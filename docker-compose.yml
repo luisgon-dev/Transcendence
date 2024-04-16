@@ -1,0 +1,6 @@
+﻿services:
+  projectsyndrabackend:
+    image: projectsyndrabackend
+    build:
+      context: .
+      dockerfile: ProjectSyndraBackend/Dockerfile

@@ -1,5 +1,6 @@
 ﻿namespace ProjectSyndraBackend.Data;
 
-public class Class1
+public class ProjectSyndraContext
 {
+    
 }

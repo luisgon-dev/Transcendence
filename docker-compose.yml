@@ -4,3 +4,9 @@
     build:
       context: .
       dockerfile: ProjectSyndraBackend/Dockerfile
+
+  projectsyndrabackend.webapi:
+    image: projectsyndrabackend.webapi
+    build:
+      context: .
+      dockerfile: ProjectSyndraBackend.WebAPI/Dockerfile

@@ -1,6 +1,12 @@
-﻿namespace ProjectSyndraBackend.Data;
+﻿using Microsoft.EntityFrameworkCore;
+using ProjectSyndraBackend.Data.Models;
 
-public class ProjectSyndraContext
+namespace ProjectSyndraBackend.Data;
+
+public class ProjectSyndraContext : DbContext
 {
+    public DbSet<Summoner> Summoners { get; set; }
+    
+    
     
 }

@@ -10,7 +10,12 @@
 
     <ItemGroup>
         <PackageReference Include="Camille.RiotGames" Version="3.0.0-nightly-2024-06-21-7a0fafa812" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0-preview.3.24172.4">
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+          <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
+        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.0-preview.3" />
     </ItemGroup>
 
     <ItemGroup>

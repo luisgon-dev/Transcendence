@@ -4,7 +4,7 @@ using ProjectSyndraBackend.Data.Models.Match;
 
 namespace ProjectSyndraBackend.Data;
 
-public class ProjectSyndraContext : DbContext
+public class ProjectSyndraContext(DbContextOptions<ProjectSyndraContext> options) : DbContext(options)
 {
     public DbSet<Summoner> Summoners { get; set; }
     public DbSet<Match> Matches { get; set; }

@@ -8,8 +8,8 @@ public class MatchDetail
     public int Kills { get; set; }
     public int Deaths { get; set; }
     public int Assists { get; set; }
-    public List<string> Items { get; set; } = new List<string>();
-    public List<string> Runes { get; set; } = new List<string>();
+    public List<string> Items { get; set; } = [];
+    public List<string> Runes { get; set; } = [];
     public string MatchId { get; set; }
     public Match Match { get; set; }
     public string SummonerId { get; set; }

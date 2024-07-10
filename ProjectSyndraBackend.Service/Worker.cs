@@ -1,5 +1,4 @@
-using ProjectSyndraBackend.Data;
-using ProjectSyndraBackend.Service.Services;
+using ProjectSyndraBackend.Service.Services.Recurring_Jobs;
 
 namespace ProjectSyndraBackend.Service;
 
@@ -11,13 +10,11 @@ public class Worker(ILogger<Worker> logger, IServiceScopeFactory scopeFactory) :
         var taskServices = scope.ServiceProvider.GetServices<ITaskService>().ToList();
         var tasks = new List<Task>();
 
-        foreach (var taskService in taskServices)
-        {
-            tasks.Add(ScheduleTask(taskService, stoppingToken));
-        }
+        foreach (var taskService in taskServices) tasks.Add(ScheduleTask(taskService, stoppingToken));
 
         await Task.WhenAll(tasks);
     }
+
     private async Task ScheduleTask(ITaskService taskService, CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)

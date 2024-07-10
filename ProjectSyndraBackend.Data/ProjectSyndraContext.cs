@@ -15,16 +15,15 @@ public class ProjectSyndraContext(DbContextOptions<ProjectSyndraContext> options
     {
         modelBuilder.Entity<MatchSummoner>()
             .HasKey(ms => new { ms.MatchId, ms.SummonerId });
-        
+
         modelBuilder.Entity<MatchSummoner>()
             .HasOne(ms => ms.Match)
             .WithMany(m => m.MatchSummoners)
             .HasForeignKey(ms => ms.MatchId);
-        
+
         modelBuilder.Entity<MatchSummoner>()
             .HasOne(ms => ms.Summoner)
             .WithMany(s => s.MatchSummoners)
             .HasForeignKey(ms => ms.SummonerId);
     }
-    
 }

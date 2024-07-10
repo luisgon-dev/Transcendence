@@ -12,13 +12,13 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Content Include="..\.dockerignore">
-        <Link>.dockerignore</Link>
-      </Content>
+        <Content Include="..\.dockerignore">
+            <Link>.dockerignore</Link>
+        </Content>
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\ProjectSyndraBackend.Data\ProjectSyndraBackend.Data.csproj" />
+        <ProjectReference Include="..\ProjectSyndraBackend.Data\ProjectSyndraBackend.Data.csproj"/>
     </ItemGroup>
 
 </Project>

@@ -10,6 +10,7 @@ public class ProjectSyndraContext(DbContextOptions<ProjectSyndraContext> options
     public DbSet<Match> Matches { get; set; }
     public DbSet<MatchDetail> MatchDetails { get; set; }
     public DbSet<MatchSummoner> MatchSummoners { get; set; }
+    public DbSet<Runes> Runes { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

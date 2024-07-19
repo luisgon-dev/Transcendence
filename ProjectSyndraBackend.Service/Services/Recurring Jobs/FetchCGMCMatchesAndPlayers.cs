@@ -48,14 +48,13 @@ public class FetchCgmcMatchesAndPlayers(
                 existingSummoner.TagLine = summoner.TagLine;
                 existingSummoner.SummonerName = summoner.SummonerName;
             }
+
             logger.LogInformation("Summoner {SummonerName} added or updated", summoner.SummonerName);
 
             await context.SaveChangesAsync(stoppingToken);
         }
-        
+
         logger.LogInformation("All summoners added or updated");
-        
-        
     }
 
     public int Interval { get; } = 500000000;

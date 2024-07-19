@@ -11,8 +11,10 @@ builder.Services.AddDbContext<ProjectSyndraContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("MainDatabase"),
         b => b.MigrationsAssembly("ProjectSyndraBackend.Service")));
 builder.Services.AddSingleton(_ => RiotGamesApi.NewInstance(builder.Configuration.GetConnectionString("RiotApi")!));
-builder.Services.AddScoped<ITaskService, FetchCgmcMatchesAndPlayers>();
 
+
+// builder.Services.AddScoped<ITaskService, FetchCgmcMatchesAndPlayers>();
+builder.Services.AddScoped<ITaskService, FetchLatestMatchInformation>();
 
 builder.Services.AddHostedService<Worker>(provider =>
 {

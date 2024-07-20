@@ -72,7 +72,10 @@ public static class RiotApiExtensions
         if (details == null) return null;
 
         // make sure the match doesn't already exist in the database.
-        if (await data.Matches.AnyAsync(x => x.MatchId == details.Metadata.MatchId, cancellationToken)) return null;
+        if (await data.Matches.AnyAsync(x => x.MatchId == details.Metadata.MatchId, cancellationToken))
+        {
+            return null;
+        }
 
         var match = new Match
         {

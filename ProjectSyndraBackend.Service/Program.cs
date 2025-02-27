@@ -1,4 +1,6 @@
 using Camille.RiotGames;
+using Hangfire;
+using Hangfire.PostgreSql;
 using Microsoft.EntityFrameworkCore;
 using ProjectSyndraBackend.Data;
 using ProjectSyndraBackend.Service;
@@ -13,7 +15,13 @@ builder.Services.AddDbContext<ProjectSyndraContext>(options =>
 builder.Services.AddSingleton(_ => RiotGamesApi.NewInstance(builder.Configuration.GetConnectionString("RiotApi")!));
 
 
-// builder.Services.AddScoped<ITaskService, FetchCgmcMatchesAndPlayers>();
+GlobalConfiguration.Configuration
+    .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+    .UseSimpleAssemblyNameTypeSerializer()
+    .UseRecommendedSerializerSettings()
+    .UsePostgreSqlStorage(options =>
+        options.UseNpgsqlConnection(builder.Configuration.GetConnectionString("MainDatabase")));
+
 builder.Services.AddScoped<ITaskService, FetchLatestMatchInformation>();
 
 builder.Services.AddHostedService<Worker>(provider =>

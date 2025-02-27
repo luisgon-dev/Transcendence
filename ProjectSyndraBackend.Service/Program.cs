@@ -13,23 +13,15 @@ builder.Services.AddDbContext<ProjectSyndraContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("MainDatabase"),
         b => b.MigrationsAssembly("ProjectSyndraBackend.Service")));
 builder.Services.AddSingleton(_ => RiotGamesApi.NewInstance(builder.Configuration.GetConnectionString("RiotApi")!));
-
-
-GlobalConfiguration.Configuration
-    .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
-    .UseSimpleAssemblyNameTypeSerializer()
-    .UseRecommendedSerializerSettings()
-    .UsePostgreSqlStorage(options =>
-        options.UseNpgsqlConnection(builder.Configuration.GetConnectionString("MainDatabase")));
-
+builder.Services.AddHangfire(config =>
+    config.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+        .UseSimpleAssemblyNameTypeSerializer()
+        .UseRecommendedSerializerSettings()
+        .UsePostgreSqlStorage(options =>
+            options.UseNpgsqlConnection(builder.Configuration.GetConnectionString("MainDatabase"))));
+builder.Services.AddHangfireServer();
 builder.Services.AddScoped<ITaskService, FetchLatestMatchInformation>();
-
-builder.Services.AddHostedService<Worker>(provider =>
-{
-    var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
-    var logger = provider.GetRequiredService<ILogger<Worker>>();
-    return new Worker(logger, scopeFactory);
-});
+builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();
 host.Run();

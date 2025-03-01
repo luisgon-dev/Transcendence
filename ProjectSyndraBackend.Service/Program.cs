@@ -20,7 +20,6 @@ builder.Services.AddHangfire(config =>
         .UsePostgreSqlStorage(options =>
             options.UseNpgsqlConnection(builder.Configuration.GetConnectionString("MainDatabase"))));
 builder.Services.AddHangfireServer();
-builder.Services.AddScoped<ITaskService, FetchLatestMatchInformation>();
 builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();

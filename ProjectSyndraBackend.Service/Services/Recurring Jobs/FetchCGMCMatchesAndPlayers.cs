@@ -9,9 +9,9 @@ namespace ProjectSyndraBackend.Service.Services.Recurring_Jobs;
 public class FetchCgmcMatchesAndPlayers(
     RiotGamesApi riotGamesApi,
     ProjectSyndraContext context,
-    ILogger<FetchCgmcMatchesAndPlayers> logger) : ITaskService
+    ILogger<FetchCgmcMatchesAndPlayers> logger)  : IJobTask
 {
-    public async Task ExecuteAsync(CancellationToken stoppingToken)
+    public async Task Execute(CancellationToken stoppingToken)
     {
         var challengerLeague = await riotGamesApi.LeagueV4()
             .GetChallengerLeagueAsync(PlatformRoute.NA1, QueueType.RANKED_SOLO_5x5, stoppingToken);

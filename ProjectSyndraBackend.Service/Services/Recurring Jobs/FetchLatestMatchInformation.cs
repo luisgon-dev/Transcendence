@@ -10,9 +10,9 @@ namespace ProjectSyndraBackend.Service.Services.Recurring_Jobs;
 public class FetchLatestMatchInformation(
     RiotGamesApi riotGamesApi,
     ProjectSyndraContext context,
-    ILogger<FetchLatestMatchInformation> logger) : ITaskService
+    ILogger<FetchLatestMatchInformation> logger) : IJobTask
 {
-    public async Task ExecuteAsync(CancellationToken stoppingToken)
+    public async Task Execute(CancellationToken stoppingToken)
     {
         // get match information for every summoner in the database
         var summoners = await context.Summoners.ToListAsync(stoppingToken);

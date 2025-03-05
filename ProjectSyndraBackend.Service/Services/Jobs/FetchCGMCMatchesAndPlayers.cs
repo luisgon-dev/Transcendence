@@ -4,13 +4,15 @@ using Microsoft.EntityFrameworkCore;
 using ProjectSyndraBackend.Data;
 using ProjectSyndraBackend.Service.Services.Extensions;
 
-namespace ProjectSyndraBackend.Service.Services.Recurring_Jobs;
+namespace ProjectSyndraBackend.Service.Services.Jobs;
 
 public class FetchCgmcMatchesAndPlayers(
     RiotGamesApi riotGamesApi,
     ProjectSyndraContext context,
-    ILogger<FetchCgmcMatchesAndPlayers> logger)  : IJobTask
+    ILogger<FetchCgmcMatchesAndPlayers> logger) : IJobTask
 {
+    public int Interval { get; } = 500000000;
+
     public async Task Execute(CancellationToken stoppingToken)
     {
         var challengerLeague = await riotGamesApi.LeagueV4()
@@ -56,6 +58,4 @@ public class FetchCgmcMatchesAndPlayers(
 
         logger.LogInformation("All summoners added or updated");
     }
-
-    public int Interval { get; } = 500000000;
 }

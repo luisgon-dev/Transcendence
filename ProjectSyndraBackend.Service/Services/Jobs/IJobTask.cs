@@ -1,4 +1,4 @@
-﻿namespace ProjectSyndraBackend.Service.Services.Recurring_Jobs;
+﻿namespace ProjectSyndraBackend.Service.Services.Jobs;
 
 public interface IJobTask
 {

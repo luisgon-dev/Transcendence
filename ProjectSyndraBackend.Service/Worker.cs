@@ -1,5 +1,4 @@
 using Hangfire;
-using ProjectSyndraBackend.Service.Services.Recurring_Jobs;
 
 namespace ProjectSyndraBackend.Service;
 

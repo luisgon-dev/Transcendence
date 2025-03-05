@@ -4,7 +4,6 @@ using Hangfire.PostgreSql;
 using Microsoft.EntityFrameworkCore;
 using ProjectSyndraBackend.Data;
 using ProjectSyndraBackend.Service;
-using ProjectSyndraBackend.Service.Services.Recurring_Jobs;
 
 var builder = Host.CreateApplicationBuilder(args);
 

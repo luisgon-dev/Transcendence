@@ -3,7 +3,9 @@ using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.EntityFrameworkCore;
 using ProjectSyndraBackend.Data;
+using ProjectSyndraBackend.Data.Repositories;
 using ProjectSyndraBackend.Service;
+using ProjectSyndraBackend.Service.Services;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -20,6 +22,12 @@ builder.Services.AddHangfire(config =>
             options.UseNpgsqlConnection(builder.Configuration.GetConnectionString("MainDatabase"))));
 builder.Services.AddHangfireServer();
 builder.Services.AddHostedService<Worker>();
+// add IMatchDataGatheringService
+builder.Services.AddSingleton<IMatchDataGatheringService, MatchDataGatheringService>();
+
+
+// add data repositories
+builder.Services.AddScoped<ISummonerRepository, SummonerRepository>();
 
 var host = builder.Build();
 host.Run();

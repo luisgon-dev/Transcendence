@@ -2,6 +2,7 @@
 using Camille.RiotGames;
 using Microsoft.EntityFrameworkCore;
 using ProjectSyndraBackend.Data;
+using ProjectSyndraBackend.Data.Repositories;
 using ProjectSyndraBackend.Service.Services.Extensions;
 
 namespace ProjectSyndraBackend.Service.Services.Jobs;
@@ -9,10 +10,9 @@ namespace ProjectSyndraBackend.Service.Services.Jobs;
 public class FetchCgmcMatchesAndPlayers(
     RiotGamesApi riotGamesApi,
     ProjectSyndraContext context,
-    ILogger<FetchCgmcMatchesAndPlayers> logger) : IJobTask
+    ILogger<FetchCgmcMatchesAndPlayers> logger,
+    ISummonerRepository summonerRepository) : IJobTask
 {
-    public int Interval { get; } = 500000000;
-
     public async Task Execute(CancellationToken stoppingToken)
     {
         var challengerLeague = await riotGamesApi.LeagueV4()
@@ -33,27 +33,8 @@ public class FetchCgmcMatchesAndPlayers(
         foreach (var summonerId in summonerIds)
         {
             var summoner = await riotGamesApi.GetSummoner(summonerId, PlatformRoute.NA1, stoppingToken);
-            var existingSummoner =
-                await context.Summoners.FirstOrDefaultAsync(x => x.SummonerId == summoner.SummonerId, stoppingToken);
-            if (existingSummoner == null)
-            {
-                context.Summoners.Add(summoner);
-            }
-            else
-            {
-                existingSummoner.Puuid = summoner.Puuid;
-                existingSummoner.AccountId = summoner.AccountId;
-                existingSummoner.ProfileIconId = summoner.ProfileIconId;
-                existingSummoner.RevisionDate = summoner.RevisionDate;
-                existingSummoner.SummonerLevel = summoner.SummonerLevel;
-                existingSummoner.GameName = summoner.GameName;
-                existingSummoner.TagLine = summoner.TagLine;
-                existingSummoner.SummonerName = summoner.SummonerName;
-            }
-
+            await summonerRepository.AddOrUpdateSummonerAsync(summoner, stoppingToken);
             logger.LogInformation("Summoner {SummonerName} added or updated", summoner.SummonerName);
-
-            await context.SaveChangesAsync(stoppingToken);
         }
 
         logger.LogInformation("All summoners added or updated");

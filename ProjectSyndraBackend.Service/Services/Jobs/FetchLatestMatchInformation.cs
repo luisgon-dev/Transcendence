@@ -11,8 +11,6 @@ public class FetchLatestMatchInformation(
     ProjectSyndraContext context,
     ILogger<FetchLatestMatchInformation> logger) : IJobTask
 {
-    public int Interval { get; } = 500000000;
-
     public async Task Execute(CancellationToken stoppingToken)
     {
         // get match information for every summoner in the database

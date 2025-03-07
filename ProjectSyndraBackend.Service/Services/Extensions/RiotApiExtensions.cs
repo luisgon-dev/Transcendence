@@ -33,6 +33,13 @@ public static class RiotApiExtensions
         current.TagLine = account.TagLine;
         current.SummonerName = account.GameName + "#" + account.TagLine;
 
+        var ranks = await riotApi.GetRankInfo(current.RiotSummonerId, platformRoute, cancellationToken);
+        // assign the summoner to all ranks
+        foreach (var rank in ranks)
+            rank.Summoner = current;
+        current.Ranks = ranks;
+        
+        
         return current;
     }
 
@@ -59,8 +66,42 @@ public static class RiotApiExtensions
         current.GameName = account.GameName;
         current.TagLine = account.TagLine;
         current.SummonerName = account.GameName + "#" + account.TagLine;
-
+        
+        var ranks = await riotApi.GetRankInfo(current.Puuid, platformRoute, cancellationToken);
+        // assign the summoner to all ranks
+        foreach (var rank in ranks)
+            rank.Summoner = current;
+        current.Ranks = ranks;
+        
+        
         return current;
+    }
+    
+    public static async Task<List<Rank>> GetRankInfo(this RiotGamesApi riotApi, string summonerId, PlatformRoute platformRoute,
+        CancellationToken cancellationToken = default)
+    {
+        var ranks = await riotApi.LeagueV4().GetLeagueEntriesForSummonerAsync(platformRoute, summonerId, cancellationToken);
+
+        var localRanks = new List<Rank>();
+
+        foreach (var rank in ranks)
+        {
+            var current = new Rank
+            {
+                SummonerId = summonerId,
+                QueueType = rank.QueueType.ToString(),
+                Tier = rank.Tier.ToString() ?? string.Empty,
+                RankNumber = rank.Rank.ToString() ?? string.Empty,
+                LeaguePoints = rank.LeaguePoints,
+                Wins = rank.Wins,
+                Losses = rank.Losses,
+                Summoner = null
+            };
+
+            localRanks.Add(current);
+        }
+
+        return localRanks;
     }
 
     public static async Task<Match?> GetMatchDetails(this RiotGamesApi riotApi, string matchId,

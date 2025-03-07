@@ -10,5 +10,7 @@ public class MatchDataGatheringService(IBackgroundJobClient backgroundJobClient)
         // initialize all recurring jobs here
         // every hour check to see if a new patch is available for league.
         RecurringJob.AddOrUpdate<UpdateParameters>("addorupdate",x => x.Execute(CancellationToken.None), Cron.Hourly);
+        //RecurringJob.AddOrUpdate<FetchCgmcMatchesAndPlayers>("fetchHighEloPlayers", x => x.Execute(CancellationToken.None), Cron.Hourly);
+        backgroundJobClient.Enqueue<FetchCgmcMatchesAndPlayers>(x => x.Execute(CancellationToken.None));
     }
 }

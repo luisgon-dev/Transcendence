@@ -9,6 +9,7 @@ public class Rank
     public int Wins { get; set; }
     public int Losses { get; set; }
     public string QueueType { get; set; } = "";
+    public string SummonerId { get; set; }
     public required Summoner Summoner { get; set; }
     
 }

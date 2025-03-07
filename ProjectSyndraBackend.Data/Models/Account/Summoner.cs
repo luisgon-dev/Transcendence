@@ -15,4 +15,5 @@ public class Summoner
     public string? TagLine { get; set; }
     public string? AccountId { get; set; }
     public ICollection<MatchSummoner> MatchSummoners { get; set; } = new List<MatchSummoner>();
+    public ICollection<Rank> Ranks { get; set; } = new List<Rank>();
 }

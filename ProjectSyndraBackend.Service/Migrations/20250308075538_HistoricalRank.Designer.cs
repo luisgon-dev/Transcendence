@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using ProjectSyndraBackend.Data;
@@ -12,9 +13,11 @@ using ProjectSyndraBackend.Data;
 namespace ProjectSyndraBackend.Service.Migrations
 {
     [DbContext(typeof(ProjectSyndraContext))]
-    partial class ProjectSyndraContextModelSnapshot : ModelSnapshot
+    [Migration("20250308075538_HistoricalRank")]
+    partial class HistoricalRank
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

@@ -14,6 +14,7 @@ public class ProjectSyndraContext(DbContextOptions<ProjectSyndraContext> options
     public DbSet<Runes> Runes { get; set; }
     public DbSet<CurrentDataParameters> CurrentDataParameters { get; set; }
     public DbSet<Rank> Ranks { get; set; }
+    public DbSet<HistoricalRank> HistoricalRanks { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

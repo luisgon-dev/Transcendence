@@ -4,13 +4,16 @@ using Microsoft.EntityFrameworkCore;
 using ProjectSyndraBackend.Data;
 using ProjectSyndraBackend.Data.Repositories;
 using ProjectSyndraBackend.Service.Services.Extensions;
+using ProjectSyndraBackend.Service.Services.RiotApi;
 
 namespace ProjectSyndraBackend.Service.Services.Jobs;
 
-public class FetchCgmcMatchesAndPlayers(
+// ReSharper disable once ClassNeverInstantiated.Global
+public class AddOrUpdateHighEloProfiles(
     RiotGamesApi riotGamesApi,
     ProjectSyndraContext context,
-    ILogger<FetchCgmcMatchesAndPlayers> logger,
+    ILogger<AddOrUpdateHighEloProfiles> logger,
+    ISummonerService summonerService,
     ISummonerRepository summonerRepository) : IJobTask
 {
     public async Task Execute(CancellationToken stoppingToken)
@@ -32,7 +35,7 @@ public class FetchCgmcMatchesAndPlayers(
 
         foreach (var summonerId in summonerIds)
         {
-            var summoner = await riotGamesApi.GetSummoner(summonerId, PlatformRoute.NA1, stoppingToken);
+            var summoner = await summonerService.GetSummonerByIdAsync(summonerId, PlatformRoute.NA1, stoppingToken);
             await summonerRepository.AddOrUpdateSummonerAsync(summoner, stoppingToken);
             logger.LogInformation("Summoner {SummonerName} added or updated", summoner.SummonerName);
         }

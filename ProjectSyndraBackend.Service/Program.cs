@@ -6,6 +6,7 @@ using ProjectSyndraBackend.Data;
 using ProjectSyndraBackend.Data.Repositories;
 using ProjectSyndraBackend.Service;
 using ProjectSyndraBackend.Service.Services;
+using ProjectSyndraBackend.Service.Services.Extensions;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -13,19 +14,22 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddDbContext<ProjectSyndraContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("MainDatabase"),
         b => b.MigrationsAssembly("ProjectSyndraBackend.Service")));
+// inject top level riot games api
 builder.Services.AddSingleton(_ => RiotGamesApi.NewInstance(builder.Configuration.GetConnectionString("RiotApi")!));
 builder.Services.AddHangfire(config =>
     config.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
         .UseSimpleAssemblyNameTypeSerializer()
         .UseRecommendedSerializerSettings()
+        .UseFilter(new AutomaticRetryAttribute { Attempts = 0 })
         .UsePostgreSqlStorage(options =>
             options.UseNpgsqlConnection(builder.Configuration.GetConnectionString("MainDatabase"))));
 builder.Services.AddHangfireServer();
+
+// worker that initiates services
 builder.Services.AddHostedService<Worker>();
-// add IMatchDataGatheringService
-builder.Services.AddSingleton<IMatchDataGatheringService, MatchDataGatheringService>();
 
-
+// add services
+builder.Services.AddRiotApiServiceCollection();
 // add data repositories
 builder.Services.AddScoped<ISummonerRepository, SummonerRepository>();
 

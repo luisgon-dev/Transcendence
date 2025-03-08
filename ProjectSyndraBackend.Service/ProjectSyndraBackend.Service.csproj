@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Worker">
 
     <PropertyGroup>
-        <TargetFramework>net8.0</TargetFramework>
+        <TargetFramework>net9.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <UserSecretsId>dotnet-ProjectSyndraBackend.Service-7020057A-78AB-49AA-A01A-00BDB9E404F0</UserSecretsId>
@@ -9,7 +9,10 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Camille.RiotGames" Version="3.0.0-nightly-2024-06-21-7a0fafa812"/>
+        <PackageReference Include="Camille.RiotGames" Version="3.0.0-nightly-2025-03-07-d2b94715b7"/>
+        <PackageReference Include="Hangfire.Core" Version="1.8.18"/>
+        <PackageReference Include="Hangfire.NetCore" Version="1.8.18"/>
+        <PackageReference Include="Hangfire.PostgreSql" Version="1.20.10"/>
         <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0-preview.3.24172.4">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>

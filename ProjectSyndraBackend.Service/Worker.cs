@@ -1,48 +1,24 @@
-using ProjectSyndraBackend.Service.Services.Recurring_Jobs;
+using Hangfire;
+using ProjectSyndraBackend.Service.Services.RiotApi.Interfaces;
 
 namespace ProjectSyndraBackend.Service;
 
-public class Worker(ILogger<Worker> logger, IServiceScopeFactory scopeFactory) : BackgroundService
+public class Worker(
+    ILogger<Worker> logger,
+    IBackgroundJobClient backgroundJobClient,
+    IMatchDataGatheringService gatheringService) : BackgroundService
 {
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    public override Task StartAsync(CancellationToken cancellationToken)
     {
-        using var scope = scopeFactory.CreateScope();
-        var taskServices = scope.ServiceProvider.GetServices<ITaskService>().ToList();
-        var tasks = new List<Task>();
-
-        foreach (var taskService in taskServices) tasks.Add(ScheduleTask(taskService, stoppingToken));
-
-        await Task.WhenAll(tasks);
+        gatheringService.Init();
+        return base.StartAsync(cancellationToken);
     }
 
-    private async Task ScheduleTask(ITaskService taskService, CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // init the hangfire server
         while (!stoppingToken.IsCancellationRequested)
-        {
-            try
-            {
-                await taskService.ExecuteAsync(stoppingToken);
-            }
-            catch (OperationCanceledException)
-            {
-                // Expected during shutdown, log if necessary or handle gracefully
-                break; // Exit the loop to end the task
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error executing task service {TaskServiceName}", taskService.GetType().Name);
-            }
-
-            // Respect the cancellation token by passing it to Task.Delay
-            try
-            {
-                await Task.Delay(taskService.Interval, stoppingToken);
-            }
-            catch (OperationCanceledException)
-            {
-                // Handle the cancellation gracefully
-                break; // Exit the loop to end the task
-            }
-        }
+            // wait for 1 minute
+            await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
     }
 }

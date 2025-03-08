@@ -5,11 +5,8 @@
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+        <UserSecretsId>b4d1ea52-6fae-4ee6-8950-f8ad6ca7b490</UserSecretsId>
     </PropertyGroup>
-
-    <ItemGroup>
-        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0"/>
-    </ItemGroup>
 
     <ItemGroup>
         <Content Include="..\.dockerignore">
@@ -18,7 +15,8 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\ProjectSyndraBackend.Data\ProjectSyndraBackend.Data.csproj"/>
+        <PackageReference Include="Hangfire.Core" Version="1.8.18"/>
+        <PackageReference Include="Hangfire.PostgreSql" Version="1.20.10"/>
     </ItemGroup>
 
 </Project>

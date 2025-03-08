@@ -16,3 +16,9 @@
     build:
       context: .
       dockerfile: ProjectSyndraBackend.Service/Dockerfile
+
+  projectsyndrabackend.webadminportal:
+    image: projectsyndrabackend.webadminportal
+    build:
+      context: .
+      dockerfile: ProjectSyndraBackend.WebAdminPortal/Dockerfile

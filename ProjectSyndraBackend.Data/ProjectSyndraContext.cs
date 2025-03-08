@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using ProjectSyndraBackend.Data.Models.Account;
 using ProjectSyndraBackend.Data.Models.Match;
+using ProjectSyndraBackend.Data.Models.Service;
 
 namespace ProjectSyndraBackend.Data;
 
@@ -11,6 +12,9 @@ public class ProjectSyndraContext(DbContextOptions<ProjectSyndraContext> options
     public DbSet<MatchDetail> MatchDetails { get; set; }
     public DbSet<MatchSummoner> MatchSummoners { get; set; }
     public DbSet<Runes> Runes { get; set; }
+    public DbSet<CurrentDataParameters> CurrentDataParameters { get; set; }
+    public DbSet<Rank> Ranks { get; set; }
+    public DbSet<HistoricalRank> HistoricalRanks { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -26,5 +30,10 @@ public class ProjectSyndraContext(DbContextOptions<ProjectSyndraContext> options
             .HasOne(ms => ms.Summoner)
             .WithMany(s => s.MatchSummoners)
             .HasForeignKey(ms => ms.SummonerId);
+
+        modelBuilder.Entity<Rank>()
+            .HasOne(r => r.Summoner)
+            .WithMany(s => s.Ranks)
+            .HasForeignKey(r => r.SummonerId);
     }
 }

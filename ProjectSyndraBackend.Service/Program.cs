@@ -1,8 +1,11 @@
 using Camille.RiotGames;
+using Hangfire;
+using Hangfire.PostgreSql;
 using Microsoft.EntityFrameworkCore;
 using ProjectSyndraBackend.Data;
+using ProjectSyndraBackend.Data.Extensions;
 using ProjectSyndraBackend.Service;
-using ProjectSyndraBackend.Service.Services.Recurring_Jobs;
+using ProjectSyndraBackend.Service.Services.Extensions;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -10,18 +13,24 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddDbContext<ProjectSyndraContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("MainDatabase"),
         b => b.MigrationsAssembly("ProjectSyndraBackend.Service")));
+// inject top level riot games api
 builder.Services.AddSingleton(_ => RiotGamesApi.NewInstance(builder.Configuration.GetConnectionString("RiotApi")!));
+builder.Services.AddHangfire(config =>
+    config.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+        .UseSimpleAssemblyNameTypeSerializer()
+        .UseRecommendedSerializerSettings()
+        .UseFilter(new AutomaticRetryAttribute { Attempts = 0 })
+        .UsePostgreSqlStorage(options =>
+            options.UseNpgsqlConnection(builder.Configuration.GetConnectionString("MainDatabase"))));
+builder.Services.AddHangfireServer();
 
+// worker that initiates services
+builder.Services.AddHostedService<Worker>();
 
-// builder.Services.AddScoped<ITaskService, FetchCgmcMatchesAndPlayers>();
-builder.Services.AddScoped<ITaskService, FetchLatestMatchInformation>();
-
-builder.Services.AddHostedService<Worker>(provider =>
-{
-    var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
-    var logger = provider.GetRequiredService<ILogger<Worker>>();
-    return new Worker(logger, scopeFactory);
-});
+// add services
+builder.Services.AddRiotApiServiceCollection();
+// add data repositories
+builder.Services.AddProjectSyndraRepositories();
 
 var host = builder.Build();
 host.Run();

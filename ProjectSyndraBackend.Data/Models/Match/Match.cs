@@ -6,6 +6,7 @@ public class Match
     public long MatchDate { get; set; }
     public int Duration { get; set; }
     public string? Patch { get; set; }
+    public string? QueueType { get; set; }
     public string? EndOfGameResult { get; set; }
 
     public ICollection<MatchDetail> MatchDetails { get; set; } = new List<MatchDetail>();

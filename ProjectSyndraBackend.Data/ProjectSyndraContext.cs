@@ -30,7 +30,7 @@ public class ProjectSyndraContext(DbContextOptions<ProjectSyndraContext> options
             .HasOne(ms => ms.Summoner)
             .WithMany(s => s.MatchSummoners)
             .HasForeignKey(ms => ms.SummonerId);
-        
+
         modelBuilder.Entity<Rank>()
             .HasOne(r => r.Summoner)
             .WithMany(s => s.Ranks)

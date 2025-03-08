@@ -3,9 +3,8 @@ using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.EntityFrameworkCore;
 using ProjectSyndraBackend.Data;
-using ProjectSyndraBackend.Data.Repositories;
+using ProjectSyndraBackend.Data.Extensions;
 using ProjectSyndraBackend.Service;
-using ProjectSyndraBackend.Service.Services;
 using ProjectSyndraBackend.Service.Services.Extensions;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -31,7 +30,7 @@ builder.Services.AddHostedService<Worker>();
 // add services
 builder.Services.AddRiotApiServiceCollection();
 // add data repositories
-builder.Services.AddScoped<ISummonerRepository, SummonerRepository>();
+builder.Services.AddProjectSyndraRepositories();
 
 var host = builder.Build();
 host.Run();

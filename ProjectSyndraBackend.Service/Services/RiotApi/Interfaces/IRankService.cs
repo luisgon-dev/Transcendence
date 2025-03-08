@@ -5,5 +5,6 @@ namespace ProjectSyndraBackend.Service.Services.RiotApi.Interfaces;
 
 public interface IRankService
 {
-    Task<List<Rank>> GetRankedDataAsync(string summonerId, PlatformRoute platformRoute, CancellationToken cancellationToken = default);
+    Task<List<Rank>> GetRankedDataAsync(string summonerId, PlatformRoute platformRoute,
+        CancellationToken cancellationToken = default);
 }

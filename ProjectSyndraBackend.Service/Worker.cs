@@ -1,13 +1,16 @@
 using Hangfire;
-using ProjectSyndraBackend.Service.Services;
+using ProjectSyndraBackend.Service.Services.RiotApi.Interfaces;
 
 namespace ProjectSyndraBackend.Service;
 
-public class Worker(ILogger<Worker> logger, IBackgroundJobClient backgroundJobClient, IMatchDataGatheringService gatheringService) : BackgroundService
+public class Worker(
+    ILogger<Worker> logger,
+    IBackgroundJobClient backgroundJobClient,
+    IMatchDataGatheringService gatheringService) : BackgroundService
 {
     public override Task StartAsync(CancellationToken cancellationToken)
     {
-        gatheringService.Init(); 
+        gatheringService.Init();
         return base.StartAsync(cancellationToken);
     }
 
@@ -15,9 +18,7 @@ public class Worker(ILogger<Worker> logger, IBackgroundJobClient backgroundJobCl
     {
         // init the hangfire server
         while (!stoppingToken.IsCancellationRequested)
-        {
             // wait for 1 minute
             await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
-        }
     }
 }

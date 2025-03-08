@@ -1,9 +1,7 @@
 ﻿using Camille.Enums;
 using Camille.RiotGames;
-using Microsoft.EntityFrameworkCore;
 using ProjectSyndraBackend.Data;
 using ProjectSyndraBackend.Data.Repositories;
-using ProjectSyndraBackend.Service.Services.Extensions;
 using ProjectSyndraBackend.Service.Services.RiotApi;
 
 namespace ProjectSyndraBackend.Service.Services.Jobs;

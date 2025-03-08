@@ -5,7 +5,9 @@ namespace ProjectSyndraBackend.Service.Services.RiotApi;
 
 public interface ISummonerService
 {
-    Task<Summoner> GetSummonerByIdAsync(string summonerId, PlatformRoute platformRoute, CancellationToken cancellationToken = default);
-    Task<Summoner> GetSummonerByPuuidAsync(string puuid, PlatformRoute platformRoute, CancellationToken cancellationToken = default);
-}
+    Task<Summoner> GetSummonerByIdAsync(string summonerId, PlatformRoute platformRoute,
+        CancellationToken cancellationToken = default);
 
+    Task<Summoner> GetSummonerByPuuidAsync(string puuid, PlatformRoute platformRoute,
+        CancellationToken cancellationToken = default);
+}

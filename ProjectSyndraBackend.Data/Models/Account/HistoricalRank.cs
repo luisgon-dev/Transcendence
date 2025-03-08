@@ -1,4 +1,5 @@
 // HistoricalRank.cs
+
 namespace ProjectSyndraBackend.Data.Models.Account;
 
 public class HistoricalRank

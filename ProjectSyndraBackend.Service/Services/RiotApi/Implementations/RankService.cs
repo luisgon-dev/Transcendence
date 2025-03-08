@@ -7,10 +7,11 @@ namespace ProjectSyndraBackend.Service.Services.RiotApi.Implementations;
 
 public class RankService(RiotGamesApi riotApi) : IRankService
 {
-
-    public async Task<List<Rank>> GetRankedDataAsync(string summonerId, PlatformRoute platformRoute, CancellationToken cancellationToken = default)
+    public async Task<List<Rank>> GetRankedDataAsync(string summonerId, PlatformRoute platformRoute,
+        CancellationToken cancellationToken = default)
     {
-        var ranks = await riotApi.LeagueV4().GetLeagueEntriesForSummonerAsync(platformRoute, summonerId, cancellationToken);
+        var ranks = await riotApi.LeagueV4()
+            .GetLeagueEntriesForSummonerAsync(platformRoute, summonerId, cancellationToken);
         return ranks.Select(rank => new Rank
         {
             SummonerId = summonerId,

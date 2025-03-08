@@ -6,6 +6,7 @@ using ProjectSyndraBackend.Data.Models.Service;
 
 namespace ProjectSyndraBackend.Service.Services.Jobs;
 
+// ReSharper disable once ClassNeverInstantiated.Global
 public class UpdateParameters(
     RiotGamesApi riotGamesApi,
     ProjectSyndraContext projectSyndraContext,
@@ -15,7 +16,7 @@ public class UpdateParameters(
 
     public async Task Execute(CancellationToken stoppingToken)
     {
-        string latestPatch = await GetLatestPatchAsync();
+        var latestPatch = await GetLatestPatchAsync();
         logger.LogInformation($"Latest Patch: {latestPatch}");
 
         await UpdatePatchInDatabase(latestPatch);
@@ -25,10 +26,10 @@ public class UpdateParameters(
     {
         const string versionsUrl = "https://ddragon.leagueoflegends.com/api/versions.json";
 
-        HttpResponseMessage response = await HttpClient.GetAsync(versionsUrl);
+        var response = await HttpClient.GetAsync(versionsUrl);
         response.EnsureSuccessStatusCode();
 
-        string jsonResponse = await response.Content.ReadAsStringAsync();
+        var jsonResponse = await response.Content.ReadAsStringAsync();
         var versions = JsonSerializer.Deserialize<string[]>(jsonResponse);
 
         return versions?.Length > 0 ? versions[0] : "Unknown";

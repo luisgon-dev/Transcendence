@@ -11,5 +11,4 @@ public class Rank
     public string QueueType { get; set; } = "";
     public string SummonerId { get; set; }
     public required Summoner Summoner { get; set; }
-    
 }

@@ -1,4 +1,4 @@
-namespace ProjectSyndraBackend.Service.Services;
+namespace ProjectSyndraBackend.Service.Services.RiotApi.Interfaces;
 
 public interface IMatchDataGatheringService
 {

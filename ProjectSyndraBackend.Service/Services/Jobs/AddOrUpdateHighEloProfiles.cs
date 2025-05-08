@@ -3,6 +3,7 @@ using Camille.RiotGames;
 using ProjectSyndraBackend.Data;
 using ProjectSyndraBackend.Data.Repositories;
 using ProjectSyndraBackend.Service.Services.RiotApi;
+using ProjectSyndraBackend.Service.Services.RiotApi.Interfaces;
 
 namespace ProjectSyndraBackend.Service.Services.Jobs;
 
@@ -12,7 +13,8 @@ public class AddOrUpdateHighEloProfiles(
     ProjectSyndraContext context,
     ILogger<AddOrUpdateHighEloProfiles> logger,
     ISummonerService summonerService,
-    ISummonerRepository summonerRepository) : IJobTask
+    ISummonerRepository summonerRepository,
+    IRankService rankService) : IJobTask
 {
     public async Task Execute(CancellationToken stoppingToken)
     {
@@ -35,6 +37,10 @@ public class AddOrUpdateHighEloProfiles(
         {
             var summoner = await summonerService.GetSummonerByIdAsync(summonerId, PlatformRoute.NA1, stoppingToken);
             await summonerRepository.AddOrUpdateSummonerAsync(summoner, stoppingToken);
+            
+            var rank = await rankService.GetRankedDataAsync(summonerId, PlatformRoute.NA1, stoppingToken);
+            
+
             logger.LogInformation("Summoner {SummonerName} added or updated", summoner.SummonerName);
         }
 

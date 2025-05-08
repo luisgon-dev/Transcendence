@@ -13,8 +13,8 @@ using ProjectSyndraBackend.Data;
 namespace ProjectSyndraBackend.Service.Migrations
 {
     [DbContext(typeof(ProjectSyndraContext))]
-    [Migration("20250307061129_AddRanks")]
-    partial class AddRanks
+    [Migration("20250508032734_Initial")]
+    partial class Initial
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -26,13 +26,48 @@ namespace ProjectSyndraBackend.Service.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.Account.Rank", b =>
+            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.LoL.Account.HistoricalRank", b =>
                 {
-                    b.Property<int>("RankId")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("DateRecorded")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("LeaguePoints")
                         .HasColumnType("integer");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("RankId"));
+                    b.Property<int>("Losses")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("QueueType")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RankNumber")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("SummonerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Tier")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Wins")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SummonerId");
+
+                    b.ToTable("HistoricalRanks");
+                });
+
+            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.LoL.Account.Rank", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
 
                     b.Property<int>("LeaguePoints")
                         .HasColumnType("integer");
@@ -44,13 +79,15 @@ namespace ProjectSyndraBackend.Service.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("RankId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("RankNumber")
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("SummonerId")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<Guid>("SummonerId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Tier")
                         .IsRequired()
@@ -59,17 +96,18 @@ namespace ProjectSyndraBackend.Service.Migrations
                     b.Property<int>("Wins")
                         .HasColumnType("integer");
 
-                    b.HasKey("RankId");
+                    b.HasKey("Id");
 
                     b.HasIndex("SummonerId");
 
                     b.ToTable("Ranks");
                 });
 
-            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.Account.Summoner", b =>
+            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.LoL.Account.Summoner", b =>
                 {
-                    b.Property<string>("SummonerId")
-                        .HasColumnType("text");
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
 
                     b.Property<string>("AccountId")
                         .HasColumnType("text");
@@ -77,10 +115,16 @@ namespace ProjectSyndraBackend.Service.Migrations
                     b.Property<string>("GameName")
                         .HasColumnType("text");
 
+                    b.Property<string>("PlatformRegion")
+                        .HasColumnType("text");
+
                     b.Property<int>("ProfileIconId")
                         .HasColumnType("integer");
 
                     b.Property<string>("Puuid")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Region")
                         .HasColumnType("text");
 
                     b.Property<long>("RevisionDate")
@@ -98,15 +142,16 @@ namespace ProjectSyndraBackend.Service.Migrations
                     b.Property<string>("TagLine")
                         .HasColumnType("text");
 
-                    b.HasKey("SummonerId");
+                    b.HasKey("Id");
 
                     b.ToTable("Summoners");
                 });
 
-            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.Match.Match", b =>
+            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.LoL.Match.Match", b =>
                 {
-                    b.Property<string>("MatchId")
-                        .HasColumnType("text");
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
 
                     b.Property<int>("Duration")
                         .HasColumnType("integer");
@@ -117,21 +162,25 @@ namespace ProjectSyndraBackend.Service.Migrations
                     b.Property<long>("MatchDate")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("MatchId")
+                        .HasColumnType("text");
+
                     b.Property<string>("Patch")
                         .HasColumnType("text");
 
-                    b.HasKey("MatchId");
+                    b.Property<string>("QueueType")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
 
                     b.ToTable("Matches");
                 });
 
-            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.Match.MatchDetail", b =>
+            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.LoL.Match.MatchDetail", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("uuid");
 
                     b.Property<int>("Assists")
                         .HasColumnType("integer");
@@ -157,20 +206,18 @@ namespace ProjectSyndraBackend.Service.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("MatchId")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Role")
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int>("RunesId")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("RunesId")
+                        .HasColumnType("uuid");
 
-                    b.Property<string>("SummonerId")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<Guid>("SummonerId")
+                        .HasColumnType("uuid");
 
                     b.Property<int>("SummonerSpell1")
                         .HasColumnType("integer");
@@ -192,13 +239,13 @@ namespace ProjectSyndraBackend.Service.Migrations
                     b.ToTable("MatchDetails");
                 });
 
-            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.Match.MatchSummoner", b =>
+            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.LoL.Match.MatchSummoner", b =>
                 {
-                    b.Property<string>("MatchId")
-                        .HasColumnType("text");
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
 
-                    b.Property<string>("SummonerId")
-                        .HasColumnType("text");
+                    b.Property<Guid>("SummonerId")
+                        .HasColumnType("uuid");
 
                     b.HasKey("MatchId", "SummonerId");
 
@@ -207,13 +254,11 @@ namespace ProjectSyndraBackend.Service.Migrations
                     b.ToTable("MatchSummoners");
                 });
 
-            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.Match.Runes", b =>
+            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.LoL.Match.Runes", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("uuid");
 
                     b.Property<int>("Perk0")
                         .HasColumnType("integer");
@@ -277,13 +322,49 @@ namespace ProjectSyndraBackend.Service.Migrations
                     b.ToTable("Runes");
                 });
 
-            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.Service.CurrentDataParameters", b =>
+            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.Service.CurrentChampionLoadout", b =>
                 {
-                    b.Property<int>("CurrentDataParametersId")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ChampionId")
                         .HasColumnType("integer");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("CurrentDataParametersId"));
+                    b.Property<string>("ChampionName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Lane")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Patch")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("QueueType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Rank")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Region")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("CurrentChampionLoadouts");
+                });
+
+            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.Service.CurrentDataParameters", b =>
+                {
+                    b.Property<Guid>("CurrentDataParametersId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime?>("EndDate")
                         .HasColumnType("timestamp with time zone");
@@ -299,9 +380,52 @@ namespace ProjectSyndraBackend.Service.Migrations
                     b.ToTable("CurrentDataParameters");
                 });
 
-            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.Account.Rank", b =>
+            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.Service.Helpers.UnitWinPercent", b =>
                 {
-                    b.HasOne("ProjectSyndraBackend.Data.Models.Account.Summoner", "Summoner")
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<Guid?>("CurrentChampionLoadoutId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("NumberOfGames")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<float>("WinRate")
+                        .HasColumnType("real");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CurrentChampionLoadoutId");
+
+                    b.ToTable("UnitWinPercent");
+                });
+
+            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.LoL.Account.HistoricalRank", b =>
+                {
+                    b.HasOne("ProjectSyndraBackend.Data.Models.LoL.Account.Summoner", "Summoner")
+                        .WithMany()
+                        .HasForeignKey("SummonerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Summoner");
+                });
+
+            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.LoL.Account.Rank", b =>
+                {
+                    b.HasOne("ProjectSyndraBackend.Data.Models.LoL.Account.Summoner", "Summoner")
                         .WithMany("Ranks")
                         .HasForeignKey("SummonerId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -310,21 +434,21 @@ namespace ProjectSyndraBackend.Service.Migrations
                     b.Navigation("Summoner");
                 });
 
-            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.Match.MatchDetail", b =>
+            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.LoL.Match.MatchDetail", b =>
                 {
-                    b.HasOne("ProjectSyndraBackend.Data.Models.Match.Match", "Match")
+                    b.HasOne("ProjectSyndraBackend.Data.Models.LoL.Match.Match", "Match")
                         .WithMany("MatchDetails")
                         .HasForeignKey("MatchId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("ProjectSyndraBackend.Data.Models.Match.Runes", "Runes")
+                    b.HasOne("ProjectSyndraBackend.Data.Models.LoL.Match.Runes", "Runes")
                         .WithMany()
                         .HasForeignKey("RunesId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("ProjectSyndraBackend.Data.Models.Account.Summoner", "Summoner")
+                    b.HasOne("ProjectSyndraBackend.Data.Models.LoL.Account.Summoner", "Summoner")
                         .WithMany()
                         .HasForeignKey("SummonerId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -337,15 +461,15 @@ namespace ProjectSyndraBackend.Service.Migrations
                     b.Navigation("Summoner");
                 });
 
-            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.Match.MatchSummoner", b =>
+            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.LoL.Match.MatchSummoner", b =>
                 {
-                    b.HasOne("ProjectSyndraBackend.Data.Models.Match.Match", "Match")
+                    b.HasOne("ProjectSyndraBackend.Data.Models.LoL.Match.Match", "Match")
                         .WithMany("MatchSummoners")
                         .HasForeignKey("MatchId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("ProjectSyndraBackend.Data.Models.Account.Summoner", "Summoner")
+                    b.HasOne("ProjectSyndraBackend.Data.Models.LoL.Account.Summoner", "Summoner")
                         .WithMany("MatchSummoners")
                         .HasForeignKey("SummonerId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -356,18 +480,30 @@ namespace ProjectSyndraBackend.Service.Migrations
                     b.Navigation("Summoner");
                 });
 
-            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.Account.Summoner", b =>
+            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.Service.Helpers.UnitWinPercent", b =>
+                {
+                    b.HasOne("ProjectSyndraBackend.Data.Models.Service.CurrentChampionLoadout", null)
+                        .WithMany("UnitWinPercents")
+                        .HasForeignKey("CurrentChampionLoadoutId");
+                });
+
+            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.LoL.Account.Summoner", b =>
                 {
                     b.Navigation("MatchSummoners");
 
                     b.Navigation("Ranks");
                 });
 
-            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.Match.Match", b =>
+            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.LoL.Match.Match", b =>
                 {
                     b.Navigation("MatchDetails");
 
                     b.Navigation("MatchSummoners");
+                });
+
+            modelBuilder.Entity("ProjectSyndraBackend.Data.Models.Service.CurrentChampionLoadout", b =>
+                {
+                    b.Navigation("UnitWinPercents");
                 });
 #pragma warning restore 612, 618
         }

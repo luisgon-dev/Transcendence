@@ -11,6 +11,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddScoped<IMatchRepository, MatchRepository>();
         services.AddScoped<ISummonerRepository, SummonerRepository>();
+        services.AddScoped<IRankRepository, RankRepository>();
 
         return services;
     }

@@ -1,8 +1,8 @@
-﻿namespace ProjectSyndraBackend.Data.Models.Match;
+﻿namespace ProjectSyndraBackend.Data.Models.LoL.Match;
 
 public class Runes
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; }
 
     public int PrimaryStyle { get; set; }
     public int SubStyle { get; set; }

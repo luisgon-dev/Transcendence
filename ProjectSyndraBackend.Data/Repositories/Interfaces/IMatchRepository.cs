@@ -1,4 +1,4 @@
-using ProjectSyndraBackend.Data.Models.Match;
+using ProjectSyndraBackend.Data.Models.LoL.Match;
 
 namespace ProjectSyndraBackend.Data.Repositories.Interfaces;
 

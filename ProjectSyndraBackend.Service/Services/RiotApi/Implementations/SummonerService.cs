@@ -1,15 +1,13 @@
 using Camille.Enums;
 using Camille.RiotGames;
-using Microsoft.EntityFrameworkCore;
-using ProjectSyndraBackend.Data;
-using ProjectSyndraBackend.Data.Models.Account;
+using ProjectSyndraBackend.Data.Models.LoL.Account;
 using ProjectSyndraBackend.Service.Services.RiotApi.Interfaces;
 
 namespace ProjectSyndraBackend.Service.Services.RiotApi.Implementations;
 
 // SummonerService.cs
 
-public class SummonerService(RiotGamesApi riotApi, IRankService rankService, ProjectSyndraContext context)
+public class SummonerService(RiotGamesApi riotApi, IRankService rankService)
     : ISummonerService
 {
     public async Task<Summoner> GetSummonerByIdAsync(string summonerId, PlatformRoute platformRoute,
@@ -31,7 +29,6 @@ public class SummonerService(RiotGamesApi riotApi, IRankService rankService, Pro
     {
         var current = new Summoner
         {
-            SummonerId = summoner.Puuid,
             RiotSummonerId = summoner.Id,
             Puuid = summoner.Puuid,
             AccountId = summoner.AccountId,
@@ -48,33 +45,17 @@ public class SummonerService(RiotGamesApi riotApi, IRankService rankService, Pro
         current.TagLine = account.TagLine;
         current.SummonerName = account.GameName + "#" + account.TagLine;
 
-        var ranks = await rankService.GetRankedDataAsync(current.RiotSummonerId, platformRoute, cancellationToken);
 
-        // Move old ranks to historical table
-        var oldRanks = await context.Ranks.Where(r => r.SummonerId == current.RiotSummonerId)
-            .ToListAsync(cancellationToken);
-        var historicalRanks = oldRanks.Select(oldRank => new HistoricalRank
+        var latestRank = await rankService.GetRankedDataAsync(current.RiotSummonerId, platformRoute, cancellationToken);
+
+        if (latestRank.Count > 0)
         {
-            SummonerId = oldRank.SummonerId,
-            QueueType = oldRank.QueueType,
-            Tier = oldRank.Tier,
-            RankNumber = oldRank.RankNumber,
-            LeaguePoints = oldRank.LeaguePoints,
-            Wins = oldRank.Wins,
-            Losses = oldRank.Losses,
-            DateRecorded = DateTime.UtcNow,
-            Summoner = current
-        }).ToList();
-
-        context.HistoricalRanks.AddRange(historicalRanks);
-        context.Ranks.RemoveRange(oldRanks);
-
-        foreach (var rank in ranks)
-            rank.Summoner = current;
-        current.Ranks = ranks;
-
-        await context.SaveChangesAsync(cancellationToken);
-
+            current.Ranks = latestRank;
+        }
+        else
+        {
+            current.Ranks = [];
+        }
         return current;
     }
 }

@@ -1,5 +1,5 @@
 using Camille.Enums;
-using ProjectSyndraBackend.Data.Models.Account;
+using ProjectSyndraBackend.Data.Models.LoL.Account;
 
 namespace ProjectSyndraBackend.Service.Services.RiotApi.Interfaces;
 

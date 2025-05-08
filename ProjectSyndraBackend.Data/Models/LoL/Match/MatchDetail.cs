@@ -1,10 +1,10 @@
-﻿using ProjectSyndraBackend.Data.Models.Account;
+﻿using ProjectSyndraBackend.Data.Models.LoL.Account;
 
-namespace ProjectSyndraBackend.Data.Models.Match;
+namespace ProjectSyndraBackend.Data.Models.LoL.Match;
 
 public class MatchDetail
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; }
     public int Kills { get; set; }
     public int Deaths { get; set; }
     public int Assists { get; set; }
@@ -24,8 +24,8 @@ public class MatchDetail
     public List<int> Items { get; set; } = [];
 
     public Runes Runes { get; set; }
-    public string MatchId { get; set; }
+    public Guid MatchId { get; set; }
     public Match Match { get; set; }
-    public string SummonerId { get; set; }
+    public Guid SummonerId { get; set; }
     public Summoner Summoner { get; set; }
 }

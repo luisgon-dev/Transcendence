@@ -4,7 +4,7 @@ using ProjectSyndraBackend.Service.Services.RiotApi.Interfaces;
 
 namespace ProjectSyndraBackend.Service.Services.RiotApi.Implementations;
 
-public class MatchDataGatheringService(IBackgroundJobClient backgroundJobClient) : IMatchDataGatheringService
+public class MatchDataGatheringService : IMatchDataGatheringService
 {
     public void Init()
     {

@@ -1,11 +1,12 @@
 // SummonerRepository.cs
 
 using Microsoft.EntityFrameworkCore;
-using ProjectSyndraBackend.Data.Models.Account;
+using ProjectSyndraBackend.Data.Models.LoL.Account;
+using ProjectSyndraBackend.Data.Repositories.Interfaces;
 
 namespace ProjectSyndraBackend.Data.Repositories.Implementations;
 
-public class SummonerRepository(ProjectSyndraContext context) : ISummonerRepository
+public class SummonerRepository(ProjectSyndraContext context, IRankRepository rankRepository) : ISummonerRepository
 {
     public async Task<Summoner?> GetSummonerByPuuidAsync(string puuid, CancellationToken cancellationToken)
     {
@@ -32,6 +33,11 @@ public class SummonerRepository(ProjectSyndraContext context) : ISummonerReposit
             existingSummoner.SummonerName = summoner.SummonerName;
             existingSummoner.PlatformRegion = summoner.PlatformRegion;
             existingSummoner.Region = summoner.Region;
+            existingSummoner.RiotSummonerId = summoner.RiotSummonerId;
+
+            await rankRepository.AddOrUpdateRank(existingSummoner.Ranks.ToList());
+
+
         }
 
         await context.SaveChangesAsync(cancellationToken);

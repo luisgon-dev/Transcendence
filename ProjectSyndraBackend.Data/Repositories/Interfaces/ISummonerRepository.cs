@@ -1,6 +1,6 @@
 // ISummonerRepository.cs
 
-using ProjectSyndraBackend.Data.Models.Account;
+using ProjectSyndraBackend.Data.Models.LoL.Account;
 
 namespace ProjectSyndraBackend.Data.Repositories;
 

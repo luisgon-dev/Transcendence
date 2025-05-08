@@ -1,6 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using ProjectSyndraBackend.Data.Models.Account;
-using ProjectSyndraBackend.Data.Models.Match;
+using ProjectSyndraBackend.Data.Models.LoL.Account;
+using ProjectSyndraBackend.Data.Models.LoL.Match;
 using ProjectSyndraBackend.Data.Models.Service;
 
 namespace ProjectSyndraBackend.Data;
@@ -15,25 +15,13 @@ public class ProjectSyndraContext(DbContextOptions<ProjectSyndraContext> options
     public DbSet<CurrentDataParameters> CurrentDataParameters { get; set; }
     public DbSet<Rank> Ranks { get; set; }
     public DbSet<HistoricalRank> HistoricalRanks { get; set; }
+    public DbSet<CurrentChampionLoadout> CurrentChampionLoadouts { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<MatchSummoner>()
-            .HasKey(ms => new { ms.MatchId, ms.SummonerId });
-
-        modelBuilder.Entity<MatchSummoner>()
-            .HasOne(ms => ms.Match)
-            .WithMany(m => m.MatchSummoners)
-            .HasForeignKey(ms => ms.MatchId);
-
-        modelBuilder.Entity<MatchSummoner>()
-            .HasOne(ms => ms.Summoner)
-            .WithMany(s => s.MatchSummoners)
-            .HasForeignKey(ms => ms.SummonerId);
-
-        modelBuilder.Entity<Rank>()
-            .HasOne(r => r.Summoner)
-            .WithMany(s => s.Ranks)
-            .HasForeignKey(r => r.SummonerId);
+        modelBuilder.Entity<Summoner>()
+            .HasMany(m => m.Matches)
+            .WithMany(e => e.Summoners)
+            .UsingEntity<MatchSummoner>();
     }
 }

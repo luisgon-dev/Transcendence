@@ -15,6 +15,6 @@ var app = builder.Build();
 
 app.UseHangfireDashboard();
 
-app.MapGet("/", () => "Hello World!");
+// app.MapGet("/", () => "Hello World!");
 
 app.Run();

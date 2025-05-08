@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using ProjectSyndraBackend.Data.Models.Match;
+using ProjectSyndraBackend.Data.Models.LoL.Match;
 using ProjectSyndraBackend.Data.Repositories.Interfaces;
 
 namespace ProjectSyndraBackend.Data.Repositories.Implementations;

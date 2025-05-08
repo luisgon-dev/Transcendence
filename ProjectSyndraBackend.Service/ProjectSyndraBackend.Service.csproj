@@ -30,4 +30,8 @@
     <ItemGroup>
         <ProjectReference Include="..\ProjectSyndraBackend.Data\ProjectSyndraBackend.Data.csproj"/>
     </ItemGroup>
+
+    <ItemGroup>
+        <Folder Include="Migrations\"/>
+    </ItemGroup>
 </Project>

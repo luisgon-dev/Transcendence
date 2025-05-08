@@ -20,7 +20,7 @@ public class MatchService(
         if (details == null) return null;
         var match = new Match
         {
-            MatchId = details.Metadata.MatchId,
+            ExternalMatchId = details.Metadata.MatchId, // Use ExternalMatchId instead of MatchId
             MatchDate = details.Info.GameCreation,
             Duration = (int)details.Info.GameDuration,
             Patch = details.Info.GameVersion,
@@ -44,12 +44,16 @@ public class MatchService(
 
             match.MatchSummoners.Add(new MatchSummoner
             {
+                MatchId = match.Id, // Use GUID primary key
                 Match = match,
-                Summoner = summoner
+                SummonerId = summoner.Id, // Use GUID primary key
+                Summoner = summoner,
+                ExternalMatchId = match.ExternalMatchId, // Store external IDs for reference
+                ExternalSummonerId = summoner.ExternalSummonerId
             });
+            
             localSummoners.Add(summoner);
         }
-
 
         foreach (var info in details.Info.Participants)
         {
@@ -69,7 +73,11 @@ public class MatchService(
                 ChampionName = info.ChampionName,
                 ChampionId = (int)info.ChampionId,
                 Match = match,
-                Summoner = summoner!
+                MatchId = match.Id, // Use GUID primary key
+                SummonerId = summoner!.Id, // Use GUID primary key
+                Summoner = summoner,
+                ExternalMatchId = match.ExternalMatchId, // Store external IDs for reference
+                ExternalSummonerId = summoner.ExternalSummonerId
             };
 
             items.Add(info.Item0);
@@ -81,7 +89,6 @@ public class MatchService(
             items.Add(info.Item6);
 
             matchDetail.Items = items;
-
 
             var localRunes = new Runes();
 

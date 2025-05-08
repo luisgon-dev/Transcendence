@@ -35,7 +35,7 @@ public class FetchLatestMatchInformation(
             }
             catch (Exception e)
             {
-                logger.LogError(e, "Error fetching match information for summoner {SummonerId}", summoner.SummonerId);
+                logger.LogError(e, "Error fetching match information for summoner {SummonerId}", summoner.Id);
                 continue;
             }
 

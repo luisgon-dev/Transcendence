@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using ProjectSyndraBackend.Data;
@@ -13,11 +12,9 @@ using ProjectSyndraBackend.Data;
 namespace ProjectSyndraBackend.Service.Migrations
 {
     [DbContext(typeof(ProjectSyndraContext))]
-    [Migration("20250508032734_Initial")]
-    partial class Initial
+    partial class ProjectSyndraContextModelSnapshot : ModelSnapshot
     {
-        /// <inheritdoc />
-        protected override void BuildTargetModel(ModelBuilder modelBuilder)
+        protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -78,9 +75,6 @@ namespace ProjectSyndraBackend.Service.Migrations
                     b.Property<string>("QueueType")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<int>("RankId")
-                        .HasColumnType("integer");
 
                     b.Property<string>("RankNumber")
                         .IsRequired()

@@ -6,6 +6,7 @@ using ProjectSyndraBackend.Data;
 using ProjectSyndraBackend.Data.Extensions;
 using ProjectSyndraBackend.Service;
 using ProjectSyndraBackend.Service.Services.Extensions;
+using ProjectSyndraBackend.Service.Workers;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -25,10 +26,20 @@ builder.Services.AddHangfire(config =>
 builder.Services.AddHangfireServer();
 
 // worker that initiates services
-builder.Services.AddHostedService<Worker>();
+if (builder.Environment.IsDevelopment())
+{
+    // development worker directly enqueues and cleans up jobs for development
+    builder.Services.AddHostedService<DevelopmentWorker>();
+}
+else
+{
+    builder.Services.AddHostedService<ProductionWorker>();
+}
 
-// add services
+// check to see if we are in a dev env
+// add the development service 
 builder.Services.AddRiotApiServiceCollection();
+
 // add data repositories
 builder.Services.AddProjectSyndraRepositories();
 

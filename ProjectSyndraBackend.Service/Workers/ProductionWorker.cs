@@ -1,10 +1,10 @@
 using Hangfire;
 using ProjectSyndraBackend.Service.Services.RiotApi.Interfaces;
 
-namespace ProjectSyndraBackend.Service;
+namespace ProjectSyndraBackend.Service.Workers;
 
-public class Worker(
-    ILogger<Worker> logger,
+public class ProductionWorker(
+    ILogger<ProductionWorker> logger,
     IBackgroundJobClient backgroundJobClient,
     IMatchDataGatheringService gatheringService) : BackgroundService
 {

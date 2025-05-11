@@ -8,7 +8,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ProjectSyndraBackend.Service.Migrations
 {
     /// <inheritdoc />
-    public partial class Initial : Migration
+    public partial class init : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -231,7 +231,6 @@ namespace ProjectSyndraBackend.Service.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    RankId = table.Column<int>(type: "integer", nullable: false),
                     Tier = table.Column<string>(type: "text", nullable: false),
                     RankNumber = table.Column<string>(type: "text", nullable: false),
                     LeaguePoints = table.Column<int>(type: "integer", nullable: false),

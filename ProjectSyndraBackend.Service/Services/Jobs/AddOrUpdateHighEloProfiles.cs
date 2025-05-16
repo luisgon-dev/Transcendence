@@ -2,6 +2,7 @@
 using Camille.RiotGames;
 using ProjectSyndraBackend.Data;
 using ProjectSyndraBackend.Data.Repositories;
+using ProjectSyndraBackend.Data.Repositories.Interfaces;
 using ProjectSyndraBackend.Service.Services.RiotApi;
 using ProjectSyndraBackend.Service.Services.RiotApi.Interfaces;
 

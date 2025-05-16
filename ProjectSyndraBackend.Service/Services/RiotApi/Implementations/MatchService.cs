@@ -3,6 +3,7 @@ using Camille.RiotGames;
 using ProjectSyndraBackend.Data.Models.LoL.Account;
 using ProjectSyndraBackend.Data.Models.LoL.Match;
 using ProjectSyndraBackend.Data.Repositories;
+using ProjectSyndraBackend.Data.Repositories.Interfaces;
 using ProjectSyndraBackend.Service.Services.RiotApi.Interfaces;
 
 namespace ProjectSyndraBackend.Service.Services.RiotApi.Implementations;

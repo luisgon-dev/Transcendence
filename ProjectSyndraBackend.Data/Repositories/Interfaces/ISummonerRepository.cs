@@ -2,7 +2,7 @@
 
 using ProjectSyndraBackend.Data.Models.LoL.Account;
 
-namespace ProjectSyndraBackend.Data.Repositories;
+namespace ProjectSyndraBackend.Data.Repositories.Interfaces;
 
 public interface ISummonerRepository
 {

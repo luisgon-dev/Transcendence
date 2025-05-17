@@ -1,6 +1,7 @@
 // SummonerRepository.cs
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Query;
 using ProjectSyndraBackend.Data.Models.LoL.Account;
 using ProjectSyndraBackend.Data.Repositories.Interfaces;
 
@@ -8,15 +9,24 @@ namespace ProjectSyndraBackend.Data.Repositories.Implementations;
 
 public class SummonerRepository(ProjectSyndraContext context, IRankRepository rankRepository) : ISummonerRepository
 {
-    public async Task<Summoner?> GetSummonerByPuuidAsync(string puuid, CancellationToken cancellationToken)
+    public async Task<Summoner?> GetSummonerByPuuidAsync(string puuid,
+        Func<IQueryable<Summoner>, IQueryable<Summoner>>? includes = null,
+        CancellationToken cancellationToken = default)
     {
-        return await context.Summoners.FirstOrDefaultAsync(x => x.Puuid == puuid, cancellationToken);
+        IQueryable<Summoner> query = context.Summoners;
+
+        if (includes != null)
+        {
+            query = includes(query);
+        }
+
+        return await query.FirstOrDefaultAsync(x => x.Puuid == puuid, cancellationToken);
     }
 
     public async Task AddOrUpdateSummonerAsync(Summoner summoner, CancellationToken cancellationToken)
     {
         var existingSummoner =
-            await GetSummonerByPuuidAsync(summoner.Puuid!, cancellationToken);
+            await GetSummonerByPuuidAsync(summoner.Puuid!, query => query.Include(s => s.Ranks), cancellationToken);
         if (existingSummoner == null)
         {
             context.Summoners.Add(summoner);
@@ -35,9 +45,7 @@ public class SummonerRepository(ProjectSyndraContext context, IRankRepository ra
             existingSummoner.Region = summoner.Region;
             existingSummoner.RiotSummonerId = summoner.RiotSummonerId;
 
-            await rankRepository.AddOrUpdateRank(existingSummoner.Ranks.ToList());
-
-
+            await rankRepository.AddOrUpdateRank(existingSummoner.Ranks.ToList(), cancellationToken);
         }
 
         await context.SaveChangesAsync(cancellationToken);

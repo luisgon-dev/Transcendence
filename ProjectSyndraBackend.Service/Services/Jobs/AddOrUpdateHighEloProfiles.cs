@@ -38,10 +38,6 @@ public class AddOrUpdateHighEloProfiles(
         {
             var summoner = await summonerService.GetSummonerByIdAsync(summonerId, PlatformRoute.NA1, stoppingToken);
             await summonerRepository.AddOrUpdateSummonerAsync(summoner, stoppingToken);
-            
-            var rank = await rankService.GetRankedDataAsync(summonerId, PlatformRoute.NA1, stoppingToken);
-            
-
             logger.LogInformation("Summoner {SummonerName} added or updated", summoner.SummonerName);
         }
 

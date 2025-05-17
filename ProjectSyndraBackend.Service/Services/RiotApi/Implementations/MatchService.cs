@@ -34,7 +34,7 @@ public class MatchService(
 
         foreach (var participant in details.Info.Participants)
         {
-            var summoner = await summonerRepository.GetSummonerByPuuidAsync(participant.Puuid, cancellationToken);
+            var summoner = await summonerRepository.GetSummonerByPuuidAsync(participant.Puuid, null, cancellationToken);
 
             if (summoner == null)
             {

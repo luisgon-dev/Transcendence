@@ -11,7 +11,8 @@ public class DevelopmentWorker : BackgroundService
         CleanupHangfireJobs();
         
         Console.WriteLine("Starting development worker");
-        BackgroundJob.Enqueue<FetchLatestMatchInformation>(x => x.Execute(CancellationToken.None));
+        BackgroundJob.Enqueue<AddOrUpdateHighEloProfiles>(x => x.Execute(CancellationToken.None));
+        //BackgroundJob.Enqueue<FetchLatestMatchInformation>(x => x.Execute(CancellationToken.None));
         return Task.CompletedTask;
     }
     

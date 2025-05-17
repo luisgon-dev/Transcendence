@@ -14,7 +14,7 @@ public class RankService(RiotGamesApi riotApi, ISummonerRepository repository) :
     {
         var ranks = await riotApi.LeagueV4()
             .GetLeagueEntriesForSummonerAsync(platformRoute, summonerId, cancellationToken);
-        var summoner = await repository.GetSummonerByPuuidAsync(summonerId, cancellationToken);
+        var summoner = await repository.GetSummonerByPuuidAsync(summonerId, null, cancellationToken);
         return ranks.Select(rank => new Rank
         {
             QueueType = rank.QueueType.ToString(),

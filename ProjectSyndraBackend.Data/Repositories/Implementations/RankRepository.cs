@@ -23,7 +23,7 @@ namespace ProjectSyndraBackend.Data.Repositories.Implementations
 
             // Get the existing ranks from the database
             var existingRanks = await context.Ranks
-                .Where(r => ranks.Select(rank => rank.SummonerId).Contains(r.SummonerId))
+                .Where(r => ranks.Select(rank => rank.SummonerId).Contains(r.SummonerId)).Include(rank => rank.Summoner)
                 .ToListAsync(cancellationToken);
 
            // if they are different from the inputted rank, create a new historical rank , delete then update rank with the latest.

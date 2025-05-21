@@ -1,16 +1,20 @@
 using Camille.Enums;
 using Camille.RiotGames;
+using Camille.RiotGames.MatchV5;
 using ProjectSyndraBackend.Data.Models.LoL.Account;
 using ProjectSyndraBackend.Data.Models.LoL.Match;
 using ProjectSyndraBackend.Data.Repositories;
+using ProjectSyndraBackend.Data.Repositories.Implementations;
 using ProjectSyndraBackend.Data.Repositories.Interfaces;
 using ProjectSyndraBackend.Service.Services.RiotApi.Interfaces;
+using Match = ProjectSyndraBackend.Data.Models.LoL.Match.Match;
 
 namespace ProjectSyndraBackend.Service.Services.RiotApi.Implementations;
 
 public class MatchService(
     ISummonerService summonerService,
     ISummonerRepository summonerRepository,
+    IRuneRepository runeRepository,
     RiotGamesApi riotGamesApi) : IMatchService
 {
     public async Task<Match?> GetMatchDetailsAsync(string matchId, RegionalRoute regionalRoute,
@@ -83,59 +87,7 @@ public class MatchService(
 
             matchDetail.Items = items;
 
-
-            var localRunes = new Runes();
-
-            foreach (var rune in info.Perks.Styles)
-                switch (rune.Description)
-                {
-                    case "primaryStyle":
-                        localRunes.PrimaryStyle = rune.Style;
-
-                        localRunes.Perk0 = rune.Selections[0].Perk;
-                        localRunes.Perk1 = rune.Selections[1].Perk;
-                        localRunes.Perk2 = rune.Selections[2].Perk;
-                        localRunes.Perk3 = rune.Selections[3].Perk;
-
-                        // for each selection append all var1, var2, var3 to the rune vars.
-                        localRunes.RuneVars0[0] = rune.Selections[0].Var1;
-                        localRunes.RuneVars1[0] = rune.Selections[1].Var1;
-                        localRunes.RuneVars2[0] = rune.Selections[2].Var1;
-                        localRunes.RuneVars3[0] = rune.Selections[3].Var1;
-
-                        localRunes.RuneVars0[1] = rune.Selections[0].Var2;
-                        localRunes.RuneVars1[1] = rune.Selections[1].Var2;
-                        localRunes.RuneVars2[1] = rune.Selections[2].Var2;
-                        localRunes.RuneVars3[1] = rune.Selections[3].Var2;
-
-                        localRunes.RuneVars0[2] = rune.Selections[0].Var3;
-                        localRunes.RuneVars1[2] = rune.Selections[1].Var3;
-                        localRunes.RuneVars2[2] = rune.Selections[2].Var3;
-                        localRunes.RuneVars3[2] = rune.Selections[3].Var3;
-                        break;
-                    case "subStyle":
-                        localRunes.SubStyle = rune.Style;
-
-                        localRunes.Perk4 = rune.Selections[0].Perk;
-                        localRunes.Perk5 = rune.Selections[1].Perk;
-
-                        // for each selection append all var1, var2, var3 to the rune vars.
-                        localRunes.RuneVars4[0] = rune.Selections[0].Var1;
-                        localRunes.RuneVars5[0] = rune.Selections[1].Var1;
-
-                        localRunes.RuneVars4[1] = rune.Selections[0].Var2;
-                        localRunes.RuneVars5[1] = rune.Selections[1].Var2;
-
-                        localRunes.RuneVars4[2] = rune.Selections[0].Var3;
-                        localRunes.RuneVars5[2] = rune.Selections[1].Var3;
-                        break;
-                }
-
-            localRunes.StatDefense = info.Perks.StatPerks.Defense;
-            localRunes.StatFlex = info.Perks.StatPerks.Flex;
-            localRunes.StatOffense = info.Perks.StatPerks.Offense;
-
-            matchDetail.Runes = localRunes;
+            matchDetail.Runes = await GetOrCreateRunesAsync(info.Perks, cancellationToken);
 
             localMatchDetails.Add(matchDetail);
         }
@@ -143,5 +95,85 @@ public class MatchService(
         match.MatchDetails = localMatchDetails;
 
         return match;
+    }
+
+    private async Task<Runes> GetOrCreateRunesAsync(
+        Perks perks,
+        CancellationToken cancellationToken)
+    {
+        int primaryStyle = 0, subStyle = 0;
+        var primaryRunes = new int[4];
+        var subRunes = new int[2];
+        var primaryRuneVars = new int[4][];
+        var subRuneVars = new int[2][];
+
+        foreach (var style in perks.Styles)
+        {
+            if (style.Description == "primaryStyle")
+            {
+                primaryStyle = style.Style;
+                for (int i = 0; i < 4; i++)
+                {
+                    primaryRunes[i] = style.Selections[i].Perk;
+                    primaryRuneVars[i] = new[] {
+                        style.Selections[i].Var1,
+                        style.Selections[i].Var2,
+                        style.Selections[i].Var3
+                    };
+                }
+            }
+            else if (style.Description == "subStyle")
+            {
+                subStyle = style.Style;
+                for (int i = 0; i < 2; i++)
+                {
+                    subRunes[i] = style.Selections[i].Perk;
+                    subRuneVars[i] = new[] {
+                        style.Selections[i].Var1,
+                        style.Selections[i].Var2,
+                        style.Selections[i].Var3
+                    };
+                }
+            }
+        }
+
+        var existingRunes = await runeRepository.GetExistingRunesAsync(
+            primaryStyle, subStyle,
+            primaryRunes, subRunes,
+            perks.StatPerks.Defense,
+            perks.StatPerks.Flex,
+            perks.StatPerks.Offense,
+            cancellationToken);
+
+        if (existingRunes != null)
+            return existingRunes;
+
+        var newRunes = new Runes
+        {
+            PrimaryStyle = primaryStyle,
+            SubStyle = subStyle,
+            Perk0 = primaryRunes[0],
+            Perk1 = primaryRunes[1],
+            Perk2 = primaryRunes[2],
+            Perk3 = primaryRunes[3],
+            Perk4 = subRunes[0],
+            Perk5 = subRunes[1],
+            StatDefense = perks.StatPerks.Defense,
+            StatFlex = perks.StatPerks.Flex,
+            StatOffense = perks.StatPerks.Offense
+        };
+
+        // Set rune vars
+        for (int i = 0; i < 3; i++)
+        {
+            newRunes.RuneVars0[i] = primaryRuneVars[0][i];
+            newRunes.RuneVars1[i] = primaryRuneVars[1][i];
+            newRunes.RuneVars2[i] = primaryRuneVars[2][i];
+            newRunes.RuneVars3[i] = primaryRuneVars[3][i];
+            newRunes.RuneVars4[i] = subRuneVars[0][i];
+            newRunes.RuneVars5[i] = subRuneVars[1][i];
+        }
+
+        return await runeRepository.AddRunesAsync(newRunes, cancellationToken);
     }
 }

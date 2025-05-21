@@ -23,5 +23,23 @@ public class ProjectSyndraContext(DbContextOptions<ProjectSyndraContext> options
             .HasMany(m => m.Matches)
             .WithMany(e => e.Summoners)
             .UsingEntity<MatchSummoner>();
+
+
+        modelBuilder.Entity<Runes>()
+        .HasIndex(r => new
+        {
+            r.PrimaryStyle,
+            r.SubStyle,
+            r.Perk0,
+            r.Perk1,
+            r.Perk2,
+            r.Perk3,
+            r.Perk4,
+            r.Perk5,
+            r.StatDefense,
+            r.StatFlex,
+            r.StatOffense
+        })
+        .HasDatabaseName("IX_Runes_Combination");
     }
 }

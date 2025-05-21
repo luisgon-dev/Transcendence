@@ -9,10 +9,8 @@ public class DevelopmentWorker : BackgroundService
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
         CleanupHangfireJobs();
-        
-        Console.WriteLine("Starting development worker");
-        BackgroundJob.Enqueue<AddOrUpdateHighEloProfiles>(x => x.Execute(CancellationToken.None));
-        //BackgroundJob.Enqueue<FetchLatestMatchInformation>(x => x.Execute(CancellationToken.None));
+        //BackgroundJob.Enqueue<AddOrUpdateHighEloProfiles>(x => x.Execute(CancellationToken.None));
+        BackgroundJob.Enqueue<FetchLatestMatchInformation>(x => x.Execute(CancellationToken.None));
         return Task.CompletedTask;
     }
     

@@ -13,101 +13,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="a61827c2-0b78-45a0-be75-7dd1e30da454" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/.idea.ProjectSyndraBackend/.idea/workspace.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea.Transcendence/.idea/.gitignore" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea.Transcendence/.idea/.name" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea.Transcendence/.idea/encodings.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea.Transcendence/.idea/indexLayout.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea.Transcendence/.idea/material_theme_project_new.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea.Transcendence/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Transcendence.Data/Transcendence.Data.csproj" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Transcendence.Service/Transcendence.Service.csproj" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Transcendence.WebAPI/Transcendence.WebAPI.csproj" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Transcendence.WebAdminPortal/Transcendence.WebAdminPortal.csproj" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.ProjectSyndraBackend/.idea/.gitignore" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.ProjectSyndraBackend/.idea/encodings.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.ProjectSyndraBackend/.idea/indexLayout.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.ProjectSyndraBackend/.idea/material_theme_project_new.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.ProjectSyndraBackend/.idea/vcs.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Data/Extensions/ServiceCollectionExtensions.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Data/Extensions/ServiceCollectionExtensions.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Data/Models/LoL/Account/HistoricalRank.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Data/Models/LoL/Account/HistoricalRank.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Data/Models/LoL/Account/Rank.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Data/Models/LoL/Account/Rank.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Data/Models/LoL/Account/Summoner.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Data/Models/LoL/Account/Summoner.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Data/Models/LoL/Match/Match.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Data/Models/LoL/Match/Match.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Data/Models/LoL/Match/MatchDetail.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Data/Models/LoL/Match/MatchDetail.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Data/Models/LoL/Match/MatchSummoner.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Data/Models/LoL/Match/MatchSummoner.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Data/Models/LoL/Match/Runes.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Data/Models/LoL/Match/Runes.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Data/Models/Service/CurrentChampionLoadout.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Data/Models/Service/CurrentChampionLoadout.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Data/Models/Service/CurrentDataParameters.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Data/Models/Service/CurrentDataParameters.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Data/Models/Service/Helpers/UnitWinPercent.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Data/Models/Service/Helpers/UnitWinPercent.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Data/ProjectSyndraBackend.Data.csproj" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Data/ProjectSyndraContext.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Data/ProjectSyndraContext.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Data/Repositories/Implementations/MatchRepository.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Data/Repositories/Implementations/MatchRepository.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Data/Repositories/Implementations/RankRepository.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Data/Repositories/Implementations/RankRepository.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Data/Repositories/Implementations/RuneRepository.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Data/Repositories/Implementations/RuneRepository.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Data/Repositories/Implementations/SummonerRepository.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Data/Repositories/Implementations/SummonerRepository.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Data/Repositories/Interfaces/IMatchRepository.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Data/Repositories/Interfaces/IMatchRepository.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Data/Repositories/Interfaces/IRankRepository.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Data/Repositories/Interfaces/IRankRepository.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Data/Repositories/Interfaces/IRuneRepository.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Data/Repositories/Interfaces/IRuneRepository.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Data/Repositories/Interfaces/ISummonerRepository.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Data/Repositories/Interfaces/ISummonerRepository.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Dockerfile" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Migrations/20250511063835_init.Designer.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Migrations/20250511063835_init.Designer.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Migrations/20250511063835_init.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Migrations/20250511063835_init.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Migrations/20250521214223_AddRuneOptimization.Designer.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Migrations/20250521214223_AddRuneOptimization.Designer.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Migrations/20250521214223_AddRuneOptimization.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Migrations/20250521214223_AddRuneOptimization.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Migrations/20250810070230_AddOptimizations.Designer.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Migrations/20250810070230_AddOptimizations.Designer.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Migrations/20250810070230_AddOptimizations.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Migrations/20250810070230_AddOptimizations.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Migrations/ProjectSyndraContextModelSnapshot.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Migrations/ProjectSyndraContextModelSnapshot.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Program.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Program.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/ProjectSyndraBackend.Service.csproj" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Properties/launchSettings.json" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Properties/launchSettings.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Services/Analysis/Implementations/ChampionLoadoutAnalysisService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Services/Analysis/Implementations/ChampionLoadoutAnalysisService.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Services/Analysis/Interfaces/IChampionLoadoutAnalysisService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Services/Analysis/Interfaces/IChampionLoadoutAnalysisService.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Services/Extensions/HangfireExtensions.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Services/Extensions/HangfireExtensions.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Services/Extensions/ServiceCollectionExtensions.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Services/Extensions/ServiceCollectionExtensions.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Services/Jobs/AddOrUpdateHighEloProfiles.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Services/Jobs/AddOrUpdateHighEloProfiles.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Services/Jobs/AnalyzeData.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Services/Jobs/AnalyzeData.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Services/Jobs/FetchLatestMatchInformation.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Services/Jobs/FetchLatestMatchInformation.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Services/Jobs/IJobTask.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Services/Jobs/IJobTask.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Services/Jobs/UpdateParameters.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Services/Jobs/UpdateParameters.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Services/Jobs/UpdateRanks.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Services/Jobs/UpdateRanks.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Services/RiotApi/Implementations/MatchDataGatheringService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Services/RiotApi/Implementations/MatchDataGatheringService.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Services/RiotApi/Implementations/MatchService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Services/RiotApi/Implementations/MatchService.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Services/RiotApi/Implementations/RankService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Services/RiotApi/Implementations/RankService.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Services/RiotApi/Implementations/SummonerService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Services/RiotApi/Implementations/SummonerService.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Services/RiotApi/Interfaces/IMatchDataGatheringService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Services/RiotApi/Interfaces/IMatchDataGatheringService.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Services/RiotApi/Interfaces/IMatchService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Services/RiotApi/Interfaces/IMatchService.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Services/RiotApi/Interfaces/IRankService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Services/RiotApi/Interfaces/IRankService.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Services/RiotApi/Interfaces/ISummonerService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Services/RiotApi/Interfaces/ISummonerService.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Workers/DevelopmentWorker.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Workers/DevelopmentWorker.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/Workers/ProductionWorker.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/Workers/ProductionWorker.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/appsettings.Development.json" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/appsettings.Development.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.Service/appsettings.json" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.Service/appsettings.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.WebAPI/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.WebAPI/Dockerfile" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.WebAPI/Program.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.WebAPI/Program.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.WebAPI/ProjectSyndraBackend.WebAPI.csproj" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.WebAPI/ProjectSyndraBackend.WebAPI.http" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.WebAPI/ProjectSyndraBackend.WebAPI.http" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.WebAPI/Properties/launchSettings.json" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.WebAPI/Properties/launchSettings.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.WebAPI/WeatherForecast.cs" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.WebAPI/appsettings.Development.json" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.WebAPI/appsettings.Development.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.WebAPI/appsettings.json" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.WebAPI/appsettings.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.WebAdminPortal/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.WebAdminPortal/Dockerfile" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.WebAdminPortal/Program.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.WebAdminPortal/Program.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.WebAdminPortal/ProjectSyndraBackend.WebAdminPortal.csproj" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.WebAdminPortal/Properties/launchSettings.json" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.WebAdminPortal/Properties/launchSettings.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.WebAdminPortal/appsettings.Development.json" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.WebAdminPortal/appsettings.Development.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.WebAdminPortal/appsettings.json" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.WebAdminPortal/appsettings.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend.sln" beforeDir="false" afterPath="$PROJECT_DIR$/Transcendence.sln" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend/ProjectSyndraBackend.Data/Models/LoL/Account/Rank.cs" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend/ProjectSyndraBackend.Data/Models/LoL/Account/Summoner.cs" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend/ProjectSyndraBackend.Data/Models/LoL/Match/Match.cs" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend/ProjectSyndraBackend.Data/Models/LoL/Match/MatchDetail.cs" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend/ProjectSyndraBackend.Data/Models/LoL/Match/MatchSummoner.cs" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend/ProjectSyndraBackend.Data/ProjectSyndraContext.cs" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/ProjectSyndraBackend/ProjectSyndraBackend.Service/Services/RiotApi/Implementations/MatchService.cs" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/docker-compose.yml" beforeDir="false" afterPath="$PROJECT_DIR$/docker-compose.yml" afterDir="false" />
-    </list>
+    <list default="true" id="a61827c2-0b78-45a0-be75-7dd1e30da454" name="Changes" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -163,6 +69,7 @@
     &quot;.NET Launch Settings Profile.ProjectSyndraBackend.WebAPI: http.executor&quot;: &quot;Run&quot;,
     &quot;.NET Launch Settings Profile.ProjectSyndraBackend.WebAdminPortal: https.executor&quot;: &quot;Run&quot;,
     &quot;.NET Launch Settings Profile.ProjectSyndraBackend: http.executor&quot;: &quot;Run&quot;,
+    &quot;.NET Launch Settings Profile.Transcendence.Service.executor&quot;: &quot;Run&quot;,
     &quot;ASKED_ADD_EXTERNAL_FILES&quot;: &quot;true&quot;,
     &quot;ASKED_SHARE_PROJECT_CONFIGURATION_FILES&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
@@ -384,7 +291,7 @@
       <workItem from="1750390268087" duration="1443000" />
       <workItem from="1754805463998" duration="15000" />
       <workItem from="1754805506428" duration="6304000" />
-      <workItem from="1754856495385" duration="590000" />
+      <workItem from="1754856495385" duration="1042000" />
     </task>
     <task id="LOCAL-00001" summary="Init Commit">
       <option name="closed" value="true" />
@@ -450,7 +357,15 @@
       <option name="project" value="LOCAL" />
       <updated>1746945921049</updated>
     </task>
-    <option name="localTasksCounter" value="9" />
+    <task id="LOCAL-00009" summary="rename refactor">
+      <option name="closed" value="true" />
+      <created>1754857298755</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1754857298755</updated>
+    </task>
+    <option name="localTasksCounter" value="10" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -480,7 +395,8 @@
     <MESSAGE value="test" />
     <MESSAGE value="Added basic database schema" />
     <MESSAGE value="dev workflow improvement for testing jobs" />
-    <option name="LAST_COMMIT_MESSAGE" value="dev workflow improvement for testing jobs" />
+    <MESSAGE value="rename refactor" />
+    <option name="LAST_COMMIT_MESSAGE" value="rename refactor" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>

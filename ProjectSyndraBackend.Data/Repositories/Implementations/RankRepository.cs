@@ -81,7 +81,6 @@ public class RankRepository(ProjectSyndraContext context) : IRankRepository
                 await context.Ranks.AddAsync(rank, cancellationToken);
             }
         }
-
-        await context.SaveChangesAsync(cancellationToken);
     }
+    
 }

@@ -48,6 +48,7 @@ public class SummonerRepository(ProjectSyndraContext context, IRankRepository ra
             await rankRepository.AddOrUpdateRank(existingSummoner.Ranks.ToList(), cancellationToken);
         }
 
-        await context.SaveChangesAsync(cancellationToken);
+       
     }
+    
 }

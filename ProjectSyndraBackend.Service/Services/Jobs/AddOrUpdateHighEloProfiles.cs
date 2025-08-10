@@ -19,8 +19,7 @@ public class AddOrUpdateHighEloProfiles(
 {
     public async Task Execute(CancellationToken stoppingToken)
     {
-        var challengerLeague = await riotGamesApi.LeagueV4()
-            .GetChallengerLeagueAsync(PlatformRoute.NA1, QueueType.RANKED_SOLO_5x5, stoppingToken);
+        var challengerLeague = await riotGamesApi.LeagueV4().GetChallengerLeagueAsync(PlatformRoute.NA1, QueueType.RANKED_SOLO_5x5, stoppingToken);
         var grandmasterLeague = await riotGamesApi.LeagueV4()
             .GetGrandmasterLeagueAsync(PlatformRoute.NA1, QueueType.RANKED_SOLO_5x5, stoppingToken);
         var masterLeague = await riotGamesApi.LeagueV4()
@@ -28,15 +27,15 @@ public class AddOrUpdateHighEloProfiles(
 
 
         // get all the summoner ID from the leagues into one list
-        var summonerIds = challengerLeague.Entries.Select(x => x.SummonerId)
-            .Concat(grandmasterLeague.Entries.Select(x => x.SummonerId))
-            .Concat(masterLeague.Entries.Select(x => x.SummonerId))
+        var summonerPuuids = challengerLeague.Entries.Select(x => x.Puuid)
+            .Concat(grandmasterLeague.Entries.Select(x => x.Puuid))
+            .Concat(masterLeague.Entries.Select(x => x.Puuid))
             .ToList();
 
 
-        foreach (var summonerId in summonerIds)
+        foreach (var summonerPuuid in summonerPuuids)
         {
-            var summoner = await summonerService.GetSummonerByIdAsync(summonerId, PlatformRoute.NA1, stoppingToken);
+            var summoner = await summonerService.GetSummonerByPuuidAsync(summonerPuuid, PlatformRoute.NA1, stoppingToken);
             await summonerRepository.AddOrUpdateSummonerAsync(summoner, stoppingToken);
             logger.LogInformation("Summoner {SummonerName} added or updated", summoner.SummonerName);
         }

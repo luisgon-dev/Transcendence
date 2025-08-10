@@ -19,6 +19,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\ProjectSyndraBackend.Data\ProjectSyndraBackend.Data.csproj"/>
+        <ProjectReference Include="..\ProjectSyndraBackend.Service\ProjectSyndraBackend.Service.csproj" />
     </ItemGroup>
 
 </Project>

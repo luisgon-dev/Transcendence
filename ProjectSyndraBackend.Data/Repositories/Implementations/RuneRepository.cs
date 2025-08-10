@@ -40,8 +40,8 @@ namespace ProjectSyndraBackend.Data.Repositories.Implementations
         public async Task<Runes> AddRunesAsync(Runes runes, CancellationToken cancellationToken = default)
         {
             var entry = await context.Runes.AddAsync(runes, cancellationToken);
-            await context.SaveChangesAsync(cancellationToken);
             return entry.Entity;
         }
+        
     }
 }

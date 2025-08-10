@@ -59,6 +59,10 @@ public class FetchLatestMatchInformation(
                     }
 
                     await matchRepository.AddMatchAsync(match, stoppingToken);
+                    
+                    // save all changes
+                    await context.SaveChangesAsync(stoppingToken);
+                    
                 }
                 catch (Exception e)
                 {

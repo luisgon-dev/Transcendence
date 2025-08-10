@@ -93,6 +93,7 @@ public class MatchService(
         }
 
         match.MatchDetails = localMatchDetails;
+        
 
         return match;
     }

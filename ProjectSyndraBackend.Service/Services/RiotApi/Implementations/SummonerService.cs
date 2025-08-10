@@ -10,12 +10,6 @@ namespace ProjectSyndraBackend.Service.Services.RiotApi.Implementations;
 public class SummonerService(RiotGamesApi riotApi, IRankService rankService)
     : ISummonerService
 {
-    public async Task<Summoner> GetSummonerByIdAsync(string summonerId, PlatformRoute platformRoute,
-        CancellationToken cancellationToken = default)
-    {
-        var summoner = await riotApi.SummonerV4().GetBySummonerIdAsync(platformRoute, summonerId, cancellationToken);
-        return await CreateSummonerAsync(summoner, platformRoute, cancellationToken);
-    }
 
     public async Task<Summoner> GetSummonerByPuuidAsync(string puuid, PlatformRoute platformRoute,
         CancellationToken cancellationToken = default)
@@ -46,7 +40,7 @@ public class SummonerService(RiotGamesApi riotApi, IRankService rankService)
         current.SummonerName = account.GameName + "#" + account.TagLine;
 
 
-        var latestRank = await rankService.GetRankedDataAsync(current.RiotSummonerId, platformRoute, cancellationToken);
+        var latestRank = await rankService.GetRankedDataAsync(current.Puuid, platformRoute, cancellationToken);
 
         if (latestRank.Count > 0)
         {

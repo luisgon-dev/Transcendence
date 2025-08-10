@@ -1,12 +1,11 @@
 using Camille.Enums;
 using ProjectSyndraBackend.Data.Models.LoL.Account;
 
-namespace ProjectSyndraBackend.Service.Services.RiotApi;
+namespace ProjectSyndraBackend.Service.Services.RiotApi.Interfaces;
 
 public interface ISummonerService
 {
-    Task<Summoner> GetSummonerByIdAsync(string summonerId, PlatformRoute platformRoute,
-        CancellationToken cancellationToken = default);
+
 
     Task<Summoner> GetSummonerByPuuidAsync(string puuid, PlatformRoute platformRoute,
         CancellationToken cancellationToken = default);

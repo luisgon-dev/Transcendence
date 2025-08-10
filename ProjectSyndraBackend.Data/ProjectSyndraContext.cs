@@ -25,6 +25,14 @@ public class ProjectSyndraContext(DbContextOptions<ProjectSyndraContext> options
             .UsingEntity<MatchSummoner>();
 
 
+        modelBuilder.Entity<Rank>()
+            .HasIndex(x => new { x.SummonerId, x.QueueType })
+            .IsUnique();
+        
+        modelBuilder.Entity<Match>()
+            .HasIndex(x => new { x.MatchId })
+            .IsUnique();
+        
         modelBuilder.Entity<Runes>()
         .HasIndex(r => new
         {

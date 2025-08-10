@@ -1,0 +1,39 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{A829922D-4E5D-4995-8F2D-C8C952C93A7C}"
+	ProjectSection(SolutionItems) = preProject
+		docker-compose.yml = docker-compose.yml
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Transcendence.Data", "Transcendence.Data\Transcendence.Data.csproj", "{C35CFBA4-4E00-418B-9661-15B6B9F2F559}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Transcendence.WebAPI", "Transcendence.WebAPI\Transcendence.WebAPI.csproj", "{A100C2B2-4773-4090-B077-FF47010254F2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Transcendence.Service", "Transcendence.Service\Transcendence.Service.csproj", "{5BBFC682-73D0-4CB6-9091-5CDC41967CEA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Transcendence.WebAdminPortal", "Transcendence.WebAdminPortal\Transcendence.WebAdminPortal.csproj", "{333954F2-754F-4937-9F9D-8B135C772162}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C35CFBA4-4E00-418B-9661-15B6B9F2F559}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C35CFBA4-4E00-418B-9661-15B6B9F2F559}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C35CFBA4-4E00-418B-9661-15B6B9F2F559}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C35CFBA4-4E00-418B-9661-15B6B9F2F559}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A100C2B2-4773-4090-B077-FF47010254F2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A100C2B2-4773-4090-B077-FF47010254F2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A100C2B2-4773-4090-B077-FF47010254F2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A100C2B2-4773-4090-B077-FF47010254F2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5BBFC682-73D0-4CB6-9091-5CDC41967CEA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5BBFC682-73D0-4CB6-9091-5CDC41967CEA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5BBFC682-73D0-4CB6-9091-5CDC41967CEA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5BBFC682-73D0-4CB6-9091-5CDC41967CEA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{333954F2-754F-4937-9F9D-8B135C772162}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{333954F2-754F-4937-9F9D-8B135C772162}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{333954F2-754F-4937-9F9D-8B135C772162}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{333954F2-754F-4937-9F9D-8B135C772162}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

@@ -11,8 +11,6 @@ public class Match
     public string? Patch { get; set; }
     public string? QueueType { get; set; }
     public string? EndOfGameResult { get; set; }
-
-    public ICollection<MatchDetail> MatchDetails { get; set; } = new List<MatchDetail>();
     public List<Summoner> Summoners { get; set; } = [];
-    public ICollection<MatchSummoner> MatchSummoners { get; set; } = new List<MatchSummoner>();
+    public ICollection<MatchParticipant> Participants { get; set; } = new List<MatchParticipant>();
 }

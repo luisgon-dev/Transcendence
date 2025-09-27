@@ -9,13 +9,13 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
 {
     public DbSet<Summoner> Summoners { get; set; }
     public DbSet<Match> Matches { get; set; }
-    public DbSet<MatchDetail> MatchDetails { get; set; }
     public DbSet<MatchSummoner> MatchSummoners { get; set; }
     public DbSet<Runes> Runes { get; set; }
     public DbSet<CurrentDataParameters> CurrentDataParameters { get; set; }
     public DbSet<Rank> Ranks { get; set; }
     public DbSet<HistoricalRank> HistoricalRanks { get; set; }
     public DbSet<CurrentChampionLoadout> CurrentChampionLoadouts { get; set; }
+    public DbSet<MatchParticipant> MatchParticipants { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -28,26 +28,98 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
         modelBuilder.Entity<Rank>()
             .HasIndex(x => new { x.SummonerId, x.QueueType })
             .IsUnique();
-        
+
         modelBuilder.Entity<Match>()
             .HasIndex(x => new { x.MatchId })
             .IsUnique();
-        
-        modelBuilder.Entity<Runes>()
-        .HasIndex(r => new
+
+        // Helpful secondary indexes for query patterns on matches
+        modelBuilder.Entity<Match>()
+            .HasIndex(x => x.MatchDate);
+        modelBuilder.Entity<Match>()
+            .HasIndex(x => x.QueueType);
+
+        // Summoner lookups by Puuid
+        modelBuilder.Entity<Summoner>()
+            .HasIndex(s => s.Puuid);
+
+        // MatchParticipant configuration
+        modelBuilder.Entity<MatchParticipant>(entity =>
         {
-            r.PrimaryStyle,
-            r.SubStyle,
-            r.Perk0,
-            r.Perk1,
-            r.Perk2,
-            r.Perk3,
-            r.Perk4,
-            r.Perk5,
-            r.StatDefense,
-            r.StatFlex,
-            r.StatOffense
-        })
-        .HasDatabaseName("IX_Runes_Combination");
+            entity.HasKey(p => p.Id);
+
+            entity.HasOne(p => p.Match)
+                .WithMany(m => m.Participants)
+                .HasForeignKey(p => p.MatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(p => p.Summoner)
+                .WithMany(s => s.MatchParticipants)
+                .HasForeignKey(p => p.SummonerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Enforce one participant per (Match, Summoner)
+            entity.HasIndex(p => new { p.MatchId, p.SummonerId })
+                .IsUnique();
+
+            // Common filter/index fields
+            entity.HasIndex(p => p.SummonerId);
+            entity.HasIndex(p => p.ChampionId);
+            entity.HasIndex(p => new { p.ChampionId, p.TeamPosition });
+            entity.HasIndex(p => p.MatchId);
+        });
+
+        // Helpful secondary indexes for query patterns on matches
+        modelBuilder.Entity<Match>()
+            .HasIndex(x => x.MatchDate);
+        modelBuilder.Entity<Match>()
+            .HasIndex(x => x.QueueType);
+
+        // Summoner lookups by Puuid
+        modelBuilder.Entity<Summoner>()
+            .HasIndex(s => s.Puuid);
+
+        // MatchParticipant configuration
+        modelBuilder.Entity<MatchParticipant>(entity =>
+        {
+            entity.HasKey(p => p.Id);
+
+            entity.HasOne(p => p.Match)
+                .WithMany(m => m.Participants)
+                .HasForeignKey(p => p.MatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(p => p.Summoner)
+                .WithMany(s => s.MatchParticipants)
+                .HasForeignKey(p => p.SummonerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Enforce one participant per (Match, Summoner)
+            entity.HasIndex(p => new { p.MatchId, p.SummonerId })
+                .IsUnique();
+
+            // Common filter/index fields
+            entity.HasIndex(p => p.SummonerId);
+            entity.HasIndex(p => p.ChampionId);
+            entity.HasIndex(p => new { p.ChampionId, p.TeamPosition });
+            entity.HasIndex(p => p.MatchId);
+        });
+
+        modelBuilder.Entity<Runes>()
+            .HasIndex(r => new
+            {
+                r.PrimaryStyle,
+                r.SubStyle,
+                r.Perk0,
+                r.Perk1,
+                r.Perk2,
+                r.Perk3,
+                r.Perk4,
+                r.Perk5,
+                r.StatDefense,
+                r.StatFlex,
+                r.StatOffense
+            })
+            .HasDatabaseName("IX_Runes_Combination");
     }
 }

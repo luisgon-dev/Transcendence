@@ -1,100 +1,110 @@
 using Camille.Enums;
 using Camille.RiotGames;
 using Camille.RiotGames.MatchV5;
-using Transcendence.Data.Models.LoL.Account;
+using Microsoft.EntityFrameworkCore;
+using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Match;
-using Transcendence.Data.Repositories;
-using Transcendence.Data.Repositories.Implementations;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Services.RiotApi.Interfaces;
-using Match = Transcendence.Data.Models.LoL.Match.Match;
 
 namespace Transcendence.Service.Services.RiotApi.Implementations;
 
+using DataMatch = Data.Models.LoL.Match.Match;
+
 public class MatchService(
+    RiotGamesApi riotGamesApi,
+    TranscendenceContext context,
+    IMatchRepository matchRepository,
     ISummonerService summonerService,
     ISummonerRepository summonerRepository,
     IRuneRepository runeRepository,
-    RiotGamesApi riotGamesApi) : IMatchService
+    ILogger<MatchService> logger) : IMatchService
 {
-    public async Task<Match?> GetMatchDetailsAsync(string matchId, RegionalRoute regionalRoute,
-        PlatformRoute platformRoute, CancellationToken cancellationToken = default)
+    public async Task<DataMatch?> GetMatchDetailsAsync(
+        string matchId,
+        RegionalRoute regionalRoute,
+        PlatformRoute platformRoute,
+        CancellationToken cancellationToken = default)
     {
-        var details = await riotGamesApi.MatchV5().GetMatchAsync(regionalRoute, matchId, cancellationToken);
-
-        if (details == null) return null;
-        var match = new Match
+        // Fetch match from Riot
+        var matchDto = await riotGamesApi.MatchV5()
+            .GetMatchAsync(regionalRoute, matchId, cancellationToken);
+        if (matchDto == null)
         {
-            MatchId = details.Metadata.MatchId,
-            MatchDate = details.Info.GameCreation,
-            Duration = (int)details.Info.GameDuration,
-            Patch = details.Info.GameVersion,
-            QueueType = details.Info.QueueId.ToString(),
-            EndOfGameResult = details.Info.EndOfGameResult
+            logger.LogWarning("Riot API returned null for match {MatchId}", matchId);
+            return null;
+        }
+
+        var info = matchDto.Info;
+        var metadata = matchDto.Metadata;
+
+        // Build match entity (do not persist here; caller handles persistence)
+        var match = new DataMatch
+        {
+            MatchId = metadata.MatchId,
+            MatchDate = info.GameCreation, // epoch ms
+            Duration = (int)info.GameDuration,
+            Patch = info.GameVersion,
+            QueueType = info.QueueId.ToString(),
+            EndOfGameResult = info.EndOfGameResult
         };
 
-        var localSummoners = new List<Summoner>();
-        var localMatchDetails = new List<MatchDetail>();
-
-        foreach (var participant in details.Info.Participants)
+        // Ensure Summoners exist, build participants and relationships
+        foreach (var p in info.Participants)
         {
-            var summoner = await summonerRepository.GetSummonerByPuuidAsync(participant.Puuid, null, cancellationToken);
+            // Attempt to find Summoner by PUUID
+            var summoner = await context.Summoners
+                .FirstOrDefaultAsync(s => s.Puuid == p.Puuid, cancellationToken);
 
             if (summoner == null)
             {
-                summoner = await summonerService.GetSummonerByPuuidAsync(participant.Puuid, platformRoute,
-                    cancellationToken);
+                // Fetch and upsert missing summoner via existing service/repository
+                summoner = await summonerService.GetSummonerByPuuidAsync(p.Puuid, platformRoute, cancellationToken);
                 await summonerRepository.AddOrUpdateSummonerAsync(summoner, cancellationToken);
             }
 
-            match.MatchSummoners.Add(new MatchSummoner
+            // Link summoner to this match (many-to-many)
+            if (match.Summoners.All(s => s.Id != summoner.Id))
+            {
+                match.Summoners.Add(summoner);
+            }
+
+            // Create participant
+            var participant = new MatchParticipant
             {
                 Match = match,
-                Summoner = summoner
-            });
-            localSummoners.Add(summoner);
-        }
-
-
-        foreach (var info in details.Info.Participants)
-        {
-            var summoner = localSummoners.FirstOrDefault(x => x.Puuid == info.Puuid);
-            var items = new List<int>();
-
-            var matchDetail = new MatchDetail
-            {
-                Kills = info.Kills,
-                Deaths = info.Deaths,
-                Assists = info.Assists,
-                Win = info.Win,
-                SummonerSpell1 = info.Summoner1Id,
-                SummonerSpell2 = info.Summoner2Id,
-                Lane = info.Lane,
-                Role = info.Role,
-                ChampionName = info.ChampionName,
-                ChampionId = (int)info.ChampionId,
-                Match = match,
-                Summoner = summoner!
+                Summoner = summoner,
+                Puuid = p.Puuid,
+                TeamId = (int)p.TeamId,
+                ChampionId = (int)p.ChampionId,
+                TeamPosition = !string.IsNullOrWhiteSpace(p.TeamPosition) ? p.TeamPosition : p.IndividualPosition,
+                Win = p.Win,
+                Kills = p.Kills,
+                Deaths = p.Deaths,
+                Assists = p.Assists,
+                ChampLevel = p.ChampLevel,
+                GoldEarned = p.GoldEarned,
+                TotalDamageDealtToChampions = p.TotalDamageDealtToChampions,
+                VisionScore = p.VisionScore,
+                TotalMinionsKilled = p.TotalMinionsKilled,
+                NeutralMinionsKilled = p.NeutralMinionsKilled,
+                SummonerSpell1Id = p.Summoner1Id,
+                SummonerSpell2Id = p.Summoner2Id,
+                Item0 = p.Item0,
+                Item1 = p.Item1,
+                Item2 = p.Item2,
+                Item3 = p.Item3,
+                Item4 = p.Item4,
+                Item5 = p.Item5,
+                Item6 = p.Item6,
+                TrinketItem = p.Item6 // trinket slot by convention
             };
-
-            items.Add(info.Item0);
-            items.Add(info.Item1);
-            items.Add(info.Item2);
-            items.Add(info.Item3);
-            items.Add(info.Item4);
-            items.Add(info.Item5);
-            items.Add(info.Item6);
-
-            matchDetail.Items = items;
-
-            matchDetail.Runes = await GetOrCreateRunesAsync(info.Perks, cancellationToken);
-
-            localMatchDetails.Add(matchDetail);
+            participant.Runes = await GetOrCreateRunesAsync(p.Perks, cancellationToken);
+            match.Participants.Add(participant);
         }
 
-        match.MatchDetails = localMatchDetails;
-        
-
+        logger.LogInformation("Prepared match {MatchId} with {Count} participants for persistence.", matchId,
+            match.Participants.Count);
         return match;
     }
 
@@ -116,7 +126,8 @@ public class MatchService(
                 for (int i = 0; i < 4; i++)
                 {
                     primaryRunes[i] = style.Selections[i].Perk;
-                    primaryRuneVars[i] = new[] {
+                    primaryRuneVars[i] = new[]
+                    {
                         style.Selections[i].Var1,
                         style.Selections[i].Var2,
                         style.Selections[i].Var3
@@ -129,7 +140,8 @@ public class MatchService(
                 for (int i = 0; i < 2; i++)
                 {
                     subRunes[i] = style.Selections[i].Perk;
-                    subRuneVars[i] = new[] {
+                    subRuneVars[i] = new[]
+                    {
                         style.Selections[i].Var1,
                         style.Selections[i].Var2,
                         style.Selections[i].Var3

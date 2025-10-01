@@ -1,16 +1,18 @@
 using Hangfire;
+using Transcendence.Service.Services.Jobs;
 using Transcendence.Service.Services.RiotApi.Interfaces;
 
 namespace Transcendence.Service.Workers;
 
 public class ProductionWorker(
     ILogger<ProductionWorker> logger,
-    IBackgroundJobClient backgroundJobClient,
+    IRecurringJobManager recurringJobManager,
     IMatchDataGatheringService gatheringService) : BackgroundService
 {
     public override Task StartAsync(CancellationToken cancellationToken)
     {
         gatheringService.Init();
+        recurringJobManager.AddOrUpdate<UpdateStaticDataJob>("updateStaticData", x => x.Execute(CancellationToken.None), Cron.Daily);
         return base.StartAsync(cancellationToken);
     }
 

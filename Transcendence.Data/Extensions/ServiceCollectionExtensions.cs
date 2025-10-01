@@ -12,7 +12,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMatchRepository, MatchRepository>();
         services.AddScoped<ISummonerRepository, SummonerRepository>();
         services.AddScoped<IRankRepository, RankRepository>();
-        services.AddScoped<IRuneRepository, RuneRepository>();
 
         return services;
     }

@@ -17,7 +17,6 @@ public class Summoner
     public required string? PlatformRegion { get; set; }
     public required string? Region { get; set; }
     public List<Match.Match> Matches { get; } = [];
-    public List<MatchSummoner> MatchSummoners { get; } = [];
     public ICollection<MatchParticipant> MatchParticipants { get; } = [];
     public ICollection<Rank> Ranks { get; set; } = new List<Rank>();
 }

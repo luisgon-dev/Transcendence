@@ -4,13 +4,14 @@ using Transcendence.Service.Services.Jobs;
 
 namespace Transcendence.Service.Workers;
 
-public class DevelopmentWorker : BackgroundService
+public class DevelopmentWorker(IBackgroundJobClient backgroundJobClient) : BackgroundService
 {
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
         CleanupHangfireJobs();
         //BackgroundJob.Enqueue<AddOrUpdateHighEloProfiles>(x => x.Execute(CancellationToken.None));
-        BackgroundJob.Enqueue<FetchLatestMatchInformation>(x => x.Execute(CancellationToken.None));
+        //backgroundJobClient.Enqueue<FetchLatestMatchInformation>(x => x.Execute(CancellationToken.None));
+        backgroundJobClient.Enqueue<UpdateStaticDataJob>(x => x.Execute(CancellationToken.None));
         return Task.CompletedTask;
     }
     

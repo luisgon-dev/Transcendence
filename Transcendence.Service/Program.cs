@@ -25,6 +25,8 @@ builder.Services.AddHangfire(config =>
             options.UseNpgsqlConnection(builder.Configuration.GetConnectionString("MainDatabase"))));
 builder.Services.AddHangfireServer();
 
+builder.Services.AddHttpClient();
+
 // worker that initiates services
 if (builder.Environment.IsDevelopment())
 {
@@ -38,7 +40,7 @@ else
 
 // check to see if we are in a dev env
 // add the development service 
-builder.Services.AddRiotApiServiceCollection();
+builder.Services.AddTranscendenceServices();
 
 // add data repositories
 builder.Services.AddProjectSyndraRepositories();

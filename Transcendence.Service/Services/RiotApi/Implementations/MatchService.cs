@@ -17,7 +17,6 @@ public class MatchService(
     IMatchRepository matchRepository,
     ISummonerService summonerService,
     ISummonerRepository summonerRepository,
-    IRuneRepository runeRepository,
     ILogger<MatchService> logger) : IMatchService
 {
     public async Task<DataMatch?> GetMatchDetailsAsync(
@@ -89,17 +88,12 @@ public class MatchService(
                 TotalMinionsKilled = p.TotalMinionsKilled,
                 NeutralMinionsKilled = p.NeutralMinionsKilled,
                 SummonerSpell1Id = p.Summoner1Id,
-                SummonerSpell2Id = p.Summoner2Id,
-                Item0 = p.Item0,
-                Item1 = p.Item1,
-                Item2 = p.Item2,
-                Item3 = p.Item3,
-                Item4 = p.Item4,
-                Item5 = p.Item5,
-                Item6 = p.Item6,
-                TrinketItem = p.Item6 // trinket slot by convention
+                SummonerSpell2Id = p.Summoner2Id
             };
-            participant.Runes = await GetOrCreateRunesAsync(p.Perks, cancellationToken);
+
+            participant.Runes = CreateMatchParticipantRunes(p.Perks, match.Patch);
+            participant.Items = CreateMatchParticipantItems(p, match.Patch);
+
             match.Participants.Add(participant);
         }
 
@@ -108,85 +102,39 @@ public class MatchService(
         return match;
     }
 
-    private async Task<Runes> GetOrCreateRunesAsync(
-        Perks perks,
-        CancellationToken cancellationToken)
+    private ICollection<MatchParticipantRune> CreateMatchParticipantRunes(Perks perks, string patch)
     {
-        int primaryStyle = 0, subStyle = 0;
-        var primaryRunes = new int[4];
-        var subRunes = new int[2];
-        var primaryRuneVars = new int[4][];
-        var subRuneVars = new int[2][];
+        var participantRunes = new List<MatchParticipantRune>();
 
         foreach (var style in perks.Styles)
         {
-            if (style.Description == "primaryStyle")
+            foreach (var selection in style.Selections)
             {
-                primaryStyle = style.Style;
-                for (int i = 0; i < 4; i++)
+                participantRunes.Add(new MatchParticipantRune
                 {
-                    primaryRunes[i] = style.Selections[i].Perk;
-                    primaryRuneVars[i] = new[]
-                    {
-                        style.Selections[i].Var1,
-                        style.Selections[i].Var2,
-                        style.Selections[i].Var3
-                    };
-                }
-            }
-            else if (style.Description == "subStyle")
-            {
-                subStyle = style.Style;
-                for (int i = 0; i < 2; i++)
-                {
-                    subRunes[i] = style.Selections[i].Perk;
-                    subRuneVars[i] = new[]
-                    {
-                        style.Selections[i].Var1,
-                        style.Selections[i].Var2,
-                        style.Selections[i].Var3
-                    };
-                }
+                    RuneId = selection.Perk,
+                    PatchVersion = patch
+                });
             }
         }
 
-        var existingRunes = await runeRepository.GetExistingRunesAsync(
-            primaryStyle, subStyle,
-            primaryRunes, subRunes,
-            perks.StatPerks.Defense,
-            perks.StatPerks.Flex,
-            perks.StatPerks.Offense,
-            cancellationToken);
-
-        if (existingRunes != null)
-            return existingRunes;
-
-        var newRunes = new Runes
-        {
-            PrimaryStyle = primaryStyle,
-            SubStyle = subStyle,
-            Perk0 = primaryRunes[0],
-            Perk1 = primaryRunes[1],
-            Perk2 = primaryRunes[2],
-            Perk3 = primaryRunes[3],
-            Perk4 = subRunes[0],
-            Perk5 = subRunes[1],
-            StatDefense = perks.StatPerks.Defense,
-            StatFlex = perks.StatPerks.Flex,
-            StatOffense = perks.StatPerks.Offense
-        };
-
-        // Set rune vars
-        for (int i = 0; i < 3; i++)
-        {
-            newRunes.RuneVars0[i] = primaryRuneVars[0][i];
-            newRunes.RuneVars1[i] = primaryRuneVars[1][i];
-            newRunes.RuneVars2[i] = primaryRuneVars[2][i];
-            newRunes.RuneVars3[i] = primaryRuneVars[3][i];
-            newRunes.RuneVars4[i] = subRuneVars[0][i];
-            newRunes.RuneVars5[i] = subRuneVars[1][i];
-        }
-
-        return await runeRepository.AddRunesAsync(newRunes, cancellationToken);
+        return participantRunes;
     }
+
+    private ICollection<MatchParticipantItem> CreateMatchParticipantItems(Participant participant, string patch)
+    {
+        var participantItems = new List<MatchParticipantItem>();
+
+        if (participant.Item0 != 0) participantItems.Add(new MatchParticipantItem { ItemId = participant.Item0, PatchVersion = patch });
+        if (participant.Item1 != 0) participantItems.Add(new MatchParticipantItem { ItemId = participant.Item1, PatchVersion = patch });
+        if (participant.Item2 != 0) participantItems.Add(new MatchParticipantItem { ItemId = participant.Item2, PatchVersion = patch });
+        if (participant.Item3 != 0) participantItems.Add(new MatchParticipantItem { ItemId = participant.Item3, PatchVersion = patch });
+        if (participant.Item4 != 0) participantItems.Add(new MatchParticipantItem { ItemId = participant.Item4, PatchVersion = patch });
+        if (participant.Item5 != 0) participantItems.Add(new MatchParticipantItem { ItemId = participant.Item5, PatchVersion = patch });
+        if (participant.Item6 != 0) participantItems.Add(new MatchParticipantItem { ItemId = participant.Item6, PatchVersion = patch });
+
+        return participantItems;
+    }
+
+
 }

@@ -1,7 +1,6 @@
 namespace Transcendence.Service.Services.StaticData.DTOs;
 
-public class CommunityDragonPatch
+public class DataDragonPatch
 {
-    public string Name { get; set; }
     public string Patch { get; set; }
 }

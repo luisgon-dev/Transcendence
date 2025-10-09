@@ -15,35 +15,49 @@ public class StaticDataService(TranscendenceContext context, IHttpClientFactory 
         var client = httpClientFactory.CreateClient();
 
         var patches = await FetchPatchesAsync(client, cancellationToken);
+        if (patches is null || patches.Count == 0) return;
 
-        foreach (var patch in patches)
+        // Only use the latest patch (first in the list) and trim last decimal (e.g., 15.20.1 -> 15.20)
+        var latestFullPatch = patches[0].Patch;
+        var latestCdragonPatch = TrimPatch(latestFullPatch);
+
+        if (!await context.Patches.AnyAsync(p => p.Version == latestCdragonPatch, cancellationToken))
         {
-            if (!await context.Patches.AnyAsync(p => p.Version == patch.Patch, cancellationToken))
-            {
-                context.Patches.Add(new Patch { Version = patch.Patch, ReleaseDate = DateTime.UtcNow });
+            context.Patches.Add(new Patch { Version = latestCdragonPatch, ReleaseDate = DateTime.UtcNow });
 
-                var runes = await FetchRunesForPatchAsync(client, patch.Patch, cancellationToken);
-                await context.RuneVersions.AddRangeAsync(runes, cancellationToken);
+            var runes = await FetchRunesForPatchAsync(client, latestCdragonPatch, cancellationToken);
+            await context.RuneVersions.AddRangeAsync(runes, cancellationToken);
 
-                var items = await FetchItemsForPatchAsync(client, patch.Patch, cancellationToken);
-                await context.ItemVersions.AddRangeAsync(items, cancellationToken);
+            var items = await FetchItemsForPatchAsync(client, latestCdragonPatch, cancellationToken);
+            await context.ItemVersions.AddRangeAsync(items, cancellationToken);
 
-                await context.SaveChangesAsync(cancellationToken);
-            }
+            await context.SaveChangesAsync(cancellationToken);
         }
     }
 
-    private async Task<List<CommunityDragonPatch>> FetchPatchesAsync(HttpClient client, CancellationToken cancellationToken)
+    private static string TrimPatch(string patch)
     {
-        var response = await client.GetAsync("https://www.communitydragon.org/patches.json", cancellationToken);
-        response.EnsureSuccessStatusCode();
-        var content = await response.Content.ReadAsStringAsync(cancellationToken);
-        return JsonSerializer.Deserialize<List<CommunityDragonPatch>>(content);
+        // Converts "15.20.1" -> "15.20" by removing the last dot segment
+        var parts = patch.Split('.');
+        return parts.Length >= 2 ? $"{parts[0]}.{parts[1]}" : patch;
     }
 
-    private async Task<List<RuneVersion>> FetchRunesForPatchAsync(HttpClient client, string patch, CancellationToken cancellationToken)
+    private async Task<List<DataDragonPatch>?> FetchPatchesAsync(HttpClient client, CancellationToken cancellationToken)
     {
-        var response = await client.GetAsync($"https://raw.communitydragon.org/{patch}/plugins/rcp-be-lol-game-data/global/default/v1/perks.json", cancellationToken);
+        var response = await client.GetAsync("https://ddragon.leagueoflegends.com/api/versions.json", cancellationToken);
+        response.EnsureSuccessStatusCode();
+        var content = await response.Content.ReadAsStringAsync(cancellationToken);
+        var versions = JsonSerializer.Deserialize<List<string>>(content);
+        return versions?.Select(v => new DataDragonPatch { Patch = v }).ToList();
+    }
+
+    private async Task<List<RuneVersion>> FetchRunesForPatchAsync(HttpClient client, string patch,
+        CancellationToken cancellationToken)
+    {
+        var response =
+            await client.GetAsync(
+                $"https://raw.communitydragon.org/{patch}/plugins/rcp-be-lol-game-data/global/default/v1/perks.json",
+                cancellationToken);
         response.EnsureSuccessStatusCode();
         var content = await response.Content.ReadAsStringAsync(cancellationToken);
         var communityDragonRunes = JsonSerializer.Deserialize<List<CommunityDragonRune>>(content);
@@ -52,18 +66,18 @@ public class StaticDataService(TranscendenceContext context, IHttpClientFactory 
         {
             RuneId = r.Id,
             PatchVersion = patch,
-            Key = r.Key,
             Name = r.Name,
-            Description = r.ShortDesc,
-            RunePathId = r.RunePathId,
-            RunePathName = r.RunePathName,
-            Slot = r.Slot
+            Description = r.ShortDesc
         }).ToList();
     }
 
-    private async Task<List<ItemVersion>> FetchItemsForPatchAsync(HttpClient client, string patch, CancellationToken cancellationToken)
+    private async Task<List<ItemVersion>> FetchItemsForPatchAsync(HttpClient client, string patch,
+        CancellationToken cancellationToken)
     {
-        var response = await client.GetAsync($"https://raw.communitydragon.org/{patch}/plugins/rcp-be-lol-game-data/global/default/v1/items.json", cancellationToken);
+        var response =
+            await client.GetAsync(
+                $"https://raw.communitydragon.org/{patch}/plugins/rcp-be-lol-game-data/global/default/v1/items.json",
+                cancellationToken);
         response.EnsureSuccessStatusCode();
         var content = await response.Content.ReadAsStringAsync(cancellationToken);
         var communityDragonItems = JsonSerializer.Deserialize<List<CommunityDragonItem>>(content);

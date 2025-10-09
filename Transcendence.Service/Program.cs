@@ -15,7 +15,7 @@ builder.Services.AddDbContext<TranscendenceContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("MainDatabase"),
         b => b.MigrationsAssembly("Transcendence.Service")));
 // inject top level riot games api
-builder.Services.AddSingleton(_ => RiotGamesApi.NewInstance(builder.Configuration.GetConnectionString("RiotApi")!));
+builder.Services.AddSingleton(_ => RiotGamesApi.NewInstance(builder.Configuration["RiotApi:ApiKey"]!));
 builder.Services.AddHangfire(config =>
     config.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
         .UseSimpleAssemblyNameTypeSerializer()

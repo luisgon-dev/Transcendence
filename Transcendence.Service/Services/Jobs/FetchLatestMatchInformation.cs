@@ -13,10 +13,14 @@ public class FetchLatestMatchInformation(
     TranscendenceContext context,
     IMatchService matchService,
     IMatchRepository matchRepository,
+    Transcendence.Service.Services.StaticData.Interfaces.IStaticDataService staticDataService,
     ILogger<FetchLatestMatchInformation> logger) : IJobTask
 {
     public async Task Execute(CancellationToken stoppingToken)
     {
+        // Ensure static data (latest patch) is up to date before fetching matches
+        await staticDataService.UpdateStaticDataAsync(stoppingToken);
+
         // get match information for every summoner in the database
         //TODO: Add more sophisticated logic to only fetch matches for summoners that have not been updated in a while or high elo
         var summoners = await context.Summoners.ToListAsync(stoppingToken);

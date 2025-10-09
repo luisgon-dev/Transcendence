@@ -6,6 +6,7 @@ using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Services.RiotApi.Interfaces;
+using Transcendence.Service.Services.StaticData.Interfaces;
 
 namespace Transcendence.Service.Services.RiotApi.Implementations;
 
@@ -17,6 +18,7 @@ public class MatchService(
     IMatchRepository matchRepository,
     ISummonerService summonerService,
     ISummonerRepository summonerRepository,
+    IStaticDataService staticDataService,
     ILogger<MatchService> logger) : IMatchService
 {
     public async Task<DataMatch?> GetMatchDetailsAsync(
@@ -43,10 +45,13 @@ public class MatchService(
             MatchId = metadata.MatchId,
             MatchDate = info.GameCreation, // epoch ms
             Duration = (int)info.GameDuration,
-            Patch = info.GameVersion,
+            Patch = NormalizePatch(info.GameVersion),
             QueueType = info.QueueId.ToString(),
             EndOfGameResult = info.EndOfGameResult
         };
+
+        // Ensure static data for this match patch exists
+        await staticDataService.EnsureStaticDataForPatchAsync(match.Patch, cancellationToken);
 
         // Ensure Summoners exist, build participants and relationships
         foreach (var p in info.Participants)
@@ -102,19 +107,36 @@ public class MatchService(
         return match;
     }
 
+    private static string NormalizePatch(string? gameVersion)
+    {
+        if (string.IsNullOrWhiteSpace(gameVersion)) return string.Empty;
+        var parts = gameVersion.Split('.');
+        if (parts.Length >= 2)
+        {
+            return $"{parts[0]}.{parts[1]}";
+        }
+        return gameVersion;
+    }
+
     private ICollection<MatchParticipantRune> CreateMatchParticipantRunes(Perks perks, string patch)
     {
         var participantRunes = new List<MatchParticipantRune>();
+        var seenRunes = new HashSet<int>();
 
         foreach (var style in perks.Styles)
         {
             foreach (var selection in style.Selections)
             {
-                participantRunes.Add(new MatchParticipantRune
+                var runeId = selection.Perk;
+                if (runeId == 0) continue;
+                if (seenRunes.Add(runeId))
                 {
-                    RuneId = selection.Perk,
-                    PatchVersion = patch
-                });
+                    participantRunes.Add(new MatchParticipantRune
+                    {
+                        RuneId = runeId,
+                        PatchVersion = patch
+                    });
+                }
             }
         }
 
@@ -123,15 +145,25 @@ public class MatchService(
 
     private ICollection<MatchParticipantItem> CreateMatchParticipantItems(Participant participant, string patch)
     {
-        var participantItems = new List<MatchParticipantItem>();
+        // Deduplicate by ItemId to satisfy PK (MatchParticipantId, ItemId)
+        var uniqueItemIds = new HashSet<int>();
+        void TryAdd(int itemId)
+        {
+            if (itemId != 0)
+                uniqueItemIds.Add(itemId);
+        }
 
-        if (participant.Item0 != 0) participantItems.Add(new MatchParticipantItem { ItemId = participant.Item0, PatchVersion = patch });
-        if (participant.Item1 != 0) participantItems.Add(new MatchParticipantItem { ItemId = participant.Item1, PatchVersion = patch });
-        if (participant.Item2 != 0) participantItems.Add(new MatchParticipantItem { ItemId = participant.Item2, PatchVersion = patch });
-        if (participant.Item3 != 0) participantItems.Add(new MatchParticipantItem { ItemId = participant.Item3, PatchVersion = patch });
-        if (participant.Item4 != 0) participantItems.Add(new MatchParticipantItem { ItemId = participant.Item4, PatchVersion = patch });
-        if (participant.Item5 != 0) participantItems.Add(new MatchParticipantItem { ItemId = participant.Item5, PatchVersion = patch });
-        if (participant.Item6 != 0) participantItems.Add(new MatchParticipantItem { ItemId = participant.Item6, PatchVersion = patch });
+        TryAdd(participant.Item0);
+        TryAdd(participant.Item1);
+        TryAdd(participant.Item2);
+        TryAdd(participant.Item3);
+        TryAdd(participant.Item4);
+        TryAdd(participant.Item5);
+        TryAdd(participant.Item6);
+
+        var participantItems = uniqueItemIds
+            .Select(id => new MatchParticipantItem { ItemId = id, PatchVersion = patch })
+            .ToList();
 
         return participantItems;
     }

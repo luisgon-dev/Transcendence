@@ -21,18 +21,44 @@ public class StaticDataService(TranscendenceContext context, IHttpClientFactory 
         var latestFullPatch = patches[0].Patch;
         var latestCdragonPatch = TrimPatch(latestFullPatch);
 
-        if (!await context.Patches.AnyAsync(p => p.Version == latestCdragonPatch, cancellationToken))
+        await EnsureStaticDataForPatchAsync(latestCdragonPatch, cancellationToken);
+    }
+
+    public async Task EnsureStaticDataForPatchAsync(string patchVersion, CancellationToken cancellationToken = default)
+    {
+        var client = httpClientFactory.CreateClient();
+
+        // Ensure Patch row exists
+        if (!await context.Patches.AnyAsync(p => p.Version == patchVersion, cancellationToken))
         {
-            context.Patches.Add(new Patch { Version = latestCdragonPatch, ReleaseDate = DateTime.UtcNow });
-
-            var runes = await FetchRunesForPatchAsync(client, latestCdragonPatch, cancellationToken);
-            await context.RuneVersions.AddRangeAsync(runes, cancellationToken);
-
-            var items = await FetchItemsForPatchAsync(client, latestCdragonPatch, cancellationToken);
-            await context.ItemVersions.AddRangeAsync(items, cancellationToken);
-
-            await context.SaveChangesAsync(cancellationToken);
+            context.Patches.Add(new Patch { Version = patchVersion, ReleaseDate = DateTime.UtcNow });
         }
+
+        // Runes for this patch
+        var existingRuneIds = await context.RuneVersions
+            .Where(rv => rv.PatchVersion == patchVersion)
+            .Select(rv => rv.RuneId)
+            .ToListAsync(cancellationToken);
+
+        if (existingRuneIds.Count == 0)
+        {
+            var runes = await FetchRunesForPatchAsync(client, patchVersion, cancellationToken);
+            await context.RuneVersions.AddRangeAsync(runes, cancellationToken);
+        }
+
+        // Items for this patch
+        var existingItemIds = await context.ItemVersions
+            .Where(iv => iv.PatchVersion == patchVersion)
+            .Select(iv => iv.ItemId)
+            .ToListAsync(cancellationToken);
+
+        if (existingItemIds.Count == 0)
+        {
+            var items = await FetchItemsForPatchAsync(client, patchVersion, cancellationToken);
+            await context.ItemVersions.AddRangeAsync(items, cancellationToken);
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
     }
 
     private static string TrimPatch(string patch)
@@ -80,7 +106,13 @@ public class StaticDataService(TranscendenceContext context, IHttpClientFactory 
                 cancellationToken);
         response.EnsureSuccessStatusCode();
         var content = await response.Content.ReadAsStringAsync(cancellationToken);
-        var communityDragonItems = JsonSerializer.Deserialize<List<CommunityDragonItem>>(content);
+        var communityDragonItems = JsonSerializer.Deserialize<List<CommunityDragonItem>>(content, new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        });
+
+        if (communityDragonItems == null || communityDragonItems.Count == 0)
+            return new List<ItemVersion>();
 
         return communityDragonItems.Select(i => new ItemVersion
         {
@@ -88,7 +120,7 @@ public class StaticDataService(TranscendenceContext context, IHttpClientFactory 
             PatchVersion = patch,
             Name = i.Name,
             Description = i.Description,
-            Tags = i.Tags
+            Tags = i.Categories ?? new List<string>()
         }).ToList();
     }
 }

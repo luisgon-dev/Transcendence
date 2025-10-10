@@ -17,6 +17,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRankService, RankService>();
         services.AddScoped<IMatchService, MatchService>();
         services.AddScoped<IChampionLoadoutAnalysisService, ChampionLoadoutAnalysisService>();
+        services.AddScoped<ISummonerStatsService, SummonerStatsService>();
         services.AddSingleton<IMatchDataGatheringService, MatchDataGatheringService>();
 
         services.AddScoped<IStaticDataService, StaticDataService>();

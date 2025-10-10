@@ -1,3 +1,8 @@
+using Microsoft.EntityFrameworkCore;
+using Transcendence.Data;
+using Transcendence.Data.Extensions;
+using Transcendence.Service.Services.Extensions;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -6,6 +11,16 @@ builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// Infrastructure: DbContext, HTTP, domain services, repositories
+builder.Services.AddDbContext<TranscendenceContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("MainDatabase"),
+        b => b.MigrationsAssembly("Transcendence.Service")));
+
+builder.Services.AddHttpClient();
+
+builder.Services.AddTranscendenceServices();
+builder.Services.AddProjectSyndraRepositories();
 
 var app = builder.Build();
 

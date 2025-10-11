@@ -25,6 +25,8 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<MatchParticipantRune> MatchParticipantRunes { get; set; }
     public DbSet<MatchParticipantItem> MatchParticipantItems { get; set; }
 
+    public DbSet<RefreshLock> RefreshLocks { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Rank>()
@@ -75,6 +77,12 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
         modelBuilder.Entity<Patch>(entity =>
         {
             entity.HasKey(p => p.Version);
+        });
+
+        // RefreshLock configuration
+        modelBuilder.Entity<RefreshLock>(entity =>
+        {
+            entity.HasIndex(x => x.Key).IsUnique();
         });
 
         modelBuilder.Entity<RuneVersion>(entity =>

@@ -19,4 +19,5 @@ public class Summoner
     public List<Match.Match> Matches { get; } = [];
     public ICollection<MatchParticipant> MatchParticipants { get; } = [];
     public ICollection<Rank> Ranks { get; set; } = new List<Rank>();
+    public ICollection<HistoricalRank> HistoricalRanks { get; set; } = new List<HistoricalRank>();
 }

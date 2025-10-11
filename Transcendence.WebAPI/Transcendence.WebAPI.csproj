@@ -5,10 +5,15 @@
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+        <UserSecretsId>4f8b5993-bfbd-4070-941c-b73b591743ee</UserSecretsId>
     </PropertyGroup>
 
     <ItemGroup>
         <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0"/>
+        <PackageReference Include="Hangfire.Core" Version="1.8.20" />
+        <PackageReference Include="Hangfire.NetCore" Version="1.8.20" />
+        <PackageReference Include="Hangfire.AspNetCore" Version="1.8.20" />
+        <PackageReference Include="Hangfire.PostgreSql" Version="1.20.12" />
     </ItemGroup>
 
     <ItemGroup>

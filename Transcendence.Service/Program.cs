@@ -1,4 +1,3 @@
-using Camille.RiotGames;
 using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.EntityFrameworkCore;
@@ -14,8 +13,7 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddDbContext<TranscendenceContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("MainDatabase"),
         b => b.MigrationsAssembly("Transcendence.Service")));
-// inject top level riot games api
-builder.Services.AddSingleton(_ => RiotGamesApi.NewInstance(builder.Configuration["RiotApi:ApiKey"]!));
+
 builder.Services.AddHangfire(config =>
     config.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
         .UseSimpleAssemblyNameTypeSerializer()
@@ -38,9 +36,9 @@ else
     builder.Services.AddHostedService<ProductionWorker>();
 }
 
-// check to see if we are in a dev env
-// add the development service 
-builder.Services.AddTranscendenceServices();
+// Register services
+builder.Services.AddTranscendenceCore();
+builder.Services.AddTranscendenceRiot(builder.Configuration);
 
 // add data repositories
 builder.Services.AddProjectSyndraRepositories();

@@ -3,84 +3,80 @@ using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Repositories.Interfaces;
 
+namespace Transcendence.Data.Repositories.Implementations;
+
 public class RankRepository(TranscendenceContext context) : IRankRepository
 {
-    public async Task AddOrUpdateRank(List<Rank> ranks, CancellationToken cancellationToken = default)
+    public async Task AddOrUpdateRank(Summoner summoner, List<Rank> newRanks, CancellationToken cancellationToken = default)
     {
-        // Check if the ranks list is empty
-        if (ranks == null || ranks.Count == 0)
+        if (newRanks == null || newRanks.Count == 0)
         {
             return; // No ranks to add or update
         }
 
-        // Get the existing ranks from the database
+        // Load existing ranks for this summoner once
         var existingRanks = await context.Ranks
-            .Where(r => ranks.Select(rank => rank.SummonerId).Contains(r.SummonerId))
-            .Include(rank => rank.Summoner)
+            .Where(r => r.SummonerId == summoner.Id)
+            .Include(r => r.Summoner)
             .ToListAsync(cancellationToken);
 
-        foreach (var rank in ranks)
+        foreach (var incoming in newRanks)
         {
-            var existingRank = existingRanks.FirstOrDefault(r =>
-                r.SummonerId == rank.SummonerId &&
-                r.QueueType == rank.QueueType);
+            var existing = existingRanks.FirstOrDefault(r => r.QueueType == incoming.QueueType);
 
-            if (existingRank != null)
+            if (existing != null)
             {
-                // Check if the rank has actually changed
-                bool rankChanged = existingRank.Tier != rank.Tier ||
-                                 existingRank.RankNumber != rank.RankNumber ||
-                                 existingRank.LeaguePoints != rank.LeaguePoints ||
-                                 existingRank.Wins != rank.Wins ||
-                                 existingRank.Losses != rank.Losses;
+                // Determine if any relevant fields changed
+                bool changed = existing.Tier != incoming.Tier ||
+                               existing.RankNumber != incoming.RankNumber ||
+                               existing.LeaguePoints != incoming.LeaguePoints ||
+                               existing.Wins != incoming.Wins ||
+                               existing.Losses != incoming.Losses;
 
-                if (rankChanged)
+                if (changed)
                 {
-                    // Check if we already have a historical rank for this exact state
-                    var existingHistoricalRank = await context.HistoricalRanks
+                    // Snapshot previous state into history (only if a different state isn't already recorded at latest)
+                    var hasLatestSnapshot = await context.HistoricalRanks
                         .OrderByDescending(hr => hr.DateRecorded)
-                        .FirstOrDefaultAsync(hr =>
-                            hr.Summoner.Id == rank.SummonerId &&
-                            hr.QueueType == rank.QueueType &&
-                            hr.Tier == existingRank.Tier &&
-                            hr.RankNumber == existingRank.RankNumber &&
-                            hr.LeaguePoints == existingRank.LeaguePoints &&
-                            hr.Wins == existingRank.Wins &&
-                            hr.Losses == existingRank.Losses,
+                        .AnyAsync(hr =>
+                            hr.Summoner.Id == summoner.Id &&
+                            hr.QueueType == existing.QueueType &&
+                            hr.Tier == existing.Tier &&
+                            hr.RankNumber == existing.RankNumber &&
+                            hr.LeaguePoints == existing.LeaguePoints &&
+                            hr.Wins == existing.Wins &&
+                            hr.Losses == existing.Losses,
                             cancellationToken);
 
-                    if (existingHistoricalRank == null)
+                    if (!hasLatestSnapshot)
                     {
-                        // Create a historical rank entry only if it's different
-                        var historicalRank = new HistoricalRank
+                        await context.HistoricalRanks.AddAsync(new HistoricalRank
                         {
-                            QueueType = existingRank.QueueType,
-                            Tier = existingRank.Tier,
-                            RankNumber = existingRank.RankNumber,
-                            LeaguePoints = existingRank.LeaguePoints,
-                            Wins = existingRank.Wins,
-                            Losses = existingRank.Losses,
-                            Summoner = existingRank.Summoner,
+                            QueueType = existing.QueueType,
+                            Tier = existing.Tier,
+                            RankNumber = existing.RankNumber,
+                            LeaguePoints = existing.LeaguePoints,
+                            Wins = existing.Wins,
+                            Losses = existing.Losses,
+                            Summoner = existing.Summoner,
                             DateRecorded = DateTime.UtcNow
-                        };
-
-                        await context.HistoricalRanks.AddAsync(historicalRank, cancellationToken);
+                        }, cancellationToken);
                     }
 
-                    // Update existing rank properties
-                    existingRank.Tier = rank.Tier;
-                    existingRank.RankNumber = rank.RankNumber;
-                    existingRank.LeaguePoints = rank.LeaguePoints;
-                    existingRank.Wins = rank.Wins;
-                    existingRank.Losses = rank.Losses;
+                    // Update current values
+                    existing.Tier = incoming.Tier;
+                    existing.RankNumber = incoming.RankNumber;
+                    existing.LeaguePoints = incoming.LeaguePoints;
+                    existing.Wins = incoming.Wins;
+                    existing.Losses = incoming.Losses;
                 }
             }
             else
             {
-                // Only add new ranks that don't exist
-                await context.Ranks.AddAsync(rank, cancellationToken);
+                // Attach to summoner and add as new current rank
+                incoming.Summoner = summoner;
+                await context.Ranks.AddAsync(incoming, cancellationToken);
             }
         }
     }
-    
 }

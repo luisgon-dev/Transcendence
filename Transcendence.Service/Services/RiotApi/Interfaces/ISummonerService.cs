@@ -5,8 +5,9 @@ namespace Transcendence.Service.Services.RiotApi.Interfaces;
 
 public interface ISummonerService
 {
-
-
     Task<Summoner> GetSummonerByPuuidAsync(string puuid, PlatformRoute platformRoute,
+        CancellationToken cancellationToken = default);
+
+    Task<Summoner> GetSummonerByRiotIdAsync(string gameName, string tagLine, PlatformRoute platformRoute,
         CancellationToken cancellationToken = default);
 }

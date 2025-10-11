@@ -1,4 +1,5 @@
 // HistoricalRank.cs
+using System.Text.Json.Serialization;
 
 namespace Transcendence.Data.Models.LoL.Account;
 
@@ -12,5 +13,6 @@ public class HistoricalRank
     public int Wins { get; set; }
     public int Losses { get; set; }
     public DateTime DateRecorded { get; set; }
-    public required Summoner Summoner { get; set; }
+    [JsonIgnore]
+    public Summoner? Summoner { get; set; }
 }

@@ -10,7 +10,7 @@ public class DevelopmentWorker(IBackgroundJobClient backgroundJobClient) : Backg
     {
         CleanupHangfireJobs();
         //BackgroundJob.Enqueue<AddOrUpdateHighEloProfiles>(x => x.Execute(CancellationToken.None));
-        backgroundJobClient.Enqueue<FetchLatestMatchInformation>(x => x.Execute(CancellationToken.None));
+        //backgroundJobClient.Enqueue<FetchLatestMatchInformation>(x => x.Execute(CancellationToken.None));
         //backgroundJobClient.Enqueue<UpdateStaticDataJob>(x => x.Execute(CancellationToken.None));
         return Task.CompletedTask;
     }

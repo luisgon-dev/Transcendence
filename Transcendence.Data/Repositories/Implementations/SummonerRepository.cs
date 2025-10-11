@@ -23,16 +23,35 @@ public class SummonerRepository(TranscendenceContext context, IRankRepository ra
         return await query.FirstOrDefaultAsync(x => x.Puuid == puuid, cancellationToken);
     }
 
+    public async Task<Summoner?> FindByRiotIdAsync(
+        string platformRegion,
+        string gameName,
+        string tagLine,
+        Func<IQueryable<Summoner>, IQueryable<Summoner>>? includes = null,
+        CancellationToken cancellationToken = default)
+    {
+        IQueryable<Summoner> query = context.Summoners;
+        if (includes != null)
+        {
+            query = includes(query);
+        }
+        return await query.FirstOrDefaultAsync(x =>
+            x.PlatformRegion == platformRegion && x.GameName == gameName && x.TagLine == tagLine,
+            cancellationToken);
+    }
+
     public async Task AddOrUpdateSummonerAsync(Summoner summoner, CancellationToken cancellationToken)
     {
         var existingSummoner =
             await GetSummonerByPuuidAsync(summoner.Puuid!, query => query.Include(s => s.Ranks), cancellationToken);
         if (existingSummoner == null)
         {
+            // New summoner: attach with current ranks; EF will insert both
             context.Summoners.Add(summoner);
         }
         else
         {
+            // Update scalar properties
             existingSummoner.Puuid = summoner.Puuid;
             existingSummoner.AccountId = summoner.AccountId;
             existingSummoner.ProfileIconId = summoner.ProfileIconId;
@@ -45,10 +64,8 @@ public class SummonerRepository(TranscendenceContext context, IRankRepository ra
             existingSummoner.Region = summoner.Region;
             existingSummoner.RiotSummonerId = summoner.RiotSummonerId;
 
-            await rankRepository.AddOrUpdateRank(existingSummoner.Ranks.ToList(), cancellationToken);
+            // Upsert current ranks and snapshot history if changed, using freshly fetched ranks
+            await rankRepository.AddOrUpdateRank(existingSummoner, summoner.Ranks.ToList(), cancellationToken);
         }
-
-       
     }
-    
 }

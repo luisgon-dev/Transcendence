@@ -10,11 +10,23 @@ namespace Transcendence.Service.Services.RiotApi.Implementations;
 public class SummonerService(RiotGamesApi riotApi, IRankService rankService)
     : ISummonerService
 {
-
     public async Task<Summoner> GetSummonerByPuuidAsync(string puuid, PlatformRoute platformRoute,
         CancellationToken cancellationToken = default)
     {
         var summoner = await riotApi.SummonerV4().GetByPUUIDAsync(platformRoute, puuid, cancellationToken);
+        return await CreateSummonerAsync(summoner, platformRoute, cancellationToken);
+    }
+
+    public async Task<Summoner> GetSummonerByRiotIdAsync(string gameName, string tagLine, PlatformRoute platformRoute,
+        CancellationToken cancellationToken = default)
+    {
+        var regional = platformRoute.ToRegional();
+        var account = await riotApi.AccountV1()
+            .GetByRiotIdAsync(regional, gameName, tagLine, cancellationToken);
+
+        var summoner = await riotApi.SummonerV4()
+            .GetByPUUIDAsync(platformRoute, account.Puuid, cancellationToken);
+
         return await CreateSummonerAsync(summoner, platformRoute, cancellationToken);
     }
 
@@ -34,11 +46,10 @@ public class SummonerService(RiotGamesApi riotApi, IRankService rankService)
         };
 
         var account = await riotApi.AccountV1()
-            .GetByPuuidAsync(RegionalRoute.AMERICAS, summoner.Puuid, cancellationToken);
+            .GetByPuuidAsync(platformRoute.ToRegional(), summoner.Puuid, cancellationToken);
         current.GameName = account.GameName;
         current.TagLine = account.TagLine;
         current.SummonerName = account.GameName + "#" + account.TagLine;
-
 
         var latestRank = await rankService.GetRankedDataAsync(current.Puuid, platformRoute, cancellationToken);
 

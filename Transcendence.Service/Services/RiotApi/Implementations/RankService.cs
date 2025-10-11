@@ -1,28 +1,25 @@
 using Camille.Enums;
 using Camille.RiotGames;
 using Transcendence.Data.Models.LoL.Account;
-using Transcendence.Data.Repositories;
-using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Services.RiotApi.Interfaces;
 
 namespace Transcendence.Service.Services.RiotApi.Implementations;
 
-public class RankService(RiotGamesApi riotApi, ISummonerRepository repository) : IRankService
+public class RankService(RiotGamesApi riotApi) : IRankService
 {
     public async Task<List<Rank>> GetRankedDataAsync(string summonerPuuid, PlatformRoute platformRoute,
         CancellationToken cancellationToken = default)
     {
-        var ranks = await riotApi.LeagueV4().GetLeagueEntriesByPUUIDAsync(platformRoute, summonerPuuid, cancellationToken);
-        var summoner = await repository.GetSummonerByPuuidAsync(summonerPuuid, null, cancellationToken);
-        return ranks.Select(rank => new Rank
+        var entries = await riotApi.LeagueV4().GetLeagueEntriesByPUUIDAsync(platformRoute, summonerPuuid, cancellationToken);
+        // Normalize and return Rank models without binding to a Summoner; caller will attach
+        return entries.Select(e => new Rank
         {
-            QueueType = rank.QueueType.ToString(),
-            Tier = rank.Tier.ToString() ?? string.Empty,
-            RankNumber = rank.Rank.ToString() ?? string.Empty,
-            LeaguePoints = rank.LeaguePoints,
-            Wins = rank.Wins,
-            Losses = rank.Losses,
-            Summoner = summoner!
+            QueueType = e.QueueType.ToString(),
+            Tier = e.Tier.ToString() ?? string.Empty,
+            RankNumber = e.Rank.ToString() ?? string.Empty,
+            LeaguePoints = e.LeaguePoints,
+            Wins = e.Wins,
+            Losses = e.Losses,
         }).ToList();
     }
 }

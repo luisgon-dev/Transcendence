@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Transcendence.Data;
 using Transcendence.Data.Extensions;
 using Transcendence.Service.Services.Extensions;
+using Hangfire;
+using Hangfire.PostgreSql;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,8 +21,16 @@ builder.Services.AddDbContext<TranscendenceContext>(options =>
 
 builder.Services.AddHttpClient();
 
-builder.Services.AddTranscendenceServices();
+// Register only core, API remains keyless
+builder.Services.AddTranscendenceCore();
 builder.Services.AddProjectSyndraRepositories();
+
+// Configure Hangfire client (no server) for enqueueing jobs
+builder.Services.AddHangfire(config =>
+    config.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+        .UseSimpleAssemblyNameTypeSerializer()
+        .UseRecommendedSerializerSettings()
+        .UsePostgreSqlStorage(options => options.UseNpgsqlConnection(builder.Configuration.GetConnectionString("MainDatabase"))));
 
 var app = builder.Build();
 

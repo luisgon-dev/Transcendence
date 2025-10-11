@@ -10,5 +10,12 @@ public interface ISummonerRepository
         Func<IQueryable<Summoner>, IQueryable<Summoner>>? includes = null,
         CancellationToken cancellationToken = default);
 
+    Task<Summoner?> FindByRiotIdAsync(
+        string platformRegion,
+        string gameName,
+        string tagLine,
+        Func<IQueryable<Summoner>, IQueryable<Summoner>>? includes = null,
+        CancellationToken cancellationToken = default);
+
     Task AddOrUpdateSummonerAsync(Summoner summoner, CancellationToken cancellationToken);
 }

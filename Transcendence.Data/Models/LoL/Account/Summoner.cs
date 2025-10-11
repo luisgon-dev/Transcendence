@@ -1,5 +1,4 @@
 using Transcendence.Data.Models.LoL.Match;
-
 namespace Transcendence.Data.Models.LoL.Account;
 
 public class Summoner

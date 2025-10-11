@@ -4,7 +4,6 @@ using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Static;
 using Transcendence.Service.Services.StaticData.DTOs;
 using Transcendence.Service.Services.StaticData.Interfaces;
-
 namespace Transcendence.Service.Services.StaticData.Implementations;
 
 public class StaticDataService(TranscendenceContext context, IHttpClientFactory httpClientFactory)
@@ -31,7 +30,11 @@ public class StaticDataService(TranscendenceContext context, IHttpClientFactory 
         // Ensure Patch row exists
         if (!await context.Patches.AnyAsync(p => p.Version == patchVersion, cancellationToken))
         {
-            context.Patches.Add(new Patch { Version = patchVersion, ReleaseDate = DateTime.UtcNow });
+            context.Patches.Add(new Patch
+            {
+                Version = patchVersion,
+                ReleaseDate = DateTime.UtcNow
+            });
         }
 
         // Runes for this patch
@@ -61,23 +64,26 @@ public class StaticDataService(TranscendenceContext context, IHttpClientFactory 
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    private static string TrimPatch(string patch)
+    static string TrimPatch(string patch)
     {
         // Converts "15.20.1" -> "15.20" by removing the last dot segment
         var parts = patch.Split('.');
         return parts.Length >= 2 ? $"{parts[0]}.{parts[1]}" : patch;
     }
 
-    private async Task<List<DataDragonPatch>?> FetchPatchesAsync(HttpClient client, CancellationToken cancellationToken)
+    async Task<List<DataDragonPatch>?> FetchPatchesAsync(HttpClient client, CancellationToken cancellationToken)
     {
         var response = await client.GetAsync("https://ddragon.leagueoflegends.com/api/versions.json", cancellationToken);
         response.EnsureSuccessStatusCode();
         var content = await response.Content.ReadAsStringAsync(cancellationToken);
         var versions = JsonSerializer.Deserialize<List<string>>(content);
-        return versions?.Select(v => new DataDragonPatch { Patch = v }).ToList();
+        return versions?.Select(v => new DataDragonPatch
+        {
+            Patch = v
+        }).ToList();
     }
 
-    private async Task<List<RuneVersion>> FetchRunesForPatchAsync(HttpClient client, string patch,
+    async Task<List<RuneVersion>> FetchRunesForPatchAsync(HttpClient client, string patch,
         CancellationToken cancellationToken)
     {
         var response =
@@ -97,7 +103,7 @@ public class StaticDataService(TranscendenceContext context, IHttpClientFactory 
         }).ToList();
     }
 
-    private async Task<List<ItemVersion>> FetchItemsForPatchAsync(HttpClient client, string patch,
+    async Task<List<ItemVersion>> FetchItemsForPatchAsync(HttpClient client, string patch,
         CancellationToken cancellationToken)
     {
         var response =

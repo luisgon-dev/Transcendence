@@ -1,5 +1,4 @@
 using Transcendence.Data.Models.Service;
-
 namespace Transcendence.Service.Services.Analysis.Interfaces;
 
 public interface IChampionLoadoutAnalysisService

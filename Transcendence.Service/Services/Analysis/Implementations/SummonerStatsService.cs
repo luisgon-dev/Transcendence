@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Transcendence.Data;
 using Transcendence.Service.Services.Analysis.Interfaces;
 using Transcendence.Service.Services.Analysis.Models;
-
 namespace Transcendence.Service.Services.Analysis.Implementations;
 
 public class SummonerStatsService(TranscendenceContext db) : ISummonerStatsService
@@ -38,7 +37,7 @@ public class SummonerStatsService(TranscendenceContext db) : ISummonerStatsServi
                 AvgAssists = g.Average(x => (double)x.Assists),
                 AvgVision = g.Average(x => (double)x.VisionScore),
                 AvgDamage = g.Average(x => (double)x.TotalDamageDealtToChampions),
-                AvgCsPerMin = g.Average(x => x.DurationSeconds > 0 ? (double)x.Cs / ((double)x.DurationSeconds / 60d) : 0d),
+                AvgCsPerMin = g.Average(x => x.DurationSeconds > 0 ? x.Cs / (x.DurationSeconds / 60d) : 0d),
                 AvgDurationMin = g.Average(x => x.DurationSeconds / 60.0)
             })
             .FirstOrDefaultAsync(ct);
@@ -46,7 +45,7 @@ public class SummonerStatsService(TranscendenceContext db) : ISummonerStatsServi
         var total = aggregate?.Total ?? 0;
         var wins = aggregate?.Wins ?? 0;
         var losses = aggregate?.Losses ?? 0;
-        double wr = total > 0 ? (double)wins / total * 100.0 : 0.0;
+        var wr = total > 0 ? (double)wins / total * 100.0 : 0.0;
 
         var recent = await db.MatchParticipants
             .AsNoTracking()
@@ -58,7 +57,7 @@ public class SummonerStatsService(TranscendenceContext db) : ISummonerStatsServi
                 mp.Kills,
                 mp.Deaths,
                 mp.Assists,
-                mp.Match.Duration > 0 ? ((mp.TotalMinionsKilled + mp.NeutralMinionsKilled) / (mp.Match.Duration / 60.0)) : 0.0,
+                mp.Match.Duration > 0 ? (mp.TotalMinionsKilled + mp.NeutralMinionsKilled) / (mp.Match.Duration / 60.0) : 0.0,
                 mp.VisionScore,
                 mp.TotalDamageDealtToChampions
             ))
@@ -90,7 +89,10 @@ public class SummonerStatsService(TranscendenceContext db) : ISummonerStatsServi
         var list = await db.MatchParticipants
             .AsNoTracking()
             .Where(mp => mp.SummonerId == summonerId)
-            .GroupBy(mp => new { mp.ChampionId })
+            .GroupBy(mp => new
+            {
+                mp.ChampionId
+            })
             .Select(g => new ChampionStat(
                 g.Key.ChampionId,
                 g.Count(),
@@ -101,7 +103,7 @@ public class SummonerStatsService(TranscendenceContext db) : ISummonerStatsServi
                 g.Average(x => (double)x.Deaths),
                 g.Average(x => (double)x.Assists),
                 0, // fill KDA after
-                g.Average(x => x.Match.Duration > 0 ? (double)(x.TotalMinionsKilled + x.NeutralMinionsKilled) / (x.Match.Duration / 60.0) : 0.0),
+                g.Average(x => x.Match.Duration > 0 ? (x.TotalMinionsKilled + x.NeutralMinionsKilled) / (x.Match.Duration / 60.0) : 0.0),
                 g.Average(x => (double)x.VisionScore),
                 g.Average(x => (double)x.TotalDamageDealtToChampions)
             ))
@@ -111,7 +113,10 @@ public class SummonerStatsService(TranscendenceContext db) : ISummonerStatsServi
 
         // Compute KDA for each (post-projection)
         return list
-            .Select(x => x with { KdaRatio = CalcKdaRatio(x.AvgKills, x.AvgDeaths, x.AvgAssists) })
+            .Select(x => x with
+            {
+                KdaRatio = CalcKdaRatio(x.AvgKills, x.AvgDeaths, x.AvgAssists)
+            })
             .ToList();
     }
 
@@ -161,14 +166,14 @@ public class SummonerStatsService(TranscendenceContext db) : ISummonerStatsServi
                 mp.Assists,
                 mp.VisionScore,
                 mp.TotalDamageDealtToChampions,
-                mp.Match.Duration > 0 ? (double)(mp.TotalMinionsKilled + mp.NeutralMinionsKilled) / (mp.Match.Duration / 60.0) : 0.0
+                mp.Match.Duration > 0 ? (mp.TotalMinionsKilled + mp.NeutralMinionsKilled) / (mp.Match.Duration / 60.0) : 0.0
             ))
             .ToListAsync(ct);
 
         return new PagedResult<RecentMatchSummary>(items, page, pageSize, total);
     }
 
-    private static double CalcKdaRatio(double kills, double deaths, double assists)
+    static double CalcKdaRatio(double kills, double deaths, double assists)
     {
         return (kills + assists) / Math.Max(1.0, deaths);
     }

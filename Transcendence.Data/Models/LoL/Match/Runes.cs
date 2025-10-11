@@ -30,7 +30,6 @@ public class Runes
     public int StatFlex { get; set; }
     public int StatOffense { get; set; }
 }
-
 public class RuneSelection
 {
 }

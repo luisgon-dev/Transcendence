@@ -1,13 +1,12 @@
 using Camille.RiotGames;
-using Microsoft.Extensions.Configuration;
 using Transcendence.Service.Services.Analysis.Implementations;
 using Transcendence.Service.Services.Analysis.Interfaces;
 using Transcendence.Service.Services.Jobs;
+using Transcendence.Service.Services.Jobs.Interfaces;
 using Transcendence.Service.Services.RiotApi.Implementations;
 using Transcendence.Service.Services.RiotApi.Interfaces;
 using Transcendence.Service.Services.StaticData.Implementations;
 using Transcendence.Service.Services.StaticData.Interfaces;
-
 namespace Transcendence.Service.Services.Extensions;
 
 public static class ServiceCollectionExtensions
@@ -30,9 +29,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMatchService, MatchService>();
         services.AddScoped<IStaticDataService, StaticDataService>();
 
-        services.AddSingleton<IMatchDataGatheringService, MatchDataGatheringService>();
         services.AddScoped<UpdateStaticDataJob>();
-        services.AddScoped<Transcendence.Service.Services.Jobs.Interfaces.ISummonerRefreshJob, Transcendence.Service.Services.Jobs.SummonerRefreshJob>();
+        services.AddScoped<ISummonerRefreshJob, SummonerRefreshJob>();
         return services;
     }
 }

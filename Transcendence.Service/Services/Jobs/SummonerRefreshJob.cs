@@ -4,7 +4,6 @@ using Transcendence.Data;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Services.Jobs.Interfaces;
 using Transcendence.Service.Services.RiotApi.Interfaces;
-
 namespace Transcendence.Service.Services.Jobs;
 
 public class SummonerRefreshJob(

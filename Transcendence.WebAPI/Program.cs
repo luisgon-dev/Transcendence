@@ -1,10 +1,9 @@
+using Hangfire;
+using Hangfire.PostgreSql;
 using Microsoft.EntityFrameworkCore;
 using Transcendence.Data;
 using Transcendence.Data.Extensions;
 using Transcendence.Service.Services.Extensions;
-using Hangfire;
-using Hangfire.PostgreSql;
-
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.

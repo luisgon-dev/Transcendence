@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Transcendence.Service.Services.Analysis.Interfaces;
 using Transcendence.WebAPI.Models.Stats;
-
 namespace Transcendence.WebAPI.Controllers;
 
 [ApiController]
@@ -9,7 +8,7 @@ namespace Transcendence.WebAPI.Controllers;
 public class SummonerStatsController(ISummonerStatsService statsService) : ControllerBase
 {
     /// <summary>
-    /// Gets overall statistics for a summoner.
+    ///     Gets overall statistics for a summoner.
     /// </summary>
     [HttpGet("stats/overview")]
     [ProducesResponseType(typeof(SummonerOverviewDto), StatusCodes.Status200OK)]
@@ -36,7 +35,7 @@ public class SummonerStatsController(ISummonerStatsService statsService) : Contr
     }
 
     /// <summary>
-    /// Gets top champion stats for a summoner.
+    ///     Gets top champion stats for a summoner.
     /// </summary>
     [HttpGet("stats/champions")]
     [ProducesResponseType(typeof(List<ChampionStatDto>), StatusCodes.Status200OK)]
@@ -61,7 +60,7 @@ public class SummonerStatsController(ISummonerStatsService statsService) : Contr
     }
 
     /// <summary>
-    /// Gets role breakdown for a summoner.
+    ///     Gets role breakdown for a summoner.
     /// </summary>
     [HttpGet("stats/roles")]
     [ProducesResponseType(typeof(List<RoleStatDto>), StatusCodes.Status200OK)]
@@ -73,7 +72,7 @@ public class SummonerStatsController(ISummonerStatsService statsService) : Contr
     }
 
     /// <summary>
-    /// Gets recent matches for a summoner with pagination.
+    ///     Gets recent matches for a summoner with pagination.
     /// </summary>
     [HttpGet("matches/recent")]
     [ProducesResponseType(typeof(PagedResultDto<RecentMatchSummaryDto>), StatusCodes.Status200OK)]

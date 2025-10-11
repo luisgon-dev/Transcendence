@@ -1,5 +1,4 @@
 ﻿using Transcendence.Data.Models.LoL.Account;
-
 namespace Transcendence.Data.Models.LoL.Match;
 
 public class Match

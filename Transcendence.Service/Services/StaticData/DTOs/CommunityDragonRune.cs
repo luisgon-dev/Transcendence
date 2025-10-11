@@ -1,5 +1,4 @@
 using System.Text.Json.Serialization;
-
 namespace Transcendence.Service.Services.StaticData.DTOs;
 
 public class CommunityDragonRune

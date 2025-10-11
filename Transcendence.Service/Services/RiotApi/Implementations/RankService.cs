@@ -2,7 +2,6 @@ using Camille.Enums;
 using Camille.RiotGames;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Service.Services.RiotApi.Interfaces;
-
 namespace Transcendence.Service.Services.RiotApi.Implementations;
 
 public class RankService(RiotGamesApi riotApi) : IRankService
@@ -19,7 +18,7 @@ public class RankService(RiotGamesApi riotApi) : IRankService
             RankNumber = e.Rank.ToString() ?? string.Empty,
             LeaguePoints = e.LeaguePoints,
             Wins = e.Wins,
-            Losses = e.Losses,
+            Losses = e.Losses
         }).ToList();
     }
 }

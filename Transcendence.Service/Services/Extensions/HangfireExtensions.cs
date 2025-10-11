@@ -1,7 +1,5 @@
 using Hangfire;
 using Hangfire.Storage;
-using Hangfire.Storage.Monitoring;
-
 namespace Transcendence.Service.Services.Extensions;
 
 public static class HangfireExtensions
@@ -10,7 +8,7 @@ public static class HangfireExtensions
     {
         var toDelete = new List<string>();
 
-        foreach (QueueWithTopEnqueuedJobsDto queue in monitor.Queues())
+        foreach (var queue in monitor.Queues())
         {
             for (var i = 0; i < Math.Ceiling(queue.Length / 1000d); i++)
             {

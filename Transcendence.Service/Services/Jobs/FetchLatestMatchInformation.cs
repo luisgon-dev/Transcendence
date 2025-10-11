@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Transcendence.Data;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Services.RiotApi.Interfaces;
-
+using Transcendence.Service.Services.StaticData.Interfaces;
 namespace Transcendence.Service.Services.Jobs;
 
 // ReSharper disable once ClassNeverInstantiated.Global
@@ -13,8 +13,8 @@ public class FetchLatestMatchInformation(
     TranscendenceContext context,
     IMatchService matchService,
     IMatchRepository matchRepository,
-    Transcendence.Service.Services.StaticData.Interfaces.IStaticDataService staticDataService,
-    ILogger<FetchLatestMatchInformation> logger) : IJobTask
+    IStaticDataService staticDataService,
+    ILogger<FetchLatestMatchInformation> logger)
 {
     public async Task Execute(CancellationToken stoppingToken)
     {
@@ -63,10 +63,10 @@ public class FetchLatestMatchInformation(
                     }
 
                     await matchRepository.AddMatchAsync(match, stoppingToken);
-                    
+
                     // save all changes
                     await context.SaveChangesAsync(stoppingToken);
-                    
+
                 }
                 catch (Exception e)
                 {

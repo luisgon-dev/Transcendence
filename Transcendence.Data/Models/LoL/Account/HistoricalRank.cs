@@ -1,6 +1,5 @@
 // HistoricalRank.cs
 using System.Text.Json.Serialization;
-
 namespace Transcendence.Data.Models.LoL.Account;
 
 public class HistoricalRank

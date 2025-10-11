@@ -7,11 +7,10 @@ using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Services.RiotApi.Interfaces;
 using Transcendence.Service.Services.StaticData.Interfaces;
-
+using Match = Transcendence.Data.Models.LoL.Match.Match;
 namespace Transcendence.Service.Services.RiotApi.Implementations;
 
-using DataMatch = Data.Models.LoL.Match.Match;
-
+using DataMatch = Match;
 public class MatchService(
     RiotGamesApi riotGamesApi,
     TranscendenceContext context,
@@ -107,7 +106,7 @@ public class MatchService(
         return match;
     }
 
-    private static string NormalizePatch(string? gameVersion)
+    static string NormalizePatch(string? gameVersion)
     {
         if (string.IsNullOrWhiteSpace(gameVersion)) return string.Empty;
         var parts = gameVersion.Split('.');
@@ -118,7 +117,7 @@ public class MatchService(
         return gameVersion;
     }
 
-    private ICollection<MatchParticipantRune> CreateMatchParticipantRunes(Perks perks, string patch)
+    ICollection<MatchParticipantRune> CreateMatchParticipantRunes(Perks perks, string patch)
     {
         var participantRunes = new List<MatchParticipantRune>();
         var seenRunes = new HashSet<int>();
@@ -143,7 +142,7 @@ public class MatchService(
         return participantRunes;
     }
 
-    private ICollection<MatchParticipantItem> CreateMatchParticipantItems(Participant participant, string patch)
+    ICollection<MatchParticipantItem> CreateMatchParticipantItems(Participant participant, string patch)
     {
         // Deduplicate by ItemId to satisfy PK (MatchParticipantId, ItemId)
         var uniqueItemIds = new HashSet<int>();
@@ -162,11 +161,13 @@ public class MatchService(
         TryAdd(participant.Item6);
 
         var participantItems = uniqueItemIds
-            .Select(id => new MatchParticipantItem { ItemId = id, PatchVersion = patch })
+            .Select(id => new MatchParticipantItem
+            {
+                ItemId = id,
+                PatchVersion = patch
+            })
             .ToList();
 
         return participantItems;
     }
-
-
 }

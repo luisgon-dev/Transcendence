@@ -2,11 +2,9 @@ using Camille.Enums;
 using Camille.RiotGames;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Service.Services.RiotApi.Interfaces;
-
 namespace Transcendence.Service.Services.RiotApi.Implementations;
 
 // SummonerService.cs
-
 public class SummonerService(RiotGamesApi riotApi, IRankService rankService)
     : ISummonerService
 {
@@ -30,7 +28,7 @@ public class SummonerService(RiotGamesApi riotApi, IRankService rankService)
         return await CreateSummonerAsync(summoner, platformRoute, cancellationToken);
     }
 
-    private async Task<Summoner> CreateSummonerAsync(Camille.RiotGames.SummonerV4.Summoner summoner,
+    async Task<Summoner> CreateSummonerAsync(Camille.RiotGames.SummonerV4.Summoner summoner,
         PlatformRoute platformRoute, CancellationToken cancellationToken)
     {
         var current = new Summoner

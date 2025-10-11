@@ -1,9 +1,8 @@
 using Transcendence.Service.Services.Analysis.Interfaces;
-
 namespace Transcendence.Service.Services.Jobs;
 
 // ReSharper disable once UnusedType.Global
-public class AnalyzeData(IChampionLoadoutAnalysisService championLoadoutAnalysis) : IJobTask
+public class AnalyzeData(IChampionLoadoutAnalysisService championLoadoutAnalysis)
 {
     public async Task Execute(CancellationToken stoppingToken)
     {

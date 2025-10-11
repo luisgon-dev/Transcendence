@@ -16,7 +16,6 @@ public record SummonerOverviewDto(
     double AvgGameDurationMin,
     IReadOnlyList<RecentPerformanceDto> RecentPerformance
 );
-
 public record RecentPerformanceDto(
     string MatchId,
     bool Win,
@@ -27,7 +26,6 @@ public record RecentPerformanceDto(
     int VisionScore,
     int DamageToChamps
 );
-
 public record ChampionStatDto(
     int ChampionId,
     int Games,
@@ -42,7 +40,6 @@ public record ChampionStatDto(
     double AvgVisionScore,
     double AvgDamageToChamps
 );
-
 public record RoleStatDto(
     string Role,
     int Games,
@@ -50,7 +47,6 @@ public record RoleStatDto(
     int Losses,
     double WinRate
 );
-
 public record RecentMatchSummaryDto(
     string MatchId,
     long MatchDate,
@@ -66,5 +62,4 @@ public record RecentMatchSummaryDto(
     int DamageToChamps,
     double CsPerMin
 );
-
 public record PagedResultDto<T>(IReadOnlyList<T> Items, int Page, int PageSize, int TotalCount, int TotalPages);

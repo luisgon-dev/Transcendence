@@ -1,5 +1,4 @@
 using Camille.Enums;
-
 namespace Transcendence.Service.Services.Jobs.Interfaces;
 
 public interface ISummonerRefreshJob

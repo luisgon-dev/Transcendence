@@ -10,10 +10,10 @@
 
     <ItemGroup>
         <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0"/>
-        <PackageReference Include="Hangfire.Core" Version="1.8.20" />
-        <PackageReference Include="Hangfire.NetCore" Version="1.8.20" />
-        <PackageReference Include="Hangfire.AspNetCore" Version="1.8.20" />
-        <PackageReference Include="Hangfire.PostgreSql" Version="1.20.12" />
+        <PackageReference Include="Hangfire.Core" Version="1.8.20"/>
+        <PackageReference Include="Hangfire.NetCore" Version="1.8.20"/>
+        <PackageReference Include="Hangfire.AspNetCore" Version="1.8.20"/>
+        <PackageReference Include="Hangfire.PostgreSql" Version="1.20.12"/>
     </ItemGroup>
 
     <ItemGroup>
@@ -23,8 +23,8 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Transcendence.Data\Transcendence.Data.csproj" />
-        <ProjectReference Include="..\Transcendence.Service\Transcendence.Service.csproj" />
+        <ProjectReference Include="..\Transcendence.Data\Transcendence.Data.csproj"/>
+        <ProjectReference Include="..\Transcendence.Service\Transcendence.Service.csproj"/>
     </ItemGroup>
 
 </Project>

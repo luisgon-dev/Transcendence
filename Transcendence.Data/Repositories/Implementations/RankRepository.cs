@@ -1,8 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Repositories.Interfaces;
-
 namespace Transcendence.Data.Repositories.Implementations;
 
 public class RankRepository(TranscendenceContext context) : IRankRepository
@@ -27,11 +25,11 @@ public class RankRepository(TranscendenceContext context) : IRankRepository
             if (existing != null)
             {
                 // Determine if any relevant fields changed
-                bool changed = existing.Tier != incoming.Tier ||
-                               existing.RankNumber != incoming.RankNumber ||
-                               existing.LeaguePoints != incoming.LeaguePoints ||
-                               existing.Wins != incoming.Wins ||
-                               existing.Losses != incoming.Losses;
+                var changed = existing.Tier != incoming.Tier ||
+                    existing.RankNumber != incoming.RankNumber ||
+                    existing.LeaguePoints != incoming.LeaguePoints ||
+                    existing.Wins != incoming.Wins ||
+                    existing.Losses != incoming.Losses;
 
                 if (changed)
                 {
@@ -39,13 +37,13 @@ public class RankRepository(TranscendenceContext context) : IRankRepository
                     var hasLatestSnapshot = await context.HistoricalRanks
                         .OrderByDescending(hr => hr.DateRecorded)
                         .AnyAsync(hr =>
-                            hr.Summoner.Id == summoner.Id &&
-                            hr.QueueType == existing.QueueType &&
-                            hr.Tier == existing.Tier &&
-                            hr.RankNumber == existing.RankNumber &&
-                            hr.LeaguePoints == existing.LeaguePoints &&
-                            hr.Wins == existing.Wins &&
-                            hr.Losses == existing.Losses,
+                                hr.Summoner.Id == summoner.Id &&
+                                hr.QueueType == existing.QueueType &&
+                                hr.Tier == existing.Tier &&
+                                hr.RankNumber == existing.RankNumber &&
+                                hr.LeaguePoints == existing.LeaguePoints &&
+                                hr.Wins == existing.Wins &&
+                                hr.Losses == existing.Losses,
                             cancellationToken);
 
                     if (!hasLatestSnapshot)

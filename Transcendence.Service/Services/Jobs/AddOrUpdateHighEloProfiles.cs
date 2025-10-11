@@ -1,11 +1,8 @@
 ﻿using Camille.Enums;
 using Camille.RiotGames;
 using Transcendence.Data;
-using Transcendence.Data.Repositories;
 using Transcendence.Data.Repositories.Interfaces;
-using Transcendence.Service.Services.RiotApi;
 using Transcendence.Service.Services.RiotApi.Interfaces;
-
 namespace Transcendence.Service.Services.Jobs;
 
 // ReSharper disable once ClassNeverInstantiated.Global
@@ -15,7 +12,7 @@ public class AddOrUpdateHighEloProfiles(
     ILogger<AddOrUpdateHighEloProfiles> logger,
     ISummonerService summonerService,
     ISummonerRepository summonerRepository,
-    IRankService rankService) : IJobTask
+    IRankService rankService)
 {
     public async Task Execute(CancellationToken stoppingToken)
     {

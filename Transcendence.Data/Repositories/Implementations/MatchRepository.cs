@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Repositories.Interfaces;
-
 namespace Transcendence.Data.Repositories.Implementations;
 
 public class MatchRepository(TranscendenceContext transcendenceContext) : IMatchRepository
@@ -15,6 +14,4 @@ public class MatchRepository(TranscendenceContext transcendenceContext) : IMatch
     {
         return transcendenceContext.Matches.FirstOrDefaultAsync(x => x.MatchId == matchId, cancellationToken);
     }
-
-
 }

@@ -1,10 +1,8 @@
 // SummonerRepository.cs
 
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Query;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Repositories.Interfaces;
-
 namespace Transcendence.Data.Repositories.Implementations;
 
 public class SummonerRepository(TranscendenceContext context, IRankRepository rankRepository) : ISummonerRepository
@@ -36,7 +34,7 @@ public class SummonerRepository(TranscendenceContext context, IRankRepository ra
             query = includes(query);
         }
         return await query.FirstOrDefaultAsync(x =>
-            x.PlatformRegion == platformRegion && x.GameName == gameName && x.TagLine == tagLine,
+                x.PlatformRegion == platformRegion && x.GameName == gameName && x.TagLine == tagLine,
             cancellationToken);
     }
 

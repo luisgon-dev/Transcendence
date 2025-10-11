@@ -1,5 +1,4 @@
 using Transcendence.Service.Services.Analysis.Models;
-
 namespace Transcendence.Service.Services.Analysis.Interfaces;
 
 public interface ISummonerStatsService

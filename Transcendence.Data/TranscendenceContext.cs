@@ -3,7 +3,6 @@ using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Models.LoL.Static;
 using Transcendence.Data.Models.Service;
-
 namespace Transcendence.Data;
 
 public class TranscendenceContext(DbContextOptions<TranscendenceContext> options) : DbContext(options)
@@ -30,11 +29,18 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Rank>()
-            .HasIndex(x => new { x.SummonerId, x.QueueType })
+            .HasIndex(x => new
+            {
+                x.SummonerId,
+                x.QueueType
+            })
             .IsUnique();
 
         modelBuilder.Entity<Match>()
-            .HasIndex(x => new { x.MatchId })
+            .HasIndex(x => new
+            {
+                x.MatchId
+            })
             .IsUnique();
 
         // Helpful secondary indexes for query patterns on matches
@@ -61,15 +67,23 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
                 .WithMany(s => s.MatchParticipants)
                 .HasForeignKey(p => p.SummonerId)
                 .OnDelete(DeleteBehavior.Cascade);
-            
+
             // Enforce one participant per (Match, Summoner)
-            entity.HasIndex(p => new { p.MatchId, p.SummonerId })
+            entity.HasIndex(p => new
+                {
+                    p.MatchId,
+                    p.SummonerId
+                })
                 .IsUnique();
 
             // Common filter/index fields
             entity.HasIndex(p => p.SummonerId);
             entity.HasIndex(p => p.ChampionId);
-            entity.HasIndex(p => new { p.ChampionId, p.TeamPosition });
+            entity.HasIndex(p => new
+            {
+                p.ChampionId,
+                p.TeamPosition
+            });
             entity.HasIndex(p => p.MatchId);
         });
 
@@ -87,7 +101,11 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
 
         modelBuilder.Entity<RuneVersion>(entity =>
         {
-            entity.HasKey(rv => new { rv.RuneId, rv.PatchVersion });
+            entity.HasKey(rv => new
+            {
+                rv.RuneId,
+                rv.PatchVersion
+            });
 
             entity.HasOne(rv => rv.Patch)
                 .WithMany()
@@ -96,7 +114,11 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
 
         modelBuilder.Entity<ItemVersion>(entity =>
         {
-            entity.HasKey(iv => new { iv.ItemId, iv.PatchVersion });
+            entity.HasKey(iv => new
+            {
+                iv.ItemId,
+                iv.PatchVersion
+            });
 
             entity.HasOne(iv => iv.Patch)
                 .WithMany()
@@ -106,7 +128,11 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
         // Match participant join tables configuration
         modelBuilder.Entity<MatchParticipantRune>(entity =>
         {
-            entity.HasKey(mpr => new { mpr.MatchParticipantId, mpr.RuneId });
+            entity.HasKey(mpr => new
+            {
+                mpr.MatchParticipantId,
+                mpr.RuneId
+            });
 
             entity.HasOne(mpr => mpr.MatchParticipant)
                 .WithMany(mp => mp.Runes)
@@ -114,12 +140,20 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
 
             entity.HasOne(mpr => mpr.RuneVersion)
                 .WithMany()
-                .HasForeignKey(mpr => new { mpr.RuneId, mpr.PatchVersion });
+                .HasForeignKey(mpr => new
+                {
+                    mpr.RuneId,
+                    mpr.PatchVersion
+                });
         });
 
         modelBuilder.Entity<MatchParticipantItem>(entity =>
         {
-            entity.HasKey(mpi => new { mpi.MatchParticipantId, mpi.ItemId });
+            entity.HasKey(mpi => new
+            {
+                mpi.MatchParticipantId,
+                mpi.ItemId
+            });
 
             entity.HasOne(mpi => mpi.MatchParticipant)
                 .WithMany(mp => mp.Items)
@@ -127,7 +161,11 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
 
             entity.HasOne(mpi => mpi.ItemVersion)
                 .WithMany()
-                .HasForeignKey(mpi => new { mpi.ItemId, mpi.PatchVersion });
+                .HasForeignKey(mpi => new
+                {
+                    mpi.ItemId,
+                    mpi.PatchVersion
+                });
         });
     }
 }

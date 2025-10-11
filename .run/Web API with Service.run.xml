@@ -1,0 +1,7 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Web API with Service" type="CompoundRunConfigurationType">
+    <toRun name="Transcendence.Service" type="LaunchSettings" />
+    <toRun name="Transcendence.WebAPI: http" type="LaunchSettings" />
+    <method v="2" />
+  </configuration>
+</component>

@@ -1,24 +1,24 @@
 ﻿services:
-  projectsyndrabackend:
-    image: projectsyndrabackend
+  transcendence:
+    image: transcendence
     build:
       context: .
-      dockerfile: ProjectSyndraBackend/Dockerfile
+      dockerfile: transcendence/Dockerfile
 
-  projectsyndrabackend.webapi:
-    image: projectsyndrabackend.webapi
+  transcendence.webapi:
+    image: transcendence.webapi
     build:
       context: .
-      dockerfile: ProjectSyndraBackend.WebAPI/Dockerfile
+      dockerfile: transcendence.WebAPI/Dockerfile
 
-  projectsyndrabackend.service:
-    image: projectsyndrabackend.service
+  transcendence.service:
+    image: transcendence.service
     build:
       context: .
-      dockerfile: ProjectSyndraBackend.Service/Dockerfile
+      dockerfile: transcendence.Service/Dockerfile
 
-  projectsyndrabackend.webadminportal:
-    image: projectsyndrabackend.webadminportal
+  transcendence.webadminportal:
+    image: transcendence.webadminportal
     build:
       context: .
-      dockerfile: ProjectSyndraBackend.WebAdminPortal/Dockerfile
+      dockerfile: transcendence.WebAdminPortal/Dockerfile

@@ -1,4 +1,4 @@
-﻿FROM mcr.microsoft.com/dotnet/runtime:9.0 AS base
+FROM mcr.microsoft.com/dotnet/runtime:9.0 AS base
 USER $APP_UID
 WORKDIR /app
 
@@ -6,6 +6,8 @@ FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 COPY ["Transcendence.Service/Transcendence.Service.csproj", "Transcendence.Service/"]
+COPY ["Transcendence.Service.Core/Transcendence.Service.Core.csproj", "Transcendence.Service.Core/"]
+COPY ["Transcendence.Data/Transcendence.Data.csproj", "Transcendence.Data/"]
 RUN dotnet restore "Transcendence.Service/Transcendence.Service.csproj"
 COPY . .
 WORKDIR "/src/Transcendence.Service"

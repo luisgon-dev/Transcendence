@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Repositories.Interfaces;
-using Transcendence.Service.Services.Jobs.Interfaces;
+using Transcendence.Service.Core.Jobs.Interfaces;
 namespace Transcendence.WebAPI.Controllers;
 
 [ApiController]

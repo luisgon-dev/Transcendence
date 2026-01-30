@@ -1,5 +1,5 @@
 using Hangfire;
-using Transcendence.Service.Services.Extensions;
+using Transcendence.Service.Core.Extensions;
 namespace Transcendence.Service.Workers;
 
 public class DevelopmentWorker(IBackgroundJobClient backgroundJobClient, ILogger<DevelopmentWorker> logger) : BackgroundService

@@ -9,7 +9,6 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Camille.RiotGames" Version="3.0.0-nightly-2025-06-24-d2b94715b7"/>
         <PackageReference Include="Hangfire.Core" Version="1.8.20"/>
         <PackageReference Include="Hangfire.NetCore" Version="1.8.20"/>
         <PackageReference Include="Hangfire.PostgreSql" Version="1.20.12"/>
@@ -17,8 +16,7 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
-        <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.8"/>
-        <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.9"/>
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.9"/>
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4"/>
     </ItemGroup>
 
@@ -29,10 +27,11 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Transcendence.Data\Transcendence.Data.csproj"/>
+        <ProjectReference Include="..\Transcendence.Service.Core\Transcendence.Service.Core.csproj"/>
     </ItemGroup>
 
     <ItemGroup>
         <Folder Include="Migrations\"/>
     </ItemGroup>
+
 </Project>

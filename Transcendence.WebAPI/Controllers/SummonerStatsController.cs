@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
-using Transcendence.Service.Services.Analysis.Interfaces;
+using Transcendence.Service.Core.Analysis.Interfaces;
 using Transcendence.WebAPI.Models.Stats;
 namespace Transcendence.WebAPI.Controllers;
 

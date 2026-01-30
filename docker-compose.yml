@@ -1,24 +1,18 @@
-﻿services:
-  transcendence:
-    image: transcendence
-    build:
-      context: .
-      dockerfile: transcendence/Dockerfile
-
+services:
   transcendence.webapi:
     image: transcendence.webapi
     build:
       context: .
-      dockerfile: transcendence.WebAPI/Dockerfile
+      dockerfile: Transcendence.WebAPI/Dockerfile
 
   transcendence.service:
     image: transcendence.service
     build:
       context: .
-      dockerfile: transcendence.Service/Dockerfile
+      dockerfile: Transcendence.Service/Dockerfile
 
   transcendence.webadminportal:
     image: transcendence.webadminportal
     build:
       context: .
-      dockerfile: transcendence.WebAdminPortal/Dockerfile
+      dockerfile: Transcendence.WebAdminPortal/Dockerfile

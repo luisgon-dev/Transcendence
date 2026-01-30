@@ -3,7 +3,7 @@ using Hangfire.PostgreSql;
 using Microsoft.EntityFrameworkCore;
 using Transcendence.Data;
 using Transcendence.Data.Extensions;
-using Transcendence.Service.Services.Extensions;
+using Transcendence.Service.Core.Extensions;
 using Transcendence.Service.Workers;
 var builder = Host.CreateApplicationBuilder(args);
 

@@ -14,6 +14,7 @@
         <PackageReference Include="Hangfire.NetCore" Version="1.8.20" />
         <PackageReference Include="Hangfire.AspNetCore" Version="1.8.20" />
         <PackageReference Include="Hangfire.PostgreSql" Version="1.20.12" />
+        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4"/>
     </ItemGroup>
 
     <ItemGroup>
@@ -24,13 +25,13 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Transcendence.Data\Transcendence.Data.csproj" />
-        <ProjectReference Include="..\Transcendence.Service\Transcendence.Service.csproj" />
+        <ProjectReference Include="..\Transcendence.Service.Core\Transcendence.Service.Core.csproj" />
     </ItemGroup>
 
     <ItemGroup>
-      <Content Update="appsettings.json">
-        <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-      </Content>
+        <Content Update="appsettings.Development.json">
+            <CopyToPublishDirectory>Never</CopyToPublishDirectory>
+        </Content>
     </ItemGroup>
 
 </Project>

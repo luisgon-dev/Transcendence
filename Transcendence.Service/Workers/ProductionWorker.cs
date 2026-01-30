@@ -1,5 +1,5 @@
 using Hangfire;
-using Transcendence.Service.Services.Jobs;
+using Transcendence.Service.Core.Jobs;
 namespace Transcendence.Service.Workers;
 
 public class ProductionWorker(

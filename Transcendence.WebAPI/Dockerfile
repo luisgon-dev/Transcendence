@@ -7,17 +7,17 @@ EXPOSE 8081
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
-COPY ["ProjectSyndraBackend.WebAPI/ProjectSyndraBackend.WebAPI.csproj", "ProjectSyndraBackend.WebAPI/"]
-RUN dotnet restore "ProjectSyndraBackend.WebAPI/ProjectSyndraBackend.WebAPI.csproj"
+COPY ["Transcendence.WebAPI/Transcendence.WebAPI.csproj", "Transcendence.WebAPI/"]
+RUN dotnet restore "Transcendence.WebAPI/Transcendence.WebAPI.csproj"
 COPY . .
-WORKDIR "/src/ProjectSyndraBackend.WebAPI"
-RUN dotnet build "ProjectSyndraBackend.WebAPI.csproj" -c $BUILD_CONFIGURATION -o /app/build
+WORKDIR "/src/Transcendence.WebAPI"
+RUN dotnet build "Transcendence.WebAPI.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "ProjectSyndraBackend.WebAPI.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "Transcendence.WebAPI.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "ProjectSyndraBackend.WebAPI.dll"]
+ENTRYPOINT ["dotnet", "Transcendence.WebAPI.dll"]

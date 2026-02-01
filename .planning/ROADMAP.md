@@ -29,6 +29,14 @@ This roadmap delivers a production-grade League of Legends analytics API across 
 
 **Directory:** `.planning/phases/01-foundation/`
 
+**Plans:** 4 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — HybridCache + Redis setup with stampede protection
+- [ ] 01-02-PLAN.md — Patch detection with cache invalidation and scheduled refresh
+- [ ] 01-03-PLAN.md — Retry logic with exponential backoff and retention window checks
+- [ ] 01-04-PLAN.md — Data freshness metadata in API responses
+
 ---
 
 ### Phase 2: Summoner Profiles - Complete Profile API
@@ -52,6 +60,11 @@ This roadmap delivers a production-grade League of Legends analytics API across 
 
 **Directory:** `.planning/phases/02-summoner-profiles/`
 
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (use `/gsd:plan-phase 2` to create)
+
 ---
 
 ### Phase 3: Champion Analytics - Meta Insights & Recommendations
@@ -74,6 +87,11 @@ This roadmap delivers a production-grade League of Legends analytics API across 
 **Dependencies:** Phase 1 (caching), Phase 2 (match data for aggregations)
 
 **Directory:** `.planning/phases/03-champion-analytics/`
+
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (use `/gsd:plan-phase 3` to create)
 
 ---
 
@@ -103,6 +121,11 @@ This roadmap delivers a production-grade League of Legends analytics API across 
 
 **Directory:** `.planning/phases/04-live-game-auth/`
 
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (use `/gsd:plan-phase 4` to create)
+
 ---
 
 ### Phase 5: Management & Monitoring - Operational Hardening
@@ -126,13 +149,18 @@ This roadmap delivers a production-grade League of Legends analytics API across 
 
 **Directory:** `.planning/phases/05-management/`
 
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (use `/gsd:plan-phase 5` to create)
+
 ---
 
 ## Progress
 
 | Phase | Status | Requirements | Completion |
 |-------|--------|--------------|------------|
-| 1 - Foundation | Pending | INFRA-01, INFRA-02 | 0% |
+| 1 - Foundation | Planned | INFRA-01, INFRA-02 | 0% |
 | 2 - Summoner Profiles | Pending | PROF-01, PROF-02, PROF-03, PROF-04 | 0% |
 | 3 - Champion Analytics | Pending | CHAMP-01, CHAMP-02, CHAMP-03, CHAMP-04 | 0% |
 | 4 - Live Game & Auth | Pending | LIVE-01, LIVE-02, LIVE-03, LIVE-04, AUTH-01, AUTH-02, AUTH-03 | 0% |

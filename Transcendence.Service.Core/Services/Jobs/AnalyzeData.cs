@@ -1,5 +1,6 @@
-using Transcendence.Service.Core.Analysis.Interfaces;
-namespace Transcendence.Service.Core.Jobs;
+using Transcendence.Service.Core.Services.Analysis.Interfaces;
+
+namespace Transcendence.Service.Core.Services.Jobs;
 
 // ReSharper disable once UnusedType.Global
 public class AnalyzeData(IChampionLoadoutAnalysisService championLoadoutAnalysis)

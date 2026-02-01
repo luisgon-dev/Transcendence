@@ -1,13 +1,14 @@
 using Camille.RiotGames;
-using Transcendence.Service.Core.Analysis.Implementations;
-using Transcendence.Service.Core.Analysis.Interfaces;
-using Transcendence.Service.Core.Jobs;
-using Transcendence.Service.Core.Jobs.Interfaces;
-using Transcendence.Service.Core.RiotApi.Implementations;
-using Transcendence.Service.Core.RiotApi.Interfaces;
-using Transcendence.Service.Core.StaticData.Implementations;
-using Transcendence.Service.Core.StaticData.Interfaces;
-namespace Transcendence.Service.Core.Extensions;
+using Transcendence.Service.Core.Services.Analysis.Implementations;
+using Transcendence.Service.Core.Services.Analysis.Interfaces;
+using Transcendence.Service.Core.Services.Jobs;
+using Transcendence.Service.Core.Services.Jobs.Interfaces;
+using Transcendence.Service.Core.Services.RiotApi.Implementations;
+using Transcendence.Service.Core.Services.RiotApi.Interfaces;
+using Transcendence.Service.Core.Services.StaticData.Implementations;
+using Transcendence.Service.Core.Services.StaticData.Interfaces;
+
+namespace Transcendence.Service.Core.Services.Extensions;
 
 public static class ServiceCollectionExtensions
 {
@@ -20,7 +21,8 @@ public static class ServiceCollectionExtensions
     }
 
     // Riot-facing registrations; only hosts holding RiotApi:ApiKey should call this (e.g., Worker)
-    public static IServiceCollection AddTranscendenceRiot(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddTranscendenceRiot(this IServiceCollection services,
+        IConfiguration configuration)
     {
         services.AddSingleton(_ => RiotGamesApi.NewInstance(configuration["RiotApi:ApiKey"]!));
 

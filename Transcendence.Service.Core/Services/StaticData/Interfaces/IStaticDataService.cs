@@ -1,4 +1,4 @@
-namespace Transcendence.Service.Core.StaticData.Interfaces;
+namespace Transcendence.Service.Core.Services.StaticData.Interfaces;
 
 public interface IStaticDataService
 {

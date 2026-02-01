@@ -1,4 +1,5 @@
 using Transcendence.Data.Models.LoL.Static;
+
 namespace Transcendence.Data.Models.LoL.Match;
 
 public class MatchParticipantItem

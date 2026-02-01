@@ -1,6 +1,7 @@
 using Camille.Enums;
 using Transcendence.Data.Models.LoL.Match;
-namespace Transcendence.Service.Core.RiotApi.Interfaces;
+
+namespace Transcendence.Service.Core.Services.RiotApi.Interfaces;
 
 public interface IMatchService
 {

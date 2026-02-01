@@ -1,9 +1,10 @@
-namespace Transcendence.Service.Core.Analysis.Models;
+namespace Transcendence.Service.Core.Services.Analysis.Models;
 
 public record PagedResult<T>(IReadOnlyList<T> Items, int Page, int PageSize, int TotalCount)
 {
     public int TotalPages => (int)Math.Ceiling((double)TotalCount / PageSize);
 }
+
 public record SummonerOverviewStats(
     Guid SummonerId,
     int TotalMatches,
@@ -20,7 +21,17 @@ public record SummonerOverviewStats(
     double AvgGameDurationMin,
     IReadOnlyList<RecentPerformancePoint> RecentPerformance // e.g., last N games WR trend
 );
-public record RecentPerformancePoint(string MatchId, bool Win, int Kills, int Deaths, int Assists, double CsPerMin, int VisionScore, int DamageToChamps);
+
+public record RecentPerformancePoint(
+    string MatchId,
+    bool Win,
+    int Kills,
+    int Deaths,
+    int Assists,
+    double CsPerMin,
+    int VisionScore,
+    int DamageToChamps);
+
 public record ChampionStat(
     int ChampionId,
     int Games,
@@ -35,6 +46,7 @@ public record ChampionStat(
     double AvgVisionScore,
     double AvgDamageToChamps
 );
+
 public record RoleStat(
     string Role,
     int Games,
@@ -42,6 +54,7 @@ public record RoleStat(
     int Losses,
     double WinRate
 );
+
 public record RecentMatchSummary(
     string MatchId,
     long MatchDate,

@@ -1,8 +1,9 @@
 using Camille.Enums;
 using Camille.RiotGames;
 using Transcendence.Data.Models.LoL.Account;
-using Transcendence.Service.Core.RiotApi.Interfaces;
-namespace Transcendence.Service.Core.RiotApi.Implementations;
+using Transcendence.Service.Core.Services.RiotApi.Interfaces;
+
+namespace Transcendence.Service.Core.Services.RiotApi.Implementations;
 
 // SummonerService.cs
 public class SummonerService(RiotGamesApi riotApi, IRankService rankService)
@@ -28,7 +29,7 @@ public class SummonerService(RiotGamesApi riotApi, IRankService rankService)
         return await CreateSummonerAsync(summoner, platformRoute, cancellationToken);
     }
 
-    async Task<Summoner> CreateSummonerAsync(Camille.RiotGames.SummonerV4.Summoner summoner,
+    private async Task<Summoner> CreateSummonerAsync(Camille.RiotGames.SummonerV4.Summoner summoner,
         PlatformRoute platformRoute, CancellationToken cancellationToken)
     {
         var current = new Summoner
@@ -52,13 +53,9 @@ public class SummonerService(RiotGamesApi riotApi, IRankService rankService)
         var latestRank = await rankService.GetRankedDataAsync(current.Puuid, platformRoute, cancellationToken);
 
         if (latestRank.Count > 0)
-        {
             current.Ranks = latestRank;
-        }
         else
-        {
             current.Ranks = [];
-        }
         return current;
     }
 }

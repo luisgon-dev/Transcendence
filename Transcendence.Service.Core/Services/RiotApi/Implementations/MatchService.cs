@@ -5,12 +5,14 @@ using Microsoft.EntityFrameworkCore;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Repositories.Interfaces;
-using Transcendence.Service.Core.RiotApi.Interfaces;
-using Transcendence.Service.Core.StaticData.Interfaces;
+using Transcendence.Service.Core.Services.RiotApi.Interfaces;
+using Transcendence.Service.Core.Services.StaticData.Interfaces;
 using Match = Transcendence.Data.Models.LoL.Match.Match;
-namespace Transcendence.Service.Core.RiotApi.Implementations;
+
+namespace Transcendence.Service.Core.Services.RiotApi.Implementations;
 
 using DataMatch = Match;
+
 public class MatchService(
     RiotGamesApi riotGamesApi,
     TranscendenceContext context,
@@ -67,10 +69,7 @@ public class MatchService(
             }
 
             // Link summoner to this match (many-to-many)
-            if (match.Summoners.All(s => s.Id != summoner.Id))
-            {
-                match.Summoners.Add(summoner);
-            }
+            if (match.Summoners.All(s => s.Id != summoner.Id)) match.Summoners.Add(summoner);
 
             // Create participant
             var participant = new MatchParticipant
@@ -106,46 +105,40 @@ public class MatchService(
         return match;
     }
 
-    static string NormalizePatch(string? gameVersion)
+    private static string NormalizePatch(string? gameVersion)
     {
         if (string.IsNullOrWhiteSpace(gameVersion)) return string.Empty;
         var parts = gameVersion.Split('.');
-        if (parts.Length >= 2)
-        {
-            return $"{parts[0]}.{parts[1]}";
-        }
+        if (parts.Length >= 2) return $"{parts[0]}.{parts[1]}";
         return gameVersion;
     }
 
-    ICollection<MatchParticipantRune> CreateMatchParticipantRunes(Perks perks, string patch)
+    private ICollection<MatchParticipantRune> CreateMatchParticipantRunes(Perks perks, string patch)
     {
         var participantRunes = new List<MatchParticipantRune>();
         var seenRunes = new HashSet<int>();
 
         foreach (var style in perks.Styles)
+        foreach (var selection in style.Selections)
         {
-            foreach (var selection in style.Selections)
-            {
-                var runeId = selection.Perk;
-                if (runeId == 0) continue;
-                if (seenRunes.Add(runeId))
+            var runeId = selection.Perk;
+            if (runeId == 0) continue;
+            if (seenRunes.Add(runeId))
+                participantRunes.Add(new MatchParticipantRune
                 {
-                    participantRunes.Add(new MatchParticipantRune
-                    {
-                        RuneId = runeId,
-                        PatchVersion = patch
-                    });
-                }
-            }
+                    RuneId = runeId,
+                    PatchVersion = patch
+                });
         }
 
         return participantRunes;
     }
 
-    ICollection<MatchParticipantItem> CreateMatchParticipantItems(Participant participant, string patch)
+    private ICollection<MatchParticipantItem> CreateMatchParticipantItems(Participant participant, string patch)
     {
         // Deduplicate by ItemId to satisfy PK (MatchParticipantId, ItemId)
         var uniqueItemIds = new HashSet<int>();
+
         void TryAdd(int itemId)
         {
             if (itemId != 0)

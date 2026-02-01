@@ -3,6 +3,7 @@ using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Models.LoL.Static;
 using Transcendence.Data.Models.Service;
+
 namespace Transcendence.Data;
 
 public class TranscendenceContext(DbContextOptions<TranscendenceContext> options) : DbContext(options)
@@ -88,16 +89,10 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
         });
 
         // Versioned static data configuration
-        modelBuilder.Entity<Patch>(entity =>
-        {
-            entity.HasKey(p => p.Version);
-        });
+        modelBuilder.Entity<Patch>(entity => { entity.HasKey(p => p.Version); });
 
         // RefreshLock configuration
-        modelBuilder.Entity<RefreshLock>(entity =>
-        {
-            entity.HasIndex(x => x.Key).IsUnique();
-        });
+        modelBuilder.Entity<RefreshLock>(entity => { entity.HasIndex(x => x.Key).IsUnique(); });
 
         modelBuilder.Entity<RuneVersion>(entity =>
         {

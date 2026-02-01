@@ -1,16 +1,15 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Repositories.Interfaces;
+
 namespace Transcendence.Data.Repositories.Implementations;
 
 public class RankRepository(TranscendenceContext context) : IRankRepository
 {
-    public async Task AddOrUpdateRank(Summoner summoner, List<Rank> newRanks, CancellationToken cancellationToken = default)
+    public async Task AddOrUpdateRank(Summoner summoner, List<Rank> newRanks,
+        CancellationToken cancellationToken = default)
     {
-        if (newRanks == null || newRanks.Count == 0)
-        {
-            return; // No ranks to add or update
-        }
+        if (newRanks == null || newRanks.Count == 0) return; // No ranks to add or update
 
         // Load existing ranks for this summoner once
         var existingRanks = await context.Ranks
@@ -26,10 +25,10 @@ public class RankRepository(TranscendenceContext context) : IRankRepository
             {
                 // Determine if any relevant fields changed
                 var changed = existing.Tier != incoming.Tier ||
-                    existing.RankNumber != incoming.RankNumber ||
-                    existing.LeaguePoints != incoming.LeaguePoints ||
-                    existing.Wins != incoming.Wins ||
-                    existing.Losses != incoming.Losses;
+                              existing.RankNumber != incoming.RankNumber ||
+                              existing.LeaguePoints != incoming.LeaguePoints ||
+                              existing.Wins != incoming.Wins ||
+                              existing.Losses != incoming.Losses;
 
                 if (changed)
                 {
@@ -47,7 +46,6 @@ public class RankRepository(TranscendenceContext context) : IRankRepository
                             cancellationToken);
 
                     if (!hasLatestSnapshot)
-                    {
                         await context.HistoricalRanks.AddAsync(new HistoricalRank
                         {
                             QueueType = existing.QueueType,
@@ -59,7 +57,6 @@ public class RankRepository(TranscendenceContext context) : IRankRepository
                             Summoner = existing.Summoner,
                             DateRecorded = DateTime.UtcNow
                         }, cancellationToken);
-                    }
 
                     // Update current values
                     existing.Tier = incoming.Tier;

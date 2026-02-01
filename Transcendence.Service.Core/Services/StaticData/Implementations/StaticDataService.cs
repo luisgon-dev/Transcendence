@@ -2,9 +2,10 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Static;
-using Transcendence.Service.Core.StaticData.DTOs;
-using Transcendence.Service.Core.StaticData.Interfaces;
-namespace Transcendence.Service.Core.StaticData.Implementations;
+using Transcendence.Service.Core.Services.StaticData.DTOs;
+using Transcendence.Service.Core.Services.StaticData.Interfaces;
+
+namespace Transcendence.Service.Core.Services.StaticData.Implementations;
 
 public class StaticDataService(TranscendenceContext context, IHttpClientFactory httpClientFactory)
     : IStaticDataService
@@ -29,13 +30,11 @@ public class StaticDataService(TranscendenceContext context, IHttpClientFactory 
 
         // Ensure Patch row exists
         if (!await context.Patches.AnyAsync(p => p.Version == patchVersion, cancellationToken))
-        {
             context.Patches.Add(new Patch
             {
                 Version = patchVersion,
                 ReleaseDate = DateTime.UtcNow
             });
-        }
 
         // Runes for this patch
         var existingRuneIds = await context.RuneVersions
@@ -64,16 +63,17 @@ public class StaticDataService(TranscendenceContext context, IHttpClientFactory 
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    static string TrimPatch(string patch)
+    private static string TrimPatch(string patch)
     {
         // Converts "15.20.1" -> "15.20" by removing the last dot segment
         var parts = patch.Split('.');
         return parts.Length >= 2 ? $"{parts[0]}.{parts[1]}" : patch;
     }
 
-    async Task<List<DataDragonPatch>?> FetchPatchesAsync(HttpClient client, CancellationToken cancellationToken)
+    private async Task<List<DataDragonPatch>?> FetchPatchesAsync(HttpClient client, CancellationToken cancellationToken)
     {
-        var response = await client.GetAsync("https://ddragon.leagueoflegends.com/api/versions.json", cancellationToken);
+        var response =
+            await client.GetAsync("https://ddragon.leagueoflegends.com/api/versions.json", cancellationToken);
         response.EnsureSuccessStatusCode();
         var content = await response.Content.ReadAsStringAsync(cancellationToken);
         var versions = JsonSerializer.Deserialize<List<string>>(content);
@@ -83,7 +83,7 @@ public class StaticDataService(TranscendenceContext context, IHttpClientFactory 
         }).ToList();
     }
 
-    async Task<List<RuneVersion>> FetchRunesForPatchAsync(HttpClient client, string patch,
+    private async Task<List<RuneVersion>> FetchRunesForPatchAsync(HttpClient client, string patch,
         CancellationToken cancellationToken)
     {
         var response =
@@ -103,7 +103,7 @@ public class StaticDataService(TranscendenceContext context, IHttpClientFactory 
         }).ToList();
     }
 
-    async Task<List<ItemVersion>> FetchItemsForPatchAsync(HttpClient client, string patch,
+    private async Task<List<ItemVersion>> FetchItemsForPatchAsync(HttpClient client, string patch,
         CancellationToken cancellationToken)
     {
         var response =
@@ -112,10 +112,11 @@ public class StaticDataService(TranscendenceContext context, IHttpClientFactory 
                 cancellationToken);
         response.EnsureSuccessStatusCode();
         var content = await response.Content.ReadAsStringAsync(cancellationToken);
-        var communityDragonItems = JsonSerializer.Deserialize<List<CommunityDragonItem>>(content, new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        });
+        var communityDragonItems = JsonSerializer.Deserialize<List<CommunityDragonItem>>(content,
+            new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
 
         if (communityDragonItems == null || communityDragonItems.Count == 0)
             return new List<ItemVersion>();

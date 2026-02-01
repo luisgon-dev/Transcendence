@@ -4,7 +4,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Repositories.Interfaces;
-using Transcendence.Service.Core.Jobs.Interfaces;
+using Transcendence.Service.Core.Services.Jobs.Interfaces;
+
 namespace Transcendence.WebAPI.Controllers;
 
 [ApiController]
@@ -29,17 +30,16 @@ public class SummonersController(
     [ProducesResponseType(typeof(Summoner), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
-    public async Task<IActionResult> GetByRiotId([FromRoute] string region, [FromRoute] string name, [FromRoute] string tag, CancellationToken ct)
+    public async Task<IActionResult> GetByRiotId([FromRoute] string region, [FromRoute] string name,
+        [FromRoute] string tag, CancellationToken ct)
     {
         if (!TryParsePlatformRoute(region, out var platform))
             return BadRequest($"Unsupported region '{region}'. Use a platform like NA1, EUW1, EUN1, KR, etc.");
 
         var platformRegion = platform.ToString();
-        var summoner = await summonerRepository.FindByRiotIdAsync(platformRegion, name, tag, q => q.Include(s => s.Ranks).Include(s => s.HistoricalRanks), ct);
-        if (summoner != null)
-        {
-            return Ok(summoner);
-        }
+        var summoner = await summonerRepository.FindByRiotIdAsync(platformRegion, name, tag,
+            q => q.Include(s => s.Ranks).Include(s => s.HistoricalRanks), ct);
+        if (summoner != null) return Ok(summoner);
 
         // If a refresh is in progress, let the caller know
         var refreshKey = BuildRefreshKey(platform, name, tag);
@@ -74,7 +74,8 @@ public class SummonersController(
     [HttpPost("{region}/{name}/{tag}/refresh")]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> RefreshByRiotId([FromRoute] string region, [FromRoute] string name, [FromRoute] string tag, CancellationToken ct)
+    public async Task<IActionResult> RefreshByRiotId([FromRoute] string region, [FromRoute] string name,
+        [FromRoute] string tag, CancellationToken ct)
     {
         if (!TryParsePlatformRoute(region, out var platform))
             return BadRequest($"Unsupported region '{region}'. Use a platform like NA1, EUW1, EUN1, KR, etc.");
@@ -86,7 +87,9 @@ public class SummonersController(
         if (!acquired)
         {
             var existing = await refreshLockRepository.GetAsync(key, ct);
-            var seconds = existing == null ? (int)ttl.TotalSeconds : (int)Math.Max(1, (existing.LockedUntilUtc - DateTime.UtcNow).TotalSeconds);
+            var seconds = existing == null
+                ? (int)ttl.TotalSeconds
+                : (int)Math.Max(1, (existing.LockedUntilUtc - DateTime.UtcNow).TotalSeconds);
             return Accepted(new
             {
                 message = "Refresh in process",
@@ -95,7 +98,8 @@ public class SummonersController(
         }
 
         // Enqueue refresh job
-        backgroundJobClient.Enqueue<ISummonerRefreshJob>(job => job.RefreshByRiotId(name, tag, platform, key, CancellationToken.None));
+        backgroundJobClient.Enqueue<ISummonerRefreshJob>(job =>
+            job.RefreshByRiotId(name, tag, platform, key, CancellationToken.None));
 
         var pollUrl = Url.ActionLink(nameof(GetByRiotId), null, new
         {
@@ -110,17 +114,18 @@ public class SummonersController(
         });
     }
 
-    static string BuildRefreshKey(PlatformRoute platform, string name, string tag)
+    private static string BuildRefreshKey(PlatformRoute platform, string name, string tag)
     {
         var nm = name.Trim().ToUpperInvariant();
         var tg = tag.Trim().ToUpperInvariant();
         return $"summoner-refresh:{platform}:{nm}:{tg}";
     }
 
-    static bool TryParsePlatformRoute(string input, out PlatformRoute platform)
+    private static bool TryParsePlatformRoute(string input, out PlatformRoute platform)
     {
         // normalize
-        var normalized = input.Replace(" ", string.Empty).Replace("-", string.Empty).Replace("_", string.Empty).ToUpperInvariant();
+        var normalized = input.Replace(" ", string.Empty).Replace("-", string.Empty).Replace("_", string.Empty)
+            .ToUpperInvariant();
 
         // First try direct enum parse (handles NA1, EUW1, EUN1, KR, BR1, LA1, LA2, OC1, JP1, TR1, RU)
         if (Enum.TryParse(normalized, true, out platform))

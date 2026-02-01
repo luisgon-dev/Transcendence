@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Transcendence.Data.Models.Service;
 using Transcendence.Data.Repositories.Interfaces;
+
 namespace Transcendence.Data.Repositories.Implementations;
 
 public class RefreshLockRepository(TranscendenceContext db) : IRefreshLockRepository

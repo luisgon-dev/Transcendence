@@ -1,24 +1,25 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net9.0</TargetFramework>
+        <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
+        <LangVersion>default</LangVersion>
     </PropertyGroup>
 
     <ItemGroup>
-        <Using Include="Microsoft.Extensions.DependencyInjection" />
-        <Using Include="Microsoft.Extensions.Configuration" />
-        <Using Include="Microsoft.Extensions.Logging" />
+        <Using Include="Microsoft.Extensions.DependencyInjection"/>
+        <Using Include="Microsoft.Extensions.Configuration"/>
+        <Using Include="Microsoft.Extensions.Logging"/>
     </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="Camille.RiotGames" Version="3.0.0-nightly-2025-06-24-d2b94715b7"/>
-        <PackageReference Include="Hangfire.Core" Version="1.8.20"/>
-        <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.9"/>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.9"/>
-        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.9"/>
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.9"/>
+        <PackageReference Include="Hangfire.Core" Version="1.8.22"/>
+        <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.2"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.2"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.2"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2"/>
     </ItemGroup>
 
     <ItemGroup>

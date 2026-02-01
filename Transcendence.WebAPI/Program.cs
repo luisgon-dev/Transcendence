@@ -3,7 +3,8 @@ using Hangfire.PostgreSql;
 using Microsoft.EntityFrameworkCore;
 using Transcendence.Data;
 using Transcendence.Data.Extensions;
-using Transcendence.Service.Core.Extensions;
+using Transcendence.Service.Core.Services.Extensions;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -29,7 +30,8 @@ builder.Services.AddHangfire(config =>
     config.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
         .UseSimpleAssemblyNameTypeSerializer()
         .UseRecommendedSerializerSettings()
-        .UsePostgreSqlStorage(options => options.UseNpgsqlConnection(builder.Configuration.GetConnectionString("MainDatabase"))));
+        .UsePostgreSqlStorage(options =>
+            options.UseNpgsqlConnection(builder.Configuration.GetConnectionString("MainDatabase"))));
 
 var app = builder.Build();
 

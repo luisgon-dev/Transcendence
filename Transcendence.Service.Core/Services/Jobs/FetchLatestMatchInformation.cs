@@ -3,9 +3,10 @@ using Camille.RiotGames;
 using Microsoft.EntityFrameworkCore;
 using Transcendence.Data;
 using Transcendence.Data.Repositories.Interfaces;
-using Transcendence.Service.Core.RiotApi.Interfaces;
-using Transcendence.Service.Core.StaticData.Interfaces;
-namespace Transcendence.Service.Core.Jobs;
+using Transcendence.Service.Core.Services.RiotApi.Interfaces;
+using Transcendence.Service.Core.Services.StaticData.Interfaces;
+
+namespace Transcendence.Service.Core.Services.Jobs;
 
 // ReSharper disable once ClassNeverInstantiated.Global
 public class FetchLatestMatchInformation(
@@ -66,7 +67,6 @@ public class FetchLatestMatchInformation(
 
                     // save all changes
                     await context.SaveChangesAsync(stoppingToken);
-
                 }
                 catch (Exception e)
                 {

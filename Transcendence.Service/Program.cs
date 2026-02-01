@@ -3,8 +3,9 @@ using Hangfire.PostgreSql;
 using Microsoft.EntityFrameworkCore;
 using Transcendence.Data;
 using Transcendence.Data.Extensions;
-using Transcendence.Service.Core.Extensions;
+using Transcendence.Service.Core.Services.Extensions;
 using Transcendence.Service.Workers;
+
 var builder = Host.CreateApplicationBuilder(args);
 
 // Add services to the container.
@@ -28,14 +29,10 @@ builder.Services.AddHttpClient();
 
 // worker that initiates services
 if (builder.Environment.IsDevelopment())
-{
     // development worker directly enqueues and cleans up jobs for development
     builder.Services.AddHostedService<DevelopmentWorker>();
-}
 else
-{
     builder.Services.AddHostedService<ProductionWorker>();
-}
 
 // Register services
 builder.Services.AddTranscendenceCore();

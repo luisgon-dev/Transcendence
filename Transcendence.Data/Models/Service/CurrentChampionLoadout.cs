@@ -1,4 +1,5 @@
 using Transcendence.Data.Models.Service.Helpers;
+
 namespace Transcendence.Data.Models.Service;
 
 public class CurrentChampionLoadout

@@ -1,4 +1,5 @@
 using Transcendence.Data.Models.Service;
+
 namespace Transcendence.Data.Repositories.Interfaces;
 
 public interface IRefreshLockRepository

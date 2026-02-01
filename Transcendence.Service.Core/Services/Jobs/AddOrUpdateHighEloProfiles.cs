@@ -2,8 +2,9 @@
 using Camille.RiotGames;
 using Transcendence.Data;
 using Transcendence.Data.Repositories.Interfaces;
-using Transcendence.Service.Core.RiotApi.Interfaces;
-namespace Transcendence.Service.Core.Jobs;
+using Transcendence.Service.Core.Services.RiotApi.Interfaces;
+
+namespace Transcendence.Service.Core.Services.Jobs;
 
 // ReSharper disable once ClassNeverInstantiated.Global
 public class AddOrUpdateHighEloProfiles(
@@ -16,7 +17,8 @@ public class AddOrUpdateHighEloProfiles(
 {
     public async Task Execute(CancellationToken stoppingToken)
     {
-        var challengerLeague = await riotGamesApi.LeagueV4().GetChallengerLeagueAsync(PlatformRoute.NA1, QueueType.RANKED_SOLO_5x5, stoppingToken);
+        var challengerLeague = await riotGamesApi.LeagueV4()
+            .GetChallengerLeagueAsync(PlatformRoute.NA1, QueueType.RANKED_SOLO_5x5, stoppingToken);
         var grandmasterLeague = await riotGamesApi.LeagueV4()
             .GetGrandmasterLeagueAsync(PlatformRoute.NA1, QueueType.RANKED_SOLO_5x5, stoppingToken);
         var masterLeague = await riotGamesApi.LeagueV4()
@@ -32,7 +34,8 @@ public class AddOrUpdateHighEloProfiles(
 
         foreach (var summonerPuuid in summonerPuuids)
         {
-            var summoner = await summonerService.GetSummonerByPuuidAsync(summonerPuuid, PlatformRoute.NA1, stoppingToken);
+            var summoner =
+                await summonerService.GetSummonerByPuuidAsync(summonerPuuid, PlatformRoute.NA1, stoppingToken);
             await summonerRepository.AddOrUpdateSummonerAsync(summoner, stoppingToken);
             await context.SaveChangesAsync(stoppingToken);
             logger.LogInformation("Summoner {SummonerName} added or updated", summoner.SummonerName);

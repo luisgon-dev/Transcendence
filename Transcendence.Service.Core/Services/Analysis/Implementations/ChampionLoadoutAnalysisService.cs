@@ -1,6 +1,7 @@
 using Transcendence.Data.Models.Service;
-using Transcendence.Service.Core.Analysis.Interfaces;
-namespace Transcendence.Service.Core.Analysis.Implementations;
+using Transcendence.Service.Core.Services.Analysis.Interfaces;
+
+namespace Transcendence.Service.Core.Services.Analysis.Implementations;
 
 public class ChampionLoadoutAnalysisService : IChampionLoadoutAnalysisService
 {

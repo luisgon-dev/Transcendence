@@ -1,5 +1,6 @@
 using Hangfire;
-using Transcendence.Service.Core.Jobs;
+using Transcendence.Service.Core.Services.Jobs;
+
 namespace Transcendence.Service.Workers;
 
 public class ProductionWorker(
@@ -8,7 +9,8 @@ public class ProductionWorker(
 {
     public override Task StartAsync(CancellationToken cancellationToken)
     {
-        recurringJobManager.AddOrUpdate<UpdateStaticDataJob>("updateStaticData", x => x.Execute(CancellationToken.None), Cron.Daily);
+        recurringJobManager.AddOrUpdate<UpdateStaticDataJob>("updateStaticData", x => x.Execute(CancellationToken.None),
+            Cron.Daily);
         return base.StartAsync(cancellationToken);
     }
 

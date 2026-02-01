@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
-using Transcendence.Service.Core.Analysis.Interfaces;
+using Transcendence.Service.Core.Services.Analysis.Interfaces;
 using Transcendence.WebAPI.Models.Stats;
+
 namespace Transcendence.WebAPI.Controllers;
 
 [ApiController]
@@ -12,7 +13,8 @@ public class SummonerStatsController(ISummonerStatsService statsService) : Contr
     /// </summary>
     [HttpGet("stats/overview")]
     [ProducesResponseType(typeof(SummonerOverviewDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetOverview([FromRoute] Guid summonerId, [FromQuery] int recent = 20, CancellationToken ct = default)
+    public async Task<IActionResult> GetOverview([FromRoute] Guid summonerId, [FromQuery] int recent = 20,
+        CancellationToken ct = default)
     {
         var result = await statsService.GetSummonerOverviewAsync(summonerId, recent, ct);
         var dto = new SummonerOverviewDto(
@@ -29,7 +31,8 @@ public class SummonerStatsController(ISummonerStatsService statsService) : Contr
             result.AvgVisionScore,
             result.AvgDamageToChamps,
             result.AvgGameDurationMin,
-            result.RecentPerformance.Select(p => new RecentPerformanceDto(p.MatchId, p.Win, p.Kills, p.Deaths, p.Assists, p.CsPerMin, p.VisionScore, p.DamageToChamps)).ToList()
+            result.RecentPerformance.Select(p => new RecentPerformanceDto(p.MatchId, p.Win, p.Kills, p.Deaths,
+                p.Assists, p.CsPerMin, p.VisionScore, p.DamageToChamps)).ToList()
         );
         return Ok(dto);
     }
@@ -39,7 +42,8 @@ public class SummonerStatsController(ISummonerStatsService statsService) : Contr
     /// </summary>
     [HttpGet("stats/champions")]
     [ProducesResponseType(typeof(List<ChampionStatDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetChampionStats([FromRoute] Guid summonerId, [FromQuery] int top = 10, CancellationToken ct = default)
+    public async Task<IActionResult> GetChampionStats([FromRoute] Guid summonerId, [FromQuery] int top = 10,
+        CancellationToken ct = default)
     {
         var result = await statsService.GetChampionStatsAsync(summonerId, top, ct);
         var dto = result.Select(x => new ChampionStatDto(
@@ -76,7 +80,8 @@ public class SummonerStatsController(ISummonerStatsService statsService) : Contr
     /// </summary>
     [HttpGet("matches/recent")]
     [ProducesResponseType(typeof(PagedResultDto<RecentMatchSummaryDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetRecentMatches([FromRoute] Guid summonerId, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+    public async Task<IActionResult> GetRecentMatches([FromRoute] Guid summonerId, [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20, CancellationToken ct = default)
     {
         var result = await statsService.GetRecentMatchesAsync(summonerId, page, pageSize, ct);
         var dto = new PagedResultDto<RecentMatchSummaryDto>(

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Transcendence.Data.Repositories.Implementations;
 using Transcendence.Data.Repositories.Interfaces;
+
 namespace Transcendence.Data.Extensions;
 
 public static class ServiceCollectionExtensions

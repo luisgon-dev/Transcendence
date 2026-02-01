@@ -1,4 +1,4 @@
-namespace Transcendence.Service.Core.StaticData.DTOs;
+namespace Transcendence.Service.Core.Services.StaticData.DTOs;
 
 public class DataDragonPatch
 {

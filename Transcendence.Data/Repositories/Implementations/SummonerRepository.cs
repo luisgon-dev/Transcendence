@@ -3,6 +3,7 @@
 using Microsoft.EntityFrameworkCore;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Repositories.Interfaces;
+
 namespace Transcendence.Data.Repositories.Implementations;
 
 public class SummonerRepository(TranscendenceContext context, IRankRepository rankRepository) : ISummonerRepository
@@ -13,10 +14,7 @@ public class SummonerRepository(TranscendenceContext context, IRankRepository ra
     {
         IQueryable<Summoner> query = context.Summoners;
 
-        if (includes != null)
-        {
-            query = includes(query);
-        }
+        if (includes != null) query = includes(query);
 
         return await query.FirstOrDefaultAsync(x => x.Puuid == puuid, cancellationToken);
     }
@@ -29,10 +27,7 @@ public class SummonerRepository(TranscendenceContext context, IRankRepository ra
         CancellationToken cancellationToken = default)
     {
         IQueryable<Summoner> query = context.Summoners;
-        if (includes != null)
-        {
-            query = includes(query);
-        }
+        if (includes != null) query = includes(query);
         return await query.FirstOrDefaultAsync(x =>
                 x.PlatformRegion == platformRegion && x.GameName == gameName && x.TagLine == tagLine,
             cancellationToken);

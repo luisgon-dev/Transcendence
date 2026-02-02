@@ -8,22 +8,25 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Using Include="Microsoft.Extensions.DependencyInjection"/>
-        <Using Include="Microsoft.Extensions.Configuration"/>
-        <Using Include="Microsoft.Extensions.Logging"/>
+        <Using Include="Microsoft.Extensions.DependencyInjection" />
+        <Using Include="Microsoft.Extensions.Configuration" />
+        <Using Include="Microsoft.Extensions.Logging" />
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Camille.RiotGames" Version="3.0.0-nightly-2025-06-24-d2b94715b7"/>
-        <PackageReference Include="Hangfire.Core" Version="1.8.22"/>
-        <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.2"/>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.2"/>
-        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.2"/>
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2"/>
+        <PackageReference Include="Camille.RiotGames" Version="3.0.0-nightly-2025-06-24-d2b94715b7" />
+        <PackageReference Include="Hangfire.Core" Version="1.8.22" />
+        <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.0.2" />
+        <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.2" />
+        <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.2" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.2" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.2" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2" />
+        <PackageReference Include="StackExchange.Redis" Version="2.8.16" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Transcendence.Data\Transcendence.Data.csproj"/>
+        <ProjectReference Include="..\Transcendence.Data\Transcendence.Data.csproj" />
     </ItemGroup>
 
 </Project>

@@ -9,8 +9,12 @@ public class ProductionWorker(
 {
     public override Task StartAsync(CancellationToken cancellationToken)
     {
-        recurringJobManager.AddOrUpdate<UpdateStaticDataJob>("updateStaticData", x => x.Execute(CancellationToken.None),
-            Cron.Daily);
+        // Schedule patch detection every 6 hours
+        recurringJobManager.AddOrUpdate<UpdateStaticDataJob>(
+            "detect-patch",
+            x => x.Execute(CancellationToken.None),
+            "0 */6 * * *"); // Every 6 hours at minute 0
+
         return base.StartAsync(cancellationToken);
     }
 

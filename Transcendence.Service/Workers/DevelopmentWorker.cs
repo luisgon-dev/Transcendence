@@ -11,7 +11,16 @@ public class DevelopmentWorker(IBackgroundJobClient backgroundJobClient, ILogger
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
         CleanupHangfireJobs();
+
+        // Schedule patch detection every 6 hours
+        RecurringJob.AddOrUpdate<UpdateStaticDataJob>(
+            "detect-patch",
+            job => job.Execute(CancellationToken.None),
+            "0 */6 * * *"); // Every 6 hours at minute 0
+
+        // Run immediately on startup for development
         BackgroundJob.Enqueue<UpdateStaticDataJob>(x => x.Execute(CancellationToken.None));
+
         return Task.CompletedTask;
     }
 

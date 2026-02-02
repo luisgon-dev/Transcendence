@@ -99,7 +99,11 @@ public class SummonerStatsController(ISummonerStatsService statsService) : Contr
                 m.Assists,
                 m.VisionScore,
                 m.DamageToChamps,
-                m.CsPerMin
+                m.CsPerMin,
+                m.SummonerSpell1Id,
+                m.SummonerSpell2Id,
+                m.Items,
+                new MatchRuneSummaryDto(m.Runes.PrimaryStyleId, m.Runes.SubStyleId, m.Runes.KeystoneId)
             )).ToList(),
             result.Page,
             result.PageSize,

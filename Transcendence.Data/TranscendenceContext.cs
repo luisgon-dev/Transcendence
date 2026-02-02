@@ -54,6 +54,10 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
         modelBuilder.Entity<Summoner>()
             .HasIndex(s => s.Puuid);
 
+        // Global query filter to exclude unfetchable matches from normal queries
+        modelBuilder.Entity<Match>()
+            .HasQueryFilter(m => m.Status != FetchStatus.PermanentlyUnfetchable);
+
         // MatchParticipant configuration
         modelBuilder.Entity<MatchParticipant>(entity =>
         {

@@ -1,6 +1,7 @@
 using Camille.RiotGames;
 using Transcendence.Service.Core.Services.Analysis.Implementations;
 using Transcendence.Service.Core.Services.Analysis.Interfaces;
+using Transcendence.Service.Core.Services.Cache;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.RiotApi.Implementations;
@@ -15,6 +16,7 @@ public static class ServiceCollectionExtensions
     // Core services that do not require external Riot SDK
     public static IServiceCollection AddTranscendenceCore(this IServiceCollection services)
     {
+        services.AddScoped<ICacheService, CacheService>();
         services.AddScoped<IChampionLoadoutAnalysisService, ChampionLoadoutAnalysisService>();
         services.AddScoped<ISummonerStatsService, SummonerStatsService>();
         return services;

@@ -60,10 +60,13 @@ Plans:
 
 **Directory:** `.planning/phases/02-summoner-profiles/`
 
-**Plans:** 0 plans
+**Plans:** 4 plans in 2 waves
 
 Plans:
-- [ ] TBD (use `/gsd:plan-phase 2` to create)
+- [ ] 02-01-PLAN.md — Full match details endpoint with items/runes/spells (Wave 1)
+- [ ] 02-02-PLAN.md — Complete profile response in single API call (Wave 1)
+- [ ] 02-03-PLAN.md — HybridCache for stats queries (Wave 2)
+- [ ] 02-04-PLAN.md — Match history with loadout data (Wave 2)
 
 ---
 

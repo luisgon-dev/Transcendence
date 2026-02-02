@@ -224,14 +224,19 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
             .OrderByDescending(mp => mp.Match.MatchDate);
 
         var total = await query.CountAsync(ct);
-        var items = await query
+
+        // First, get participant IDs with match data
+        var participantData = await query
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(mp => new RecentMatchSummary(
-                mp.Match.MatchId!,
+            .Select(mp => new
+            {
+                mp.Id,
+                mp.Match.MatchId,
                 mp.Match.MatchDate,
                 mp.Match.Duration,
-                mp.Match.QueueType!,
+                mp.Match.QueueType,
+                mp.Match.Patch,
                 mp.Win,
                 mp.ChampionId,
                 mp.TeamPosition,
@@ -240,21 +245,70 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
                 mp.Assists,
                 mp.VisionScore,
                 mp.TotalDamageDealtToChampions,
-                mp.Match.Duration > 0
-                    ? (mp.TotalMinionsKilled + mp.NeutralMinionsKilled) / (mp.Match.Duration / 60.0)
-                    : 0.0,
+                mp.TotalMinionsKilled,
+                mp.NeutralMinionsKilled,
                 mp.SummonerSpell1Id,
-                mp.SummonerSpell2Id,
-                //TODO: Fix the below two lines to get actual rune data and items
-                mp.Items.Select(i => i.ItemId).ToList(),
-                new MatchRuneSummary
-                (
-                    1,
-                    1,
-                    1
-                )
-            ))
+                mp.SummonerSpell2Id
+            })
             .ToListAsync(ct);
+
+        // Get items and runes for these participants
+        var participantIds = participantData.Select(p => p.Id).ToList();
+
+        var itemsByParticipant = await db.Set<Data.Models.LoL.Match.MatchParticipantItem>()
+            .Where(i => participantIds.Contains(i.MatchParticipantId))
+            .GroupBy(i => i.MatchParticipantId)
+            .Select(g => new { ParticipantId = g.Key, Items = g.Select(i => i.ItemId).ToList() })
+            .ToDictionaryAsync(x => x.ParticipantId, x => x.Items, ct);
+
+        // Get runes and their metadata for determining styles
+        var runesByParticipant = await db.Set<Data.Models.LoL.Match.MatchParticipantRune>()
+            .Where(r => participantIds.Contains(r.MatchParticipantId))
+            .GroupBy(r => r.MatchParticipantId)
+            .Select(g => new { ParticipantId = g.Key, RuneIds = g.Select(r => r.RuneId).ToList(), PatchVersion = g.Select(r => r.PatchVersion).FirstOrDefault() })
+            .ToDictionaryAsync(x => x.ParticipantId, ct);
+
+        // Get rune metadata for all runes we need to process
+        var allRuneIds = runesByParticipant.Values.SelectMany(r => r.RuneIds).Distinct().ToList();
+        var patches = participantData.Select(p => p.Patch).Distinct().ToList();
+
+        var runeMetadata = await db.RuneVersions
+            .AsNoTracking()
+            .Where(rv => allRuneIds.Contains(rv.RuneId) && patches.Contains(rv.PatchVersion))
+            .ToDictionaryAsync(rv => rv.RuneId, rv => new RuneMetadata(rv.RunePathId, rv.Slot), ct);
+
+        // Map to final DTOs
+        var items = participantData.Select(p =>
+        {
+            var itemList = itemsByParticipant.GetValueOrDefault(p.Id) ?? new List<int>();
+            // Ensure 7 slots (pad with 0s if needed)
+            while (itemList.Count < 7) itemList.Add(0);
+
+            var runes = runesByParticipant.GetValueOrDefault(p.Id);
+            var runeSummary = runes != null
+                ? BuildRuneSummary(runes.RuneIds, runeMetadata)
+                : new MatchRuneSummary(0, 0, 0);
+
+            return new RecentMatchSummary(
+                p.MatchId!,
+                p.MatchDate,
+                p.Duration,
+                p.QueueType!,
+                p.Win,
+                p.ChampionId,
+                p.TeamPosition,
+                p.Kills,
+                p.Deaths,
+                p.Assists,
+                p.VisionScore,
+                p.TotalDamageDealtToChampions,
+                p.Duration > 0 ? (p.TotalMinionsKilled + p.NeutralMinionsKilled) / (p.Duration / 60.0) : 0.0,
+                p.SummonerSpell1Id,
+                p.SummonerSpell2Id,
+                itemList,
+                runeSummary
+            );
+        }).ToList();
 
         return new PagedResult<RecentMatchSummary>(items, page, pageSize, total);
     }
@@ -400,6 +454,58 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
     private static double CalcKdaRatio(double kills, double deaths, double assists)
     {
         return (kills + assists) / Math.Max(1.0, deaths);
+    }
+
+    /// <summary>
+    /// Builds a rune summary (primary/sub styles + keystone) for match history.
+    /// Simpler than BuildRunesDto - just enough for match cards.
+    /// </summary>
+    private static MatchRuneSummary BuildRuneSummary(
+        List<int> runeIds,
+        Dictionary<int, RuneMetadata> runeMetadata)
+    {
+        // Group runes by their path (style)
+        var runesByPath = new Dictionary<int, List<(int RuneId, int Slot)>>();
+
+        foreach (var runeId in runeIds)
+        {
+            if (runeMetadata.TryGetValue(runeId, out var meta))
+            {
+                var pathId = meta.PathId;
+                var slot = meta.Slot;
+
+                if (!runesByPath.ContainsKey(pathId))
+                    runesByPath[pathId] = [];
+
+                runesByPath[pathId].Add((runeId, slot));
+            }
+        }
+
+        // Primary style has 4 runes (slots 0-3), sub style has 2 runes
+        // Stat shards are in a separate path (typically path 5xxx) - ignore for summary
+        var primaryStyleId = 0;
+        var subStyleId = 0;
+        var keystoneId = 0;
+
+        foreach (var (pathId, runes) in runesByPath)
+        {
+            // Skip stat shard paths (5xxx range)
+            if (pathId >= 5000)
+                continue;
+
+            if (runes.Count >= 3) // Primary style has 4 runes (keystone + 3)
+            {
+                primaryStyleId = pathId;
+                // Keystone is slot 0 in primary tree
+                keystoneId = runes.Where(r => r.Slot == 0).Select(r => r.RuneId).FirstOrDefault();
+            }
+            else // Sub style has 2 runes
+            {
+                subStyleId = pathId;
+            }
+        }
+
+        return new MatchRuneSummary(primaryStyleId, subStyleId, keystoneId);
     }
 
     /// <summary>

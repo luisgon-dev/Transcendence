@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Repositories.Interfaces;
+using Transcendence.Service.Core.Services.Analysis.Interfaces;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.RiotApi.DTOs;
 
@@ -14,7 +15,8 @@ namespace Transcendence.WebAPI.Controllers;
 public class SummonersController(
     ISummonerRepository summonerRepository,
     IRefreshLockRepository refreshLockRepository,
-    IBackgroundJobClient backgroundJobClient
+    IBackgroundJobClient backgroundJobClient,
+    ISummonerStatsService statsService
 ) : ControllerBase
 {
     /// <summary>
@@ -46,6 +48,19 @@ public class SummonersController(
             var soloRank = summoner.Ranks.FirstOrDefault(r => r.QueueType == "RANKED_SOLO_5x5");
             var flexRank = summoner.Ranks.FirstOrDefault(r => r.QueueType == "RANKED_FLEX_SR");
 
+            // Fetch stats in parallel for optimal performance
+            var overviewTask = statsService.GetSummonerOverviewAsync(summoner.Id, 20, ct);
+            var championsTask = statsService.GetChampionStatsAsync(summoner.Id, 5, ct);
+            var recentTask = statsService.GetRecentMatchesAsync(summoner.Id, 1, 10, ct);
+            await Task.WhenAll(overviewTask, championsTask, recentTask);
+
+            var overview = await overviewTask;
+            var champions = await championsTask;
+            var recent = await recentTask;
+
+            // Calculate StatsAge from most recent match
+            var mostRecentMatchDate = recent.Items.Count > 0 ? recent.Items[0].MatchDate : (long?)null;
+
             var response = new SummonerProfileResponse
             {
                 Puuid = summoner.Puuid ?? string.Empty,
@@ -72,6 +87,49 @@ public class SummonersController(
                     Losses = flexRank.Losses
                 } : null,
 
+                // Overview stats
+                OverviewStats = overview.TotalMatches > 0 ? new ProfileOverviewStats
+                {
+                    TotalMatches = overview.TotalMatches,
+                    Wins = overview.Wins,
+                    Losses = overview.Losses,
+                    WinRate = overview.WinRate,
+                    AvgKills = overview.AvgKills,
+                    AvgDeaths = overview.AvgDeaths,
+                    AvgAssists = overview.AvgAssists,
+                    KdaRatio = overview.KdaRatio,
+                    AvgCsPerMin = overview.AvgCsPerMin,
+                    AvgVisionScore = overview.AvgVisionScore,
+                    AvgDamageToChamps = overview.AvgDamageToChamps
+                } : null,
+
+                // Top 5 champions
+                TopChampions = champions.Select(c => new ProfileChampionStat
+                {
+                    ChampionId = c.ChampionId,
+                    ChampionName = ResolveChampionName(c.ChampionId),
+                    Games = c.Games,
+                    Wins = c.Wins,
+                    Losses = c.Losses,
+                    WinRate = c.WinRate,
+                    KdaRatio = c.KdaRatio
+                }).ToList(),
+
+                // Recent 10 matches
+                RecentMatches = recent.Items.Select(m => new ProfileRecentMatch
+                {
+                    MatchId = m.MatchId,
+                    MatchDate = m.MatchDate,
+                    QueueType = m.QueueType,
+                    Win = m.Win,
+                    ChampionId = m.ChampionId,
+                    ChampionName = ResolveChampionName(m.ChampionId),
+                    Kills = m.Kills,
+                    Deaths = m.Deaths,
+                    Assists = m.Assists,
+                    CsPerMin = m.CsPerMin
+                }).ToList(),
+
                 ProfileAge = new DataAgeMetadata
                 {
                     FetchedAt = summoner.UpdatedAt
@@ -80,7 +138,15 @@ public class SummonersController(
                 RankAge = new DataAgeMetadata
                 {
                     FetchedAt = soloRank?.UpdatedAt ?? flexRank?.UpdatedAt ?? DateTime.UtcNow
-                }
+                },
+
+                // Stats freshness based on most recent match
+                StatsAge = mostRecentMatchDate.HasValue
+                    ? new DataAgeMetadata
+                    {
+                        FetchedAt = DateTimeOffset.FromUnixTimeMilliseconds(mostRecentMatchDate.Value).UtcDateTime
+                    }
+                    : null
             };
 
             return Ok(response);
@@ -192,5 +258,14 @@ public class SummonersController(
             _ => default
         };
         return platform != default;
+    }
+
+    /// <summary>
+    /// Resolves champion ID to name. Phase 3 will add proper static data service.
+    /// For now, returns placeholder that clients can resolve client-side.
+    /// </summary>
+    private static string ResolveChampionName(int championId)
+    {
+        return $"Champion {championId}";
     }
 }

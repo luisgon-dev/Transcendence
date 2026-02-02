@@ -11,9 +11,9 @@ See: .planning/PROJECT.md (updated 2026-01-31)
 ## Current Position
 
 Phase: 2 of 5 - Summoner Profiles
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-02-02 - Phase 1 complete, verified
+Plan: 01 complete
+Status: Ready for Plan 02-02
+Last activity: 2026-02-02 - Plan 02-01 complete (Match Details Endpoint)
 
 Progress: ██░░░░░░░░ 20% (1/5 phases complete)
 
@@ -30,12 +30,15 @@ Progress: ██░░░░░░░░ 20% (1/5 phases complete)
 - Current phase: Phase 2
 
 **Velocity:**
-- Not yet measured
+- Plan 02-01: 15 minutes (3 tasks)
 
 ## Recent Decisions
 
 | Phase | Decision | Rationale |
 |-------|----------|-----------|
+| 02-01 | Rune style via RuneVersion lookup | Current MatchParticipantRune only stores RuneId - use RunePathId from static data to infer primary/sub |
+| 02-01 | Flat item list without slots | Items stored deduplicated without slot positions, returned as simple list |
+| 02-01 | Private RuneMetadata record | Type-safe alternative to dynamic for rune lookup results |
 | 01 | L1 TTL (5min) shorter than L2 TTL (1hr) | Prevents stale-distributed-fresh scenarios where one server has stale in-memory cache but Redis has updated data |
 | 01 | Use HybridCache built-in stampede protection | No manual locking needed - HybridCache guarantees only one concurrent caller executes factory for given key |
 | 01 | CacheService wrapper abstraction | Centralizes cache key generation, improves testability, provides domain-specific API over infrastructure |
@@ -56,17 +59,17 @@ Progress: ██░░░░░░░░ 20% (1/5 phases complete)
 
 ## Pending Todos
 
-(None yet - awaiting Phase 1 planning)
+(None)
 
 ## Known Blockers
 
-(None yet)
+(None)
 
 ## Session Continuity
 
 **Last session:** 2026-02-02
-**Activity:** Phase execution
-**Stopped at:** Phase 1 complete and verified
+**Activity:** Plan 02-01 execution
+**Stopped at:** Plan 02-01 complete
 **Resume file:** None
 
 ---
@@ -74,16 +77,17 @@ Progress: ██░░░░░░░░ 20% (1/5 phases complete)
 ## Context for Next Session
 
 **What we just did:**
-- Completed Phase 1 Foundation with 4 plans:
-  - 01-01: HybridCache + Redis two-tier caching with stampede protection
-  - 01-02: Automatic patch detection every 6 hours with cache invalidation
-  - 01-03: Retry logic with exponential backoff (30s-300s) and 2yr retention window checks
-  - 01-04: Data freshness metadata (DataAgeMetadata) in API responses
-- Phase verified: All 5 success criteria met, VERIFICATION.md created
+- Completed Plan 02-01 (Match Details Endpoint) with 3 tasks:
+  - Created MatchDetailDto with ParticipantDetailDto and ParticipantRunesDto
+  - Implemented GetMatchDetailAsync in SummonerStatsService with EF Include chain
+  - Added GET /api/summoners/{id}/matches/{matchId} endpoint
 
-**Phase 2 focus:** Summoner profile endpoints. Existing code has basic summoner lookup—Phase 2 polishes into production-ready endpoints with full stats, match history, and champion breakdowns.
+**Key artifacts:**
+- `Transcendence.Service.Core/Services/RiotApi/DTOs/MatchDetailDto.cs` - Full match DTOs
+- `SummonerStatsService.GetMatchDetailAsync()` - Match detail query
+- `SummonerStatsController.GetMatchDetail()` - Match detail endpoint
 
-**Ready for:** `/gsd:plan-phase 2` to create execution plans for summoner profile endpoints.
+**Ready for:** Plan 02-02 execution or next phase planning
 
 ---
 

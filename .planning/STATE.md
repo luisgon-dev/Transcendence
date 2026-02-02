@@ -11,9 +11,9 @@ See: .planning/PROJECT.md (updated 2026-01-31)
 ## Current Position
 
 Phase: 2 of 5 - Summoner Profiles
-Plan: 03 complete
+Plan: 04 complete
 Status: Ready for next phase or plan
-Last activity: 2026-02-02 - Plan 02-03 complete (Stats Query Caching)
+Last activity: 2026-02-02 - Plan 02-04 complete (Match History Loadout)
 
 Progress: ██░░░░░░░░ 20% (1/5 phases complete)
 
@@ -33,11 +33,15 @@ Progress: ██░░░░░░░░ 20% (1/5 phases complete)
 - Plan 02-01: 15 minutes (3 tasks)
 - Plan 02-02: 20 minutes (3 tasks)
 - Plan 02-03: 15 minutes (3 tasks)
+- Plan 02-04: 4 minutes (3 tasks, Task 1 pre-complete)
 
 ## Recent Decisions
 
 | Phase | Decision | Rationale |
 |-------|----------|-----------|
+| 02-04 | Items padded to 7 slots with 0s | MatchParticipantItem lacks Slot property - pad to consistent length (6 items + trinket) for UI |
+| 02-04 | Rune summary vs full detail | Match cards show keystone+styles, full rune tree available via match detail endpoint |
+| 02-04 | Batched queries for items/runes | 3 queries (participants, items, runes) prevents N+1 performance issues |
 | 02-03 | 5-minute stats TTL (2min L1) | Shorter than profile/rank because stats aggregate from frequently-updated match data |
 | 02-03 | 1-hour match detail TTL (15min L1) | Match data is immutable once stored, can cache longer |
 | 02-03 | Eager invalidation of known cache keys | HybridCache lacks wildcard support - invalidate common parameter combinations on refresh |
@@ -77,8 +81,8 @@ Progress: ██░░░░░░░░ 20% (1/5 phases complete)
 ## Session Continuity
 
 **Last session:** 2026-02-02
-**Activity:** Plan 02-03 execution
-**Stopped at:** Plan 02-03 complete
+**Activity:** Plan 02-04 execution
+**Stopped at:** Plan 02-04 complete
 **Resume file:** None
 
 ---
@@ -86,23 +90,27 @@ Progress: ██░░░░░░░░ 20% (1/5 phases complete)
 ## Context for Next Session
 
 **What we just did:**
-- Completed Plan 02-03 (Stats Query Caching) with 3 tasks:
-  - Added HybridCache infrastructure to SummonerStatsService
-  - Wrapped all stats methods with GetOrCreateAsync pattern
-  - Implemented cache invalidation in SummonerRefreshJob
+- Completed Plan 02-04 (Match History Loadout) with 3 tasks:
+  - Task 1 already complete (RecentMatchSummary + MatchRuneSummary records)
+  - Restructured ComputeRecentMatchesAsync for batched item/rune fetching
+  - Updated controller DTOs and mapping to expose loadout data
 
 **Key artifacts:**
-- `Transcendence.Service.Core/Services/Analysis/Implementations/SummonerStatsService.cs` - All stats queries cached
-- `Transcendence.Service.Core/Services/Jobs/SummonerRefreshJob.cs` - Invalidates stats cache after refresh
+- `Transcendence.Service.Core/Services/Analysis/Implementations/SummonerStatsService.cs` - Batched queries for items/runes
+- `Transcendence.WebAPI/Models/Stats/SummonerStatsDtos.cs` - RecentMatchSummaryDto with loadout
+- `Transcendence.WebAPI/Controllers/SummonerStatsController.cs` - Mapping updated
 
-**Caching implementation:**
-- Stats queries use 5-minute TTL (2min L1) - changes on refresh
-- Match details use 1-hour TTL (15min L1) - immutable data
-- Cache keys include summonerId: `stats:{type}:{summonerId}:{params}`
-- Automatic invalidation after summoner refresh completes
-- Sub-500ms response times for repeated profile queries
+**Match history endpoint now returns:**
+- Items array (7 slots: 6 items + trinket, 0 for empty)
+- Rune summary (primary/sub style IDs, keystone ID)
+- Summoner spell IDs (Spell1Id, Spell2Id)
 
-**Ready for:** Phase 3 (Static Data Service) to add champion names, rune metadata, item data
+**Query performance:**
+- 3 batched queries (participants, items, runes) prevents N+1
+- RuneVersion metadata fetched separately for efficient style inference
+- Same pattern as match detail endpoint (consistent architecture)
+
+**Ready for:** Phase 3 (Static Data Service) to add champion/item/rune name resolution
 
 ---
 

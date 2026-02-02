@@ -16,13 +16,13 @@
     <ItemGroup>
         <PackageReference Include="Camille.RiotGames" Version="3.0.0-nightly-2025-06-24-d2b94715b7" />
         <PackageReference Include="Hangfire.Core" Version="1.8.22" />
-        <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.0.2" />
+        <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.2.0" />
         <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.2" />
         <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.2" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.2" />
         <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.2" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2" />
-        <PackageReference Include="StackExchange.Redis" Version="2.8.16" />
+        <PackageReference Include="StackExchange.Redis" Version="2.10.1" />
     </ItemGroup>
 
     <ItemGroup>

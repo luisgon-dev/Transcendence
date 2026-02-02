@@ -35,6 +35,17 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
     {
         if (recentGamesCount <= 0) recentGamesCount = 20;
 
+        var cacheKey = $"{OverviewCacheKeyPrefix}{summonerId}:{recentGamesCount}";
+        return await cache.GetOrCreateAsync(
+            cacheKey,
+            async cancel => await ComputeOverviewAsync(summonerId, recentGamesCount, cancel),
+            StatsCacheOptions,
+            cancellationToken: ct);
+    }
+
+    private async Task<SummonerOverviewStats> ComputeOverviewAsync(Guid summonerId, int recentGamesCount,
+        CancellationToken ct)
+    {
         var baseQuery = db.MatchParticipants
             .AsNoTracking()
             .Where(mp => mp.SummonerId == summonerId)
@@ -113,6 +124,17 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
     {
         if (top <= 0) top = 10;
 
+        var cacheKey = $"{ChampionsCacheKeyPrefix}{summonerId}:{top}";
+        return await cache.GetOrCreateAsync(
+            cacheKey,
+            async cancel => await ComputeChampionStatsAsync(summonerId, top, cancel),
+            StatsCacheOptions,
+            cancellationToken: ct);
+    }
+
+    private async Task<IReadOnlyList<ChampionStat>> ComputeChampionStatsAsync(Guid summonerId, int top,
+        CancellationToken ct)
+    {
         var list = await db.MatchParticipants
             .AsNoTracking()
             .Where(mp => mp.SummonerId == summonerId)
@@ -152,6 +174,16 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
 
     public async Task<IReadOnlyList<RoleStat>> GetRoleBreakdownAsync(Guid summonerId, CancellationToken ct)
     {
+        var cacheKey = $"{RolesCacheKeyPrefix}{summonerId}";
+        return await cache.GetOrCreateAsync(
+            cacheKey,
+            async cancel => await ComputeRoleBreakdownAsync(summonerId, cancel),
+            StatsCacheOptions,
+            cancellationToken: ct);
+    }
+
+    private async Task<IReadOnlyList<RoleStat>> ComputeRoleBreakdownAsync(Guid summonerId, CancellationToken ct)
+    {
         var list = await db.MatchParticipants
             .AsNoTracking()
             .Where(mp => mp.SummonerId == summonerId)
@@ -175,6 +207,17 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
         if (page <= 0) page = 1;
         if (pageSize <= 0 || pageSize > 100) pageSize = 20;
 
+        var cacheKey = $"{RecentMatchesCacheKeyPrefix}{summonerId}:{page}:{pageSize}";
+        return await cache.GetOrCreateAsync(
+            cacheKey,
+            async cancel => await ComputeRecentMatchesAsync(summonerId, page, pageSize, cancel),
+            StatsCacheOptions,
+            cancellationToken: ct);
+    }
+
+    private async Task<PagedResult<RecentMatchSummary>> ComputeRecentMatchesAsync(Guid summonerId, int page,
+        int pageSize, CancellationToken ct)
+    {
         var query = db.MatchParticipants
             .AsNoTracking()
             .Where(mp => mp.SummonerId == summonerId)
@@ -199,7 +242,17 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
                 mp.TotalDamageDealtToChampions,
                 mp.Match.Duration > 0
                     ? (mp.TotalMinionsKilled + mp.NeutralMinionsKilled) / (mp.Match.Duration / 60.0)
-                    : 0.0
+                    : 0.0,
+                mp.SummonerSpell1Id,
+                mp.SummonerSpell2Id,
+                //TODO: Fix the below two lines to get actual rune data and items
+                mp.Items.Select(i => i.ItemId).ToList(),
+                new MatchRuneSummary
+                (
+                    1,
+                    1,
+                    1
+                )
             ))
             .ToListAsync(ct);
 
@@ -207,6 +260,16 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
     }
 
     public async Task<MatchDetailDto?> GetMatchDetailAsync(string matchId, CancellationToken ct)
+    {
+        var cacheKey = $"{MatchDetailCacheKeyPrefix}{matchId}";
+        return await cache.GetOrCreateAsync(
+            cacheKey,
+            async cancel => await ComputeMatchDetailAsync(matchId, cancel),
+            MatchDetailCacheOptions,
+            cancellationToken: ct);
+    }
+
+    private async Task<MatchDetailDto?> ComputeMatchDetailAsync(string matchId, CancellationToken ct)
     {
         var match = await db.Matches
             .AsNoTracking()

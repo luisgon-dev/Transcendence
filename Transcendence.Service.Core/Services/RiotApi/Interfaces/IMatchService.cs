@@ -7,4 +7,6 @@ public interface IMatchService
 {
     Task<Match?> GetMatchDetailsAsync(string matchId, RegionalRoute regionalRoute, PlatformRoute platformRoute,
         CancellationToken cancellationToken = default);
+
+    Task<bool> FetchMatchWithRetryAsync(string matchId, string region, CancellationToken cancellationToken = default);
 }

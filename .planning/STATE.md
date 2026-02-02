@@ -11,9 +11,9 @@ See: .planning/PROJECT.md (updated 2026-01-31)
 ## Current Position
 
 Phase: 2 of 5 - Summoner Profiles
-Plan: 01 complete
-Status: Ready for Plan 02-02
-Last activity: 2026-02-02 - Plan 02-01 complete (Match Details Endpoint)
+Plan: 02 complete
+Status: Ready for Plan 02-03
+Last activity: 2026-02-02 - Plan 02-02 complete (Profile Stats Integration)
 
 Progress: ██░░░░░░░░ 20% (1/5 phases complete)
 
@@ -31,11 +31,15 @@ Progress: ██░░░░░░░░ 20% (1/5 phases complete)
 
 **Velocity:**
 - Plan 02-01: 15 minutes (3 tasks)
+- Plan 02-02: 20 minutes (3 tasks)
 
 ## Recent Decisions
 
 | Phase | Decision | Rationale |
 |-------|----------|-----------|
+| 02-02 | Champion name placeholder "Champion {id}" | Phase 3 will add proper static data service for name resolution |
+| 02-02 | StatsAge from most recent match date | FetchedAt uses first match MatchDate from RecentMatches for freshness indication |
+| 02-02 | Task.WhenAll for parallel stats fetching | Minimizes latency by fetching overview, champions, recent concurrently |
 | 02-01 | Rune style via RuneVersion lookup | Current MatchParticipantRune only stores RuneId - use RunePathId from static data to infer primary/sub |
 | 02-01 | Flat item list without slots | Items stored deduplicated without slot positions, returned as simple list |
 | 02-01 | Private RuneMetadata record | Type-safe alternative to dynamic for rune lookup results |
@@ -68,8 +72,8 @@ Progress: ██░░░░░░░░ 20% (1/5 phases complete)
 ## Session Continuity
 
 **Last session:** 2026-02-02
-**Activity:** Plan 02-01 execution
-**Stopped at:** Plan 02-01 complete
+**Activity:** Plan 02-02 execution
+**Stopped at:** Plan 02-02 complete
 **Resume file:** None
 
 ---
@@ -77,17 +81,24 @@ Progress: ██░░░░░░░░ 20% (1/5 phases complete)
 ## Context for Next Session
 
 **What we just did:**
-- Completed Plan 02-01 (Match Details Endpoint) with 3 tasks:
-  - Created MatchDetailDto with ParticipantDetailDto and ParticipantRunesDto
-  - Implemented GetMatchDetailAsync in SummonerStatsService with EF Include chain
-  - Added GET /api/summoners/{id}/matches/{matchId} endpoint
+- Completed Plan 02-02 (Profile Stats Integration) with 3 tasks:
+  - Extended SummonerProfileResponse with ProfileOverviewStats, ProfileChampionStat, ProfileRecentMatch DTOs
+  - Updated SummonersController to populate full profile with parallel Task.WhenAll
+  - Added StatsAge metadata based on most recent match date
 
 **Key artifacts:**
-- `Transcendence.Service.Core/Services/RiotApi/DTOs/MatchDetailDto.cs` - Full match DTOs
-- `SummonerStatsService.GetMatchDetailAsync()` - Match detail query
-- `SummonerStatsController.GetMatchDetail()` - Match detail endpoint
+- `Transcendence.Service.Core/Services/RiotApi/DTOs/SummonerProfileResponse.cs` - Profile DTOs with stats
+- `Transcendence.WebAPI/Controllers/SummonersController.cs` - Full profile population with parallel fetching
 
-**Ready for:** Plan 02-02 execution or next phase planning
+**Profile endpoint now returns:**
+- Basic summoner info (puuid, name, tag, level, icon)
+- Solo/Flex rank info
+- OverviewStats (wins, losses, KDA, CS/min, vision, damage)
+- TopChampions (top 5 by games played)
+- RecentMatches (last 10 matches)
+- ProfileAge, RankAge, StatsAge metadata
+
+**Ready for:** Plan 02-03 execution or Phase 3 for static data (champion names)
 
 ---
 

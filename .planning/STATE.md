@@ -11,9 +11,9 @@ See: .planning/PROJECT.md (updated 2026-01-31)
 ## Current Position
 
 Phase: 2 of 5 - Summoner Profiles
-Plan: 02 complete
-Status: Ready for Plan 02-03
-Last activity: 2026-02-02 - Plan 02-02 complete (Profile Stats Integration)
+Plan: 03 complete
+Status: Ready for next phase or plan
+Last activity: 2026-02-02 - Plan 02-03 complete (Stats Query Caching)
 
 Progress: ██░░░░░░░░ 20% (1/5 phases complete)
 
@@ -32,11 +32,16 @@ Progress: ██░░░░░░░░ 20% (1/5 phases complete)
 **Velocity:**
 - Plan 02-01: 15 minutes (3 tasks)
 - Plan 02-02: 20 minutes (3 tasks)
+- Plan 02-03: 15 minutes (3 tasks)
 
 ## Recent Decisions
 
 | Phase | Decision | Rationale |
 |-------|----------|-----------|
+| 02-03 | 5-minute stats TTL (2min L1) | Shorter than profile/rank because stats aggregate from frequently-updated match data |
+| 02-03 | 1-hour match detail TTL (15min L1) | Match data is immutable once stored, can cache longer |
+| 02-03 | Eager invalidation of known cache keys | HybridCache lacks wildcard support - invalidate common parameter combinations on refresh |
+| 02-03 | Extract ComputeXxx methods for cache factories | Keeps cache logic separate from business logic, follows GetOrCreateAsync pattern cleanly |
 | 02-02 | Champion name placeholder "Champion {id}" | Phase 3 will add proper static data service for name resolution |
 | 02-02 | StatsAge from most recent match date | FetchedAt uses first match MatchDate from RecentMatches for freshness indication |
 | 02-02 | Task.WhenAll for parallel stats fetching | Minimizes latency by fetching overview, champions, recent concurrently |
@@ -72,8 +77,8 @@ Progress: ██░░░░░░░░ 20% (1/5 phases complete)
 ## Session Continuity
 
 **Last session:** 2026-02-02
-**Activity:** Plan 02-02 execution
-**Stopped at:** Plan 02-02 complete
+**Activity:** Plan 02-03 execution
+**Stopped at:** Plan 02-03 complete
 **Resume file:** None
 
 ---
@@ -81,24 +86,23 @@ Progress: ██░░░░░░░░ 20% (1/5 phases complete)
 ## Context for Next Session
 
 **What we just did:**
-- Completed Plan 02-02 (Profile Stats Integration) with 3 tasks:
-  - Extended SummonerProfileResponse with ProfileOverviewStats, ProfileChampionStat, ProfileRecentMatch DTOs
-  - Updated SummonersController to populate full profile with parallel Task.WhenAll
-  - Added StatsAge metadata based on most recent match date
+- Completed Plan 02-03 (Stats Query Caching) with 3 tasks:
+  - Added HybridCache infrastructure to SummonerStatsService
+  - Wrapped all stats methods with GetOrCreateAsync pattern
+  - Implemented cache invalidation in SummonerRefreshJob
 
 **Key artifacts:**
-- `Transcendence.Service.Core/Services/RiotApi/DTOs/SummonerProfileResponse.cs` - Profile DTOs with stats
-- `Transcendence.WebAPI/Controllers/SummonersController.cs` - Full profile population with parallel fetching
+- `Transcendence.Service.Core/Services/Analysis/Implementations/SummonerStatsService.cs` - All stats queries cached
+- `Transcendence.Service.Core/Services/Jobs/SummonerRefreshJob.cs` - Invalidates stats cache after refresh
 
-**Profile endpoint now returns:**
-- Basic summoner info (puuid, name, tag, level, icon)
-- Solo/Flex rank info
-- OverviewStats (wins, losses, KDA, CS/min, vision, damage)
-- TopChampions (top 5 by games played)
-- RecentMatches (last 10 matches)
-- ProfileAge, RankAge, StatsAge metadata
+**Caching implementation:**
+- Stats queries use 5-minute TTL (2min L1) - changes on refresh
+- Match details use 1-hour TTL (15min L1) - immutable data
+- Cache keys include summonerId: `stats:{type}:{summonerId}:{params}`
+- Automatic invalidation after summoner refresh completes
+- Sub-500ms response times for repeated profile queries
 
-**Ready for:** Plan 02-03 execution or Phase 3 for static data (champion names)
+**Ready for:** Phase 3 (Static Data Service) to add champion names, rune metadata, item data
 
 ---
 

@@ -1,5 +1,6 @@
 using Camille.Enums;
 using Camille.RiotGames;
+using Microsoft.Extensions.Caching.Hybrid;
 using Transcendence.Data;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
@@ -15,7 +16,8 @@ public class SummonerRefreshJob(
     TranscendenceContext db,
     IRefreshLockRepository refreshLockRepository,
     ILogger<SummonerRefreshJob> logger,
-    RiotGamesApi riotGamesApi) : ISummonerRefreshJob
+    RiotGamesApi riotGamesApi,
+    HybridCache cache) : ISummonerRefreshJob
 {
     public async Task RefreshByRiotId(string gameName, string tagLine, PlatformRoute platformRoute, string lockKey,
         CancellationToken ct = default)
@@ -61,6 +63,9 @@ public class SummonerRefreshJob(
                         gameName, tagLine);
                 }
 
+            // After matches saved, invalidate stats cache for this summoner
+            await InvalidateStatsCacheAsync(summoner.Id, ct);
+
             logger.LogInformation("[Refresh] Completed refresh for {GameName}#{Tag} on {Platform}", gameName, tagLine,
                 platformRoute);
         }
@@ -81,6 +86,34 @@ public class SummonerRefreshJob(
             {
                 logger.LogError(ex, "[Refresh] Failed to release refresh lock {LockKey}", lockKey);
             }
+        }
+    }
+
+    private async Task InvalidateStatsCacheAsync(Guid summonerId, CancellationToken ct)
+    {
+        // HybridCache doesn't have wildcard invalidation, but we can remove known keys
+        // The cache will naturally expire, but we can force invalidation for common patterns
+
+        // Common recentGamesCount values
+        foreach (var count in new[] { 10, 20, 50 })
+        {
+            await cache.RemoveAsync($"stats:overview:{summonerId}:{count}", ct);
+        }
+
+        // Common top champion counts
+        foreach (var top in new[] { 5, 10 })
+        {
+            await cache.RemoveAsync($"stats:champions:{summonerId}:{top}", ct);
+        }
+
+        // Roles has no parameters
+        await cache.RemoveAsync($"stats:roles:{summonerId}", ct);
+
+        // Invalidate first few pages of recent matches
+        foreach (var page in new[] { 1, 2, 3 })
+        {
+            await cache.RemoveAsync($"stats:recent:{summonerId}:{page}:20", ct);
+            await cache.RemoveAsync($"stats:recent:{summonerId}:{page}:10", ct);
         }
     }
 }

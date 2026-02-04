@@ -1,0 +1,55 @@
+using Microsoft.AspNetCore.Mvc;
+using Transcendence.Service.Core.Services.Analytics.Interfaces;
+using Transcendence.Service.Core.Services.Analytics.Models;
+
+namespace Transcendence.WebAPI.Controllers;
+
+[ApiController]
+[Route("api/analytics/champions")]
+public class ChampionAnalyticsController(IChampionAnalyticsService analyticsService) : ControllerBase
+{
+    /// <summary>
+    /// Get champion win rates by role and rank tier.
+    /// Only returns data for champion/role/tier combinations with 100+ games.
+    /// Data is cached for 24 hours.
+    /// </summary>
+    /// <param name="championId">Champion ID (e.g., 1 for Annie)</param>
+    /// <param name="rankTier">Optional rank tier filter (Iron, Bronze, Silver, Gold, Platinum, Emerald, Diamond, Master, Grandmaster, Challenger)</param>
+    /// <param name="region">Optional region filter (e.g., NA1, EUW1)</param>
+    /// <param name="role">Optional role filter (TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY)</param>
+    /// <param name="ct">Cancellation token</param>
+    [HttpGet("{championId}/winrates")]
+    [ProducesResponseType(typeof(ChampionWinRateSummary), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetWinRates(
+        [FromRoute] int championId,
+        [FromQuery] string? rankTier = null,
+        [FromQuery] string? region = null,
+        [FromQuery] string? role = null,
+        CancellationToken ct = default)
+    {
+        if (championId <= 0)
+            return BadRequest("Invalid champion ID. Must be positive integer.");
+
+        var filter = new ChampionAnalyticsFilter(
+            RankTier: rankTier,
+            Region: region,
+            Role: role
+        );
+
+        var summary = await analyticsService.GetWinRatesAsync(championId, filter, ct);
+        return Ok(summary);
+    }
+
+    /// <summary>
+    /// Invalidates all analytics cache entries.
+    /// Used when patch changes or significant data updates occur.
+    /// </summary>
+    [HttpPost("cache/invalidate")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> InvalidateCache(CancellationToken ct)
+    {
+        await analyticsService.InvalidateAnalyticsCacheAsync(ct);
+        return Ok(new { message = "Analytics cache invalidated successfully" });
+    }
+}

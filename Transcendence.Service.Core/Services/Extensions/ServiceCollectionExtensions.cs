@@ -1,6 +1,8 @@
 using Camille.RiotGames;
 using Transcendence.Service.Core.Services.Analysis.Implementations;
 using Transcendence.Service.Core.Services.Analysis.Interfaces;
+using Transcendence.Service.Core.Services.Analytics.Implementations;
+using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Cache;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
@@ -19,6 +21,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICacheService, CacheService>();
         services.AddScoped<IChampionLoadoutAnalysisService, ChampionLoadoutAnalysisService>();
         services.AddScoped<ISummonerStatsService, SummonerStatsService>();
+
+        // Analytics services
+        services.AddScoped<IChampionAnalyticsComputeService, ChampionAnalyticsComputeService>();
+        services.AddScoped<IChampionAnalyticsService, ChampionAnalyticsService>();
+
         return services;
     }
 

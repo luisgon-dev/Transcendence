@@ -135,15 +135,27 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
     private async Task<IReadOnlyList<ChampionStat>> ComputeChampionStatsAsync(Guid summonerId, int top,
         CancellationToken ct)
     {
-        var list = await db.MatchParticipants
+        var games = await db.MatchParticipants
             .AsNoTracking()
             .Where(mp => mp.SummonerId == summonerId)
-            .GroupBy(mp => new
+            .Select(mp => new
             {
-                mp.ChampionId
+                mp.ChampionId,
+                mp.Win,
+                mp.Kills,
+                mp.Deaths,
+                mp.Assists,
+                mp.VisionScore,
+                mp.TotalDamageDealtToChampions,
+                Cs = mp.TotalMinionsKilled + mp.NeutralMinionsKilled,
+                MatchDuration = mp.Match.Duration
             })
+            .ToListAsync(ct);
+
+        var list = games
+            .GroupBy(x => x.ChampionId)
             .Select(g => new ChampionStat(
-                g.Key.ChampionId,
+                g.Key,
                 g.Count(),
                 g.Sum(x => x.Win ? 1 : 0),
                 g.Sum(x => x.Win ? 0 : 1),
@@ -152,16 +164,13 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
                 g.Average(x => (double)x.Deaths),
                 g.Average(x => (double)x.Assists),
                 0, // fill KDA after
-                g.Average(x =>
-                    x.Match.Duration > 0
-                        ? (x.TotalMinionsKilled + x.NeutralMinionsKilled) / (x.Match.Duration / 60.0)
-                        : 0.0),
+                g.Average(x => x.MatchDuration > 0 ? x.Cs / (x.MatchDuration / 60.0) : 0.0),
                 g.Average(x => (double)x.VisionScore),
                 g.Average(x => (double)x.TotalDamageDealtToChampions)
             ))
             .OrderByDescending(x => x.Games)
             .Take(top)
-            .ToListAsync(ct);
+            .ToList();
 
         // Compute KDA for each (post-projection)
         return list
@@ -275,7 +284,10 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
         var runeMetadata = await db.RuneVersions
             .AsNoTracking()
             .Where(rv => allRuneIds.Contains(rv.RuneId) && patches.Contains(rv.PatchVersion))
-            .ToDictionaryAsync(rv => rv.RuneId, rv => new RuneMetadata(rv.RunePathId, rv.Slot), ct);
+            .ToDictionaryAsync(
+                rv => new RunePatchKey(rv.RuneId, rv.PatchVersion),
+                rv => new RuneMetadata(rv.RunePathId, rv.Slot),
+                ct);
 
         // Map to final DTOs
         var items = participantData.Select(p =>
@@ -286,7 +298,7 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
 
             var runes = runesByParticipant.GetValueOrDefault(p.Id);
             var runeSummary = runes != null
-                ? BuildRuneSummary(runes.RuneIds, runeMetadata)
+                ? BuildRuneSummary(runes.RuneIds, runes.PatchVersion ?? p.Patch, runeMetadata)
                 : new MatchRuneSummary(0, 0, 0);
 
             return new RecentMatchSummary(
@@ -462,14 +474,16 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
     /// </summary>
     private static MatchRuneSummary BuildRuneSummary(
         List<int> runeIds,
-        Dictionary<int, RuneMetadata> runeMetadata)
+        string? patchVersion,
+        Dictionary<RunePatchKey, RuneMetadata> runeMetadata)
     {
         // Group runes by their path (style)
         var runesByPath = new Dictionary<int, List<(int RuneId, int Slot)>>();
+        var normalizedPatch = patchVersion ?? string.Empty;
 
         foreach (var runeId in runeIds)
         {
-            if (runeMetadata.TryGetValue(runeId, out var meta))
+            if (runeMetadata.TryGetValue(new RunePatchKey(runeId, normalizedPatch), out var meta))
             {
                 var pathId = meta.PathId;
                 var slot = meta.Slot;
@@ -511,5 +525,7 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
     /// <summary>
     /// Internal record for rune metadata lookup.
     /// </summary>
+    private readonly record struct RunePatchKey(int RuneId, string PatchVersion);
+
     private record RuneMetadata(int PathId, int Slot);
 }

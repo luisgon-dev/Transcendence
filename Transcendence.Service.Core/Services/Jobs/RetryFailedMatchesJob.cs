@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Camille.Enums;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
@@ -24,7 +25,17 @@ public class RetryFailedMatchesJob(
 
         foreach (var match in failedMatches)
         {
-            await matchService.FetchMatchWithRetryAsync(match.MatchId!, "na1", cancellationToken);
+            var regionalRoute = ResolveRegionalRoute(match.MatchId!);
+            await matchService.FetchMatchWithRetryAsync(match.MatchId!, regionalRoute.ToString(), cancellationToken);
         }
+    }
+
+    private static RegionalRoute ResolveRegionalRoute(string matchId)
+    {
+        var prefix = matchId.Split('_')[0].ToUpperInvariant();
+        if (Enum.TryParse<PlatformRoute>(prefix, true, out var platformRoute))
+            return platformRoute.ToRegional();
+
+        return RegionalRoute.AMERICAS;
     }
 }

@@ -28,8 +28,16 @@ public class SummonerRepository(TranscendenceContext context, IRankRepository ra
     {
         IQueryable<Summoner> query = context.Summoners;
         if (includes != null) query = includes(query);
+
+        var normalizedGameName = gameName.Trim().ToUpperInvariant();
+        var normalizedTagLine = tagLine.Trim().ToUpperInvariant();
+
         return await query.FirstOrDefaultAsync(x =>
-                x.PlatformRegion == platformRegion && x.GameName == gameName && x.TagLine == tagLine,
+                x.PlatformRegion == platformRegion &&
+                x.GameName != null &&
+                x.TagLine != null &&
+                x.GameName.ToUpper() == normalizedGameName &&
+                x.TagLine.ToUpper() == normalizedTagLine,
             cancellationToken);
     }
 

@@ -136,7 +136,10 @@ public class MatchService(
             match.LastAttemptAt = DateTime.UtcNow;
 
             // Camille handles rate limiting automatically
-            var regionalRoute = Enum.Parse<RegionalRoute>(region.ToUpper());
+            if (!TryParseRegionalRoute(region, out var regionalRoute))
+                throw new ArgumentException($"Unsupported region '{region}' for match retry.", nameof(region));
+
+            var platformRoute = ResolvePlatformRoute(matchId, regionalRoute);
             var matchDto = await riotGamesApi.MatchV5().GetMatchAsync(regionalRoute, matchId, cancellationToken);
 
             if (matchDto == null)
@@ -166,7 +169,7 @@ public class MatchService(
 
                 if (summoner == null)
                 {
-                    summoner = await summonerService.GetSummonerByPuuidAsync(p.Puuid, PlatformRoute.NA1, cancellationToken);
+                    summoner = await summonerService.GetSummonerByPuuidAsync(p.Puuid, platformRoute, cancellationToken);
                     await summonerRepository.AddOrUpdateSummonerAsync(summoner, cancellationToken);
                 }
 
@@ -257,6 +260,41 @@ public class MatchService(
         var parts = gameVersion.Split('.');
         if (parts.Length >= 2) return $"{parts[0]}.{parts[1]}";
         return gameVersion;
+    }
+
+    private static bool TryParseRegionalRoute(string input, out RegionalRoute regionalRoute)
+    {
+        var normalized = input.Replace(" ", string.Empty).Replace("-", string.Empty).Replace("_", string.Empty)
+            .ToUpperInvariant();
+
+        if (Enum.TryParse(normalized, true, out regionalRoute))
+            return true;
+
+        if (Enum.TryParse<PlatformRoute>(normalized, true, out var platformRoute))
+        {
+            regionalRoute = platformRoute.ToRegional();
+            return true;
+        }
+
+        regionalRoute = default;
+        return false;
+    }
+
+    private static PlatformRoute ResolvePlatformRoute(string matchId, RegionalRoute regionalRoute)
+    {
+        var matchPrefix = matchId.Split('_')[0].ToUpperInvariant();
+        if (Enum.TryParse<PlatformRoute>(matchPrefix, true, out var platformFromMatchId))
+            return platformFromMatchId;
+
+        // Fallback only when the match ID is malformed.
+        return regionalRoute switch
+        {
+            RegionalRoute.AMERICAS => PlatformRoute.NA1,
+            RegionalRoute.EUROPE => PlatformRoute.EUW1,
+            RegionalRoute.ASIA => PlatformRoute.KR,
+            RegionalRoute.SEA => PlatformRoute.OC1,
+            _ => PlatformRoute.NA1
+        };
     }
 
     private ICollection<MatchParticipantRune> CreateMatchParticipantRunes(Perks perks, string patch)

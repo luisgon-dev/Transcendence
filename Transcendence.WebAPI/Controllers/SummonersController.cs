@@ -48,15 +48,10 @@ public class SummonersController(
             var soloRank = summoner.Ranks.FirstOrDefault(r => r.QueueType == "RANKED_SOLO_5x5");
             var flexRank = summoner.Ranks.FirstOrDefault(r => r.QueueType == "RANKED_FLEX_SR");
 
-            // Fetch stats in parallel for optimal performance
-            var overviewTask = statsService.GetSummonerOverviewAsync(summoner.Id, 20, ct);
-            var championsTask = statsService.GetChampionStatsAsync(summoner.Id, 5, ct);
-            var recentTask = statsService.GetRecentMatchesAsync(summoner.Id, 1, 10, ct);
-            await Task.WhenAll(overviewTask, championsTask, recentTask);
-
-            var overview = await overviewTask;
-            var champions = await championsTask;
-            var recent = await recentTask;
+            // Keep these sequential because statsService shares a scoped DbContext, which is not thread-safe.
+            var overview = await statsService.GetSummonerOverviewAsync(summoner.Id, 20, ct);
+            var champions = await statsService.GetChampionStatsAsync(summoner.Id, 5, ct);
+            var recent = await statsService.GetRecentMatchesAsync(summoner.Id, 1, 10, ct);
 
             // Calculate StatsAge from most recent match
             var mostRecentMatchDate = recent.Items.Count > 0 ? recent.Items[0].MatchDate : (long?)null;

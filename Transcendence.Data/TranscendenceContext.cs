@@ -58,6 +58,10 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
         modelBuilder.Entity<Match>()
             .HasQueryFilter(m => m.Status != FetchStatus.PermanentlyUnfetchable);
 
+        // Apply matching filter to dependents to avoid required-parent filter warning
+        modelBuilder.Entity<MatchParticipant>()
+            .HasQueryFilter(mp => mp.Match.Status != FetchStatus.PermanentlyUnfetchable);
+
         // MatchParticipant configuration
         modelBuilder.Entity<MatchParticipant>(entity =>
         {
@@ -146,6 +150,9 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
                 });
         });
 
+        modelBuilder.Entity<MatchParticipantRune>()
+            .HasQueryFilter(mpr => mpr.MatchParticipant.Match.Status != FetchStatus.PermanentlyUnfetchable);
+
         modelBuilder.Entity<MatchParticipantItem>(entity =>
         {
             entity.HasKey(mpi => new
@@ -166,5 +173,9 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
                     mpi.PatchVersion
                 });
         });
+
+        // Match participant item/rune filters align with match/participant filters
+        modelBuilder.Entity<MatchParticipantItem>()
+            .HasQueryFilter(mpi => mpi.MatchParticipant.Match.Status != FetchStatus.PermanentlyUnfetchable);
     }
 }

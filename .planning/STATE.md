@@ -11,18 +11,18 @@ See: .planning/PROJECT.md (updated 2026-01-31)
 ## Current Position
 
 Phase: 3 of 5 - Champion Analytics
-Plan: 2 of 5 (Tier Lists)
+Plan: 3 of 5 (Build Recommendations)
 Status: In progress
-Last activity: 2026-02-05 - Completed 03-02-PLAN.md
+Last activity: 2026-02-05 - Completed 03-03-PLAN.md
 
-Progress: ████▓░░░░░ 44% (2.4/5 phases complete)
+Progress: ████▓░░░░░ 46% (2.6/5 phases complete)
 
 ## Performance Metrics
 
 **Requirements:**
 - Total v1 requirements: 21
-- Requirements complete: 8 (INFRA-01, INFRA-02, PROF-01, PROF-02, PROF-03, PROF-04, CHAMP-01, CHAMP-03)
-- Requirements remaining: 13
+- Requirements complete: 9 (INFRA-01, INFRA-02, PROF-01, PROF-02, PROF-03, PROF-04, CHAMP-01, CHAMP-02, CHAMP-03)
+- Requirements remaining: 12
 
 **Phases:**
 - Total phases: 5
@@ -36,11 +36,16 @@ Progress: ████▓░░░░░ 44% (2.4/5 phases complete)
 - Plan 02-04: 4 minutes (3 tasks, Task 1 pre-complete)
 - Plan 03-01: 8 minutes (3 tasks)
 - Plan 03-02: 4 minutes (3 tasks, Task 1 pre-complete)
+- Plan 03-03: 7 minutes (3 tasks)
 
 ## Recent Decisions
 
 | Phase | Decision | Rationale |
 |-------|----------|-----------|
+| 03-03 | Flatten rune structure (PrimaryRunes, SubRunes, StatShards) | Simpler build grouping than nested DTO - previous RuneTreeDto structure would block build key generation |
+| 03-03 | 30-game minimum per specific build | Balances statistical significance with availability - stricter than 100-game overall minimum |
+| 03-03 | Build scoring via (games × winRate) | Simple composite balancing popularity with effectiveness for top 3 selection |
+| 03-03 | Stat shards identified by RunePathId >= 5000 | Follows League's rune system convention - separate path from regular runes |
 | 03-02 | Composite score 70% WR + 30% PR | Win rate primary indicator, pick rate provides meta relevance - prevents niche picks dominating S tier |
 | 03-02 | Percentile-based tier thresholds | S=top 10%, A=10-30%, B=30-60%, C=60-85%, D=85%+ ensures tier distribution regardless of patch balance |
 | 03-02 | Movement compares tier grades not ranks | Tier letter change more stable than rank comparison (rank 15→20 might be SAME tier) |
@@ -93,8 +98,8 @@ Progress: ████▓░░░░░ 44% (2.4/5 phases complete)
 ## Session Continuity
 
 **Last session:** 2026-02-05
-**Activity:** Plan 03-02 execution
-**Stopped at:** Plan 03-02 complete
+**Activity:** Plan 03-03 execution
+**Stopped at:** Plan 03-03 complete
 **Resume file:** None
 
 ---
@@ -102,25 +107,27 @@ Progress: ████▓░░░░░ 44% (2.4/5 phases complete)
 ## Context for Next Session
 
 **What we just did:**
-- Completed Plan 03-02 (Tier Lists):
-  - Champion tier lists with S/A/B/C/D percentile-based grading
-  - Composite scoring: 70% win rate + 30% pick rate
-  - Movement tracking from previous patch (UP/DOWN/SAME/NEW)
-  - Per-role and unified tier list support
-  - REST endpoint GET /api/analytics/tierlist
+- Completed Plan 03-03 (Build Recommendations):
+  - Top 3 builds per champion/role with items and runes bundled
+  - Item frequency analysis with 70% core threshold
+  - Core vs situational item distinction
+  - Boots, trinkets, consumables excluded from core calculation
+  - Rune structure parsing from RuneVersion metadata
+  - Build grouping by item+rune combinations
+  - REST endpoint GET /api/analytics/champions/{championId}/builds
   - 24hr L2 / 1hr L1 caching with tag-based invalidation
 
-**Plan 03-02 deliverables:**
-- TierListDto models with TierGrade and TierMovement enums
-- ComputeTierListAsync in ChampionAnalyticsComputeService with percentile thresholds
-- GetPreviousPatchAsync and GetPreviousPatchTiersAsync helpers for movement tracking
-- GetTierListAsync in ChampionAnalyticsService with caching
-- AnalyticsController at /api/analytics/tierlist
-- Requirement CHAMP-03 complete
+**Plan 03-03 deliverables:**
+- ChampionBuildDto with flattened rune structure (PrimaryRunes, SubRunes, StatShards)
+- ComputeBuildsAsync with item frequency analysis and rune metadata lookup
+- BuildRuneInfo helper determines primary/secondary trees by rune count
+- GetBuildsAsync in ChampionAnalyticsService with caching
+- Build recommendation endpoint in ChampionAnalyticsController
+- Requirement CHAMP-02 complete
 
-**Summary:** `.planning/phases/03-champion-analytics/03-02-SUMMARY.md`
+**Summary:** `.planning/phases/03-champion-analytics/03-03-SUMMARY.md`
 
-**Ready for:** Plan 03-03 - Build recommendations (items, runes)
+**Ready for:** Plan 03-04 - Matchup analysis (counters and favorable matchups)
 
 ---
 

@@ -66,6 +66,29 @@ public class ChampionAnalyticsController(IChampionAnalyticsService analyticsServ
     }
 
     /// <summary>
+    /// Get matchup data (counters and favorable matchups) for a champion in a role.
+    /// Matchups are lane-specific (e.g., Mid vs Mid).
+    /// </summary>
+    /// <param name="championId">Champion ID</param>
+    /// <param name="role">Role: TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY</param>
+    /// <param name="rankTier">Optional: Filter by rank tier</param>
+    [HttpGet("{championId}/matchups")]
+    [ProducesResponseType(typeof(ChampionMatchupsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ChampionMatchupsResponse>> GetMatchups(
+        int championId,
+        [FromQuery] string role,
+        [FromQuery] string? rankTier = null,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(role))
+            return BadRequest("Role parameter is required");
+
+        var result = await analyticsService.GetMatchupsAsync(championId, role, rankTier, ct);
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Invalidates all analytics cache entries.
     /// Used when patch changes or significant data updates occur.
     /// </summary>

@@ -15,6 +15,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
     private const string WinRateCacheKeyPrefix = "analytics:champion:winrates:";
     private const string TierListCacheKeyPrefix = "analytics:tierlist:";
     private const string BuildsCacheKeyPrefix = "analytics:builds:";
+    private const string MatchupsCacheKeyPrefix = "analytics:matchups:";
     private const string AnalyticsCacheTag = "analytics";
 
     // Analytics cache options: 24hr total, 1hr L1 (analytics computed from large datasets)
@@ -142,6 +143,27 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         return await _cache.GetOrCreateAsync(
             cacheKey,
             async cancel => await _computeService.ComputeBuildsAsync(
+                championId, normalizedRole, rankTier, patch, cancel),
+            AnalyticsCacheOptions,
+            tags,
+            cancellationToken: ct);
+    }
+
+    public async Task<ChampionMatchupsResponse> GetMatchupsAsync(
+        int championId,
+        string role,
+        string? rankTier,
+        CancellationToken ct)
+    {
+        var patch = await GetCurrentPatchAsync(ct);
+        var normalizedRole = role.ToUpperInvariant();
+        var normalizedTier = rankTier ?? "all";
+        var cacheKey = $"{MatchupsCacheKeyPrefix}{championId}:{normalizedRole}:{normalizedTier}:{patch}";
+        var tags = new[] { AnalyticsCacheTag, $"patch:{patch}", "matchups" };
+
+        return await _cache.GetOrCreateAsync(
+            cacheKey,
+            async cancel => await _computeService.ComputeMatchupsAsync(
                 championId, normalizedRole, rankTier, patch, cancel),
             AnalyticsCacheOptions,
             tags,

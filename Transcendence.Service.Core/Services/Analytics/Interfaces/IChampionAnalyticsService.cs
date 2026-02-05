@@ -37,6 +37,17 @@ public interface IChampionAnalyticsService
         CancellationToken ct);
 
     /// <summary>
+    /// Gets matchup data (counters and favorable matchups) for a champion.
+    /// Matchups are lane-specific (Mid vs Mid, Top vs Top, etc.).
+    /// Data is cached for 24 hours.
+    /// </summary>
+    Task<ChampionMatchupsResponse> GetMatchupsAsync(
+        int championId,
+        string role,
+        string? rankTier,
+        CancellationToken ct);
+
+    /// <summary>
     /// Invalidates all analytics cache entries.
     /// Called when patch changes or significant data updates occur.
     /// </summary>

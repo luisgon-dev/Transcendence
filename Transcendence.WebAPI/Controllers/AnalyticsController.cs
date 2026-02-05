@@ -26,4 +26,16 @@ public class AnalyticsController(IChampionAnalyticsService analyticsService) : C
         var tierList = await analyticsService.GetTierListAsync(role, rankTier, ct);
         return Ok(tierList);
     }
+
+    /// <summary>
+    /// [Admin] Invalidate all analytics cache.
+    /// Triggers cache refresh on next request.
+    /// </summary>
+    [HttpPost("cache/invalidate")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> InvalidateCache(CancellationToken ct = default)
+    {
+        await analyticsService.InvalidateAnalyticsCacheAsync(ct);
+        return Ok(new { message = "Analytics cache invalidated. Data will refresh on next request." });
+    }
 }

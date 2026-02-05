@@ -3,6 +3,8 @@ using Transcendence.Service.Core.Services.Analysis.Implementations;
 using Transcendence.Service.Core.Services.Analysis.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Implementations;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
+using Transcendence.Service.Core.Services.Auth.Implementations;
+using Transcendence.Service.Core.Services.Auth.Interfaces;
 using Transcendence.Service.Core.Services.Cache;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
@@ -21,6 +23,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICacheService, CacheService>();
         services.AddScoped<IChampionLoadoutAnalysisService, ChampionLoadoutAnalysisService>();
         services.AddScoped<ISummonerStatsService, SummonerStatsService>();
+        services.AddScoped<IApiKeyService, ApiKeyService>();
 
         // Analytics services
         services.AddScoped<IChampionAnalyticsComputeService, ChampionAnalyticsComputeService>();

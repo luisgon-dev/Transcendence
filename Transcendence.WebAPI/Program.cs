@@ -1,9 +1,11 @@
 using Hangfire;
 using Hangfire.PostgreSql;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Transcendence.Data;
 using Transcendence.Data.Extensions;
 using Transcendence.Service.Core.Services.Extensions;
+using Transcendence.WebAPI.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -42,6 +44,22 @@ builder.Services.AddHybridCache(options =>
 builder.Services.AddTranscendenceCore();
 builder.Services.AddProjectSyndraRepositories();
 
+builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = AuthPolicies.ApiKeyScheme;
+        options.DefaultChallengeScheme = AuthPolicies.ApiKeyScheme;
+    })
+    .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(
+        AuthPolicies.ApiKeyScheme,
+        _ => { });
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(AuthPolicies.AppOnly, policy =>
+        policy.AddAuthenticationSchemes(AuthPolicies.ApiKeyScheme)
+            .RequireAuthenticatedUser());
+});
+
 // Configure Hangfire client (no server) for enqueueing jobs
 builder.Services.AddHangfire(config =>
     config.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
@@ -61,6 +79,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();

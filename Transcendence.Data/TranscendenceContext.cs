@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Transcendence.Data.Models.Auth;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Models.LoL.Static;
@@ -26,6 +27,7 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<MatchParticipantItem> MatchParticipantItems { get; set; }
 
     public DbSet<RefreshLock> RefreshLocks { get; set; }
+    public DbSet<ApiClientKey> ApiClientKeys { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -101,6 +103,16 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
 
         // RefreshLock configuration
         modelBuilder.Entity<RefreshLock>(entity => { entity.HasIndex(x => x.Key).IsUnique(); });
+
+        // API key authentication
+        modelBuilder.Entity<ApiClientKey>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.KeyHash).IsUnique();
+            entity.Property(x => x.Name).IsRequired();
+            entity.Property(x => x.KeyHash).IsRequired();
+            entity.Property(x => x.KeyPrefix).IsRequired();
+        });
 
         modelBuilder.Entity<RuneVersion>(entity =>
         {

@@ -128,10 +128,15 @@ Plans:
 
 **Directory:** `.planning/phases/04-live-game-auth/`
 
-**Plans:** 0 plans
+**Plans:** 6 plans in 3 waves
 
 Plans:
-- [ ] TBD (use `/gsd:plan-phase 4` to create)
+- [ ] 04-01-PLAN.md — API key authentication foundation with AppOnly policy (Wave 1)
+- [ ] 04-02-PLAN.md — Live game lookup endpoint with Spectator mapping + cache (Wave 1)
+- [ ] 04-03-PLAN.md — Adaptive live game polling job + snapshot persistence (Wave 2)
+- [ ] 04-04-PLAN.md — Participant/team analysis + win probability enrichment (Wave 2)
+- [ ] 04-05-PLAN.md — JWT user accounts (register/login/refresh/reset init) (Wave 3)
+- [ ] 04-06-PLAN.md — Favorites/preferences + secure admin operational endpoints (Wave 3)
 
 ---
 

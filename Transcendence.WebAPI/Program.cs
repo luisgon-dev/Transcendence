@@ -1,3 +1,4 @@
+using Camille.RiotGames;
 using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Authentication;
@@ -43,6 +44,7 @@ builder.Services.AddHybridCache(options =>
 // Register only core, API remains keyless
 builder.Services.AddTranscendenceCore();
 builder.Services.AddProjectSyndraRepositories();
+builder.Services.AddSingleton(_ => RiotGamesApi.NewInstance(builder.Configuration.GetConnectionString("RiotApi")!));
 
 builder.Services.AddAuthentication(options =>
     {

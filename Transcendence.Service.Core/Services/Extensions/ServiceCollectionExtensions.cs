@@ -8,6 +8,8 @@ using Transcendence.Service.Core.Services.Auth.Interfaces;
 using Transcendence.Service.Core.Services.Cache;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
+using Transcendence.Service.Core.Services.LiveGame.Implementations;
+using Transcendence.Service.Core.Services.LiveGame.Interfaces;
 using Transcendence.Service.Core.Services.RiotApi.Implementations;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
 using Transcendence.Service.Core.Services.StaticData.Implementations;
@@ -24,6 +26,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IChampionLoadoutAnalysisService, ChampionLoadoutAnalysisService>();
         services.AddScoped<ISummonerStatsService, SummonerStatsService>();
         services.AddScoped<IApiKeyService, ApiKeyService>();
+        services.AddScoped<ILiveGameService, LiveGameService>();
 
         // Analytics services
         services.AddScoped<IChampionAnalyticsComputeService, ChampionAnalyticsComputeService>();

@@ -14,6 +14,7 @@ namespace Transcendence.Service.Core.Services.Jobs;
 [DisableConcurrentExecution(timeoutInSeconds: 10 * 60)]
 public class ChampionAnalyticsIngestionJob(
     TranscendenceContext db,
+    ISummonerBootstrapService bootstrapService,
     IRefreshLockRepository refreshLockRepository,
     IBackgroundJobClient backgroundJobClient,
     IOptions<ChampionAnalyticsIngestionJobOptions> options,
@@ -28,6 +29,8 @@ public class ChampionAnalyticsIngestionJob(
     public async Task ExecuteAsync(CancellationToken ct = default)
     {
         var jobOptions = options.Value;
+
+        await bootstrapService.EnsureSeededFromChallengerAsync(ct);
 
         var currentPatch = await db.Patches
             .AsNoTracking()

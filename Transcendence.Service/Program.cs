@@ -54,6 +54,7 @@ builder.Services.Configure<RefreshChampionAnalyticsJobOptions>(
     builder.Configuration.GetSection("Jobs:RefreshChampionAnalytics"));
 builder.Services.Configure<ChampionAnalyticsIngestionJobOptions>(
     builder.Configuration.GetSection("Jobs:ChampionAnalyticsIngestion"));
+builder.Services.Configure<SummonerBootstrapOptions>(builder.Configuration.GetSection("Jobs:SummonerBootstrap"));
 
 // worker that initiates services
 if (builder.Environment.IsDevelopment())

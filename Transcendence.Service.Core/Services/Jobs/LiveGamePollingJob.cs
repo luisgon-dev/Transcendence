@@ -6,6 +6,7 @@ using Transcendence.Data.Models.LiveGame;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
+using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.LiveGame.Interfaces;
 using Transcendence.Service.Core.Services.LiveGame.Models;
 
@@ -14,6 +15,7 @@ namespace Transcendence.Service.Core.Services.Jobs;
 [DisableConcurrentExecution(timeoutInSeconds: 5 * 60)]
 public class LiveGamePollingJob(
     TranscendenceContext db,
+    ISummonerBootstrapService bootstrapService,
     ILiveGameService liveGameService,
     ILiveGameSnapshotRepository snapshotRepository,
     IOptions<LiveGamePollingJobOptions> options,
@@ -30,6 +32,8 @@ public class LiveGamePollingJob(
 
     public async Task ExecuteAsync(CancellationToken ct = default)
     {
+        await bootstrapService.EnsureSeededFromChallengerAsync(ct);
+
         var jobOptions = options.Value;
         if (jobOptions.PauseWhileChampionAnalyticsUnavailable)
         {
@@ -89,8 +93,14 @@ public class LiveGamePollingJob(
         if (jobOptions.PollOnlyFavoriteSummoners)
         {
             var favorites = db.UserFavoriteSummoners.AsNoTracking();
+            var hasAnyFavorites = await favorites.AnyAsync(ct);
+            if (!hasAnyFavorites)
+            {
+                logger.LogInformation(
+                    "Live game polling: no favorites configured; polling tracked summoners instead.");
+            }
 
-            if (jobOptions.RespectUserLivePollingPreference)
+            if (hasAnyFavorites && jobOptions.RespectUserLivePollingPreference)
             {
                 var preferences = db.UserPreferences.AsNoTracking();
                 trackedSummonerQuery = trackedSummonerQuery.Where(s => favorites.Any(f =>
@@ -98,7 +108,7 @@ public class LiveGamePollingJob(
                     f.PlatformRegion == s.PlatformRegion &&
                     !preferences.Any(p => p.UserAccountId == f.UserAccountId && !p.LivePollingEnabled)));
             }
-            else
+            else if (hasAnyFavorites)
             {
                 trackedSummonerQuery = trackedSummonerQuery.Where(s =>
                     favorites.Any(f => f.SummonerPuuid == s.Puuid && f.PlatformRegion == s.PlatformRegion));

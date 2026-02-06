@@ -13,6 +13,21 @@ public class LiveGameAnalysisService(
     ISummonerStatsService summonerStatsService,
     IChampionAnalyticsService championAnalyticsService) : ILiveGameAnalysisService
 {
+    private const double NeutralWinRate = 0.50;
+    private const double DefaultRankScore = 3.0;
+    private const double MaxTierScore = 10.0;
+    private const double RecentWinRateWeight = 0.40;
+    private const double ChampionWinRateWeight = 0.40;
+    private const double RankWeight = 0.20;
+
+    // Thresholds represent meaningful deviations from neutral values before labeling strengths/weaknesses.
+    private const double RecentWinRateStrengthThreshold = 0.52;
+    private const double ChampionWinRateStrengthThreshold = 0.51;
+    private const double RankStrengthThreshold = 0.55;
+    private const double RecentWinRateWeaknessThreshold = 0.48;
+    private const double ChampionWinRateWeaknessThreshold = 0.49;
+    private const double RankWeaknessThreshold = 0.35;
+
     private static readonly Dictionary<string, double> TierScores = new(StringComparer.OrdinalIgnoreCase)
     {
         ["IRON"] = 1,
@@ -125,23 +140,25 @@ public class LiveGameAnalysisService(
             .GroupBy(x => x.TeamId)
             .Select(g =>
             {
-                var avgRecentWinRate = AverageOrDefault(g.Select(x => x.RecentWinRate), 0.50);
-                var avgChampionWinRate = AverageOrDefault(g.Select(x => x.ChampionWinRate), 0.50);
-                var avgRankScore = AverageOrDefault(g.Select(x => (double?)MapTierToScore(x.RankTier)), 3.0);
-                var normalizedRank = Math.Clamp(avgRankScore / 10.0, 0.0, 1.0);
+                var avgRecentWinRate = AverageOrDefault(g.Select(x => x.RecentWinRate), NeutralWinRate);
+                var avgChampionWinRate = AverageOrDefault(g.Select(x => x.ChampionWinRate), NeutralWinRate);
+                var avgRankScore = AverageOrDefault(g.Select(x => (double?)MapTierToScore(x.RankTier)), DefaultRankScore);
+                var normalizedRank = Math.Clamp(avgRankScore / MaxTierScore, 0.0, 1.0);
 
-                var score = (avgRecentWinRate * 0.40) + (avgChampionWinRate * 0.40) + (normalizedRank * 0.20);
+                var score = (avgRecentWinRate * RecentWinRateWeight)
+                            + (avgChampionWinRate * ChampionWinRateWeight)
+                            + (normalizedRank * RankWeight);
 
                 var strengths = new List<string>();
                 var weaknesses = new List<string>();
 
-                if (avgRecentWinRate >= 0.52) strengths.Add("Strong recent form");
-                if (avgChampionWinRate >= 0.51) strengths.Add("Meta-favored champions");
-                if (normalizedRank >= 0.55) strengths.Add("Higher average ladder tier");
+                if (avgRecentWinRate >= RecentWinRateStrengthThreshold) strengths.Add("Strong recent form");
+                if (avgChampionWinRate >= ChampionWinRateStrengthThreshold) strengths.Add("Meta-favored champions");
+                if (normalizedRank >= RankStrengthThreshold) strengths.Add("Higher average ladder tier");
 
-                if (avgRecentWinRate <= 0.48) weaknesses.Add("Weak recent form");
-                if (avgChampionWinRate <= 0.49) weaknesses.Add("Lower champion baseline win rates");
-                if (normalizedRank <= 0.35) weaknesses.Add("Lower average ladder tier");
+                if (avgRecentWinRate <= RecentWinRateWeaknessThreshold) weaknesses.Add("Weak recent form");
+                if (avgChampionWinRate <= ChampionWinRateWeaknessThreshold) weaknesses.Add("Lower champion baseline win rates");
+                if (normalizedRank <= RankWeaknessThreshold) weaknesses.Add("Lower average ladder tier");
 
                 return new TeamAnalysisDto(
                     TeamId: g.Key,
@@ -149,7 +166,7 @@ public class LiveGameAnalysisService(
                     AverageChampionWinRate: avgChampionWinRate,
                     AverageRankScore: avgRankScore,
                     CompositeScore: score,
-                    EstimatedWinProbability: 0.50,
+                    EstimatedWinProbability: NeutralWinRate,
                     Strengths: strengths,
                     Weaknesses: weaknesses
                 );
@@ -167,7 +184,7 @@ public class LiveGameAnalysisService(
 
     private static double MapTierToScore(string? tier)
     {
-        if (string.IsNullOrWhiteSpace(tier)) return 3.0;
-        return TierScores.GetValueOrDefault(tier, 3.0);
+        if (string.IsNullOrWhiteSpace(tier)) return DefaultRankScore;
+        return TierScores.GetValueOrDefault(tier, DefaultRankScore);
     }
 }

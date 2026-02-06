@@ -67,7 +67,7 @@ public class LiveGamePollingJob(
                 .AnyAsync(mp => mp.Match.Status == FetchStatus.Success
                                 && mp.Match.Patch == currentPatch
                                 && mp.TeamPosition != null
-                                && mp.TeamPosition != "", ct);
+                                && !string.IsNullOrWhiteSpace(mp.TeamPosition), ct);
 
             if (!hasRoleDataForAnalytics)
             {

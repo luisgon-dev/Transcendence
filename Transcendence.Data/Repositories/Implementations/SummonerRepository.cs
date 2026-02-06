@@ -29,20 +29,40 @@ public class SummonerRepository(TranscendenceContext context, IRankRepository ra
         IQueryable<Summoner> query = context.Summoners;
         if (includes != null) query = includes(query);
 
-        var normalizedGameName = gameName.Trim().ToUpperInvariant();
-        var normalizedTagLine = tagLine.Trim().ToUpperInvariant();
+        var normalizedPlatformRegion = string.IsNullOrWhiteSpace(platformRegion) ? null : platformRegion.Trim();
+        var normalizedGameName = NormalizeValue(gameName);
+        var normalizedTagLine = NormalizeValue(tagLine);
 
-        return await query.FirstOrDefaultAsync(x =>
-                x.PlatformRegion == platformRegion &&
-                x.GameName != null &&
-                x.TagLine != null &&
-                x.GameName.ToUpper() == normalizedGameName &&
-                x.TagLine.ToUpper() == normalizedTagLine,
+        if (normalizedPlatformRegion == null || normalizedGameName == null || normalizedTagLine == null)
+            return null;
+
+        // Fast path: exact match can leverage indexes directly.
+        var exactMatch = await query.FirstOrDefaultAsync(x =>
+                x.PlatformRegion == normalizedPlatformRegion &&
+                x.GameName == normalizedGameName &&
+                x.TagLine == normalizedTagLine,
             cancellationToken);
+
+        if (exactMatch != null)
+            return exactMatch;
+
+        var candidates = await query
+            .Where(x =>
+                x.PlatformRegion == normalizedPlatformRegion &&
+                x.GameName != null &&
+                x.TagLine != null)
+            .ToListAsync(cancellationToken);
+
+        return candidates.FirstOrDefault(x =>
+            string.Equals(x.GameName, normalizedGameName, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(x.TagLine, normalizedTagLine, StringComparison.OrdinalIgnoreCase));
     }
 
     public async Task AddOrUpdateSummonerAsync(Summoner summoner, CancellationToken cancellationToken)
     {
+        summoner.GameName = NormalizeValue(summoner.GameName);
+        summoner.TagLine = NormalizeValue(summoner.TagLine);
+
         var existingSummoner =
             await GetSummonerByPuuidAsync(summoner.Puuid!, query => query.Include(s => s.Ranks), cancellationToken);
         if (existingSummoner == null)
@@ -68,5 +88,10 @@ public class SummonerRepository(TranscendenceContext context, IRankRepository ra
             // Upsert current ranks and snapshot history if changed, using freshly fetched ranks
             await rankRepository.AddOrUpdateRank(existingSummoner, summoner.Ranks.ToList(), cancellationToken);
         }
+    }
+
+    private static string? NormalizeValue(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 }

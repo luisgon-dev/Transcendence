@@ -126,7 +126,7 @@ public class FetchLatestMatchInformation(
             await context.SaveChangesAsync(ct);
             return;
         }
-        catch (DbUpdateException ex) when (IsDuplicateMatchIdViolation(ex))
+        catch (DbUpdateException ex) when (MatchPersistenceErrorClassifier.IsDuplicateMatchIdViolation(ex))
         {
             context.ChangeTracker.Clear();
             logger.LogInformation(
@@ -151,7 +151,7 @@ public class FetchLatestMatchInformation(
                 await matchRepository.AddMatchAsync(match, ct);
                 await context.SaveChangesAsync(ct);
             }
-            catch (DbUpdateException ex) when (IsDuplicateMatchIdViolation(ex))
+            catch (DbUpdateException ex) when (MatchPersistenceErrorClassifier.IsDuplicateMatchIdViolation(ex))
             {
                 context.ChangeTracker.Clear();
             }
@@ -164,17 +164,4 @@ public class FetchLatestMatchInformation(
         }
     }
 
-    private static bool IsDuplicateMatchIdViolation(DbUpdateException ex)
-    {
-        var inner = ex.InnerException;
-        if (inner == null)
-            return false;
-
-        var sqlState = inner.GetType().GetProperty("SqlState")?.GetValue(inner)?.ToString();
-        var constraintName = inner.GetType().GetProperty("ConstraintName")?.GetValue(inner)?.ToString();
-
-        return string.Equals(sqlState, "23505", StringComparison.Ordinal)
-               && string.Equals(constraintName, "IX_Matches_MatchId", StringComparison.Ordinal);
-    }
 }
-

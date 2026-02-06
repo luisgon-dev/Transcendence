@@ -1,0 +1,144 @@
+name: transcendence-prod
+
+x-app-env: &app-env
+  ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+  ConnectionStrings__Redis: ${REDIS_CONNECTION}
+  ConnectionStrings__RiotApi: ${RIOT_API_KEY}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: transcendence-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - transcendence-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: transcendence-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - transcendence-net
+
+  webapi:
+    image: ghcr.io/luisgon-dev/transcendencebackend-webapi:main
+    pull_policy: always
+    container_name: transcendence-webapi
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      Auth__Jwt__Issuer: ${JWT_ISSUER}
+      Auth__Jwt__Audience: ${JWT_AUDIENCE}
+      Auth__Jwt__Key: ${JWT_SIGNING_KEY}
+      Auth__Jwt__AccessTokenMinutes: ${JWT_ACCESS_TOKEN_MINUTES}
+      Auth__BootstrapApiKey: ${AUTH_BOOTSTRAP_API_KEY}
+      <<: *app-env
+    ports:
+      - "${WEBAPI_PORT}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    networks:
+      - transcendence-net
+
+  service:
+    image: ghcr.io/luisgon-dev/transcendencebackend-service:main
+    pull_policy: always
+    container_name: transcendence-service
+    restart: unless-stopped
+    environment:
+      DOTNET_ENVIRONMENT: Production
+      <<: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    networks:
+      - transcendence-net
+
+  webadmin:
+    image: ghcr.io/luisgon-dev/transcendencebackend-webadminportal:main
+    pull_policy: always
+    container_name: transcendence-webadminportal
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+    ports:
+      - "${WEBADMIN_PORT}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    networks:
+      - transcendence-net
+
+  dozzle:
+    image: amir20/dozzle:v8.15.6
+    pull_policy: always
+    container_name: transcendence-dozzle
+    restart: unless-stopped
+    environment:
+      DOZZLE_TAILSIZE: "300"
+      DOZZLE_LEVEL: info
+    ports:
+      - "${DOZZLE_PORT}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - transcendence-net
+
+  watchtower:
+    image: containrrr/watchtower:1.7.1
+    pull_policy: always
+    container_name: transcendence-watchtower
+    restart: unless-stopped
+    environment:
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_ROLLING_RESTART: "true"
+      WATCHTOWER_INCLUDE_RESTARTING: "true"
+      WATCHTOWER_POLL_INTERVAL: ${WATCHTOWER_POLL_SECONDS}
+      REPO_USER: ${GHCR_USERNAME}
+      REPO_PASS: ${GHCR_TOKEN}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - transcendence-net
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  transcendence-net:
+    driver: bridge

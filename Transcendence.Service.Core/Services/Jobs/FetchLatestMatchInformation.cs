@@ -1,8 +1,10 @@
-﻿using Camille.Enums;
+using Camille.Enums;
 using Camille.RiotGames;
 using Microsoft.EntityFrameworkCore;
 using Transcendence.Data;
+using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Repositories.Interfaces;
+using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
 using Transcendence.Service.Core.Services.StaticData.Interfaces;
 
@@ -19,62 +21,147 @@ public class FetchLatestMatchInformation(
 {
     public async Task Execute(CancellationToken stoppingToken)
     {
-        // Ensure static data (latest patch) is up to date before fetching matches
+        // Ensure static data (latest patch) is up to date before fetching matches.
         await staticDataService.UpdateStaticDataAsync(stoppingToken);
 
-        // get match information for every summoner in the database
-        //TODO: Add more sophisticated logic to only fetch matches for summoners that have not been updated in a while or high elo
-        var summoners = await context.Summoners.ToListAsync(stoppingToken);
+        // TODO: prioritize by freshness/activity when this job is wired back into recurring scheduling.
+        var summoners = await context.Summoners
+            .AsNoTracking()
+            .ToListAsync(stoppingToken);
 
         foreach (var summoner in summoners)
         {
-            // cast string to platform route
-            var platformRoute = (PlatformRoute)Enum.Parse(typeof(PlatformRoute), summoner.PlatformRegion!);
-            var totalMatchList = new List<string>();
-            try
+            if (!PlatformRouteParser.TryParse(summoner.PlatformRegion, out var platformRoute))
             {
-                var matchList = await riotGamesApi.MatchV5()
-                    .GetMatchIdsByPUUIDAsync(platformRoute.ToRegional(), summoner.Puuid!, 20, null,
-                        Queue.SUMMONERS_RIFT_5V5_RANKED_SOLO, null, null, "ranked", stoppingToken);
-                totalMatchList.AddRange(matchList);
-            }
-            catch (Exception e)
-            {
-                logger.LogError(e, "Error fetching match information for summoner {SummonerId}", summoner.Id);
+                logger.LogWarning(
+                    "Skipping summoner {SummonerId}. Invalid platform route value: {PlatformRegion}",
+                    summoner.Id,
+                    summoner.PlatformRegion);
                 continue;
             }
 
-            // for every match ID in the match list try to fetch it through match repo, if it exists, remove it from the list
-            foreach (var matchId in totalMatchList.ToList())
+            if (string.IsNullOrWhiteSpace(summoner.Puuid))
             {
-                var match = await matchRepository.GetMatchByIdAsync(matchId, stoppingToken);
-                if (match != null) totalMatchList.Remove(matchId);
+                logger.LogWarning("Skipping summoner {SummonerId}. Missing PUUID.", summoner.Id);
+                continue;
             }
 
-            foreach (var matchId in totalMatchList)
+            IReadOnlyList<string> pendingMatchIds;
+            try
             {
+                pendingMatchIds = await FetchPendingMatchIdsAsync(platformRoute, summoner.Puuid, stoppingToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error fetching match IDs for summoner {SummonerId}", summoner.Id);
+                continue;
+            }
+
+            if (pendingMatchIds.Count == 0)
+                continue;
+
+            var matchesToPersist = new List<Match>(pendingMatchIds.Count);
+            foreach (var matchId in pendingMatchIds)
+            {
+                Match? match;
                 try
                 {
-                    var match = await matchService.GetMatchDetailsAsync(matchId, platformRoute.ToRegional(),
+                    match = await matchService.GetMatchDetailsAsync(matchId, platformRoute.ToRegional(),
                         platformRoute, stoppingToken);
-                    if (match == null)
-                    {
-                        logger.LogInformation("Match {MatchId} failed to fetch", matchId);
-                        continue;
-                    }
-
-                    await matchRepository.AddMatchAsync(match, stoppingToken);
-
-                    // save all changes
-                    await context.SaveChangesAsync(stoppingToken);
                 }
-                catch (Exception e)
+                catch (Exception ex)
                 {
-                    logger.LogError(e, "Error fetching match information for match {MatchId}", matchId);
+                    logger.LogError(ex, "Error fetching match information for match {MatchId}", matchId);
+                    continue;
                 }
 
+                if (match == null)
+                {
+                    logger.LogInformation("Match {MatchId} failed to fetch", matchId);
+                    continue;
+                }
+
+                matchesToPersist.Add(match);
                 logger.LogInformation("Fetched match information for match {MatchId}", matchId);
+            }
+
+            await PersistMatchesAsync(matchesToPersist, summoner.Id, stoppingToken);
+        }
+    }
+
+    private async Task<IReadOnlyList<string>> FetchPendingMatchIdsAsync(
+        PlatformRoute platformRoute,
+        string puuid,
+        CancellationToken ct)
+    {
+        var matchIds = await riotGamesApi.MatchV5()
+            .GetMatchIdsByPUUIDAsync(platformRoute.ToRegional(), puuid, 20, null,
+                Queue.SUMMONERS_RIFT_5V5_RANKED_SOLO, null, null, "ranked", ct);
+
+        var dedupedMatchIds = matchIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        if (dedupedMatchIds.Length == 0)
+            return Array.Empty<string>();
+
+        var existingMatchIds = await matchRepository.GetExistingMatchIdsAsync(dedupedMatchIds, ct);
+        return dedupedMatchIds.Where(id => !existingMatchIds.Contains(id)).ToArray();
+    }
+
+    private async Task PersistMatchesAsync(
+        IReadOnlyList<Match> matches,
+        Guid summonerId,
+        CancellationToken ct)
+    {
+        if (matches.Count == 0)
+            return;
+
+        try
+        {
+            foreach (var match in matches)
+                await matchRepository.AddMatchAsync(match, ct);
+
+            await context.SaveChangesAsync(ct);
+            return;
+        }
+        catch (DbUpdateException ex) when (MatchPersistenceErrorClassifier.IsDuplicateMatchIdViolation(ex))
+        {
+            context.ChangeTracker.Clear();
+            logger.LogInformation(
+                "Detected duplicate match insert while persisting {Count} matches for summoner {SummonerId}. Falling back to per-match persistence.",
+                matches.Count,
+                summonerId);
+        }
+        catch (Exception ex)
+        {
+            context.ChangeTracker.Clear();
+            logger.LogError(
+                ex,
+                "Unexpected error while persisting {Count} matches for summoner {SummonerId}. Falling back to per-match persistence.",
+                matches.Count,
+                summonerId);
+        }
+
+        foreach (var match in matches)
+        {
+            try
+            {
+                await matchRepository.AddMatchAsync(match, ct);
+                await context.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException ex) when (MatchPersistenceErrorClassifier.IsDuplicateMatchIdViolation(ex))
+            {
+                context.ChangeTracker.Clear();
+            }
+            catch (Exception ex)
+            {
+                context.ChangeTracker.Clear();
+                logger.LogError(ex, "Error persisting match {MatchId} for summoner {SummonerId}", match.MatchId,
+                    summonerId);
             }
         }
     }
+
 }

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Transcendence.Service.Core.Services.Analysis.Interfaces;
+using Transcendence.Service.Core.Services.RiotApi.DTOs;
 using Transcendence.WebAPI.Models.Stats;
 
 namespace Transcendence.WebAPI.Controllers;
@@ -98,7 +99,11 @@ public class SummonerStatsController(ISummonerStatsService statsService) : Contr
                 m.Assists,
                 m.VisionScore,
                 m.DamageToChamps,
-                m.CsPerMin
+                m.CsPerMin,
+                m.SummonerSpell1Id,
+                m.SummonerSpell2Id,
+                m.Items,
+                new MatchRuneSummaryDto(m.Runes.PrimaryStyleId, m.Runes.SubStyleId, m.Runes.KeystoneId)
             )).ToList(),
             result.Page,
             result.PageSize,
@@ -106,5 +111,27 @@ public class SummonerStatsController(ISummonerStatsService statsService) : Contr
             result.TotalPages
         );
         return Ok(dto);
+    }
+
+    /// <summary>
+    ///     Gets full match details including all participants with items, runes, and spells.
+    /// </summary>
+    /// <param name="summonerId">The summoner ID (provides RESTful context for the match)</param>
+    /// <param name="matchId">The Riot match ID (e.g., "NA1_1234567890")</param>
+    /// <param name="ct">Cancellation token</param>
+    /// <returns>Full match details with all 10 participants</returns>
+    [HttpGet("matches/{matchId}")]
+    [ProducesResponseType(typeof(MatchDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetMatchDetail(
+        [FromRoute] Guid summonerId,
+        [FromRoute] string matchId,
+        CancellationToken ct = default)
+    {
+        var result = await statsService.GetMatchDetailAsync(matchId, ct);
+        if (result == null)
+            return NotFound();
+
+        return Ok(result);
     }
 }

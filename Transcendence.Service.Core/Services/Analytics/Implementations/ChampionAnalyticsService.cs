@@ -1,0 +1,206 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Hybrid;
+using Transcendence.Data;
+using Transcendence.Service.Core.Services.Analytics.Interfaces;
+using Transcendence.Service.Core.Services.Analytics.Models;
+
+namespace Transcendence.Service.Core.Services.Analytics.Implementations;
+
+/// <summary>
+/// Cached analytics service for champion win rates and statistics.
+/// Uses HybridCache for 24-hour L2 and 1-hour L1 caching.
+/// </summary>
+public class ChampionAnalyticsService : IChampionAnalyticsService
+{
+    private const string WinRateCacheKeyPrefix = "analytics:champion:winrates:";
+    private const string TierListCacheKeyPrefix = "analytics:tierlist:";
+    private const string BuildsCacheKeyPrefix = "analytics:builds:";
+    private const string MatchupsCacheKeyPrefix = "analytics:matchups:";
+    private const string AnalyticsCacheTag = "analytics";
+
+    // Analytics cache options: 24hr total, 1hr L1 (analytics computed from large datasets)
+    private static readonly HybridCacheEntryOptions AnalyticsCacheOptions = new()
+    {
+        Expiration = TimeSpan.FromHours(24),
+        LocalCacheExpiration = TimeSpan.FromHours(1)
+    };
+
+    private readonly TranscendenceContext _context;
+    private readonly HybridCache _cache;
+    private readonly IChampionAnalyticsComputeService _computeService;
+
+    public ChampionAnalyticsService(
+        TranscendenceContext context,
+        HybridCache cache,
+        IChampionAnalyticsComputeService computeService)
+    {
+        _context = context;
+        _cache = cache;
+        _computeService = computeService;
+    }
+
+    public async Task<ChampionWinRateSummary> GetWinRatesAsync(
+        int championId,
+        ChampionAnalyticsFilter filter,
+        CancellationToken ct)
+    {
+        // Get current active patch
+        var currentPatch = await _context.Patches
+            .AsNoTracking()
+            .Where(p => p.IsActive)
+            .Select(p => p.Version)
+            .FirstOrDefaultAsync(ct);
+
+        if (string.IsNullOrEmpty(currentPatch))
+        {
+            // No active patch, return empty summary
+            return new ChampionWinRateSummary(
+                ChampionId: championId,
+                Patch: "Unknown",
+                ByRoleTier: new List<ChampionWinRateDto>()
+            );
+        }
+
+        // Build cache key based on filter parameters
+        var cacheKey = BuildCacheKey(championId, filter, currentPatch);
+
+        // Get or compute win rates with caching
+        var winRates = await _cache.GetOrCreateAsync(
+            cacheKey,
+            async cancel => await _computeService.ComputeWinRatesAsync(championId, filter, currentPatch, cancel),
+            AnalyticsCacheOptions,
+            tags: new[] { AnalyticsCacheTag, $"champion:{championId}", $"patch:{currentPatch}" },
+            cancellationToken: ct
+        );
+
+        return new ChampionWinRateSummary(
+            ChampionId: championId,
+            Patch: currentPatch,
+            ByRoleTier: winRates
+        );
+    }
+
+    public async Task<TierListResponse> GetTierListAsync(
+        string? role,
+        string? rankTier,
+        CancellationToken ct)
+    {
+        // Get current active patch
+        var currentPatch = await _context.Patches
+            .AsNoTracking()
+            .Where(p => p.IsActive)
+            .Select(p => p.Version)
+            .FirstOrDefaultAsync(ct);
+
+        if (string.IsNullOrEmpty(currentPatch))
+        {
+            // No active patch, return empty tier list
+            return new TierListResponse(
+                Patch: "Unknown",
+                Role: role,
+                RankTier: rankTier,
+                Entries: new List<TierListEntry>()
+            );
+        }
+
+        // Normalize parameters
+        var normalizedRole = string.IsNullOrEmpty(role) ? "ALL" : role.ToUpperInvariant();
+        var normalizedTier = string.IsNullOrEmpty(rankTier) ? "all" : rankTier.ToUpperInvariant();
+
+        // Build cache key
+        var cacheKey = $"{TierListCacheKeyPrefix}{normalizedRole}:{normalizedTier}:{currentPatch}";
+        var tags = new[] { AnalyticsCacheTag, $"patch:{currentPatch}", "tierlist" };
+
+        // Get or compute tier list with caching
+        var entries = await _cache.GetOrCreateAsync(
+            cacheKey,
+            async cancel => await _computeService.ComputeTierListAsync(normalizedRole, normalizedTier, currentPatch, cancel),
+            AnalyticsCacheOptions,
+            tags: tags,
+            cancellationToken: ct
+        );
+
+        return new TierListResponse(
+            Patch: currentPatch,
+            Role: normalizedRole,
+            RankTier: normalizedTier,
+            Entries: entries
+        );
+    }
+
+    public async Task<ChampionBuildsResponse> GetBuildsAsync(
+        int championId,
+        string role,
+        string? rankTier,
+        CancellationToken ct)
+    {
+        var patch = await GetCurrentPatchAsync(ct);
+        var normalizedRole = role.ToUpperInvariant();
+        var normalizedTier = rankTier ?? "all";
+        var cacheKey = $"{BuildsCacheKeyPrefix}{championId}:{normalizedRole}:{normalizedTier}:{patch}";
+        var tags = new[] { AnalyticsCacheTag, $"patch:{patch}", "builds" };
+
+        return await _cache.GetOrCreateAsync(
+            cacheKey,
+            async cancel => await _computeService.ComputeBuildsAsync(
+                championId, normalizedRole, rankTier, patch, cancel),
+            AnalyticsCacheOptions,
+            tags,
+            cancellationToken: ct);
+    }
+
+    public async Task<ChampionMatchupsResponse> GetMatchupsAsync(
+        int championId,
+        string role,
+        string? rankTier,
+        CancellationToken ct)
+    {
+        var patch = await GetCurrentPatchAsync(ct);
+        var normalizedRole = role.ToUpperInvariant();
+        var normalizedTier = rankTier ?? "all";
+        var cacheKey = $"{MatchupsCacheKeyPrefix}{championId}:{normalizedRole}:{normalizedTier}:{patch}";
+        var tags = new[] { AnalyticsCacheTag, $"patch:{patch}", "matchups" };
+
+        return await _cache.GetOrCreateAsync(
+            cacheKey,
+            async cancel => await _computeService.ComputeMatchupsAsync(
+                championId, normalizedRole, rankTier, patch, cancel),
+            AnalyticsCacheOptions,
+            tags,
+            cancellationToken: ct);
+    }
+
+    public async Task InvalidateAnalyticsCacheAsync(CancellationToken ct)
+    {
+        await _cache.RemoveByTagAsync(AnalyticsCacheTag, ct);
+    }
+
+    private async Task<string> GetCurrentPatchAsync(CancellationToken ct)
+    {
+        return await _context.Patches
+            .AsNoTracking()
+            .Where(p => p.IsActive)
+            .Select(p => p.Version)
+            .FirstOrDefaultAsync(ct) ?? "Unknown";
+    }
+
+    private static string BuildCacheKey(int championId, ChampionAnalyticsFilter filter, string patch)
+    {
+        var keyParts = new List<string>
+        {
+            $"{WinRateCacheKeyPrefix}{championId}",
+            $"patch:{patch}"
+        };
+
+        if (!string.IsNullOrEmpty(filter.RankTier))
+            keyParts.Add($"tier:{filter.RankTier}");
+
+        if (!string.IsNullOrEmpty(filter.Region))
+            keyParts.Add($"region:{filter.Region}");
+
+        if (!string.IsNullOrEmpty(filter.Role))
+            keyParts.Add($"role:{filter.Role}");
+
+        return string.Join(":", keyParts);
+    }
+}

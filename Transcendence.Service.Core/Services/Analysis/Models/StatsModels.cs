@@ -68,5 +68,15 @@ public record RecentMatchSummary(
     int Assists,
     int VisionScore,
     int DamageToChamps,
-    double CsPerMin
+    double CsPerMin,
+    int SummonerSpell1Id,
+    int SummonerSpell2Id,
+    IReadOnlyList<int> Items,  // 7 item IDs (6 items + trinket), 0 for empty slots
+    MatchRuneSummary Runes
+);
+
+public record MatchRuneSummary(
+    int PrimaryStyleId,
+    int SubStyleId,
+    int KeystoneId  // First rune in primary tree (the keystone)
 );

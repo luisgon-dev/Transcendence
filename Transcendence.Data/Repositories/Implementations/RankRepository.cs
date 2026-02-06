@@ -34,8 +34,8 @@ public class RankRepository(TranscendenceContext context) : IRankRepository
                 {
                     // Snapshot previous state into history (only if a different state isn't already recorded at latest)
                     var hasLatestSnapshot = await context.HistoricalRanks
-                        .OrderByDescending(hr => hr.DateRecorded)
                         .AnyAsync(hr =>
+                                hr.Summoner != null &&
                                 hr.Summoner.Id == summoner.Id &&
                                 hr.QueueType == existing.QueueType &&
                                 hr.Tier == existing.Tier &&

@@ -6,4 +6,5 @@ public interface IMatchRepository
 {
     Task AddMatchAsync(Match match, CancellationToken cancellationToken);
     Task<Match?> GetMatchByIdAsync(string matchId, CancellationToken cancellationToken);
+    Task<HashSet<string>> GetExistingMatchIdsAsync(IEnumerable<string> matchIds, CancellationToken cancellationToken);
 }

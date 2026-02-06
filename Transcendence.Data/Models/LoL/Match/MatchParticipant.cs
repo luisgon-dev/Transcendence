@@ -39,6 +39,6 @@ public class MatchParticipant
     public int SummonerSpell1Id { get; set; }
     public int SummonerSpell2Id { get; set; }
 
-    public ICollection<MatchParticipantRune> Runes { get; set; }
-    public ICollection<MatchParticipantItem> Items { get; set; }
+    public ICollection<MatchParticipantRune> Runes { get; set; } = new List<MatchParticipantRune>();
+    public ICollection<MatchParticipantItem> Items { get; set; } = new List<MatchParticipantItem>();
 }

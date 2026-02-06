@@ -18,7 +18,7 @@ namespace Transcendence.Service.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.8")
+                .HasAnnotation("ProductVersion", "10.0.2")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -36,6 +36,209 @@ namespace Transcendence.Service.Migrations
                     b.HasIndex("SummonersId");
 
                     b.ToTable("MatchSummoner");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Auth.ApiClientKey", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsRevoked")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("KeyHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("KeyPrefix")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("KeyHash")
+                        .IsUnique();
+
+                    b.ToTable("ApiClientKeys");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Auth.UserAccount", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("EmailNormalized")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LastLoginAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmailNormalized")
+                        .IsUnique();
+
+                    b.ToTable("UserAccounts");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Auth.UserFavoriteSummoner", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DisplayName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PlatformRegion")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SummonerPuuid")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("UserAccountId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserAccountId", "SummonerPuuid", "PlatformRegion")
+                        .IsUnique();
+
+                    b.ToTable("UserFavoriteSummoners");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Auth.UserPreferences", b =>
+                {
+                    b.Property<Guid>("UserAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("LivePollingEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PreferredRankTier")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PreferredRegion")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserAccountId");
+
+                    b.ToTable("UserPreferences");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Auth.UserRefreshToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReplacedByTokenHash")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("RevokedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("UserAccountId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserAccountId", "ExpiresAtUtc");
+
+                    b.ToTable("UserRefreshTokens");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.LiveGame.LiveGameSnapshot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("GameId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("NextPollAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ObservedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PlatformRegion")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Puuid")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("SummonerId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NextPollAtUtc");
+
+                    b.HasIndex("Puuid", "PlatformRegion", "ObservedAtUtc");
+
+                    b.ToTable("LiveGameSnapshots");
                 });
 
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Account.HistoricalRank", b =>
@@ -59,7 +262,7 @@ namespace Transcendence.Service.Migrations
                     b.Property<string>("RankNumber")
                         .HasColumnType("text");
 
-                    b.Property<Guid>("SummonerId")
+                    b.Property<Guid?>("SummonerId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("Tier")
@@ -101,6 +304,9 @@ namespace Transcendence.Service.Migrations
                     b.Property<string>("Tier")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("Wins")
                         .HasColumnType("integer");
@@ -152,6 +358,9 @@ namespace Transcendence.Service.Migrations
                     b.Property<string>("TagLine")
                         .HasColumnType("text");
 
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Puuid");
@@ -171,6 +380,15 @@ namespace Transcendence.Service.Migrations
                     b.Property<string>("EndOfGameResult")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("FetchedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastErrorMessage")
+                        .HasColumnType("text");
+
                     b.Property<long>("MatchDate")
                         .HasColumnType("bigint");
 
@@ -182,6 +400,12 @@ namespace Transcendence.Service.Migrations
 
                     b.Property<string>("QueueType")
                         .HasColumnType("text");
+
+                    b.Property<int>("RetryCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 
@@ -340,6 +564,12 @@ namespace Transcendence.Service.Migrations
                 {
                     b.Property<string>("Version")
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("DetectedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
 
                     b.Property<DateTime>("ReleaseDate")
                         .HasColumnType("timestamp with time zone");
@@ -512,13 +742,44 @@ namespace Transcendence.Service.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Transcendence.Data.Models.Auth.UserFavoriteSummoner", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.Auth.UserAccount", "UserAccount")
+                        .WithMany("FavoriteSummoners")
+                        .HasForeignKey("UserAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("UserAccount");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Auth.UserPreferences", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.Auth.UserAccount", "UserAccount")
+                        .WithOne("Preferences")
+                        .HasForeignKey("Transcendence.Data.Models.Auth.UserPreferences", "UserAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("UserAccount");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Auth.UserRefreshToken", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.Auth.UserAccount", "UserAccount")
+                        .WithMany("RefreshTokens")
+                        .HasForeignKey("UserAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("UserAccount");
+                });
+
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Account.HistoricalRank", b =>
                 {
                     b.HasOne("Transcendence.Data.Models.LoL.Account.Summoner", "Summoner")
                         .WithMany("HistoricalRanks")
-                        .HasForeignKey("SummonerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .HasForeignKey("SummonerId");
 
                     b.Navigation("Summoner");
                 });
@@ -618,6 +879,15 @@ namespace Transcendence.Service.Migrations
                     b.HasOne("Transcendence.Data.Models.Service.CurrentChampionLoadout", null)
                         .WithMany("UnitWinPercents")
                         .HasForeignKey("CurrentChampionLoadoutId");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Auth.UserAccount", b =>
+                {
+                    b.Navigation("FavoriteSummoners");
+
+                    b.Navigation("Preferences");
+
+                    b.Navigation("RefreshTokens");
                 });
 
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Account.Summoner", b =>

@@ -22,6 +22,9 @@ public class SummonerService(RiotGamesApi riotApi, IRankService rankService)
         var regional = platformRoute.ToRegional();
         var account = await riotApi.AccountV1()
             .GetByRiotIdAsync(regional, gameName, tagLine, cancellationToken);
+        if (account == null || string.IsNullOrWhiteSpace(account.Puuid))
+            throw new InvalidOperationException(
+                $"Riot Account API returned no PUUID for {gameName}#{tagLine} on {regional}.");
 
         var summoner = await riotApi.SummonerV4()
             .GetByPUUIDAsync(platformRoute, account.Puuid, cancellationToken);
@@ -46,9 +49,13 @@ public class SummonerService(RiotGamesApi riotApi, IRankService rankService)
 
         var account = await riotApi.AccountV1()
             .GetByPuuidAsync(platformRoute.ToRegional(), summoner.Puuid, cancellationToken);
+        if (account == null)
+            throw new InvalidOperationException(
+                $"Riot Account API returned no account for PUUID {summoner.Puuid} on {platformRoute.ToRegional()}.");
+
         current.GameName = account.GameName;
         current.TagLine = account.TagLine;
-        current.SummonerName = account.GameName + "#" + account.TagLine;
+        current.SummonerName = $"{account.GameName}#{account.TagLine}";
 
         var latestRank = await rankService.GetRankedDataAsync(current.Puuid, platformRoute, cancellationToken);
 

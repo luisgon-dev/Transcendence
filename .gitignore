@@ -295,6 +295,12 @@ pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Workspace monorepo packages (override Visual Studio's NuGet `packages/` ignore)
+!/packages/
+!/packages/**/*
+packages/**/node_modules/
+packages/**/dist/
+
 # Visual Studio 6 build log
 *.plg
 

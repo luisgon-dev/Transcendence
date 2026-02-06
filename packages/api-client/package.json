@@ -1,0 +1,35 @@
+{
+  "name": "@transcendence/api-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./schema": {
+      "types": "./dist/schema.d.ts",
+      "default": "./dist/schema.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "clean": "rm -rf dist",
+    "gen": "openapi-typescript ../../openapi/transcendence.v1.json -o src/schema.ts",
+    "build": "pnpm clean && tsup src/index.ts src/schema.ts --format esm --dts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.14.0"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.6.0",
+    "tsup": "^8.3.0",
+    "typescript": "^5.8.0"
+  }
+}
+

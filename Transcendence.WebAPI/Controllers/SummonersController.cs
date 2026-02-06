@@ -58,6 +58,7 @@ public class SummonersController(
 
             var response = new SummonerProfileResponse
             {
+                SummonerId = summoner.Id,
                 Puuid = summoner.Puuid ?? string.Empty,
                 GameName = summoner.GameName ?? string.Empty,
                 TagLine = summoner.TagLine ?? string.Empty,

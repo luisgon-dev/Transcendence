@@ -66,7 +66,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | Feature | Reason |
 |---------|--------|
 | Desktop application | Separate repo, consumes this API |
-| Web frontend | Separate repo, consumes this API |
+| Web frontend | Implemented in this repo under `apps/web` (monorepo) |
 | Mobile app | Web-first approach |
 | Real-time push notifications | Polling model for v1 |
 | Social features (friends, sharing) | Not core to analytics |

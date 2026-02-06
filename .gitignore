@@ -284,6 +284,16 @@ FakesAssemblies/
 # Node.js Tools for Visual Studio
 .ntvs_analysis.dat
 node_modules/
+.next/
+out/
+dist/
+coverage/
+.turbo/
+.eslintcache
+.pnpm-store/
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # Visual Studio 6 build log
 *.plg

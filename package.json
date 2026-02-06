@@ -1,0 +1,16 @@
+{
+  "name": "transcendence",
+  "private": true,
+  "packageManager": "pnpm@10.22.0",
+  "scripts": {
+    "api:spec": "bash scripts/openapi/export.sh",
+    "api:client": "pnpm --filter @transcendence/api-client gen",
+    "api:gen": "pnpm api:spec && pnpm api:client",
+    "api:check": "pnpm api:gen && git diff --exit-code -- openapi packages/api-client/src/schema.ts",
+    "web:dev": "pnpm --filter web dev",
+    "web:build": "pnpm --filter web build",
+    "web:lint": "pnpm --filter web lint",
+    "web:test": "pnpm --filter web test"
+  }
+}
+

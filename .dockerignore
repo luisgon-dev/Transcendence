@@ -17,6 +17,10 @@
 **/docker-compose*
 **/Dockerfile*
 **/node_modules
+**/.next
+**/out
+**/coverage
+**/dist
 **/npm-debug.log
 **/obj
 **/secrets.dev.yaml

@@ -1,9 +1,12 @@
 using Camille.Enums;
 using Camille.RiotGames;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Hybrid;
 using Transcendence.Data;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
+using DataMatch = Transcendence.Data.Models.LoL.Match.Match;
 
 namespace Transcendence.Service.Core.Services.Jobs;
 
@@ -15,7 +18,8 @@ public class SummonerRefreshJob(
     TranscendenceContext db,
     IRefreshLockRepository refreshLockRepository,
     ILogger<SummonerRefreshJob> logger,
-    RiotGamesApi riotGamesApi) : ISummonerRefreshJob
+    RiotGamesApi riotGamesApi,
+    HybridCache cache) : ISummonerRefreshJob
 {
     public async Task RefreshByRiotId(string gameName, string tagLine, PlatformRoute platformRoute, string lockKey,
         CancellationToken ct = default)
@@ -33,15 +37,17 @@ public class SummonerRefreshJob(
                 .GetMatchIdsByPUUIDAsync(regional, summoner.Puuid!, 20, null, Queue.SUMMONERS_RIFT_5V5_RANKED_SOLO,
                     null, null, "ranked", ct);
 
-            // Deduplicate against existing stored matches
-            var pending = new List<string>(matchIds);
-            foreach (var id in matchIds)
-            {
-                var existing = await matchRepository.GetMatchByIdAsync(id, ct);
-                if (existing != null) pending.Remove(id);
-            }
+            // Defensively dedupe IDs returned by the API and process each match once.
+            var pending = matchIds
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
 
-            foreach (var matchId in pending)
+            var existingMatchIds = await matchRepository.GetExistingMatchIdsAsync(pending, ct);
+            var matchesToPersist = new List<DataMatch>();
+
+            foreach (var matchId in pending.Where(id => !existingMatchIds.Contains(id)))
+            {
                 try
                 {
                     var match = await matchService.GetMatchDetailsAsync(matchId, regional, platformRoute, ct);
@@ -52,14 +58,19 @@ public class SummonerRefreshJob(
                         continue;
                     }
 
-                    await matchRepository.AddMatchAsync(match, ct);
-                    await db.SaveChangesAsync(ct);
+                    matchesToPersist.Add(match);
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "[Refresh] Error persisting match {MatchId} for {GameName}#{Tag}", matchId,
+                    logger.LogError(ex, "[Refresh] Error fetching match {MatchId} for {GameName}#{Tag}", matchId,
                         gameName, tagLine);
                 }
+            }
+
+            await PersistMatchesAsync(matchesToPersist, gameName, tagLine, ct);
+
+            // After matches saved, invalidate stats cache for this summoner
+            await InvalidateStatsCacheAsync(summoner.Id, ct);
 
             logger.LogInformation("[Refresh] Completed refresh for {GameName}#{Tag} on {Platform}", gameName, tagLine,
                 platformRoute);
@@ -83,4 +94,93 @@ public class SummonerRefreshJob(
             }
         }
     }
+
+    private async Task PersistMatchesAsync(
+        IReadOnlyList<DataMatch> matches,
+        string gameName,
+        string tagLine,
+        CancellationToken ct)
+    {
+        if (matches.Count == 0)
+            return;
+
+        try
+        {
+            foreach (var match in matches)
+                await matchRepository.AddMatchAsync(match, ct);
+
+            await db.SaveChangesAsync(ct);
+            return;
+        }
+        catch (DbUpdateException ex) when (MatchPersistenceErrorClassifier.IsDuplicateMatchIdViolation(ex))
+        {
+            db.ChangeTracker.Clear();
+            logger.LogInformation(
+                "[Refresh] Duplicate match detected while persisting batch for {GameName}#{Tag}. Falling back to per-match persistence.",
+                gameName,
+                tagLine);
+        }
+        catch (Exception ex)
+        {
+            db.ChangeTracker.Clear();
+            logger.LogError(
+                ex,
+                "[Refresh] Unexpected error while persisting batch for {GameName}#{Tag}. Falling back to per-match persistence.",
+                gameName,
+                tagLine);
+        }
+
+        foreach (var match in matches)
+        {
+            try
+            {
+                await matchRepository.AddMatchAsync(match, ct);
+                await db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException ex) when (MatchPersistenceErrorClassifier.IsDuplicateMatchIdViolation(ex))
+            {
+                db.ChangeTracker.Clear();
+                logger.LogInformation(
+                    "[Refresh] Match {MatchId} already exists. Skipping duplicate insert for {GameName}#{Tag}.",
+                    match.MatchId,
+                    gameName,
+                    tagLine);
+            }
+            catch (Exception ex)
+            {
+                db.ChangeTracker.Clear();
+                logger.LogError(ex, "[Refresh] Error persisting match {MatchId} for {GameName}#{Tag}", match.MatchId,
+                    gameName, tagLine);
+            }
+        }
+    }
+
+    private async Task InvalidateStatsCacheAsync(Guid summonerId, CancellationToken ct)
+    {
+        // HybridCache doesn't have wildcard invalidation, but we can remove known keys
+        // The cache will naturally expire, but we can force invalidation for common patterns
+
+        // Common recentGamesCount values
+        foreach (var count in new[] { 10, 20, 50 })
+        {
+            await cache.RemoveAsync($"stats:overview:{summonerId}:{count}", ct);
+        }
+
+        // Common top champion counts
+        foreach (var top in new[] { 5, 10 })
+        {
+            await cache.RemoveAsync($"stats:champions:{summonerId}:{top}", ct);
+        }
+
+        // Roles has no parameters
+        await cache.RemoveAsync($"stats:roles:{summonerId}", ct);
+
+        // Invalidate first few pages of recent matches
+        foreach (var page in new[] { 1, 2, 3 })
+        {
+            await cache.RemoveAsync($"stats:recent:{summonerId}:{page}:20", ct);
+            await cache.RemoveAsync($"stats:recent:{summonerId}:{page}:10", ct);
+        }
+    }
+
 }

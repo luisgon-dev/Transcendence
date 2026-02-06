@@ -6,8 +6,8 @@ public class MatchParticipantItem
 {
     public Guid MatchParticipantId { get; set; }
     public int ItemId { get; set; }
-    public string PatchVersion { get; set; }
+    public string PatchVersion { get; set; } = string.Empty;
 
-    public MatchParticipant MatchParticipant { get; set; }
-    public ItemVersion ItemVersion { get; set; }
+    public MatchParticipant MatchParticipant { get; set; } = null!;
+    public ItemVersion ItemVersion { get; set; } = null!;
 }

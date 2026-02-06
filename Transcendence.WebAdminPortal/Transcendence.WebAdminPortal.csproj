@@ -20,6 +20,11 @@
         <PackageReference Include="Hangfire.AspNetCore" Version="1.8.22"/>
         <PackageReference Include="Hangfire.Core" Version="1.8.22"/>
         <PackageReference Include="Hangfire.PostgreSql" Version="1.20.13"/>
+        <PackageReference Include="Newtonsoft.Json" Version="13.0.3"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Transcendence.Service.Core\Transcendence.Service.Core.csproj" />
     </ItemGroup>
 
 </Project>

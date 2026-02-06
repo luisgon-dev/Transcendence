@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Worker">
+﻿<Project Sdk="Microsoft.NET.Sdk.Worker">
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
@@ -10,15 +10,18 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Hangfire.Core" Version="1.8.22"/>
-        <PackageReference Include="Hangfire.NetCore" Version="1.8.22"/>
-        <PackageReference Include="Hangfire.PostgreSql" Version="1.20.13"/>
+        <PackageReference Include="Hangfire.Core" Version="1.8.22" />
+        <PackageReference Include="Hangfire.NetCore" Version="1.8.22" />
+        <PackageReference Include="Hangfire.PostgreSql" Version="1.20.13" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.2">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
-        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.2"/>
-        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0"/>
+        <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.2.0" />
+        <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.2" />
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.2" />
+        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+        <PackageReference Include="StackExchange.Redis" Version="2.10.1" />
     </ItemGroup>
 
     <ItemGroup>
@@ -28,11 +31,11 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Transcendence.Service.Core\Transcendence.Service.Core.csproj"/>
+        <ProjectReference Include="..\Transcendence.Service.Core\Transcendence.Service.Core.csproj" />
     </ItemGroup>
 
     <ItemGroup>
-        <Folder Include="Migrations\"/>
+        <Folder Include="Migrations\" />
     </ItemGroup>
 
 </Project>

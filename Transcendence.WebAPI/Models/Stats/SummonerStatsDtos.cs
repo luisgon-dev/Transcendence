@@ -64,7 +64,18 @@ public record RecentMatchSummaryDto(
     int Assists,
     int VisionScore,
     int DamageToChamps,
-    double CsPerMin
+    double CsPerMin,
+    // Loadout fields
+    int SummonerSpell1Id,
+    int SummonerSpell2Id,
+    IReadOnlyList<int> Items,
+    MatchRuneSummaryDto Runes
+);
+
+public record MatchRuneSummaryDto(
+    int PrimaryStyleId,
+    int SubStyleId,
+    int KeystoneId
 );
 
 public record PagedResultDto<T>(IReadOnlyList<T> Items, int Page, int PageSize, int TotalCount, int TotalPages);

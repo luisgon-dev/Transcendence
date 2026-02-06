@@ -1,0 +1,17 @@
+[
+  {
+    "Name": "Web API + Service",
+    "Projects": [
+      {
+        "Path": "Transcendence.WebAPI\\Transcendence.WebAPI.csproj",
+        "Action": "Start",
+        "DebugTarget": "https"
+      },
+      {
+        "Path": "Transcendence.Service\\Transcendence.Service.csproj",
+        "Action": "Start",
+        "DebugTarget": "ProjectSyndraBackend.Service"
+      }
+    ]
+  }
+]

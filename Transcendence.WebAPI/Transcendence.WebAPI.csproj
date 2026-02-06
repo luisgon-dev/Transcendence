@@ -10,12 +10,18 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.0"/>
-        <PackageReference Include="Hangfire.Core" Version="1.8.22"/>
-        <PackageReference Include="Hangfire.NetCore" Version="1.8.22"/>
-        <PackageReference Include="Hangfire.AspNetCore" Version="1.8.22"/>
-        <PackageReference Include="Hangfire.PostgreSql" Version="1.20.13"/>
-        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0"/>
+        <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.2.0" />
+        <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.2" />
+        <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.2" />
+        <PackageReference Include="StackExchange.Redis" Version="2.10.1" />
+        <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.1" />
+        <PackageReference Include="Microsoft.OpenApi" Version="2.4.1" />
+        <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+        <PackageReference Include="Hangfire.Core" Version="1.8.22" />
+        <PackageReference Include="Hangfire.NetCore" Version="1.8.22" />
+        <PackageReference Include="Hangfire.AspNetCore" Version="1.8.22" />
+        <PackageReference Include="Hangfire.PostgreSql" Version="1.20.13" />
+        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
     </ItemGroup>
 
     <ItemGroup>
@@ -25,8 +31,8 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Transcendence.Data\Transcendence.Data.csproj"/>
-        <ProjectReference Include="..\Transcendence.Service.Core\Transcendence.Service.Core.csproj"/>
+        <ProjectReference Include="..\Transcendence.Data\Transcendence.Data.csproj" />
+        <ProjectReference Include="..\Transcendence.Service.Core\Transcendence.Service.Core.csproj" />
     </ItemGroup>
 
     <ItemGroup>

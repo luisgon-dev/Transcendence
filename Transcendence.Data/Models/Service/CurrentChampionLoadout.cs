@@ -9,11 +9,11 @@ public class CurrentChampionLoadout
     public List<UnitWinPercent> UnitWinPercents { get; set; } = [];
 
     // filters for the loadout
-    public string ChampionName { get; set; }
+    public string ChampionName { get; set; } = string.Empty;
     public int ChampionId { get; set; }
-    public string Lane { get; set; }
-    public string Rank { get; set; }
-    public string Patch { get; set; }
-    public string QueueType { get; set; }
-    public string Region { get; set; }
+    public string Lane { get; set; } = string.Empty;
+    public string Rank { get; set; } = string.Empty;
+    public string Patch { get; set; } = string.Empty;
+    public string QueueType { get; set; } = string.Empty;
+    public string Region { get; set; } = string.Empty;
 }

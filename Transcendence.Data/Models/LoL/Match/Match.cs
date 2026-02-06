@@ -2,6 +2,15 @@
 
 namespace Transcendence.Data.Models.LoL.Match;
 
+public enum FetchStatus
+{
+    Unfetched = 0,
+    Success = 1,
+    TemporaryFailure = 2,
+    PermanentlyUnfetchable = 3,
+    OutsideRetentionWindow = 4
+}
+
 public class Match
 {
     public Guid Id { get; set; }
@@ -11,6 +20,14 @@ public class Match
     public string? Patch { get; set; }
     public string? QueueType { get; set; }
     public string? EndOfGameResult { get; set; }
+
+    // Fetch metadata
+    public FetchStatus Status { get; set; } = FetchStatus.Unfetched;
+    public int RetryCount { get; set; } = 0;
+    public DateTime? FetchedAt { get; set; }
+    public DateTime? LastAttemptAt { get; set; }
+    public string? LastErrorMessage { get; set; }
+
     public List<Summoner> Summoners { get; set; } = [];
     public ICollection<MatchParticipant> Participants { get; set; } = new List<MatchParticipant>();
 }

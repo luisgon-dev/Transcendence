@@ -16,6 +16,7 @@ public class Summoner
     public string? AccountId { get; set; }
     public required string? PlatformRegion { get; set; }
     public required string? Region { get; set; }
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;  // When summoner profile was last fetched
     public List<Match.Match> Matches { get; } = [];
     public ICollection<MatchParticipant> MatchParticipants { get; } = [];
     public ICollection<Rank> Ranks { get; set; } = new List<Rank>();

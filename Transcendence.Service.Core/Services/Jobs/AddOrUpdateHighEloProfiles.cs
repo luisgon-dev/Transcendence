@@ -12,11 +12,13 @@ public class AddOrUpdateHighEloProfiles(
     TranscendenceContext context,
     ILogger<AddOrUpdateHighEloProfiles> logger,
     ISummonerService summonerService,
-    ISummonerRepository summonerRepository,
-    IRankService rankService)
+    ISummonerRepository summonerRepository)
 {
     public async Task Execute(CancellationToken stoppingToken)
     {
+        const int saveBatchSize = 50;
+        var pendingChanges = 0;
+
         var challengerLeague = await riotGamesApi.LeagueV4()
             .GetChallengerLeagueAsync(PlatformRoute.NA1, QueueType.RANKED_SOLO_5x5, stoppingToken);
         var grandmasterLeague = await riotGamesApi.LeagueV4()
@@ -37,9 +39,18 @@ public class AddOrUpdateHighEloProfiles(
             var summoner =
                 await summonerService.GetSummonerByPuuidAsync(summonerPuuid, PlatformRoute.NA1, stoppingToken);
             await summonerRepository.AddOrUpdateSummonerAsync(summoner, stoppingToken);
-            await context.SaveChangesAsync(stoppingToken);
             logger.LogInformation("Summoner {SummonerName} added or updated", summoner.SummonerName);
+            pendingChanges++;
+
+            if (pendingChanges < saveBatchSize)
+                continue;
+
+            await context.SaveChangesAsync(stoppingToken);
+            pendingChanges = 0;
         }
+
+        if (pendingChanges > 0)
+            await context.SaveChangesAsync(stoppingToken);
 
         logger.LogInformation("All summoners added or updated");
     }

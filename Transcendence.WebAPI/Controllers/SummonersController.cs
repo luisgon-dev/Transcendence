@@ -2,9 +2,11 @@ using Camille.Enums;
 using Hangfire;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Repositories.Interfaces;
+using Transcendence.Service.Core.Services.Analysis.Interfaces;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
+using Transcendence.Service.Core.Services.RiotApi;
+using Transcendence.Service.Core.Services.RiotApi.DTOs;
 
 namespace Transcendence.WebAPI.Controllers;
 
@@ -13,7 +15,8 @@ namespace Transcendence.WebAPI.Controllers;
 public class SummonersController(
     ISummonerRepository summonerRepository,
     IRefreshLockRepository refreshLockRepository,
-    IBackgroundJobClient backgroundJobClient
+    IBackgroundJobClient backgroundJobClient,
+    ISummonerStatsService statsService
 ) : ControllerBase
 {
     /// <summary>
@@ -27,19 +30,122 @@ public class SummonersController(
     /// <param name="name">Riot game name (without #tag)</param>
     /// <param name="tag">Riot tag (without #)</param>
     [HttpGet("{region}/{name}/{tag}")]
-    [ProducesResponseType(typeof(Summoner), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(SummonerProfileResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
     public async Task<IActionResult> GetByRiotId([FromRoute] string region, [FromRoute] string name,
         [FromRoute] string tag, CancellationToken ct)
     {
-        if (!TryParsePlatformRoute(region, out var platform))
+        if (!PlatformRouteParser.TryParse(region, out var platform))
             return BadRequest($"Unsupported region '{region}'. Use a platform like NA1, EUW1, EUN1, KR, etc.");
 
         var platformRegion = platform.ToString();
         var summoner = await summonerRepository.FindByRiotIdAsync(platformRegion, name, tag,
             q => q.Include(s => s.Ranks).Include(s => s.HistoricalRanks), ct);
-        if (summoner != null) return Ok(summoner);
+        if (summoner != null)
+        {
+            // Map to response DTO with data age metadata
+            var soloRank = summoner.Ranks.FirstOrDefault(r => r.QueueType == "RANKED_SOLO_5x5");
+            var flexRank = summoner.Ranks.FirstOrDefault(r => r.QueueType == "RANKED_FLEX_SR");
+
+            // Keep these sequential because statsService shares a scoped DbContext, which is not thread-safe.
+            var overview = await statsService.GetSummonerOverviewAsync(summoner.Id, 20, ct);
+            var champions = await statsService.GetChampionStatsAsync(summoner.Id, 5, ct);
+            var recent = await statsService.GetRecentMatchesAsync(summoner.Id, 1, 10, ct);
+
+            // Calculate StatsAge from most recent match
+            var mostRecentMatchDate = recent.Items.Count > 0 ? recent.Items[0].MatchDate : (long?)null;
+
+            var response = new SummonerProfileResponse
+            {
+                Puuid = summoner.Puuid ?? string.Empty,
+                GameName = summoner.GameName ?? string.Empty,
+                TagLine = summoner.TagLine ?? string.Empty,
+                SummonerLevel = (int)summoner.SummonerLevel,
+                ProfileIconId = summoner.ProfileIconId,
+
+                SoloRank = soloRank != null ? new RankInfo
+                {
+                    Tier = soloRank.Tier,
+                    Division = soloRank.RankNumber,
+                    LeaguePoints = soloRank.LeaguePoints,
+                    Wins = soloRank.Wins,
+                    Losses = soloRank.Losses
+                } : null,
+
+                FlexRank = flexRank != null ? new RankInfo
+                {
+                    Tier = flexRank.Tier,
+                    Division = flexRank.RankNumber,
+                    LeaguePoints = flexRank.LeaguePoints,
+                    Wins = flexRank.Wins,
+                    Losses = flexRank.Losses
+                } : null,
+
+                // Overview stats
+                OverviewStats = overview.TotalMatches > 0 ? new ProfileOverviewStats
+                {
+                    TotalMatches = overview.TotalMatches,
+                    Wins = overview.Wins,
+                    Losses = overview.Losses,
+                    WinRate = overview.WinRate,
+                    AvgKills = overview.AvgKills,
+                    AvgDeaths = overview.AvgDeaths,
+                    AvgAssists = overview.AvgAssists,
+                    KdaRatio = overview.KdaRatio,
+                    AvgCsPerMin = overview.AvgCsPerMin,
+                    AvgVisionScore = overview.AvgVisionScore,
+                    AvgDamageToChamps = overview.AvgDamageToChamps
+                } : null,
+
+                // Top 5 champions
+                TopChampions = champions.Select(c => new ProfileChampionStat
+                {
+                    ChampionId = c.ChampionId,
+                    ChampionName = ResolveChampionName(c.ChampionId),
+                    Games = c.Games,
+                    Wins = c.Wins,
+                    Losses = c.Losses,
+                    WinRate = c.WinRate,
+                    KdaRatio = c.KdaRatio
+                }).ToList(),
+
+                // Recent 10 matches
+                RecentMatches = recent.Items.Select(m => new ProfileRecentMatch
+                {
+                    MatchId = m.MatchId,
+                    MatchDate = m.MatchDate,
+                    QueueType = m.QueueType,
+                    Win = m.Win,
+                    ChampionId = m.ChampionId,
+                    ChampionName = ResolveChampionName(m.ChampionId),
+                    Kills = m.Kills,
+                    Deaths = m.Deaths,
+                    Assists = m.Assists,
+                    CsPerMin = m.CsPerMin
+                }).ToList(),
+
+                ProfileAge = new DataAgeMetadata
+                {
+                    FetchedAt = summoner.UpdatedAt
+                },
+
+                RankAge = new DataAgeMetadata
+                {
+                    FetchedAt = soloRank?.UpdatedAt ?? flexRank?.UpdatedAt ?? DateTime.UtcNow
+                },
+
+                // Stats freshness based on most recent match
+                StatsAge = mostRecentMatchDate.HasValue
+                    ? new DataAgeMetadata
+                    {
+                        FetchedAt = DateTimeOffset.FromUnixTimeMilliseconds(mostRecentMatchDate.Value).UtcDateTime
+                    }
+                    : null
+            };
+
+            return Ok(response);
+        }
 
         // If a refresh is in progress, let the caller know
         var refreshKey = BuildRefreshKey(platform, name, tag);
@@ -77,7 +183,7 @@ public class SummonersController(
     public async Task<IActionResult> RefreshByRiotId([FromRoute] string region, [FromRoute] string name,
         [FromRoute] string tag, CancellationToken ct)
     {
-        if (!TryParsePlatformRoute(region, out var platform))
+        if (!PlatformRouteParser.TryParse(region, out var platform))
             return BadRequest($"Unsupported region '{region}'. Use a platform like NA1, EUW1, EUN1, KR, etc.");
 
         var key = BuildRefreshKey(platform, name, tag);
@@ -121,31 +227,12 @@ public class SummonersController(
         return $"summoner-refresh:{platform}:{nm}:{tg}";
     }
 
-    private static bool TryParsePlatformRoute(string input, out PlatformRoute platform)
+    /// <summary>
+    /// Resolves champion ID to name. Phase 3 will add proper static data service.
+    /// For now, returns placeholder that clients can resolve client-side.
+    /// </summary>
+    private static string ResolveChampionName(int championId)
     {
-        // normalize
-        var normalized = input.Replace(" ", string.Empty).Replace("-", string.Empty).Replace("_", string.Empty)
-            .ToUpperInvariant();
-
-        // First try direct enum parse (handles NA1, EUW1, EUN1, KR, BR1, LA1, LA2, OC1, JP1, TR1, RU)
-        if (Enum.TryParse(normalized, true, out platform))
-            return true;
-
-        // Map common short forms to official platform routes
-        platform = normalized switch
-        {
-            "NA" => PlatformRoute.NA1,
-            "EUW" => PlatformRoute.EUW1,
-            "EUNE" => PlatformRoute.EUN1,
-            "KR" => PlatformRoute.KR,
-            "BR" => PlatformRoute.BR1,
-            "LAN" => PlatformRoute.LA1,
-            "LAS" => PlatformRoute.LA2,
-            "OCE" => PlatformRoute.OC1,
-            "JP" => PlatformRoute.JP1,
-            "TR" => PlatformRoute.TR1,
-            _ => default
-        };
-        return platform != default;
+        return $"Champion {championId}";
     }
 }

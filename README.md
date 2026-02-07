@@ -145,7 +145,6 @@ Included services:
 - Worker service
 - WebAdminPortal (Hangfire dashboard)
 - Dozzle logs UI (`http://localhost:9999`)
-- Watchtower auto-updater for app containers
 
 ### Run Without Docker
 

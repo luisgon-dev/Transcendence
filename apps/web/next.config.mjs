@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   transpilePackages: ["@transcendence/api-client"],
+  output: "standalone",
   images: {
     remotePatterns: [
       {
@@ -13,4 +14,3 @@ const nextConfig = {
 };
 
 export default nextConfig;
-

@@ -18,7 +18,6 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
-          include-prerelease: true
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -42,4 +41,3 @@ jobs:
 
       - name: Build
         run: pnpm --filter web build
-

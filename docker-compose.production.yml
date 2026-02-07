@@ -39,6 +39,25 @@ services:
     networks:
       - transcendence-net
 
+  web:
+    image: ghcr.io/luisgon-dev/transcendencebackend-web:main
+    pull_policy: always
+    container_name: transcendence-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      TRN_BACKEND_BASE_URL: http://webapi:8080
+      TRN_BACKEND_API_KEY: ${WEB_TRN_BACKEND_API_KEY}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      - webapi
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    networks:
+      - transcendence-net
+
   webapi:
     image: ghcr.io/luisgon-dev/transcendencebackend-webapi:main
     pull_policy: always

@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   }
 
   const token = (await res.json()) as AuthTokenResponse;
-  setAuthCookies(token);
+  await setAuthCookies(token);
   return NextResponse.json({ ok: true });
 }
 

@@ -82,12 +82,17 @@ export default async function TierListPage({
   if (roleParam && roleParam !== "ALL") qs.set("role", roleParam);
   if (rankParam && rankParam !== "ALL") qs.set("rankTier", rankParam);
 
-  const res = await fetch(
-    `${getBackendBaseUrl()}/api/analytics/tierlist?${qs.toString()}`,
-    { next: { revalidate: 60 * 60 } }
-  );
+  let res: Response | null = null;
+  try {
+    res = await fetch(
+      `${getBackendBaseUrl()}/api/analytics/tierlist?${qs.toString()}`,
+      { next: { revalidate: 60 * 60 } }
+    );
+  } catch {
+    res = null;
+  }
 
-  if (!res.ok) {
+  if (!res || !res.ok) {
     return (
       <Card className="p-6">
         <h1 className="font-[var(--font-sora)] text-2xl font-semibold">

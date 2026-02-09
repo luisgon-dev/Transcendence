@@ -17,7 +17,7 @@ type BackendMeResponse = {
 };
 
 async function refresh() {
-  const { refreshToken } = getAuthCookies();
+  const { refreshToken } = await getAuthCookies();
   if (!refreshToken) return null;
 
   const res = await fetch(`${getBackendBaseUrl()}/api/auth/refresh`, {
@@ -28,12 +28,12 @@ async function refresh() {
 
   if (!res.ok) return null;
   const token = (await res.json()) as AuthTokenResponse;
-  setAuthCookies(token);
+  await setAuthCookies(token);
   return token.accessToken;
 }
 
 export async function GET() {
-  const { accessToken, accessExpiresAtUtc } = getAuthCookies();
+  const { accessToken, accessExpiresAtUtc } = await getAuthCookies();
   let token = accessToken;
 
   if (!token || shouldRefreshAccessToken(accessExpiresAtUtc)) {
@@ -51,7 +51,7 @@ export async function GET() {
   if (meRes.status === 401) {
     token = await refresh();
     if (!token) {
-      clearAuthCookies();
+      await clearAuthCookies();
       return NextResponse.json({ authenticated: false });
     }
 
@@ -61,7 +61,7 @@ export async function GET() {
   }
 
   if (!meRes.ok) {
-    if (meRes.status === 401) clearAuthCookies();
+    if (meRes.status === 401) await clearAuthCookies();
     return NextResponse.json({ authenticated: false });
   }
 

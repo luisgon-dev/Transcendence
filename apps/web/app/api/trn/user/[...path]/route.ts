@@ -11,7 +11,7 @@ import {
 import { getBackendBaseUrl } from "@/lib/env";
 
 async function refreshAccessToken() {
-  const { refreshToken } = getAuthCookies();
+  const { refreshToken } = await getAuthCookies();
   if (!refreshToken) return null;
 
   const res = await fetch(`${getBackendBaseUrl()}/api/auth/refresh`, {
@@ -22,12 +22,12 @@ async function refreshAccessToken() {
 
   if (!res.ok) return null;
   const token = (await res.json()) as AuthTokenResponse;
-  setAuthCookies(token);
+  await setAuthCookies(token);
   return token.accessToken;
 }
 
 async function proxy(req: NextRequest, path: string[]) {
-  const { accessToken, accessExpiresAtUtc } = getAuthCookies();
+  const { accessToken, accessExpiresAtUtc } = await getAuthCookies();
   let token = accessToken;
 
   if (!token || shouldRefreshAccessToken(accessExpiresAtUtc)) {
@@ -35,7 +35,7 @@ async function proxy(req: NextRequest, path: string[]) {
   }
 
   if (!token) {
-    clearAuthCookies();
+    await clearAuthCookies();
     return NextResponse.json({ message: "Not authenticated." }, { status: 401 });
   }
 
@@ -62,7 +62,7 @@ async function proxy(req: NextRequest, path: string[]) {
     // Token might be stale; retry once after refresh.
     token = await refreshAccessToken();
     if (!token) {
-      clearAuthCookies();
+      await clearAuthCookies();
       return NextResponse.json(
         { message: "Not authenticated." },
         { status: 401 }
@@ -87,21 +87,27 @@ async function proxy(req: NextRequest, path: string[]) {
   return new Response(res.body, { status: res.status, headers: outHeaders });
 }
 
-export async function GET(req: NextRequest, ctx: { params: { path: string[] } }) {
-  return proxy(req, ctx.params.path);
+type Ctx = { params: Promise<{ path: string[] }> };
+
+export async function GET(req: NextRequest, ctx: Ctx) {
+  const { path } = await ctx.params;
+  return proxy(req, path);
 }
 
-export async function POST(req: NextRequest, ctx: { params: { path: string[] } }) {
-  return proxy(req, ctx.params.path);
+export async function POST(req: NextRequest, ctx: Ctx) {
+  const { path } = await ctx.params;
+  return proxy(req, path);
 }
 
-export async function PUT(req: NextRequest, ctx: { params: { path: string[] } }) {
-  return proxy(req, ctx.params.path);
+export async function PUT(req: NextRequest, ctx: Ctx) {
+  const { path } = await ctx.params;
+  return proxy(req, path);
 }
 
 export async function DELETE(
   req: NextRequest,
-  ctx: { params: { path: string[] } }
+  ctx: Ctx
 ) {
-  return proxy(req, ctx.params.path);
+  const { path } = await ctx.params;
+  return proxy(req, path);
 }

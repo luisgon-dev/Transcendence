@@ -24,12 +24,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "openapi-fetch": "^0.14.0"
+    "openapi-fetch": "^0.16.0"
   },
   "devDependencies": {
-    "openapi-typescript": "^7.6.0",
+    "openapi-typescript": "^7.12.0",
     "tsup": "^8.3.0",
     "typescript": "^5.8.0"
   }
 }
-

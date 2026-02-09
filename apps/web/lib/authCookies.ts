@@ -11,8 +11,8 @@ export type AuthTokenResponse = {
   tokenType?: string;
 };
 
-export function getAuthCookies() {
-  const store = cookies();
+export async function getAuthCookies() {
+  const store = await cookies();
   return {
     accessToken: store.get(ACCESS_TOKEN_COOKIE)?.value ?? null,
     refreshToken: store.get(REFRESH_TOKEN_COOKIE)?.value ?? null,
@@ -20,8 +20,8 @@ export function getAuthCookies() {
   };
 }
 
-export function setAuthCookies(token: AuthTokenResponse) {
-  const store = cookies();
+export async function setAuthCookies(token: AuthTokenResponse) {
+  const store = await cookies();
   const secure = process.env.NODE_ENV === "production";
   const accessExpires = new Date(token.accessTokenExpiresAtUtc);
   const accessCookieBase = {
@@ -51,8 +51,8 @@ export function setAuthCookies(token: AuthTokenResponse) {
   });
 }
 
-export function clearAuthCookies() {
-  const store = cookies();
+export async function clearAuthCookies() {
+  const store = await cookies();
   store.delete({ name: ACCESS_TOKEN_COOKIE, path: "/" });
   store.delete({ name: REFRESH_TOKEN_COOKIE, path: "/" });
   store.delete({ name: ACCESS_EXPIRES_AT_COOKIE, path: "/" });

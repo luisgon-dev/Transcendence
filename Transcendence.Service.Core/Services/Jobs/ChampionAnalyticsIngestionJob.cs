@@ -32,17 +32,20 @@ public class ChampionAnalyticsIngestionJob(
 
         await bootstrapService.EnsureSeededFromChallengerAsync(ct);
 
-        var currentPatch = await db.Patches
+        var currentPatchInfo = await db.Patches
             .AsNoTracking()
             .Where(p => p.IsActive)
-            .Select(p => p.Version)
+            .Select(p => new { p.Version, p.ReleaseDate })
             .FirstOrDefaultAsync(ct);
 
-        if (string.IsNullOrWhiteSpace(currentPatch))
+        if (currentPatchInfo == null || string.IsNullOrWhiteSpace(currentPatchInfo.Version))
         {
             logger.LogWarning("Champion analytics ingestion skipped: no active patch found.");
             return;
         }
+
+        var currentPatch = currentPatchInfo.Version;
+        var patchStartEpoch = new DateTimeOffset(currentPatchInfo.ReleaseDate, TimeSpan.Zero).ToUnixTimeSeconds();
 
         var minMatchesForPatch = Math.Max(1, jobOptions.MinimumSuccessfulMatchesForCurrentPatch);
         var staleAfterMinutes = Math.Max(5, jobOptions.DataStaleAfterMinutes);
@@ -103,8 +106,8 @@ public class ChampionAnalyticsIngestionJob(
             try
             {
                 backgroundJobClient.Enqueue<ISummonerRefreshJob>(job =>
-                    job.RefreshByRiotId(candidate.GameName, candidate.TagLine, platform, lockKey,
-                        CancellationToken.None));
+                    job.RefreshForAnalytics(candidate.GameName, candidate.TagLine, platform, lockKey,
+                        patchStartEpoch, currentPatch, CancellationToken.None));
                 queued++;
             }
             catch (Exception)
@@ -154,7 +157,7 @@ public class ChampionAnalyticsIngestionJob(
             var fallbackCandidates = await db.Summoners
                 .AsNoTracking()
                 .Where(s => s.GameName != null && s.TagLine != null && s.PlatformRegion != null)
-                .OrderByDescending(s => s.UpdatedAt)
+                .OrderBy(s => s.UpdatedAt)
                 .Take(maxCandidates * 3)
                 .Select(s => new CandidateSummoner(
                     s.PlatformRegion!,
@@ -167,7 +170,7 @@ public class ChampionAnalyticsIngestionJob(
         }
 
         return combined
-            .OrderByDescending(c => c.UpdatedAt)
+            .OrderBy(c => c.UpdatedAt)
             .DistinctBy(c =>
                 $"{c.PlatformRegion.ToUpperInvariant()}:{c.GameName.ToUpperInvariant()}:{c.TagLine.ToUpperInvariant()}")
             .Take(maxCandidates)

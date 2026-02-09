@@ -49,7 +49,9 @@ public class MatchService(
             Duration = (int)info.GameDuration,
             Patch = NormalizePatch(info.GameVersion),
             QueueType = info.QueueId.ToString(),
-            EndOfGameResult = info.EndOfGameResult
+            EndOfGameResult = info.EndOfGameResult,
+            Status = FetchStatus.Success,
+            FetchedAt = DateTime.UtcNow
         };
 
         // Ensure static data for this match patch exists
@@ -103,6 +105,106 @@ public class MatchService(
 
         logger.LogInformation("Prepared match {MatchId} with {Count} participants for persistence.", matchId,
             match.Participants.Count);
+        return match;
+    }
+
+    public async Task<DataMatch?> GetMatchDetailsLightweightAsync(
+        string matchId,
+        RegionalRoute regionalRoute,
+        PlatformRoute platformRoute,
+        CancellationToken cancellationToken = default)
+    {
+        var matchDto = await riotGamesApi.MatchV5()
+            .GetMatchAsync(regionalRoute, matchId, cancellationToken);
+        if (matchDto == null)
+        {
+            logger.LogWarning("[Lightweight] Riot API returned null for match {MatchId}", matchId);
+            return null;
+        }
+
+        var info = matchDto.Info;
+        var metadata = matchDto.Metadata;
+
+        var match = new DataMatch
+        {
+            MatchId = metadata.MatchId,
+            MatchDate = info.GameCreation,
+            Duration = (int)info.GameDuration,
+            Patch = NormalizePatch(info.GameVersion),
+            QueueType = info.QueueId.ToString(),
+            EndOfGameResult = info.EndOfGameResult,
+            Status = FetchStatus.Success,
+            FetchedAt = DateTime.UtcNow
+        };
+
+        await staticDataService.EnsureStaticDataForPatchAsync(match.Patch, cancellationToken);
+
+        // Batch lookup all participant PUUIDs in a single query instead of N+1
+        var participantPuuids = info.Participants
+            .Select(p => p.Puuid)
+            .Where(puuid => !string.IsNullOrWhiteSpace(puuid))
+            .Distinct()
+            .ToList();
+
+        var existingSummoners = await context.Summoners
+            .Where(s => s.Puuid != null && participantPuuids.Contains(s.Puuid))
+            .ToDictionaryAsync(s => s.Puuid!, cancellationToken);
+
+        foreach (var p in info.Participants)
+        {
+            if (!existingSummoners.TryGetValue(p.Puuid, out var summoner))
+            {
+                // Create a minimal stub from match participant data instead of calling Riot API
+                summoner = new Data.Models.LoL.Account.Summoner
+                {
+                    Id = Guid.NewGuid(),
+                    Puuid = p.Puuid,
+                    GameName = p.RiotIdGameName,
+                    TagLine = p.RiotIdTagline,
+                    SummonerName = !string.IsNullOrWhiteSpace(p.RiotIdGameName)
+                        ? $"{p.RiotIdGameName}#{p.RiotIdTagline}"
+                        : null,
+                    PlatformRegion = platformRoute.ToString(),
+                    Region = platformRoute.ToRegional().ToString(),
+                    UpdatedAt = DateTime.MinValue,
+                    Ranks = []
+                };
+                context.Summoners.Add(summoner);
+                existingSummoners[p.Puuid] = summoner;
+            }
+
+            if (match.Summoners.All(s => s.Id != summoner.Id)) match.Summoners.Add(summoner);
+
+            var participant = new MatchParticipant
+            {
+                Match = match,
+                Summoner = summoner,
+                Puuid = p.Puuid,
+                TeamId = (int)p.TeamId,
+                ChampionId = (int)p.ChampionId,
+                TeamPosition = !string.IsNullOrWhiteSpace(p.TeamPosition) ? p.TeamPosition : p.IndividualPosition,
+                Win = p.Win,
+                Kills = p.Kills,
+                Deaths = p.Deaths,
+                Assists = p.Assists,
+                ChampLevel = p.ChampLevel,
+                GoldEarned = p.GoldEarned,
+                TotalDamageDealtToChampions = p.TotalDamageDealtToChampions,
+                VisionScore = p.VisionScore,
+                TotalMinionsKilled = p.TotalMinionsKilled,
+                NeutralMinionsKilled = p.NeutralMinionsKilled,
+                SummonerSpell1Id = p.Summoner1Id,
+                SummonerSpell2Id = p.Summoner2Id
+            };
+
+            participant.Runes = CreateMatchParticipantRunes(p.Perks, match.Patch);
+            participant.Items = CreateMatchParticipantItems(p, match.Patch);
+
+            match.Participants.Add(participant);
+        }
+
+        logger.LogInformation("[Lightweight] Prepared match {MatchId} with {Count} participants for persistence.",
+            matchId, match.Participants.Count);
         return match;
     }
 

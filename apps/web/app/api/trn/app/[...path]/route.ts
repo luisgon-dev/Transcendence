@@ -15,7 +15,9 @@ function resolveApiKey() {
   }
 }
 
-async function handler(req: NextRequest, ctx: { params: { path: string[] } }) {
+type Ctx = { params: Promise<{ path: string[] }> };
+
+async function handler(req: NextRequest, ctx: Ctx) {
   const key = resolveApiKey();
   if (!key.ok) {
     console.error("Missing backend API key for AppOnly proxy:", key.value);
@@ -25,23 +27,24 @@ async function handler(req: NextRequest, ctx: { params: { path: string[] } }) {
     return NextResponse.json({ message: key.value }, { status: 500 });
   }
 
-  return proxyToBackend(req, ctx.params.path, {
+  const { path } = await ctx.params;
+  return proxyToBackend(req, path, {
     addHeaders: { "X-API-Key": key.value }
   });
 }
 
-export async function GET(req: NextRequest, ctx: { params: { path: string[] } }) {
+export async function GET(req: NextRequest, ctx: Ctx) {
   return handler(req, ctx);
 }
 
-export async function POST(req: NextRequest, ctx: { params: { path: string[] } }) {
+export async function POST(req: NextRequest, ctx: Ctx) {
   return handler(req, ctx);
 }
 
-export async function PUT(req: NextRequest, ctx: { params: { path: string[] } }) {
+export async function PUT(req: NextRequest, ctx: Ctx) {
   return handler(req, ctx);
 }
 
-export async function DELETE(req: NextRequest, ctx: { params: { path: string[] } }) {
+export async function DELETE(req: NextRequest, ctx: Ctx) {
   return handler(req, ctx);
 }

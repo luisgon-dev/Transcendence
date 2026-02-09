@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { getBackendBaseUrl } from "@/lib/env";
 import { setAuthCookies, type AuthTokenResponse } from "@/lib/authCookies";
+import { getTrnClient } from "@/lib/trnClient";
 
 type RegisterBody = { email?: string; password?: string };
 
@@ -14,22 +14,24 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const res = await fetch(`${getBackendBaseUrl()}/api/auth/register`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email: body.email, password: body.password })
+  const client = getTrnClient();
+  const { data, error, response } = await client.POST("/api/auth/register", {
+    body: { email: body.email, password: body.password }
   });
 
-  if (!res.ok) {
-    const message = await res.text().catch(() => "");
+  if (!data) {
+    const message =
+      (error as { detail?: string; title?: string } | undefined)?.detail ??
+      (error as { detail?: string; title?: string } | undefined)?.title ??
+      "Registration failed.";
     return NextResponse.json(
-      { message: message || "Registration failed." },
-      { status: res.status }
+      { message },
+      { status: response.status }
     );
   }
 
-  const token = (await res.json()) as AuthTokenResponse;
-  setAuthCookies(token);
+  const token = data as AuthTokenResponse;
+  await setAuthCookies(token);
   return NextResponse.json({ ok: true });
 }
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { getBackendBaseUrl } from "@/lib/env";
+import { formatPercent } from "@/lib/format";
 import { championIconUrl, fetchChampionMap } from "@/lib/staticData";
 
 type TierGrade = "S" | "A" | "B" | "C" | "D";
@@ -27,6 +28,21 @@ type TierListResponse = {
   rankTier?: string | null;
   entries: TierListEntry[];
 };
+
+const ROLES = ["ALL", "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"] as const;
+const RANK_TIERS = [
+  "all",
+  "IRON",
+  "BRONZE",
+  "SILVER",
+  "GOLD",
+  "PLATINUM",
+  "EMERALD",
+  "DIAMOND",
+  "MASTER",
+  "GRANDMASTER",
+  "CHALLENGER"
+] as const;
 
 function movementLabel(m: TierMovement) {
   switch (m) {
@@ -54,25 +70,29 @@ function movementClass(m: TierMovement) {
   }
 }
 
-function percent(n: number) {
-  return `${(n * 100).toFixed(1)}%`;
-}
-
 export default async function TierListPage({
   searchParams
 }: {
   searchParams?: { role?: string; rankTier?: string };
 }) {
   const qs = new URLSearchParams();
-  if (searchParams?.role) qs.set("role", searchParams.role);
-  if (searchParams?.rankTier) qs.set("rankTier", searchParams.rankTier);
+  const roleParam = (searchParams?.role ?? "").toUpperCase();
+  const rankParam = (searchParams?.rankTier ?? "").toUpperCase();
 
-  const res = await fetch(
-    `${getBackendBaseUrl()}/api/analytics/tierlist?${qs.toString()}`,
-    { next: { revalidate: 60 * 60 } }
-  );
+  if (roleParam && roleParam !== "ALL") qs.set("role", roleParam);
+  if (rankParam && rankParam !== "ALL") qs.set("rankTier", rankParam);
 
-  if (!res.ok) {
+  let res: Response | null = null;
+  try {
+    res = await fetch(
+      `${getBackendBaseUrl()}/api/analytics/tierlist?${qs.toString()}`,
+      { next: { revalidate: 60 * 60 } }
+    );
+  } catch {
+    res = null;
+  }
+
+  if (!res || !res.ok) {
     return (
       <Card className="p-6">
         <h1 className="font-[var(--font-sora)] text-2xl font-semibold">
@@ -115,6 +135,45 @@ export default async function TierListPage({
         <p className="text-sm text-fg/75">
           Composite ranking (win rate + pick rate) with movement indicators.
         </p>
+
+        <form className="mt-2 flex flex-wrap items-end gap-2" method="get">
+          <label className="grid gap-1">
+            <span className="text-xs text-muted">Role</span>
+            <select
+              name="role"
+              defaultValue={roleParam || "ALL"}
+              className="h-10 min-w-[160px] rounded-md border border-border/70 bg-surface/35 px-3 text-sm text-fg shadow-glass outline-none focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
+            >
+              {ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="grid gap-1">
+            <span className="text-xs text-muted">Rank Tier</span>
+            <select
+              name="rankTier"
+              defaultValue={rankParam || "all"}
+              className="h-10 min-w-[180px] rounded-md border border-border/70 bg-surface/35 px-3 text-sm text-fg shadow-glass outline-none focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
+            >
+              {RANK_TIERS.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <button
+            type="submit"
+            className="h-10 rounded-md border border-border/70 bg-white/5 px-4 text-sm text-fg/85 shadow-glass hover:bg-white/10"
+          >
+            Apply
+          </button>
+        </form>
       </header>
 
       <div className="grid gap-6">
@@ -172,8 +231,8 @@ export default async function TierListPage({
                         </div>
 
                         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-fg/70">
-                          <span>Win {percent(e.winRate)}</span>
-                          <span>Pick {percent(e.pickRate)}</span>
+                          <span>Win {formatPercent(e.winRate)}</span>
+                          <span>Pick {formatPercent(e.pickRate)}</span>
                           <span>{e.games.toLocaleString()} games</span>
                           <span>Score {e.compositeScore.toFixed(3)}</span>
                         </div>

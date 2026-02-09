@@ -10,12 +10,12 @@ export default function HomePage() {
       <section className="grid gap-6">
         <div className="flex flex-wrap items-center gap-3">
           <Badge className="border-primary/40 bg-primary/10 text-primary">
-            SSR-first
+            Patch-aware stats
           </Badge>
           <Badge className="border-primary-2/40 bg-primary-2/10 text-primary-2">
-            OpenAPI client
+            Match history
           </Badge>
-          <Badge>Fast refresh polling</Badge>
+          <Badge>Builds and counters</Badge>
         </div>
 
         <h1 className="text-balance font-[var(--font-sora)] text-4xl font-semibold tracking-tight sm:text-5xl">
@@ -26,16 +26,15 @@ export default function HomePage() {
         </h1>
 
         <p className="max-w-2xl text-pretty text-base text-fg/80">
-          Transcendence is a snappy League analytics front end powered by your
-          API: summoner profiles, match history, tier lists, builds, and live
-          game insights.
+          Summoner profiles, match history, tier lists, builds, matchups, and
+          live game insights, organized for quick decisions.
         </p>
 
         <Card className="p-4">
           <SearchBar />
           <p className="mt-3 text-sm text-muted">
-            Tip: if a summoner isn&apos;t in the database yet, we&apos;ll queue a
-            background refresh and auto-poll until it lands.
+            Tip: if we don&apos;t have data for a player yet, we&apos;ll start an
+            update and this page will fill in automatically as it completes.
           </p>
         </Card>
       </section>

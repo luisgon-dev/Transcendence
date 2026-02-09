@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import type { components } from "@transcendence/api-client/schema";
+
 import {
   clearAuthCookies,
   getAuthCookies,
@@ -7,33 +9,28 @@ import {
   shouldRefreshAccessToken,
   type AuthTokenResponse
 } from "@/lib/authCookies";
-import { getBackendBaseUrl } from "@/lib/env";
+import { getTrnClient } from "@/lib/trnClient";
 
-type BackendMeResponse = {
-  subject?: string | null;
-  name?: string | null;
-  roles?: string[];
-  authType?: string | null;
-};
+type AuthMeResponse = components["schemas"]["AuthMeResponse"];
 
-async function refresh() {
-  const { refreshToken } = getAuthCookies();
+async function refresh(): Promise<string | null> {
+  const { refreshToken } = await getAuthCookies();
   if (!refreshToken) return null;
 
-  const res = await fetch(`${getBackendBaseUrl()}/api/auth/refresh`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ refreshToken })
+  const client = getTrnClient();
+  const { data } = await client.POST("/api/auth/refresh", {
+    body: { refreshToken }
   });
 
-  if (!res.ok) return null;
-  const token = (await res.json()) as AuthTokenResponse;
-  setAuthCookies(token);
-  return token.accessToken;
+  if (!data) return null;
+  const token = data as AuthTokenResponse;
+  await setAuthCookies(token);
+  return token.accessToken ?? null;
 }
 
 export async function GET() {
-  const { accessToken, accessExpiresAtUtc } = getAuthCookies();
+  const client = getTrnClient();
+  const { accessToken, accessExpiresAtUtc } = await getAuthCookies();
   let token = accessToken;
 
   if (!token || shouldRefreshAccessToken(accessExpiresAtUtc)) {
@@ -44,28 +41,28 @@ export async function GET() {
     return NextResponse.json({ authenticated: false });
   }
 
-  let meRes = await fetch(`${getBackendBaseUrl()}/api/auth/me`, {
+  let me = await client.GET("/api/auth/me", {
     headers: { authorization: `Bearer ${token}` }
   });
 
-  if (meRes.status === 401) {
+  if (me.response.status === 401) {
     token = await refresh();
     if (!token) {
-      clearAuthCookies();
+      await clearAuthCookies();
       return NextResponse.json({ authenticated: false });
     }
 
-    meRes = await fetch(`${getBackendBaseUrl()}/api/auth/me`, {
+    me = await client.GET("/api/auth/me", {
       headers: { authorization: `Bearer ${token}` }
     });
   }
 
-  if (!meRes.ok) {
-    if (meRes.status === 401) clearAuthCookies();
+  if (!me.data) {
+    if (me.response.status === 401) await clearAuthCookies();
     return NextResponse.json({ authenticated: false });
   }
 
-  const data = (await meRes.json()) as BackendMeResponse;
+  const data = me.data as AuthMeResponse;
   return NextResponse.json({
     authenticated: true,
     subject: data.subject ?? null,

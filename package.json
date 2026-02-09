@@ -15,7 +15,7 @@
     "api:check": "pnpm api:gen && git diff --exit-code -- openapi packages/api-client/src/schema.ts",
     "web:dev": "pnpm --filter @transcendence/api-client build && pnpm --filter web dev",
     "web:build": "pnpm --filter @transcendence/api-client build && pnpm --filter web build",
-    "web:lint": "pnpm --filter web lint",
-    "web:test": "pnpm --filter web test"
+    "web:lint": "pnpm --filter @transcendence/api-client build && pnpm --filter web lint",
+    "web:test": "pnpm --filter @transcendence/api-client build && pnpm --filter web test"
   }
 }

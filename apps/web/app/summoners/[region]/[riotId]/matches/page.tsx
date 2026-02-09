@@ -6,7 +6,17 @@ import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { getBackendBaseUrl } from "@/lib/env";
 import { decodeRiotIdPath, encodeRiotIdPath } from "@/lib/riotid";
-import { championIconUrl, fetchChampionMap } from "@/lib/staticData";
+import { formatDateTimeMs, formatDurationSeconds } from "@/lib/format";
+import {
+  championIconUrl,
+  fetchChampionMap,
+  fetchItemMap,
+  fetchRunesReforged,
+  fetchSummonerSpellMap,
+  itemIconUrl,
+  runeIconUrl,
+  summonerSpellIconUrl
+} from "@/lib/staticData";
 import type { SummonerProfileResponse } from "@/components/SummonerProfileClient";
 
 type RecentMatchSummaryDto = {
@@ -38,11 +48,7 @@ type PagedResultDto<T> = {
 };
 
 function fmtDate(ms: number) {
-  try {
-    return new Date(ms).toLocaleString();
-  } catch {
-    return String(ms);
-  }
+  return formatDateTimeMs(ms);
 }
 
 export default async function SummonerMatchesPage({
@@ -76,8 +82,8 @@ export default async function SummonerMatchesPage({
           Match History
         </h1>
         <p className="mt-2 text-sm text-fg/75">
-          This summoner isn&apos;t ready yet. Go to the profile page to queue a
-          refresh and poll until data is available.
+          We don&apos;t have match data for this player yet. Start an update on
+          the profile page, then come back here once it finishes.
         </p>
         <Link
           className="mt-4 inline-flex text-sm text-primary hover:underline"
@@ -118,7 +124,12 @@ export default async function SummonerMatchesPage({
   }
 
   const [staticData, matchesRes] = await Promise.all([
-    fetchChampionMap(),
+    Promise.all([
+      fetchChampionMap(),
+      fetchItemMap(),
+      fetchSummonerSpellMap(),
+      fetchRunesReforged()
+    ]),
     fetch(
       `${getBackendBaseUrl()}/api/summoners/${encodeURIComponent(
         profile.summonerId
@@ -141,7 +152,14 @@ export default async function SummonerMatchesPage({
   }
 
   const matches = (await matchesRes.json()) as PagedResultDto<RecentMatchSummaryDto>;
-  const { version, champions } = staticData;
+  const [{ version, champions }, itemStatic, spellStatic, runeStatic] = staticData;
+
+  const itemVersion = itemStatic.version;
+  const spellVersion = spellStatic.version;
+  const items = itemStatic.items;
+  const spells = spellStatic.spells;
+  const runeById = runeStatic.runeById;
+  const styleById = runeStatic.styleById;
 
   const prevPage = Math.max(1, matches.page - 1);
   const nextPage = Math.min(matches.totalPages, matches.page + 1);
@@ -175,6 +193,16 @@ export default async function SummonerMatchesPage({
           const name = champ?.name ?? `Champion ${m.championId}`;
           const champId = champ?.id ?? "Unknown";
 
+          const spell1 = spells[String(m.summonerSpell1Id)];
+          const spell2 = spells[String(m.summonerSpell2Id)];
+          const keystone = runeById[String(m.runes.keystoneId)];
+          const primaryStyle = styleById[String(m.runes.primaryStyleId)];
+          const subStyle = styleById[String(m.runes.subStyleId)];
+
+          const matchHref = `/summoners/${params.region}/${encodeRiotIdPath(
+            riotId
+          )}/matches/${encodeURIComponent(m.matchId)}`;
+
           return (
             <Card
               key={m.matchId}
@@ -205,14 +233,111 @@ export default async function SummonerMatchesPage({
                     {m.kills}/{m.deaths}/{m.assists}
                   </span>
                   <span className="text-fg/70">{m.csPerMin.toFixed(1)} CS/min</span>
-                  <span className="text-fg/70">{m.durationSeconds}s</span>
+                  <span className="text-fg/70">
+                    {formatDurationSeconds(m.durationSeconds)}
+                  </span>
                 </div>
               </div>
 
-              <p className="mt-3 text-xs text-fg/70">
-                Items: {m.items.join(", ")} · Runes: {m.runes.keystoneId} · Spells:{" "}
-                {m.summonerSpell1Id}, {m.summonerSpell2Id}
-              </p>
+              <div className="mt-3 grid gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    {spell1 ? (
+                      <Image
+                        src={summonerSpellIconUrl(spellVersion, spell1.id)}
+                        alt={spell1.name}
+                        title={spell1.name}
+                        width={22}
+                        height={22}
+                        className="rounded-md"
+                      />
+                    ) : (
+                      <div className="h-[22px] w-[22px] rounded-md border border-border/60 bg-black/30" />
+                    )}
+                    {spell2 ? (
+                      <Image
+                        src={summonerSpellIconUrl(spellVersion, spell2.id)}
+                        alt={spell2.name}
+                        title={spell2.name}
+                        width={22}
+                        height={22}
+                        className="rounded-md"
+                      />
+                    ) : (
+                      <div className="h-[22px] w-[22px] rounded-md border border-border/60 bg-black/30" />
+                    )}
+
+                    <div className="mx-1 h-4 w-px bg-border/60" />
+
+                    {keystone ? (
+                      <Image
+                        src={runeIconUrl(keystone.icon)}
+                        alt={keystone.name}
+                        title={keystone.name}
+                        width={22}
+                        height={22}
+                        className="rounded-md bg-black/20 p-0.5"
+                      />
+                    ) : (
+                      <div className="h-[22px] w-[22px] rounded-md border border-border/60 bg-black/30" />
+                    )}
+                    {primaryStyle ? (
+                      <Image
+                        src={runeIconUrl(primaryStyle.icon)}
+                        alt={primaryStyle.name}
+                        title={primaryStyle.name}
+                        width={22}
+                        height={22}
+                        className="rounded-md bg-black/20 p-0.5"
+                      />
+                    ) : null}
+                    {subStyle ? (
+                      <Image
+                        src={runeIconUrl(subStyle.icon)}
+                        alt={subStyle.name}
+                        title={subStyle.name}
+                        width={22}
+                        height={22}
+                        className="rounded-md bg-black/20 p-0.5"
+                      />
+                    ) : null}
+                  </div>
+
+                  <Link className="text-xs text-primary hover:underline" href={matchHref}>
+                    View details
+                  </Link>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {m.items.map((itemId, idx) => {
+                    if (!itemId) {
+                      return (
+                        <div
+                          key={`${m.matchId}-item-${idx}`}
+                          className="h-7 w-7 rounded-md border border-border/60 bg-black/25"
+                        />
+                      );
+                    }
+
+                    const meta = items[String(itemId)];
+                    const title = meta
+                      ? `${meta.name}${meta.plaintext ? ` — ${meta.plaintext}` : ""}`
+                      : `Item ${itemId}`;
+
+                    return (
+                      <Image
+                        key={`${m.matchId}-item-${idx}-${itemId}`}
+                        src={itemIconUrl(itemVersion, itemId)}
+                        alt={meta?.name ?? `Item ${itemId}`}
+                        title={title}
+                        width={28}
+                        height={28}
+                        className="rounded-md"
+                      />
+                    );
+                  })}
+                </div>
+              </div>
             </Card>
           );
         })}

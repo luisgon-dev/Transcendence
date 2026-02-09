@@ -96,6 +96,9 @@ public class DevelopmentWorker(
         if (schedule.RunPatchDetectionOnStartup)
             backgroundJobClient.Enqueue<UpdateStaticDataJob>(x => x.Execute(CancellationToken.None));
 
+        // One-time backfill: fix matches ingested before the FetchStatus bug was fixed
+        backgroundJobClient.Enqueue<BackfillMatchStatusJob>(job => job.ExecuteAsync(CancellationToken.None));
+
         return Task.CompletedTask;
     }
 

@@ -95,6 +95,97 @@ public class SummonerRefreshJob(
         }
     }
 
+    public async Task RefreshForAnalytics(string gameName, string tagLine, PlatformRoute platformRoute, string lockKey,
+        long startTimeEpochSeconds, string currentPatch, CancellationToken ct = default)
+    {
+        try
+        {
+            // Look up summoner from DB instead of calling Riot API (saves 2+ API calls)
+            var summoner = await summonerRepository.FindByRiotIdAsync(
+                platformRoute.ToString(), gameName, tagLine, cancellationToken: ct);
+            if (summoner == null || string.IsNullOrWhiteSpace(summoner.Puuid))
+            {
+                logger.LogWarning("[AnalyticsRefresh] Summoner {GameName}#{Tag} not found in DB, skipping",
+                    gameName, tagLine);
+                return;
+            }
+
+            var regional = platformRoute.ToRegional();
+
+            // Pass startTime to only get matches from the current patch
+            var matchIds = await riotGamesApi.MatchV5()
+                .GetMatchIdsByPUUIDAsync(regional, summoner.Puuid!, 20, null,
+                    Queue.SUMMONERS_RIFT_5V5_RANKED_SOLO,
+                    startTimeEpochSeconds, null, "ranked", ct);
+
+            var pending = matchIds
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            var existingMatchIds = await matchRepository.GetExistingMatchIdsAsync(pending, ct);
+            var matchesToPersist = new List<DataMatch>();
+
+            foreach (var matchId in pending.Where(id => !existingMatchIds.Contains(id)))
+            {
+                try
+                {
+                    // Use lightweight method that batch-queries summoners and creates stubs
+                    var match = await matchService.GetMatchDetailsLightweightAsync(matchId, regional, platformRoute, ct);
+                    if (match == null)
+                    {
+                        logger.LogInformation("[AnalyticsRefresh] Match {MatchId} failed to fetch for {GameName}#{Tag}",
+                            matchId, gameName, tagLine);
+                        continue;
+                    }
+
+                    // Skip matches not on current patch (handles patch boundary edge cases)
+                    if (!string.Equals(match.Patch, currentPatch, StringComparison.OrdinalIgnoreCase))
+                    {
+                        logger.LogInformation(
+                            "[AnalyticsRefresh] Skipping match {MatchId} - patch {Patch} does not match current {CurrentPatch}",
+                            matchId, match.Patch, currentPatch);
+                        continue;
+                    }
+
+                    matchesToPersist.Add(match);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "[AnalyticsRefresh] Error fetching match {MatchId} for {GameName}#{Tag}",
+                        matchId, gameName, tagLine);
+                }
+            }
+
+            await PersistMatchesAsync(matchesToPersist, gameName, tagLine, ct);
+
+            // Update summoner's UpdatedAt so candidate selection deprioritizes them next cycle
+            summoner.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct);
+
+            logger.LogInformation(
+                "[AnalyticsRefresh] Completed for {GameName}#{Tag} on {Platform} - persisted {Count} current-patch matches",
+                gameName, tagLine, platformRoute, matchesToPersist.Count);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "[AnalyticsRefresh] Error refreshing {GameName}#{Tag} on {Platform}",
+                gameName, tagLine, platformRoute);
+            throw;
+        }
+        finally
+        {
+            try
+            {
+                await refreshLockRepository.ReleaseAsync(lockKey, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "[AnalyticsRefresh] Failed to release refresh lock {LockKey}", lockKey);
+            }
+        }
+    }
+
     private async Task PersistMatchesAsync(
         IReadOnlyList<DataMatch> matches,
         string gameName,

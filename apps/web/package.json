@@ -11,7 +11,6 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@transcendence/api-client": "workspace:*",
     "clsx": "^2.1.1",
     "next": "^14.2.0",
     "react": "^18.3.1",

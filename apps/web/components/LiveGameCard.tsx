@@ -60,7 +60,7 @@ export function LiveGameCard({
             Live Game
           </h3>
           <p className="mt-1 text-sm text-fg/75">
-            Uses AppOnly auth; click to check current game state.
+            Check whether this player is currently in a game.
           </p>
         </div>
         <Button variant="outline" onClick={check} disabled={busy}>

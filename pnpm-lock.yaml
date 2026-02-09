@@ -3,6 +3,7 @@ lockfileVersion: '9.0'
 settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
+  injectWorkspacePackages: true
 
 importers:
 
@@ -10,9 +11,6 @@ importers:
 
   apps/web:
     dependencies:
-      '@transcendence/api-client':
-        specifier: workspace:*
-        version: link:../../packages/api-client
       clsx:
         specifier: ^2.1.1
         version: 2.1.1

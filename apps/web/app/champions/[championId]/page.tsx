@@ -4,7 +4,15 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { getBackendBaseUrl } from "@/lib/env";
-import { championIconUrl, fetchChampionMap } from "@/lib/staticData";
+import { formatPercent } from "@/lib/format";
+import {
+  championIconUrl,
+  fetchChampionMap,
+  fetchItemMap,
+  fetchRunesReforged,
+  itemIconUrl,
+  runeIconUrl
+} from "@/lib/staticData";
 
 type ChampionWinRateDto = {
   championId: number;
@@ -62,10 +70,6 @@ type ChampionMatchupsResponse = {
   favorableMatchups: MatchupEntryDto[];
 };
 
-function percent(n: number) {
-  return `${(n * 100).toFixed(1)}%`;
-}
-
 const ROLES = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"] as const;
 
 export default async function ChampionDetailPage({
@@ -81,8 +85,11 @@ export default async function ChampionDetailPage({
 
   const qsTier = rankTier ? `&rankTier=${encodeURIComponent(rankTier)}` : "";
 
-  const [staticData, winRes, buildRes, matchupRes] = await Promise.all([
+  const [staticData, itemStatic, runeStatic, winRes, buildRes, matchupRes] =
+    await Promise.all([
     fetchChampionMap(),
+    fetchItemMap(),
+    fetchRunesReforged(),
     fetch(`${getBackendBaseUrl()}/api/analytics/champions/${championId}/winrates`, {
       next: { revalidate: 60 * 60 }
     }),
@@ -104,6 +111,10 @@ export default async function ChampionDetailPage({
   const champ = champions[String(championId)];
   const champName = champ?.name ?? `Champion ${championId}`;
   const champSlug = champ?.id ?? "Unknown";
+  const itemVersion = itemStatic.version;
+  const items = itemStatic.items;
+  const runeById = runeStatic.runeById;
+  const styleById = runeStatic.styleById;
 
   const winrates = winRes.ok ? ((await winRes.json()) as ChampionWinRateSummary) : null;
   const builds = buildRes.ok ? ((await buildRes.json()) as ChampionBuildsResponse) : null;
@@ -181,8 +192,8 @@ export default async function ChampionDetailPage({
                     <tr key={`${w.role}-${w.rankTier}`} className="border-t border-border/50">
                       <td className="py-2 pr-4 font-medium">{w.role}</td>
                       <td className="py-2 pr-4">{w.rankTier}</td>
-                      <td className="py-2 pr-4">{percent(w.winRate)}</td>
-                      <td className="py-2 pr-4">{percent(w.pickRate)}</td>
+                      <td className="py-2 pr-4">{formatPercent(w.winRate)}</td>
+                      <td className="py-2 pr-4">{formatPercent(w.pickRate)}</td>
                       <td className="py-2 pr-4">{w.games.toLocaleString()}</td>
                     </tr>
                   ))}
@@ -211,12 +222,74 @@ export default async function ChampionDetailPage({
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-semibold text-fg">Build {idx + 1}</p>
                     <p className="text-xs text-muted">
-                      {b.games.toLocaleString()} games, {percent(b.winRate)} win
+                      {b.games.toLocaleString()} games, {formatPercent(b.winRate)} win
                     </p>
                   </div>
-                  <p className="mt-2 text-xs text-fg/70">
-                    Items: {b.items.join(", ")}
-                  </p>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-1.5">
+                      {b.items.map((itemId, itemIdx) => {
+                        if (!itemId) {
+                          return (
+                            <div
+                              key={`${idx}-item-${itemIdx}`}
+                              className="h-7 w-7 rounded-md border border-border/60 bg-black/25"
+                            />
+                          );
+                        }
+                        const meta = items[String(itemId)];
+                        const title = meta
+                          ? `${meta.name}${meta.plaintext ? ` — ${meta.plaintext}` : ""}`
+                          : `Item ${itemId}`;
+                        return (
+                          <Image
+                            key={`${idx}-${itemIdx}-${itemId}`}
+                            src={itemIconUrl(itemVersion, itemId)}
+                            alt={meta?.name ?? `Item ${itemId}`}
+                            title={title}
+                            width={28}
+                            height={28}
+                            className="rounded-md"
+                          />
+                        );
+                      })}
+                    </div>
+
+                    <div className="mx-1 h-4 w-px bg-border/60" />
+
+                    <div className="flex items-center gap-1.5">
+                      {b.primaryRunes?.[0] && runeById[String(b.primaryRunes[0])] ? (
+                        <Image
+                          src={runeIconUrl(runeById[String(b.primaryRunes[0])]!.icon)}
+                          alt={runeById[String(b.primaryRunes[0])]!.name}
+                          title={runeById[String(b.primaryRunes[0])]!.name}
+                          width={22}
+                          height={22}
+                          className="rounded bg-black/20 p-0.5"
+                        />
+                      ) : null}
+                      {styleById[String(b.primaryStyleId)] ? (
+                        <Image
+                          src={runeIconUrl(styleById[String(b.primaryStyleId)]!.icon)}
+                          alt={styleById[String(b.primaryStyleId)]!.name}
+                          title={styleById[String(b.primaryStyleId)]!.name}
+                          width={22}
+                          height={22}
+                          className="rounded bg-black/20 p-0.5"
+                        />
+                      ) : null}
+                      {styleById[String(b.subStyleId)] ? (
+                        <Image
+                          src={runeIconUrl(styleById[String(b.subStyleId)]!.icon)}
+                          alt={styleById[String(b.subStyleId)]!.name}
+                          title={styleById[String(b.subStyleId)]!.name}
+                          width={22}
+                          height={22}
+                          className="rounded bg-black/20 p-0.5"
+                        />
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -244,15 +317,28 @@ export default async function ChampionDetailPage({
                         key={m.opponentChampionId}
                         className="flex items-center justify-between rounded-md border border-border/60 bg-white/5 px-3 py-2"
                       >
-                        <Link
-                          href={`/champions/${m.opponentChampionId}`}
-                          className="text-sm font-medium hover:underline"
-                        >
-                          {champions[String(m.opponentChampionId)]?.name ??
-                            `Champion ${m.opponentChampionId}`}
+                        <Link href={`/champions/${m.opponentChampionId}`} className="flex min-w-0 items-center gap-2">
+                          {champions[String(m.opponentChampionId)]?.id ? (
+                            <Image
+                              src={championIconUrl(
+                                version,
+                                champions[String(m.opponentChampionId)]!.id
+                              )}
+                              alt={champions[String(m.opponentChampionId)]?.name ?? `Champion ${m.opponentChampionId}`}
+                              width={22}
+                              height={22}
+                              className="rounded-md"
+                            />
+                          ) : (
+                            <div className="h-[22px] w-[22px] rounded-md border border-border/60 bg-black/25" />
+                          )}
+                          <span className="truncate text-sm font-medium hover:underline">
+                            {champions[String(m.opponentChampionId)]?.name ??
+                              `Champion ${m.opponentChampionId}`}
+                          </span>
                         </Link>
                         <span className="text-xs text-muted">
-                          {percent(m.winRate)} ({m.games})
+                          {formatPercent(m.winRate)} ({m.games})
                         </span>
                       </li>
                     ))}
@@ -273,15 +359,28 @@ export default async function ChampionDetailPage({
                         key={m.opponentChampionId}
                         className="flex items-center justify-between rounded-md border border-border/60 bg-white/5 px-3 py-2"
                       >
-                        <Link
-                          href={`/champions/${m.opponentChampionId}`}
-                          className="text-sm font-medium hover:underline"
-                        >
-                          {champions[String(m.opponentChampionId)]?.name ??
-                            `Champion ${m.opponentChampionId}`}
+                        <Link href={`/champions/${m.opponentChampionId}`} className="flex min-w-0 items-center gap-2">
+                          {champions[String(m.opponentChampionId)]?.id ? (
+                            <Image
+                              src={championIconUrl(
+                                version,
+                                champions[String(m.opponentChampionId)]!.id
+                              )}
+                              alt={champions[String(m.opponentChampionId)]?.name ?? `Champion ${m.opponentChampionId}`}
+                              width={22}
+                              height={22}
+                              className="rounded-md"
+                            />
+                          ) : (
+                            <div className="h-[22px] w-[22px] rounded-md border border-border/60 bg-black/25" />
+                          )}
+                          <span className="truncate text-sm font-medium hover:underline">
+                            {champions[String(m.opponentChampionId)]?.name ??
+                              `Champion ${m.opponentChampionId}`}
+                          </span>
                         </Link>
                         <span className="text-xs text-muted">
-                          {percent(m.winRate)} ({m.games})
+                          {formatPercent(m.winRate)} ({m.games})
                         </span>
                       </li>
                     ))}

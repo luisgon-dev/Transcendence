@@ -8,6 +8,7 @@ namespace Transcendence.Service.Workers;
 
 public class ProductionWorker(
     ILogger<ProductionWorker> logger,
+    IBackgroundJobClient backgroundJobClient,
     JobStorage jobStorage,
     IOptions<WorkerJobScheduleOptions> options,
     IRecurringJobManager recurringJobManager) : BackgroundService
@@ -95,6 +96,9 @@ public class ProductionWorker(
             schedule.EnableAdaptiveAnalyticsRefresh ? schedule.RefreshChampionAnalyticsAdaptiveCron : "disabled",
             schedule.EnableChampionAnalyticsIngestion ? schedule.ChampionAnalyticsIngestionCron : "disabled",
             schedule.LiveGamePollingCron);
+
+        // One-time backfill: fix matches ingested before the FetchStatus bug was fixed
+        backgroundJobClient.Enqueue<BackfillMatchStatusJob>(job => job.ExecuteAsync(CancellationToken.None));
 
         return base.StartAsync(cancellationToken);
     }

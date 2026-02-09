@@ -13,7 +13,7 @@ import { getTrnClient } from "@/lib/trnClient";
 
 type AuthMeResponse = components["schemas"]["AuthMeResponse"];
 
-async function refresh() {
+async function refresh(): Promise<string | null> {
   const { refreshToken } = await getAuthCookies();
   if (!refreshToken) return null;
 
@@ -25,7 +25,7 @@ async function refresh() {
   if (!data) return null;
   const token = data as AuthTokenResponse;
   await setAuthCookies(token);
-  return token.accessToken;
+  return token.accessToken ?? null;
 }
 
 export async function GET() {

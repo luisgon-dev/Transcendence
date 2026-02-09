@@ -32,7 +32,7 @@ public class SummonersController(
     [HttpGet("{region}/{name}/{tag}")]
     [ProducesResponseType(typeof(SummonerProfileResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(SummonerAcceptedResponse), StatusCodes.Status202Accepted)]
     public async Task<IActionResult> GetByRiotId([FromRoute] string region, [FromRoute] string name,
         [FromRoute] string tag, CancellationToken ct)
     {
@@ -58,6 +58,7 @@ public class SummonersController(
 
             var response = new SummonerProfileResponse
             {
+                SummonerId = summoner.Id,
                 Puuid = summoner.Puuid ?? string.Empty,
                 GameName = summoner.GameName ?? string.Empty,
                 TagLine = summoner.TagLine ?? string.Empty,
@@ -159,27 +160,23 @@ public class SummonersController(
         if (lockRow != null && lockRow.LockedUntilUtc > DateTime.UtcNow)
         {
             var seconds = (int)(lockRow.LockedUntilUtc - DateTime.UtcNow).TotalSeconds;
-            return Accepted(new
-            {
-                message = "Refresh in process",
-                poll = pollUrl,
-                retryAfterSeconds = Math.Max(1, seconds)
-            });
+            return Accepted(new SummonerAcceptedResponse(
+                "Refresh in process",
+                pollUrl,
+                Math.Max(1, seconds)));
         }
 
-        return Accepted(new
-        {
-            message = "Summoner not found in store. Use the refresh endpoint to queue a background refresh.",
-            poll = pollUrl
-        });
+        return Accepted(new SummonerAcceptedResponse(
+            "Summoner not found in store. Use the refresh endpoint to queue a background refresh.",
+            pollUrl));
     }
 
     /// <summary>
     ///     Queue a background refresh for the specified summoner by Riot ID. Only one refresh can be in-flight at a time.
     /// </summary>
     [HttpPost("{region}/{name}/{tag}/refresh")]
-    [ProducesResponseType(StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(SummonerAcceptedResponse), StatusCodes.Status202Accepted)]
     public async Task<IActionResult> RefreshByRiotId([FromRoute] string region, [FromRoute] string name,
         [FromRoute] string tag, CancellationToken ct)
     {
@@ -196,11 +193,10 @@ public class SummonersController(
             var seconds = existing == null
                 ? (int)ttl.TotalSeconds
                 : (int)Math.Max(1, (existing.LockedUntilUtc - DateTime.UtcNow).TotalSeconds);
-            return Accepted(new
-            {
-                message = "Refresh in process",
-                retryAfterSeconds = seconds
-            });
+            return Accepted(new SummonerAcceptedResponse(
+                "Refresh in process",
+                null,
+                seconds));
         }
 
         // Enqueue refresh job
@@ -213,11 +209,9 @@ public class SummonersController(
             name,
             tag
         });
-        return Accepted(new
-        {
-            message = "Refresh queued",
-            poll = pollUrl
-        });
+        return Accepted(new SummonerAcceptedResponse(
+            "Refresh queued",
+            pollUrl));
     }
 
     private static string BuildRefreshKey(PlatformRoute platform, string name, string tag)

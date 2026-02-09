@@ -11,3 +11,5 @@ public record AuthTokenResponse(
     DateTime AccessTokenExpiresAtUtc,
     string TokenType = "Bearer"
 );
+
+public record AuthMeResponse(string? Subject, string? Name, string[] Roles, string? AuthType);

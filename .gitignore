@@ -284,6 +284,28 @@ FakesAssemblies/
 # Node.js Tools for Visual Studio
 .ntvs_analysis.dat
 node_modules/
+.next/
+out/
+dist/
+coverage/
+.turbo/
+.eslintcache
+.pnpm-store/
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Workspace monorepo packages (override Visual Studio's NuGet `packages/` ignore)
+!/packages/
+!/packages/**/*
+packages/**/node_modules/
+packages/**/dist/
+
+# Next.js env overrides (local only)
+.env.local
+.env.*.local
+apps/**/.env.local
+apps/**/.env.*.local
 
 # Visual Studio 6 build log
 *.plg

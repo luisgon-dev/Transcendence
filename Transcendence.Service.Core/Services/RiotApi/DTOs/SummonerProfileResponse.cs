@@ -2,6 +2,7 @@ namespace Transcendence.Service.Core.Services.RiotApi.DTOs;
 
 public class SummonerProfileResponse
 {
+    public Guid SummonerId { get; set; }
     public string Puuid { get; set; } = string.Empty;
     public string GameName { get; set; } = string.Empty;
     public string TagLine { get; set; } = string.Empty;

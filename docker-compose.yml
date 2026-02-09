@@ -4,6 +4,7 @@ x-app-env: &app-env
   ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=${POSTGRES_DB:-transcendence};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}
   ConnectionStrings__Redis: redis:6379
   ConnectionStrings__RiotApi: ${RIOT_API_KEY:-RGAPI-00000000-0000-0000-0000-000000000000}
+  Auth__BootstrapApiKey: ${AUTH_BOOTSTRAP_API_KEY:-trn_bootstrap_dev_key}
 
 services:
   postgres:

@@ -62,7 +62,7 @@ public class AuthController(IUserAuthService userAuthService) : ControllerBase
 
     [HttpGet("me")]
     [Authorize(Policy = AuthPolicies.AppOrUser)]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AuthMeResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public IActionResult Me()
     {
@@ -70,12 +70,10 @@ public class AuthController(IUserAuthService userAuthService) : ControllerBase
         var name = User.FindFirstValue(ClaimTypes.Name);
         var roles = User.FindAll(ClaimTypes.Role).Select(x => x.Value).ToArray();
 
-        return Ok(new
-        {
-            Subject = subject,
-            Name = name,
-            Roles = roles,
-            AuthType = User.Identity?.AuthenticationType
-        });
+        return Ok(new AuthMeResponse(
+            subject,
+            name,
+            roles,
+            User.Identity?.AuthenticationType));
     }
 }

@@ -36,7 +36,7 @@ Summoner profiles with comprehensive stats — the foundation that enables the d
 ### Out of Scope
 
 - Desktop application — separate repo, consumes this API
-- Web frontend — separate repo, consumes this API
+- Web frontend — implemented in this repo under `apps/web` (monorepo for dev ergonomics)
 - Mobile app — web-first approach
 - Real-time push notifications — polling model for v1
 - Social features (friends, sharing) — not core to analytics

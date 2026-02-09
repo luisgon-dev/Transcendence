@@ -39,6 +39,23 @@ services:
     networks:
       - transcendence-net
 
+  web:
+    image: ghcr.io/luisgon-dev/transcendencebackend-web:main
+    pull_policy: always
+    container_name: transcendence-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      TRN_BACKEND_BASE_URL: http://webapi:8080
+      TRN_BACKEND_API_KEY: ${WEB_TRN_BACKEND_API_KEY}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      - webapi
+    networks:
+      - transcendence-net
+
   webapi:
     image: ghcr.io/luisgon-dev/transcendencebackend-webapi:main
     pull_policy: always
@@ -60,8 +77,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    labels:
-      com.centurylinklabs.watchtower.enable: "true"
     networks:
       - transcendence-net
 
@@ -78,8 +93,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    labels:
-      com.centurylinklabs.watchtower.enable: "true"
     networks:
       - transcendence-net
 
@@ -99,8 +112,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    labels:
-      com.centurylinklabs.watchtower.enable: "true"
     networks:
       - transcendence-net
 
@@ -116,24 +127,6 @@ services:
       - "${DOZZLE_PORT}:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    networks:
-      - transcendence-net
-
-  watchtower:
-    image: containrrr/watchtower:1.7.1
-    pull_policy: always
-    container_name: transcendence-watchtower
-    restart: unless-stopped
-    environment:
-      WATCHTOWER_LABEL_ENABLE: "true"
-      WATCHTOWER_CLEANUP: "true"
-      WATCHTOWER_ROLLING_RESTART: "true"
-      WATCHTOWER_INCLUDE_RESTARTING: "true"
-      WATCHTOWER_POLL_INTERVAL: ${WATCHTOWER_POLL_SECONDS}
-      REPO_USER: ${GHCR_USERNAME}
-      REPO_PASS: ${GHCR_TOKEN}
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - transcendence-net
 

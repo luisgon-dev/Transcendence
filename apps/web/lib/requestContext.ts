@@ -8,6 +8,7 @@ const SAFE_HEADER_KEYS = [
   "x-forwarded-proto",
   "x-forwarded-for",
   "x-real-ip",
+  "x-trn-request-id",
   "user-agent",
   // Cloudflare (optional)
   "cf-connecting-ip",

@@ -64,25 +64,34 @@ export default async function SummonerMatchesPage({
   searchParams?: { page?: string };
 }) {
   const verbosity = getErrorVerbosity();
-  const pageRequestId = verbosity === "verbose" ? newRequestId() : null;
+  const ctx = verbosity === "verbose" ? await getSafeRequestContext() : null;
+  const pageRequestId =
+    verbosity === "verbose"
+      ? (ctx?.headers["x-trn-request-id"] ?? newRequestId())
+      : null;
+
+  const paramsAny = params as unknown as Record<string, unknown>;
+  const riotIdRaw = (paramsAny.riotId ?? paramsAny.riotid) as unknown;
+  const riotIdPath =
+    typeof riotIdRaw === "string" ? riotIdRaw : riotIdRaw == null ? "" : String(riotIdRaw);
 
   if (verbosity === "verbose") {
-    const ctx = await getSafeRequestContext();
     logEvent("info", "summoner matches page invoked", {
       requestId: pageRequestId,
       route: "summoners/[region]/[riotId]/matches",
       region: params.region,
-      riotIdRaw: params.riotId,
-      riotIdRawCodePoints: toCodePoints(params.riotId),
+      paramsKeys: Object.keys(paramsAny),
+      riotIdRaw: riotIdRaw ?? null,
+      riotIdRawCodePoints: toCodePoints(riotIdRaw),
+      riotIdRawString: riotIdPath,
       ...ctx
     });
   }
 
-  const riotId = decodeRiotIdPath(params.riotId);
+  const riotId = decodeRiotIdPath(riotIdPath);
   if (!riotId) {
     if (verbosity === "verbose") {
-      const ctx = await getSafeRequestContext();
-      const decoded = safeDecodeURIComponent(params.riotId);
+      const decoded = safeDecodeURIComponent(riotIdRaw);
       const decodedValue = decoded.ok ? decoded.value : null;
       const decodedCodePoints = decodedValue ? toCodePoints(decodedValue) : null;
 
@@ -90,8 +99,10 @@ export default async function SummonerMatchesPage({
         requestId: pageRequestId,
         route: "summoners/[region]/[riotId]/matches",
         region: params.region,
-        riotIdRaw: params.riotId,
-        riotIdRawCodePoints: toCodePoints(params.riotId),
+        paramsKeys: Object.keys(paramsAny),
+        riotIdRaw: riotIdRaw ?? null,
+        riotIdRawCodePoints: toCodePoints(riotIdRaw),
+        riotIdRawString: riotIdPath,
         decoded: decodedValue,
         decodedCodePoints,
         decodeError: decoded.ok ? null : decoded.error,
@@ -111,8 +122,10 @@ export default async function SummonerMatchesPage({
             ? JSON.stringify(
                 {
                   region: params.region,
-                  riotIdRaw: params.riotId,
-                  riotIdRawCodePoints: toCodePoints(params.riotId)
+                  paramsKeys: Object.keys(paramsAny),
+                  riotIdRaw: riotIdRaw ?? null,
+                  riotIdRawString: riotIdPath,
+                  riotIdRawCodePoints: toCodePoints(riotIdRaw)
                 },
                 null,
                 2

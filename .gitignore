@@ -392,3 +392,4 @@ FodyWeavers.xsd
 # Local deployment env files
 .env.production
 .env.production.local
+apps/web/.env

@@ -1,8 +1,10 @@
 import "server-only";
 
-export function toCodePoints(input: string): string[] {
+export function toCodePoints(input: unknown): string[] {
+  const s =
+    typeof input === "string" ? input : input == null ? "" : String(input);
   const out: string[] = [];
-  for (const ch of input) {
+  for (const ch of s) {
     const cp = ch.codePointAt(0);
     if (cp == null) continue;
     const hex = cp.toString(16).toUpperCase();
@@ -11,15 +13,17 @@ export function toCodePoints(input: string): string[] {
   return out;
 }
 
-export function safeDecodeURIComponent(input: string): {
+export function safeDecodeURIComponent(input: unknown): {
   ok: true;
   value: string;
 } | {
   ok: false;
   error: { name?: string; message?: string };
 } {
+  const s =
+    typeof input === "string" ? input : input == null ? "" : String(input);
   try {
-    return { ok: true, value: decodeURIComponent(input) };
+    return { ok: true, value: decodeURIComponent(s) };
   } catch (e) {
     if (e instanceof Error) {
       return { ok: false, error: { name: e.name, message: e.message } };
@@ -27,4 +31,3 @@ export function safeDecodeURIComponent(input: string): {
     return { ok: false, error: { message: String(e) } };
   }
 }
-

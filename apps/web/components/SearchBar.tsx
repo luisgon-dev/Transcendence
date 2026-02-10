@@ -25,18 +25,33 @@ const REGIONS = [
 export function SearchBar({ className }: { className?: string }) {
   const router = useRouter();
   const [region, setRegion] = useState("na");
-  const [query, setQuery] = useState("");
+  const [gameName, setGameName] = useState("");
+  const [tag, setTag] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const hint = useMemo(() => "Riot ID (e.g., Faker#KR1)", []);
+  const hints = useMemo(
+    () => ({
+      gameName: "Game name (e.g., Faker)",
+      tag: "Tag (e.g., KR1)"
+    }),
+    []
+  );
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
-    const riotId = parseRiotIdInput(query);
-    if (!riotId) {
-      setError("Enter a Riot ID like GameName#TAG.");
+    // Convenience: allow paste of "GameName#TAG" into the game name field.
+    const hasHash = gameName.includes("#");
+    const pasted = hasHash ? parseRiotIdInput(gameName) : null;
+    if (hasHash && !pasted) {
+      setError("Enter a game name and tag (or paste GameName#TAG).");
+      return;
+    }
+    const riotId = pasted ?? { gameName: gameName.trim(), tagLine: tag.trim() };
+
+    if (!riotId.gameName || !riotId.tagLine) {
+      setError("Enter a game name and tag (or paste GameName#TAG).");
       return;
     }
 
@@ -67,10 +82,22 @@ export function SearchBar({ className }: { className?: string }) {
         </select>
 
         <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={hint}
-          className="w-full sm:w-[360px]"
+          value={gameName}
+          onChange={(e) => setGameName(e.target.value)}
+          placeholder={hints.gameName}
+          aria-label="Game name"
+          className="w-full sm:w-[300px]"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+        />
+
+        <Input
+          value={tag}
+          onChange={(e) => setTag(e.target.value)}
+          placeholder={hints.tag}
+          aria-label="Tag"
+          className="w-[120px] sm:w-[120px]"
           autoCorrect="off"
           autoCapitalize="off"
           spellCheck={false}

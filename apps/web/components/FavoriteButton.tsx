@@ -32,11 +32,19 @@ export function FavoriteButton({
       }
 
       if (!res.ok) {
-        setMsg(`Failed to add favorite (${res.status}).`);
+        const json = (await res.json().catch(() => null)) as
+          | { message?: string; requestId?: string }
+          | null;
+        const msg =
+          json?.message ?? `Failed to add favorite (${res.status}).`;
+        const rid = json?.requestId ? ` (Request ID: ${json.requestId})` : "";
+        setMsg(`${msg}${rid}`);
         return;
       }
 
       setMsg("Saved to favorites.");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Failed to add favorite.");
     } finally {
       setBusy(false);
     }

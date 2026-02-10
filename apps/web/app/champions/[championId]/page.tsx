@@ -1,9 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl } from "@/lib/env";
+import { getErrorVerbosity } from "@/lib/env";
 import { formatPercent } from "@/lib/format";
 import {
   championIconUrl,
@@ -80,32 +83,43 @@ export default async function ChampionDetailPage({
   searchParams?: { role?: string; rankTier?: string };
 }) {
   const championId = Number(params.championId);
+  if (!Number.isFinite(championId) || championId <= 0) {
+    return (
+      <BackendErrorCard
+        title="Champion"
+        message="Invalid champion id."
+      />
+    );
+  }
+
   const role = (searchParams?.role ?? "MIDDLE").toUpperCase();
   const rankTier = searchParams?.rankTier;
 
   const qsTier = rankTier ? `&rankTier=${encodeURIComponent(rankTier)}` : "";
 
+  const verbosity = getErrorVerbosity();
   const [staticData, itemStatic, runeStatic, winRes, buildRes, matchupRes] =
     await Promise.all([
-    fetchChampionMap(),
-    fetchItemMap(),
-    fetchRunesReforged(),
-    fetch(`${getBackendBaseUrl()}/api/analytics/champions/${championId}/winrates`, {
-      next: { revalidate: 60 * 60 }
-    }),
-    fetch(
-      `${getBackendBaseUrl()}/api/analytics/champions/${championId}/builds?role=${encodeURIComponent(
-        role
-      )}${qsTier}`,
-      { next: { revalidate: 60 * 60 } }
-    ),
-    fetch(
-      `${getBackendBaseUrl()}/api/analytics/champions/${championId}/matchups?role=${encodeURIComponent(
-        role
-      )}${qsTier}`,
-      { next: { revalidate: 60 * 60 } }
-    )
-  ]);
+      fetchChampionMap(),
+      fetchItemMap(),
+      fetchRunesReforged(),
+      fetchBackendJson<ChampionWinRateSummary>(
+        `${getBackendBaseUrl()}/api/analytics/champions/${championId}/winrates`,
+        { next: { revalidate: 60 * 60 } }
+      ),
+      fetchBackendJson<ChampionBuildsResponse>(
+        `${getBackendBaseUrl()}/api/analytics/champions/${championId}/builds?role=${encodeURIComponent(
+          role
+        )}${qsTier}`,
+        { next: { revalidate: 60 * 60 } }
+      ),
+      fetchBackendJson<ChampionMatchupsResponse>(
+        `${getBackendBaseUrl()}/api/analytics/champions/${championId}/matchups?role=${encodeURIComponent(
+          role
+        )}${qsTier}`,
+        { next: { revalidate: 60 * 60 } }
+      )
+    ]);
 
   const { version, champions } = staticData;
   const champ = champions[String(championId)];
@@ -116,11 +130,40 @@ export default async function ChampionDetailPage({
   const runeById = runeStatic.runeById;
   const styleById = runeStatic.styleById;
 
-  const winrates = winRes.ok ? ((await winRes.json()) as ChampionWinRateSummary) : null;
-  const builds = buildRes.ok ? ((await buildRes.json()) as ChampionBuildsResponse) : null;
-  const matchups = matchupRes.ok
-    ? ((await matchupRes.json()) as ChampionMatchupsResponse)
-    : null;
+  if (!winRes.ok && !buildRes.ok && !matchupRes.ok) {
+    const requestId = winRes.requestId || buildRes.requestId || matchupRes.requestId;
+    const kind = winRes.errorKind ?? buildRes.errorKind ?? matchupRes.errorKind;
+    return (
+      <BackendErrorCard
+        title={champName}
+        message={
+          kind === "timeout"
+            ? "Timed out reaching the backend."
+            : kind === "unreachable"
+              ? "We are having trouble reaching the backend."
+              : "Failed to load champion data from the backend."
+        }
+        requestId={requestId}
+        detail={
+          verbosity === "verbose"
+            ? JSON.stringify(
+                {
+                  winrates: { status: winRes.status, errorKind: winRes.errorKind },
+                  builds: { status: buildRes.status, errorKind: buildRes.errorKind },
+                  matchups: { status: matchupRes.status, errorKind: matchupRes.errorKind }
+                },
+                null,
+                2
+              )
+            : null
+        }
+      />
+    );
+  }
+
+  const winrates = winRes.ok ? winRes.body! : null;
+  const builds = buildRes.ok ? buildRes.body! : null;
+  const matchups = matchupRes.ok ? matchupRes.body! : null;
 
   return (
     <div className="grid gap-6">

@@ -35,6 +35,10 @@ Set:
 - `TRN_BACKEND_BASE_URL=http://localhost:8080`
 - `TRN_BACKEND_API_KEY=<api key for AppOnly endpoints>`
 
+Optional:
+- `TRN_BACKEND_TIMEOUT_MS=10000` (server-side backend timeout, milliseconds)
+- `TRN_ERROR_VERBOSITY=safe|verbose` (controls user-visible error detail from Next route handlers)
+
 4. Run the web app:
 
 ```bash

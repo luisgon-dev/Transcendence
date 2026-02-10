@@ -22,24 +22,34 @@ export default function FavoritesPage() {
 
   async function load() {
     setError(null);
-    const res = await fetch("/api/trn/user/users/me/favorites", {
-      cache: "no-store"
-    });
+    try {
+      const res = await fetch("/api/trn/user/users/me/favorites", {
+        cache: "no-store"
+      });
 
-    if (res.status === 401) {
+      if (res.status === 401) {
+        setItems([]);
+        setError("Login required to view favorites.");
+        return;
+      }
+
+      if (!res.ok) {
+        const json = (await res.json().catch(() => null)) as
+          | { message?: string; requestId?: string }
+          | null;
+        const msg = json?.message ?? `Failed to load favorites (${res.status}).`;
+        const rid = json?.requestId ? ` (Request ID: ${json.requestId})` : "";
+        setItems([]);
+        setError(`${msg}${rid}`);
+        return;
+      }
+
+      const json = (await res.json()) as FavoriteSummonerDto[];
+      setItems(json);
+    } catch (e) {
       setItems([]);
-      setError("Login required to view favorites.");
-      return;
+      setError(e instanceof Error ? e.message : "Failed to load favorites.");
     }
-
-    if (!res.ok) {
-      setItems([]);
-      setError(`Failed to load favorites (${res.status}).`);
-      return;
-    }
-
-    const json = (await res.json()) as FavoriteSummonerDto[];
-    setItems(json);
   }
 
   useEffect(() => {
@@ -47,14 +57,24 @@ export default function FavoritesPage() {
   }, []);
 
   async function removeFavorite(id: string) {
-    const res = await fetch(`/api/trn/user/users/me/favorites/${id}`, {
-      method: "DELETE"
-    });
-    if (!res.ok) {
-      setError(`Failed to remove favorite (${res.status}).`);
-      return;
+    try {
+      const res = await fetch(`/api/trn/user/users/me/favorites/${id}`, {
+        method: "DELETE"
+      });
+      if (!res.ok) {
+        const json = (await res.json().catch(() => null)) as
+          | { message?: string; requestId?: string }
+          | null;
+        const msg =
+          json?.message ?? `Failed to remove favorite (${res.status}).`;
+        const rid = json?.requestId ? ` (Request ID: ${json.requestId})` : "";
+        setError(`${msg}${rid}`);
+        return;
+      }
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to remove favorite.");
     }
-    await load();
   }
 
   return (

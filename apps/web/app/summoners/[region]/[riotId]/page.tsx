@@ -2,8 +2,11 @@ import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { SummonerProfileClient } from "@/components/SummonerProfileClient";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
+import { newRequestId } from "@/lib/requestId";
+import { getSafeRequestContext } from "@/lib/requestContext";
 import { decodeRiotIdPath } from "@/lib/riotid";
 import { logEvent } from "@/lib/serverLog";
+import { safeDecodeURIComponent, toCodePoints } from "@/lib/textDebug";
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
@@ -14,12 +17,62 @@ export default async function SummonerProfilePage({
 }: {
   params: { region: string; riotId: string };
 }) {
+  const verbosity = getErrorVerbosity();
+  const pageRequestId = verbosity === "verbose" ? newRequestId() : null;
+
+  if (verbosity === "verbose") {
+    const ctx = await getSafeRequestContext();
+    logEvent("info", "summoner page invoked", {
+      requestId: pageRequestId,
+      route: "summoners/[region]/[riotId]",
+      region: params.region,
+      riotIdRaw: params.riotId,
+      riotIdRawCodePoints: toCodePoints(params.riotId),
+      ...ctx
+    });
+  }
+
   const riotId = decodeRiotIdPath(params.riotId);
   if (!riotId) {
+    if (verbosity === "verbose") {
+      const ctx = await getSafeRequestContext();
+      const decoded = safeDecodeURIComponent(params.riotId);
+      const decodedValue = decoded.ok ? decoded.value : null;
+      const decodedCodePoints = decodedValue ? toCodePoints(decodedValue) : null;
+
+      logEvent("error", "riotId decode failed", {
+        requestId: pageRequestId,
+        route: "summoners/[region]/[riotId]",
+        region: params.region,
+        riotIdRaw: params.riotId,
+        riotIdRawCodePoints: toCodePoints(params.riotId),
+        decoded: decodedValue,
+        decodedCodePoints,
+        decodeError: decoded.ok ? null : decoded.error,
+        asciiDashIndex: decodedValue ? decodedValue.lastIndexOf("-") : null,
+        hashIndex: decodedValue ? decodedValue.lastIndexOf("#") : null,
+        ...ctx
+      });
+    }
+
     return (
       <BackendErrorCard
         title="Summoner"
         message="Invalid summoner URL. Expected /summoners/{region}/{gameName}-{tagLine}."
+        requestId={pageRequestId}
+        detail={
+          verbosity === "verbose"
+            ? JSON.stringify(
+                {
+                  region: params.region,
+                  riotIdRaw: params.riotId,
+                  riotIdRawCodePoints: toCodePoints(params.riotId)
+                },
+                null,
+                2
+              )
+            : null
+        }
       />
     );
   }
@@ -29,7 +82,6 @@ export default async function SummonerProfilePage({
   )}/${encodeURIComponent(riotId.gameName)}/${encodeURIComponent(riotId.tagLine)}`;
 
   const result = await fetchBackendJson<unknown>(url, { cache: "no-store" });
-  const verbosity = getErrorVerbosity();
 
   let initialStatus = result.status;
   let initialBody: unknown = result.body;

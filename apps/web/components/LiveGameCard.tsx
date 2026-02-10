@@ -8,6 +8,8 @@ import { Card } from "@/components/ui/Card";
 type LiveGameResponseDto = {
   state?: string;
   message?: string;
+  requestId?: string;
+  detail?: string;
   [k: string]: unknown;
 };
 
@@ -37,10 +39,11 @@ export function LiveGameCard({
 
       const json = (await res.json().catch(() => null)) as LiveGameResponseDto | null;
       if (!res.ok) {
-        setError(
+        const msg =
           (json?.message as string | undefined) ??
-            `Live game request failed (${res.status}).`
-        );
+          `Live game request failed (${res.status}).`;
+        const rid = json?.requestId ? ` Request ID: ${json.requestId}` : "";
+        setError(`${msg}${rid}`);
         return;
       }
 

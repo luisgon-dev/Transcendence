@@ -89,6 +89,13 @@ type AcceptedResponse = {
   poll?: string;
 };
 
+type ApiErrorResponse = {
+  message?: string;
+  code?: string;
+  requestId?: string;
+  detail?: string;
+};
+
 type RoleStatDto = {
   role: string;
   games: number;
@@ -116,6 +123,26 @@ type SummonerOverviewDto = {
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
+}
+
+function pickApiError(status: number, json: unknown): ApiErrorResponse {
+  if (!isRecord(json)) {
+    return { message: `Request failed (${status}).` };
+  }
+
+  const msg = typeof json.message === "string" ? (json.message as string) : null;
+  const requestId =
+    typeof json.requestId === "string" ? (json.requestId as string) : undefined;
+  const detail =
+    typeof json.detail === "string" ? (json.detail as string) : undefined;
+  const code = typeof json.code === "string" ? (json.code as string) : undefined;
+
+  return {
+    message: msg ?? `Request failed (${status}).`,
+    code,
+    requestId,
+    detail
+  };
 }
 
 type ChampionStatic = {
@@ -151,6 +178,11 @@ export function SummonerProfileClient({
   );
   const [accepted, setAccepted] = useState<AcceptedResponse | null>(
     initialStatus === 202 ? (initialBody as AcceptedResponse) : null
+  );
+  const [error, setError] = useState<ApiErrorResponse | null>(
+    initialStatus !== 200 && initialStatus !== 202
+      ? pickApiError(initialStatus, initialBody)
+      : null
   );
   const [busy, setBusy] = useState(false);
   const [polling, setPolling] = useState(initialStatus === 202);
@@ -201,6 +233,11 @@ export function SummonerProfileClient({
           )
         ]);
 
+        if (!rolesRes.ok || !overviewRes.ok) {
+          if (!cancelled) setExtraError("Failed to load extra stats.");
+          return;
+        }
+
         const rolesJson = (await rolesRes.json().catch(() => null)) as unknown;
         const overviewJson = (await overviewRes.json().catch(() => null)) as unknown;
 
@@ -226,42 +263,54 @@ export function SummonerProfileClient({
   }, [profile?.summonerId]);
 
   const fetchProfileOnce = useCallback(async () => {
-    const res = await fetch(
-      `/api/trn/public/summoners/${encodeURIComponent(region)}/${encodeURIComponent(
-        gameName
-      )}/${encodeURIComponent(tagLine)}`,
-      { cache: "no-store" }
-    );
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/trn/public/summoners/${encodeURIComponent(region)}/${encodeURIComponent(
+          gameName
+        )}/${encodeURIComponent(tagLine)}`,
+        { cache: "no-store" }
+      );
 
-    const json = (await res.json().catch(() => null)) as unknown;
-    if (res.status === 200) {
-      setProfile(json as SummonerProfileResponse);
-      setAccepted(null);
-      setPolling(false);
-      return;
-    }
-
-    if (res.status === 202) {
-      const acc: AcceptedResponse | null = isRecord(json)
-        ? {
-            message:
-              typeof json.message === "string" ? (json.message as string) : undefined,
-            poll: typeof json.poll === "string" ? (json.poll as string) : undefined,
-            retryAfterSeconds:
-              typeof json.retryAfterSeconds === "number"
-                ? (json.retryAfterSeconds as number)
-                : undefined
-          }
-        : null;
-
-      setAccepted(acc ?? { message: "Refresh in process." });
-      if (acc && Number.isFinite(acc.retryAfterSeconds)) {
-        setPollDelayMs((d) => computeNextPollDelayMs(d, acc.retryAfterSeconds));
+      const json = (await res.json().catch(() => null)) as unknown;
+      if (res.status === 200) {
+        setProfile(json as SummonerProfileResponse);
+        setAccepted(null);
+        setPolling(false);
+        return;
       }
-      return;
-    }
 
-    setAccepted({ message: `Unexpected response (${res.status}).` });
+      if (res.status === 202) {
+        const acc: AcceptedResponse | null = isRecord(json)
+          ? {
+              message:
+                typeof json.message === "string"
+                  ? (json.message as string)
+                  : undefined,
+              poll: typeof json.poll === "string" ? (json.poll as string) : undefined,
+              retryAfterSeconds:
+                typeof json.retryAfterSeconds === "number"
+                  ? (json.retryAfterSeconds as number)
+                  : undefined
+            }
+          : null;
+
+        setAccepted(acc ?? { message: "Refresh in process." });
+        if (acc && Number.isFinite(acc.retryAfterSeconds)) {
+          setPollDelayMs((d) => computeNextPollDelayMs(d, acc.retryAfterSeconds));
+        }
+        return;
+      }
+
+      setAccepted(null);
+      setError(pickApiError(res.status, json));
+    } catch (e) {
+      setAccepted(null);
+      setError({
+        message: e instanceof Error ? e.message : "Request failed.",
+        code: "CLIENT_FETCH_FAILED"
+      });
+    }
   }, [region, gameName, tagLine]);
 
   function friendlyAcceptedMessage(msg?: string) {
@@ -284,7 +333,15 @@ export function SummonerProfileClient({
     if (!polling) return;
 
     const t = setTimeout(async () => {
-      await fetchProfileOnce();
+      try {
+        await fetchProfileOnce();
+      } catch (e) {
+        setAccepted(null);
+        setError({
+          message: e instanceof Error ? e.message : "Request failed.",
+          code: "CLIENT_FETCH_FAILED"
+        });
+      }
       setPollDelayMs((d) => computeNextPollDelayMs(d));
     }, pollDelayMs);
 
@@ -293,6 +350,7 @@ export function SummonerProfileClient({
 
   async function queueRefresh() {
     setBusy(true);
+    setError(null);
     try {
       const res = await fetch(
         `/api/trn/public/summoners/${encodeURIComponent(region)}/${encodeURIComponent(
@@ -301,10 +359,21 @@ export function SummonerProfileClient({
         { method: "POST" }
       );
       const json = (await res.json().catch(() => null)) as AcceptedResponse | null;
+      if (!res.ok) {
+        setAccepted(null);
+        setError(pickApiError(res.status, json));
+        return;
+      }
+
       setAccepted(json ?? { message: "Refresh queued." });
       setPolling(true);
-
       setPollDelayMs(computeNextPollDelayMs(2000, json?.retryAfterSeconds));
+    } catch (e) {
+      setAccepted(null);
+      setError({
+        message: e instanceof Error ? e.message : "Request failed.",
+        code: "CLIENT_FETCH_FAILED"
+      });
     } finally {
       setBusy(false);
     }
@@ -371,6 +440,22 @@ export function SummonerProfileClient({
               <p className="mt-1 text-xs text-muted">
                 Updating... checking again in ~{Math.round(pollDelayMs / 1000)}s
               </p>
+            ) : null}
+          </Card>
+        ) : null}
+
+        {error?.message ? (
+          <Card className="p-4">
+            <p className="text-sm text-fg/85">{error.message}</p>
+            {error.requestId ? (
+              <p className="mt-1 text-xs text-muted">
+                Request ID: <code>{error.requestId}</code>
+              </p>
+            ) : null}
+            {error.detail ? (
+              <pre className="mt-2 max-w-full overflow-x-auto rounded-lg border border-border/60 bg-black/25 p-3 text-xs text-fg/80">
+                {error.detail}
+              </pre>
             ) : null}
           </Card>
         ) : null}

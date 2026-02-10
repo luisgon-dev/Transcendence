@@ -1,9 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl } from "@/lib/env";
+import { getErrorVerbosity } from "@/lib/env";
 import { formatPercent } from "@/lib/format";
 import { championIconUrl, fetchChampionMap } from "@/lib/staticData";
 
@@ -82,30 +85,34 @@ export default async function TierListPage({
   if (roleParam && roleParam !== "ALL") qs.set("role", roleParam);
   if (rankParam && rankParam !== "ALL") qs.set("rankTier", rankParam);
 
-  let res: Response | null = null;
-  try {
-    res = await fetch(
-      `${getBackendBaseUrl()}/api/analytics/tierlist?${qs.toString()}`,
-      { next: { revalidate: 60 * 60 } }
-    );
-  } catch {
-    res = null;
-  }
+  const verbosity = getErrorVerbosity();
+  const res = await fetchBackendJson<TierListResponse>(
+    `${getBackendBaseUrl()}/api/analytics/tierlist?${qs.toString()}`,
+    { next: { revalidate: 60 * 60 } }
+  );
 
-  if (!res || !res.ok) {
+  if (!res.ok) {
     return (
-      <Card className="p-6">
-        <h1 className="font-[var(--font-sora)] text-2xl font-semibold">
-          Tier List
-        </h1>
-        <p className="mt-2 text-sm text-fg/75">
-          Failed to load tier list from the backend.
-        </p>
-      </Card>
+      <BackendErrorCard
+        title="Tier List"
+        message={
+          res.errorKind === "timeout"
+            ? "Timed out reaching the backend."
+            : res.errorKind === "unreachable"
+              ? "We are having trouble reaching the backend."
+              : "Failed to load tier list from the backend."
+        }
+        requestId={res.requestId}
+        detail={
+          verbosity === "verbose"
+            ? JSON.stringify({ status: res.status, errorKind: res.errorKind }, null, 2)
+            : null
+        }
+      />
     );
   }
 
-  const tierlist = (await res.json()) as TierListResponse;
+  const tierlist = res.body!;
   const { version, champions } = await fetchChampionMap();
 
   const groups: Record<TierGrade, TierListEntry[]> = {

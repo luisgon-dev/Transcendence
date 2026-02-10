@@ -1,10 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 
+import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl } from "@/lib/env";
+import { getErrorVerbosity } from "@/lib/env";
 import { formatDateTimeMs, formatDurationSeconds } from "@/lib/format";
 import { decodeRiotIdPath, encodeRiotIdPath } from "@/lib/riotid";
 import type { SummonerProfileResponse } from "@/components/SummonerProfileClient";
@@ -71,20 +73,29 @@ export default async function MatchDetailPage({
   params: { region: string; riotId: string; matchId: string };
 }) {
   const riotId = decodeRiotIdPath(params.riotId);
-  if (!riotId) notFound();
+  if (!riotId) {
+    return (
+      <BackendErrorCard
+        title="Match Details"
+        message="Invalid summoner URL. Expected /summoners/{region}/{gameName}-{tagLine}."
+      />
+    );
+  }
 
-  const profileRes = await fetch(
+  const verbosity = getErrorVerbosity();
+  const profileResult = await fetchBackendJson<unknown>(
     `${getBackendBaseUrl()}/api/summoners/${encodeURIComponent(
       params.region
     )}/${encodeURIComponent(riotId.gameName)}/${encodeURIComponent(riotId.tagLine)}`,
     { cache: "no-store" }
   );
-  const profileBody = (await profileRes.json().catch(() => null)) as
+
+  const profileBody = profileResult.body as
     | SummonerProfileResponse
     | { message?: string }
     | null;
 
-  if (profileRes.status === 202) {
+  if (profileResult.status === 202) {
     return (
       <Card className="p-6">
         <h1 className="font-[var(--font-sora)] text-2xl font-semibold">
@@ -104,16 +115,31 @@ export default async function MatchDetailPage({
     );
   }
 
-  if (!profileRes.ok || !profileBody || typeof profileBody !== "object") {
+  if (!profileResult.ok || !profileBody || typeof profileBody !== "object") {
     return (
-      <Card className="p-6">
-        <h1 className="font-[var(--font-sora)] text-2xl font-semibold">
-          Match Details
-        </h1>
-        <p className="mt-2 text-sm text-fg/75">
-          Failed to load summoner profile.
-        </p>
-      </Card>
+      <BackendErrorCard
+        title="Match Details"
+        message={
+          profileResult.errorKind === "timeout"
+            ? "Timed out reaching the backend."
+            : profileResult.errorKind === "unreachable"
+              ? "We are having trouble reaching the backend."
+              : "Failed to load summoner profile."
+        }
+        requestId={profileResult.requestId}
+        detail={
+          verbosity === "verbose"
+            ? JSON.stringify(
+                {
+                  status: profileResult.status,
+                  errorKind: profileResult.errorKind
+                },
+                null,
+                2
+              )
+            : null
+        }
+      />
     );
   }
 
@@ -138,7 +164,7 @@ export default async function MatchDetailPage({
       fetchSummonerSpellMap(),
       fetchRunesReforged()
     ]),
-    fetch(
+    fetchBackendJson<MatchDetailDto>(
       `${getBackendBaseUrl()}/api/summoners/${encodeURIComponent(
         profile.summonerId
       )}/matches/${encodeURIComponent(params.matchId)}`,
@@ -148,24 +174,33 @@ export default async function MatchDetailPage({
 
   if (!matchRes.ok) {
     return (
-      <Card className="p-6">
-        <h1 className="font-[var(--font-sora)] text-2xl font-semibold">
-          Match Details
-        </h1>
-        <p className="mt-2 text-sm text-fg/75">
-          Failed to load match details.
-        </p>
+      <BackendErrorCard
+        title="Match Details"
+        message={
+          matchRes.errorKind === "timeout"
+            ? "Timed out reaching the backend."
+            : matchRes.errorKind === "unreachable"
+              ? "We are having trouble reaching the backend."
+              : "Failed to load match details."
+        }
+        requestId={matchRes.requestId}
+        detail={
+          verbosity === "verbose"
+            ? JSON.stringify({ status: matchRes.status, errorKind: matchRes.errorKind }, null, 2)
+            : null
+        }
+      >
         <Link
-          className="mt-4 inline-flex text-sm text-primary hover:underline"
+          className="inline-flex text-sm text-primary hover:underline"
           href={`/summoners/${params.region}/${encodeRiotIdPath(riotId)}/matches`}
         >
           Back to match history
         </Link>
-      </Card>
+      </BackendErrorCard>
     );
   }
 
-  const match = (await matchRes.json()) as MatchDetailDto;
+  const match = matchRes.body!;
   const [{ version, champions }, itemStatic, spellStatic, runeStatic] = staticData;
   const itemVersion = itemStatic.version;
   const spellVersion = spellStatic.version;

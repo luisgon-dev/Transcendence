@@ -1,10 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 
+import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl } from "@/lib/env";
+import { getErrorVerbosity } from "@/lib/env";
 import { decodeRiotIdPath, encodeRiotIdPath } from "@/lib/riotid";
 import { formatDateTimeMs, formatDurationSeconds } from "@/lib/format";
 import {
@@ -59,23 +61,33 @@ export default async function SummonerMatchesPage({
   searchParams?: { page?: string };
 }) {
   const riotId = decodeRiotIdPath(params.riotId);
-  if (!riotId) notFound();
+  if (!riotId) {
+    return (
+      <BackendErrorCard
+        title="Match History"
+        message="Invalid summoner URL. Expected /summoners/{region}/{gameName}-{tagLine}."
+      />
+    );
+  }
 
   const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
   const pageSize = 20;
 
-  const profileRes = await fetch(
-    `${getBackendBaseUrl()}/api/summoners/${encodeURIComponent(
-      params.region
-    )}/${encodeURIComponent(riotId.gameName)}/${encodeURIComponent(riotId.tagLine)}`,
-    { cache: "no-store" }
-  );
-  const profileBody = (await profileRes.json().catch(() => null)) as
+  const verbosity = getErrorVerbosity();
+  const profileUrl = `${getBackendBaseUrl()}/api/summoners/${encodeURIComponent(
+    params.region
+  )}/${encodeURIComponent(riotId.gameName)}/${encodeURIComponent(riotId.tagLine)}`;
+
+  const profileResult = await fetchBackendJson<unknown>(profileUrl, {
+    cache: "no-store"
+  });
+
+  const profileBody = profileResult.body as
     | SummonerProfileResponse
     | { message?: string }
     | null;
 
-  if (profileRes.status === 202) {
+  if (profileResult.status === 202) {
     return (
       <Card className="p-6">
         <h1 className="font-[var(--font-sora)] text-2xl font-semibold">
@@ -95,16 +107,32 @@ export default async function SummonerMatchesPage({
     );
   }
 
-  if (!profileRes.ok || !profileBody || typeof profileBody !== "object") {
+  if (!profileResult.ok || !profileBody || typeof profileBody !== "object") {
+    const msg =
+      profileResult.errorKind === "timeout"
+        ? "Timed out reaching the backend."
+        : profileResult.errorKind === "unreachable"
+          ? "We are having trouble reaching the backend."
+          : "Failed to load summoner profile.";
+
     return (
-      <Card className="p-6">
-        <h1 className="font-[var(--font-sora)] text-2xl font-semibold">
-          Match History
-        </h1>
-        <p className="mt-2 text-sm text-fg/75">
-          Failed to load summoner profile.
-        </p>
-      </Card>
+      <BackendErrorCard
+        title="Match History"
+        message={msg}
+        requestId={profileResult.requestId}
+        detail={
+          verbosity === "verbose"
+            ? JSON.stringify(
+                {
+                  status: profileResult.status,
+                  errorKind: profileResult.errorKind
+                },
+                null,
+                2
+              )
+            : null
+        }
+      />
     );
   }
 
@@ -130,7 +158,7 @@ export default async function SummonerMatchesPage({
       fetchSummonerSpellMap(),
       fetchRunesReforged()
     ]),
-    fetch(
+    fetchBackendJson<PagedResultDto<RecentMatchSummaryDto>>(
       `${getBackendBaseUrl()}/api/summoners/${encodeURIComponent(
         profile.summonerId
       )}/matches/recent?page=${page}&pageSize=${pageSize}`,
@@ -140,18 +168,30 @@ export default async function SummonerMatchesPage({
 
   if (!matchesRes.ok) {
     return (
-      <Card className="p-6">
-        <h1 className="font-[var(--font-sora)] text-2xl font-semibold">
-          Match History
-        </h1>
-        <p className="mt-2 text-sm text-fg/75">
-          Failed to load match history.
-        </p>
-      </Card>
+      <BackendErrorCard
+        title="Match History"
+        message={
+          matchesRes.errorKind === "timeout"
+            ? "Timed out reaching the backend."
+            : matchesRes.errorKind === "unreachable"
+              ? "We are having trouble reaching the backend."
+              : "Failed to load match history."
+        }
+        requestId={matchesRes.requestId}
+        detail={
+          verbosity === "verbose"
+            ? JSON.stringify(
+                { status: matchesRes.status, errorKind: matchesRes.errorKind },
+                null,
+                2
+              )
+            : null
+        }
+      />
     );
   }
 
-  const matches = (await matchesRes.json()) as PagedResultDto<RecentMatchSummaryDto>;
+  const matches = matchesRes.body!;
   const [{ version, champions }, itemStatic, spellStatic, runeStatic] = staticData;
 
   const itemVersion = itemStatic.version;

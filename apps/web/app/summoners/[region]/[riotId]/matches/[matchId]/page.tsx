@@ -5,10 +5,13 @@ import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { fetchBackendJson } from "@/lib/backendCall";
-import { getBackendBaseUrl } from "@/lib/env";
-import { getErrorVerbosity } from "@/lib/env";
+import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
+import { newRequestId } from "@/lib/requestId";
+import { getSafeRequestContext } from "@/lib/requestContext";
 import { formatDateTimeMs, formatDurationSeconds } from "@/lib/format";
 import { decodeRiotIdPath, encodeRiotIdPath } from "@/lib/riotid";
+import { logEvent } from "@/lib/serverLog";
+import { safeDecodeURIComponent, toCodePoints } from "@/lib/textDebug";
 import type { SummonerProfileResponse } from "@/components/SummonerProfileClient";
 import {
   championIconUrl,
@@ -72,17 +75,69 @@ export default async function MatchDetailPage({
 }: {
   params: { region: string; riotId: string; matchId: string };
 }) {
+  const verbosity = getErrorVerbosity();
+  const pageRequestId = verbosity === "verbose" ? newRequestId() : null;
+
+  if (verbosity === "verbose") {
+    const ctx = await getSafeRequestContext();
+    logEvent("info", "summoner match detail page invoked", {
+      requestId: pageRequestId,
+      route: "summoners/[region]/[riotId]/matches/[matchId]",
+      region: params.region,
+      riotIdRaw: params.riotId,
+      matchId: params.matchId,
+      riotIdRawCodePoints: toCodePoints(params.riotId),
+      ...ctx
+    });
+  }
+
   const riotId = decodeRiotIdPath(params.riotId);
   if (!riotId) {
+    if (verbosity === "verbose") {
+      const ctx = await getSafeRequestContext();
+      const decoded = safeDecodeURIComponent(params.riotId);
+      const decodedValue = decoded.ok ? decoded.value : null;
+      const decodedCodePoints = decodedValue ? toCodePoints(decodedValue) : null;
+
+      logEvent("error", "riotId decode failed", {
+        requestId: pageRequestId,
+        route: "summoners/[region]/[riotId]/matches/[matchId]",
+        region: params.region,
+        matchId: params.matchId,
+        riotIdRaw: params.riotId,
+        riotIdRawCodePoints: toCodePoints(params.riotId),
+        decoded: decodedValue,
+        decodedCodePoints,
+        decodeError: decoded.ok ? null : decoded.error,
+        asciiDashIndex: decodedValue ? decodedValue.lastIndexOf("-") : null,
+        hashIndex: decodedValue ? decodedValue.lastIndexOf("#") : null,
+        ...ctx
+      });
+    }
+
     return (
       <BackendErrorCard
         title="Match Details"
         message="Invalid summoner URL. Expected /summoners/{region}/{gameName}-{tagLine}."
+        requestId={pageRequestId}
+        detail={
+          verbosity === "verbose"
+            ? JSON.stringify(
+                {
+                  region: params.region,
+                  riotIdRaw: params.riotId,
+                  riotIdRawCodePoints: toCodePoints(params.riotId),
+                  matchId: params.matchId
+                },
+                null,
+                2
+              )
+            : null
+        }
       />
     );
   }
 
-  const verbosity = getErrorVerbosity();
   const profileResult = await fetchBackendJson<unknown>(
     `${getBackendBaseUrl()}/api/summoners/${encodeURIComponent(
       params.region

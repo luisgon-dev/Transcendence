@@ -8,6 +8,7 @@ import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl } from "@/lib/env";
 import { getErrorVerbosity } from "@/lib/env";
 import { formatPercent } from "@/lib/format";
+import { roleDisplayLabel } from "@/lib/roles";
 import {
   championIconUrl,
   fetchChampionMap,
@@ -249,7 +250,7 @@ export default async function ChampionDetailPage({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Badge>Role: {effectiveRole}</Badge>
+          <Badge>Role: {roleDisplayLabel(effectiveRole)}</Badge>
           <Badge>Tier: {normalizedRankTier ?? "all"}</Badge>
           {winrates ? <Badge className="border-primary/40 bg-primary/10 text-primary">Patch {winrates.patch}</Badge> : null}
         </div>
@@ -264,7 +265,7 @@ export default async function ChampionDetailPage({
             >
               {ROLES.map((r) => (
                 <option key={r} value={r}>
-                  {r}
+                  {roleDisplayLabel(r)}
                 </option>
               ))}
             </select>
@@ -304,7 +305,7 @@ export default async function ChampionDetailPage({
                   : "border-border/70 bg-white/5 text-fg/80 hover:bg-white/10"
               }`}
             >
-              {r}
+              {roleDisplayLabel(r)}
             </Link>
           ))}
         </nav>
@@ -336,7 +337,7 @@ export default async function ChampionDetailPage({
                   .sort((a, b) => b.games - a.games)
                   .map((w) => (
                     <tr key={`${w.role}-${w.rankTier}`} className="border-t border-border/50">
-                      <td className="py-2 pr-4 font-medium">{w.role}</td>
+                      <td className="py-2 pr-4 font-medium">{roleDisplayLabel(w.role)}</td>
                       <td className="py-2 pr-4">{w.rankTier}</td>
                       <td className="py-2 pr-4">{formatPercent(w.winRate)}</td>
                       <td className="py-2 pr-4">{formatPercent(w.pickRate)}</td>

@@ -36,7 +36,12 @@ public class ChampionAnalyticsIngestionJob(
             return;
         }
 
-        await bootstrapService.EnsureSeededFromChallengerAsync(ct);
+        var hasTrackedSummoners = await db.Summoners
+            .AsNoTracking()
+            .AnyAsync(ct);
+
+        if (!hasTrackedSummoners)
+            await bootstrapService.EnsureSeededFromChallengerAsync(ct);
 
         var currentPatchInfo = await db.Patches
             .AsNoTracking()

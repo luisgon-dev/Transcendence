@@ -25,7 +25,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
 
     /// <summary>
     /// Computes win rates for a champion across roles and rank tiers.
-    /// Only returns data for combinations with 100+ games.
+    /// Uses adaptive sample thresholds and degrades gracefully for early-patch datasets.
     /// </summary>
     public async Task<List<ChampionWinRateDto>> ComputeWinRatesAsync(
         int championId,
@@ -83,8 +83,14 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                 .ToList();
         }
 
+        var totalGames = participantRanks.Count;
+        if (totalGames == 0)
+            return [];
+
+        var effectiveMinimumGames = ResolveEffectiveSampleSize(minimumGamesRequired, totalGames, floor: 3);
+
         // Group by role and rank tier, calculate win rates
-        var winRateData = participantRanks
+        var groupedData = participantRanks
             .GroupBy(pr => new { pr.Participant.TeamPosition, pr.RankTier })
             .Select(g => new
             {
@@ -93,11 +99,19 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                 Games = g.Count(),
                 Wins = g.Count(pr => pr.Participant.Win)
             })
-            .Where(x => x.Games >= minimumGamesRequired)
             .ToList();
 
-        // Calculate total games across all roles/tiers for pick rate calculation
-        var totalGames = participantRanks.Count;
+        var winRateData = groupedData
+            .Where(x => x.Games >= effectiveMinimumGames)
+            .ToList();
+
+        if (winRateData.Count == 0)
+        {
+            // Degrade gracefully so champion pages still show early-patch stats.
+            winRateData = groupedData
+                .Where(x => x.Games >= 1)
+                .ToList();
+        }
 
         // Convert to DTOs
         var result = winRateData
@@ -145,24 +159,24 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             baseQuery = baseQuery.Where(mp => mp.TeamPosition == normalizedRole);
         }
 
-        // Left-join ranks so missing rank data does not exclude participants for unfiltered views.
-        var rankedSolo = _context.Ranks
-            .AsNoTracking()
-            .Where(r => r.QueueType == "RANKED_SOLO_5x5");
+        // Only apply rank join semantics when a tier filter is requested.
+        // Unfiltered views intentionally keep unranked participants.
+        if (!string.IsNullOrEmpty(normalizedRankTierFilter))
+        {
+            baseQuery = baseQuery.Where(mp => _context.Ranks.Any(r =>
+                r.QueueType == "RANKED_SOLO_5x5" &&
+                r.SummonerId == mp.SummonerId &&
+                r.Tier == normalizedRankTierFilter));
+        }
 
-        var query =
-            from mp in baseQuery
-            join rank in rankedSolo on mp.SummonerId equals rank.SummonerId into rankJoin
-            from rank in rankJoin.DefaultIfEmpty()
-            let rankTierValue = rank != null && rank.Tier != null ? rank.Tier : "UNRANKED"
-            where normalizedRankTierFilter == null ||
-                  (rank != null &&
-                   rank.Tier != null &&
-                   rank.Tier.ToUpperInvariant() == normalizedRankTierFilter)
-            select new { mp.ChampionId, mp.TeamPosition, mp.Win, mp.MatchId, RankTier = rankTierValue };
+        var query = baseQuery.Select(mp => new { mp.ChampionId, mp.TeamPosition, mp.Win, mp.MatchId });
+        var totalParticipants = await query.CountAsync(ct);
+        if (totalParticipants == 0)
+            return [];
+        var effectiveMinimumGames = ResolveEffectiveSampleSize(minimumGamesRequired, totalParticipants, floor: 5);
 
         // Step 2: Aggregate champion stats
-        var championStats = isUnifiedRole
+        var aggregatedChampionStats = isUnifiedRole
             ? await query
                 .GroupBy(x => x.ChampionId)
                 .Select(g => new
@@ -172,7 +186,6 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                     Games = g.Count(),
                     Wins = g.Count(x => x.Win)
                 })
-                .Where(x => x.Games >= minimumGamesRequired)
                 .ToListAsync(ct)
             : await query
                 .GroupBy(x => new { x.ChampionId, x.TeamPosition })
@@ -183,16 +196,24 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                     Games = g.Count(),
                     Wins = g.Count(x => x.Win)
                 })
-                .Where(x => x.Games >= minimumGamesRequired)
                 .ToListAsync(ct);
+
+        var championStats = aggregatedChampionStats
+            .Where(x => x.Games >= effectiveMinimumGames)
+            .ToList();
+
+        if (championStats.Count == 0)
+        {
+            // Degrade gracefully so tier lists still render while patch data is ramping.
+            championStats = aggregatedChampionStats
+                .Where(x => x.Games >= 1)
+                .ToList();
+        }
 
         if (championStats.Count == 0)
             return new List<TierListEntry>();
 
-        // Step 3: Calculate total games for pick rate (per role if role-specific, otherwise all)
-        var totalParticipants = await query.CountAsync(ct);
-
-        // Step 4: Calculate composite scores
+        // Step 3: Calculate composite scores
         var withScores = championStats.Select(c => new
         {
             c.ChampionId,
@@ -324,6 +345,18 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
     private static string NormalizeRole(string? role) =>
         string.IsNullOrWhiteSpace(role) ? "ALL" : role.ToUpperInvariant();
 
+    private static int ResolveEffectiveSampleSize(int configuredMinimum, int availableGames, int floor)
+    {
+        if (availableGames <= 0)
+            return int.MaxValue;
+
+        var safeConfiguredMinimum = Math.Max(1, configuredMinimum);
+        var safeFloor = Math.Max(1, floor);
+        var proportionalMinimum = (int)Math.Ceiling(availableGames * 0.15);
+        var boundedFloor = Math.Min(availableGames, Math.Max(safeFloor, proportionalMinimum));
+        return Math.Max(1, Math.Min(safeConfiguredMinimum, boundedFloor));
+    }
+
     /// <summary>
     /// Calculates movement indicator by comparing tier grades.
     /// </summary>
@@ -383,12 +416,13 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         string patch,
         CancellationToken ct)
     {
-        var minimumGamesRequired = Math.Max(1, _options.MinimumGamesRequired);
+        var minimumGamesRequired = await GetAdaptiveMinimumGamesRequiredAsync(patch, ct);
         var normalizedRankTierFilter = NormalizeRankTierFilter(rankTier);
 
         // Step 1: Get all match data for this champion/role/patch/tier with items and runes
         var baseQuery = _context.MatchParticipants
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(mp => mp.Items)
             .Include(mp => mp.Runes)
             .Where(mp => mp.ChampionId == championId
@@ -396,18 +430,15 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                       && mp.Match.Status == FetchStatus.Success
                       && mp.TeamPosition == role);
 
-        // Join with Rank for tier filtering
-        var query = baseQuery
-            .Join(
-                _context.Ranks.Where(r => r.QueueType == "RANKED_SOLO_5x5"
-                    && (normalizedRankTierFilter == null ||
-                        (r.Tier != null && r.Tier.ToUpperInvariant() == normalizedRankTierFilter))),
-                mp => mp.SummonerId,
-                r => r.SummonerId,
-                (mp, r) => mp
-            );
+        if (!string.IsNullOrEmpty(normalizedRankTierFilter))
+        {
+            baseQuery = baseQuery.Where(mp => _context.Ranks.Any(r =>
+                r.QueueType == "RANKED_SOLO_5x5" &&
+                r.SummonerId == mp.SummonerId &&
+                r.Tier == normalizedRankTierFilter));
+        }
 
-        var matchData = await query
+        var matchData = await baseQuery
             .Select(mp => new
             {
                 mp.Win,
@@ -416,7 +447,8 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             })
             .ToListAsync(ct);
 
-        if (matchData.Count < minimumGamesRequired)
+        var effectiveMinimumGames = ResolveEffectiveSampleSize(minimumGamesRequired, matchData.Count, floor: 3);
+        if (matchData.Count < effectiveMinimumGames)
             return new ChampionBuildsResponse(championId, role, rankTier ?? "all", patch,
                 new List<int>(), new List<ChampionBuildDto>());
 
@@ -444,6 +476,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             .ToDictionaryAsync(rv => rv.RuneId, rv => new RuneMetadata(rv.RunePathId, rv.Slot), ct);
 
         // Step 4: Group by build (items + runes as key)
+        var effectiveBuildSampleSize = ResolveEffectiveSampleSize(MinBuildSampleSize, totalGames, floor: 2);
         var buildGroups = matchData
             .Select(m => new
             {
@@ -463,10 +496,35 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                 Wins = g.Sum(x => x.Win ? 1 : 0),
                 WinRate = (double)g.Sum(x => x.Win ? 1 : 0) / g.Count()
             })
-            .Where(b => b.Games >= MinBuildSampleSize)
+            .Where(b => b.Games >= effectiveBuildSampleSize)
             .OrderByDescending(b => b.Games * b.WinRate) // Score: popularity * success
             .Take(3)
             .ToList();
+
+        if (buildGroups.Count == 0)
+        {
+            buildGroups = matchData
+                .Select(m => new
+                {
+                    m.Win,
+                    ItemKey = string.Join(",", m.Items.Where(i => i != 0).OrderBy(i => i)),
+                    RuneInfo = BuildRuneInfo(m.Runes, runeMetadata),
+                    Items = m.Items.Where(i => i != 0).OrderBy(i => i).ToList()
+                })
+                .GroupBy(m => new { m.ItemKey, m.RuneInfo.Key })
+                .Select(g => new
+                {
+                    Items = g.First().Items,
+                    RuneInfo = g.First().RuneInfo,
+                    Games = g.Count(),
+                    Wins = g.Sum(x => x.Win ? 1 : 0),
+                    WinRate = (double)g.Sum(x => x.Win ? 1 : 0) / g.Count()
+                })
+                .Where(b => b.Games >= 1)
+                .OrderByDescending(b => b.Games * b.WinRate)
+                .Take(3)
+                .ToList();
+        }
 
         // Step 5: Map to DTOs
         var builds = buildGroups.Select(build => new ChampionBuildDto(
@@ -586,16 +644,10 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         // Apply rank tier filter if specified
         if (!string.IsNullOrEmpty(normalizedRankTierFilter))
         {
-            championQuery = championQuery
-                .Join(
-                    _context.Ranks.Where(r =>
-                        r.QueueType == "RANKED_SOLO_5x5" &&
-                        r.Tier != null &&
-                        r.Tier.ToUpperInvariant() == normalizedRankTierFilter),
-                    mp => mp.SummonerId,
-                    r => r.SummonerId,
-                    (mp, r) => mp
-                );
+            championQuery = championQuery.Where(mp => _context.Ranks.Any(r =>
+                r.QueueType == "RANKED_SOLO_5x5" &&
+                r.SummonerId == mp.SummonerId &&
+                r.Tier == normalizedRankTierFilter));
         }
 
         // Join with opponent: same match, same role, different team
@@ -618,11 +670,14 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                 Wins = g.Sum(x => x.Champion.Win ? 1 : 0),
                 Losses = g.Sum(x => x.Champion.Win ? 0 : 1)
             })
-            .Where(m => m.Games >= MinMatchupSampleSize)
             .ToListAsync(ct);
+
+        var totalMatchupGames = matchupData.Sum(m => m.Games);
+        var effectiveMatchupSampleSize = ResolveEffectiveSampleSize(MinMatchupSampleSize, totalMatchupGames, floor: 2);
 
         // Convert to DTOs with calculated win rate
         var matchups = matchupData
+            .Where(m => m.Games >= effectiveMatchupSampleSize)
             .Select(m => new MatchupEntryDto
             {
                 OpponentChampionId = m.OpponentChampionId,
@@ -632,6 +687,21 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                 WinRate = m.Games > 0 ? (double)m.Wins / m.Games : 0.0
             })
             .ToList();
+
+        if (matchups.Count == 0)
+        {
+            matchups = matchupData
+                .Where(m => m.Games >= 1)
+                .Select(m => new MatchupEntryDto
+                {
+                    OpponentChampionId = m.OpponentChampionId,
+                    Games = m.Games,
+                    Wins = m.Wins,
+                    Losses = m.Losses,
+                    WinRate = m.Games > 0 ? (double)m.Wins / m.Games : 0.0
+                })
+                .ToList();
+        }
 
         // Separate counters (low win rate) and favorable (high win rate)
         var counters = matchups

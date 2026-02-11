@@ -36,7 +36,7 @@ const TIER_LINKS = [
   { label: "Tier List · Jungle", href: "/tierlist?role=JUNGLE" },
   { label: "Tier List · Middle", href: "/tierlist?role=MIDDLE" },
   { label: "Tier List · Bottom", href: "/tierlist?role=BOTTOM" },
-  { label: "Tier List · Utility", href: "/tierlist?role=UTILITY" },
+  { label: "Tier List · Support", href: "/tierlist?role=UTILITY" },
   { label: "Tier List · Challenger", href: "/tierlist?rankTier=CHALLENGER" }
 ] as const;
 

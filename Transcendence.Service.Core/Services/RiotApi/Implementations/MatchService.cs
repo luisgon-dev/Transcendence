@@ -146,12 +146,44 @@ public class MatchService(
             .Distinct()
             .ToList();
 
-        var existingSummoners = await context.Summoners
+        var existingSummonersRaw = await context.Summoners
             .Where(s => s.Puuid != null && participantPuuids.Contains(s.Puuid))
-            .ToDictionaryAsync(s => s.Puuid!, cancellationToken);
+            .ToListAsync(cancellationToken);
+
+        var duplicatePuuids = existingSummonersRaw
+            .GroupBy(s => s.Puuid!, StringComparer.Ordinal)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToList();
+
+        if (duplicatePuuids.Count > 0)
+        {
+            logger.LogWarning(
+                "[Lightweight] Found {DuplicateCount} duplicate summoner records by PUUID while processing {MatchId}. Using the most recently updated record per PUUID.",
+                duplicatePuuids.Count,
+                matchId);
+        }
+
+        var existingSummoners = existingSummonersRaw
+            .GroupBy(s => s.Puuid!, StringComparer.Ordinal)
+            .ToDictionary(
+                g => g.Key,
+                g => g
+                    .OrderByDescending(s => s.UpdatedAt)
+                    .ThenByDescending(s => s.Id)
+                    .First(),
+                StringComparer.Ordinal);
 
         foreach (var p in info.Participants)
         {
+            if (string.IsNullOrWhiteSpace(p.Puuid))
+            {
+                logger.LogWarning(
+                    "[Lightweight] Skipping participant with missing PUUID in match {MatchId}.",
+                    matchId);
+                continue;
+            }
+
             if (!existingSummoners.TryGetValue(p.Puuid, out var summoner))
             {
                 // Create a minimal stub from match participant data instead of calling Riot API

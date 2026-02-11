@@ -12,7 +12,7 @@ public class ChampionAnalyticsController(IChampionAnalyticsService analyticsServ
 {
     /// <summary>
     /// Get champion win rates by role and rank tier.
-    /// Only returns data for champion/role/tier combinations with 100+ games.
+    /// Uses adaptive sample thresholds to remain useful during early patch windows.
     /// Data is cached for 24 hours.
     /// </summary>
     /// <param name="championId">Champion ID (e.g., 1 for Annie)</param>

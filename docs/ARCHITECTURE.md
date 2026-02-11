@@ -16,6 +16,8 @@ Transcendence is a backend + web monorepo:
 ### `Transcendence.Service`
 - Background host that runs Hangfire server and recurring jobs
 - Executes ingestion/refresh/analytics workflows
+- In `Development`, the worker narrows recurring schedules to analytics-oriented jobs only (analytics refresh + ingestion)
+- In `Production`, startup can bootstrap analytics immediately by running patch detection first, then queuing ingestion + adaptive analytics refresh (controlled by `Jobs:Schedule:RunPatchDetectionOnStartup`)
 
 ### `Transcendence.Service.Core`
 - Domain/application services (analysis, analytics compute, auth, live game, Riot API integration, jobs)

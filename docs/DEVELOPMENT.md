@@ -107,6 +107,23 @@ corepack pnpm api:check
 
 Key worker settings live under `Jobs:*` in `Transcendence.Service/appsettings*.json`.
 
+### Development Worker Scope
+
+When `Transcendence.Service` runs in the `Development` environment, the `DevelopmentWorker` schedules only analytics-oriented recurring jobs:
+
+- `refresh-champion-analytics`
+- `refresh-champion-analytics-adaptive` (when enabled)
+- `champion-analytics-ingestion` (when enabled)
+
+It explicitly removes non-analytics recurring jobs (`detect-patch`, `retry-failed-matches`, `poll-live-games`) from the scheduler to keep local runs focused on analytics behavior.
+
+### Production Startup Bootstrap
+
+When `Transcendence.Service` runs in non-development environments, the `ProductionWorker` can queue startup bootstrap jobs so analytics is available sooner after deploy:
+
+- `Jobs:Schedule:RunPatchDetectionOnStartup=true` runs patch detection immediately on startup.
+- After startup patch detection, the worker queues analytics ingestion (when enabled) and adaptive analytics refresh.
+
 ### Champion Analytics Ingestion
 
 `Jobs:ChampionAnalyticsIngestion` now supports:

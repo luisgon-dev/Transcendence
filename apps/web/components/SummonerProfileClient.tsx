@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { formatPercent } from "@/lib/format";
+import { roleDisplayLabel } from "@/lib/roles";
 import { encodeRiotIdPath } from "@/lib/riotid";
 import { computeNextPollDelayMs } from "@/lib/polling";
 import { profileIconUrl } from "@/lib/staticData";
@@ -612,7 +613,7 @@ export function SummonerProfileClient({
                           return (
                             <div key={r.role} className="grid gap-1">
                               <div className="flex items-center justify-between text-xs text-fg/80">
-                                <span className="font-medium">{r.role}</span>
+                                <span className="font-medium">{roleDisplayLabel(r.role)}</span>
                                 <span>
                                   {r.games} games · {formatPercent(r.winRate)}
                                 </span>

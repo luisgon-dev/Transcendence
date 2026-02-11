@@ -7,7 +7,6 @@ using Transcendence.Service.Core.Services.Jobs.Configuration;
 namespace Transcendence.Service.Workers;
 
 public class DevelopmentWorker(
-    IBackgroundJobClient backgroundJobClient,
     JobStorage jobStorage,
     IOptions<WorkerJobScheduleOptions> options,
     ILogger<DevelopmentWorker> logger)
@@ -41,18 +40,9 @@ public class DevelopmentWorker(
         if (schedule.CleanupOnStartup)
             CleanupHangfireJobs();
 
-        // Schedule patch detection every 6 hours
-        RecurringJob.AddOrUpdate<UpdateStaticDataJob>(
-            DetectPatchJobId,
-            job => job.Execute(CancellationToken.None),
-            schedule.DetectPatchCron,
-            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
-
-        RecurringJob.AddOrUpdate<RetryFailedMatchesJob>(
-            RetryFailedMatchesJobId,
-            job => job.Execute(CancellationToken.None),
-            schedule.RetryFailedMatchesCron,
-            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+        // Development worker intentionally runs analytics-only recurring jobs.
+        RemoveNonAnalyticsRecurringJobs();
+        logger.LogInformation("Development worker is configured for analytics-only recurring jobs.");
 
         // Schedule analytics refresh daily at 4 AM UTC
         RecurringJob.AddOrUpdate<RefreshChampionAnalyticsJob>(
@@ -87,19 +77,14 @@ public class DevelopmentWorker(
             RecurringJob.RemoveIfExists(ChampionAnalyticsIngestionJobId);
         }
 
-        RecurringJob.AddOrUpdate<LiveGamePollingJob>(
-            PollLiveGamesJobId,
-            job => job.ExecuteAsync(CancellationToken.None),
-            schedule.LiveGamePollingCron,
-            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
-
-        if (schedule.RunPatchDetectionOnStartup)
-            backgroundJobClient.Enqueue<UpdateStaticDataJob>(x => x.Execute(CancellationToken.None));
-
-        // One-time backfill: fix matches ingested before the FetchStatus bug was fixed
-        backgroundJobClient.Enqueue<BackfillMatchStatusJob>(job => job.ExecuteAsync(CancellationToken.None));
-
         return Task.CompletedTask;
+    }
+
+    private static void RemoveNonAnalyticsRecurringJobs()
+    {
+        RecurringJob.RemoveIfExists(DetectPatchJobId);
+        RecurringJob.RemoveIfExists(RetryFailedMatchesJobId);
+        RecurringJob.RemoveIfExists(PollLiveGamesJobId);
     }
 
     private void CleanupHangfireJobs()

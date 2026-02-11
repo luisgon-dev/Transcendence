@@ -23,6 +23,9 @@ public class ProductionWorker(
     public override Task StartAsync(CancellationToken cancellationToken)
     {
         var schedule = options.Value;
+        if (schedule.CleanupOnStartup)
+            CleanupHangfireJobs();
+
         var removed = jobStorage.RemoveInvalidRecurringJobs(
             logger,
             legacyRecurringJobIds:
@@ -97,10 +100,63 @@ public class ProductionWorker(
             schedule.EnableChampionAnalyticsIngestion ? schedule.ChampionAnalyticsIngestionCron : "disabled",
             schedule.LiveGamePollingCron);
 
+        EnqueueStartupAnalyticsBootstrap(schedule);
+
         // One-time backfill: fix matches ingested before the FetchStatus bug was fixed
         backgroundJobClient.Enqueue<BackfillMatchStatusJob>(job => job.ExecuteAsync(CancellationToken.None));
 
         return base.StartAsync(cancellationToken);
+    }
+
+    private void EnqueueStartupAnalyticsBootstrap(WorkerJobScheduleOptions schedule)
+    {
+        string? patchJobId = null;
+        if (schedule.RunPatchDetectionOnStartup)
+        {
+            patchJobId = backgroundJobClient.Enqueue<UpdateStaticDataJob>(job => job.Execute(CancellationToken.None));
+            logger.LogInformation("Queued startup patch detection job.");
+        }
+
+        if (schedule.EnableChampionAnalyticsIngestion)
+        {
+            if (!string.IsNullOrWhiteSpace(patchJobId))
+            {
+                backgroundJobClient.ContinueJobWith<ChampionAnalyticsIngestionJob>(
+                    patchJobId,
+                    job => job.ExecuteAsync(CancellationToken.None));
+            }
+            else
+            {
+                backgroundJobClient.Enqueue<ChampionAnalyticsIngestionJob>(job => job.ExecuteAsync(CancellationToken.None));
+            }
+
+            logger.LogInformation("Queued startup champion analytics ingestion job.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(patchJobId))
+        {
+            backgroundJobClient.ContinueJobWith<RefreshChampionAnalyticsJob>(
+                patchJobId,
+                job => job.ExecuteAdaptiveAsync(CancellationToken.None));
+        }
+        else
+        {
+            backgroundJobClient.Enqueue<RefreshChampionAnalyticsJob>(job => job.ExecuteAdaptiveAsync(CancellationToken.None));
+        }
+
+        logger.LogInformation("Queued startup adaptive analytics refresh job.");
+    }
+
+    private void CleanupHangfireJobs()
+    {
+        JobStorage.Current?.GetMonitoringApi()?.PurgeJobs();
+        RecurringJob.RemoveIfExists(DetectPatchJobId);
+        RecurringJob.RemoveIfExists(RetryFailedMatchesJobId);
+        RecurringJob.RemoveIfExists(RefreshChampionAnalyticsJobId);
+        RecurringJob.RemoveIfExists(RefreshChampionAnalyticsAdaptiveJobId);
+        RecurringJob.RemoveIfExists(ChampionAnalyticsIngestionJobId);
+        RecurringJob.RemoveIfExists(PollLiveGamesJobId);
+        logger.LogInformation("Cleared queued and recurring jobs due to CleanupOnStartup=true.");
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

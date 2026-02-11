@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
 using Transcendence.Data;
+using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
 
@@ -44,14 +45,8 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         ChampionAnalyticsFilter filter,
         CancellationToken ct)
     {
-        // Get current active patch
-        var currentPatch = await _context.Patches
-            .AsNoTracking()
-            .Where(p => p.IsActive)
-            .Select(p => p.Version)
-            .FirstOrDefaultAsync(ct);
-
-        if (string.IsNullOrEmpty(currentPatch))
+        var currentPatch = await GetCurrentPatchOrFallbackAsync(ct);
+        if (string.IsNullOrWhiteSpace(currentPatch))
         {
             // No active patch, return empty summary
             return new ChampionWinRateSummary(
@@ -85,14 +80,8 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         string? rankTier,
         CancellationToken ct)
     {
-        // Get current active patch
-        var currentPatch = await _context.Patches
-            .AsNoTracking()
-            .Where(p => p.IsActive)
-            .Select(p => p.Version)
-            .FirstOrDefaultAsync(ct);
-
-        if (string.IsNullOrEmpty(currentPatch))
+        var currentPatch = await GetCurrentPatchOrFallbackAsync(ct);
+        if (string.IsNullOrWhiteSpace(currentPatch))
         {
             // No active patch, return empty tier list
             return new TierListResponse(
@@ -137,9 +126,13 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         string? rankTier,
         CancellationToken ct)
     {
-        var patch = await GetCurrentPatchAsync(ct);
+        var patch = await GetCurrentPatchOrFallbackAsync(ct);
         var normalizedRole = role.ToUpperInvariant();
         var normalizedTier = NormalizeRankTier(rankTier);
+
+        if (string.IsNullOrWhiteSpace(patch))
+            return new ChampionBuildsResponse(championId, normalizedRole, normalizedTier, "Unknown", [], []);
+
         var cacheKey = $"{BuildsCacheKeyPrefix}{championId}:{normalizedRole}:{normalizedTier}:{patch}";
         var tags = new[] { AnalyticsCacheTag, $"patch:{patch}", "builds" };
 
@@ -158,9 +151,23 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         string? rankTier,
         CancellationToken ct)
     {
-        var patch = await GetCurrentPatchAsync(ct);
+        var patch = await GetCurrentPatchOrFallbackAsync(ct);
         var normalizedRole = role.ToUpperInvariant();
         var normalizedTier = NormalizeRankTier(rankTier);
+
+        if (string.IsNullOrWhiteSpace(patch))
+        {
+            return new ChampionMatchupsResponse
+            {
+                ChampionId = championId,
+                Role = normalizedRole,
+                RankTier = normalizedTier,
+                Patch = "Unknown",
+                Counters = [],
+                FavorableMatchups = []
+            };
+        }
+
         var cacheKey = $"{MatchupsCacheKeyPrefix}{championId}:{normalizedRole}:{normalizedTier}:{patch}";
         var tags = new[] { AnalyticsCacheTag, $"patch:{patch}", "matchups" };
 
@@ -178,13 +185,24 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         await _cache.RemoveByTagAsync(AnalyticsCacheTag, ct);
     }
 
-    private async Task<string> GetCurrentPatchAsync(CancellationToken ct)
+    private async Task<string?> GetCurrentPatchOrFallbackAsync(CancellationToken ct)
     {
-        return await _context.Patches
+        var activePatch = await _context.Patches
             .AsNoTracking()
             .Where(p => p.IsActive)
             .Select(p => p.Version)
-            .FirstOrDefaultAsync(ct) ?? "Unknown";
+            .FirstOrDefaultAsync(ct);
+
+        if (!string.IsNullOrWhiteSpace(activePatch))
+            return activePatch;
+
+        return await _context.Matches
+            .AsNoTracking()
+            .Where(m => m.Status == FetchStatus.Success && m.Patch != null && m.Patch != "")
+            .OrderByDescending(m => m.FetchedAt)
+            .ThenByDescending(m => m.Id)
+            .Select(m => m.Patch)
+            .FirstOrDefaultAsync(ct);
     }
 
     private static string BuildCacheKey(int championId, ChampionAnalyticsFilter filter, string patch)

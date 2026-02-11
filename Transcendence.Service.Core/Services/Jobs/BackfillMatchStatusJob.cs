@@ -29,6 +29,7 @@ public class BackfillMatchStatusJob(
         {
             var batch = await db.Matches
                 .Where(m => m.Status == FetchStatus.Unfetched && m.Participants.Any())
+                .OrderBy(m => m.Id)
                 .Take(BatchSize)
                 .ToListAsync(ct);
 

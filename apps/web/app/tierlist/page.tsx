@@ -8,6 +8,7 @@ import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl } from "@/lib/env";
 import { getErrorVerbosity } from "@/lib/env";
 import { formatPercent } from "@/lib/format";
+import { roleDisplayLabel } from "@/lib/roles";
 import { championIconUrl, fetchChampionMap } from "@/lib/staticData";
 
 type TierGrade = "S" | "A" | "B" | "C" | "D";
@@ -134,7 +135,7 @@ export default async function TierListPage({
           <Badge className="border-primary/40 bg-primary/10 text-primary">
             Patch {tierlist.patch}
           </Badge>
-          <Badge>Role: {tierlist.role ?? "ALL"}</Badge>
+          <Badge>Role: {roleDisplayLabel(tierlist.role ?? "ALL")}</Badge>
           <Badge>Tier: {tierlist.rankTier ?? "all"}</Badge>
         </div>
         <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
@@ -154,7 +155,7 @@ export default async function TierListPage({
             >
               {ROLES.map((r) => (
                 <option key={r} value={r}>
-                  {r}
+                  {roleDisplayLabel(r)}
                 </option>
               ))}
             </select>
@@ -225,7 +226,7 @@ export default async function TierListPage({
                           >
                             {champName}
                           </Link>
-                          <span className="text-xs text-muted">{e.role}</span>
+                          <span className="text-xs text-muted">{roleDisplayLabel(e.role)}</span>
                           <span
                             className={`text-xs font-medium ${movementClass(e.movement)}`}
                             title={

@@ -30,7 +30,7 @@ public class SummonerBootstrapService(
         var hasAnySummoners = await db.Summoners.AsNoTracking().AnyAsync(ct);
         if (hasAnySummoners)
         {
-            logger.LogInformation("Summoner bootstrap skipped: summoners already exist.");
+            logger.LogDebug("Summoner bootstrap skipped: summoners already exist.");
             return 0;
         }
 
@@ -49,7 +49,7 @@ public class SummonerBootstrapService(
         var acquired = await refreshLockRepository.TryAcquireAsync(lockKey, lockTtl, ct);
         if (!acquired)
         {
-            logger.LogInformation("Summoner bootstrap skipped: lock held ({LockKey}).", lockKey);
+            logger.LogDebug("Summoner bootstrap skipped: lock held ({LockKey}).", lockKey);
             return 0;
         }
 
@@ -59,7 +59,7 @@ public class SummonerBootstrapService(
             hasAnySummoners = await db.Summoners.AsNoTracking().AnyAsync(ct);
             if (hasAnySummoners)
             {
-                logger.LogInformation("Summoner bootstrap skipped: summoners already exist.");
+                logger.LogDebug("Summoner bootstrap skipped: summoners already exist.");
                 return 0;
             }
 

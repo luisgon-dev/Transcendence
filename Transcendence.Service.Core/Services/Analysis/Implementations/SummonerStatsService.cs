@@ -222,19 +222,36 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache, IL
 
     private async Task<IReadOnlyList<RoleStat>> ComputeRoleBreakdownAsync(Guid summonerId, CancellationToken ct)
     {
-        var list = await db.MatchParticipants
+        var rows = await db.MatchParticipants
             .AsNoTracking()
             .Where(mp => mp.SummonerId == summonerId)
-            .GroupBy(mp => string.IsNullOrWhiteSpace(mp.TeamPosition) ? "UNKNOWN" : mp.TeamPosition!)
-            .Select(g => new RoleStat(
-                g.Key,
-                g.Count(),
-                g.Sum(x => x.Win ? 1 : 0),
-                g.Sum(x => x.Win ? 0 : 1),
-                g.Count() > 0 ? (double)g.Sum(x => x.Win ? 1 : 0) / g.Count() * 100.0 : 0.0
-            ))
-            .OrderByDescending(x => x.Games)
+            .Select(mp => new { mp.TeamPosition, mp.Win })
             .ToListAsync(ct);
+
+        var list = rows
+            .GroupBy(row => NormalizeTeamPosition(row.TeamPosition))
+            .Select(g =>
+            {
+                var games = g.Count();
+                var wins = g.Sum(x => x.Win ? 1 : 0);
+                return new RoleStat(
+                    g.Key,
+                    games,
+                    wins,
+                    games - wins,
+                    games > 0 ? (double)wins / games * 100.0 : 0.0
+                );
+            })
+            .OrderByDescending(x => x.Games)
+            .ToList();
+
+        if (rows.Count > 0 && list.Count == 0)
+        {
+            logger.LogWarning(
+                "Role breakdown produced no buckets for summoner {SummonerId} despite {MatchCount} matches.",
+                summonerId,
+                rows.Count);
+        }
 
         return list;
     }
@@ -579,6 +596,14 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache, IL
     private static string NormalizePatchVersion(string? patchVersion)
     {
         return string.IsNullOrWhiteSpace(patchVersion) ? string.Empty : patchVersion.Trim();
+    }
+
+    private static string NormalizeTeamPosition(string? teamPosition)
+    {
+        if (string.IsNullOrWhiteSpace(teamPosition))
+            return "UNKNOWN";
+
+        return teamPosition.Trim().ToUpperInvariant();
     }
 
     private static SummonerOverviewStats EmptyOverview(Guid summonerId)

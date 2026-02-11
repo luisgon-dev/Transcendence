@@ -51,6 +51,28 @@ Transcendence is a backend + web monorepo:
    - Upserts summoner/rank/match records
 4. Client polls GET endpoint until data is ready (200 OK)
 
+### Refresh Priority Orchestration
+
+- API-triggered summoner refreshes are implicitly high-priority.
+- API refresh requests create an additional lock key with prefix `refresh-priority:api:`.
+- While any active `refresh-priority:api:` lock exists:
+  - Champion analytics ingestion pauses.
+  - Live game polling pauses.
+  - Failed-match retry pauses.
+- Hangfire queue ordering is configured as:
+  - `refresh-high`
+  - `default`
+  - `refresh-low`
+- API refresh jobs run on `refresh-high`; ingestion-driven refresh jobs run on `refresh-low`.
+
+### Continuous Analytics Ingestion
+
+- Champion analytics ingestion now runs continuously in low-priority mode to keep growing current-patch data.
+- Ingestion scales queued refresh count based on:
+  - current patch coverage vs target
+  - staleness of recent successful fetches
+- Even when patch data is healthy, ingestion can queue a small minimum number of low-priority refreshes per run.
+
 ## Web Auth Boundary (BFF)
 
 The web app never exposes backend tokens to browser JS:
@@ -67,4 +89,3 @@ Backend uses a layered approach (see source and README):
 
 - HybridCache (L1 in-memory + L2 Redis) for derived stats/analytics
 - Persistent storage (PostgreSQL) for canonical match/summoner data
-

@@ -35,6 +35,12 @@ This is a navigational summary; the OpenAPI spec is the source of truth.
 - `GET /api/summoners/{summonerId}/matches/recent`
 - `GET /api/summoners/{summonerId}/matches/{matchId}`
 
+#### Refresh Priority Behavior
+
+- `POST /api/summoners/{region}/{name}/{tag}/refresh` is implicitly treated as a high-priority refresh request.
+- The request/response contract is unchanged (no priority request parameter).
+- When high-priority refresh demand is active, lower-priority Riot-calling background jobs are temporarily paused.
+
 ### Analytics
 
 - `GET /api/analytics/tierlist`
@@ -69,4 +75,3 @@ The repo keeps the exported spec committed and uses it to generate the TypeScrip
 See root `package.json` scripts:
 - `api:gen`
 - `api:check`
-

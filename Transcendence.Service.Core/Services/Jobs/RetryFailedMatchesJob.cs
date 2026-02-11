@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Match;
+using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
 
@@ -14,10 +15,20 @@ public class RetryFailedMatchesJob(
     TranscendenceContext context,
     IMatchService matchService,
     IOptions<RetryFailedMatchesJobOptions> options,
+    IOptions<ChampionAnalyticsIngestionJobOptions> analyticsIngestionOptions,
+    IRefreshLockRepository refreshLockRepository,
     ILogger<RetryFailedMatchesJob> logger)
 {
     public async Task Execute(CancellationToken cancellationToken)
     {
+        if (analyticsIngestionOptions.Value.PauseWhenApiPriorityRefreshActive &&
+            await refreshLockRepository.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix,
+                cancellationToken))
+        {
+            logger.LogInformation("RetryFailedMatches skipped: active high-priority API refresh demand detected.");
+            return;
+        }
+
         var jobOptions = options.Value;
         var maxMatchesPerRun = Math.Max(1, jobOptions.MaxMatchesPerRun);
         var minimumMinutesSinceAttempt = Math.Max(1, jobOptions.MinimumMinutesSinceLastAttempt);

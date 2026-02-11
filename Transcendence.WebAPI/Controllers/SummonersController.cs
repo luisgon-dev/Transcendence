@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Analysis.Interfaces;
+using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.DTOs;
@@ -149,7 +150,7 @@ public class SummonersController(
         }
 
         // If a refresh is in progress, let the caller know
-        var refreshKey = BuildRefreshKey(platform, name, tag);
+        var refreshKey = RefreshLockKeys.BuildSummonerRefreshKey(platform, name, tag);
         var lockRow = await refreshLockRepository.GetAsync(refreshKey, ct);
         var pollUrl = Url.ActionLink(nameof(GetByRiotId), null, new
         {
@@ -183,8 +184,9 @@ public class SummonersController(
         if (!PlatformRouteParser.TryParse(region, out var platform))
             return BadRequest($"Unsupported region '{region}'. Use a platform like NA1, EUW1, EUN1, KR, etc.");
 
-        var key = BuildRefreshKey(platform, name, tag);
-        var ttl = TimeSpan.FromMinutes(5);
+        var key = RefreshLockKeys.BuildSummonerRefreshKey(platform, name, tag);
+        var priorityKey = RefreshLockKeys.BuildApiPriorityKey(platform, name, tag);
+        var ttl = TimeSpan.FromMinutes(15);
 
         var acquired = await refreshLockRepository.TryAcquireAsync(key, ttl, ct);
         if (!acquired)
@@ -199,9 +201,22 @@ public class SummonersController(
                 seconds));
         }
 
+        var priorityAcquired = await refreshLockRepository.TryAcquireAsync(priorityKey, ttl, ct);
+
         // Enqueue refresh job
-        backgroundJobClient.Enqueue<ISummonerRefreshJob>(job =>
-            job.RefreshByRiotId(name, tag, platform, key, CancellationToken.None));
+        try
+        {
+            backgroundJobClient.Enqueue<ISummonerRefreshJob>(job =>
+                job.RefreshByRiotId(name, tag, platform, key, priorityAcquired ? priorityKey : null,
+                    CancellationToken.None));
+        }
+        catch
+        {
+            await refreshLockRepository.ReleaseAsync(key, ct);
+            if (priorityAcquired)
+                await refreshLockRepository.ReleaseAsync(priorityKey, ct);
+            throw;
+        }
 
         var pollUrl = Url.ActionLink(nameof(GetByRiotId), null, new
         {
@@ -212,13 +227,6 @@ public class SummonersController(
         return Accepted(new SummonerAcceptedResponse(
             "Refresh queued",
             pollUrl));
-    }
-
-    private static string BuildRefreshKey(PlatformRoute platform, string name, string tag)
-    {
-        var nm = name.Trim().ToUpperInvariant();
-        var tg = tag.Trim().ToUpperInvariant();
-        return $"summoner-refresh:{platform}:{nm}:{tg}";
     }
 
     /// <summary>

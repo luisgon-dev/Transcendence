@@ -7,4 +7,5 @@ public interface IRefreshLockRepository
     Task<bool> TryAcquireAsync(string key, TimeSpan ttl, CancellationToken ct = default);
     Task ReleaseAsync(string key, CancellationToken ct = default);
     Task<RefreshLock?> GetAsync(string key, CancellationToken ct = default);
+    Task<bool> AnyActiveByPrefixAsync(string prefix, CancellationToken ct = default);
 }

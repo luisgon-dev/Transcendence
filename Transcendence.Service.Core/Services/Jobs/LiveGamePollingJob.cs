@@ -18,6 +18,7 @@ public class LiveGamePollingJob(
     ISummonerBootstrapService bootstrapService,
     ILiveGameService liveGameService,
     ILiveGameSnapshotRepository snapshotRepository,
+    IRefreshLockRepository refreshLockRepository,
     IOptions<LiveGamePollingJobOptions> options,
     IOptions<ChampionAnalyticsIngestionJobOptions> analyticsIngestionOptions,
     ILogger<LiveGamePollingJob> logger)
@@ -32,6 +33,13 @@ public class LiveGamePollingJob(
 
     public async Task ExecuteAsync(CancellationToken ct = default)
     {
+        if (analyticsIngestionOptions.Value.PauseWhenApiPriorityRefreshActive &&
+            await refreshLockRepository.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, ct))
+        {
+            logger.LogInformation("Live game polling skipped: active high-priority API refresh demand detected.");
+            return;
+        }
+
         await bootstrapService.EnsureSeededFromChallengerAsync(ct);
 
         var jobOptions = options.Value;

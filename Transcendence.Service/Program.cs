@@ -3,6 +3,7 @@ using Hangfire.PostgreSql;
 using Microsoft.EntityFrameworkCore;
 using Transcendence.Data;
 using Transcendence.Data.Extensions;
+using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Extensions;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Workers;
@@ -26,7 +27,10 @@ builder.Services.AddHangfire(config =>
         })
         .UsePostgreSqlStorage(options =>
             options.UseNpgsqlConnection(builder.Configuration.GetConnectionString("MainDatabase"))));
-builder.Services.AddHangfireServer();
+builder.Services.AddHangfireServer(options =>
+{
+    options.Queues = ["refresh-high", "default", "refresh-low"];
+});
 
 builder.Services.AddHttpClient();
 
@@ -55,6 +59,7 @@ builder.Services.Configure<RefreshChampionAnalyticsJobOptions>(
 builder.Services.Configure<ChampionAnalyticsIngestionJobOptions>(
     builder.Configuration.GetSection("Jobs:ChampionAnalyticsIngestion"));
 builder.Services.Configure<SummonerBootstrapOptions>(builder.Configuration.GetSection("Jobs:SummonerBootstrap"));
+builder.Services.Configure<ChampionAnalyticsComputeOptions>(builder.Configuration.GetSection("Analytics:Compute"));
 
 // worker that initiates services
 if (builder.Environment.IsDevelopment())

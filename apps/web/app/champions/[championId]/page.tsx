@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { BackendErrorCard } from "@/components/BackendErrorCard";
+import { RuneSetupDisplay } from "@/components/RuneSetupDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { fetchBackendJson } from "@/lib/backendCall";
@@ -14,8 +15,7 @@ import {
   fetchChampionMap,
   fetchItemMap,
   fetchRunesReforged,
-  itemIconUrl,
-  runeIconUrl
+  itemIconUrl
 } from "@/lib/staticData";
 
 type ChampionWinRateDto = {
@@ -404,38 +404,16 @@ export default async function ChampionDetailPage({
 
                     <div className="mx-1 h-4 w-px bg-border/60" />
 
-                    <div className="flex items-center gap-1.5">
-                      {b.primaryRunes?.[0] && runeById[String(b.primaryRunes[0])] ? (
-                        <Image
-                          src={runeIconUrl(runeById[String(b.primaryRunes[0])]!.icon)}
-                          alt={runeById[String(b.primaryRunes[0])]!.name}
-                          title={runeById[String(b.primaryRunes[0])]!.name}
-                          width={22}
-                          height={22}
-                          className="rounded bg-black/20 p-0.5"
-                        />
-                      ) : null}
-                      {styleById[String(b.primaryStyleId)] ? (
-                        <Image
-                          src={runeIconUrl(styleById[String(b.primaryStyleId)]!.icon)}
-                          alt={styleById[String(b.primaryStyleId)]!.name}
-                          title={styleById[String(b.primaryStyleId)]!.name}
-                          width={22}
-                          height={22}
-                          className="rounded bg-black/20 p-0.5"
-                        />
-                      ) : null}
-                      {styleById[String(b.subStyleId)] ? (
-                        <Image
-                          src={runeIconUrl(styleById[String(b.subStyleId)]!.icon)}
-                          alt={styleById[String(b.subStyleId)]!.name}
-                          title={styleById[String(b.subStyleId)]!.name}
-                          width={22}
-                          height={22}
-                          className="rounded bg-black/20 p-0.5"
-                        />
-                      ) : null}
-                    </div>
+                    <RuneSetupDisplay
+                      primaryStyleId={b.primaryStyleId}
+                      subStyleId={b.subStyleId}
+                      primarySelections={b.primaryRunes ?? []}
+                      subSelections={b.subRunes ?? []}
+                      statShards={b.statShards ?? []}
+                      runeById={runeById}
+                      styleById={styleById}
+                      iconSize={20}
+                    />
                   </div>
                 </div>
               ))}

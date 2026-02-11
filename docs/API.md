@@ -35,6 +35,17 @@ This is a navigational summary; the OpenAPI spec is the source of truth.
 - `GET /api/summoners/{summonerId}/matches/recent`
 - `GET /api/summoners/{summonerId}/matches/{matchId}`
 
+#### Rune Payloads
+
+- `GET /api/summoners/{summonerId}/matches/recent`
+  - `runes` remains a compact summary (`primaryStyleId`, `subStyleId`, `keystoneId`)
+  - `runesDetail` now includes full selections:
+    - `primarySelections` (4)
+    - `subSelections` (2)
+    - `statShards` (3)
+- `GET /api/summoners/{summonerId}/matches/{matchId}`
+  - Participant runes continue to return full selections (`primarySelections`, `subSelections`, `statShards`)
+
 #### Refresh Priority Behavior
 
 - `POST /api/summoners/{region}/{name}/{tag}/refresh` is implicitly treated as a high-priority refresh request.
@@ -48,6 +59,10 @@ This is a navigational summary; the OpenAPI spec is the source of truth.
 - `GET /api/analytics/champions/{championId}/builds`
 - `GET /api/analytics/champions/{championId}/matchups`
 - `POST /api/analytics/cache/invalidate` (`AppOnly`)
+
+`GET /api/analytics/champions/{championId}/builds` includes full rune setup per build:
+- `primaryStyleId`, `subStyleId`
+- `primaryRunes` (4), `subRunes` (2), `statShards` (3)
 
 ### Live Game (`AppOnly`)
 

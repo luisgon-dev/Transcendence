@@ -18,6 +18,7 @@ public class ProductionWorker(
     private const string RefreshChampionAnalyticsJobId = "refresh-champion-analytics";
     private const string RefreshChampionAnalyticsAdaptiveJobId = "refresh-champion-analytics-adaptive";
     private const string ChampionAnalyticsIngestionJobId = "champion-analytics-ingestion";
+    private const string RuneSelectionIntegrityBackfillJobId = "rune-selection-integrity-backfill";
     private const string PollLiveGamesJobId = "poll-live-games";
 
     public override Task StartAsync(CancellationToken cancellationToken)
@@ -85,6 +86,19 @@ public class ProductionWorker(
             RecurringJob.RemoveIfExists(ChampionAnalyticsIngestionJobId);
         }
 
+        if (schedule.EnableRuneSelectionIntegrityBackfill)
+        {
+            recurringJobManager.AddOrUpdate<RuneSelectionIntegrityBackfillJob>(
+                RuneSelectionIntegrityBackfillJobId,
+                job => job.ExecuteAsync(CancellationToken.None),
+                schedule.RuneSelectionIntegrityBackfillCron,
+                new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+        }
+        else
+        {
+            RecurringJob.RemoveIfExists(RuneSelectionIntegrityBackfillJobId);
+        }
+
         recurringJobManager.AddOrUpdate<LiveGamePollingJob>(
             PollLiveGamesJobId,
             job => job.ExecuteAsync(CancellationToken.None),
@@ -92,18 +106,20 @@ public class ProductionWorker(
             new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
 
         logger.LogInformation(
-            "Recurring jobs configured: patch={PatchCron}, retry={RetryCron}, analyticsDaily={AnalyticsDailyCron}, analyticsAdaptive={AnalyticsAdaptiveCron}, analyticsIngestion={AnalyticsIngestionCron}, livePolling={LivePollingCron}",
+            "Recurring jobs configured: patch={PatchCron}, retry={RetryCron}, analyticsDaily={AnalyticsDailyCron}, analyticsAdaptive={AnalyticsAdaptiveCron}, analyticsIngestion={AnalyticsIngestionCron}, runeIntegrity={RuneIntegrityCron}, livePolling={LivePollingCron}",
             schedule.DetectPatchCron,
             schedule.RetryFailedMatchesCron,
             schedule.RefreshChampionAnalyticsDailyCron,
             schedule.EnableAdaptiveAnalyticsRefresh ? schedule.RefreshChampionAnalyticsAdaptiveCron : "disabled",
             schedule.EnableChampionAnalyticsIngestion ? schedule.ChampionAnalyticsIngestionCron : "disabled",
+            schedule.EnableRuneSelectionIntegrityBackfill ? schedule.RuneSelectionIntegrityBackfillCron : "disabled",
             schedule.LiveGamePollingCron);
 
         EnqueueStartupAnalyticsBootstrap(schedule);
 
         // One-time backfill: fix matches ingested before the FetchStatus bug was fixed
         backgroundJobClient.Enqueue<BackfillMatchStatusJob>(job => job.ExecuteAsync(CancellationToken.None));
+        backgroundJobClient.Enqueue<RuneSelectionIntegrityBackfillJob>(job => job.ExecuteAsync(CancellationToken.None));
 
         return base.StartAsync(cancellationToken);
     }
@@ -155,6 +171,7 @@ public class ProductionWorker(
         RecurringJob.RemoveIfExists(RefreshChampionAnalyticsJobId);
         RecurringJob.RemoveIfExists(RefreshChampionAnalyticsAdaptiveJobId);
         RecurringJob.RemoveIfExists(ChampionAnalyticsIngestionJobId);
+        RecurringJob.RemoveIfExists(RuneSelectionIntegrityBackfillJobId);
         RecurringJob.RemoveIfExists(PollLiveGamesJobId);
         logger.LogInformation("Cleared queued and recurring jobs due to CleanupOnStartup=true.");
     }

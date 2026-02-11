@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { BackendErrorCard } from "@/components/BackendErrorCard";
+import { RuneSetupDisplay } from "@/components/RuneSetupDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { fetchBackendJson } from "@/lib/backendCall";
@@ -20,7 +21,6 @@ import {
   fetchRunesReforged,
   fetchSummonerSpellMap,
   itemIconUrl,
-  runeIconUrl,
   summonerSpellIconUrl
 } from "@/lib/staticData";
 
@@ -370,10 +370,6 @@ export default async function MatchDetailPage({
                       const spell1 = spells[String(p.summonerSpell1Id)];
                       const spell2 = spells[String(p.summonerSpell2Id)];
 
-                      const keystone = runeById[String(p.runes.primarySelections?.[0] ?? 0)];
-                      const primaryStyle = styleById[String(p.runes.primaryStyleId)];
-                      const subStyle = styleById[String(p.runes.subStyleId)];
-
                       return (
                         <tr
                           key={`${t.teamId}-${p.championId}-${idx}`}
@@ -444,38 +440,16 @@ export default async function MatchDetailPage({
                             </div>
                           </td>
                           <td className="py-2 pr-4">
-                            <div className="flex items-center gap-1.5">
-                              {keystone ? (
-                                <Image
-                                  src={runeIconUrl(keystone.icon)}
-                                  alt={keystone.name}
-                                  title={keystone.name}
-                                  width={18}
-                                  height={18}
-                                  className="rounded bg-black/20 p-0.5"
-                                />
-                              ) : null}
-                              {primaryStyle ? (
-                                <Image
-                                  src={runeIconUrl(primaryStyle.icon)}
-                                  alt={primaryStyle.name}
-                                  title={primaryStyle.name}
-                                  width={18}
-                                  height={18}
-                                  className="rounded bg-black/20 p-0.5"
-                                />
-                              ) : null}
-                              {subStyle ? (
-                                <Image
-                                  src={runeIconUrl(subStyle.icon)}
-                                  alt={subStyle.name}
-                                  title={subStyle.name}
-                                  width={18}
-                                  height={18}
-                                  className="rounded bg-black/20 p-0.5"
-                                />
-                              ) : null}
-                            </div>
+                            <RuneSetupDisplay
+                              primaryStyleId={p.runes.primaryStyleId}
+                              subStyleId={p.runes.subStyleId}
+                              primarySelections={p.runes.primarySelections ?? []}
+                              subSelections={p.runes.subSelections ?? []}
+                              statShards={p.runes.statShards ?? []}
+                              runeById={runeById}
+                              styleById={styleById}
+                              iconSize={16}
+                            />
                           </td>
                           <td className="py-2 pr-4">
                             <div className="flex items-center gap-1.5">

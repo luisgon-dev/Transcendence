@@ -107,20 +107,47 @@ public class StaticDataService(
 
     private async Task<bool> FetchAndStoreRunesAsync(string patchVersion, CancellationToken cancellationToken)
     {
-        var hasRunesForPatch = await context.RuneVersions
-            .AnyAsync(rv => rv.PatchVersion == patchVersion, cancellationToken);
-
-        if (hasRunesForPatch)
-            return true;
-
         var client = httpClientFactory.CreateClient();
         var runes = await FetchRunesForPatchAsync(client, patchVersion, cancellationToken);
 
         if (runes.Count == 0)
             throw new InvalidOperationException($"No rune data was returned for patch '{patchVersion}'.");
 
-        await context.RuneVersions.AddRangeAsync(runes, cancellationToken);
-        await context.SaveChangesAsync(cancellationToken);
+        var existingRunes = await context.RuneVersions
+            .Where(rv => rv.PatchVersion == patchVersion)
+            .ToDictionaryAsync(rv => rv.RuneId, cancellationToken);
+
+        var changed = false;
+        foreach (var incoming in runes)
+        {
+            if (existingRunes.TryGetValue(incoming.RuneId, out var existing))
+            {
+                if (existing.Key != incoming.Key ||
+                    existing.Name != incoming.Name ||
+                    existing.Description != incoming.Description ||
+                    existing.RunePathId != incoming.RunePathId ||
+                    existing.RunePathName != incoming.RunePathName ||
+                    existing.Slot != incoming.Slot)
+                {
+                    existing.Key = incoming.Key;
+                    existing.Name = incoming.Name;
+                    existing.Description = incoming.Description;
+                    existing.RunePathId = incoming.RunePathId;
+                    existing.RunePathName = incoming.RunePathName;
+                    existing.Slot = incoming.Slot;
+                    changed = true;
+                }
+            }
+            else
+            {
+                await context.RuneVersions.AddAsync(incoming, cancellationToken);
+                changed = true;
+            }
+        }
+
+        if (changed)
+            await context.SaveChangesAsync(cancellationToken);
+
         return true;
     }
 
@@ -164,11 +191,15 @@ public class StaticDataService(
         string patch,
         CancellationToken cancellationToken)
     {
-        var url =
+        var perkUrl =
             $"https://raw.communitydragon.org/{patch}/plugins/rcp-be-lol-game-data/global/default/v1/perks.json";
+        var perkStylesUrl =
+            $"https://raw.communitydragon.org/{patch}/plugins/rcp-be-lol-game-data/global/default/v1/perkstyles.json";
 
-        var communityDragonRunes = await GetAndDeserializeAsync<List<CommunityDragonRune>>(client, url,
+        var communityDragonRunes = await GetAndDeserializeAsync<List<CommunityDragonRune>>(client, perkUrl,
             cancellationToken);
+        var communityDragonStyles =
+            await GetAndDeserializeAsync<CommunityDragonPerkStylesRoot>(client, perkStylesUrl, cancellationToken);
 
         if (communityDragonRunes == null || communityDragonRunes.Count == 0)
         {
@@ -176,14 +207,66 @@ public class StaticDataService(
             return [];
         }
 
-        return communityDragonRunes.Select(r => new RuneVersion
+        var runeMetadata = BuildRuneMetadataByRuneId(communityDragonStyles?.Styles ?? []);
+
+        return communityDragonRunes.Select(r =>
         {
-            RuneId = r.Id,
-            PatchVersion = patch,
-            Name = string.IsNullOrWhiteSpace(r.Name) ? $"Rune {r.Id}" : r.Name,
-            Description = r.ShortDesc ?? string.Empty
+            var hasMetadata = runeMetadata.TryGetValue(r.Id, out var metadata);
+
+            return new RuneVersion
+            {
+                RuneId = r.Id,
+                PatchVersion = patch,
+                Key = r.RecommendationDescriptor,
+                Name = string.IsNullOrWhiteSpace(r.Name) ? $"Rune {r.Id}" : r.Name,
+                Description = !string.IsNullOrWhiteSpace(r.ShortDesc)
+                    ? r.ShortDesc
+                    : !string.IsNullOrWhiteSpace(r.LongDesc)
+                        ? r.LongDesc
+                        : r.Tooltip ?? string.Empty,
+                RunePathId = hasMetadata ? metadata.PathId : 0,
+                RunePathName = hasMetadata ? metadata.PathName : null,
+                Slot = hasMetadata ? metadata.Slot : 0
+            };
         }).ToList();
     }
+
+    private static Dictionary<int, RuneStaticMetadata> BuildRuneMetadataByRuneId(
+        IReadOnlyCollection<CommunityDragonPerkStyle> styles)
+    {
+        var metadata = new Dictionary<int, RuneStaticMetadata>();
+
+        foreach (var style in styles)
+        {
+            var nonStatSlot = 0;
+            var statSlot = 0;
+
+            foreach (var slot in style.Slots)
+            {
+                var isStatSlot = string.Equals(slot.Type, "kStatMod", StringComparison.OrdinalIgnoreCase);
+                var resolvedPathId = isStatSlot ? 5000 : style.Id;
+                var resolvedPathName = isStatSlot ? "Stat Mods" : style.Name;
+                var resolvedSlot = isStatSlot ? statSlot : nonStatSlot;
+
+                foreach (var runeId in slot.Perks)
+                {
+                    if (runeId == 0 || metadata.ContainsKey(runeId))
+                        continue;
+
+                    metadata[runeId] = new RuneStaticMetadata(resolvedPathId, resolvedPathName, resolvedSlot);
+                }
+
+                if (isStatSlot)
+                    statSlot++;
+                else
+                    nonStatSlot++;
+            }
+        }
+
+        return metadata;
+    }
+
+    private readonly record struct RuneStaticMetadata(int PathId, string PathName, int Slot);
 
     private async Task<List<ItemVersion>> FetchItemsForPatchAsync(
         HttpClient client,

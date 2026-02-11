@@ -42,6 +42,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ChampionAnalyticsIngestionJob>();
         services.AddScoped<RefreshChampionAnalyticsJob>();
         services.AddScoped<LiveGamePollingJob>();
+        services.AddScoped<RuneSelectionIntegrityBackfillJob>();
 
         return services;
     }

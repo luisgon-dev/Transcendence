@@ -204,6 +204,8 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             entity.HasKey(mpr => new
             {
                 mpr.MatchParticipantId,
+                mpr.SelectionTree,
+                mpr.SelectionIndex,
                 mpr.RuneId
             });
 
@@ -218,6 +220,8 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
                     mpr.RuneId,
                     mpr.PatchVersion
                 });
+
+            entity.HasIndex(mpr => new { mpr.RuneId, mpr.PatchVersion });
         });
 
         modelBuilder.Entity<MatchParticipantRune>()

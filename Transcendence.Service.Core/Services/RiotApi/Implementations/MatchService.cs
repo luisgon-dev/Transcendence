@@ -434,20 +434,72 @@ public class MatchService(
     private ICollection<MatchParticipantRune> CreateMatchParticipantRunes(Perks perks, string patch)
     {
         var participantRunes = new List<MatchParticipantRune>();
-        var seenRunes = new HashSet<int>();
+        var styles = perks.Styles?.ToList() ?? [];
 
-        foreach (var style in perks.Styles)
-            foreach (var selection in style.Selections)
+        var primaryStyle = styles.FirstOrDefault(s =>
+            string.Equals(s.Description?.ToString(), "primaryStyle", StringComparison.OrdinalIgnoreCase));
+        var secondaryStyle = styles.FirstOrDefault(s =>
+            string.Equals(s.Description?.ToString(), "subStyle", StringComparison.OrdinalIgnoreCase));
+
+        if (primaryStyle == null && styles.Count > 0)
+            primaryStyle = styles[0];
+
+        if (secondaryStyle == null)
+            secondaryStyle = styles.FirstOrDefault(s => !ReferenceEquals(s, primaryStyle));
+
+        if (primaryStyle != null)
+        {
+            var primaryIndex = 0;
+            foreach (var selection in primaryStyle.Selections)
             {
                 var runeId = selection.Perk;
                 if (runeId == 0) continue;
-                if (seenRunes.Add(runeId))
-                    participantRunes.Add(new MatchParticipantRune
-                    {
-                        RuneId = runeId,
-                        PatchVersion = patch
-                    });
+
+                participantRunes.Add(new MatchParticipantRune
+                {
+                    RuneId = runeId,
+                    PatchVersion = patch,
+                    SelectionTree = RuneSelectionTree.Primary,
+                    SelectionIndex = primaryIndex++,
+                    StyleId = primaryStyle.Style
+                });
             }
+        }
+
+        if (secondaryStyle != null)
+        {
+            var secondaryIndex = 0;
+            foreach (var selection in secondaryStyle.Selections)
+            {
+                var runeId = selection.Perk;
+                if (runeId == 0) continue;
+
+                participantRunes.Add(new MatchParticipantRune
+                {
+                    RuneId = runeId,
+                    PatchVersion = patch,
+                    SelectionTree = RuneSelectionTree.Secondary,
+                    SelectionIndex = secondaryIndex++,
+                    StyleId = secondaryStyle.Style
+                });
+            }
+        }
+
+        var statRuneIds = new[] { perks.StatPerks.Offense, perks.StatPerks.Flex, perks.StatPerks.Defense };
+        for (var i = 0; i < statRuneIds.Length; i++)
+        {
+            var runeId = statRuneIds[i];
+            if (runeId == 0) continue;
+
+            participantRunes.Add(new MatchParticipantRune
+            {
+                RuneId = runeId,
+                PatchVersion = patch,
+                SelectionTree = RuneSelectionTree.StatShards,
+                SelectionIndex = i,
+                StyleId = 0
+            });
+        }
 
         return participantRunes;
     }

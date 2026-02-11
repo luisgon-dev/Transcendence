@@ -154,7 +154,13 @@ public class SummonerStatsController(
                     m.SummonerSpell1Id,
                     m.SummonerSpell2Id,
                     m.Items,
-                    new MatchRuneSummaryDto(m.Runes.PrimaryStyleId, m.Runes.SubStyleId, m.Runes.KeystoneId)
+                    new MatchRuneSummaryDto(m.Runes.PrimaryStyleId, m.Runes.SubStyleId, m.Runes.KeystoneId),
+                    new MatchRuneDetailDto(
+                        m.RunesDetail.PrimaryStyleId,
+                        m.RunesDetail.SubStyleId,
+                        m.RunesDetail.PrimarySelections,
+                        m.RunesDetail.SubSelections,
+                        m.RunesDetail.StatShards)
                 )).ToList(),
                 result.Page,
                 result.PageSize,

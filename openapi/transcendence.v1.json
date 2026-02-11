@@ -2339,6 +2339,44 @@
         },
         "additionalProperties": false
       },
+      "MatchRuneDetailDto": {
+        "type": "object",
+        "properties": {
+          "primaryStyleId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "subStyleId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "primarySelections": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "nullable": true
+          },
+          "subSelections": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "nullable": true
+          },
+          "statShards": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "MatchRuneSummaryDto": {
         "type": "object",
         "properties": {
@@ -2773,6 +2811,9 @@
           },
           "runes": {
             "$ref": "#/components/schemas/MatchRuneSummaryDto"
+          },
+          "runesDetail": {
+            "$ref": "#/components/schemas/MatchRuneDetailDto"
           }
         },
         "additionalProperties": false

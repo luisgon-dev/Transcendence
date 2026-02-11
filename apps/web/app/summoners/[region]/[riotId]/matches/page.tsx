@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { BackendErrorCard } from "@/components/BackendErrorCard";
+import { RuneSetupDisplay } from "@/components/RuneSetupDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { fetchBackendJson } from "@/lib/backendCall";
@@ -42,6 +43,13 @@ type RecentMatchSummaryDto = {
   summonerSpell2Id: number;
   items: number[];
   runes: { primaryStyleId: number; subStyleId: number; keystoneId: number };
+  runesDetail?: {
+    primaryStyleId: number;
+    subStyleId: number;
+    primarySelections: number[];
+    subSelections: number[];
+    statShards: number[];
+  } | null;
 };
 
 type PagedResultDto<T> = {
@@ -444,6 +452,26 @@ export default async function SummonerMatchesPage({
                     );
                   })}
                 </div>
+
+                {m.runesDetail ? (
+                  <details className="rounded-md border border-border/60 bg-black/15 px-2 py-1.5">
+                    <summary className="cursor-pointer text-xs text-fg/80">
+                      Rune setup
+                    </summary>
+                    <div className="mt-2">
+                      <RuneSetupDisplay
+                        primaryStyleId={m.runesDetail.primaryStyleId}
+                        subStyleId={m.runesDetail.subStyleId}
+                        primarySelections={m.runesDetail.primarySelections ?? []}
+                        subSelections={m.runesDetail.subSelections ?? []}
+                        statShards={m.runesDetail.statShards ?? []}
+                        runeById={runeById}
+                        styleById={styleById}
+                        iconSize={18}
+                      />
+                    </div>
+                  </details>
+                ) : null}
               </div>
             </Card>
           );

@@ -17,6 +17,7 @@ public class DevelopmentWorker(
     private const string RefreshChampionAnalyticsJobId = "refresh-champion-analytics";
     private const string RefreshChampionAnalyticsAdaptiveJobId = "refresh-champion-analytics-adaptive";
     private const string ChampionAnalyticsIngestionJobId = "champion-analytics-ingestion";
+    private const string RuneSelectionIntegrityBackfillJobId = "rune-selection-integrity-backfill";
     private const string PollLiveGamesJobId = "poll-live-games";
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
@@ -77,6 +78,19 @@ public class DevelopmentWorker(
             RecurringJob.RemoveIfExists(ChampionAnalyticsIngestionJobId);
         }
 
+        if (schedule.EnableRuneSelectionIntegrityBackfill)
+        {
+            RecurringJob.AddOrUpdate<RuneSelectionIntegrityBackfillJob>(
+                RuneSelectionIntegrityBackfillJobId,
+                job => job.ExecuteAsync(CancellationToken.None),
+                schedule.RuneSelectionIntegrityBackfillCron,
+                new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+        }
+        else
+        {
+            RecurringJob.RemoveIfExists(RuneSelectionIntegrityBackfillJobId);
+        }
+
         return Task.CompletedTask;
     }
 
@@ -96,6 +110,7 @@ public class DevelopmentWorker(
         RecurringJob.RemoveIfExists(RefreshChampionAnalyticsJobId);
         RecurringJob.RemoveIfExists(RefreshChampionAnalyticsAdaptiveJobId);
         RecurringJob.RemoveIfExists(ChampionAnalyticsIngestionJobId);
+        RecurringJob.RemoveIfExists(RuneSelectionIntegrityBackfillJobId);
         RecurringJob.RemoveIfExists(PollLiveGamesJobId);
         logger.LogInformation("Cleared all jobs");
     }

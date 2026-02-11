@@ -1659,6 +1659,15 @@ export interface components {
             patch?: string | null;
             participants?: components["schemas"]["ParticipantDetailDto"][] | null;
         };
+        MatchRuneDetailDto: {
+            /** Format: int32 */
+            primaryStyleId?: number;
+            /** Format: int32 */
+            subStyleId?: number;
+            primarySelections?: number[] | null;
+            subSelections?: number[] | null;
+            statShards?: number[] | null;
+        };
         MatchRuneSummaryDto: {
             /** Format: int32 */
             primaryStyleId?: number;
@@ -1832,6 +1841,7 @@ export interface components {
             summonerSpell2Id?: number;
             items?: number[] | null;
             runes?: components["schemas"]["MatchRuneSummaryDto"];
+            runesDetail?: components["schemas"]["MatchRuneDetailDto"];
         };
         RecentMatchSummaryDtoPagedResultDto: {
             items?: components["schemas"]["RecentMatchSummaryDto"][] | null;

@@ -72,11 +72,20 @@ public record RecentMatchSummary(
     int SummonerSpell1Id,
     int SummonerSpell2Id,
     IReadOnlyList<int> Items,  // 7 item IDs (6 items + trinket), 0 for empty slots
-    MatchRuneSummary Runes
+    MatchRuneSummary Runes,
+    MatchRuneDetail RunesDetail
 );
 
 public record MatchRuneSummary(
     int PrimaryStyleId,
     int SubStyleId,
     int KeystoneId  // First rune in primary tree (the keystone)
+);
+
+public record MatchRuneDetail(
+    int PrimaryStyleId,
+    int SubStyleId,
+    IReadOnlyList<int> PrimarySelections,
+    IReadOnlyList<int> SubSelections,
+    IReadOnlyList<int> StatShards
 );

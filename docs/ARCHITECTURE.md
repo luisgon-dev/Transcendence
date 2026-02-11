@@ -75,6 +75,18 @@ Transcendence is a backend + web monorepo:
   - staleness of recent successful fetches
 - Even when patch data is healthy, ingestion can queue a small minimum number of low-priority refreshes per run.
 
+### Rune Hierarchy Pipeline
+
+- Match ingestion stores rune selections with explicit hierarchy metadata per participant:
+  - `SelectionTree`: primary, secondary, stat shards
+  - `SelectionIndex`: slot order inside each tree
+  - `StyleId`: rune path for primary/secondary trees
+- Static rune data ingestion now maps each rune to canonical path/slot metadata using CommunityDragon `perkstyles` + `perks`.
+- Analytics build computation and summoner match summaries use explicit selection hierarchy first, then fallback to static metadata only for legacy rows.
+- API payloads expose:
+  - compact rune summary for list views
+  - full rune selections for detailed/expanded views
+
 ## Web Auth Boundary (BFF)
 
 The web app never exposes backend tokens to browser JS:

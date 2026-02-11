@@ -139,6 +139,18 @@ When `Transcendence.Service` runs in non-development environments, the `Producti
 - `FallbackToTrackedSummoners`
 - `PauseWhenApiPriorityRefreshActive`
 
+### Rune Selection Integrity Backfill
+
+`Jobs:Schedule` now supports:
+
+- `RuneSelectionIntegrityBackfillCron`
+- `EnableRuneSelectionIntegrityBackfill`
+
+`Jobs:RuneSelectionIntegrityBackfill` supports:
+
+- `BatchSize`
+- `MaxBatchesPerRun`
+
 ### Analytics Compute Thresholds
 
 Analytics sampling thresholds are configurable in both API and worker hosts:

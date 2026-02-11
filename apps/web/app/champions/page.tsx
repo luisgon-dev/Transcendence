@@ -38,7 +38,6 @@ export default async function ChampionsPage() {
                   <p className="truncate text-sm font-semibold text-fg group-hover:underline">
                     {c.name}
                   </p>
-                  <p className="text-xs text-muted">#{c.championId}</p>
                 </div>
               </div>
             </Card>
@@ -48,4 +47,3 @@ export default async function ChampionsPage() {
     </div>
   );
 }
-

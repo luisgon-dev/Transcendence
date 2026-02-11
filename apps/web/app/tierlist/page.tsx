@@ -220,7 +220,7 @@ export default async function TierListPage({
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                           <Link
-                            href={`/champions/${e.championId}`}
+                            href={`/champions/${e.championId}?role=${encodeURIComponent(e.role)}${tierlist.rankTier && tierlist.rankTier !== "all" ? `&rankTier=${encodeURIComponent(tierlist.rankTier)}` : ""}`}
                             className="truncate text-sm font-semibold text-fg hover:underline"
                           >
                             {champName}
@@ -256,4 +256,3 @@ export default async function TierListPage({
     </div>
   );
 }
-

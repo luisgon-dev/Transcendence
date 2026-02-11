@@ -74,6 +74,45 @@ type ChampionMatchupsResponse = {
 };
 
 const ROLES = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"] as const;
+const RANK_TIERS = [
+  "all",
+  "IRON",
+  "BRONZE",
+  "SILVER",
+  "GOLD",
+  "PLATINUM",
+  "EMERALD",
+  "DIAMOND",
+  "MASTER",
+  "GRANDMASTER",
+  "CHALLENGER"
+] as const;
+
+function normalizeRole(role: string | undefined) {
+  if (!role) return null;
+  const upper = role.toUpperCase();
+  return ROLES.includes(upper as (typeof ROLES)[number]) ? upper : null;
+}
+
+function normalizeRankTier(rankTier: string | undefined) {
+  if (!rankTier) return null;
+  const upper = rankTier.toUpperCase();
+  if (upper === "ALL") return null;
+  return RANK_TIERS.includes(upper as (typeof RANK_TIERS)[number]) ? upper : null;
+}
+
+function pickMostPlayedRole(summary: ChampionWinRateSummary | null) {
+  if (!summary?.byRoleTier?.length) return null;
+  const gamesByRole = new Map<string, number>();
+  for (const entry of summary.byRoleTier) {
+    const role = entry.role.toUpperCase();
+    gamesByRole.set(role, (gamesByRole.get(role) ?? 0) + entry.games);
+  }
+  const sorted = [...gamesByRole.entries()].sort((a, b) => b[1] - a[1]);
+  if (sorted.length === 0) return null;
+  const candidate = sorted[0][0];
+  return normalizeRole(candidate);
+}
 
 export default async function ChampionDetailPage({
   params,
@@ -94,34 +133,58 @@ export default async function ChampionDetailPage({
     );
   }
 
-  const role = (resolvedSearchParams?.role ?? "MIDDLE").toUpperCase();
-  const rankTier = resolvedSearchParams?.rankTier;
-
-  const qsTier = rankTier ? `&rankTier=${encodeURIComponent(rankTier)}` : "";
+  const explicitRole = normalizeRole(resolvedSearchParams?.role);
+  const normalizedRankTier = normalizeRankTier(resolvedSearchParams?.rankTier);
+  const qsTier = normalizedRankTier
+    ? `?rankTier=${encodeURIComponent(normalizedRankTier)}`
+    : "";
 
   const verbosity = getErrorVerbosity();
-  const [staticData, itemStatic, runeStatic, winRes, buildRes, matchupRes] =
-    await Promise.all([
-      fetchChampionMap(),
-      fetchItemMap(),
-      fetchRunesReforged(),
-      fetchBackendJson<ChampionWinRateSummary>(
-        `${getBackendBaseUrl()}/api/analytics/champions/${championId}/winrates`,
-        { next: { revalidate: 60 * 60 } }
-      ),
-      fetchBackendJson<ChampionBuildsResponse>(
-        `${getBackendBaseUrl()}/api/analytics/champions/${championId}/builds?role=${encodeURIComponent(
-          role
-        )}${qsTier}`,
-        { next: { revalidate: 60 * 60 } }
-      ),
-      fetchBackendJson<ChampionMatchupsResponse>(
-        `${getBackendBaseUrl()}/api/analytics/champions/${championId}/matchups?role=${encodeURIComponent(
-          role
-        )}${qsTier}`,
-        { next: { revalidate: 60 * 60 } }
-      )
-    ]);
+  const [staticData, itemStatic, runeStatic, winRes] = await Promise.all([
+    fetchChampionMap(),
+    fetchItemMap(),
+    fetchRunesReforged(),
+    fetchBackendJson<ChampionWinRateSummary>(
+      `${getBackendBaseUrl()}/api/analytics/champions/${championId}/winrates${qsTier}`,
+      { next: { revalidate: 60 * 60 } }
+    )
+  ]);
+
+  const winrates = winRes.ok ? winRes.body! : null;
+  let fallbackWinrates: ChampionWinRateSummary | null = null;
+
+  if (!explicitRole && normalizedRankTier && (!winrates || winrates.byRoleTier.length === 0)) {
+    const fallbackWinRes = await fetchBackendJson<ChampionWinRateSummary>(
+      `${getBackendBaseUrl()}/api/analytics/champions/${championId}/winrates`,
+      { next: { revalidate: 60 * 60 } }
+    );
+    fallbackWinrates = fallbackWinRes.ok ? fallbackWinRes.body! : null;
+  }
+
+  const effectiveRole =
+    explicitRole ??
+    pickMostPlayedRole(winrates) ??
+    pickMostPlayedRole(fallbackWinrates) ??
+    "MIDDLE";
+
+  const qsBuildAndMatchupTier = normalizedRankTier
+    ? `&rankTier=${encodeURIComponent(normalizedRankTier)}`
+    : "";
+
+  const [buildRes, matchupRes] = await Promise.all([
+    fetchBackendJson<ChampionBuildsResponse>(
+      `${getBackendBaseUrl()}/api/analytics/champions/${championId}/builds?role=${encodeURIComponent(
+        effectiveRole
+      )}${qsBuildAndMatchupTier}`,
+      { next: { revalidate: 60 * 60 } }
+    ),
+    fetchBackendJson<ChampionMatchupsResponse>(
+      `${getBackendBaseUrl()}/api/analytics/champions/${championId}/matchups?role=${encodeURIComponent(
+        effectiveRole
+      )}${qsBuildAndMatchupTier}`,
+      { next: { revalidate: 60 * 60 } }
+    )
+  ]);
 
   const { version, champions } = staticData;
   const champ = champions[String(championId)];
@@ -163,7 +226,6 @@ export default async function ChampionDetailPage({
     );
   }
 
-  const winrates = winRes.ok ? winRes.body! : null;
   const builds = buildRes.ok ? buildRes.body! : null;
   const matchups = matchupRes.ok ? matchupRes.body! : null;
 
@@ -187,18 +249,57 @@ export default async function ChampionDetailPage({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Badge>Role: {role}</Badge>
-          <Badge>Tier: {rankTier ?? "all"}</Badge>
+          <Badge>Role: {effectiveRole}</Badge>
+          <Badge>Tier: {normalizedRankTier ?? "all"}</Badge>
           {winrates ? <Badge className="border-primary/40 bg-primary/10 text-primary">Patch {winrates.patch}</Badge> : null}
         </div>
+
+        <form className="mt-2 flex flex-wrap items-end gap-2" method="get">
+          <label className="grid gap-1">
+            <span className="text-xs text-muted">Role</span>
+            <select
+              name="role"
+              defaultValue={effectiveRole}
+              className="h-10 min-w-[160px] rounded-md border border-border/70 bg-surface/35 px-3 text-sm text-fg shadow-glass outline-none focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
+            >
+              {ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="grid gap-1">
+            <span className="text-xs text-muted">Rank Tier</span>
+            <select
+              name="rankTier"
+              defaultValue={normalizedRankTier ?? "all"}
+              className="h-10 min-w-[180px] rounded-md border border-border/70 bg-surface/35 px-3 text-sm text-fg shadow-glass outline-none focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
+            >
+              {RANK_TIERS.map((tier) => (
+                <option key={tier} value={tier}>
+                  {tier}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <button
+            type="submit"
+            className="h-10 rounded-md border border-border/70 bg-white/5 px-4 text-sm text-fg/85 shadow-glass hover:bg-white/10"
+          >
+            Apply
+          </button>
+        </form>
 
         <nav className="flex flex-wrap gap-2">
           {ROLES.map((r) => (
             <Link
               key={r}
-              href={`/champions/${championId}?role=${r}${rankTier ? `&rankTier=${encodeURIComponent(rankTier)}` : ""}`}
+              href={`/champions/${championId}?role=${r}${normalizedRankTier ? `&rankTier=${encodeURIComponent(normalizedRankTier)}` : ""}`}
               className={`rounded-md border px-3 py-1 text-sm ${
-                r === role
+                r === effectiveRole
                   ? "border-primary/50 bg-primary/15 text-primary"
                   : "border-border/70 bg-white/5 text-fg/80 hover:bg-white/10"
               }`}
@@ -439,4 +540,3 @@ export default async function ChampionDetailPage({
     </div>
   );
 }
-

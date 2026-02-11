@@ -37,8 +37,7 @@ export function SearchBar({ className }: { className?: string }) {
     []
   );
 
-  function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  function submitSearch() {
     setError(null);
 
     // Convenience: allow paste of "GameName#TAG" into the game name field.
@@ -60,14 +59,20 @@ export function SearchBar({ className }: { className?: string }) {
   }
 
   return (
-    <form
-      onSubmit={onSubmit}
+    <div
+      role="search"
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          submitSearch();
+        }
+      }}
       className={cn(
-        "flex w-full flex-col gap-2 sm:flex-row sm:items-center",
+        "flex w-full min-w-0 flex-col gap-2 lg:flex-row lg:items-center",
         className
       )}
     >
-      <div className="flex gap-2">
+      <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-[auto_minmax(0,1fr)_120px]">
         <select
           className="h-11 min-w-[92px] rounded-md border border-border/70 bg-surface/35 px-3 text-sm text-fg shadow-glass outline-none focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
           value={region}
@@ -86,7 +91,7 @@ export function SearchBar({ className }: { className?: string }) {
           onChange={(e) => setGameName(e.target.value)}
           placeholder={hints.gameName}
           aria-label="Game name"
-          className="w-full sm:w-[300px]"
+          className="min-w-0 w-full"
           autoCorrect="off"
           autoCapitalize="off"
           spellCheck={false}
@@ -97,18 +102,19 @@ export function SearchBar({ className }: { className?: string }) {
           onChange={(e) => setTag(e.target.value)}
           placeholder={hints.tag}
           aria-label="Tag"
-          className="w-[120px] sm:w-[120px]"
+          className="w-full sm:w-[120px]"
           autoCorrect="off"
           autoCapitalize="off"
           spellCheck={false}
         />
       </div>
 
-      <div className="flex items-center gap-3">
-        <Button type="submit">Search</Button>
+      <div className="flex items-center gap-2">
+        <Button type="button" onClick={submitSearch}>
+          Search
+        </Button>
         {error ? <p className="text-sm text-red-300">{error}</p> : null}
       </div>
-    </form>
+    </div>
   );
 }
-

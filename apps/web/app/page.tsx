@@ -1,89 +1,56 @@
 import Link from "next/link";
 
+import { GlobalSearchLauncher } from "@/components/GlobalSearchLauncher";
 import { Card } from "@/components/ui/Card";
-import { SearchBar } from "@/components/SearchBar";
-import { Badge } from "@/components/ui/Badge";
 
 export default function HomePage() {
   return (
-    <div className="grid gap-10">
-      <section className="grid gap-6">
-        <div className="flex flex-wrap items-center gap-3">
-          <Badge className="border-primary/40 bg-primary/10 text-primary">
-            Patch-aware stats
-          </Badge>
-          <Badge className="border-primary-2/40 bg-primary-2/10 text-primary-2">
-            Match history
-          </Badge>
-          <Badge>Builds and counters</Badge>
-        </div>
+    <section className="grid min-h-[72vh] place-items-center">
+      <div className="relative w-full max-w-3xl">
+        <div className="pointer-events-none absolute -inset-x-10 -inset-y-8 bg-[radial-gradient(circle_at_center,rgba(80,120,255,0.20),transparent_65%)] blur-2xl" />
 
-        <h1 className="text-balance font-[var(--font-sora)] text-4xl font-semibold tracking-tight sm:text-5xl">
-          Find players. Analyze matches.{" "}
-          <span className="bg-gradient-to-r from-primary to-primary-2 bg-clip-text text-transparent">
-            Move faster.
-          </span>
-        </h1>
+        <Card className="relative border-border/60 bg-surface/45 p-6 shadow-[0_14px_46px_rgba(0,0,0,0.45)] sm:p-8">
+          <p className="text-center text-xs font-medium uppercase tracking-[0.14em] text-fg/45">
+            Global Search
+          </p>
+          <h1 className="mt-3 text-center font-[var(--font-sora)] text-3xl font-semibold tracking-tight sm:text-4xl">
+            Find What You Need
+          </h1>
+          <p className="mt-2 text-center text-sm text-fg/68 sm:text-base">
+            One search for champions, summoners, and tier list.
+          </p>
 
-        <p className="max-w-2xl text-pretty text-base text-fg/80">
-          Summoner profiles, match history, tier lists, builds, matchups, and
-          live game insights, organized for quick decisions.
-        </p>
+          <GlobalSearchLauncher
+            variant="hero"
+            className="mt-6 h-14 w-full px-4 text-left"
+          />
 
-        <Card className="p-4">
-          <SearchBar />
-          <p className="mt-3 text-sm text-muted">
-            Tip: if we don&apos;t have data for a player yet, we&apos;ll start an
-            update and this page will fill in automatically as it completes.
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+            <Link
+              className="rounded-full border border-border/65 bg-white/[0.03] px-3 py-1.5 text-sm text-fg/75 transition hover:bg-white/[0.08] hover:text-fg"
+              href="/tierlist"
+            >
+              Tier List
+            </Link>
+            <Link
+              className="rounded-full border border-border/65 bg-white/[0.03] px-3 py-1.5 text-sm text-fg/75 transition hover:bg-white/[0.08] hover:text-fg"
+              href="/champions"
+            >
+              Champions
+            </Link>
+            <Link
+              className="rounded-full border border-border/65 bg-white/[0.03] px-3 py-1.5 text-sm text-fg/75 transition hover:bg-white/[0.08] hover:text-fg"
+              href="/account/favorites"
+            >
+              Favorites
+            </Link>
+          </div>
+
+          <p className="mt-4 text-center text-xs text-muted">
+            Shortcut works anywhere: Ctrl/Cmd+K
           </p>
         </Card>
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-3">
-        <Card className="p-5">
-          <h2 className="font-[var(--font-sora)] text-lg font-semibold">
-            Tier List
-          </h2>
-          <p className="mt-2 text-sm text-fg/75">
-            Patch-aware rankings with win/pick rates and movement.
-          </p>
-          <Link
-            className="mt-4 inline-flex text-sm text-primary hover:underline"
-            href="/tierlist"
-          >
-            Browse tier list
-          </Link>
-        </Card>
-        <Card className="p-5">
-          <h2 className="font-[var(--font-sora)] text-lg font-semibold">
-            Champions
-          </h2>
-          <p className="mt-2 text-sm text-fg/75">
-            Explore builds, matchups, and win rates per role.
-          </p>
-          <Link
-            className="mt-4 inline-flex text-sm text-primary hover:underline"
-            href="/champions"
-          >
-            Explore champions
-          </Link>
-        </Card>
-        <Card className="p-5">
-          <h2 className="font-[var(--font-sora)] text-lg font-semibold">
-            Favorites
-          </h2>
-          <p className="mt-2 text-sm text-fg/75">
-            Save your most-viewed players and preferences.
-          </p>
-          <Link
-            className="mt-4 inline-flex text-sm text-primary hover:underline"
-            href="/account/favorites"
-          >
-            View favorites
-          </Link>
-        </Card>
-      </section>
-    </div>
+      </div>
+    </section>
   );
 }
-

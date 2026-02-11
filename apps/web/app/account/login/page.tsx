@@ -1,44 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useActionState } from "react";
 
+import { loginAction } from "@/app/account/actions";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 
 export default function LoginPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setBusy(true);
-
-    try {
-      const res = await fetch("/api/session/login", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password })
-      });
-
-      if (!res.ok) {
-        const json = (await res.json().catch(() => null)) as { message?: string } | null;
-        setError(json?.message ?? "Login failed.");
-        return;
-      }
-
-      router.push("/account/favorites");
-      router.refresh();
-    } finally {
-      setBusy(false);
-    }
-  }
+  const [state, formAction, pending] = useActionState(
+    loginAction,
+    { error: null as string | null }
+  );
 
   return (
     <div className="grid place-items-center">
@@ -50,12 +24,11 @@ export default function LoginPage() {
           Access your favorites and preferences.
         </p>
 
-        <form onSubmit={onSubmit} className="mt-6 grid gap-3">
+        <form action={formAction} className="mt-6 grid gap-3">
           <label className="grid gap-1 text-sm">
             <span className="text-fg/85">Email</span>
             <Input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              name="email"
               type="email"
               autoComplete="email"
               required
@@ -64,18 +37,17 @@ export default function LoginPage() {
           <label className="grid gap-1 text-sm">
             <span className="text-fg/85">Password</span>
             <Input
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              name="password"
               type="password"
               autoComplete="current-password"
               required
             />
           </label>
 
-          {error ? <p className="text-sm text-red-300">{error}</p> : null}
+          {state.error ? <p className="text-sm text-red-300">{state.error}</p> : null}
 
-          <Button type="submit" disabled={busy}>
-            {busy ? "Signing in..." : "Sign in"}
+          <Button type="submit" disabled={pending}>
+            {pending ? "Signing in..." : "Sign in"}
           </Button>
         </form>
 
@@ -89,4 +61,3 @@ export default function LoginPage() {
     </div>
   );
 }
-

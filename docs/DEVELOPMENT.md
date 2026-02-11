@@ -103,6 +103,33 @@ corepack pnpm api:gen
 corepack pnpm api:check
 ```
 
+## Background Job Tuning
+
+Key worker settings live under `Jobs:*` in `Transcendence.Service/appsettings*.json`.
+
+### Champion Analytics Ingestion
+
+`Jobs:ChampionAnalyticsIngestion` now supports:
+
+- `MinimumSuccessfulMatchesForCurrentPatch`
+- `TargetSuccessfulMatchesForCurrentPatch`
+- `DataStaleAfterMinutes`
+- `MaxCandidateSummonersPerRun`
+- `MinRefreshJobsToQueuePerRun`
+- `MaxRefreshJobsToQueuePerRun`
+- `RefreshLockMinutes`
+- `PrioritizeFavoriteSummoners`
+- `FallbackToTrackedSummoners`
+- `PauseWhenApiPriorityRefreshActive`
+
+### Analytics Compute Thresholds
+
+Analytics sampling thresholds are configurable in both API and worker hosts:
+
+- `Analytics:Compute:MinimumGamesRequired`
+- `Analytics:Compute:EarlyPatchMinimumGamesRequired`
+- `Analytics:Compute:EarlyPatchWindowHours`
+
 ## Documentation Policy (Contributor Requirement)
 
 If a change affects any of the following, update docs in the same PR:
@@ -110,4 +137,3 @@ If a change affects any of the following, update docs in the same PR:
 - Runtime behavior, user flows, or UI routes: update `README.md` and/or `docs/ARCHITECTURE.md`
 - API endpoints, payloads, auth, or status codes: update `docs/API.md` and ensure OpenAPI is up to date
 - Environment variables, secrets, compose, or run commands: update `docs/DEVELOPMENT.md`
-

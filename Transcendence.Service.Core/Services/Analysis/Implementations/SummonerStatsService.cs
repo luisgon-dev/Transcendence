@@ -7,7 +7,8 @@ using Transcendence.Service.Core.Services.RiotApi.DTOs;
 
 namespace Transcendence.Service.Core.Services.Analysis.Implementations;
 
-public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : ISummonerStatsService
+public class SummonerStatsService(TranscendenceContext db, HybridCache cache, ILogger<SummonerStatsService> logger)
+    : ISummonerStatsService
 {
     // Cache key prefixes
     private const string OverviewCacheKeyPrefix = "stats:overview:";
@@ -34,13 +35,22 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
         CancellationToken ct)
     {
         if (recentGamesCount <= 0) recentGamesCount = 20;
-
-        var cacheKey = $"{OverviewCacheKeyPrefix}{summonerId}:{recentGamesCount}";
-        return await cache.GetOrCreateAsync(
-            cacheKey,
-            async cancel => await ComputeOverviewAsync(summonerId, recentGamesCount, cancel),
-            StatsCacheOptions,
-            cancellationToken: ct);
+        try
+        {
+            var cacheKey = $"{OverviewCacheKeyPrefix}{summonerId}:{recentGamesCount}";
+            return await cache.GetOrCreateAsync(
+                cacheKey,
+                async cancel => await ComputeOverviewAsync(summonerId, recentGamesCount, cancel),
+                StatsCacheOptions,
+                cancellationToken: ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Failed to compute overview stats for summoner {SummonerId}. Returning an empty payload.",
+                summonerId);
+            return EmptyOverview(summonerId);
+        }
     }
 
     private async Task<SummonerOverviewStats> ComputeOverviewAsync(Guid summonerId, int recentGamesCount,
@@ -123,13 +133,22 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
     public async Task<IReadOnlyList<ChampionStat>> GetChampionStatsAsync(Guid summonerId, int top, CancellationToken ct)
     {
         if (top <= 0) top = 10;
-
-        var cacheKey = $"{ChampionsCacheKeyPrefix}{summonerId}:{top}";
-        return await cache.GetOrCreateAsync(
-            cacheKey,
-            async cancel => await ComputeChampionStatsAsync(summonerId, top, cancel),
-            StatsCacheOptions,
-            cancellationToken: ct);
+        try
+        {
+            var cacheKey = $"{ChampionsCacheKeyPrefix}{summonerId}:{top}";
+            return await cache.GetOrCreateAsync(
+                cacheKey,
+                async cancel => await ComputeChampionStatsAsync(summonerId, top, cancel),
+                StatsCacheOptions,
+                cancellationToken: ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Failed to compute champion stats for summoner {SummonerId}. Returning an empty payload.",
+                summonerId);
+            return [];
+        }
     }
 
     private async Task<IReadOnlyList<ChampionStat>> ComputeChampionStatsAsync(Guid summonerId, int top,
@@ -183,12 +202,22 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
 
     public async Task<IReadOnlyList<RoleStat>> GetRoleBreakdownAsync(Guid summonerId, CancellationToken ct)
     {
-        var cacheKey = $"{RolesCacheKeyPrefix}{summonerId}";
-        return await cache.GetOrCreateAsync(
-            cacheKey,
-            async cancel => await ComputeRoleBreakdownAsync(summonerId, cancel),
-            StatsCacheOptions,
-            cancellationToken: ct);
+        try
+        {
+            var cacheKey = $"{RolesCacheKeyPrefix}{summonerId}";
+            return await cache.GetOrCreateAsync(
+                cacheKey,
+                async cancel => await ComputeRoleBreakdownAsync(summonerId, cancel),
+                StatsCacheOptions,
+                cancellationToken: ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Failed to compute role breakdown for summoner {SummonerId}. Returning an empty payload.",
+                summonerId);
+            return [];
+        }
     }
 
     private async Task<IReadOnlyList<RoleStat>> ComputeRoleBreakdownAsync(Guid summonerId, CancellationToken ct)
@@ -215,13 +244,24 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
     {
         if (page <= 0) page = 1;
         if (pageSize <= 0 || pageSize > 100) pageSize = 20;
-
-        var cacheKey = $"{RecentMatchesCacheKeyPrefix}{summonerId}:{page}:{pageSize}";
-        return await cache.GetOrCreateAsync(
-            cacheKey,
-            async cancel => await ComputeRecentMatchesAsync(summonerId, page, pageSize, cancel),
-            StatsCacheOptions,
-            cancellationToken: ct);
+        try
+        {
+            var cacheKey = $"{RecentMatchesCacheKeyPrefix}{summonerId}:{page}:{pageSize}";
+            return await cache.GetOrCreateAsync(
+                cacheKey,
+                async cancel => await ComputeRecentMatchesAsync(summonerId, page, pageSize, cancel),
+                StatsCacheOptions,
+                cancellationToken: ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Failed to compute recent matches for summoner {SummonerId} page {Page} size {PageSize}. Returning an empty payload.",
+                summonerId,
+                page,
+                pageSize);
+            return new PagedResult<RecentMatchSummary>([], page, pageSize, 0);
+        }
     }
 
     private async Task<PagedResult<RecentMatchSummary>> ComputeRecentMatchesAsync(Guid summonerId, int page,
@@ -261,10 +301,14 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
             })
             .ToListAsync(ct);
 
+        if (participantData.Count == 0)
+            return new PagedResult<RecentMatchSummary>([], page, pageSize, total);
+
         // Get items and runes for these participants
-        var participantIds = participantData.Select(p => p.Id).ToList();
+        var participantIds = participantData.Select(p => p.Id).Distinct().ToList();
 
         var itemsByParticipant = await db.Set<Data.Models.LoL.Match.MatchParticipantItem>()
+            .AsNoTracking()
             .Where(i => participantIds.Contains(i.MatchParticipantId))
             .GroupBy(i => i.MatchParticipantId)
             .Select(g => new { ParticipantId = g.Key, Items = g.Select(i => i.ItemId).ToList() })
@@ -272,40 +316,78 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
 
         // Get runes and their metadata for determining styles
         var runesByParticipant = await db.Set<Data.Models.LoL.Match.MatchParticipantRune>()
+            .AsNoTracking()
             .Where(r => participantIds.Contains(r.MatchParticipantId))
             .GroupBy(r => r.MatchParticipantId)
-            .Select(g => new { ParticipantId = g.Key, RuneIds = g.Select(r => r.RuneId).ToList(), PatchVersion = g.Select(r => r.PatchVersion).FirstOrDefault() })
+            .Select(g => new
+            {
+                ParticipantId = g.Key,
+                RuneIds = g.Select(r => r.RuneId).ToList(),
+                PatchVersion = g.Select(r => r.PatchVersion).FirstOrDefault()
+            })
             .ToDictionaryAsync(x => x.ParticipantId, ct);
 
         // Get rune metadata for all runes we need to process
         var allRuneIds = runesByParticipant.Values.SelectMany(r => r.RuneIds).Distinct().ToList();
-        var patches = participantData.Select(p => p.Patch).Distinct().ToList();
+        var patches = participantData
+            .Select(p => NormalizePatchVersion(p.Patch))
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Distinct()
+            .ToList();
 
-        var runeMetadata = await db.RuneVersions
-            .AsNoTracking()
-            .Where(rv => allRuneIds.Contains(rv.RuneId) && patches.Contains(rv.PatchVersion))
-            .ToDictionaryAsync(
-                rv => new RunePatchKey(rv.RuneId, rv.PatchVersion),
-                rv => new RuneMetadata(rv.RunePathId, rv.Slot),
-                ct);
+        var runeMetadataRows = allRuneIds.Count > 0
+            ? await db.RuneVersions
+                .AsNoTracking()
+                .Where(rv =>
+                    allRuneIds.Contains(rv.RuneId) &&
+                    (patches.Count == 0 || patches.Contains(rv.PatchVersion)))
+                .Select(rv => new { rv.RuneId, rv.PatchVersion, rv.RunePathId, rv.Slot })
+                .ToListAsync(ct)
+            : [];
+
+        var runeMetadataByPatch = runeMetadataRows
+            .GroupBy(rv => new RunePatchKey(rv.RuneId, NormalizePatchVersion(rv.PatchVersion)))
+            .ToDictionary(
+                g => g.Key,
+                g =>
+                {
+                    var first = g.First();
+                    return new RuneMetadata(first.RunePathId, first.Slot);
+                });
+
+        var runeMetadataByRuneId = runeMetadataRows
+            .GroupBy(rv => rv.RuneId)
+            .ToDictionary(
+                g => g.Key,
+                g =>
+                {
+                    var first = g.First();
+                    return new RuneMetadata(first.RunePathId, first.Slot);
+                });
 
         // Map to final DTOs
         var items = participantData.Select(p =>
         {
             var itemList = itemsByParticipant.GetValueOrDefault(p.Id) ?? new List<int>();
+            if (itemList.Count > 7)
+                itemList = itemList.Take(7).ToList();
             // Ensure 7 slots (pad with 0s if needed)
             while (itemList.Count < 7) itemList.Add(0);
 
             var runes = runesByParticipant.GetValueOrDefault(p.Id);
             var runeSummary = runes != null
-                ? BuildRuneSummary(runes.RuneIds, runes.PatchVersion ?? p.Patch, runeMetadata)
+                ? BuildRuneSummary(
+                    runes.RuneIds,
+                    runes.PatchVersion ?? p.Patch,
+                    runeMetadataByPatch,
+                    runeMetadataByRuneId)
                 : new MatchRuneSummary(0, 0, 0);
 
             return new RecentMatchSummary(
-                p.MatchId!,
+                p.MatchId ?? string.Empty,
                 p.MatchDate,
                 p.Duration,
-                p.QueueType!,
+                p.QueueType ?? "UNKNOWN",
                 p.Win,
                 p.ChampionId,
                 p.TeamPosition,
@@ -327,18 +409,29 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
 
     public async Task<MatchDetailDto?> GetMatchDetailAsync(string matchId, CancellationToken ct)
     {
-        var cacheKey = $"{MatchDetailCacheKeyPrefix}{matchId}";
-        return await cache.GetOrCreateAsync(
-            cacheKey,
-            async cancel => await ComputeMatchDetailAsync(matchId, cancel),
-            MatchDetailCacheOptions,
-            cancellationToken: ct);
+        try
+        {
+            var cacheKey = $"{MatchDetailCacheKeyPrefix}{matchId}";
+            return await cache.GetOrCreateAsync(
+                cacheKey,
+                async cancel => await ComputeMatchDetailAsync(matchId, cancel),
+                MatchDetailCacheOptions,
+                cancellationToken: ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Failed to compute match detail for match {MatchId}. Returning null.",
+                matchId);
+            return null;
+        }
     }
 
     private async Task<MatchDetailDto?> ComputeMatchDetailAsync(string matchId, CancellationToken ct)
     {
         var match = await db.Matches
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(m => m.Participants)
                 .ThenInclude(p => p.Summoner)
             .Include(m => m.Participants)
@@ -356,10 +449,25 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
             .Distinct()
             .ToList();
 
-        var runeMetadata = await db.RuneVersions
-            .AsNoTracking()
-            .Where(rv => runeIds.Contains(rv.RuneId) && rv.PatchVersion == match.Patch)
-            .ToDictionaryAsync(rv => rv.RuneId, rv => new RuneMetadata(rv.RunePathId, rv.Slot), ct);
+        var normalizedPatch = NormalizePatchVersion(match.Patch);
+        var runeMetadataRows = runeIds.Count > 0
+            ? await db.RuneVersions
+                .AsNoTracking()
+                .Where(rv => runeIds.Contains(rv.RuneId) &&
+                             (string.IsNullOrWhiteSpace(normalizedPatch) || rv.PatchVersion == normalizedPatch))
+                .Select(rv => new { rv.RuneId, rv.RunePathId, rv.Slot })
+                .ToListAsync(ct)
+            : [];
+
+        var runeMetadata = runeMetadataRows
+            .GroupBy(rv => rv.RuneId)
+            .ToDictionary(
+                g => g.Key,
+                g =>
+                {
+                    var first = g.First();
+                    return new RuneMetadata(first.RunePathId, first.Slot);
+                });
 
         var participants = match.Participants.Select(p => MapParticipant(p, runeMetadata)).ToList();
 
@@ -367,8 +475,8 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
             match.MatchId ?? string.Empty,
             match.MatchDate,
             match.Duration,
-            match.QueueType ?? string.Empty,
-            match.Patch,
+            match.QueueType ?? "UNKNOWN",
+            string.IsNullOrWhiteSpace(match.Patch) ? null : match.Patch,
             participants
         );
     }
@@ -468,6 +576,30 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
         return (kills + assists) / Math.Max(1.0, deaths);
     }
 
+    private static string NormalizePatchVersion(string? patchVersion)
+    {
+        return string.IsNullOrWhiteSpace(patchVersion) ? string.Empty : patchVersion.Trim();
+    }
+
+    private static SummonerOverviewStats EmptyOverview(Guid summonerId)
+    {
+        return new SummonerOverviewStats(
+            summonerId,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            []);
+    }
+
     /// <summary>
     /// Builds a rune summary (primary/sub styles + keystone) for match history.
     /// Simpler than BuildRunesDto - just enough for match cards.
@@ -475,15 +607,17 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache) : 
     private static MatchRuneSummary BuildRuneSummary(
         List<int> runeIds,
         string? patchVersion,
-        Dictionary<RunePatchKey, RuneMetadata> runeMetadata)
+        Dictionary<RunePatchKey, RuneMetadata> runeMetadata,
+        IReadOnlyDictionary<int, RuneMetadata> runeMetadataByRuneId)
     {
         // Group runes by their path (style)
         var runesByPath = new Dictionary<int, List<(int RuneId, int Slot)>>();
-        var normalizedPatch = patchVersion ?? string.Empty;
+        var normalizedPatch = NormalizePatchVersion(patchVersion);
 
         foreach (var runeId in runeIds)
         {
-            if (runeMetadata.TryGetValue(new RunePatchKey(runeId, normalizedPatch), out var meta))
+            if (runeMetadata.TryGetValue(new RunePatchKey(runeId, normalizedPatch), out var meta) ||
+                runeMetadataByRuneId.TryGetValue(runeId, out meta))
             {
                 var pathId = meta.PathId;
                 var slot = meta.Slot;

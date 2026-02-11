@@ -1,5 +1,6 @@
 using Camille.Enums;
 using Camille.RiotGames;
+using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
 using Transcendence.Data;
@@ -21,8 +22,9 @@ public class SummonerRefreshJob(
     RiotGamesApi riotGamesApi,
     HybridCache cache) : ISummonerRefreshJob
 {
+    [Queue("refresh-high")]
     public async Task RefreshByRiotId(string gameName, string tagLine, PlatformRoute platformRoute, string lockKey,
-        CancellationToken ct = default)
+        string? priorityLockKey, CancellationToken ct = default)
     {
         try
         {
@@ -34,7 +36,8 @@ public class SummonerRefreshJob(
             // Fetch a small window of recent ranked solo match IDs for this summoner
             var regional = platformRoute.ToRegional();
             var matchIds = await riotGamesApi.MatchV5()
-                .GetMatchIdsByPUUIDAsync(regional, summoner.Puuid!, 20, null, Queue.SUMMONERS_RIFT_5V5_RANKED_SOLO,
+                .GetMatchIdsByPUUIDAsync(regional, summoner.Puuid!, 20, null,
+                    Camille.Enums.Queue.SUMMONERS_RIFT_5V5_RANKED_SOLO,
                     null, null, "ranked", ct);
 
             // Defensively dedupe IDs returned by the API and process each match once.
@@ -83,23 +86,27 @@ public class SummonerRefreshJob(
         }
         finally
         {
-            // Always release the lock
-            try
-            {
-                await refreshLockRepository.ReleaseAsync(lockKey, ct);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "[Refresh] Failed to release refresh lock {LockKey}", lockKey);
-            }
+            await ReleaseLockSafeAsync(lockKey, ct, "[Refresh]");
+            if (!string.IsNullOrWhiteSpace(priorityLockKey))
+                await ReleaseLockSafeAsync(priorityLockKey, ct, "[Refresh]");
         }
     }
 
+    [Queue("refresh-low")]
     public async Task RefreshForAnalytics(string gameName, string tagLine, PlatformRoute platformRoute, string lockKey,
         long startTimeEpochSeconds, string currentPatch, CancellationToken ct = default)
     {
         try
         {
+            if (await refreshLockRepository.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, ct))
+            {
+                logger.LogInformation(
+                    "[AnalyticsRefresh] Skipping {GameName}#{Tag} because high-priority API refresh demand is active.",
+                    gameName,
+                    tagLine);
+                return;
+            }
+
             // Look up summoner from DB instead of calling Riot API (saves 2+ API calls)
             var summoner = await summonerRepository.FindByRiotIdAsync(
                 platformRoute.ToString(), gameName, tagLine, cancellationToken: ct);
@@ -115,7 +122,7 @@ public class SummonerRefreshJob(
             // Pass startTime to only get matches from the current patch
             var matchIds = await riotGamesApi.MatchV5()
                 .GetMatchIdsByPUUIDAsync(regional, summoner.Puuid!, 20, null,
-                    Queue.SUMMONERS_RIFT_5V5_RANKED_SOLO,
+                    Camille.Enums.Queue.SUMMONERS_RIFT_5V5_RANKED_SOLO,
                     startTimeEpochSeconds, null, "ranked", ct);
 
             var pending = matchIds
@@ -128,6 +135,15 @@ public class SummonerRefreshJob(
 
             foreach (var matchId in pending.Where(id => !existingMatchIds.Contains(id)))
             {
+                if (await refreshLockRepository.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, ct))
+                {
+                    logger.LogInformation(
+                        "[AnalyticsRefresh] Stopping low-priority refresh for {GameName}#{Tag} due to active high-priority API refresh demand.",
+                        gameName,
+                        tagLine);
+                    break;
+                }
+
                 try
                 {
                     // Use lightweight method that batch-queries summoners and creates stubs
@@ -175,14 +191,19 @@ public class SummonerRefreshJob(
         }
         finally
         {
-            try
-            {
-                await refreshLockRepository.ReleaseAsync(lockKey, ct);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "[AnalyticsRefresh] Failed to release refresh lock {LockKey}", lockKey);
-            }
+            await ReleaseLockSafeAsync(lockKey, ct, "[AnalyticsRefresh]");
+        }
+    }
+
+    private async Task ReleaseLockSafeAsync(string lockKey, CancellationToken ct, string operation)
+    {
+        try
+        {
+            await refreshLockRepository.ReleaseAsync(lockKey, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "{Operation} Failed to release refresh lock {LockKey}", operation, lockKey);
         }
     }
 

@@ -9,6 +9,7 @@ using Microsoft.OpenApi;
 using System.Text;
 using Transcendence.Data;
 using Transcendence.Data.Extensions;
+using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Extensions;
 using Transcendence.WebAPI.Security;
 
@@ -74,6 +75,7 @@ builder.Services.AddHybridCache(options =>
 // Register only core, API remains keyless
 builder.Services.AddTranscendenceCore();
 builder.Services.AddProjectSyndraRepositories();
+builder.Services.Configure<ChampionAnalyticsComputeOptions>(builder.Configuration.GetSection("Analytics:Compute"));
 
 var riotApiKey = builder.Configuration.GetConnectionString("RiotApi")
                  ?? builder.Configuration["RiotApi:ApiKey"];

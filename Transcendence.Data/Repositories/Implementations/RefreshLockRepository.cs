@@ -69,4 +69,15 @@ public class RefreshLockRepository(TranscendenceContext db) : IRefreshLockReposi
     {
         return db.RefreshLocks.FirstOrDefaultAsync(x => x.Key == key, ct);
     }
+
+    public Task<bool> AnyActiveByPrefixAsync(string prefix, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(prefix))
+            throw new ArgumentException("Prefix is required.", nameof(prefix));
+
+        var now = DateTime.UtcNow;
+        return db.RefreshLocks
+            .AsNoTracking()
+            .AnyAsync(x => x.Key.StartsWith(prefix) && x.LockedUntilUtc > now, ct);
+    }
 }

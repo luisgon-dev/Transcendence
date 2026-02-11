@@ -105,7 +105,10 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 
         // Normalize parameters
         var normalizedRole = string.IsNullOrEmpty(role) ? "ALL" : role.ToUpperInvariant();
-        var normalizedTier = string.IsNullOrEmpty(rankTier) ? "all" : rankTier.ToUpperInvariant();
+        var normalizedTier = string.IsNullOrWhiteSpace(rankTier)
+            ? "all"
+            : rankTier.Trim().ToUpperInvariant();
+        var tierFilter = normalizedTier == "ALL" ? null : normalizedTier;
 
         // Build cache key
         var cacheKey = $"{TierListCacheKeyPrefix}{normalizedRole}:{normalizedTier}:{currentPatch}";
@@ -114,7 +117,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         // Get or compute tier list with caching
         var entries = await _cache.GetOrCreateAsync(
             cacheKey,
-            async cancel => await _computeService.ComputeTierListAsync(normalizedRole, normalizedTier, currentPatch, cancel),
+            async cancel => await _computeService.ComputeTierListAsync(normalizedRole, tierFilter, currentPatch, cancel),
             AnalyticsCacheOptions,
             tags: tags,
             cancellationToken: ct
@@ -136,14 +139,14 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
     {
         var patch = await GetCurrentPatchAsync(ct);
         var normalizedRole = role.ToUpperInvariant();
-        var normalizedTier = rankTier ?? "all";
+        var normalizedTier = NormalizeRankTier(rankTier);
         var cacheKey = $"{BuildsCacheKeyPrefix}{championId}:{normalizedRole}:{normalizedTier}:{patch}";
         var tags = new[] { AnalyticsCacheTag, $"patch:{patch}", "builds" };
 
         return await _cache.GetOrCreateAsync(
             cacheKey,
             async cancel => await _computeService.ComputeBuildsAsync(
-                championId, normalizedRole, rankTier, patch, cancel),
+                championId, normalizedRole, normalizedTier == "all" ? null : normalizedTier, patch, cancel),
             AnalyticsCacheOptions,
             tags,
             cancellationToken: ct);
@@ -157,14 +160,14 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
     {
         var patch = await GetCurrentPatchAsync(ct);
         var normalizedRole = role.ToUpperInvariant();
-        var normalizedTier = rankTier ?? "all";
+        var normalizedTier = NormalizeRankTier(rankTier);
         var cacheKey = $"{MatchupsCacheKeyPrefix}{championId}:{normalizedRole}:{normalizedTier}:{patch}";
         var tags = new[] { AnalyticsCacheTag, $"patch:{patch}", "matchups" };
 
         return await _cache.GetOrCreateAsync(
             cacheKey,
             async cancel => await _computeService.ComputeMatchupsAsync(
-                championId, normalizedRole, rankTier, patch, cancel),
+                championId, normalizedRole, normalizedTier == "all" ? null : normalizedTier, patch, cancel),
             AnalyticsCacheOptions,
             tags,
             cancellationToken: ct);
@@ -202,5 +205,14 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             keyParts.Add($"role:{filter.Role}");
 
         return string.Join(":", keyParts);
+    }
+
+    private static string NormalizeRankTier(string? rankTier)
+    {
+        if (string.IsNullOrWhiteSpace(rankTier))
+            return "all";
+
+        var normalized = rankTier.Trim().ToUpperInvariant();
+        return normalized == "ALL" ? "all" : normalized;
     }
 }

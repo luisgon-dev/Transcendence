@@ -76,11 +76,12 @@ function movementClass(m: TierMovement) {
 export default async function TierListPage({
   searchParams
 }: {
-  searchParams?: { role?: string; rankTier?: string };
+  searchParams?: Promise<{ role?: string; rankTier?: string }>;
 }) {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const qs = new URLSearchParams();
-  const roleParam = (searchParams?.role ?? "").toUpperCase();
-  const rankParam = (searchParams?.rankTier ?? "").toUpperCase();
+  const roleParam = (resolvedSearchParams?.role ?? "").toUpperCase();
+  const rankParam = (resolvedSearchParams?.rankTier ?? "").toUpperCase();
 
   if (roleParam && roleParam !== "ALL") qs.set("role", roleParam);
   if (rankParam && rankParam !== "ALL") qs.set("rankTier", rankParam);

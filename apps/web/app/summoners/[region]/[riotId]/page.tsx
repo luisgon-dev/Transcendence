@@ -15,8 +15,9 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 export default async function SummonerProfilePage({
   params
 }: {
-  params: { region: string; riotId: string };
+  params: Promise<{ region: string; riotId: string }>;
 }) {
+  const resolvedParams = await params;
   const verbosity = getErrorVerbosity();
   const ctx = verbosity === "verbose" ? await getSafeRequestContext() : null;
   const pageRequestId =
@@ -25,7 +26,7 @@ export default async function SummonerProfilePage({
       : null;
 
   // Some environments appear to provide the dynamic param key with different casing.
-  const paramsAny = params as unknown as Record<string, unknown>;
+  const paramsAny = resolvedParams as unknown as Record<string, unknown>;
   const riotIdRaw = (paramsAny.riotId ?? paramsAny.riotid) as unknown;
   const riotIdPath =
     typeof riotIdRaw === "string" ? riotIdRaw : riotIdRaw == null ? "" : String(riotIdRaw);
@@ -34,7 +35,7 @@ export default async function SummonerProfilePage({
     logEvent("info", "summoner page invoked", {
       requestId: pageRequestId,
       route: "summoners/[region]/[riotId]",
-      region: params.region,
+      region: resolvedParams.region,
       paramsKeys: Object.keys(paramsAny),
       riotIdRaw: riotIdRaw ?? null,
       riotIdRawCodePoints: toCodePoints(riotIdRaw),
@@ -53,7 +54,7 @@ export default async function SummonerProfilePage({
       logEvent("error", "riotId decode failed", {
         requestId: pageRequestId,
         route: "summoners/[region]/[riotId]",
-        region: params.region,
+        region: resolvedParams.region,
         paramsKeys: Object.keys(paramsAny),
         riotIdRaw: riotIdRaw ?? null,
         riotIdRawCodePoints: toCodePoints(riotIdRaw),
@@ -76,7 +77,7 @@ export default async function SummonerProfilePage({
           verbosity === "verbose"
             ? JSON.stringify(
                 {
-                  region: params.region,
+                  region: resolvedParams.region,
                   paramsKeys: Object.keys(paramsAny),
                   riotIdRaw: riotIdRaw ?? null,
                   riotIdRawString: riotIdPath,
@@ -92,7 +93,7 @@ export default async function SummonerProfilePage({
   }
 
   const url = `${getBackendBaseUrl()}/api/summoners/${encodeURIComponent(
-    params.region
+    resolvedParams.region
   )}/${encodeURIComponent(riotId.gameName)}/${encodeURIComponent(riotId.tagLine)}`;
 
   const result = await fetchBackendJson<unknown>(url, { cache: "no-store" });
@@ -139,7 +140,7 @@ export default async function SummonerProfilePage({
 
   return (
     <SummonerProfileClient
-      region={params.region}
+      region={resolvedParams.region}
       gameName={riotId.gameName}
       tagLine={riotId.tagLine}
       initialStatus={initialStatus}
@@ -147,4 +148,3 @@ export default async function SummonerProfilePage({
     />
   );
 }
-

@@ -60,9 +60,11 @@ export default async function SummonerMatchesPage({
   params,
   searchParams
 }: {
-  params: { region: string; riotId: string };
-  searchParams?: { page?: string };
+  params: Promise<{ region: string; riotId: string }>;
+  searchParams?: Promise<{ page?: string }>;
 }) {
+  const resolvedParams = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const verbosity = getErrorVerbosity();
   const ctx = verbosity === "verbose" ? await getSafeRequestContext() : null;
   const pageRequestId =
@@ -70,7 +72,7 @@ export default async function SummonerMatchesPage({
       ? (ctx?.headers["x-trn-request-id"] ?? newRequestId())
       : null;
 
-  const paramsAny = params as unknown as Record<string, unknown>;
+  const paramsAny = resolvedParams as unknown as Record<string, unknown>;
   const riotIdRaw = (paramsAny.riotId ?? paramsAny.riotid) as unknown;
   const riotIdPath =
     typeof riotIdRaw === "string" ? riotIdRaw : riotIdRaw == null ? "" : String(riotIdRaw);
@@ -79,7 +81,7 @@ export default async function SummonerMatchesPage({
     logEvent("info", "summoner matches page invoked", {
       requestId: pageRequestId,
       route: "summoners/[region]/[riotId]/matches",
-      region: params.region,
+      region: resolvedParams.region,
       paramsKeys: Object.keys(paramsAny),
       riotIdRaw: riotIdRaw ?? null,
       riotIdRawCodePoints: toCodePoints(riotIdRaw),
@@ -98,7 +100,7 @@ export default async function SummonerMatchesPage({
       logEvent("error", "riotId decode failed", {
         requestId: pageRequestId,
         route: "summoners/[region]/[riotId]/matches",
-        region: params.region,
+        region: resolvedParams.region,
         paramsKeys: Object.keys(paramsAny),
         riotIdRaw: riotIdRaw ?? null,
         riotIdRawCodePoints: toCodePoints(riotIdRaw),
@@ -121,7 +123,7 @@ export default async function SummonerMatchesPage({
           verbosity === "verbose"
             ? JSON.stringify(
                 {
-                  region: params.region,
+                  region: resolvedParams.region,
                   paramsKeys: Object.keys(paramsAny),
                   riotIdRaw: riotIdRaw ?? null,
                   riotIdRawString: riotIdPath,
@@ -136,11 +138,11 @@ export default async function SummonerMatchesPage({
     );
   }
 
-  const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
+  const page = Math.max(1, Number(resolvedSearchParams?.page ?? "1") || 1);
   const pageSize = 20;
 
   const profileUrl = `${getBackendBaseUrl()}/api/summoners/${encodeURIComponent(
-    params.region
+    resolvedParams.region
   )}/${encodeURIComponent(riotId.gameName)}/${encodeURIComponent(riotId.tagLine)}`;
 
   const profileResult = await fetchBackendJson<unknown>(profileUrl, {
@@ -164,7 +166,7 @@ export default async function SummonerMatchesPage({
         </p>
         <Link
           className="mt-4 inline-flex text-sm text-primary hover:underline"
-          href={`/summoners/${params.region}/${encodeRiotIdPath(riotId)}`}
+          href={`/summoners/${resolvedParams.region}/${encodeRiotIdPath(riotId)}`}
         >
           Back to profile
         </Link>
@@ -285,7 +287,7 @@ export default async function SummonerMatchesPage({
           </h1>
           <Link
             className="text-sm text-primary hover:underline"
-            href={`/summoners/${params.region}/${encodeRiotIdPath(riotId)}`}
+            href={`/summoners/${resolvedParams.region}/${encodeRiotIdPath(riotId)}`}
           >
             Back to profile
           </Link>
@@ -304,7 +306,7 @@ export default async function SummonerMatchesPage({
           const primaryStyle = styleById[String(m.runes.primaryStyleId)];
           const subStyle = styleById[String(m.runes.subStyleId)];
 
-          const matchHref = `/summoners/${params.region}/${encodeRiotIdPath(
+          const matchHref = `/summoners/${resolvedParams.region}/${encodeRiotIdPath(
             riotId
           )}/matches/${encodeURIComponent(m.matchId)}`;
 
@@ -455,7 +457,7 @@ export default async function SummonerMatchesPage({
               ? "pointer-events-none border-border/50 bg-white/5 text-muted"
               : "border-border/70 bg-white/5 text-fg/80 hover:bg-white/10"
           }`}
-          href={`/summoners/${params.region}/${encodeRiotIdPath(riotId)}/matches?page=${prevPage}`}
+          href={`/summoners/${resolvedParams.region}/${encodeRiotIdPath(riotId)}/matches?page=${prevPage}`}
         >
           Previous
         </Link>
@@ -465,7 +467,7 @@ export default async function SummonerMatchesPage({
               ? "pointer-events-none border-border/50 bg-white/5 text-muted"
               : "border-border/70 bg-white/5 text-fg/80 hover:bg-white/10"
           }`}
-          href={`/summoners/${params.region}/${encodeRiotIdPath(riotId)}/matches?page=${nextPage}`}
+          href={`/summoners/${resolvedParams.region}/${encodeRiotIdPath(riotId)}/matches?page=${nextPage}`}
         >
           Next
         </Link>

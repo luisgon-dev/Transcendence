@@ -40,6 +40,7 @@ public class RuneSelectionIntegrityBackfillJob(
                 break;
 
             var runes = await db.MatchParticipantRunes
+                .AsNoTracking()
                 .Where(r => participantIds.Contains(r.MatchParticipantId))
                 .OrderBy(r => r.MatchParticipantId)
                 .ThenBy(r => r.RuneId)
@@ -69,35 +70,63 @@ public class RuneSelectionIntegrityBackfillJob(
                     return new RuneMetadata(row.RunePathId, row.Slot);
                 });
 
+            var participantsNeedingRewrite = new HashSet<Guid>();
+            var replacementRows = new List<MatchParticipantRune>(runes.Count);
             var runesUpdatedInBatch = 0;
             foreach (var group in runes.GroupBy(r => r.MatchParticipantId))
             {
                 var updates = BuildSelectionUpdates(group.ToList(), metadataByPatch, metadataByRuneId);
+                var requiresRewrite = updates.Any(update =>
+                    update.Row.SelectionTree != update.SelectionTree ||
+                    update.Row.SelectionIndex != update.SelectionIndex ||
+                    update.Row.StyleId != update.StyleId);
+
+                if (!requiresRewrite)
+                    continue;
+
+                participantsNeedingRewrite.Add(group.Key);
+
                 foreach (var update in updates)
                 {
                     if (update.Row.SelectionTree != update.SelectionTree ||
                         update.Row.SelectionIndex != update.SelectionIndex ||
                         update.Row.StyleId != update.StyleId)
                     {
-                        update.Row.SelectionTree = update.SelectionTree;
-                        update.Row.SelectionIndex = update.SelectionIndex;
-                        update.Row.StyleId = update.StyleId;
                         runesUpdatedInBatch++;
                     }
+
+                    replacementRows.Add(new MatchParticipantRune
+                    {
+                        MatchParticipantId = update.Row.MatchParticipantId,
+                        RuneId = update.Row.RuneId,
+                        PatchVersion = update.Row.PatchVersion,
+                        SelectionTree = update.SelectionTree,
+                        SelectionIndex = update.SelectionIndex,
+                        StyleId = update.StyleId
+                    });
                 }
             }
 
-            await db.SaveChangesAsync(ct);
+            if (participantsNeedingRewrite.Count > 0)
+            {
+                await db.MatchParticipantRunes
+                    .Where(r => participantsNeedingRewrite.Contains(r.MatchParticipantId))
+                    .ExecuteDeleteAsync(ct);
+
+                await db.MatchParticipantRunes.AddRangeAsync(replacementRows, ct);
+                await db.SaveChangesAsync(ct);
+                db.ChangeTracker.Clear();
+            }
 
             batchesProcessed++;
-            totalParticipantsUpdated += participantIds.Count;
+            totalParticipantsUpdated += participantsNeedingRewrite.Count;
             totalRunesUpdated += runesUpdatedInBatch;
 
             logger.LogInformation(
                 "[RuneSelectionIntegrityBackfill] Batch {BatchNumber}/{MaxBatches}: participants={ParticipantCount}, runesUpdated={RunesUpdated}.",
                 batchesProcessed,
                 maxBatches,
-                participantIds.Count,
+                participantsNeedingRewrite.Count,
                 runesUpdatedInBatch);
         }
 

@@ -13,7 +13,7 @@
     "api:client": "pnpm --filter @transcendence/api-client gen && pnpm --filter @transcendence/api-client build",
     "api:gen": "pnpm api:spec && pnpm api:client",
     "api:check": "pnpm api:gen && git diff --exit-code -- openapi packages/api-client/src/schema.ts",
-    "web:dev": "pnpm --filter @transcendence/api-client build && pnpm --filter web dev",
+    "web:dev": "pnpm --filter @transcendence/api-client build && pnpm exec next dev apps/web -p 3000",
     "web:build": "pnpm --filter @transcendence/api-client build && pnpm --filter web build",
     "web:lint": "pnpm --filter @transcendence/api-client build && pnpm --filter web lint",
     "web:test": "pnpm --filter @transcendence/api-client build && pnpm --filter web test"

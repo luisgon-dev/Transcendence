@@ -13,7 +13,7 @@ export const config = {
   matcher: ["/summoners/:path*"]
 };
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   if (!isVerbose()) return NextResponse.next();
 
   const requestId = req.headers.get("x-trn-request-id") ?? crypto.randomUUID();
@@ -28,7 +28,7 @@ export function middleware(req: NextRequest) {
   console.log(
     JSON.stringify({
       level: "info",
-      msg: "middleware request",
+      msg: "proxy request",
       requestId,
       pathname,
       search,

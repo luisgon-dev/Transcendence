@@ -79,10 +79,12 @@ export default async function ChampionDetailPage({
   params,
   searchParams
 }: {
-  params: { championId: string };
-  searchParams?: { role?: string; rankTier?: string };
+  params: Promise<{ championId: string }>;
+  searchParams?: Promise<{ role?: string; rankTier?: string }>;
 }) {
-  const championId = Number(params.championId);
+  const resolvedParams = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const championId = Number(resolvedParams.championId);
   if (!Number.isFinite(championId) || championId <= 0) {
     return (
       <BackendErrorCard
@@ -92,8 +94,8 @@ export default async function ChampionDetailPage({
     );
   }
 
-  const role = (searchParams?.role ?? "MIDDLE").toUpperCase();
-  const rankTier = searchParams?.rankTier;
+  const role = (resolvedSearchParams?.role ?? "MIDDLE").toUpperCase();
+  const rankTier = resolvedSearchParams?.rankTier;
 
   const qsTier = rankTier ? `&rankTier=${encodeURIComponent(rankTier)}` : "";
 

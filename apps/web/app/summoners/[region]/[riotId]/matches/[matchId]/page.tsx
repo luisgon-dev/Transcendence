@@ -73,8 +73,9 @@ function fmtKda(p: ParticipantDetailDto) {
 export default async function MatchDetailPage({
   params
 }: {
-  params: { region: string; riotId: string; matchId: string };
+  params: Promise<{ region: string; riotId: string; matchId: string }>;
 }) {
+  const resolvedParams = await params;
   const verbosity = getErrorVerbosity();
   const ctx = verbosity === "verbose" ? await getSafeRequestContext() : null;
   const pageRequestId =
@@ -82,7 +83,7 @@ export default async function MatchDetailPage({
       ? (ctx?.headers["x-trn-request-id"] ?? newRequestId())
       : null;
 
-  const paramsAny = params as unknown as Record<string, unknown>;
+  const paramsAny = resolvedParams as unknown as Record<string, unknown>;
   const riotIdRaw = (paramsAny.riotId ?? paramsAny.riotid) as unknown;
   const riotIdPath =
     typeof riotIdRaw === "string" ? riotIdRaw : riotIdRaw == null ? "" : String(riotIdRaw);
@@ -91,11 +92,11 @@ export default async function MatchDetailPage({
     logEvent("info", "summoner match detail page invoked", {
       requestId: pageRequestId,
       route: "summoners/[region]/[riotId]/matches/[matchId]",
-      region: params.region,
+      region: resolvedParams.region,
       paramsKeys: Object.keys(paramsAny),
       riotIdRaw: riotIdRaw ?? null,
       riotIdRawString: riotIdPath,
-      matchId: params.matchId,
+      matchId: resolvedParams.matchId,
       riotIdRawCodePoints: toCodePoints(riotIdRaw),
       ...ctx
     });
@@ -111,8 +112,8 @@ export default async function MatchDetailPage({
       logEvent("error", "riotId decode failed", {
         requestId: pageRequestId,
         route: "summoners/[region]/[riotId]/matches/[matchId]",
-        region: params.region,
-        matchId: params.matchId,
+        region: resolvedParams.region,
+        matchId: resolvedParams.matchId,
         paramsKeys: Object.keys(paramsAny),
         riotIdRaw: riotIdRaw ?? null,
         riotIdRawString: riotIdPath,
@@ -135,12 +136,12 @@ export default async function MatchDetailPage({
           verbosity === "verbose"
             ? JSON.stringify(
                 {
-                  region: params.region,
+                  region: resolvedParams.region,
                   paramsKeys: Object.keys(paramsAny),
                   riotIdRaw: riotIdRaw ?? null,
                   riotIdRawString: riotIdPath,
                   riotIdRawCodePoints: toCodePoints(riotIdRaw),
-                  matchId: params.matchId
+                  matchId: resolvedParams.matchId
                 },
                 null,
                 2
@@ -153,7 +154,7 @@ export default async function MatchDetailPage({
 
   const profileResult = await fetchBackendJson<unknown>(
     `${getBackendBaseUrl()}/api/summoners/${encodeURIComponent(
-      params.region
+      resolvedParams.region
     )}/${encodeURIComponent(riotId.gameName)}/${encodeURIComponent(riotId.tagLine)}`,
     { cache: "no-store" }
   );
@@ -175,7 +176,7 @@ export default async function MatchDetailPage({
         </p>
         <Link
           className="mt-4 inline-flex text-sm text-primary hover:underline"
-          href={`/summoners/${params.region}/${encodeRiotIdPath(riotId)}`}
+          href={`/summoners/${resolvedParams.region}/${encodeRiotIdPath(riotId)}`}
         >
           Back to profile
         </Link>
@@ -235,7 +236,7 @@ export default async function MatchDetailPage({
     fetchBackendJson<MatchDetailDto>(
       `${getBackendBaseUrl()}/api/summoners/${encodeURIComponent(
         profile.summonerId
-      )}/matches/${encodeURIComponent(params.matchId)}`,
+      )}/matches/${encodeURIComponent(resolvedParams.matchId)}`,
       { cache: "no-store" }
     )
   ]);
@@ -260,7 +261,7 @@ export default async function MatchDetailPage({
       >
         <Link
           className="inline-flex text-sm text-primary hover:underline"
-          href={`/summoners/${params.region}/${encodeRiotIdPath(riotId)}/matches`}
+          href={`/summoners/${resolvedParams.region}/${encodeRiotIdPath(riotId)}/matches`}
         >
           Back to match history
         </Link>
@@ -306,13 +307,13 @@ export default async function MatchDetailPage({
           <div className="flex items-center gap-4">
             <Link
               className="text-sm text-primary hover:underline"
-              href={`/summoners/${params.region}/${encodeRiotIdPath(riotId)}/matches`}
+              href={`/summoners/${resolvedParams.region}/${encodeRiotIdPath(riotId)}/matches`}
             >
               Back to match history
             </Link>
             <Link
               className="text-sm text-fg/80 hover:text-fg hover:underline"
-              href={`/summoners/${params.region}/${encodeRiotIdPath(riotId)}`}
+              href={`/summoners/${resolvedParams.region}/${encodeRiotIdPath(riotId)}`}
             >
               Profile
             </Link>

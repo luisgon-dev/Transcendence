@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import type { components } from "@transcendence/api-client/schema";
 
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { Badge } from "@/components/ui/Badge";
@@ -10,28 +11,16 @@ import { getErrorVerbosity } from "@/lib/env";
 import { formatPercent } from "@/lib/format";
 import { roleDisplayLabel } from "@/lib/roles";
 import { championIconUrl, fetchChampionMap } from "@/lib/staticData";
+import {
+  movementClass,
+  movementLabel,
+  normalizeTierListEntries,
+  TIER_ORDER,
+  type UITierGrade,
+  type UITierListEntry
+} from "@/lib/tierlist";
 
-type TierGrade = "S" | "A" | "B" | "C" | "D";
-type TierMovement = "NEW" | "UP" | "DOWN" | "SAME";
-
-type TierListEntry = {
-  championId: number;
-  role: string;
-  tier: TierGrade;
-  compositeScore: number;
-  winRate: number;
-  pickRate: number;
-  games: number;
-  movement: TierMovement;
-  previousTier?: TierGrade | null;
-};
-
-type TierListResponse = {
-  patch: string;
-  role?: string | null;
-  rankTier?: string | null;
-  entries: TierListEntry[];
-};
+type TierListResponse = components["schemas"]["TierListResponse"];
 
 const ROLES = ["ALL", "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"] as const;
 const RANK_TIERS = [
@@ -47,32 +36,6 @@ const RANK_TIERS = [
   "GRANDMASTER",
   "CHALLENGER"
 ] as const;
-
-function movementLabel(m: TierMovement) {
-  switch (m) {
-    case "UP":
-      return "Up";
-    case "DOWN":
-      return "Down";
-    case "NEW":
-      return "New";
-    case "SAME":
-      return "Same";
-  }
-}
-
-function movementClass(m: TierMovement) {
-  switch (m) {
-    case "UP":
-      return "text-emerald-300";
-    case "DOWN":
-      return "text-red-300";
-    case "NEW":
-      return "text-primary";
-    case "SAME":
-      return "text-fg/70";
-  }
-}
 
 export default async function TierListPage({
   searchParams
@@ -116,24 +79,31 @@ export default async function TierListPage({
 
   const tierlist = res.body!;
   const { version, champions } = await fetchChampionMap();
+  const normalizedEntries = normalizeTierListEntries(tierlist.entries);
 
-  const groups: Record<TierGrade, TierListEntry[]> = {
+  const groups: Record<UITierGrade, UITierListEntry[]> = {
     S: [],
     A: [],
     B: [],
     C: [],
     D: []
   };
-  for (const e of tierlist.entries) groups[e.tier].push(e);
 
-  const tiers: TierGrade[] = ["S", "A", "B", "C", "D"];
+  for (const e of normalizedEntries) {
+    groups[e.tier].push(e);
+  }
+
+  const rankTierValue =
+    typeof tierlist.rankTier === "string" && tierlist.rankTier.toLowerCase() !== "all"
+      ? tierlist.rankTier
+      : null;
 
   return (
     <div className="grid gap-6">
       <header className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <Badge className="border-primary/40 bg-primary/10 text-primary">
-            Patch {tierlist.patch}
+            Patch {tierlist.patch ?? "Unknown"}
           </Badge>
           <Badge>Role: {roleDisplayLabel(tierlist.role ?? "ALL")}</Badge>
           <Badge>Tier: {tierlist.rankTier ?? "all"}</Badge>
@@ -186,7 +156,7 @@ export default async function TierListPage({
       </header>
 
       <div className="grid gap-6">
-        {tiers.map((tier) => {
+        {TIER_ORDER.map((tier) => {
           const entries = groups[tier];
           if (entries.length === 0) return null;
 
@@ -221,7 +191,7 @@ export default async function TierListPage({
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                           <Link
-                            href={`/champions/${e.championId}?role=${encodeURIComponent(e.role)}${tierlist.rankTier && tierlist.rankTier !== "all" ? `&rankTier=${encodeURIComponent(tierlist.rankTier)}` : ""}`}
+                            href={`/champions/${e.championId}?role=${encodeURIComponent(e.role)}${rankTierValue ? `&rankTier=${encodeURIComponent(rankTierValue)}` : ""}`}
                             className="truncate text-sm font-semibold text-fg hover:underline"
                           >
                             {champName}

@@ -1,72 +1,262 @@
-# Transcendence (Backend + Web)
+# Transcendence
 
-League of Legends analytics platform (backend + website). This repository contains:
+Transcendence is a full-stack League of Legends analytics platform built as a portfolio project.
 
-- Web API (`Transcendence.WebAPI`)
-- Background worker (`Transcendence.Service` + Hangfire)
-- Core domain/services (`Transcendence.Service.Core`)
-- Data layer (`Transcendence.Data`)
-- Admin portal for Hangfire (`Transcendence.WebAdminPortal`)
-- Next.js web frontend (`apps/web`)
+[![Portfolio Project](https://img.shields.io/badge/Project-Portfolio-1f6feb)](https://transcend.kronic.one)
+[![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
+[![Next.js](https://img.shields.io/badge/Next.js-App%20Router-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)](https://redis.io/)
 
-## Documentation Map (Source of Truth)
+Live site: [transcend.kronic.one](https://transcend.kronic.one)
 
-- Development setup and runbooks: `docs/DEVELOPMENT.md`
-- API overview and contract workflow: `docs/API.md`
-- Architecture overview: `docs/ARCHITECTURE.md`
-- Agent instructions: `CLAUDE.md` and `AGENTS.md`
+It combines:
+- A .NET API for stats, analytics, auth, and live game data
+- A .NET background worker for ingestion and analytics computation
+- A Next.js web app for tier lists, champion analytics, and summoner breakdowns
 
-## Documentation Policy (Contributor Requirement)
+## Table of Contents
 
-If a change affects behavior, API contracts, or configuration, update documentation in the same PR.
+- [Why This Exists](#why-this-exists)
+- [Current Features](#current-features)
+- [Tech Stack](#tech-stack)
+- [Architecture Overview](#architecture-overview)
+- [Repository Structure](#repository-structure)
+- [Quick Start (Docker Recommended)](#quick-start-docker-recommended)
+- [Run Without Docker](#run-without-docker)
+- [Common Commands](#common-commands)
+- [API and Client Contract](#api-and-client-contract)
+- [Documentation Map](#documentation-map)
+- [Documentation Hygiene](#documentation-hygiene)
+- [Project Status](#project-status)
+- [License](#license)
 
-Examples:
-- API/auth/env changes: update `docs/API.md` and/or `docs/DEVELOPMENT.md`
-- Architectural or data-flow changes: update `docs/ARCHITECTURE.md`
-- Command changes (pnpm/dotnet/docker): update `docs/DEVELOPMENT.md`
+## Why This Exists
+
+This project is meant to demonstrate practical backend and full-stack engineering work:
+- Domain modeling for real game data (matches, runes, builds, patch-aware analytics)
+- Asynchronous processing with queues and recurring jobs
+- API contract discipline (OpenAPI + generated TypeScript schema)
+- SSR/BFF frontend patterns with clear auth boundaries
+
+## Current Features
+
+### Web Experience
+
+- Global command/search experience for champions, summoners, and tier list
+- Tier list page with role and rank tier filters
+- Champion index and champion detail pages
+- Champion detail includes:
+  - win rates by role/tier
+  - top builds
+  - matchup tables
+  - full rune setups (primary, secondary, stat shards)
+- Summoner profile with refresh workflow
+- Match history with paged results
+- Match detail view with full team tables, spells, items, and runes
+- Account pages for registration, login, and favorites
+
+### Backend + Data Pipeline
+
+- REST API with mixed auth model (`AppOnly`, `UserOnly`, `AppOrUser`)
+- Hangfire-backed background processing with queue prioritization
+- Riot data ingestion and patch-aware static data updates
+- Continuous analytics ingestion and adaptive refresh jobs
+- Rune selection hierarchy persisted per match participant:
+  - tree (`Primary`, `Secondary`, `StatShards`)
+  - slot index within each tree
+  - style/path id metadata
+- Rune integrity backfill job for older/legacy rows
 
 ## Tech Stack
 
-- ASP.NET Core Web API (`net10.0`)
-- .NET Worker Service (`net10.0`)
+- .NET SDK pinned in `global.json` (`10.0.102` currently)
+- ASP.NET Core Web API (`Transcendence.WebAPI`)
+- .NET Worker + Hangfire (`Transcendence.Service`)
 - EF Core + PostgreSQL
-- Hangfire + Hangfire.PostgreSql
 - Redis + HybridCache
-- Swagger/OpenAPI (spec committed under `openapi/`)
-- Docker + Docker Compose
-- Next.js (App Router) + Tailwind CSS
-- pnpm workspaces
-- OpenAPI TypeScript client generation (`openapi-typescript` + `openapi-fetch`)
+- Next.js App Router + Tailwind CSS (`apps/web`)
+- pnpm workspaces (`pnpm@10.22.0`, Node `22` via `.nvmrc`)
+- OpenAPI spec + generated TypeScript client (`openapi-typescript`, `openapi-fetch`)
+- Docker Compose for local environment orchestration
 
-## Repo Structure
+## Architecture Overview
+
+```text
+Browser
+  -> Next.js app (SSR + BFF routes in apps/web/api/*)
+  -> Transcendence.WebAPI (REST, auth, enqueue jobs)
+  -> PostgreSQL / Redis
+
+Transcendence.Service (Hangfire worker)
+  -> pulls queued + recurring jobs
+  -> calls Riot APIs
+  -> updates PostgreSQL
+  -> refreshes analytics/cache
+```
+
+Key behavior:
+- API handles request/response and lightweight orchestration.
+- Worker owns heavy and scheduled work (refresh, ingestion, analytics, backfills).
+- Frontend uses route handlers as a BFF so browser JS does not directly handle backend auth tokens.
+
+## Repository Structure
 
 | Project | Purpose |
 |---|---|
 | `Transcendence.WebAPI` | Public and authenticated REST API |
-| `Transcendence.Service` | Background processing host (Hangfire server + recurring jobs) |
-| `Transcendence.Service.Core` | Domain/application services (analytics, auth, live game, Riot integration, jobs) |
-| `Transcendence.Data` | EF Core DbContext, entities, repositories |
+| `Transcendence.Service` | Background worker host + Hangfire server |
+| `Transcendence.Service.Core` | Core services (analytics, auth, Riot integration, jobs) |
+| `Transcendence.Data` | EF Core `DbContext`, entities, repositories |
 | `Transcendence.WebAdminPortal` | Hangfire dashboard host |
-| `apps/web` | Next.js website (SSR + route handlers BFF) |
-| `packages/api-client` | Generated OpenAPI TypeScript client (`openapi/transcendence.v1.json` -> `src/schema.ts`) |
-| `openapi` | Committed OpenAPI spec export |
-| `scripts/openapi` | Spec export script |
+| `apps/web` | Next.js frontend (pages + BFF route handlers) |
+| `packages/api-client` | Generated TypeScript schema/client artifacts |
+| `openapi` | Committed OpenAPI spec |
+| `docs` | Development, API, and architecture docs |
 
-## Local Development (Quick Start)
+## Quick Start (Docker Recommended)
+
+1. Start backend infrastructure and .NET services:
 
 ```bash
 docker compose up --build
+```
+
+2. Install JS dependencies:
+
+```bash
 corepack pnpm install
+```
+
+3. Configure the web app:
+
+```bash
+cp apps/web/.env.example apps/web/.env.local
+```
+
+PowerShell equivalent:
+
+```powershell
+Copy-Item apps/web/.env.example apps/web/.env.local
+```
+
+Set at minimum:
+- `TRN_BACKEND_BASE_URL=http://localhost:8080`
+- `TRN_BACKEND_API_KEY=trn_bootstrap_dev_key` (or a generated app key)
+
+4. Run the web app:
+
+```bash
 corepack pnpm web:dev
 ```
 
-For full setup instructions (env vars, secrets, migrations, keys), see `docs/DEVELOPMENT.md`.
+Local endpoints:
+- Web: `http://localhost:3000`
+- API: `http://localhost:8080`
+- Hangfire admin portal: `http://localhost:8081`
+- pgAdmin: `http://localhost:5050`
 
-## OpenAPI Spec + Client Generation
+## Run Without Docker
+
+Use local PostgreSQL + Redis and configure secrets for both hosts.
+
+`Transcendence.WebAPI`:
+
+```bash
+dotnet user-secrets set "ConnectionStrings:MainDatabase" "Host=localhost;Port=5432;Database=transcendence;Username=postgres;Password=postgres" --project Transcendence.WebAPI
+dotnet user-secrets set "ConnectionStrings:Redis" "localhost:6379" --project Transcendence.WebAPI
+dotnet user-secrets set "ConnectionStrings:RiotApi" "RGAPI-your-key" --project Transcendence.WebAPI
+dotnet user-secrets set "Auth:Jwt:Key" "CHANGE_THIS_TO_A_REAL_32+_CHAR_SECRET" --project Transcendence.WebAPI
+dotnet user-secrets set "Auth:BootstrapApiKey" "trn_bootstrap_dev_key" --project Transcendence.WebAPI
+```
+
+`Transcendence.Service`:
+
+```bash
+dotnet user-secrets set "ConnectionStrings:MainDatabase" "Host=localhost;Port=5432;Database=transcendence;Username=postgres;Password=postgres" --project Transcendence.Service
+dotnet user-secrets set "ConnectionStrings:Redis" "localhost:6379" --project Transcendence.Service
+dotnet user-secrets set "ConnectionStrings:RiotApi" "RGAPI-your-key" --project Transcendence.Service
+```
+
+Apply database migrations:
+
+```bash
+dotnet ef database update --project Transcendence.Service --startup-project Transcendence.Service
+```
+
+Run services:
+
+```bash
+dotnet run --project Transcendence.WebAPI
+dotnet run --project Transcendence.Service
+dotnet run --project Transcendence.WebAdminPortal
+```
+
+## Common Commands
+
+From repo root:
+
+```bash
+corepack pnpm web:dev
+corepack pnpm web:build
+corepack pnpm web:lint
+corepack pnpm web:test
+```
+
+OpenAPI + TS schema:
 
 ```bash
 corepack pnpm api:gen
 corepack pnpm api:check
 ```
 
-See `docs/API.md` for details.
+.NET builds:
+
+```bash
+dotnet build Transcendence.sln
+```
+
+## API and Client Contract
+
+Contract source of truth:
+- `openapi/transcendence.v1.json`
+
+Key backend areas:
+- Summoners and match stats
+- Analytics and tier list endpoints
+- Auth and API key management
+- User preferences/favorites
+- Live game lookup
+
+Frontend typing:
+- `packages/api-client/src/schema.ts` is generated from OpenAPI
+
+If API surface changes, update OpenAPI and regenerate the client in the same PR.
+
+## Documentation Map
+
+- `docs/DEVELOPMENT.md`: setup, environment, jobs, and operational runbooks
+- `docs/API.md`: auth model, endpoint map, and contract workflow
+- `docs/ARCHITECTURE.md`: system boundaries, data flow, and job orchestration
+- `CLAUDE.md` / `AGENTS.md`: agent-specific workflow guidance
+
+## Documentation Hygiene
+
+This repo expects docs to be updated in the same PR when behavior changes.
+
+Examples:
+- API/auth/request-response updates:
+  - update `docs/API.md`
+  - update `openapi/transcendence.v1.json` when applicable
+- Env vars, secrets, docker, run/build/test commands:
+  - update `docs/DEVELOPMENT.md` and/or `README.md`
+- System design and background workflow changes:
+  - update `docs/ARCHITECTURE.md`
+
+## Project Status
+
+This is an active portfolio codebase. The architecture and feature set are intentionally broad enough to show end-to-end engineering decisions, but the project is still evolving.
+
+## License
+
+A license file is not currently committed in this repository.

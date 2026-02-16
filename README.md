@@ -23,12 +23,8 @@ It combines:
 - [Architecture Overview](#architecture-overview)
 - [Repository Structure](#repository-structure)
 - [Quick Start (Docker Recommended)](#quick-start-docker-recommended)
-- [Run Without Docker](#run-without-docker)
-- [Common Commands](#common-commands)
 - [API and Client Contract](#api-and-client-contract)
 - [Documentation Map](#documentation-map)
-- [Documentation Hygiene](#documentation-hygiene)
-- [Project Status](#project-status)
 - [License](#license)
 
 ## Why This Exists
@@ -70,13 +66,12 @@ This project is meant to demonstrate practical backend and full-stack engineerin
 
 ## Tech Stack
 
-- .NET SDK pinned in `global.json` (`10.0.102` currently)
+- .NET 10 SDK 
 - ASP.NET Core Web API (`Transcendence.WebAPI`)
 - .NET Worker + Hangfire (`Transcendence.Service`)
 - EF Core + PostgreSQL
 - Redis + HybridCache
 - Next.js App Router + Tailwind CSS (`apps/web`)
-- pnpm workspaces (`pnpm@10.22.0`, Node `22` via `.nvmrc`)
 - OpenAPI spec + generated TypeScript client (`openapi-typescript`, `openapi-fetch`)
 - Docker Compose for local environment orchestration
 
@@ -156,66 +151,6 @@ Local endpoints:
 - Hangfire admin portal: `http://localhost:8081`
 - pgAdmin: `http://localhost:5050`
 
-## Run Without Docker
-
-Use local PostgreSQL + Redis and configure secrets for both hosts.
-
-`Transcendence.WebAPI`:
-
-```bash
-dotnet user-secrets set "ConnectionStrings:MainDatabase" "Host=localhost;Port=5432;Database=transcendence;Username=postgres;Password=postgres" --project Transcendence.WebAPI
-dotnet user-secrets set "ConnectionStrings:Redis" "localhost:6379" --project Transcendence.WebAPI
-dotnet user-secrets set "ConnectionStrings:RiotApi" "RGAPI-your-key" --project Transcendence.WebAPI
-dotnet user-secrets set "Auth:Jwt:Key" "CHANGE_THIS_TO_A_REAL_32+_CHAR_SECRET" --project Transcendence.WebAPI
-dotnet user-secrets set "Auth:BootstrapApiKey" "trn_bootstrap_dev_key" --project Transcendence.WebAPI
-```
-
-`Transcendence.Service`:
-
-```bash
-dotnet user-secrets set "ConnectionStrings:MainDatabase" "Host=localhost;Port=5432;Database=transcendence;Username=postgres;Password=postgres" --project Transcendence.Service
-dotnet user-secrets set "ConnectionStrings:Redis" "localhost:6379" --project Transcendence.Service
-dotnet user-secrets set "ConnectionStrings:RiotApi" "RGAPI-your-key" --project Transcendence.Service
-```
-
-Apply database migrations:
-
-```bash
-dotnet ef database update --project Transcendence.Service --startup-project Transcendence.Service
-```
-
-Run services:
-
-```bash
-dotnet run --project Transcendence.WebAPI
-dotnet run --project Transcendence.Service
-dotnet run --project Transcendence.WebAdminPortal
-```
-
-## Common Commands
-
-From repo root:
-
-```bash
-corepack pnpm web:dev
-corepack pnpm web:build
-corepack pnpm web:lint
-corepack pnpm web:test
-```
-
-OpenAPI + TS schema:
-
-```bash
-corepack pnpm api:gen
-corepack pnpm api:check
-```
-
-.NET builds:
-
-```bash
-dotnet build Transcendence.sln
-```
-
 ## API and Client Contract
 
 Contract source of truth:
@@ -231,7 +166,6 @@ Key backend areas:
 Frontend typing:
 - `packages/api-client/src/schema.ts` is generated from OpenAPI
 
-If API surface changes, update OpenAPI and regenerate the client in the same PR.
 
 ## Documentation Map
 
@@ -240,22 +174,6 @@ If API surface changes, update OpenAPI and regenerate the client in the same PR.
 - `docs/ARCHITECTURE.md`: system boundaries, data flow, and job orchestration
 - `CLAUDE.md` / `AGENTS.md`: agent-specific workflow guidance
 
-## Documentation Hygiene
-
-This repo expects docs to be updated in the same PR when behavior changes.
-
-Examples:
-- API/auth/request-response updates:
-  - update `docs/API.md`
-  - update `openapi/transcendence.v1.json` when applicable
-- Env vars, secrets, docker, run/build/test commands:
-  - update `docs/DEVELOPMENT.md` and/or `README.md`
-- System design and background workflow changes:
-  - update `docs/ARCHITECTURE.md`
-
-## Project Status
-
-This is an active portfolio codebase. The architecture and feature set are intentionally broad enough to show end-to-end engineering decisions, but the project is still evolving.
 
 ## License
 

@@ -1,14 +1,62 @@
-import Image from "next/image";
-import Link from "next/link";
+import type { components } from "@transcendence/api-client/schema";
 
-import { Card } from "@/components/ui/Card";
-import { fetchChampionMap, championIconUrl } from "@/lib/staticData";
+import {
+  ChampionsGridClient,
+  type ChampionGridEntry
+} from "@/components/ChampionsGridClient";
+import { fetchBackendJson } from "@/lib/backendCall";
+import { getBackendBaseUrl } from "@/lib/env";
+import { fetchChampionMap } from "@/lib/staticData";
+import {
+  normalizeTierListEntries,
+  type UITierGrade
+} from "@/lib/tierlist";
+
+type TierListResponse = components["schemas"]["TierListResponse"];
 
 export default async function ChampionsPage() {
-  const { version, champions } = await fetchChampionMap();
+  const [{ version, champions }, tierListRes] = await Promise.all([
+    fetchChampionMap(),
+    fetchBackendJson<TierListResponse>(
+      `${getBackendBaseUrl()}/api/analytics/tierlist`,
+      { next: { revalidate: 60 * 60 } }
+    )
+  ]);
 
-  const list = Object.entries(champions)
-    .map(([key, value]) => ({ championId: Number(key), ...value }))
+  // Build a map of championId -> best tier/role/winRate from the tier list
+  const tierMap = new Map<
+    number,
+    { tier: UITierGrade; role: string; winRate: number; games: number }
+  >();
+
+  if (tierListRes.ok && tierListRes.body) {
+    const entries = normalizeTierListEntries(tierListRes.body.entries);
+    for (const entry of entries) {
+      const existing = tierMap.get(entry.championId);
+      // Keep the entry with the most games (most relevant role)
+      if (!existing || entry.games > existing.games) {
+        tierMap.set(entry.championId, {
+          tier: entry.tier,
+          role: entry.role,
+          winRate: entry.winRate,
+          games: entry.games
+        });
+      }
+    }
+  }
+
+  const list: ChampionGridEntry[] = Object.entries(champions)
+    .map(([key, value]) => {
+      const id = Number(key);
+      const tierInfo = tierMap.get(id);
+      return {
+        championId: id,
+        ...value,
+        tier: tierInfo?.tier ?? null,
+        winRate: tierInfo?.winRate ?? null,
+        primaryRole: tierInfo?.role ?? null
+      };
+    })
     .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
@@ -22,28 +70,7 @@ export default async function ChampionsPage() {
         </p>
       </header>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-        {list.map((c) => (
-          <Link key={c.championId} href={`/champions/${c.championId}`}>
-            <Card className="group p-3 transition hover:bg-white/10">
-              <div className="flex items-center gap-3">
-                <Image
-                  src={championIconUrl(version, c.id)}
-                  alt={c.name}
-                  width={40}
-                  height={40}
-                  className="rounded-lg"
-                />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-fg group-hover:underline">
-                    {c.name}
-                  </p>
-                </div>
-              </div>
-            </Card>
-          </Link>
-        ))}
-      </div>
+      <ChampionsGridClient champions={list} version={version} />
     </div>
   );
 }

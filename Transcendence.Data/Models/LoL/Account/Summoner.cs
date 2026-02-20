@@ -13,6 +13,8 @@ public class Summoner
     public string? Puuid { get; set; }
     public string? GameName { get; set; }
     public string? TagLine { get; set; }
+    public string? GameNameNormalized { get; set; }
+    public string? TagLineNormalized { get; set; }
     public string? AccountId { get; set; }
     public required string? PlatformRegion { get; set; }
     public required string? Region { get; set; }

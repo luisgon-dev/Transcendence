@@ -9,14 +9,12 @@ public class UserAccountRepository(TranscendenceContext db) : IUserAccountReposi
     public Task<UserAccount?> GetByEmailNormalizedAsync(string emailNormalized, CancellationToken ct = default)
     {
         return db.Set<UserAccount>()
-            .Include(x => x.RefreshTokens)
             .FirstOrDefaultAsync(x => x.EmailNormalized == emailNormalized, ct);
     }
 
     public Task<UserAccount?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
         return db.Set<UserAccount>()
-            .Include(x => x.RefreshTokens)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
     }
 

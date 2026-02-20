@@ -37,11 +37,8 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         var normalizedRankTierFilter = NormalizeRankTierFilter(filter.RankTier);
 
         // Base query: Match participants for this champion in this patch
-        var query = _context.MatchParticipants
+        var baseQuery = _context.MatchParticipants
             .AsNoTracking()
-            .Include(mp => mp.Match)
-            .Include(mp => mp.Summoner)
-                .ThenInclude(s => s.Ranks)
             .Where(mp => mp.ChampionId == championId)
             .Where(mp => mp.Match.Patch == patch)
             .Where(mp => mp.Match.Status == FetchStatus.Success)
@@ -50,56 +47,52 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         // Apply region filter if specified
         if (!string.IsNullOrEmpty(filter.Region))
         {
-            query = query.Where(mp => mp.Summoner.Region == filter.Region);
+            baseQuery = baseQuery.Where(mp => mp.Summoner.Region == filter.Region);
         }
 
         // Apply role filter if specified
         if (!string.IsNullOrEmpty(filter.Role))
         {
-            query = query.Where(mp => mp.TeamPosition == filter.Role);
+            baseQuery = baseQuery.Where(mp => mp.TeamPosition == filter.Role);
         }
 
-        // Get all participants with their rank data
-        var participants = await query.ToListAsync(ct);
-
-        // For each participant, get their current rank tier at the time of the match
-        // We'll use the most recent rank data (RANKED_SOLO_5x5 queue)
-        var participantRanks = participants
-            .Select(mp => new
-            {
-                Participant = mp,
-                RankTier = mp.Summoner.Ranks
-                    .Where(r => r.QueueType == "RANKED_SOLO_5x5")
-                    .OrderByDescending(r => r.UpdatedAt)
-                    .FirstOrDefault()?.Tier ?? "UNRANKED"
-            })
-            .ToList();
+        var participantRanks = from mp in baseQuery
+                               join rank in _context.Ranks
+                                   .AsNoTracking()
+                                   .Where(r => r.QueueType == "RANKED_SOLO_5x5")
+                                   on mp.SummonerId equals rank.SummonerId into rankGroup
+                               from soloRank in rankGroup.DefaultIfEmpty()
+                               select new
+                               {
+                                   mp.TeamPosition,
+                                   mp.Win,
+                                   RankTier = soloRank != null ? soloRank.Tier : "UNRANKED"
+                               };
 
         // Apply rank tier filter if specified
         if (!string.IsNullOrEmpty(normalizedRankTierFilter))
         {
             participantRanks = participantRanks
-                .Where(pr => pr.RankTier.Equals(normalizedRankTierFilter, StringComparison.OrdinalIgnoreCase))
-                .ToList();
+                .Where(pr => pr.RankTier == normalizedRankTierFilter);
         }
 
-        var totalGames = participantRanks.Count;
+        var totalGames = await participantRanks.CountAsync(ct);
         if (totalGames == 0)
             return [];
 
         var effectiveMinimumGames = ResolveEffectiveSampleSize(minimumGamesRequired, totalGames, floor: 3);
 
         // Group by role and rank tier, calculate win rates
-        var groupedData = participantRanks
-            .GroupBy(pr => new { pr.Participant.TeamPosition, pr.RankTier })
+        var groupedData = await participantRanks
+            .GroupBy(pr => new { pr.TeamPosition, pr.RankTier })
             .Select(g => new
             {
                 Role = g.Key.TeamPosition!,
                 RankTier = g.Key.RankTier,
                 Games = g.Count(),
-                Wins = g.Count(pr => pr.Participant.Win)
+                Wins = g.Sum(pr => pr.Win ? 1 : 0)
             })
-            .ToList();
+            .ToListAsync(ct);
 
         var winRateData = groupedData
             .Where(x => x.Games >= effectiveMinimumGames)

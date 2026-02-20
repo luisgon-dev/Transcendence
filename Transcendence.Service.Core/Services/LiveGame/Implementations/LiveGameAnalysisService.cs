@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using Transcendence.Data.Repositories.Interfaces;
-using Transcendence.Service.Core.Services.Analysis.Interfaces;
+using Transcendence.Data;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.LiveGame.Interfaces;
@@ -9,8 +8,7 @@ using Transcendence.Service.Core.Services.LiveGame.Models;
 namespace Transcendence.Service.Core.Services.LiveGame.Implementations;
 
 public class LiveGameAnalysisService(
-    ISummonerRepository summonerRepository,
-    ISummonerStatsService summonerStatsService,
+    TranscendenceContext db,
     IChampionAnalyticsService championAnalyticsService) : ILiveGameAnalysisService
 {
     private const double NeutralWinRate = 0.50;
@@ -49,13 +47,53 @@ public class LiveGameAnalysisService(
     {
         var championWinRateCache = new Dictionary<int, double?>();
         var participantAnalysis = new List<LiveGameParticipantAnalysisDto>();
+        var participantPuuids = liveGame.Participants
+            .Select(p => p.Puuid)
+            .Where(puuid => !string.IsNullOrWhiteSpace(puuid))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        var summonersRaw = await db.Summoners
+            .AsNoTracking()
+            .Include(x => x.Ranks)
+            .Where(x => x.Puuid != null && participantPuuids.Contains(x.Puuid))
+            .ToListAsync(ct);
+
+        var summonersByPuuid = summonersRaw
+            .GroupBy(s => s.Puuid!, StringComparer.Ordinal)
+            .ToDictionary(
+                g => g.Key,
+                g => g
+                    .OrderByDescending(s => s.UpdatedAt)
+                    .ThenByDescending(s => s.Id)
+                    .First(),
+                StringComparer.Ordinal);
+
+        var summonerIds = summonersByPuuid.Values
+            .Select(s => s.Id)
+            .Distinct()
+            .ToList();
+
+        var recentOverviewBySummonerId = await db.MatchParticipants
+            .AsNoTracking()
+            .Where(mp => summonerIds.Contains(mp.SummonerId))
+            .GroupBy(mp => mp.SummonerId)
+            .Select(g => new
+            {
+                SummonerId = g.Key,
+                Games = g.Count(),
+                WinRate = g.Count() > 0 ? (double)g.Sum(x => x.Win ? 1 : 0) / g.Count() * 100.0 : 0.0,
+                KdaRatio = (g.Average(x => (double)x.Kills) + g.Average(x => (double)x.Assists))
+                           / Math.Max(1.0, g.Average(x => (double)x.Deaths))
+            })
+            .ToDictionaryAsync(x => x.SummonerId, ct);
 
         foreach (var participant in liveGame.Participants)
         {
-            var summoner = await summonerRepository.GetSummonerByPuuidAsync(
-                participant.Puuid,
-                q => q.Include(x => x.Ranks),
-                ct);
+            var summoner = !string.IsNullOrWhiteSpace(participant.Puuid) &&
+                           summonersByPuuid.TryGetValue(participant.Puuid, out var resolvedSummoner)
+                ? resolvedSummoner
+                : null;
 
             string? tier = null;
             string? division = null;
@@ -70,8 +108,7 @@ public class LiveGameAnalysisService(
                 division = solo?.RankNumber;
                 lp = solo?.LeaguePoints;
 
-                var overview = await summonerStatsService.GetSummonerOverviewAsync(summoner.Id, 20, ct);
-                if (overview.TotalMatches > 0)
+                if (recentOverviewBySummonerId.TryGetValue(summoner.Id, out var overview) && overview.Games > 0)
                 {
                     recentWinRate = overview.WinRate;
                     recentKda = overview.KdaRatio;

@@ -57,18 +57,20 @@ public class MatchService(
         // Ensure static data for this match patch exists
         await staticDataService.EnsureStaticDataForPatchAsync(match.Patch, cancellationToken);
 
+        var summonersByPuuid = await ResolveSummonersByPuuidAsync(
+            info.Participants.Select(p => p.Puuid),
+            platformRoute,
+            cancellationToken);
+
         // Ensure Summoners exist, build participants and relationships
         foreach (var p in info.Participants)
         {
-            // Attempt to find Summoner by PUUID
-            var summoner = await context.Summoners
-                .FirstOrDefaultAsync(s => s.Puuid == p.Puuid, cancellationToken);
-
-            if (summoner == null)
+            if (string.IsNullOrWhiteSpace(p.Puuid) || !summonersByPuuid.TryGetValue(p.Puuid, out var summoner))
             {
-                // Fetch and upsert missing summoner via existing service/repository
-                summoner = await summonerService.GetSummonerByPuuidAsync(p.Puuid, platformRoute, cancellationToken);
-                await summonerRepository.AddOrUpdateSummonerAsync(summoner, cancellationToken);
+                logger.LogWarning(
+                    "Skipping participant with unresolved PUUID in match {MatchId}.",
+                    matchId);
+                continue;
             }
 
             // Link summoner to this match (many-to-many)
@@ -193,6 +195,8 @@ public class MatchService(
                     Puuid = p.Puuid,
                     GameName = p.RiotIdGameName,
                     TagLine = p.RiotIdTagline,
+                    GameNameNormalized = NormalizeForLookup(p.RiotIdGameName),
+                    TagLineNormalized = NormalizeForLookup(p.RiotIdTagline),
                     SummonerName = !string.IsNullOrWhiteSpace(p.RiotIdGameName)
                         ? $"{p.RiotIdGameName}#{p.RiotIdTagline}"
                         : null,
@@ -295,16 +299,20 @@ public class MatchService(
             // Ensure static data for this match patch exists
             await staticDataService.EnsureStaticDataForPatchAsync(match.Patch, cancellationToken);
 
+            var summonersByPuuid = await ResolveSummonersByPuuidAsync(
+                info.Participants.Select(p => p.Puuid),
+                platformRoute,
+                cancellationToken);
+
             // Ensure Summoners exist, build participants and relationships
             foreach (var p in info.Participants)
             {
-                var summoner = await context.Summoners
-                    .FirstOrDefaultAsync(s => s.Puuid == p.Puuid, cancellationToken);
-
-                if (summoner == null)
+                if (string.IsNullOrWhiteSpace(p.Puuid) || !summonersByPuuid.TryGetValue(p.Puuid, out var summoner))
                 {
-                    summoner = await summonerService.GetSummonerByPuuidAsync(p.Puuid, platformRoute, cancellationToken);
-                    await summonerRepository.AddOrUpdateSummonerAsync(summoner, cancellationToken);
+                    logger.LogWarning(
+                        "Skipping participant with unresolved PUUID in retry match fetch {MatchId}.",
+                        matchId);
+                    continue;
                 }
 
                 if (match.Summoners.All(s => s.Id != summoner.Id)) match.Summoners.Add(summoner);
@@ -386,6 +394,67 @@ public class MatchService(
             await context.SaveChangesAsync(cancellationToken);
             return false;
         }
+    }
+
+    private async Task<Dictionary<string, Data.Models.LoL.Account.Summoner>> ResolveSummonersByPuuidAsync(
+        IEnumerable<string?> puuids,
+        PlatformRoute platformRoute,
+        CancellationToken cancellationToken)
+    {
+        var participantPuuids = puuids
+            .Where(puuid => !string.IsNullOrWhiteSpace(puuid))
+            .Select(puuid => puuid!)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (participantPuuids.Count == 0)
+            return new Dictionary<string, Data.Models.LoL.Account.Summoner>(StringComparer.Ordinal);
+
+        var existingSummonersRaw = await context.Summoners
+            .Where(s => s.Puuid != null && participantPuuids.Contains(s.Puuid))
+            .ToListAsync(cancellationToken);
+
+        var duplicatePuuids = existingSummonersRaw
+            .GroupBy(s => s.Puuid!, StringComparer.Ordinal)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToList();
+
+        if (duplicatePuuids.Count > 0)
+        {
+            logger.LogWarning(
+                "Found {DuplicateCount} duplicate summoner records by PUUID during match processing. Using the most recently updated record per PUUID.",
+                duplicatePuuids.Count);
+        }
+
+        var existingSummoners = existingSummonersRaw
+            .GroupBy(s => s.Puuid!, StringComparer.Ordinal)
+            .ToDictionary(
+                g => g.Key,
+                g => g
+                    .OrderByDescending(s => s.UpdatedAt)
+                    .ThenByDescending(s => s.Id)
+                    .First(),
+                StringComparer.Ordinal);
+
+        foreach (var puuid in participantPuuids)
+        {
+            if (existingSummoners.ContainsKey(puuid))
+                continue;
+
+            try
+            {
+                var summoner = await summonerService.GetSummonerByPuuidAsync(puuid, platformRoute, cancellationToken);
+                await summonerRepository.AddOrUpdateSummonerAsync(summoner, cancellationToken);
+                existingSummoners[puuid] = summoner;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to resolve summoner for participant PUUID {Puuid}.", puuid);
+            }
+        }
+
+        return existingSummoners;
     }
 
     private static string NormalizePatch(string? gameVersion)
@@ -506,31 +575,33 @@ public class MatchService(
 
     private ICollection<MatchParticipantItem> CreateMatchParticipantItems(Participant participant, string patch)
     {
-        // Deduplicate by ItemId to satisfy PK (MatchParticipantId, ItemId)
-        var uniqueItemIds = new HashSet<int>();
-
-        void TryAdd(int itemId)
+        var slotItems = new[]
         {
-            if (itemId != 0)
-                uniqueItemIds.Add(itemId);
-        }
+            participant.Item0,
+            participant.Item1,
+            participant.Item2,
+            participant.Item3,
+            participant.Item4,
+            participant.Item5,
+            participant.Item6
+        };
 
-        TryAdd(participant.Item0);
-        TryAdd(participant.Item1);
-        TryAdd(participant.Item2);
-        TryAdd(participant.Item3);
-        TryAdd(participant.Item4);
-        TryAdd(participant.Item5);
-        TryAdd(participant.Item6);
-
-        var participantItems = uniqueItemIds
-            .Select(id => new MatchParticipantItem
+        var participantItems = slotItems
+            .Select((itemId, slotIndex) => new { itemId, slotIndex })
+            .Where(x => x.itemId != 0)
+            .Select(x => new MatchParticipantItem
             {
-                ItemId = id,
+                SlotIndex = x.slotIndex,
+                ItemId = x.itemId,
                 PatchVersion = patch
             })
             .ToList();
 
         return participantItems;
+    }
+
+    private static string? NormalizeForLookup(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToUpperInvariant();
     }
 }

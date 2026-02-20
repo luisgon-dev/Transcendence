@@ -11,7 +11,7 @@ using Transcendence.Service.Workers;
 var builder = Host.CreateApplicationBuilder(args);
 
 // Add services to the container.
-builder.Services.AddDbContext<TranscendenceContext>(options =>
+builder.Services.AddDbContextPool<TranscendenceContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("MainDatabase"),
         b => b.MigrationsAssembly("Transcendence.Service")));
 

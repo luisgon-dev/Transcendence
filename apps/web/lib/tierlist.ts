@@ -124,13 +124,82 @@ export function movementLabel(movement: UITierMovement): string {
 export function movementClass(movement: UITierMovement): string {
   switch (movement) {
     case "UP":
-      return "text-emerald-300";
+      return "text-wr-high";
     case "DOWN":
-      return "text-red-300";
+      return "text-wr-low";
     case "NEW":
       return "text-primary";
     case "SAME":
     default:
       return "text-fg/70";
   }
+}
+
+export function movementIcon(movement: UITierMovement): string {
+  switch (movement) {
+    case "UP":
+      return "\u25B2";
+    case "DOWN":
+      return "\u25BC";
+    case "NEW":
+      return "\u2605";
+    case "SAME":
+    default:
+      return "\u2013";
+  }
+}
+
+export function tierColorClass(tier: UITierGrade): string {
+  switch (tier) {
+    case "S":
+      return "text-tier-s";
+    case "A":
+      return "text-tier-a";
+    case "B":
+      return "text-tier-b";
+    case "C":
+      return "text-tier-c";
+    case "D":
+      return "text-tier-d";
+  }
+}
+
+export function tierBgClass(tier: UITierGrade): string {
+  switch (tier) {
+    case "S":
+      return "bg-tier-s/15";
+    case "A":
+      return "bg-tier-a/15";
+    case "B":
+      return "bg-tier-b/15";
+    case "C":
+      return "bg-tier-c/15";
+    case "D":
+      return "bg-tier-d/15";
+  }
+}
+
+export function tierBorderClass(tier: UITierGrade): string {
+  switch (tier) {
+    case "S":
+      return "border-tier-s/40";
+    case "A":
+      return "border-tier-a/40";
+    case "B":
+      return "border-tier-b/40";
+    case "C":
+      return "border-tier-c/40";
+    case "D":
+      return "border-tier-d/40";
+  }
+}
+
+export function deriveTier(winRate: number | null | undefined): UITierGrade {
+  if (winRate == null || !Number.isFinite(winRate)) return "C";
+  const pct = Math.abs(winRate) >= 1.5 ? winRate : winRate * 100;
+  if (pct >= 53) return "S";
+  if (pct >= 51) return "A";
+  if (pct >= 49) return "B";
+  if (pct >= 47) return "C";
+  return "D";
 }

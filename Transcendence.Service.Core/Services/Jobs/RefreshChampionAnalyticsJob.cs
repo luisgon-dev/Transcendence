@@ -7,6 +7,7 @@ using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
+using Transcendence.Service.Core.Services.StaticData.Interfaces;
 
 namespace Transcendence.Service.Core.Services.Jobs;
 
@@ -17,6 +18,7 @@ namespace Transcendence.Service.Core.Services.Jobs;
 [DisableConcurrentExecution(timeoutInSeconds: 60 * 60)]
 public class RefreshChampionAnalyticsJob(
     IChampionAnalyticsService analyticsService,
+    IStaticDataService staticDataService,
     TranscendenceContext db,
     IBackgroundJobClient backgroundJobClient,
     IDistributedCache distributedCache,
@@ -116,6 +118,8 @@ public class RefreshChampionAnalyticsJob(
                 logger.LogWarning("Analytics refresh skipped because no active patch was found.");
                 return;
             }
+
+            await staticDataService.EnsureStaticDataForPatchAsync(currentPatch, ct);
 
             // Step 1: Invalidate all analytics cache
             logger.LogInformation("Invalidating analytics cache");

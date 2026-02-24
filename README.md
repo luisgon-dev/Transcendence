@@ -148,6 +148,7 @@ corepack pnpm web:dev
 Local endpoints:
 - Web: `http://localhost:3000`
 - API: `http://localhost:8080`
+- API health: `http://localhost:8080/health/live`, `http://localhost:8080/health/ready`
 - Hangfire admin portal: `http://localhost:8081`
 - pgAdmin: `http://localhost:5050`
 

@@ -66,6 +66,7 @@ Transcendence is a backend + web monorepo:
   - `default`
   - `refresh-low`
 - API refresh jobs run on `refresh-high`; ingestion-driven refresh jobs run on `refresh-low`.
+- Refresh locks use DB-backed lease semantics (atomic acquire/renew + explicit lease expiry on release) so concurrent lock races do not require lock-row deletion.
 
 ### Continuous Analytics Ingestion
 
@@ -87,6 +88,14 @@ Transcendence is a backend + web monorepo:
   - compact rune summary for list views
   - full rune selections for detailed/expanded views
 
+### Match Item Persistence
+
+- Match participant items are persisted with explicit `SlotIndex` (0-6) plus `ItemId`.
+- This preserves final inventory order and allows duplicate item IDs in different slots.
+- Champion build analytics post-processes persisted items against static item metadata and only counts completed, in-store, build-impact items (filters out components/trinkets/wards/consumables).
+- Build endpoint requests do not trigger static-data network refresh; patch item metadata is refreshed by background jobs.
+- If metadata coverage is temporarily incomplete for a patch, analytics uses a legacy exclusion fallback to avoid empty build responses.
+
 ## Web Auth Boundary (BFF)
 
 The web app never exposes backend tokens to browser JS:
@@ -103,3 +112,4 @@ Backend uses a layered approach (see source and README):
 
 - HybridCache (L1 in-memory + L2 Redis) for derived stats/analytics
 - Persistent storage (PostgreSQL) for canonical match/summoner data
+- Summoner stats cache entries are tagged per summoner (`summoner-stats:{summonerId}`) so refresh jobs can invalidate all related stats keys in one operation

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Transcendence.Service.Core.Services.Analysis.Interfaces;
 using Transcendence.Service.Core.Services.RiotApi.DTOs;
 using Transcendence.WebAPI.Models.Stats;
@@ -7,15 +8,22 @@ namespace Transcendence.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/summoners/{summonerId:guid}")]
+[EnableRateLimiting("expensive-read")]
+[ProducesResponseType(StatusCodes.Status429TooManyRequests)]
 public class SummonerStatsController(
     ISummonerStatsService statsService,
-    ILogger<SummonerStatsController> logger) : ControllerBase
+    ILogger<SummonerStatsController> logger,
+    IConfiguration configuration) : ControllerBase
 {
+    private readonly bool _returnProblemDetailsOnFailure =
+        configuration.GetValue<bool>("Api:ReturnProblemDetailsOnStatsFailure");
+
     /// <summary>
     ///     Gets overall statistics for a summoner.
     /// </summary>
     [HttpGet("stats/overview")]
     [ProducesResponseType(typeof(SummonerOverviewDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetOverview([FromRoute] Guid summonerId, [FromQuery] int recent = 20,
         CancellationToken ct = default)
     {
@@ -47,6 +55,11 @@ public class SummonerStatsController(
                 "Request {RequestId}: failed to load overview stats for summoner {SummonerId}. Returning empty payload.",
                 HttpContext.TraceIdentifier,
                 summonerId);
+            if (_returnProblemDetailsOnFailure)
+                return Problem(
+                    title: "Failed to load summoner overview statistics.",
+                    statusCode: StatusCodes.Status500InternalServerError);
+
             return Ok(new SummonerOverviewDto(
                 summonerId,
                 0,
@@ -70,6 +83,7 @@ public class SummonerStatsController(
     /// </summary>
     [HttpGet("stats/champions")]
     [ProducesResponseType(typeof(List<ChampionStatDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetChampionStats([FromRoute] Guid summonerId, [FromQuery] int top = 10,
         CancellationToken ct = default)
     {
@@ -98,6 +112,11 @@ public class SummonerStatsController(
                 "Request {RequestId}: failed to load champion stats for summoner {SummonerId}. Returning empty payload.",
                 HttpContext.TraceIdentifier,
                 summonerId);
+            if (_returnProblemDetailsOnFailure)
+                return Problem(
+                    title: "Failed to load summoner champion statistics.",
+                    statusCode: StatusCodes.Status500InternalServerError);
+
             return Ok(new List<ChampionStatDto>());
         }
     }
@@ -107,6 +126,7 @@ public class SummonerStatsController(
     /// </summary>
     [HttpGet("stats/roles")]
     [ProducesResponseType(typeof(List<RoleStatDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetRoleBreakdown([FromRoute] Guid summonerId, CancellationToken ct = default)
     {
         try
@@ -121,6 +141,11 @@ public class SummonerStatsController(
                 "Request {RequestId}: failed to load role stats for summoner {SummonerId}. Returning empty payload.",
                 HttpContext.TraceIdentifier,
                 summonerId);
+            if (_returnProblemDetailsOnFailure)
+                return Problem(
+                    title: "Failed to load summoner role statistics.",
+                    statusCode: StatusCodes.Status500InternalServerError);
+
             return Ok(new List<RoleStatDto>());
         }
     }
@@ -130,6 +155,7 @@ public class SummonerStatsController(
     /// </summary>
     [HttpGet("matches/recent")]
     [ProducesResponseType(typeof(PagedResultDto<RecentMatchSummaryDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetRecentMatches([FromRoute] Guid summonerId, [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20, CancellationToken ct = default)
     {
@@ -175,6 +201,10 @@ public class SummonerStatsController(
                 "Request {RequestId}: failed to load recent matches for summoner {SummonerId}. Returning empty payload.",
                 HttpContext.TraceIdentifier,
                 summonerId);
+            if (_returnProblemDetailsOnFailure)
+                return Problem(
+                    title: "Failed to load summoner recent matches.",
+                    statusCode: StatusCodes.Status500InternalServerError);
 
             var normalizedPage = page <= 0 ? 1 : page;
             var normalizedPageSize = pageSize <= 0 || pageSize > 100 ? 20 : pageSize;
@@ -192,6 +222,7 @@ public class SummonerStatsController(
     [HttpGet("matches/{matchId}")]
     [ProducesResponseType(typeof(MatchDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetMatchDetail(
         [FromRoute] Guid summonerId,
         [FromRoute] string matchId,
@@ -212,6 +243,11 @@ public class SummonerStatsController(
                 HttpContext.TraceIdentifier,
                 matchId,
                 summonerId);
+            if (_returnProblemDetailsOnFailure)
+                return Problem(
+                    title: "Failed to load match detail.",
+                    statusCode: StatusCodes.Status500InternalServerError);
+
             return NotFound();
         }
     }

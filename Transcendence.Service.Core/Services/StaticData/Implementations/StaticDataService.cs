@@ -83,7 +83,7 @@ public class StaticDataService(
             cancellationToken: cancellationToken);
 
         await cacheService.GetOrCreateAsync(
-            $"static:items:{patchVersion}",
+            $"static:items:v2:{patchVersion}",
             ct => FetchAndStoreItemsAsync(patchVersion, ct),
             expiration: TimeSpan.FromDays(30),
             localExpiration: TimeSpan.FromMinutes(5),
@@ -153,20 +153,52 @@ public class StaticDataService(
 
     private async Task<bool> FetchAndStoreItemsAsync(string patchVersion, CancellationToken cancellationToken)
     {
-        var hasItemsForPatch = await context.ItemVersions
-            .AnyAsync(iv => iv.PatchVersion == patchVersion, cancellationToken);
-
-        if (hasItemsForPatch)
-            return true;
-
         var client = httpClientFactory.CreateClient();
         var items = await FetchItemsForPatchAsync(client, patchVersion, cancellationToken);
 
         if (items.Count == 0)
             throw new InvalidOperationException($"No item data was returned for patch '{patchVersion}'.");
 
-        await context.ItemVersions.AddRangeAsync(items, cancellationToken);
-        await context.SaveChangesAsync(cancellationToken);
+        var existingItems = await context.ItemVersions
+            .Where(iv => iv.PatchVersion == patchVersion)
+            .ToDictionaryAsync(iv => iv.ItemId, cancellationToken);
+
+        var changed = false;
+        foreach (var incoming in items)
+        {
+            if (existingItems.TryGetValue(incoming.ItemId, out var existing))
+            {
+                var hasDiff =
+                    existing.Name != incoming.Name ||
+                    existing.Description != incoming.Description ||
+                    !AreEqual(existing.Tags, incoming.Tags) ||
+                    !AreEqual(existing.BuildsFrom, incoming.BuildsFrom) ||
+                    !AreEqual(existing.BuildsInto, incoming.BuildsInto) ||
+                    existing.InStore != incoming.InStore ||
+                    existing.PriceTotal != incoming.PriceTotal;
+
+                if (!hasDiff)
+                    continue;
+
+                existing.Name = incoming.Name;
+                existing.Description = incoming.Description;
+                existing.Tags = incoming.Tags;
+                existing.BuildsFrom = incoming.BuildsFrom;
+                existing.BuildsInto = incoming.BuildsInto;
+                existing.InStore = incoming.InStore;
+                existing.PriceTotal = incoming.PriceTotal;
+                changed = true;
+            }
+            else
+            {
+                await context.ItemVersions.AddAsync(incoming, cancellationToken);
+                changed = true;
+            }
+        }
+
+        if (changed)
+            await context.SaveChangesAsync(cancellationToken);
+
         return true;
     }
 
@@ -291,8 +323,41 @@ public class StaticDataService(
             PatchVersion = patch,
             Name = string.IsNullOrWhiteSpace(i.Name) ? $"Item {i.Id}" : i.Name,
             Description = i.Description ?? string.Empty,
-            Tags = i.Categories ?? []
+            Tags = NormalizeStringList(i.Categories),
+            BuildsFrom = NormalizeIntList(i.From),
+            BuildsInto = NormalizeIntList(i.To),
+            InStore = i.InStore ?? true,
+            PriceTotal = i.PriceTotal ?? 0
         }).ToList();
+    }
+
+    private static List<string> NormalizeStringList(List<string>? values) =>
+        (values ?? [])
+        .Where(v => !string.IsNullOrWhiteSpace(v))
+        .Select(v => v.Trim())
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(v => v, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    private static List<int> NormalizeIntList(List<int>? values) =>
+        (values ?? [])
+        .Where(v => v > 0)
+        .Distinct()
+        .OrderBy(v => v)
+        .ToList();
+
+    private static bool AreEqual<T>(IReadOnlyList<T> left, IReadOnlyList<T> right)
+    {
+        if (left.Count != right.Count)
+            return false;
+
+        for (var i = 0; i < left.Count; i++)
+        {
+            if (!EqualityComparer<T>.Default.Equals(left[i], right[i]))
+                return false;
+        }
+
+        return true;
     }
 
     private static async Task<T?> GetAndDeserializeAsync<T>(

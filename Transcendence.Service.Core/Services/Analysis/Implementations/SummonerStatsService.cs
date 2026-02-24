@@ -17,6 +17,7 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache, IL
     private const string RolesCacheKeyPrefix = "stats:roles:";
     private const string RecentMatchesCacheKeyPrefix = "stats:recent:";
     private const string MatchDetailCacheKeyPrefix = "match:detail:";
+    private const string SummonerStatsCacheTagPrefix = "summoner-stats:";
 
     // Stats cache options: 5min total, 2min L1 (stats change on refresh)
     private static readonly HybridCacheEntryOptions StatsCacheOptions = new()
@@ -43,6 +44,7 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache, IL
                 cacheKey,
                 async cancel => await ComputeOverviewAsync(summonerId, recentGamesCount, cancel),
                 StatsCacheOptions,
+                tags: new[] { BuildSummonerStatsTag(summonerId) },
                 cancellationToken: ct);
         }
         catch (Exception ex)
@@ -141,6 +143,7 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache, IL
                 cacheKey,
                 async cancel => await ComputeChampionStatsAsync(summonerId, top, cancel),
                 StatsCacheOptions,
+                tags: new[] { BuildSummonerStatsTag(summonerId) },
                 cancellationToken: ct);
         }
         catch (Exception ex)
@@ -155,25 +158,10 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache, IL
     private async Task<IReadOnlyList<ChampionStat>> ComputeChampionStatsAsync(Guid summonerId, int top,
         CancellationToken ct)
     {
-        var games = await db.MatchParticipants
+        var list = await db.MatchParticipants
             .AsNoTracking()
             .Where(mp => mp.SummonerId == summonerId)
-            .Select(mp => new
-            {
-                mp.ChampionId,
-                mp.Win,
-                mp.Kills,
-                mp.Deaths,
-                mp.Assists,
-                mp.VisionScore,
-                mp.TotalDamageDealtToChampions,
-                Cs = mp.TotalMinionsKilled + mp.NeutralMinionsKilled,
-                MatchDuration = mp.Match.Duration
-            })
-            .ToListAsync(ct);
-
-        var list = games
-            .GroupBy(x => x.ChampionId)
+            .GroupBy(mp => mp.ChampionId)
             .Select(g => new ChampionStat(
                 g.Key,
                 g.Count(),
@@ -184,13 +172,15 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache, IL
                 g.Average(x => (double)x.Deaths),
                 g.Average(x => (double)x.Assists),
                 0, // fill KDA after
-                g.Average(x => x.MatchDuration > 0 ? x.Cs / (x.MatchDuration / 60.0) : 0.0),
+                g.Average(x => x.Match.Duration > 0
+                    ? (x.TotalMinionsKilled + x.NeutralMinionsKilled) / (x.Match.Duration / 60.0)
+                    : 0.0),
                 g.Average(x => (double)x.VisionScore),
                 g.Average(x => (double)x.TotalDamageDealtToChampions)
             ))
             .OrderByDescending(x => x.Games)
             .Take(top)
-            .ToList();
+            .ToListAsync(ct);
 
         // Compute KDA for each (post-projection)
         return list
@@ -210,6 +200,7 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache, IL
                 cacheKey,
                 async cancel => await ComputeRoleBreakdownAsync(summonerId, cancel),
                 StatsCacheOptions,
+                tags: new[] { BuildSummonerStatsTag(summonerId) },
                 cancellationToken: ct);
         }
         catch (Exception ex)
@@ -223,36 +214,21 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache, IL
 
     private async Task<IReadOnlyList<RoleStat>> ComputeRoleBreakdownAsync(Guid summonerId, CancellationToken ct)
     {
-        var rows = await db.MatchParticipants
+        var list = await db.MatchParticipants
             .AsNoTracking()
             .Where(mp => mp.SummonerId == summonerId)
-            .Select(mp => new { mp.TeamPosition, mp.Win })
-            .ToListAsync(ct);
-
-        var list = rows
-            .GroupBy(row => NormalizeTeamPosition(row.TeamPosition))
-            .Select(g =>
-            {
-                var games = g.Count();
-                var wins = g.Sum(x => x.Win ? 1 : 0);
-                return new RoleStat(
-                    g.Key,
-                    games,
-                    wins,
-                    games - wins,
-                    games > 0 ? (double)wins / games * 100.0 : 0.0
-                );
-            })
+            .GroupBy(mp => mp.TeamPosition == null || mp.TeamPosition == string.Empty
+                ? "UNKNOWN"
+                : mp.TeamPosition.ToUpper())
+            .Select(g => new RoleStat(
+                g.Key,
+                g.Count(),
+                g.Sum(x => x.Win ? 1 : 0),
+                g.Count() - g.Sum(x => x.Win ? 1 : 0),
+                g.Count() > 0 ? (double)g.Sum(x => x.Win ? 1 : 0) / g.Count() * 100.0 : 0.0
+            ))
             .OrderByDescending(x => x.Games)
-            .ToList();
-
-        if (rows.Count > 0 && list.Count == 0)
-        {
-            logger.LogWarning(
-                "Role breakdown produced no buckets for summoner {SummonerId} despite {MatchCount} matches.",
-                summonerId,
-                rows.Count);
-        }
+            .ToListAsync(ct);
 
         return list;
     }
@@ -269,6 +245,7 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache, IL
                 cacheKey,
                 async cancel => await ComputeRecentMatchesAsync(summonerId, page, pageSize, cancel),
                 StatsCacheOptions,
+                tags: new[] { BuildSummonerStatsTag(summonerId) },
                 cancellationToken: ct);
         }
         catch (Exception ex)
@@ -329,7 +306,11 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache, IL
             .AsNoTracking()
             .Where(i => participantIds.Contains(i.MatchParticipantId))
             .GroupBy(i => i.MatchParticipantId)
-            .Select(g => new { ParticipantId = g.Key, Items = g.Select(i => i.ItemId).ToList() })
+            .Select(g => new
+            {
+                ParticipantId = g.Key,
+                Items = g.OrderBy(i => i.SlotIndex).Select(i => i.ItemId).ToList()
+            })
             .ToDictionaryAsync(x => x.ParticipantId, x => x.Items, ct);
 
         // Get runes with explicit selection hierarchy (plus metadata fallback fields)
@@ -522,7 +503,10 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache, IL
         Data.Models.LoL.Match.MatchParticipant p,
         Dictionary<int, RuneMetadata> runeMetadata)
     {
-        var items = p.Items.Select(i => i.ItemId).ToList();
+        var items = p.Items
+            .OrderBy(i => i.SlotIndex)
+            .Select(i => i.ItemId)
+            .ToList();
 
         // Build runes structure from explicit selection data with metadata fallback for legacy rows.
         var runes = BuildRunesDto(
@@ -674,13 +658,7 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache, IL
         return string.IsNullOrWhiteSpace(patchVersion) ? string.Empty : patchVersion.Trim();
     }
 
-    private static string NormalizeTeamPosition(string? teamPosition)
-    {
-        if (string.IsNullOrWhiteSpace(teamPosition))
-            return "UNKNOWN";
-
-        return teamPosition.Trim().ToUpperInvariant();
-    }
+    private static string BuildSummonerStatsTag(Guid summonerId) => $"{SummonerStatsCacheTagPrefix}{summonerId}";
 
     private static SummonerOverviewStats EmptyOverview(Guid summonerId)
     {

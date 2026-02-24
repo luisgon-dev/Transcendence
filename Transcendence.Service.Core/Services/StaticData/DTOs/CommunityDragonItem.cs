@@ -9,4 +9,11 @@ public class CommunityDragonItem
 
     // Matches the CommunityDragon items.json field name
     public List<string> Categories { get; set; } = [];
+
+    // Recipe relationships in CommunityDragon items.json
+    public List<int> From { get; set; } = [];
+    public List<int> To { get; set; } = [];
+
+    public bool? InStore { get; set; }
+    public int? PriceTotal { get; set; }
 }

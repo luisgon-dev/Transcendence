@@ -143,6 +143,7 @@ public class LiveGamePollingJob(
 
         var processed = 0;
         var attemptedRequests = 0;
+        var pendingSnapshots = 0;
         foreach (var summoner in trackedSummoners)
         {
             if (attemptedRequests >= maxRiotRequestsPerRun)
@@ -185,7 +186,7 @@ public class LiveGamePollingJob(
                 };
 
                 await snapshotRepository.AddAsync(snapshot, ct);
-                await snapshotRepository.SaveChangesAsync(ct);
+                pendingSnapshots++;
                 processed++;
 
                 if (latest?.State == "in_game" && response.State == "offline")
@@ -207,6 +208,9 @@ public class LiveGamePollingJob(
                     summoner.TagLine);
             }
         }
+
+        if (pendingSnapshots > 0)
+            await snapshotRepository.SaveChangesAsync(ct);
 
         logger.LogInformation(
             "Live game polling cycle complete. Processed {Count} summoners, attempted {RequestCount} Riot calls.",

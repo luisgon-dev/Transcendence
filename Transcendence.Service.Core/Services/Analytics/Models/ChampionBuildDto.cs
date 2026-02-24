@@ -4,7 +4,7 @@ namespace Transcendence.Service.Core.Services.Analytics.Models;
 /// A specific item + rune build with performance stats.
 /// </summary>
 public record ChampionBuildDto(
-    List<int> Items,              // Full item list for this build
+    List<int> Items,              // Completed build-impact item IDs only
     List<int> CoreItems,          // Items that appear in 70%+ of all games (not just this build)
     List<int> SituationalItems,   // Items in this build that aren't core
     int PrimaryStyleId,           // Primary rune tree (e.g., Precision)

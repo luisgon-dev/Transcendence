@@ -32,11 +32,27 @@ public class SummonerRepository(TranscendenceContext context, IRankRepository ra
         var normalizedPlatformRegion = string.IsNullOrWhiteSpace(platformRegion) ? null : platformRegion.Trim();
         var normalizedGameName = NormalizeValue(gameName);
         var normalizedTagLine = NormalizeValue(tagLine);
+        var normalizedGameNameKey = NormalizeForLookup(normalizedGameName);
+        var normalizedTagLineKey = NormalizeForLookup(normalizedTagLine);
 
-        if (normalizedPlatformRegion == null || normalizedGameName == null || normalizedTagLine == null)
+        if (normalizedPlatformRegion == null ||
+            normalizedGameName == null ||
+            normalizedTagLine == null ||
+            normalizedGameNameKey == null ||
+            normalizedTagLineKey == null)
             return null;
 
-        // Fast path: exact match can leverage indexes directly.
+        // Fast path: normalized match can leverage the composite index.
+        var normalizedMatch = await query.FirstOrDefaultAsync(x =>
+                x.PlatformRegion == normalizedPlatformRegion &&
+                x.GameNameNormalized == normalizedGameNameKey &&
+                x.TagLineNormalized == normalizedTagLineKey,
+            cancellationToken);
+
+        if (normalizedMatch != null)
+            return normalizedMatch;
+
+        // Secondary exact match for rows written before normalization fields were introduced.
         var exactMatch = await query.FirstOrDefaultAsync(x =>
                 x.PlatformRegion == normalizedPlatformRegion &&
                 x.GameName == normalizedGameName &&
@@ -46,22 +62,24 @@ public class SummonerRepository(TranscendenceContext context, IRankRepository ra
         if (exactMatch != null)
             return exactMatch;
 
-        var candidates = await query
-            .Where(x =>
+        // Legacy fallback for older rows where normalized fields are not present.
+        return await query.FirstOrDefaultAsync(x =>
                 x.PlatformRegion == normalizedPlatformRegion &&
+                x.GameNameNormalized == null &&
+                x.TagLineNormalized == null &&
                 x.GameName != null &&
-                x.TagLine != null)
-            .ToListAsync(cancellationToken);
-
-        return candidates.FirstOrDefault(x =>
-            string.Equals(x.GameName, normalizedGameName, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(x.TagLine, normalizedTagLine, StringComparison.OrdinalIgnoreCase));
+                x.TagLine != null &&
+                x.GameName.ToUpper() == normalizedGameNameKey &&
+                x.TagLine.ToUpper() == normalizedTagLineKey,
+            cancellationToken);
     }
 
     public async Task AddOrUpdateSummonerAsync(Summoner summoner, CancellationToken cancellationToken)
     {
         summoner.GameName = NormalizeValue(summoner.GameName);
         summoner.TagLine = NormalizeValue(summoner.TagLine);
+        summoner.GameNameNormalized = NormalizeForLookup(summoner.GameName);
+        summoner.TagLineNormalized = NormalizeForLookup(summoner.TagLine);
 
         var existingSummoner =
             await GetSummonerByPuuidAsync(summoner.Puuid!, query => query.Include(s => s.Ranks), cancellationToken);
@@ -80,6 +98,8 @@ public class SummonerRepository(TranscendenceContext context, IRankRepository ra
             existingSummoner.SummonerLevel = summoner.SummonerLevel;
             existingSummoner.GameName = summoner.GameName;
             existingSummoner.TagLine = summoner.TagLine;
+            existingSummoner.GameNameNormalized = summoner.GameNameNormalized;
+            existingSummoner.TagLineNormalized = summoner.TagLineNormalized;
             existingSummoner.SummonerName = summoner.SummonerName;
             existingSummoner.PlatformRegion = summoner.PlatformRegion;
             existingSummoner.Region = summoner.Region;
@@ -93,5 +113,10 @@ public class SummonerRepository(TranscendenceContext context, IRankRepository ra
     private static string? NormalizeValue(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static string? NormalizeForLookup(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToUpperInvariant();
     }
 }

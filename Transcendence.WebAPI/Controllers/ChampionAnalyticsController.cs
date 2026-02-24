@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.WebAPI.Security;
@@ -8,6 +9,8 @@ namespace Transcendence.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/analytics/champions")]
+[EnableRateLimiting("expensive-read")]
+[ProducesResponseType(StatusCodes.Status429TooManyRequests)]
 public class ChampionAnalyticsController(IChampionAnalyticsService analyticsService) : ControllerBase
 {
     /// <summary>

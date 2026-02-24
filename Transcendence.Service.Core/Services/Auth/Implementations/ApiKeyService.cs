@@ -12,6 +12,7 @@ public class ApiKeyService(
     IConfiguration configuration) : IApiKeyService
 {
     private const string BootstrapKeyConfigPath = "Auth:BootstrapApiKey";
+    private static readonly TimeSpan LastUsedWriteInterval = TimeSpan.FromMinutes(10);
 
     public async Task<ApiKeyCreateResult> CreateAsync(ApiKeyCreateRequest request, CancellationToken ct = default)
     {
@@ -63,8 +64,12 @@ public class ApiKeyService(
         var key = await apiKeyRepository.GetActiveByHashAsync(hash, ct);
         if (key == null) return null;
 
-        key.LastUsedAt = DateTime.UtcNow;
-        await apiKeyRepository.SaveChangesAsync(ct);
+        var now = DateTime.UtcNow;
+        if (!key.LastUsedAt.HasValue || now - key.LastUsedAt.Value >= LastUsedWriteInterval)
+        {
+            key.LastUsedAt = now;
+            await apiKeyRepository.SaveChangesAsync(ct);
+        }
 
         return new ApiKeyValidationResult(key.Id, key.Name);
     }

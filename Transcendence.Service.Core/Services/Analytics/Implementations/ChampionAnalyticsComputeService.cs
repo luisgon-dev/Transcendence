@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Match;
@@ -16,11 +17,16 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
     private const int MatchupsToShow = 5;
     private readonly TranscendenceContext _context;
     private readonly ChampionAnalyticsComputeOptions _options;
+    private readonly ILogger<ChampionAnalyticsComputeService> _logger;
 
-    public ChampionAnalyticsComputeService(TranscendenceContext context, IOptions<ChampionAnalyticsComputeOptions> options)
+    public ChampionAnalyticsComputeService(
+        TranscendenceContext context,
+        IOptions<ChampionAnalyticsComputeOptions> options,
+        ILogger<ChampionAnalyticsComputeService> logger)
     {
         _context = context;
         _options = options.Value;
+        _logger = logger;
     }
 
     /// <summary>
@@ -37,11 +43,8 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         var normalizedRankTierFilter = NormalizeRankTierFilter(filter.RankTier);
 
         // Base query: Match participants for this champion in this patch
-        var query = _context.MatchParticipants
+        var baseQuery = _context.MatchParticipants
             .AsNoTracking()
-            .Include(mp => mp.Match)
-            .Include(mp => mp.Summoner)
-                .ThenInclude(s => s.Ranks)
             .Where(mp => mp.ChampionId == championId)
             .Where(mp => mp.Match.Patch == patch)
             .Where(mp => mp.Match.Status == FetchStatus.Success)
@@ -50,56 +53,52 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         // Apply region filter if specified
         if (!string.IsNullOrEmpty(filter.Region))
         {
-            query = query.Where(mp => mp.Summoner.Region == filter.Region);
+            baseQuery = baseQuery.Where(mp => mp.Summoner.Region == filter.Region);
         }
 
         // Apply role filter if specified
         if (!string.IsNullOrEmpty(filter.Role))
         {
-            query = query.Where(mp => mp.TeamPosition == filter.Role);
+            baseQuery = baseQuery.Where(mp => mp.TeamPosition == filter.Role);
         }
 
-        // Get all participants with their rank data
-        var participants = await query.ToListAsync(ct);
-
-        // For each participant, get their current rank tier at the time of the match
-        // We'll use the most recent rank data (RANKED_SOLO_5x5 queue)
-        var participantRanks = participants
-            .Select(mp => new
-            {
-                Participant = mp,
-                RankTier = mp.Summoner.Ranks
-                    .Where(r => r.QueueType == "RANKED_SOLO_5x5")
-                    .OrderByDescending(r => r.UpdatedAt)
-                    .FirstOrDefault()?.Tier ?? "UNRANKED"
-            })
-            .ToList();
+        var participantRanks = from mp in baseQuery
+                               join rank in _context.Ranks
+                                   .AsNoTracking()
+                                   .Where(r => r.QueueType == "RANKED_SOLO_5x5")
+                                   on mp.SummonerId equals rank.SummonerId into rankGroup
+                               from soloRank in rankGroup.DefaultIfEmpty()
+                               select new
+                               {
+                                   mp.TeamPosition,
+                                   mp.Win,
+                                   RankTier = soloRank != null ? soloRank.Tier : "UNRANKED"
+                               };
 
         // Apply rank tier filter if specified
         if (!string.IsNullOrEmpty(normalizedRankTierFilter))
         {
             participantRanks = participantRanks
-                .Where(pr => pr.RankTier.Equals(normalizedRankTierFilter, StringComparison.OrdinalIgnoreCase))
-                .ToList();
+                .Where(pr => pr.RankTier == normalizedRankTierFilter);
         }
 
-        var totalGames = participantRanks.Count;
+        var totalGames = await participantRanks.CountAsync(ct);
         if (totalGames == 0)
             return [];
 
         var effectiveMinimumGames = ResolveEffectiveSampleSize(minimumGamesRequired, totalGames, floor: 3);
 
         // Group by role and rank tier, calculate win rates
-        var groupedData = participantRanks
-            .GroupBy(pr => new { pr.Participant.TeamPosition, pr.RankTier })
+        var groupedData = await participantRanks
+            .GroupBy(pr => new { pr.TeamPosition, pr.RankTier })
             .Select(g => new
             {
                 Role = g.Key.TeamPosition!,
                 RankTier = g.Key.RankTier,
                 Games = g.Count(),
-                Wins = g.Count(pr => pr.Participant.Win)
+                Wins = g.Sum(pr => pr.Win ? 1 : 0)
             })
-            .ToList();
+            .ToListAsync(ct);
 
         var winRateData = groupedData
             .Where(x => x.Games >= effectiveMinimumGames)
@@ -389,21 +388,29 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         _ => 0
     };
 
-    // Excluded items: boots, trinkets, consumables
-    private static readonly HashSet<int> ExcludedFromCore = new()
+    // Non-build-impact item classes that should not appear in completed build recommendations.
+    private static readonly HashSet<string> ExcludedBuildItemCategories = new(StringComparer.OrdinalIgnoreCase)
     {
-        // Boots (Tier 2)
-        3006, 3009, 3020, 3047, 3111, 3117, 3158,
-        // Tier 1 boots
-        1001,
-        // Trinkets
-        3340, 3363, 3364,
+        "Consumable",
+        "Trinket",
+        "Vision"
+    };
+
+    // Used only when item metadata coverage is incomplete for the active patch.
+    private static readonly HashSet<int> LegacyExcludedBuildItems = new()
+    {
+        // Trinkets and wards
+        3340, 3363, 3364, 2055,
         // Consumables
-        2003, 2031, 2033, 2055, 2138, 2139, 2140
+        2003, 2010, 2031, 2033, 2138, 2139, 2140,
+        // Starter and component items
+        1001, 1004, 1011, 1018, 1026, 1027, 1028, 1029, 1031, 1033, 1035, 1036, 1037, 1038, 1042, 1043,
+        1052, 1053, 1054, 1055, 1056, 1057, 1058, 1082, 1083, 2420, 2421, 2422, 3024, 3052, 3070
     };
 
     private const double CoreItemThreshold = 0.70;
     private const int MinBuildSampleSize = 30;
+    private const double ItemMetadataCoverageFallbackThreshold = 0.90;
 
     /// <summary>
     /// Computes top 3 builds for a champion with items and runes bundled.
@@ -451,15 +458,78 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             })
             .ToListAsync(ct);
 
-        var effectiveMinimumGames = ResolveEffectiveSampleSize(minimumGamesRequired, matchData.Count, floor: 3);
-        if (matchData.Count < effectiveMinimumGames)
+        var allItemIds = matchData
+            .SelectMany(m => m.Items)
+            .Where(itemId => itemId != 0)
+            .Distinct()
+            .ToList();
+
+        var itemMetadataById = allItemIds.Count == 0
+            ? new Dictionary<int, BuildItemMetadata>()
+            : await _context.ItemVersions
+                .AsNoTracking()
+                .Where(iv => iv.PatchVersion == patch && allItemIds.Contains(iv.ItemId))
+                .Select(iv => new
+                {
+                    iv.ItemId,
+                    iv.BuildsFrom,
+                    iv.BuildsInto,
+                    iv.Tags,
+                    iv.InStore,
+                    iv.PriceTotal
+                })
+                .ToDictionaryAsync(
+                    iv => iv.ItemId,
+                    iv => new BuildItemMetadata(
+                        iv.BuildsFrom,
+                        iv.BuildsInto,
+                        iv.Tags,
+                        iv.InStore,
+                        iv.PriceTotal),
+                    ct);
+
+        var itemMetadataCoverage = allItemIds.Count == 0
+            ? 1.0
+            : (double)itemMetadataById.Count / allItemIds.Count;
+        var useLegacyFallback = itemMetadataCoverage < ItemMetadataCoverageFallbackThreshold;
+
+        if (allItemIds.Count > 0 && itemMetadataById.Count == 0)
+        {
+            _logger.LogWarning(
+                "No item metadata found for patch {Patch} while computing builds for champion {ChampionId}/{Role}. Using legacy build-item fallback.",
+                patch,
+                championId,
+                role);
+        }
+        else if (useLegacyFallback)
+        {
+            _logger.LogWarning(
+                "Item metadata coverage is {Coverage:P1} for patch {Patch} while computing builds for champion {ChampionId}/{Role}. Using legacy build-item fallback.",
+                itemMetadataCoverage,
+                patch,
+                championId,
+                role);
+        }
+
+        var buildEligibleMatches = matchData
+            .Select(m => new
+            {
+                m.Win,
+                Runes = m.Runes,
+                Items = NormalizeCompletedBuildItems(m.Items, itemMetadataById, useLegacyFallback)
+            })
+            .Where(m => m.Items.Count > 0)
+            .ToList();
+
+        var effectiveMinimumGames = ResolveEffectiveSampleSize(minimumGamesRequired, buildEligibleMatches.Count, floor: 3);
+        if (buildEligibleMatches.Count < effectiveMinimumGames)
             return new ChampionBuildsResponse(championId, role, rankTier ?? "all", patch,
                 new List<int>(), new List<ChampionBuildDto>());
 
-        // Step 2: Calculate global core items (appear in 70%+ of ALL games, excluding boots/trinkets/consumables)
-        var totalGames = matchData.Count;
-        var itemFrequency = matchData
-            .SelectMany(m => m.Items.Where(i => i != 0 && !ExcludedFromCore.Contains(i)))
+        // Step 2: Calculate global core items from completed build-impact items.
+        var totalGames = buildEligibleMatches.Count;
+        var itemFrequency = buildEligibleMatches
+            .SelectMany(m => m.Items.Distinct())
             .GroupBy(itemId => itemId)
             .ToDictionary(
                 g => g.Key,
@@ -472,7 +542,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             .ToList();
 
         // Step 3: Get rune metadata for style determination
-        var allRuneIds = matchData.SelectMany(m => m.Runes.Select(r => r.RuneId)).Distinct().ToList();
+        var allRuneIds = buildEligibleMatches.SelectMany(m => m.Runes.Select(r => r.RuneId)).Distinct().ToList();
         var runeMetadata = await _context.RuneVersions
             .AsNoTracking()
             .Where(rv => allRuneIds.Contains(rv.RuneId) && rv.PatchVersion == patch)
@@ -481,15 +551,14 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
 
         // Step 4: Group by build (items + runes as key)
         var effectiveBuildSampleSize = ResolveEffectiveSampleSize(MinBuildSampleSize, totalGames, floor: 2);
-        var buildGroups = matchData
+        var buildGroups = buildEligibleMatches
             .Select(m => new
             {
                 m.Win,
-                // Normalize item list (sort, exclude empty)
-                ItemKey = string.Join(",", m.Items.Where(i => i != 0).OrderBy(i => i)),
+                ItemKey = string.Join(",", m.Items),
                 // Build rune structure
                 RuneInfo = BuildRuneInfo(m.Runes, runeMetadata),
-                Items = m.Items.Where(i => i != 0).OrderBy(i => i).ToList()
+                Items = m.Items
             })
             .GroupBy(m => new { m.ItemKey, m.RuneInfo.Key })
             .Select(g => new
@@ -507,13 +576,13 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
 
         if (buildGroups.Count == 0)
         {
-            buildGroups = matchData
+            buildGroups = buildEligibleMatches
                 .Select(m => new
                 {
                     m.Win,
-                    ItemKey = string.Join(",", m.Items.Where(i => i != 0).OrderBy(i => i)),
+                    ItemKey = string.Join(",", m.Items),
                     RuneInfo = BuildRuneInfo(m.Runes, runeMetadata),
-                    Items = m.Items.Where(i => i != 0).OrderBy(i => i).ToList()
+                    Items = m.Items
                 })
                 .GroupBy(m => new { m.ItemKey, m.RuneInfo.Key })
                 .Select(g => new
@@ -534,7 +603,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         var builds = buildGroups.Select(build => new ChampionBuildDto(
             build.Items,
             globalCoreItems,
-            build.Items.Where(i => !globalCoreItems.Contains(i) && !ExcludedFromCore.Contains(i)).ToList(),
+            build.Items.Where(i => !globalCoreItems.Contains(i)).ToList(),
             build.RuneInfo.PrimaryStyleId,
             build.RuneInfo.SubStyleId,
             build.RuneInfo.PrimaryRunes,
@@ -552,6 +621,63 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             globalCoreItems,
             builds
         );
+    }
+
+    private readonly record struct BuildItemMetadata(
+        IReadOnlyList<int> BuildsFrom,
+        IReadOnlyList<int> BuildsInto,
+        IReadOnlyList<string> Tags,
+        bool InStore,
+        int PriceTotal);
+
+    private static List<int> NormalizeCompletedBuildItems(
+        IReadOnlyList<int> itemIds,
+        IReadOnlyDictionary<int, BuildItemMetadata> itemMetadataById,
+        bool useLegacyFallback)
+    {
+        var filtered = new List<int>(itemIds.Count);
+        foreach (var itemId in itemIds)
+        {
+            if (itemId == 0)
+                continue;
+
+            if (itemMetadataById.TryGetValue(itemId, out var metadata))
+            {
+                if (!IsCompletedBuildItem(metadata))
+                    continue;
+
+                filtered.Add(itemId);
+                continue;
+            }
+
+            if (!useLegacyFallback)
+                continue;
+
+            if (LegacyExcludedBuildItems.Contains(itemId))
+                continue;
+
+            filtered.Add(itemId);
+        }
+
+        filtered.Sort();
+        return filtered;
+    }
+
+    private static bool IsCompletedBuildItem(BuildItemMetadata metadata)
+    {
+        if (!metadata.InStore)
+            return false;
+
+        if (metadata.PriceTotal <= 0)
+            return false;
+
+        if (metadata.BuildsInto.Count > 0)
+            return false;
+
+        if (metadata.BuildsFrom.Count == 0)
+            return false;
+
+        return metadata.Tags.All(tag => !ExcludedBuildItemCategories.Contains(tag));
     }
 
     /// <summary>

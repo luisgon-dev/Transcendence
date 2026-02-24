@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Transcendence.Service.Core.Services.LiveGame.Interfaces;
 using Transcendence.Service.Core.Services.LiveGame.Models;
 using Transcendence.WebAPI.Security;
@@ -9,6 +10,8 @@ namespace Transcendence.WebAPI.Controllers;
 [ApiController]
 [Route("api/summoners")]
 [Authorize(Policy = AuthPolicies.AppOnly)]
+[EnableRateLimiting("expensive-read")]
+[ProducesResponseType(StatusCodes.Status429TooManyRequests)]
 public class LiveGameController(ILiveGameService liveGameService) : ControllerBase
 {
     /// <summary>

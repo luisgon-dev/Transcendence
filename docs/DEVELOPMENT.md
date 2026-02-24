@@ -47,6 +47,10 @@ corepack pnpm web:dev
 
 Web: `http://localhost:3000`
 
+API health:
+- `http://localhost:8080/health/live`
+- `http://localhost:8080/health/ready`
+
 ## Run Without Docker (Backend)
 
 ### Secrets
@@ -59,6 +63,7 @@ dotnet user-secrets set "ConnectionStrings:Redis" "localhost:6379" --project Tra
 dotnet user-secrets set "ConnectionStrings:RiotApi" "RGAPI-your-key" --project Transcendence.WebAPI
 dotnet user-secrets set "Auth:Jwt:Key" "CHANGE_THIS_TO_A_REAL_32+_CHAR_SECRET" --project Transcendence.WebAPI
 dotnet user-secrets set "Auth:BootstrapApiKey" "trn_bootstrap_dev_key" --project Transcendence.WebAPI
+dotnet user-secrets set "Api:ReturnProblemDetailsOnStatsFailure" "false" --project Transcendence.WebAPI
 ```
 
 `Transcendence.Service`:

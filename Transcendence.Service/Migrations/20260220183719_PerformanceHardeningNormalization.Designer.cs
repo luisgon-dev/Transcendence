@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Transcendence.Data;
@@ -12,9 +13,11 @@ using Transcendence.Data;
 namespace Transcendence.Service.Migrations
 {
     [DbContext(typeof(TranscendenceContext))]
-    partial class ProjectSyndraContextModelSnapshot : ModelSnapshot
+    [Migration("20260220183719_PerformanceHardeningNormalization")]
+    partial class PerformanceHardeningNormalization
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -565,27 +568,13 @@ namespace Transcendence.Service.Migrations
                     b.Property<string>("PatchVersion")
                         .HasColumnType("text");
 
-                    b.PrimitiveCollection<List<int>>("BuildsFrom")
-                        .IsRequired()
-                        .HasColumnType("integer[]");
-
-                    b.PrimitiveCollection<List<int>>("BuildsInto")
-                        .IsRequired()
-                        .HasColumnType("integer[]");
-
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<bool>("InStore")
-                        .HasColumnType("boolean");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<int>("PriceTotal")
-                        .HasColumnType("integer");
 
                     b.PrimitiveCollection<List<string>>("Tags")
                         .IsRequired()

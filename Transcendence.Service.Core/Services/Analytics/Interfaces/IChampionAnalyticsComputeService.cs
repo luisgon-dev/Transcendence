@@ -31,7 +31,7 @@ public interface IChampionAnalyticsComputeService
     /// <summary>
     /// Computes top 3 builds for a champion with items and runes bundled.
     /// Core items (70%+ appearance) distinguished from situational.
-    /// Excludes boots, trinkets, consumables from core calculation.
+    /// Uses only completed, build-impact items for build quality calculations.
     /// </summary>
     Task<ChampionBuildsResponse> ComputeBuildsAsync(
         int championId,

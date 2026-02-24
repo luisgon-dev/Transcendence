@@ -269,30 +269,7 @@ public class SummonerRefreshJob(
 
     private async Task InvalidateStatsCacheAsync(Guid summonerId, CancellationToken ct)
     {
-        // HybridCache doesn't have wildcard invalidation, but we can remove known keys
-        // The cache will naturally expire, but we can force invalidation for common patterns
-
-        // Common recentGamesCount values
-        foreach (var count in new[] { 10, 20, 50 })
-        {
-            await cache.RemoveAsync($"stats:overview:{summonerId}:{count}", ct);
-        }
-
-        // Common top champion counts
-        foreach (var top in new[] { 5, 10 })
-        {
-            await cache.RemoveAsync($"stats:champions:{summonerId}:{top}", ct);
-        }
-
-        // Roles has no parameters
-        await cache.RemoveAsync($"stats:roles:{summonerId}", ct);
-
-        // Invalidate first few pages of recent matches
-        foreach (var page in new[] { 1, 2, 3 })
-        {
-            await cache.RemoveAsync($"stats:recent:{summonerId}:{page}:20", ct);
-            await cache.RemoveAsync($"stats:recent:{summonerId}:{page}:10", ct);
-        }
+        await cache.RemoveByTagAsync($"summoner-stats:{summonerId}", ct);
     }
 
 }

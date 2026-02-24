@@ -8,66 +8,40 @@ public class RefreshLockRepository(TranscendenceContext db) : IRefreshLockReposi
 {
     public async Task<bool> TryAcquireAsync(string key, TimeSpan ttl, CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(key))
+            throw new ArgumentException("Lock key is required.", nameof(key));
+
         var now = DateTime.UtcNow;
         var lockedUntil = now.Add(ttl);
+        var rowId = Guid.NewGuid();
 
-        // Try to find existing lock
-        var existing = await db.RefreshLocks.FirstOrDefaultAsync(x => x.Key == key, ct);
-        if (existing == null)
-        {
-            // Insert new lock
-            var lockRow = new RefreshLock
-            {
-                Id = Guid.NewGuid(),
-                Key = key,
-                CreatedAtUtc = now,
-                LockedUntilUtc = lockedUntil
-            };
-            db.RefreshLocks.Add(lockRow);
-            try
-            {
-                await db.SaveChangesAsync(ct);
-                return true;
-            }
-            catch (DbUpdateException)
-            {
-                // Unique constraint failed due to race; treat as not acquired
-                return false;
-            }
-        }
+        // Acquire lock with an atomic upsert. We only update an existing row when its lease is expired.
+        var affectedRows = await db.Database.ExecuteSqlInterpolatedAsync($@"
+            INSERT INTO ""RefreshLocks"" (""Id"", ""Key"", ""CreatedAtUtc"", ""LockedUntilUtc"")
+            VALUES ({rowId}, {key}, {now}, {lockedUntil})
+            ON CONFLICT (""Key"") DO UPDATE
+            SET ""LockedUntilUtc"" = EXCLUDED.""LockedUntilUtc""
+            WHERE ""RefreshLocks"".""LockedUntilUtc"" <= {now};", ct);
 
-        // If expired, extend and acquire
-        if (existing.LockedUntilUtc <= now)
-        {
-            existing.LockedUntilUtc = lockedUntil;
-            try
-            {
-                await db.SaveChangesAsync(ct);
-                return true;
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                return false;
-            }
-        }
-
-        // Still locked
-        return false;
+        return affectedRows > 0;
     }
 
     public async Task ReleaseAsync(string key, CancellationToken ct = default)
     {
-        var existing = await db.RefreshLocks.FirstOrDefaultAsync(x => x.Key == key, ct);
-        if (existing != null)
-        {
-            db.RefreshLocks.Remove(existing);
-            await db.SaveChangesAsync(ct);
-        }
+        if (string.IsNullOrWhiteSpace(key))
+            throw new ArgumentException("Lock key is required.", nameof(key));
+
+        var now = DateTime.UtcNow;
+        await db.RefreshLocks
+            .Where(x => x.Key == key && x.LockedUntilUtc > now)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.LockedUntilUtc, now), ct);
     }
 
     public Task<RefreshLock?> GetAsync(string key, CancellationToken ct = default)
     {
-        return db.RefreshLocks.FirstOrDefaultAsync(x => x.Key == key, ct);
+        return db.RefreshLocks
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Key == key, ct);
     }
 
     public Task<bool> AnyActiveByPrefixAsync(string prefix, CancellationToken ct = default)

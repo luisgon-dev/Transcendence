@@ -1,6 +1,7 @@
 using Camille.Enums;
 using Hangfire;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Analysis.Interfaces;
@@ -13,6 +14,7 @@ namespace Transcendence.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/summoners")]
+[ProducesResponseType(StatusCodes.Status429TooManyRequests)]
 public class SummonersController(
     ISummonerRepository summonerRepository,
     IRefreshLockRepository refreshLockRepository,
@@ -31,6 +33,7 @@ public class SummonersController(
     /// <param name="name">Riot game name (without #tag)</param>
     /// <param name="tag">Riot tag (without #)</param>
     [HttpGet("{region}/{name}/{tag}")]
+    [EnableRateLimiting("expensive-read")]
     [ProducesResponseType(typeof(SummonerProfileResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(SummonerAcceptedResponse), StatusCodes.Status202Accepted)]
@@ -176,6 +179,7 @@ public class SummonersController(
     ///     Queue a background refresh for the specified summoner by Riot ID. Only one refresh can be in-flight at a time.
     /// </summary>
     [HttpPost("{region}/{name}/{tag}/refresh")]
+    [EnableRateLimiting("expensive-read")]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(SummonerAcceptedResponse), StatusCodes.Status202Accepted)]
     public async Task<IActionResult> RefreshByRiotId([FromRoute] string region, [FromRoute] string name,

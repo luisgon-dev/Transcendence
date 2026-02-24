@@ -10,7 +10,21 @@ import { cn } from "@/lib/cn";
 const COMPACT_HEADER_PATHS = new Set(["/account/login", "/account/register"]);
 const GITHUB_REPO_URL = "https://github.com/luisgon-dev/Transcendence";
 
-export function SiteHeaderClient({ children }: { children: React.ReactNode }) {
+function navLinkClass(pathname: string | null, prefix: string): string {
+  const isActive = pathname?.startsWith(prefix) ?? false;
+  return cn(
+    "text-sm transition",
+    isActive ? "text-fg font-medium" : "text-fg/70 hover:text-fg"
+  );
+}
+
+export function SiteHeaderClient({
+  children,
+  patch
+}: {
+  children: React.ReactNode;
+  patch?: string | null;
+}) {
   const pathname = usePathname();
   const compact = pathname ? COMPACT_HEADER_PATHS.has(pathname) : false;
 
@@ -26,12 +40,17 @@ export function SiteHeaderClient({ children }: { children: React.ReactNode }) {
           </Link>
 
           <nav className="ml-3 hidden items-center gap-5 md:flex">
-            <Link href="/tierlist" className="text-sm text-fg/70 transition hover:text-fg">
+            <Link href="/tierlist" className={navLinkClass(pathname, "/tierlist")}>
               Tier List
             </Link>
-            <Link href="/champions" className="text-sm text-fg/70 transition hover:text-fg">
+            <Link href="/champions" className={navLinkClass(pathname, "/champions")}>
               Champions
             </Link>
+            {patch ? (
+              <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                {patch}
+              </span>
+            ) : null}
             <Link
               href={GITHUB_REPO_URL}
               target="_blank"
@@ -57,12 +76,17 @@ export function SiteHeaderClient({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="flex items-center gap-4 border-t border-border/40 pt-2 md:hidden">
-          <Link href="/tierlist" className="text-sm text-fg/70 transition hover:text-fg">
+          <Link href="/tierlist" className={navLinkClass(pathname, "/tierlist")}>
             Tier List
           </Link>
-          <Link href="/champions" className="text-sm text-fg/70 transition hover:text-fg">
+          <Link href="/champions" className={navLinkClass(pathname, "/champions")}>
             Champions
           </Link>
+          {patch ? (
+            <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+              {patch}
+            </span>
+          ) : null}
           <Link
             href={GITHUB_REPO_URL}
             target="_blank"

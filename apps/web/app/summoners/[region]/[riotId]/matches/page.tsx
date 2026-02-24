@@ -10,7 +10,8 @@ import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { newRequestId } from "@/lib/requestId";
 import { getSafeRequestContext } from "@/lib/requestContext";
 import { decodeRiotIdPath, encodeRiotIdPath } from "@/lib/riotid";
-import { formatDateTimeMs, formatDurationSeconds } from "@/lib/format";
+import { formatDateTimeMs, formatDurationSeconds, formatRelativeTime } from "@/lib/format";
+import { roleDisplayLabel } from "@/lib/roles";
 import { logEvent } from "@/lib/serverLog";
 import { safeDecodeURIComponent, toCodePoints } from "@/lib/textDebug";
 import {
@@ -322,7 +323,7 @@ export default async function SummonerMatchesPage({
             <Card
               key={m.matchId}
               className={`p-4 ${
-                m.win ? "border-emerald-400/30 bg-emerald-500/10" : "border-red-400/30 bg-red-500/10"
+                m.win ? "border-win/30 bg-win/10" : "border-loss/30 bg-loss/10"
               }`}
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -337,9 +338,14 @@ export default async function SummonerMatchesPage({
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-fg">
                       {name}{" "}
-                      <span className="text-xs text-muted">({m.queueType})</span>
+                      {m.teamPosition ? (
+                        <span className="text-xs text-muted">{roleDisplayLabel(m.teamPosition)} ·</span>
+                      ) : null}{" "}
+                      <span className="text-xs text-muted">{m.queueType}</span>
                     </p>
-                    <p className="text-xs text-muted">{fmtDate(m.matchDate)}</p>
+                    <p className="text-xs text-muted">
+                      {formatRelativeTime(m.matchDate)} · {fmtDate(m.matchDate)}
+                    </p>
                   </div>
                 </div>
 

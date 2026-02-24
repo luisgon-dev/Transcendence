@@ -9,7 +9,8 @@ import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { newRequestId } from "@/lib/requestId";
 import { getSafeRequestContext } from "@/lib/requestContext";
-import { formatDateTimeMs, formatDurationSeconds } from "@/lib/format";
+import { formatDateTimeMs, formatDurationSeconds, formatRelativeTime } from "@/lib/format";
+import { roleDisplayLabel } from "@/lib/roles";
 import { decodeRiotIdPath, encodeRiotIdPath } from "@/lib/riotid";
 import { logEvent } from "@/lib/serverLog";
 import { safeDecodeURIComponent, toCodePoints } from "@/lib/textDebug";
@@ -296,7 +297,7 @@ export default async function MatchDetailPage({
           </Badge>
           <Badge>{match.queueType}</Badge>
           <Badge>{formatDurationSeconds(match.duration)}</Badge>
-          <Badge>{formatDateTimeMs(match.matchDate)}</Badge>
+          <Badge>{formatRelativeTime(match.matchDate)} · {formatDateTimeMs(match.matchDate)}</Badge>
           {match.patch ? <Badge>Patch {match.patch}</Badge> : null}
         </div>
 
@@ -328,13 +329,13 @@ export default async function MatchDetailPage({
             <Card
               key={t.teamId}
               className={`p-5 ${
-                win ? "border-emerald-400/20" : "border-red-400/20"
+                win ? "border-win/20" : "border-loss/20"
               }`}
             >
               <div className="flex items-center justify-between gap-3">
                 <h2 className="font-[var(--font-sora)] text-lg font-semibold">
                   Team {t.teamId}{" "}
-                  <span className="text-sm text-muted">
+                  <span className={`text-sm ${win ? "text-win" : "text-loss"}`}>
                     ({win ? "Win" : "Loss"})
                   </span>
                 </h2>
@@ -374,7 +375,7 @@ export default async function MatchDetailPage({
                         <tr
                           key={`${t.teamId}-${p.championId}-${idx}`}
                           className={`border-t border-border/50 ${
-                            isTarget ? "bg-white/5" : ""
+                            isTarget ? "bg-primary/10 border-l-2 border-l-primary" : ""
                           }`}
                         >
                           <td className="py-2 pr-4">
@@ -402,7 +403,7 @@ export default async function MatchDetailPage({
                             </div>
                           </td>
                           <td className="py-2 pr-4 text-xs text-fg/80">
-                            {p.teamPosition ?? "-"}
+                            {p.teamPosition ? roleDisplayLabel(p.teamPosition) : "-"}
                           </td>
                           <td className="py-2 pr-4 font-medium">
                             {fmtKda(p)}

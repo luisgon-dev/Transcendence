@@ -11,7 +11,16 @@ export default {
         fg: "hsl(var(--fg))",
         muted: "hsl(var(--muted))",
         primary: "hsl(var(--primary))",
-        "primary-2": "hsl(var(--primary-2))"
+        "primary-2": "hsl(var(--primary-2))",
+        "tier-s": "hsl(var(--tier-s))",
+        "tier-a": "hsl(var(--tier-a))",
+        "tier-b": "hsl(var(--tier-b))",
+        "tier-c": "hsl(var(--tier-c))",
+        "tier-d": "hsl(var(--tier-d))",
+        "wr-high": "hsl(var(--wr-high))",
+        "wr-low": "hsl(var(--wr-low))",
+        win: "hsl(var(--win))",
+        loss: "hsl(var(--loss))"
       },
       boxShadow: {
         glass: "0 1px 0 hsl(var(--border) / 0.65) inset, 0 0 0 1px hsl(var(--border) / 0.6), 0 12px 40px hsl(240 50% 5% / 0.65)"

@@ -3,39 +3,28 @@ import Link from "next/link";
 import type { components } from "@transcendence/api-client/schema";
 
 import { BackendErrorCard } from "@/components/BackendErrorCard";
+import { FilterBar } from "@/components/FilterBar";
+import { TierBadge } from "@/components/TierBadge";
+import { WinRateText } from "@/components/WinRateText";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { fetchBackendJson } from "@/lib/backendCall";
-import { getBackendBaseUrl } from "@/lib/env";
-import { getErrorVerbosity } from "@/lib/env";
-import { formatPercent } from "@/lib/format";
+import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
+import { formatGames, formatPercent } from "@/lib/format";
 import { roleDisplayLabel } from "@/lib/roles";
 import { championIconUrl, fetchChampionMap } from "@/lib/staticData";
 import {
   movementClass,
-  movementLabel,
+  movementIcon,
   normalizeTierListEntries,
+  tierBgClass,
+  tierColorClass,
   TIER_ORDER,
   type UITierGrade,
   type UITierListEntry
 } from "@/lib/tierlist";
 
 type TierListResponse = components["schemas"]["TierListResponse"];
-
-const ROLES = ["ALL", "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"] as const;
-const RANK_TIERS = [
-  "all",
-  "IRON",
-  "BRONZE",
-  "SILVER",
-  "GOLD",
-  "PLATINUM",
-  "EMERALD",
-  "DIAMOND",
-  "MASTER",
-  "GRANDMASTER",
-  "CHALLENGER"
-] as const;
 
 export default async function TierListPage({
   searchParams
@@ -98,132 +87,142 @@ export default async function TierListPage({
       ? tierlist.rankTier
       : null;
 
+  // Precompute rank offset for each tier so we can display global rank
+  const tierRankOffset: Record<UITierGrade, number> = { S: 0, A: 0, B: 0, C: 0, D: 0 };
+  let offset = 0;
+  for (const tier of TIER_ORDER) {
+    tierRankOffset[tier] = offset;
+    offset += groups[tier].length;
+  }
+
   return (
     <div className="grid gap-6">
-      <header className="flex flex-col gap-2">
+      <header className="flex flex-col gap-3">
+        <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
+          Tier List
+        </h1>
+
         <div className="flex flex-wrap items-center gap-2">
           <Badge className="border-primary/40 bg-primary/10 text-primary">
             Patch {tierlist.patch ?? "Unknown"}
           </Badge>
-          <Badge>Role: {roleDisplayLabel(tierlist.role ?? "ALL")}</Badge>
-          <Badge>Tier: {tierlist.rankTier ?? "all"}</Badge>
+          <Badge>{roleDisplayLabel(tierlist.role ?? "ALL")}</Badge>
+          <Badge>{rankTierValue ?? "All Ranks"}</Badge>
+          <Badge>{normalizedEntries.length} champions</Badge>
         </div>
-        <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
-          Tier List
-        </h1>
-        <p className="text-sm text-fg/75">
-          Composite ranking (win rate + pick rate) with movement indicators.
-        </p>
 
-        <form className="mt-2 flex flex-wrap items-end gap-2" method="get">
-          <label className="grid gap-1">
-            <span className="text-xs text-muted">Role</span>
-            <select
-              name="role"
-              defaultValue={roleParam || "ALL"}
-              className="h-10 min-w-[160px] rounded-md border border-border/70 bg-surface/35 px-3 text-sm text-fg shadow-glass outline-none focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
-            >
-              {ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {roleDisplayLabel(r)}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="grid gap-1">
-            <span className="text-xs text-muted">Rank Tier</span>
-            <select
-              name="rankTier"
-              defaultValue={rankParam || "all"}
-              className="h-10 min-w-[180px] rounded-md border border-border/70 bg-surface/35 px-3 text-sm text-fg shadow-glass outline-none focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
-            >
-              {RANK_TIERS.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <button
-            type="submit"
-            className="h-10 rounded-md border border-border/70 bg-white/5 px-4 text-sm text-fg/85 shadow-glass hover:bg-white/10"
-          >
-            Apply
-          </button>
-        </form>
+        <FilterBar
+          activeRole={roleParam || "ALL"}
+          activeRank={rankParam?.toLowerCase() || "all"}
+          baseHref="/tierlist"
+          patch={tierlist.patch}
+        />
       </header>
 
-      <div className="grid gap-6">
+      <Card className="overflow-hidden p-0">
         {TIER_ORDER.map((tier) => {
           const entries = groups[tier];
           if (entries.length === 0) return null;
 
           return (
-            <Card key={tier} className="p-5">
-              <div className="flex items-center justify-between">
-                <h2 className="font-[var(--font-sora)] text-lg font-semibold">
+            <div key={tier}>
+              {/* Tier header row */}
+              <div
+                className={`flex items-center gap-3 border-b border-border/40 px-4 py-2.5 ${tierBgClass(tier)}`}
+              >
+                <TierBadge tier={tier} size="md" />
+                <span className={`text-sm font-semibold ${tierColorClass(tier)}`}>
                   Tier {tier}
-                </h2>
-                <p className="text-sm text-muted">{entries.length} champions</p>
+                </span>
+                <span className="text-xs text-muted">
+                  {entries.length} champion{entries.length !== 1 ? "s" : ""}
+                </span>
               </div>
 
-              <div className="mt-4 grid gap-2">
-                {entries.map((e) => {
-                  const champ = champions[String(e.championId)];
-                  const champName = champ?.name ?? `Champion ${e.championId}`;
-                  const champId = champ?.id ?? "Unknown";
+              {/* Champion rows */}
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] text-left text-sm">
+                  <thead className="text-[11px] uppercase tracking-wider text-muted">
+                    <tr className="border-b border-border/30">
+                      <th className="w-10 px-4 py-2 text-center">#</th>
+                      <th className="w-10 px-2 py-2">Tier</th>
+                      <th className="px-3 py-2">Champion</th>
+                      <th className="px-3 py-2">Role</th>
+                      <th className="px-3 py-2 text-right">Win Rate</th>
+                      <th className="px-3 py-2 text-right">Pick Rate</th>
+                      <th className="px-3 py-2 text-right">Games</th>
+                      <th className="w-16 px-3 py-2 text-center">Trend</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {entries.map((e, idx) => {
+                      const rank = tierRankOffset[tier] + idx + 1;
+                      const champ = champions[String(e.championId)];
+                      const champName = champ?.name ?? `Champion ${e.championId}`;
+                      const champSlug = champ?.id ?? "Unknown";
 
-                  return (
-                    <div
-                      key={`${tier}-${e.role}-${e.championId}`}
-                      className="flex items-center gap-3 rounded-lg border border-border/60 bg-white/5 px-3 py-2"
-                    >
-                      <Image
-                        src={championIconUrl(version, champId)}
-                        alt={champName}
-                        width={32}
-                        height={32}
-                        className="rounded-md"
-                      />
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                          <Link
-                            href={`/champions/${e.championId}?role=${encodeURIComponent(e.role)}${rankTierValue ? `&rankTier=${encodeURIComponent(rankTierValue)}` : ""}`}
-                            className="truncate text-sm font-semibold text-fg hover:underline"
-                          >
-                            {champName}
-                          </Link>
-                          <span className="text-xs text-muted">{roleDisplayLabel(e.role)}</span>
-                          <span
-                            className={`text-xs font-medium ${movementClass(e.movement)}`}
-                            title={
-                              e.previousTier
-                                ? `Previous: ${e.previousTier}`
-                                : undefined
-                            }
-                          >
-                            {movementLabel(e.movement)}
-                          </span>
-                        </div>
-
-                        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-fg/70">
-                          <span>Win {formatPercent(e.winRate)}</span>
-                          <span>Pick {formatPercent(e.pickRate)}</span>
-                          <span>{e.games.toLocaleString()} games</span>
-                          <span>Score {e.compositeScore.toFixed(3)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                      return (
+                        <tr
+                          key={`${tier}-${e.role}-${e.championId}`}
+                          className="border-b border-border/20 transition hover:bg-white/[0.03]"
+                        >
+                          <td className="px-4 py-2.5 text-center text-xs text-muted">
+                            {rank}
+                          </td>
+                          <td className="px-2 py-2.5">
+                            <TierBadge tier={e.tier} />
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <Link
+                              href={`/champions/${e.championId}?role=${encodeURIComponent(e.role)}${rankTierValue ? `&rankTier=${encodeURIComponent(rankTierValue)}` : ""}`}
+                              className="flex items-center gap-2.5 hover:underline"
+                            >
+                              <Image
+                                src={championIconUrl(version, champSlug)}
+                                alt={champName}
+                                width={28}
+                                height={28}
+                                className="rounded-md"
+                              />
+                              <span className="truncate font-medium text-fg">
+                                {champName}
+                              </span>
+                            </Link>
+                          </td>
+                          <td className="px-3 py-2.5 text-xs text-muted">
+                            {roleDisplayLabel(e.role)}
+                          </td>
+                          <td className="px-3 py-2.5 text-right">
+                            <WinRateText value={e.winRate} decimals={2} />
+                          </td>
+                          <td className="px-3 py-2.5 text-right text-fg/70">
+                            {formatPercent(e.pickRate, { decimals: 1 })}
+                          </td>
+                          <td className="px-3 py-2.5 text-right text-fg/70">
+                            {formatGames(e.games)}
+                          </td>
+                          <td className="px-3 py-2.5 text-center">
+                            <span
+                              className={`text-sm font-medium ${movementClass(e.movement)}`}
+                              title={
+                                e.previousTier
+                                  ? `Previous: ${e.previousTier}`
+                                  : undefined
+                              }
+                            >
+                              {movementIcon(e.movement)}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-            </Card>
+            </div>
           );
         })}
-      </div>
+      </Card>
     </div>
   );
 }

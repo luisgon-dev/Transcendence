@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { formatPercent } from "@/lib/format";
+import { formatPercent, formatRelativeTime, kdaColorClass, winRateColorClass } from "@/lib/format";
 import { roleDisplayLabel } from "@/lib/roles";
 import { encodeRiotIdPath } from "@/lib/riotid";
 import { computeNextPollDelayMs } from "@/lib/polling";
@@ -153,6 +153,23 @@ type ChampionStatic = {
 
 function fmtKda(k: number, d: number, a: number) {
   return `${k}/${d}/${a}`;
+}
+
+function rankColorClass(tier: string | undefined): string {
+  if (!tier) return "";
+  switch (tier.toUpperCase()) {
+    case "IRON": return "text-zinc-400";
+    case "BRONZE": return "text-amber-700";
+    case "SILVER": return "text-zinc-300";
+    case "GOLD": return "text-yellow-400";
+    case "PLATINUM": return "text-cyan-400";
+    case "EMERALD": return "text-emerald-400";
+    case "DIAMOND": return "text-sky-300";
+    case "MASTER": return "text-purple-400";
+    case "GRANDMASTER": return "text-red-400";
+    case "CHALLENGER": return "text-amber-300";
+    default: return "text-fg/80";
+  }
 }
 
 function champIconUrl(staticData: ChampionStatic | null, championId: number) {
@@ -520,22 +537,37 @@ export function SummonerProfileClient({
               <Card className="p-5">
                 <h2 className="font-[var(--font-sora)] text-lg font-semibold">Ranks</h2>
                 <div className="mt-4 grid gap-3">
-                  <div className="flex items-center justify-between rounded-lg border border-border/60 bg-white/5 px-3 py-2">
-                    <p className="text-sm font-medium">Solo/Duo</p>
-                    <p className="text-sm text-fg/80">
-                      {profile.soloRank
-                        ? `${profile.soloRank.tier} ${profile.soloRank.division} · ${profile.soloRank.leaguePoints} LP (${profile.soloRank.wins}W/${profile.soloRank.losses}L)`
-                        : "Unranked"}
-                    </p>
-                  </div>
-                  <div className="flex items-center justify-between rounded-lg border border-border/60 bg-white/5 px-3 py-2">
-                    <p className="text-sm font-medium">Flex</p>
-                    <p className="text-sm text-fg/80">
-                      {profile.flexRank
-                        ? `${profile.flexRank.tier} ${profile.flexRank.division} · ${profile.flexRank.leaguePoints} LP (${profile.flexRank.wins}W/${profile.flexRank.losses}L)`
-                        : "Unranked"}
-                    </p>
-                  </div>
+                  {([
+                    ["Solo/Duo", profile.soloRank],
+                    ["Flex", profile.flexRank]
+                  ] as const).map(([label, rank]) => (
+                    <div key={label} className="rounded-lg border border-border/60 bg-white/5 px-3 py-2.5">
+                      <p className="text-xs text-muted">{label}</p>
+                      {rank ? (
+                        <div className="mt-1">
+                          <p className={`text-sm font-semibold ${rankColorClass(rank.tier)}`}>
+                            {rank.tier} {rank.division}
+                          </p>
+                          <p className="text-xs text-muted">{rank.leaguePoints} LP</p>
+                          <div className="mt-1 flex items-center gap-2 text-xs">
+                            <span className="text-win">{rank.wins}W</span>
+                            <span className="text-loss">{rank.losses}L</span>
+                            <span className={winRateColorClass(rank.wins / Math.max(rank.wins + rank.losses, 1) * 100)}>
+                              {formatPercent(rank.wins / Math.max(rank.wins + rank.losses, 1), { decimals: 0 })}
+                            </span>
+                          </div>
+                          <div className="mt-1.5 h-1.5 rounded-full border border-border/60 bg-black/20">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-primary/70 to-primary-2/70"
+                              style={{ width: `${Math.min(100, (rank.wins / Math.max(rank.wins + rank.losses, 1)) * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="mt-1 text-sm text-fg/60">Unranked</p>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </Card>
 
@@ -550,7 +582,7 @@ export function SummonerProfileClient({
                         <span
                           key={p.matchId}
                           className={`h-3 w-3 rounded-sm border border-border/60 ${
-                            p.win ? "bg-emerald-400/60" : "bg-red-400/60"
+                            p.win ? "bg-win/60" : "bg-loss/60"
                           }`}
                           title={p.win ? "Win" : "Loss"}
                         />
@@ -565,20 +597,28 @@ export function SummonerProfileClient({
                   <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                     <div className="rounded-lg border border-border/60 bg-white/5 px-3 py-2">
                       <p className="text-xs text-muted">Win Rate</p>
-                      <p className="text-sm font-semibold">
+                      <p className={`text-sm font-semibold ${winRateColorClass(profile.overviewStats.winRate)}`}>
                         {formatPercent(profile.overviewStats.winRate)}
+                      </p>
+                      <p className="mt-0.5 text-xs">
+                        <span className="text-win">{profile.overviewStats.wins}W</span>
+                        {" "}
+                        <span className="text-loss">{profile.overviewStats.losses}L</span>
                       </p>
                     </div>
                     <div className="rounded-lg border border-border/60 bg-white/5 px-3 py-2">
                       <p className="text-xs text-muted">Matches</p>
                       <p className="text-sm font-semibold">
-                        {profile.overviewStats.totalMatches}
+                        {profile.overviewStats.totalMatches.toLocaleString()}
                       </p>
                     </div>
                     <div className="rounded-lg border border-border/60 bg-white/5 px-3 py-2">
                       <p className="text-xs text-muted">KDA</p>
-                      <p className="text-sm font-semibold">
+                      <p className={`text-sm font-semibold ${kdaColorClass(profile.overviewStats.kdaRatio)}`}>
                         {profile.overviewStats.kdaRatio.toFixed(2)}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted">
+                        {profile.overviewStats.avgKills.toFixed(1)} / {profile.overviewStats.avgDeaths.toFixed(1)} / {profile.overviewStats.avgAssists.toFixed(1)}
                       </p>
                     </div>
                     <div className="rounded-lg border border-border/60 bg-white/5 px-3 py-2">
@@ -615,7 +655,8 @@ export function SummonerProfileClient({
                               <div className="flex items-center justify-between text-xs text-fg/80">
                                 <span className="font-medium">{roleDisplayLabel(r.role)}</span>
                                 <span>
-                                  {r.games} games · {formatPercent(r.winRate)}
+                                  {r.games} games ·{" "}
+                                  <span className={winRateColorClass(r.winRate)}>{formatPercent(r.winRate)}</span>
                                 </span>
                               </div>
                               <div className="h-2 rounded-full border border-border/60 bg-black/20">
@@ -681,8 +722,8 @@ export function SummonerProfileClient({
                           </div>
                         </td>
                         <td className="py-2 pr-4">{c.games}</td>
-                        <td className="py-2 pr-4">{formatPercent(c.winRate)}</td>
-                        <td className="py-2 pr-4">{c.kdaRatio.toFixed(2)}</td>
+                        <td className={`py-2 pr-4 ${winRateColorClass(c.winRate)}`}>{formatPercent(c.winRate)}</td>
+                        <td className={`py-2 pr-4 ${kdaColorClass(c.kdaRatio)}`}>{c.kdaRatio.toFixed(2)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -715,8 +756,8 @@ export function SummonerProfileClient({
                     key={m.matchId}
                     className={`flex items-center justify-between rounded-lg border px-3 py-2 ${
                       m.win
-                        ? "border-emerald-400/30 bg-emerald-500/10"
-                        : "border-red-400/30 bg-red-500/10"
+                        ? "border-win/30 bg-win/10"
+                        : "border-loss/30 bg-loss/10"
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -742,7 +783,12 @@ export function SummonerProfileClient({
                         </p>
                       </div>
                     </div>
-                    <span className="text-xs text-fg/80">{m.win ? "Win" : "Loss"}</span>
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span className={`text-xs font-medium ${m.win ? "text-win" : "text-loss"}`}>{m.win ? "Win" : "Loss"}</span>
+                      {m.matchDate ? (
+                        <span className="text-[10px] text-muted">{formatRelativeTime(m.matchDate)}</span>
+                      ) : null}
+                    </div>
                   </div>
                 ))}
               </div>

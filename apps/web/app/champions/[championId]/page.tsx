@@ -2,21 +2,24 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { BackendErrorCard } from "@/components/BackendErrorCard";
+import { FilterBar } from "@/components/FilterBar";
+import { ItemBuildDisplay } from "@/components/ItemBuildDisplay";
 import { RuneSetupDisplay } from "@/components/RuneSetupDisplay";
-import { Badge } from "@/components/ui/Badge";
+import { StatsBar } from "@/components/StatsBar";
+import { TierBadge } from "@/components/TierBadge";
+import { WinRateText } from "@/components/WinRateText";
 import { Card } from "@/components/ui/Card";
 import { fetchBackendJson } from "@/lib/backendCall";
-import { getBackendBaseUrl } from "@/lib/env";
-import { getErrorVerbosity } from "@/lib/env";
-import { formatPercent } from "@/lib/format";
+import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
+import { formatGames, formatPercent } from "@/lib/format";
 import { roleDisplayLabel } from "@/lib/roles";
 import {
   championIconUrl,
   fetchChampionMap,
   fetchItemMap,
-  fetchRunesReforged,
-  itemIconUrl
+  fetchRunesReforged
 } from "@/lib/staticData";
+import { deriveTier } from "@/lib/tierlist";
 
 type ChampionWinRateDto = {
   championId: number;
@@ -113,6 +116,18 @@ function pickMostPlayedRole(summary: ChampionWinRateSummary | null) {
   if (sorted.length === 0) return null;
   const candidate = sorted[0][0];
   return normalizeRole(candidate);
+}
+
+function pickBestEntry(
+  winrates: ChampionWinRateSummary | null,
+  role: string
+): ChampionWinRateDto | null {
+  if (!winrates?.byRoleTier?.length) return null;
+  const forRole = winrates.byRoleTier.filter(
+    (e) => e.role.toUpperCase() === role.toUpperCase()
+  );
+  if (forRole.length === 0) return null;
+  return forRole.reduce((best, cur) => (cur.games > best.games ? cur : best));
 }
 
 export default async function ChampionDetailPage({
@@ -229,88 +244,53 @@ export default async function ChampionDetailPage({
 
   const builds = buildRes.ok ? buildRes.body! : null;
   const matchups = matchupRes.ok ? matchupRes.body! : null;
+  const heroEntry = pickBestEntry(winrates, effectiveRole);
+  const heroTier = deriveTier(heroEntry?.winRate);
 
   return (
     <div className="grid gap-6">
-      <header className="flex flex-col gap-3">
-        <div className="flex items-center gap-3">
+      {/* ── Champion Header ── */}
+      <header className="flex flex-col gap-4">
+        <div className="flex items-center gap-4">
           <Image
             src={championIconUrl(version, champSlug)}
             alt={champName}
-            width={52}
-            height={52}
-            className="rounded-xl"
+            width={64}
+            height={64}
+            className="rounded-xl border border-border/60"
           />
           <div>
-            <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
-              {champName}
-            </h1>
-            <p className="text-sm text-muted">Champion #{championId}</p>
+            <div className="flex items-center gap-2.5">
+              <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
+                {champName}
+              </h1>
+              <TierBadge tier={heroTier} size="md" />
+            </div>
+            <p className="mt-0.5 text-sm text-muted">
+              {roleDisplayLabel(effectiveRole)} &middot; {normalizedRankTier ?? "All Ranks"}
+            </p>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge>Role: {roleDisplayLabel(effectiveRole)}</Badge>
-          <Badge>Tier: {normalizedRankTier ?? "all"}</Badge>
-          {winrates ? <Badge className="border-primary/40 bg-primary/10 text-primary">Patch {winrates.patch}</Badge> : null}
-        </div>
+        {/* ── Stats Bar ── */}
+        <StatsBar
+          tier={heroTier}
+          winRate={heroEntry?.winRate}
+          pickRate={heroEntry?.pickRate}
+          games={heroEntry?.games}
+        />
 
-        <form className="mt-2 flex flex-wrap items-end gap-2" method="get">
-          <label className="grid gap-1">
-            <span className="text-xs text-muted">Role</span>
-            <select
-              name="role"
-              defaultValue={effectiveRole}
-              className="h-10 min-w-[160px] rounded-md border border-border/70 bg-surface/35 px-3 text-sm text-fg shadow-glass outline-none focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
-            >
-              {ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {roleDisplayLabel(r)}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="grid gap-1">
-            <span className="text-xs text-muted">Rank Tier</span>
-            <select
-              name="rankTier"
-              defaultValue={normalizedRankTier ?? "all"}
-              className="h-10 min-w-[180px] rounded-md border border-border/70 bg-surface/35 px-3 text-sm text-fg shadow-glass outline-none focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
-            >
-              {RANK_TIERS.map((tier) => (
-                <option key={tier} value={tier}>
-                  {tier}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <button
-            type="submit"
-            className="h-10 rounded-md border border-border/70 bg-white/5 px-4 text-sm text-fg/85 shadow-glass hover:bg-white/10"
-          >
-            Apply
-          </button>
-        </form>
-
-        <nav className="flex flex-wrap gap-2">
-          {ROLES.map((r) => (
-            <Link
-              key={r}
-              href={`/champions/${championId}?role=${r}${normalizedRankTier ? `&rankTier=${encodeURIComponent(normalizedRankTier)}` : ""}`}
-              className={`rounded-md border px-3 py-1 text-sm ${
-                r === effectiveRole
-                  ? "border-primary/50 bg-primary/15 text-primary"
-                  : "border-border/70 bg-white/5 text-fg/80 hover:bg-white/10"
-              }`}
-            >
-              {roleDisplayLabel(r)}
-            </Link>
-          ))}
-        </nav>
+        {/* ── Filters ── */}
+        <FilterBar
+          roles={ROLES}
+          activeRole={effectiveRole}
+          activeRank={normalizedRankTier?.toLowerCase() ?? "all"}
+          baseHref={`/champions/${championId}`}
+          patch={winrates?.patch ?? builds?.patch}
+        />
       </header>
 
+      {/* ── Win Rates Table ── */}
       <Card className="p-5">
         <h2 className="font-[var(--font-sora)] text-lg font-semibold">
           Win Rates
@@ -322,13 +302,13 @@ export default async function ChampionDetailPage({
         ) : (
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="text-xs text-muted">
-                <tr>
+              <thead className="text-[11px] uppercase tracking-wider text-muted">
+                <tr className="border-b border-border/30">
                   <th className="py-2 pr-4">Role</th>
                   <th className="py-2 pr-4">Tier</th>
-                  <th className="py-2 pr-4">Win</th>
-                  <th className="py-2 pr-4">Pick</th>
-                  <th className="py-2 pr-4">Games</th>
+                  <th className="py-2 pr-4 text-right">Win Rate</th>
+                  <th className="py-2 pr-4 text-right">Pick Rate</th>
+                  <th className="py-2 pr-4 text-right">Games</th>
                 </tr>
               </thead>
               <tbody>
@@ -336,12 +316,23 @@ export default async function ChampionDetailPage({
                   .slice()
                   .sort((a, b) => b.games - a.games)
                   .map((w) => (
-                    <tr key={`${w.role}-${w.rankTier}`} className="border-t border-border/50">
-                      <td className="py-2 pr-4 font-medium">{roleDisplayLabel(w.role)}</td>
-                      <td className="py-2 pr-4">{w.rankTier}</td>
-                      <td className="py-2 pr-4">{formatPercent(w.winRate)}</td>
-                      <td className="py-2 pr-4">{formatPercent(w.pickRate)}</td>
-                      <td className="py-2 pr-4">{w.games.toLocaleString()}</td>
+                    <tr
+                      key={`${w.role}-${w.rankTier}`}
+                      className="border-t border-border/30 transition hover:bg-white/[0.03]"
+                    >
+                      <td className="py-2.5 pr-4 font-medium">
+                        {roleDisplayLabel(w.role)}
+                      </td>
+                      <td className="py-2.5 pr-4 text-muted">{w.rankTier}</td>
+                      <td className="py-2.5 pr-4 text-right">
+                        <WinRateText value={w.winRate} decimals={2} />
+                      </td>
+                      <td className="py-2.5 pr-4 text-right text-fg/70">
+                        {formatPercent(w.pickRate, { decimals: 1 })}
+                      </td>
+                      <td className="py-2.5 pr-4 text-right text-fg/70">
+                        {formatGames(w.games)}
+                      </td>
                     </tr>
                   ))}
               </tbody>
@@ -350,60 +341,60 @@ export default async function ChampionDetailPage({
         )}
       </Card>
 
+      {/* ── Builds + Matchups ── */}
       <div className="grid gap-6 md:grid-cols-2">
+        {/* ── Builds ── */}
         <Card className="p-5">
           <h2 className="font-[var(--font-sora)] text-lg font-semibold">
-            Builds (Top 3)
+            Builds
           </h2>
           {!builds ? (
             <p className="mt-2 text-sm text-fg/75">No build data available.</p>
           ) : builds.builds.length === 0 ? (
             <p className="mt-2 text-sm text-fg/75">No samples for this role.</p>
           ) : (
-            <div className="mt-4 grid gap-3">
+            <div className="mt-4 grid gap-4">
+              {/* Global Core Items */}
+              {builds.globalCoreItems.length > 0 ? (
+                <ItemBuildDisplay
+                  allItems={[]}
+                  coreItems={builds.globalCoreItems}
+                  situationalItems={[]}
+                  version={itemVersion}
+                  items={items}
+                />
+              ) : null}
+
               {builds.builds.map((b, idx) => (
                 <div
                   key={idx}
-                  className="rounded-lg border border-border/60 bg-white/5 p-3"
+                  className="rounded-lg border border-border/60 bg-white/[0.02] p-3"
                 >
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold text-fg">Build {idx + 1}</p>
+                    <p className="text-sm font-semibold text-fg">
+                      {idx === 0 ? "Recommended Build" : `Alternative ${idx}`}
+                    </p>
                     <p className="text-xs text-muted">
-                      {b.games.toLocaleString()} games, {formatPercent(b.winRate)} win
+                      <WinRateText value={b.winRate} decimals={1} games={b.games} />
                     </p>
                   </div>
 
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <div className="flex items-center gap-1.5">
-                      {b.items.map((itemId, itemIdx) => {
-                        if (!itemId) {
-                          return (
-                            <div
-                              key={`${idx}-item-${itemIdx}`}
-                              className="h-7 w-7 rounded-md border border-border/60 bg-black/25"
-                            />
-                          );
-                        }
-                        const meta = items[String(itemId)];
-                        const title = meta
-                          ? `${meta.name}${meta.plaintext ? ` — ${meta.plaintext}` : ""}`
-                          : `Item ${itemId}`;
-                        return (
-                          <Image
-                            key={`${idx}-${itemIdx}-${itemId}`}
-                            src={itemIconUrl(itemVersion, itemId)}
-                            alt={meta?.name ?? `Item ${itemId}`}
-                            title={title}
-                            width={28}
-                            height={28}
-                            className="rounded-md"
-                          />
-                        );
-                      })}
-                    </div>
+                  {/* Items: Core + Situational */}
+                  <div className="mt-3">
+                    <ItemBuildDisplay
+                      allItems={b.items}
+                      coreItems={b.coreItems}
+                      situationalItems={b.situationalItems}
+                      version={itemVersion}
+                      items={items}
+                      winRate={b.winRate}
+                      games={b.games}
+                    />
+                  </div>
 
-                    <div className="mx-1 h-4 w-px bg-border/60" />
-
+                  {/* Runes */}
+                  <div className="mt-3 border-t border-border/40 pt-3">
+                    <p className="mb-2 text-xs font-medium text-muted">Runes</p>
                     <RuneSetupDisplay
                       primaryStyleId={b.primaryStyleId}
                       subStyleId={b.subStyleId}
@@ -421,6 +412,7 @@ export default async function ChampionDetailPage({
           )}
         </Card>
 
+        {/* ── Matchups ── */}
         <Card className="p-5">
           <h2 className="font-[var(--font-sora)] text-lg font-semibold">
             Matchups
@@ -430,85 +422,109 @@ export default async function ChampionDetailPage({
               No matchup data available.
             </p>
           ) : (
-            <div className="mt-4 grid gap-4">
+            <div className="mt-4 grid gap-5">
+              {/* Toughest Matchups */}
               <div>
-                <p className="text-sm font-semibold text-fg">Counters</p>
+                <p className="text-sm font-semibold text-fg">
+                  Toughest Matchups
+                </p>
+                <p className="mt-0.5 text-xs text-muted">
+                  These champions counter {champName}
+                </p>
                 {matchups.counters.length === 0 ? (
-                  <p className="mt-1 text-xs text-muted">No strong counters.</p>
+                  <p className="mt-2 text-xs text-muted">No strong counters found.</p>
                 ) : (
-                  <ul className="mt-2 grid gap-2 text-sm">
-                    {matchups.counters.map((m) => (
-                      <li
-                        key={m.opponentChampionId}
-                        className="flex items-center justify-between rounded-md border border-border/60 bg-white/5 px-3 py-2"
-                      >
-                        <Link href={`/champions/${m.opponentChampionId}`} className="flex min-w-0 items-center gap-2">
-                          {champions[String(m.opponentChampionId)]?.id ? (
-                            <Image
-                              src={championIconUrl(
-                                version,
-                                champions[String(m.opponentChampionId)]!.id
-                              )}
-                              alt={champions[String(m.opponentChampionId)]?.name ?? `Champion ${m.opponentChampionId}`}
-                              width={22}
-                              height={22}
-                              className="rounded-md"
+                  <ul className="mt-2 grid gap-1.5 text-sm">
+                    {matchups.counters.map((m) => {
+                      const opp = champions[String(m.opponentChampionId)];
+                      return (
+                        <li
+                          key={m.opponentChampionId}
+                          className="flex items-center justify-between rounded-md border border-border/50 bg-white/[0.02] px-3 py-2"
+                        >
+                          <Link
+                            href={`/champions/${m.opponentChampionId}`}
+                            className="flex min-w-0 items-center gap-2 hover:underline"
+                          >
+                            {opp?.id ? (
+                              <Image
+                                src={championIconUrl(version, opp.id)}
+                                alt={opp?.name ?? `Champion ${m.opponentChampionId}`}
+                                width={24}
+                                height={24}
+                                className="rounded-md"
+                              />
+                            ) : (
+                              <div className="h-6 w-6 rounded-md border border-border/60 bg-black/25" />
+                            )}
+                            <span className="truncate font-medium">
+                              {opp?.name ?? `Champion ${m.opponentChampionId}`}
+                            </span>
+                          </Link>
+                          <span className="shrink-0 text-xs">
+                            <WinRateText
+                              value={m.winRate}
+                              decimals={1}
+                              games={m.games}
                             />
-                          ) : (
-                            <div className="h-[22px] w-[22px] rounded-md border border-border/60 bg-black/25" />
-                          )}
-                          <span className="truncate text-sm font-medium hover:underline">
-                            {champions[String(m.opponentChampionId)]?.name ??
-                              `Champion ${m.opponentChampionId}`}
                           </span>
-                        </Link>
-                        <span className="text-xs text-muted">
-                          {formatPercent(m.winRate)} ({m.games})
-                        </span>
-                      </li>
-                    ))}
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </div>
 
+              {/* Best Matchups */}
               <div>
-                <p className="text-sm font-semibold text-fg">Favorable</p>
+                <p className="text-sm font-semibold text-fg">
+                  Best Matchups
+                </p>
+                <p className="mt-0.5 text-xs text-muted">
+                  {champName} performs well against these champions
+                </p>
                 {matchups.favorableMatchups.length === 0 ? (
-                  <p className="mt-1 text-xs text-muted">
-                    No strong favorable matchups.
+                  <p className="mt-2 text-xs text-muted">
+                    No strong favorable matchups found.
                   </p>
                 ) : (
-                  <ul className="mt-2 grid gap-2 text-sm">
-                    {matchups.favorableMatchups.map((m) => (
-                      <li
-                        key={m.opponentChampionId}
-                        className="flex items-center justify-between rounded-md border border-border/60 bg-white/5 px-3 py-2"
-                      >
-                        <Link href={`/champions/${m.opponentChampionId}`} className="flex min-w-0 items-center gap-2">
-                          {champions[String(m.opponentChampionId)]?.id ? (
-                            <Image
-                              src={championIconUrl(
-                                version,
-                                champions[String(m.opponentChampionId)]!.id
-                              )}
-                              alt={champions[String(m.opponentChampionId)]?.name ?? `Champion ${m.opponentChampionId}`}
-                              width={22}
-                              height={22}
-                              className="rounded-md"
+                  <ul className="mt-2 grid gap-1.5 text-sm">
+                    {matchups.favorableMatchups.map((m) => {
+                      const opp = champions[String(m.opponentChampionId)];
+                      return (
+                        <li
+                          key={m.opponentChampionId}
+                          className="flex items-center justify-between rounded-md border border-border/50 bg-white/[0.02] px-3 py-2"
+                        >
+                          <Link
+                            href={`/champions/${m.opponentChampionId}`}
+                            className="flex min-w-0 items-center gap-2 hover:underline"
+                          >
+                            {opp?.id ? (
+                              <Image
+                                src={championIconUrl(version, opp.id)}
+                                alt={opp?.name ?? `Champion ${m.opponentChampionId}`}
+                                width={24}
+                                height={24}
+                                className="rounded-md"
+                              />
+                            ) : (
+                              <div className="h-6 w-6 rounded-md border border-border/60 bg-black/25" />
+                            )}
+                            <span className="truncate font-medium">
+                              {opp?.name ?? `Champion ${m.opponentChampionId}`}
+                            </span>
+                          </Link>
+                          <span className="shrink-0 text-xs">
+                            <WinRateText
+                              value={m.winRate}
+                              decimals={1}
+                              games={m.games}
                             />
-                          ) : (
-                            <div className="h-[22px] w-[22px] rounded-md border border-border/60 bg-black/25" />
-                          )}
-                          <span className="truncate text-sm font-medium hover:underline">
-                            {champions[String(m.opponentChampionId)]?.name ??
-                              `Champion ${m.opponentChampionId}`}
                           </span>
-                        </Link>
-                        <span className="text-xs text-muted">
-                          {formatPercent(m.winRate)} ({m.games})
-                        </span>
-                      </li>
-                    ))}
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </div>

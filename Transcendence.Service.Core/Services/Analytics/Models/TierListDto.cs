@@ -37,6 +37,7 @@ public record TierListEntry(
     double CompositeScore,    // 0.0 to 1.0 (70% win rate + 30% pick rate)
     double WinRate,           // 0.0 to 1.0
     double PickRate,          // 0.0 to 1.0
+    double BanRate,           // 0.0 to 1.0
     int Games,                // Sample size
     TierMovement Movement,    // Compared to previous patch
     TierGrade? PreviousTier   // Null if NEW

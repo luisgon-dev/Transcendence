@@ -15,6 +15,7 @@ public class MatchParticipant
 
     // Core identifiers
     public string? Puuid { get; set; } // denormalized for quick joins/filtering when needed
+    public int ParticipantId { get; set; } // Riot participantId (1..10), used for timeline joins
     public int TeamId { get; set; } // 100 or 200
     public int ChampionId { get; set; }
 

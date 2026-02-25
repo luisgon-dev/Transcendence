@@ -48,11 +48,12 @@ public class MatchService(
             MatchDate = info.GameCreation, // epoch ms
             Duration = (int)info.GameDuration,
             Patch = NormalizePatch(info.GameVersion),
-            QueueType = info.QueueId.ToString(),
             EndOfGameResult = info.EndOfGameResult,
             Status = FetchStatus.Success,
             FetchedAt = DateTime.UtcNow
         };
+        ApplyQueueMetadata(match, (int)info.QueueId);
+        PopulateMatchBans(match, info);
 
         // Ensure static data for this match patch exists
         await staticDataService.EnsureStaticDataForPatchAsync(match.Patch, cancellationToken);
@@ -98,6 +99,7 @@ public class MatchService(
                 Match = match,
                 Summoner = summoner,
                 Puuid = p.Puuid,
+                ParticipantId = p.ParticipantId,
                 TeamId = (int)p.TeamId,
                 ChampionId = (int)p.ChampionId,
                 TeamPosition = !string.IsNullOrWhiteSpace(p.TeamPosition) ? p.TeamPosition : p.IndividualPosition,
@@ -156,11 +158,12 @@ public class MatchService(
             MatchDate = info.GameCreation,
             Duration = (int)info.GameDuration,
             Patch = NormalizePatch(info.GameVersion),
-            QueueType = info.QueueId.ToString(),
             EndOfGameResult = info.EndOfGameResult,
             Status = FetchStatus.Success,
             FetchedAt = DateTime.UtcNow
         };
+        ApplyQueueMetadata(match, (int)info.QueueId);
+        PopulateMatchBans(match, info);
 
         await staticDataService.EnsureStaticDataForPatchAsync(match.Patch, cancellationToken);
 
@@ -240,6 +243,7 @@ public class MatchService(
                 Match = match,
                 Summoner = summoner,
                 Puuid = p.Puuid,
+                ParticipantId = p.ParticipantId,
                 TeamId = (int)p.TeamId,
                 ChampionId = (int)p.ChampionId,
                 TeamPosition = !string.IsNullOrWhiteSpace(p.TeamPosition) ? p.TeamPosition : p.IndividualPosition,
@@ -317,8 +321,9 @@ public class MatchService(
             match.MatchDate = info.GameCreation;
             match.Duration = (int)info.GameDuration;
             match.Patch = NormalizePatch(info.GameVersion);
-            match.QueueType = info.QueueId.ToString();
             match.EndOfGameResult = info.EndOfGameResult;
+            ApplyQueueMetadata(match, (int)info.QueueId);
+            PopulateMatchBans(match, info);
 
             // Ensure static data for this match patch exists
             await staticDataService.EnsureStaticDataForPatchAsync(match.Patch, cancellationToken);
@@ -362,6 +367,7 @@ public class MatchService(
                     Match = match,
                     Summoner = summoner,
                     Puuid = p.Puuid,
+                    ParticipantId = p.ParticipantId,
                     TeamId = (int)p.TeamId,
                     ChampionId = (int)p.ChampionId,
                     TeamPosition = !string.IsNullOrWhiteSpace(p.TeamPosition) ? p.TeamPosition : p.IndividualPosition,
@@ -653,6 +659,36 @@ public class MatchService(
             .ToList();
 
         return participantItems;
+    }
+
+    private static void ApplyQueueMetadata(DataMatch match, int queueId)
+    {
+        match.QueueId = queueId;
+        match.QueueFamily = QueueCatalog.ResolveQueueFamily(queueId);
+        match.QueueType = QueueCatalog.ResolveQueueLabel(queueId);
+    }
+
+    private static void PopulateMatchBans(DataMatch match, Info info)
+    {
+        match.Bans.Clear();
+        var teams = info.Teams?.ToList() ?? [];
+        foreach (var team in teams)
+        {
+            var bans = team.Bans?.ToList() ?? [];
+            foreach (var ban in bans)
+            {
+                if (ban.ChampionId <= 0)
+                    continue;
+
+                match.Bans.Add(new MatchBan
+                {
+                    Match = match,
+                    TeamId = (int)team.TeamId,
+                    PickTurn = ban.PickTurn,
+                    ChampionId = (int)ban.ChampionId
+                });
+            }
+        }
     }
 
     private static string? NormalizeForLookup(string? value)

@@ -55,6 +55,7 @@ public record RecentMatchSummaryDto(
     string MatchId,
     long MatchDate,
     int DurationSeconds,
+    int QueueId,
     string QueueType,
     bool Win,
     int ChampionId,

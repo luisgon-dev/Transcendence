@@ -37,7 +37,9 @@ const TIER_LINKS = [
   { label: "Tier List · Middle", href: "/tierlist?role=MIDDLE" },
   { label: "Tier List · Bottom", href: "/tierlist?role=BOTTOM" },
   { label: "Tier List · Support", href: "/tierlist?role=UTILITY" },
-  { label: "Tier List · Challenger", href: "/tierlist?rankTier=CHALLENGER" }
+  { label: "Tier List · Challenger", href: "/tierlist?rankTier=CHALLENGER" },
+  { label: "Matchup Analysis", href: "/matchups" },
+  { label: "Pro Builds Preview", href: "/pro-builds" }
 ] as const;
 
 function isEditableTarget(target: EventTarget | null) {

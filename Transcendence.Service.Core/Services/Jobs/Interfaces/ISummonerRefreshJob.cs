@@ -8,5 +8,5 @@ public interface ISummonerRefreshJob
         string? priorityLockKey, CancellationToken ct = default);
 
     Task RefreshForAnalytics(string gameName, string tagLine, PlatformRoute platformRoute, string lockKey,
-        long startTimeEpochSeconds, string currentPatch, CancellationToken ct = default);
+        long startTimeEpochSeconds, string currentPatch, bool includeAllModes, CancellationToken ct = default);
 }

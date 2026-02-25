@@ -71,6 +71,27 @@ public class ChampionAnalyticsController(IChampionAnalyticsService analyticsServ
     }
 
     /// <summary>
+    /// Get pro/high-ELO builds for a champion.
+    /// Region defaults to ALL. Role and patch are optional.
+    /// </summary>
+    [HttpGet("{championId}/pro-builds")]
+    [ProducesResponseType(typeof(ChampionProBuildsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ChampionProBuildsResponse>> GetProBuilds(
+        int championId,
+        [FromQuery] string? region = null,
+        [FromQuery] string? role = null,
+        [FromQuery] string? patch = null,
+        CancellationToken ct = default)
+    {
+        if (championId <= 0)
+            return BadRequest("Invalid champion ID. Must be positive integer.");
+
+        var result = await analyticsService.GetProBuildsAsync(championId, region, role, patch, ct);
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Get matchup data (counters and favorable matchups) for a champion in a role.
     /// Matchups are lane-specific (e.g., Mid vs Mid).
     /// </summary>

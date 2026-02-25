@@ -36,6 +36,13 @@ public interface IChampionAnalyticsService
         string? rankTier,
         CancellationToken ct);
 
+    Task<ChampionProBuildsResponse> GetProBuildsAsync(
+        int championId,
+        string? region,
+        string? role,
+        string? patch,
+        CancellationToken ct);
+
     /// <summary>
     /// Gets matchup data (counters and favorable matchups) for a champion.
     /// Matchups are lane-specific (Mid vs Mid, Top vs Top, etc.).

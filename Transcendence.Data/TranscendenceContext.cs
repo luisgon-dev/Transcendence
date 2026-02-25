@@ -15,8 +15,13 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<CurrentDataParameters> CurrentDataParameters { get; set; }
     public DbSet<Rank> Ranks { get; set; }
     public DbSet<HistoricalRank> HistoricalRanks { get; set; }
+    public DbSet<TrackedProSummoner> TrackedProSummoners { get; set; }
+    public DbSet<SummonerIngestionCursor> SummonerIngestionCursors { get; set; }
     public DbSet<CurrentChampionLoadout> CurrentChampionLoadouts { get; set; }
     public DbSet<MatchParticipant> MatchParticipants { get; set; }
+    public DbSet<MatchBan> MatchBans { get; set; }
+    public DbSet<MatchTimelineFetchState> MatchTimelineFetchStates { get; set; }
+    public DbSet<MatchParticipantTimelineSnapshot> MatchParticipantTimelineSnapshots { get; set; }
 
     // Versioned static data
     public DbSet<Patch> Patches { get; set; }
@@ -56,6 +61,10 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             .HasIndex(x => x.MatchDate);
         modelBuilder.Entity<Match>()
             .HasIndex(x => x.QueueType);
+        modelBuilder.Entity<Match>()
+            .HasIndex(x => x.QueueId);
+        modelBuilder.Entity<Match>()
+            .HasIndex(x => x.QueueFamily);
 
         // Summoner lookups by Puuid
         modelBuilder.Entity<Summoner>()
@@ -106,6 +115,7 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
                 p.TeamPosition
             });
             entity.HasIndex(p => p.MatchId);
+            entity.HasIndex(p => new { p.MatchId, p.ParticipantId });
         });
 
         // Versioned static data configuration
@@ -241,6 +251,55 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
         modelBuilder.Entity<MatchParticipantRune>()
             .HasQueryFilter(mpr => mpr.MatchParticipant.Match.Status != FetchStatus.PermanentlyUnfetchable);
 
+        modelBuilder.Entity<MatchBan>(entity =>
+        {
+            entity.HasKey(mb => new
+            {
+                mb.MatchId,
+                mb.TeamId,
+                mb.PickTurn,
+                mb.ChampionId
+            });
+
+            entity.HasOne(mb => mb.Match)
+                .WithMany(m => m.Bans)
+                .HasForeignKey(mb => mb.MatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(mb => mb.ChampionId);
+            entity.HasIndex(mb => new { mb.ChampionId, mb.MatchId });
+        });
+
+        modelBuilder.Entity<MatchBan>()
+            .HasQueryFilter(mb => mb.Match.Status != FetchStatus.PermanentlyUnfetchable);
+
+        modelBuilder.Entity<MatchTimelineFetchState>(entity =>
+        {
+            entity.HasKey(x => x.MatchId);
+            entity.HasOne(x => x.Match)
+                .WithOne(m => m.TimelineFetchState)
+                .HasForeignKey<MatchTimelineFetchState>(x => x.MatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.LastAttemptAtUtc);
+        });
+
+        modelBuilder.Entity<MatchTimelineFetchState>()
+            .HasQueryFilter(x => x.Match.Status != FetchStatus.PermanentlyUnfetchable);
+
+        modelBuilder.Entity<MatchParticipantTimelineSnapshot>(entity =>
+        {
+            entity.HasKey(x => new { x.MatchId, x.ParticipantId, x.MinuteMark });
+            entity.HasOne(x => x.Match)
+                .WithMany(m => m.TimelineSnapshots)
+                .HasForeignKey(x => x.MatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.MinuteMark, x.MatchId });
+        });
+
+        modelBuilder.Entity<MatchParticipantTimelineSnapshot>()
+            .HasQueryFilter(x => x.Match.Status != FetchStatus.PermanentlyUnfetchable);
+
         modelBuilder.Entity<MatchParticipantItem>(entity =>
         {
             entity.HasKey(mpi => new
@@ -268,6 +327,27 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
         // Match participant item/rune filters align with match/participant filters
         modelBuilder.Entity<MatchParticipantItem>()
             .HasQueryFilter(mpi => mpi.MatchParticipant.Match.Status != FetchStatus.PermanentlyUnfetchable);
+
+        modelBuilder.Entity<TrackedProSummoner>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Puuid).IsRequired();
+            entity.Property(x => x.PlatformRegion).IsRequired();
+            entity.HasIndex(x => new { x.Puuid, x.PlatformRegion }).IsUnique();
+            entity.HasIndex(x => x.IsActive);
+            entity.HasIndex(x => x.UpdatedAtUtc);
+        });
+
+        modelBuilder.Entity<SummonerIngestionCursor>(entity =>
+        {
+            entity.HasKey(x => new { x.SummonerId, x.Scope });
+            entity.Property(x => x.Scope).HasMaxLength(64);
+            entity.HasOne(x => x.Summoner)
+                .WithMany(s => s.IngestionCursors)
+                .HasForeignKey(x => x.SummonerId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => x.UpdatedAtUtc);
+        });
     }
 }
 

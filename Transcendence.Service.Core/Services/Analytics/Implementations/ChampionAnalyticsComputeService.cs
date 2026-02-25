@@ -5,6 +5,7 @@ using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
+using Transcendence.Service.Core.Services.RiotApi;
 
 namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 
@@ -48,6 +49,9 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             .Where(mp => mp.ChampionId == championId)
             .Where(mp => mp.Match.Patch == patch)
             .Where(mp => mp.Match.Status == FetchStatus.Success)
+            .Where(mp => mp.Match.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
+                         (mp.Match.QueueId == 0 &&
+                          mp.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString()))
             .Where(mp => mp.TeamPosition != null && mp.TeamPosition != "");
 
         // Apply region filter if specified
@@ -72,6 +76,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                                {
                                    mp.TeamPosition,
                                    mp.Win,
+                                   mp.MatchId,
                                    RankTier = soloRank != null ? soloRank.Tier : "UNRANKED"
                                };
 
@@ -82,23 +87,25 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                 .Where(pr => pr.RankTier == normalizedRankTierFilter);
         }
 
-        var totalGames = await participantRanks.CountAsync(ct);
+        var participantRankRows = await participantRanks.ToListAsync(ct);
+        var totalGames = participantRankRows.Count;
         if (totalGames == 0)
             return [];
 
         var effectiveMinimumGames = ResolveEffectiveSampleSize(minimumGamesRequired, totalGames, floor: 3);
 
         // Group by role and rank tier, calculate win rates
-        var groupedData = await participantRanks
+        var groupedData = participantRankRows
             .GroupBy(pr => new { pr.TeamPosition, pr.RankTier })
             .Select(g => new
             {
                 Role = g.Key.TeamPosition!,
                 RankTier = g.Key.RankTier,
                 Games = g.Count(),
-                Wins = g.Sum(pr => pr.Win ? 1 : 0)
+                Wins = g.Sum(pr => pr.Win ? 1 : 0),
+                MatchIds = g.Select(pr => pr.MatchId).Distinct().ToList()
             })
-            .ToListAsync(ct);
+            .ToList();
 
         var winRateData = groupedData
             .Where(x => x.Games >= effectiveMinimumGames)
@@ -113,8 +120,33 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         }
 
         // Convert to DTOs
-        var result = winRateData
-            .Select(data => new ChampionWinRateDto(
+        var scopedMatchIds = participantRankRows
+            .Select(pr => pr.MatchId)
+            .Distinct()
+            .ToList();
+        var bannedMatchIds = scopedMatchIds.Count == 0
+            ? new HashSet<Guid>()
+            : (await _context.MatchBans
+                    .AsNoTracking()
+                    .Where(b => b.ChampionId == championId && scopedMatchIds.Contains(b.MatchId))
+                    .Select(b => b.MatchId)
+                    .Distinct()
+                    .ToListAsync(ct))
+                .ToHashSet();
+
+        var result = new List<ChampionWinRateDto>(winRateData.Count);
+        foreach (var data in winRateData)
+        {
+            var rowBanCount = data.MatchIds.Count(matchId => bannedMatchIds.Contains(matchId));
+            var roleRank = await ComputeRoleRankAsync(
+                championId,
+                data.Role,
+                data.RankTier,
+                patch,
+                filter.Region,
+                ct);
+
+            result.Add(new ChampionWinRateDto(
                 ChampionId: championId,
                 Role: data.Role,
                 RankTier: data.RankTier,
@@ -122,8 +154,14 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                 Wins: data.Wins,
                 WinRate: data.Games > 0 ? (double)data.Wins / data.Games : 0.0,
                 PickRate: totalGames > 0 ? (double)data.Games / totalGames : 0.0,
+                BanRate: data.MatchIds.Count > 0 ? (double)rowBanCount / data.MatchIds.Count : 0.0,
+                RoleRank: roleRank.RoleRank,
+                RolePopulation: roleRank.RolePopulation,
                 Patch: patch
-            ))
+            ));
+        }
+
+        result = result
             .OrderByDescending(x => x.Games)
             .ToList();
 
@@ -150,6 +188,9 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             .AsNoTracking()
             .Where(mp => mp.Match.Patch == patch)
             .Where(mp => mp.Match.Status == FetchStatus.Success)
+            .Where(mp => mp.Match.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
+                         (mp.Match.QueueId == 0 &&
+                          mp.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString()))
             .Where(mp => mp.TeamPosition != null && mp.TeamPosition != "");
 
         // Apply role filter (if not unified "ALL")
@@ -172,6 +213,25 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         var totalParticipants = await query.CountAsync(ct);
         if (totalParticipants == 0)
             return [];
+
+        var scopeMatchIds = await query
+            .Select(x => x.MatchId)
+            .Distinct()
+            .ToListAsync(ct);
+        var totalMatchesInScope = scopeMatchIds.Count;
+        var banCountsByChampion = totalMatchesInScope == 0
+            ? new Dictionary<int, int>()
+            : await _context.MatchBans
+                .AsNoTracking()
+                .Where(b => scopeMatchIds.Contains(b.MatchId))
+                .GroupBy(b => b.ChampionId)
+                .Select(g => new
+                {
+                    ChampionId = g.Key,
+                    BannedMatches = g.Select(x => x.MatchId).Distinct().Count()
+                })
+                .ToDictionaryAsync(x => x.ChampionId, x => x.BannedMatches, ct);
+
         var effectiveMinimumGames = ResolveEffectiveSampleSize(minimumGamesRequired, totalParticipants, floor: 5);
 
         // Step 2: Aggregate champion stats
@@ -220,7 +280,11 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             c.Games,
             c.Wins,
             WinRate = c.Games > 0 ? (double)c.Wins / c.Games : 0.0,
-            PickRate = totalParticipants > 0 ? (double)c.Games / totalParticipants : 0.0
+            ConservativeWinRate = ComputeWilsonLowerBound(c.Wins, c.Games),
+            PickRate = totalParticipants > 0 ? (double)c.Games / totalParticipants : 0.0,
+            BanRate = totalMatchesInScope > 0
+                ? (double)banCountsByChampion.GetValueOrDefault(c.ChampionId) / totalMatchesInScope
+                : 0.0
         })
         .Select(c => new
         {
@@ -228,9 +292,11 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             c.TeamPosition,
             c.Games,
             c.WinRate,
+            c.ConservativeWinRate,
             c.PickRate,
-            // Composite: 70% win rate + 30% pick rate
-            CompositeScore = (c.WinRate * 0.70) + (c.PickRate * 0.30)
+            c.BanRate,
+            // Composite: conservative win rate lower bound (70%) + pick rate (30%).
+            CompositeScore = (c.ConservativeWinRate * 0.70) + (c.PickRate * 0.30)
         })
         .OrderByDescending(x => x.CompositeScore)
         .ToList();
@@ -268,6 +334,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                 entry.CompositeScore,
                 entry.WinRate,
                 entry.PickRate,
+                entry.BanRate,
                 entry.Games,
                 movement,
                 previousTier
@@ -344,6 +411,68 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
     private static string NormalizeRole(string? role) =>
         string.IsNullOrWhiteSpace(role) ? "ALL" : role.ToUpperInvariant();
 
+    private static HashSet<string> ResolvePlatformsForRegion(string region)
+    {
+        return region switch
+        {
+            "NA" => ["NA1"],
+            "EUW" => ["EUW1"],
+            "KR" => ["KR"],
+            "CN" => ["CN1", "CN2"],
+            "ALL" => [],
+            _ => [region]
+        };
+    }
+
+    private async Task<(int? RoleRank, int? RolePopulation)> ComputeRoleRankAsync(
+        int championId,
+        string role,
+        string rankTier,
+        string patch,
+        string? region,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(role) || string.Equals(rankTier, "UNRANKED", StringComparison.OrdinalIgnoreCase))
+            return (null, null);
+
+        var roleQuery = _context.MatchParticipants
+            .AsNoTracking()
+            .Where(mp => mp.Match.Patch == patch)
+            .Where(mp => mp.Match.Status == FetchStatus.Success)
+            .Where(mp => mp.Match.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
+                         (mp.Match.QueueId == 0 &&
+                          mp.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString()))
+            .Where(mp => mp.TeamPosition == role);
+
+        if (!string.IsNullOrWhiteSpace(region))
+            roleQuery = roleQuery.Where(mp => mp.Summoner.Region == region);
+
+        roleQuery = roleQuery.Where(mp => _context.Ranks.Any(r =>
+            r.QueueType == "RANKED_SOLO_5x5" &&
+            r.SummonerId == mp.SummonerId &&
+            r.Tier == rankTier));
+
+        var standings = await roleQuery
+            .GroupBy(mp => mp.ChampionId)
+            .Select(g => new
+            {
+                ChampionId = g.Key,
+                Games = g.Count(),
+                WinRate = g.Count() > 0 ? (double)g.Count(x => x.Win) / g.Count() : 0.0
+            })
+            .OrderByDescending(x => x.WinRate)
+            .ThenByDescending(x => x.Games)
+            .ThenBy(x => x.ChampionId)
+            .ToListAsync(ct);
+
+        if (standings.Count == 0)
+            return (null, null);
+
+        var rolePopulation = standings.Count;
+        var rank = standings.FindIndex(s => s.ChampionId == championId);
+        return rank >= 0 ? (rank + 1, rolePopulation) : (null, rolePopulation);
+    }
+
     private static int ResolveEffectiveSampleSize(int configuredMinimum, int availableGames, int floor)
     {
         if (availableGames <= 0)
@@ -387,6 +516,19 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         TierGrade.D => 1,
         _ => 0
     };
+
+    private static double ComputeWilsonLowerBound(int wins, int games, double z = 1.96)
+    {
+        if (games <= 0)
+            return 0.0;
+
+        var p = (double)wins / games;
+        var zSquared = z * z;
+        var denominator = 1 + zSquared / games;
+        var center = p + zSquared / (2 * games);
+        var margin = z * Math.Sqrt((p * (1 - p) + zSquared / (4 * games)) / games);
+        return Math.Max(0.0, (center - margin) / denominator);
+    }
 
     // Non-build-impact item classes that should not appear in completed build recommendations.
     private static readonly HashSet<string> ExcludedBuildItemCategories = new(StringComparer.OrdinalIgnoreCase)
@@ -435,6 +577,9 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             .Where(mp => mp.ChampionId == championId
                       && mp.Match.Patch == patch
                       && mp.Match.Status == FetchStatus.Success
+                      && (mp.Match.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
+                          (mp.Match.QueueId == 0 &&
+                           mp.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString()))
                       && mp.TeamPosition == role);
 
         if (!string.IsNullOrEmpty(normalizedRankTierFilter))
@@ -621,6 +766,173 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             globalCoreItems,
             builds
         );
+    }
+
+    public async Task<ChampionProBuildsResponse> ComputeProBuildsAsync(
+        int championId,
+        string? region,
+        string? role,
+        string patch,
+        CancellationToken ct)
+    {
+        var normalizedRegion = string.IsNullOrWhiteSpace(region) ? "ALL" : region.Trim().ToUpperInvariant();
+        var normalizedRole = string.IsNullOrWhiteSpace(role) ? "ALL" : role.Trim().ToUpperInvariant();
+
+        var proQuery = _context.TrackedProSummoners
+            .AsNoTracking()
+            .Where(x => x.IsActive);
+
+        if (!string.Equals(normalizedRegion, "ALL", StringComparison.Ordinal))
+        {
+            var platforms = ResolvePlatformsForRegion(normalizedRegion);
+            proQuery = proQuery.Where(x => platforms.Contains(x.PlatformRegion.ToUpper()));
+        }
+
+        var proRoster = await proQuery
+            .Select(x => new
+            {
+                x.Puuid,
+                x.PlatformRegion,
+                x.GameName,
+                x.TagLine,
+                x.ProName,
+                x.TeamName
+            })
+            .ToListAsync(ct);
+
+        var trackedPuuids = proRoster
+            .Select(x => x.Puuid)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (trackedPuuids.Count == 0)
+            return new ChampionProBuildsResponse(championId, patch, normalizedRole, normalizedRegion, [], [], []);
+
+        var participantQuery = _context.MatchParticipants
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(mp => mp.Items)
+            .Include(mp => mp.Runes)
+            .Include(mp => mp.Summoner)
+            .Where(mp => mp.ChampionId == championId)
+            .Where(mp => mp.Match.Patch == patch)
+            .Where(mp => mp.Match.Status == FetchStatus.Success)
+            .Where(mp => mp.Match.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
+                         (mp.Match.QueueId == 0 &&
+                          mp.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString()))
+            .Where(mp => mp.Puuid != null && trackedPuuids.Contains(mp.Puuid));
+
+        if (!string.Equals(normalizedRole, "ALL", StringComparison.Ordinal))
+            participantQuery = participantQuery.Where(mp => mp.TeamPosition == normalizedRole);
+
+        var rows = await participantQuery
+            .Select(mp => new
+            {
+                mp.Match.MatchId,
+                mp.Match.MatchDate,
+                mp.Win,
+                mp.Puuid,
+                mp.Summoner.GameName,
+                mp.Summoner.TagLine,
+                Items = mp.Items.Select(i => i.ItemId).ToList(),
+                Runes = mp.Runes.Select(r => new StoredRuneSelection(
+                    r.RuneId,
+                    r.SelectionTree,
+                    r.SelectionIndex,
+                    r.StyleId)).ToList()
+            })
+            .ToListAsync(ct);
+
+        if (rows.Count == 0)
+            return new ChampionProBuildsResponse(championId, patch, normalizedRole, normalizedRegion, [], [], []);
+
+        var rosterByPuuid = proRoster
+            .GroupBy(x => x.Puuid, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+
+        var allRuneIds = rows
+            .SelectMany(r => r.Runes.Select(x => x.RuneId))
+            .Distinct()
+            .ToList();
+
+        var runeMetadata = await _context.RuneVersions
+            .AsNoTracking()
+            .Where(rv => allRuneIds.Contains(rv.RuneId) && rv.PatchVersion == patch)
+            .Select(rv => new { rv.RuneId, rv.RunePathId, rv.Slot })
+            .ToDictionaryAsync(rv => rv.RuneId, rv => new RuneMetadata(rv.RunePathId, rv.Slot), ct);
+
+        var projectedRows = rows
+            .Select(r =>
+            {
+                var runeInfo = BuildRuneInfo(r.Runes, runeMetadata);
+                rosterByPuuid.TryGetValue(r.Puuid ?? string.Empty, out var roster);
+                var playerName = !string.IsNullOrWhiteSpace(roster?.ProName)
+                    ? roster.ProName
+                    : (r.GameName != null && r.TagLine != null ? $"{r.GameName}#{r.TagLine}" : r.GameName);
+
+                return new
+                {
+                    r.MatchId,
+                    r.MatchDate,
+                    r.Win,
+                    PlayerName = playerName,
+                    TeamName = roster?.TeamName,
+                    Items = r.Items.Where(i => i != 0).OrderBy(i => i).ToList(),
+                    RuneInfo = runeInfo
+                };
+            })
+            .ToList();
+
+        var recentMatches = projectedRows
+            .OrderByDescending(r => r.MatchDate)
+            .ThenByDescending(r => r.MatchId)
+            .Take(25)
+            .Select(r => new ProMatchBuildDto(
+                r.MatchId ?? string.Empty,
+                r.PlayerName,
+                r.TeamName,
+                r.Win,
+                r.MatchDate,
+                r.Items,
+                r.RuneInfo.PrimaryStyleId,
+                r.RuneInfo.SubStyleId,
+                r.RuneInfo.PrimaryRunes,
+                r.RuneInfo.SubRunes,
+                r.RuneInfo.StatShards))
+            .ToList();
+
+        var topPlayers = projectedRows
+            .GroupBy(r => new { r.PlayerName, r.TeamName })
+            .Select(g => new ProPlayerSummaryDto(
+                g.Key.PlayerName,
+                g.Key.TeamName,
+                g.Count(),
+                g.Count() > 0 ? (double)g.Count(x => x.Win) / g.Count() : 0.0))
+            .OrderByDescending(p => p.Games)
+            .ThenByDescending(p => p.WinRate)
+            .Take(10)
+            .ToList();
+
+        var commonBuilds = projectedRows
+            .GroupBy(r => string.Join(",", r.Items))
+            .Select(g => new CommonProBuildDto(
+                g.First().Items,
+                g.Count(),
+                g.Count() > 0 ? (double)g.Count(x => x.Win) / g.Count() : 0.0))
+            .OrderByDescending(x => x.Games)
+            .ThenByDescending(x => x.WinRate)
+            .Take(10)
+            .ToList();
+
+        return new ChampionProBuildsResponse(
+            championId,
+            patch,
+            normalizedRole,
+            normalizedRegion,
+            recentMatches,
+            topPlayers,
+            commonBuilds);
     }
 
     private readonly record struct BuildItemMetadata(
@@ -836,16 +1148,17 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         CancellationToken ct)
     {
         var normalizedRankTierFilter = NormalizeRankTierFilter(rankTier);
-
-        // Self-join: champion participant vs opponent in same role, different team
-        // This gives us lane-specific matchups (Mid vs Mid, Top vs Top, etc.)
+        const int minuteMark = 15;
 
         var championQuery = _context.MatchParticipants
             .AsNoTracking()
             .Where(mp => mp.ChampionId == championId
                       && mp.TeamPosition == role
                       && mp.Match.Patch == patch
-                      && mp.Match.Status == FetchStatus.Success);
+                      && mp.Match.Status == FetchStatus.Success
+                      && (mp.Match.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
+                          (mp.Match.QueueId == 0 &&
+                           mp.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString())));
 
         // Apply rank tier filter if specified
         if (!string.IsNullOrEmpty(normalizedRankTierFilter))
@@ -856,41 +1169,95 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                 r.Tier == normalizedRankTierFilter));
         }
 
-        // Join with opponent: same match, same role, different team
-        // Since EF Core may struggle with record constructor in GroupBy/Select,
-        // we'll use anonymous types and materialize first
-        var matchupData = await championQuery
+        var lanePairsQuery = championQuery
             .Join(
-                _context.MatchParticipants,
+                _context.MatchParticipants.AsNoTracking(),
                 champion => champion.MatchId,
                 opponent => opponent.MatchId,
-                (champion, opponent) => new { Champion = champion, Opponent = opponent }
-            )
-            .Where(x => x.Champion.TeamPosition == x.Opponent.TeamPosition  // Same role (lane matchup)
-                     && x.Champion.TeamId != x.Opponent.TeamId)              // Different team (opponent)
-            .GroupBy(x => x.Opponent.ChampionId)
-            .Select(g => new
+                (champion, opponent) => new { Champion = champion, Opponent = opponent })
+            .Where(x => x.Champion.TeamPosition == x.Opponent.TeamPosition && x.Champion.TeamId != x.Opponent.TeamId)
+            .Select(x => new
             {
-                OpponentChampionId = g.Key,
-                Games = g.Count(),
-                Wins = g.Sum(x => x.Champion.Win ? 1 : 0),
-                Losses = g.Sum(x => x.Champion.Win ? 0 : 1)
-            })
+                x.Champion.MatchId,
+                x.Champion.Win,
+                OpponentChampionId = x.Opponent.ChampionId,
+                ChampionParticipantId = x.Champion.ParticipantId,
+                OpponentParticipantId = x.Opponent.ParticipantId
+            });
+
+        var timelineSnapshotQuery = _context.MatchParticipantTimelineSnapshots
+            .AsNoTracking()
+            .Where(s => s.MinuteMark == minuteMark);
+
+        var matchupData = await (
+                from pair in lanePairsQuery
+                join championTimeline in timelineSnapshotQuery
+                    on new { pair.MatchId, ParticipantId = pair.ChampionParticipantId }
+                    equals new { championTimeline.MatchId, championTimeline.ParticipantId }
+                    into championTimelineRows
+                from championTimeline in championTimelineRows.DefaultIfEmpty()
+                join opponentTimeline in timelineSnapshotQuery
+                    on new { pair.MatchId, ParticipantId = pair.OpponentParticipantId }
+                    equals new { opponentTimeline.MatchId, opponentTimeline.ParticipantId }
+                    into opponentTimelineRows
+                from opponentTimeline in opponentTimelineRows.DefaultIfEmpty()
+                group new { pair, championTimeline, opponentTimeline } by pair.OpponentChampionId
+                into g
+                select new
+                {
+                    OpponentChampionId = g.Key,
+                    Games = g.Count(),
+                    Wins = g.Sum(x => x.pair.Win ? 1 : 0),
+                    Losses = g.Sum(x => x.pair.Win ? 0 : 1),
+                    TimelineGames = g.Count(x => x.championTimeline != null && x.opponentTimeline != null),
+                    AvgGoldDiffAt15 = g
+                        .Where(x => x.championTimeline != null && x.opponentTimeline != null)
+                        .Select(x => (double?)(x.championTimeline!.Gold - x.opponentTimeline!.Gold))
+                        .Average(),
+                    AvgXpDiffAt15 = g
+                        .Where(x => x.championTimeline != null && x.opponentTimeline != null)
+                        .Select(x => (double?)(x.championTimeline!.Xp - x.opponentTimeline!.Xp))
+                        .Average(),
+                    LatestTimelineAtUtc = g
+                        .Where(x => x.championTimeline != null)
+                        .Select(x => (DateTime?)x.championTimeline!.DerivedAtUtc)
+                        .Max()
+                })
             .ToListAsync(ct);
 
         var totalMatchupGames = matchupData.Sum(m => m.Games);
+        var totalTimelineGames = matchupData.Sum(m => m.TimelineGames);
+        var timelineCoverage = totalMatchupGames > 0
+            ? (double)totalTimelineGames / totalMatchupGames
+            : (double?)null;
+        var timelineFreshness = matchupData
+            .Where(x => x.LatestTimelineAtUtc.HasValue)
+            .Select(x => x.LatestTimelineAtUtc)
+            .Max();
+
         var effectiveMatchupSampleSize = ResolveEffectiveSampleSize(MinMatchupSampleSize, totalMatchupGames, floor: 2);
 
-        // Convert to DTOs with calculated win rate
         var matchups = matchupData
             .Where(m => m.Games >= effectiveMatchupSampleSize)
+            .Select(g => new
+            {
+                g.OpponentChampionId,
+                g.Games,
+                g.Wins,
+                g.Losses,
+                WinRate = g.Games > 0 ? (double)g.Wins / g.Games : 0.0,
+                g.AvgGoldDiffAt15,
+                g.AvgXpDiffAt15
+            })
             .Select(m => new MatchupEntryDto
             {
                 OpponentChampionId = m.OpponentChampionId,
                 Games = m.Games,
                 Wins = m.Wins,
                 Losses = m.Losses,
-                WinRate = m.Games > 0 ? (double)m.Wins / m.Games : 0.0
+                WinRate = m.Games > 0 ? (double)m.Wins / m.Games : 0.0,
+                AvgGoldDiffAt15 = m.AvgGoldDiffAt15,
+                AvgXpDiffAt15 = m.AvgXpDiffAt15
             })
             .ToList();
 
@@ -904,10 +1271,18 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                     Games = m.Games,
                     Wins = m.Wins,
                     Losses = m.Losses,
-                    WinRate = m.Games > 0 ? (double)m.Wins / m.Games : 0.0
+                    WinRate = m.Games > 0 ? (double)m.Wins / m.Games : 0.0,
+                    AvgGoldDiffAt15 = m.AvgGoldDiffAt15,
+                    AvgXpDiffAt15 = m.AvgXpDiffAt15
                 })
                 .ToList();
         }
+
+        var allMatchups = matchups
+            .OrderByDescending(m => m.Games)
+            .ThenByDescending(m => m.WinRate)
+            .ThenBy(m => m.OpponentChampionId)
+            .ToList();
 
         // Separate counters (low win rate) and favorable (high win rate)
         var counters = matchups
@@ -929,7 +1304,11 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             RankTier = rankTier ?? "all",
             Patch = patch,
             Counters = counters,
-            FavorableMatchups = favorable
+            FavorableMatchups = favorable,
+            AllMatchups = allMatchups,
+            TimelineCoverageRatio = timelineCoverage,
+            TimelineSampleSize = totalTimelineGames,
+            TimelineDataFreshnessUtc = timelineFreshness
         };
     }
 }

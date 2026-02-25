@@ -157,16 +157,24 @@ public class SummonerStatsController(
     [ProducesResponseType(typeof(PagedResultDto<RecentMatchSummaryDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetRecentMatches([FromRoute] Guid summonerId, [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 20, CancellationToken ct = default)
+        [FromQuery] int pageSize = 20, [FromQuery] string? queueFamily = null,
+        [FromQuery] List<int>? queueIds = null, CancellationToken ct = default)
     {
         try
         {
-            var result = await statsService.GetRecentMatchesAsync(summonerId, page, pageSize, ct);
+            var result = await statsService.GetRecentMatchesAsync(
+                summonerId,
+                page,
+                pageSize,
+                queueFamily,
+                queueIds,
+                ct);
             var dto = new PagedResultDto<RecentMatchSummaryDto>(
                 result.Items.Select(m => new RecentMatchSummaryDto(
                     m.MatchId,
                     m.MatchDate,
                     m.DurationSeconds,
+                    m.QueueId,
                     m.QueueType,
                     m.Win,
                     m.ChampionId,

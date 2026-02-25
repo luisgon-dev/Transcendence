@@ -40,6 +40,13 @@ public interface IChampionAnalyticsComputeService
         string patch,
         CancellationToken ct);
 
+    Task<ChampionProBuildsResponse> ComputeProBuildsAsync(
+        int championId,
+        string? region,
+        string? role,
+        string patch,
+        CancellationToken ct);
+
     /// <summary>
     /// Computes matchup data (counters and favorable matchups) for a champion.
     /// Matchups are lane-specific (Mid vs Mid, Top vs Top, etc.).

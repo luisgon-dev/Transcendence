@@ -96,7 +96,7 @@ public class FetchLatestMatchInformation(
     {
         var matchIds = await riotGamesApi.MatchV5()
             .GetMatchIdsByPUUIDAsync(platformRoute.ToRegional(), puuid, 20, null,
-                Queue.SUMMONERS_RIFT_5V5_RANKED_SOLO, null, null, "ranked", ct);
+                null, null, null, null, ct);
 
         var dedupedMatchIds = matchIds
             .Where(id => !string.IsNullOrWhiteSpace(id))

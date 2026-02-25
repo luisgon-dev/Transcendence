@@ -378,6 +378,90 @@ namespace Transcendence.Service.Migrations
                     b.ToTable("Summoners");
                 });
 
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Account.SummonerIngestionCursor", b =>
+                {
+                    b.Property<Guid>("SummonerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Scope")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<long?>("BackfillBeforeEpochSeconds")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("ConsecutiveNoopRuns")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("LastRunAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("SummonerId", "Scope");
+
+                    b.HasIndex("UpdatedAtUtc");
+
+                    b.ToTable("SummonerIngestionCursors");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Account.TrackedProSummoner", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("GameName")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsHighEloOtp")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPro")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PlatformRegion")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Puuid")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("TagLine")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TeamName")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("UpdatedAtUtc");
+
+                    b.HasIndex("Puuid", "PlatformRegion")
+                        .IsUnique();
+
+                    b.ToTable("TrackedProSummoners");
+                });
+
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.Match", b =>
                 {
                     b.Property<Guid>("Id")
@@ -408,6 +492,12 @@ namespace Transcendence.Service.Migrations
                     b.Property<string>("Patch")
                         .HasColumnType("text");
 
+                    b.Property<string>("QueueFamily")
+                        .HasColumnType("text");
+
+                    b.Property<int>("QueueId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("QueueType")
                         .HasColumnType("text");
 
@@ -424,9 +514,36 @@ namespace Transcendence.Service.Migrations
                     b.HasIndex("MatchId")
                         .IsUnique();
 
+                    b.HasIndex("QueueFamily");
+
+                    b.HasIndex("QueueId");
+
                     b.HasIndex("QueueType");
 
                     b.ToTable("Matches");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.MatchBan", b =>
+                {
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("TeamId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PickTurn")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ChampionId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("MatchId", "TeamId", "PickTurn", "ChampionId");
+
+                    b.HasIndex("ChampionId");
+
+                    b.HasIndex("ChampionId", "MatchId");
+
+                    b.ToTable("MatchBans");
                 });
 
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.MatchParticipant", b =>
@@ -457,6 +574,9 @@ namespace Transcendence.Service.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<int>("NeutralMinionsKilled")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ParticipantId")
                         .HasColumnType("integer");
 
                     b.Property<string>("Puuid")
@@ -498,6 +618,8 @@ namespace Transcendence.Service.Migrations
                     b.HasIndex("SummonerId");
 
                     b.HasIndex("ChampionId", "TeamPosition");
+
+                    b.HasIndex("MatchId", "ParticipantId");
 
                     b.HasIndex("MatchId", "SummonerId")
                         .IsUnique();
@@ -555,6 +677,77 @@ namespace Transcendence.Service.Migrations
                     b.HasIndex("RuneId", "PatchVersion");
 
                     b.ToTable("MatchParticipantRunes");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.MatchParticipantTimelineSnapshot", b =>
+                {
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ParticipantId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MinuteMark")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Cs")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("DerivedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("FrameTimestampMs")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Gold")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Level")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("QualityFlags")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Xp")
+                        .HasColumnType("integer");
+
+                    b.HasKey("MatchId", "ParticipantId", "MinuteMark");
+
+                    b.HasIndex("MinuteMark", "MatchId");
+
+                    b.ToTable("MatchParticipantTimelineSnapshots");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.MatchTimelineFetchState", b =>
+                {
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("LastAttemptAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LastSuccessAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("RetryCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SourcePatch")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("MatchId");
+
+                    b.HasIndex("LastAttemptAtUtc");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("MatchTimelineFetchStates");
                 });
 
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Static.ItemVersion", b =>
@@ -841,6 +1034,28 @@ namespace Transcendence.Service.Migrations
                     b.Navigation("Summoner");
                 });
 
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Account.SummonerIngestionCursor", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.LoL.Account.Summoner", "Summoner")
+                        .WithMany("IngestionCursors")
+                        .HasForeignKey("SummonerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Summoner");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.MatchBan", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.LoL.Match.Match", "Match")
+                        .WithMany("Bans")
+                        .HasForeignKey("MatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Match");
+                });
+
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.MatchParticipant", b =>
                 {
                     b.HasOne("Transcendence.Data.Models.LoL.Match.Match", "Match")
@@ -898,6 +1113,28 @@ namespace Transcendence.Service.Migrations
                     b.Navigation("RuneVersion");
                 });
 
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.MatchParticipantTimelineSnapshot", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.LoL.Match.Match", "Match")
+                        .WithMany("TimelineSnapshots")
+                        .HasForeignKey("MatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Match");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.MatchTimelineFetchState", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.LoL.Match.Match", "Match")
+                        .WithOne("TimelineFetchState")
+                        .HasForeignKey("Transcendence.Data.Models.LoL.Match.MatchTimelineFetchState", "MatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Match");
+                });
+
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Static.ItemVersion", b =>
                 {
                     b.HasOne("Transcendence.Data.Models.LoL.Static.Patch", "Patch")
@@ -940,6 +1177,8 @@ namespace Transcendence.Service.Migrations
                 {
                     b.Navigation("HistoricalRanks");
 
+                    b.Navigation("IngestionCursors");
+
                     b.Navigation("MatchParticipants");
 
                     b.Navigation("Ranks");
@@ -947,7 +1186,13 @@ namespace Transcendence.Service.Migrations
 
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.Match", b =>
                 {
+                    b.Navigation("Bans");
+
                     b.Navigation("Participants");
+
+                    b.Navigation("TimelineFetchState");
+
+                    b.Navigation("TimelineSnapshots");
                 });
 
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.MatchParticipant", b =>

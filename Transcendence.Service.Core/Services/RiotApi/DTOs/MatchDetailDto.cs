@@ -7,6 +7,7 @@ public record MatchDetailDto(
     string MatchId,
     long MatchDate,
     int Duration,
+    int QueueId,
     string QueueType,
     string? Patch,
     IReadOnlyList<ParticipantDetailDto> Participants

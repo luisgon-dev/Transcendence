@@ -15,8 +15,8 @@ export default function RegisterPage() {
   );
 
   return (
-    <div className="grid place-items-center">
-      <Card className="w-full max-w-md p-6">
+    <div className="grid place-items-center py-8">
+      <Card className="w-full max-w-md rounded-3xl p-6">
         <h1 className="font-[var(--font-sora)] text-2xl font-semibold">
           Register
         </h1>
@@ -45,7 +45,7 @@ export default function RegisterPage() {
             <span className="text-xs text-muted">Minimum 8 characters.</span>
           </label>
 
-          {state.error ? <p className="text-sm text-red-300">{state.error}</p> : null}
+          {state.error ? <p className="text-sm text-danger">{state.error}</p> : null}
 
           <Button type="submit" disabled={pending}>
             {pending ? "Creating..." : "Create account"}

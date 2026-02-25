@@ -14,7 +14,9 @@ function navLinkClass(pathname: string | null, prefix: string): string {
   const isActive = pathname?.startsWith(prefix) ?? false;
   return cn(
     "text-sm transition",
-    isActive ? "text-fg font-medium" : "text-fg/70 hover:text-fg"
+    isActive
+      ? "text-fg font-semibold"
+      : "text-fg/70 hover:text-fg"
   );
 }
 
@@ -29,12 +31,12 @@ export function SiteHeaderClient({
   const compact = pathname ? COMPACT_HEADER_PATHS.has(pathname) : false;
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/55 bg-bg/80 backdrop-blur-md">
-      <div className="mx-auto grid max-w-6xl gap-3 px-4 py-3">
+    <header className="sticky top-0 z-40 border-b border-border/60 bg-bg/75 backdrop-blur-xl">
+      <div className="mx-auto grid w-full max-w-[1440px] gap-3 px-4 py-3 md:px-6">
         <div className="flex items-center gap-3">
-          <Link href="/" className="group inline-flex shrink-0 items-center gap-2">
-            <BrandMark className="h-8 w-8" />
-            <span className="text-sm font-semibold tracking-wide text-fg">
+          <Link href="/" className="group inline-flex shrink-0 items-center gap-2.5">
+            <BrandMark className="h-9 w-9 transition group-hover:scale-105" />
+            <span className="font-[var(--font-sora)] text-sm font-semibold tracking-wide text-fg">
               Transcendence
             </span>
           </Link>
@@ -46,9 +48,15 @@ export function SiteHeaderClient({
             <Link href="/champions" className={navLinkClass(pathname, "/champions")}>
               Champions
             </Link>
+            <Link href="/matchups" className={navLinkClass(pathname, "/matchups")}>
+              Matchups
+            </Link>
+            <Link href="/pro-builds" className={navLinkClass(pathname, "/pro-builds")}>
+              Pro Builds
+            </Link>
             {patch ? (
-              <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-                {patch}
+              <span className="rounded-full border border-primary/35 bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary">
+                Patch {patch}
               </span>
             ) : null}
             <Link
@@ -56,7 +64,7 @@ export function SiteHeaderClient({
               target="_blank"
               rel="noreferrer"
               aria-label="Open Transcendence GitHub repository"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border/70 bg-surface/40 text-fg/75 transition hover:bg-white/10 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border/70 bg-surface/50 text-fg/75 transition hover:scale-105 hover:bg-white/10 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             >
               <GitHubIcon className="h-4 w-4" />
             </Link>
@@ -75,16 +83,22 @@ export function SiteHeaderClient({
           </div>
         </div>
 
-        <nav className="flex items-center gap-4 border-t border-border/40 pt-2 md:hidden">
+        <nav className="flex flex-wrap items-center gap-3 border-t border-border/40 pt-2 md:hidden">
           <Link href="/tierlist" className={navLinkClass(pathname, "/tierlist")}>
             Tier List
           </Link>
           <Link href="/champions" className={navLinkClass(pathname, "/champions")}>
             Champions
           </Link>
+          <Link href="/matchups" className={navLinkClass(pathname, "/matchups")}>
+            Matchups
+          </Link>
+          <Link href="/pro-builds" className={navLinkClass(pathname, "/pro-builds")}>
+            Pro
+          </Link>
           {patch ? (
             <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-              {patch}
+              Patch {patch}
             </span>
           ) : null}
           <Link

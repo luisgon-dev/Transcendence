@@ -18,6 +18,8 @@ public class Match
     public long MatchDate { get; set; }
     public int Duration { get; set; }
     public string? Patch { get; set; }
+    public int QueueId { get; set; }
+    public string? QueueFamily { get; set; }
     public string? QueueType { get; set; }
     public string? EndOfGameResult { get; set; }
 
@@ -30,4 +32,8 @@ public class Match
 
     public List<Summoner> Summoners { get; set; } = [];
     public ICollection<MatchParticipant> Participants { get; set; } = new List<MatchParticipant>();
+    public ICollection<MatchBan> Bans { get; set; } = new List<MatchBan>();
+    public ICollection<MatchParticipantTimelineSnapshot> TimelineSnapshots { get; set; } =
+        new List<MatchParticipantTimelineSnapshot>();
+    public MatchTimelineFetchState? TimelineFetchState { get; set; }
 }

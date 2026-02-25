@@ -13,14 +13,14 @@ export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const base =
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:pointer-events-none disabled:opacity-60";
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl font-medium transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:pointer-events-none disabled:opacity-60";
 
 const variants: Record<Variant, string> = {
   primary:
-    "bg-gradient-to-br from-primary to-primary-2 text-black shadow-glass hover:brightness-110 active:brightness-95",
+    "bg-gradient-to-r from-primary to-primary-2 text-slate-950 shadow-glow hover:scale-[1.01] hover:brightness-110 active:scale-[0.99]",
   outline:
-    "border border-border/80 bg-surface/40 text-fg shadow-glass hover:bg-surface/60 active:bg-surface/40",
-  ghost: "text-fg/90 hover:bg-white/5 active:bg-white/10"
+    "border border-border/80 bg-surface/45 text-fg shadow-glass hover:border-border-strong hover:bg-surface/70 active:bg-surface/45",
+  ghost: "text-fg/90 hover:bg-white/10 active:bg-white/5"
 };
 
 const sizes: Record<Size, string> = {

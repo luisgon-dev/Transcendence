@@ -1,17 +1,17 @@
 import type { Metadata } from "next";
-import { Manrope, Sora } from "next/font/google";
+import { Plus_Jakarta_Sans, Space_Grotesk } from "next/font/google";
 
 import "@/app/globals.css";
 import { GlobalCommandPalette } from "@/components/GlobalCommandPalette";
 import { SiteHeader } from "@/components/SiteHeader";
 
-const sora = Sora({
+const headingFont = Space_Grotesk({
   subsets: ["latin"],
   variable: "--font-sora",
   display: "swap"
 });
 
-const manrope = Manrope({
+const bodyFont = Plus_Jakarta_Sans({
   subsets: ["latin"],
   variable: "--font-manrope",
   display: "swap"
@@ -32,10 +32,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${sora.variable} ${manrope.variable}`}>
-      <body className="noise bg-aurora font-[var(--font-manrope)]">
+    <html lang="en" className={`${headingFont.variable} ${bodyFont.variable}`}>
+      <body className="bg-aurora font-[var(--font-manrope)] antialiased">
         <SiteHeader />
-        <main className="mx-auto max-w-6xl px-4 py-10">{children}</main>
+        <main className="mx-auto w-full max-w-[1440px] px-4 py-8 md:px-6 md:py-10">
+          {children}
+        </main>
         <GlobalCommandPalette />
       </body>
     </html>

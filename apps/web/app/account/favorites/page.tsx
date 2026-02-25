@@ -79,7 +79,7 @@ export default function FavoritesPage() {
 
   return (
     <div className="grid gap-6">
-      <header className="grid gap-2">
+      <header className="glass-card mesh-highlight grid gap-2 rounded-3xl p-5">
         <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
           Favorites
         </h1>
@@ -90,7 +90,7 @@ export default function FavoritesPage() {
 
       {error ? (
         <Card className="p-5">
-          <p className="text-sm text-red-300">{error}</p>
+          <p className="text-sm text-danger">{error}</p>
           <div className="mt-3 flex items-center gap-3">
             <Link
               className="text-sm text-primary hover:underline"

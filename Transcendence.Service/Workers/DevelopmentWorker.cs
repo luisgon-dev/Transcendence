@@ -17,6 +17,8 @@ public class DevelopmentWorker(
     private const string RefreshChampionAnalyticsJobId = "refresh-champion-analytics";
     private const string RefreshChampionAnalyticsAdaptiveJobId = "refresh-champion-analytics-adaptive";
     private const string ChampionAnalyticsIngestionJobId = "champion-analytics-ingestion";
+    private const string SummonerMaintenanceJobId = "summoner-maintenance";
+    private const string MatchTimelineBackfillJobId = "match-timeline-backfill";
     private const string RuneSelectionIntegrityBackfillJobId = "rune-selection-integrity-backfill";
     private const string PollLiveGamesJobId = "poll-live-games";
 
@@ -78,6 +80,32 @@ public class DevelopmentWorker(
             RecurringJob.RemoveIfExists(ChampionAnalyticsIngestionJobId);
         }
 
+        if (schedule.EnableSummonerMaintenance)
+        {
+            RecurringJob.AddOrUpdate<SummonerMaintenanceJob>(
+                SummonerMaintenanceJobId,
+                job => job.ExecuteAsync(CancellationToken.None),
+                schedule.SummonerMaintenanceCron,
+                new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+        }
+        else
+        {
+            RecurringJob.RemoveIfExists(SummonerMaintenanceJobId);
+        }
+
+        if (schedule.EnableMatchTimelineBackfill)
+        {
+            RecurringJob.AddOrUpdate<MatchTimelineBackfillJob>(
+                MatchTimelineBackfillJobId,
+                job => job.ExecuteAsync(CancellationToken.None),
+                schedule.MatchTimelineBackfillCron,
+                new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+        }
+        else
+        {
+            RecurringJob.RemoveIfExists(MatchTimelineBackfillJobId);
+        }
+
         if (schedule.EnableRuneSelectionIntegrityBackfill)
         {
             RecurringJob.AddOrUpdate<RuneSelectionIntegrityBackfillJob>(
@@ -110,6 +138,8 @@ public class DevelopmentWorker(
         RecurringJob.RemoveIfExists(RefreshChampionAnalyticsJobId);
         RecurringJob.RemoveIfExists(RefreshChampionAnalyticsAdaptiveJobId);
         RecurringJob.RemoveIfExists(ChampionAnalyticsIngestionJobId);
+        RecurringJob.RemoveIfExists(SummonerMaintenanceJobId);
+        RecurringJob.RemoveIfExists(MatchTimelineBackfillJobId);
         RecurringJob.RemoveIfExists(RuneSelectionIntegrityBackfillJobId);
         RecurringJob.RemoveIfExists(PollLiveGamesJobId);
         logger.LogInformation("Cleared all jobs");

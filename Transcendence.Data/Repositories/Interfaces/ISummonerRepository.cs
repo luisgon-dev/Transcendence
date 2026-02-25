@@ -17,5 +17,5 @@ public interface ISummonerRepository
         Func<IQueryable<Summoner>, IQueryable<Summoner>>? includes = null,
         CancellationToken cancellationToken = default);
 
-    Task AddOrUpdateSummonerAsync(Summoner summoner, CancellationToken cancellationToken);
+    Task<Summoner> AddOrUpdateSummonerAsync(Summoner summoner, CancellationToken cancellationToken);
 }

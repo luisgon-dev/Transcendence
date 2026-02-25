@@ -567,25 +567,33 @@ namespace Transcendence.Service.Migrations
 
                     b.PrimitiveCollection<List<int>>("BuildsFrom")
                         .IsRequired()
-                        .HasColumnType("integer[]");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer[]")
+                        .HasDefaultValueSql("'{}'::integer[]");
 
                     b.PrimitiveCollection<List<int>>("BuildsInto")
                         .IsRequired()
-                        .HasColumnType("integer[]");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer[]")
+                        .HasDefaultValueSql("'{}'::integer[]");
 
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<bool>("InStore")
-                        .HasColumnType("boolean");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<int>("PriceTotal")
-                        .HasColumnType("integer");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.PrimitiveCollection<List<string>>("Tags")
                         .IsRequired()

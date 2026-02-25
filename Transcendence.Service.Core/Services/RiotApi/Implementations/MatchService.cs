@@ -212,7 +212,7 @@ public class MatchService(
             if (!existingSummoners.TryGetValue(p.Puuid, out var summoner))
             {
                 // Create a minimal stub from match participant data instead of calling Riot API
-                summoner = new Data.Models.LoL.Account.Summoner
+                var stubSummoner = new Data.Models.LoL.Account.Summoner
                 {
                     Id = Guid.NewGuid(),
                     Puuid = p.Puuid,
@@ -228,7 +228,8 @@ public class MatchService(
                     UpdatedAt = DateTime.MinValue,
                     Ranks = []
                 };
-                context.Summoners.Add(summoner);
+
+                summoner = await summonerRepository.AddOrUpdateSummonerAsync(stubSummoner, cancellationToken);
                 existingSummoners[p.Puuid] = summoner;
             }
 
@@ -495,8 +496,8 @@ public class MatchService(
             try
             {
                 var summoner = await summonerService.GetSummonerByPuuidAsync(puuid, platformRoute, cancellationToken);
-                await summonerRepository.AddOrUpdateSummonerAsync(summoner, cancellationToken);
-                existingSummoners[puuid] = summoner;
+                var persistedSummoner = await summonerRepository.AddOrUpdateSummonerAsync(summoner, cancellationToken);
+                existingSummoners[puuid] = persistedSummoner;
             }
             catch (OperationCanceledException)
             {

@@ -13,8 +13,8 @@ using Transcendence.Data;
 namespace Transcendence.Service.Migrations
 {
     [DbContext(typeof(TranscendenceContext))]
-    [Migration("20260220191344_ItemVersionBuildMetadata")]
-    partial class ItemVersionBuildMetadata
+    [Migration("20260224234804_PerformanceHardeningNormalizationV2")]
+    partial class PerformanceHardeningNormalizationV2
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -513,21 +513,19 @@ namespace Transcendence.Service.Migrations
                     b.Property<Guid>("MatchParticipantId")
                         .HasColumnType("uuid");
 
-                    b.Property<int>("SlotIndex")
+                    b.Property<int>("ItemId")
                         .HasColumnType("integer");
 
-                    b.Property<int>("ItemId")
+                    b.Property<int>("SlotIndex")
                         .HasColumnType("integer");
 
                     b.Property<string>("PatchVersion")
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.HasKey("MatchParticipantId", "SlotIndex");
+                    b.HasKey("MatchParticipantId", "ItemId", "SlotIndex");
 
                     b.HasIndex("ItemId", "PatchVersion");
-
-                    b.HasIndex("MatchParticipantId", "ItemId");
 
                     b.ToTable("MatchParticipantItems");
                 });
@@ -570,25 +568,33 @@ namespace Transcendence.Service.Migrations
 
                     b.PrimitiveCollection<List<int>>("BuildsFrom")
                         .IsRequired()
-                        .HasColumnType("integer[]");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer[]")
+                        .HasDefaultValueSql("'{}'::integer[]");
 
                     b.PrimitiveCollection<List<int>>("BuildsInto")
                         .IsRequired()
-                        .HasColumnType("integer[]");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer[]")
+                        .HasDefaultValueSql("'{}'::integer[]");
 
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<bool>("InStore")
-                        .HasColumnType("boolean");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<int>("PriceTotal")
-                        .HasColumnType("integer");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.PrimitiveCollection<List<string>>("Tags")
                         .IsRequired()

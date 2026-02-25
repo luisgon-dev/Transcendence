@@ -13,8 +13,8 @@ using Transcendence.Data;
 namespace Transcendence.Service.Migrations
 {
     [DbContext(typeof(TranscendenceContext))]
-    [Migration("20260220183719_PerformanceHardeningNormalization")]
-    partial class PerformanceHardeningNormalization
+    [Migration("20260225001036_MatchParticipantItemSlotKeyEnforcement")]
+    partial class MatchParticipantItemSlotKeyEnforcement
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -568,13 +568,35 @@ namespace Transcendence.Service.Migrations
                     b.Property<string>("PatchVersion")
                         .HasColumnType("text");
 
+                    b.PrimitiveCollection<List<int>>("BuildsFrom")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer[]")
+                        .HasDefaultValueSql("'{}'::integer[]");
+
+                    b.PrimitiveCollection<List<int>>("BuildsInto")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer[]")
+                        .HasDefaultValueSql("'{}'::integer[]");
+
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<bool>("InStore")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int>("PriceTotal")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.PrimitiveCollection<List<string>>("Tags")
                         .IsRequired()

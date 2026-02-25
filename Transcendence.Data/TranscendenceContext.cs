@@ -198,6 +198,15 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
                 iv.PatchVersion
             });
 
+            entity.Property(iv => iv.BuildsFrom)
+                .HasDefaultValueSql("'{}'::integer[]");
+            entity.Property(iv => iv.BuildsInto)
+                .HasDefaultValueSql("'{}'::integer[]");
+            entity.Property(iv => iv.InStore)
+                .HasDefaultValue(true);
+            entity.Property(iv => iv.PriceTotal)
+                .HasDefaultValue(0);
+
             entity.HasOne(iv => iv.Patch)
                 .WithMany()
                 .HasForeignKey(iv => iv.PatchVersion);
@@ -253,6 +262,7 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
                 });
 
             entity.HasIndex(mpi => new { mpi.MatchParticipantId, mpi.ItemId });
+
         });
 
         // Match participant item/rune filters align with match/participant filters

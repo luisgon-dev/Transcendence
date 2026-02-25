@@ -55,7 +55,7 @@ public class SummonersController(
             // Keep these sequential because statsService shares a scoped DbContext, which is not thread-safe.
             var overview = await statsService.GetSummonerOverviewAsync(summoner.Id, 20, ct);
             var champions = await statsService.GetChampionStatsAsync(summoner.Id, 5, ct);
-            var recent = await statsService.GetRecentMatchesAsync(summoner.Id, 1, 10, ct);
+            var recent = await statsService.GetRecentMatchesAsync(summoner.Id, 1, 10, null, null, ct);
 
             // Calculate StatsAge from most recent match
             var mostRecentMatchDate = recent.Items.Count > 0 ? recent.Items[0].MatchDate : (long?)null;

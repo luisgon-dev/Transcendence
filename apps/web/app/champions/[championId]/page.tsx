@@ -1,7 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
+import type { components } from "@transcendence/api-client/schema";
 
 import { BackendErrorCard } from "@/components/BackendErrorCard";
+import { ChampionPortrait } from "@/components/ChampionPortrait";
 import { FilterBar } from "@/components/FilterBar";
 import { ItemBuildDisplay } from "@/components/ItemBuildDisplay";
 import { RuneSetupDisplay } from "@/components/RuneSetupDisplay";
@@ -21,61 +23,10 @@ import {
 } from "@/lib/staticData";
 import { deriveTier } from "@/lib/tierlist";
 
-type ChampionWinRateDto = {
-  championId: number;
-  role: string;
-  rankTier: string;
-  games: number;
-  wins: number;
-  winRate: number;
-  pickRate: number;
-  patch: string;
-};
-
-type ChampionWinRateSummary = {
-  championId: number;
-  patch: string;
-  byRoleTier: ChampionWinRateDto[];
-};
-
-type ChampionBuildDto = {
-  items: number[];
-  coreItems: number[];
-  situationalItems: number[];
-  primaryStyleId: number;
-  subStyleId: number;
-  primaryRunes: number[];
-  subRunes: number[];
-  statShards: number[];
-  games: number;
-  winRate: number;
-};
-
-type ChampionBuildsResponse = {
-  championId: number;
-  role: string;
-  rankTier: string;
-  patch: string;
-  globalCoreItems: number[];
-  builds: ChampionBuildDto[];
-};
-
-type MatchupEntryDto = {
-  opponentChampionId: number;
-  games: number;
-  wins: number;
-  losses: number;
-  winRate: number;
-};
-
-type ChampionMatchupsResponse = {
-  championId: number;
-  role: string;
-  rankTier?: string | null;
-  patch: string;
-  counters: MatchupEntryDto[];
-  favorableMatchups: MatchupEntryDto[];
-};
+type ChampionWinRateDto = components["schemas"]["ChampionWinRateDto"];
+type ChampionWinRateSummary = components["schemas"]["ChampionWinRateSummary"];
+type ChampionBuildsResponse = components["schemas"]["ChampionBuildsResponse"];
+type ChampionMatchupsResponse = components["schemas"]["ChampionMatchupsResponse"];
 
 const ROLES = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"] as const;
 const RANK_TIERS = [
@@ -108,9 +59,10 @@ function normalizeRankTier(rankTier: string | undefined) {
 function pickMostPlayedRole(summary: ChampionWinRateSummary | null) {
   if (!summary?.byRoleTier?.length) return null;
   const gamesByRole = new Map<string, number>();
-  for (const entry of summary.byRoleTier) {
+  for (const entry of summary.byRoleTier ?? []) {
+    if (!entry.role) continue;
     const role = entry.role.toUpperCase();
-    gamesByRole.set(role, (gamesByRole.get(role) ?? 0) + entry.games);
+    gamesByRole.set(role, (gamesByRole.get(role) ?? 0) + (entry.games ?? 0));
   }
   const sorted = [...gamesByRole.entries()].sort((a, b) => b[1] - a[1]);
   if (sorted.length === 0) return null;
@@ -123,11 +75,11 @@ function pickBestEntry(
   role: string
 ): ChampionWinRateDto | null {
   if (!winrates?.byRoleTier?.length) return null;
-  const forRole = winrates.byRoleTier.filter(
-    (e) => e.role.toUpperCase() === role.toUpperCase()
+  const forRole = (winrates.byRoleTier ?? []).filter(
+    (e) => (e.role ?? "").toUpperCase() === role.toUpperCase()
   );
   if (forRole.length === 0) return null;
-  return forRole.reduce((best, cur) => (cur.games > best.games ? cur : best));
+  return forRole.reduce((best, cur) => ((cur.games ?? 0) > (best.games ?? 0) ? cur : best));
 }
 
 export default async function ChampionDetailPage({
@@ -169,7 +121,11 @@ export default async function ChampionDetailPage({
   const winrates = winRes.ok ? winRes.body! : null;
   let fallbackWinrates: ChampionWinRateSummary | null = null;
 
-  if (!explicitRole && normalizedRankTier && (!winrates || winrates.byRoleTier.length === 0)) {
+  if (
+    !explicitRole &&
+    normalizedRankTier &&
+    (!winrates || (winrates.byRoleTier?.length ?? 0) === 0)
+  ) {
     const fallbackWinRes = await fetchBackendJson<ChampionWinRateSummary>(
       `${getBackendBaseUrl()}/api/analytics/champions/${championId}/winrates`,
       { next: { revalidate: 60 * 60 } }
@@ -244,13 +200,29 @@ export default async function ChampionDetailPage({
 
   const builds = buildRes.ok ? buildRes.body! : null;
   const matchups = matchupRes.ok ? matchupRes.body! : null;
+  const winrateRows = winrates?.byRoleTier ?? [];
+  const buildRows = builds?.builds ?? [];
+  const globalCoreItems = builds?.globalCoreItems ?? [];
+  const counters = matchups?.counters ?? [];
+  const favorableMatchups = matchups?.favorableMatchups ?? [];
   const heroEntry = pickBestEntry(winrates, effectiveRole);
   const heroTier = deriveTier(heroEntry?.winRate);
+  const splashUrl = `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${champSlug}_0.jpg`;
 
   return (
     <div className="grid gap-6">
       {/* ── Champion Header ── */}
-      <header className="flex flex-col gap-4">
+      <header className="glass-card mesh-highlight relative overflow-hidden rounded-[2rem] p-5 md:p-6">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-30"
+          style={{
+            backgroundImage: `linear-gradient(to right, hsl(var(--bg)) 20%, hsl(var(--bg) / 0.82) 45%, transparent 100%), url(${splashUrl})`,
+            backgroundSize: "cover",
+            backgroundPosition: "top right"
+          }}
+        />
+
+        <div className="relative flex flex-col gap-4">
         <div className="flex items-center gap-4">
           <Image
             src={championIconUrl(version, champSlug)}
@@ -266,9 +238,33 @@ export default async function ChampionDetailPage({
               </h1>
               <TierBadge tier={heroTier} size="md" />
             </div>
+            {champ?.title ? <p className="mt-0.5 text-xs uppercase tracking-wide text-muted">{champ.title}</p> : null}
             <p className="mt-0.5 text-sm text-muted">
               {roleDisplayLabel(effectiveRole)} &middot; {normalizedRankTier ?? "All Ranks"}
             </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+              <span className="rounded-full border border-border/60 bg-white/[0.03] px-2 py-1 text-fg/80">
+                Rank # — (coming soon)
+              </span>
+              <span
+                className="rounded-full border border-border/60 bg-white/[0.03] px-2 py-1 text-muted"
+                title="Ban rate is not exposed by the current analytics API."
+              >
+                Ban Rate —
+              </span>
+              <Link
+                href={`/matchups/${championId}?role=${encodeURIComponent(effectiveRole)}${normalizedRankTier ? `&rankTier=${encodeURIComponent(normalizedRankTier)}` : ""}`}
+                className="rounded-full border border-primary/40 bg-primary/10 px-2 py-1 text-primary hover:bg-primary/20"
+              >
+                Matchup Analysis
+              </Link>
+              <Link
+                href={`/pro-builds/${championId}`}
+                className="rounded-full border border-primary/40 bg-primary/10 px-2 py-1 text-primary hover:bg-primary/20"
+              >
+                Pro Builds Preview
+              </Link>
+            </div>
           </div>
         </div>
 
@@ -288,6 +284,7 @@ export default async function ChampionDetailPage({
           baseHref={`/champions/${championId}`}
           patch={winrates?.patch ?? builds?.patch}
         />
+        </div>
       </header>
 
       {/* ── Win Rates Table ── */}
@@ -297,7 +294,7 @@ export default async function ChampionDetailPage({
         </h2>
         {!winrates ? (
           <p className="mt-2 text-sm text-fg/75">No win rate data available.</p>
-        ) : winrates.byRoleTier.length === 0 ? (
+        ) : winrateRows.length === 0 ? (
           <p className="mt-2 text-sm text-fg/75">No samples for this patch.</p>
         ) : (
           <div className="mt-4 overflow-x-auto">
@@ -312,18 +309,18 @@ export default async function ChampionDetailPage({
                 </tr>
               </thead>
               <tbody>
-                {winrates.byRoleTier
+                {winrateRows
                   .slice()
-                  .sort((a, b) => b.games - a.games)
+                  .sort((a, b) => (b.games ?? 0) - (a.games ?? 0))
                   .map((w) => (
                     <tr
-                      key={`${w.role}-${w.rankTier}`}
+                      key={`${w.role ?? "ALL"}-${w.rankTier ?? "all"}`}
                       className="border-t border-border/30 transition hover:bg-white/[0.03]"
                     >
                       <td className="py-2.5 pr-4 font-medium">
-                        {roleDisplayLabel(w.role)}
+                        {roleDisplayLabel(w.role ?? "ALL")}
                       </td>
-                      <td className="py-2.5 pr-4 text-muted">{w.rankTier}</td>
+                      <td className="py-2.5 pr-4 text-muted">{w.rankTier ?? "ALL"}</td>
                       <td className="py-2.5 pr-4 text-right">
                         <WinRateText value={w.winRate} decimals={2} />
                       </td>
@@ -344,28 +341,28 @@ export default async function ChampionDetailPage({
       {/* ── Builds + Matchups ── */}
       <div className="grid gap-6 md:grid-cols-2">
         {/* ── Builds ── */}
-        <Card className="p-5">
+        <Card className="p-5" id="builds">
           <h2 className="font-[var(--font-sora)] text-lg font-semibold">
             Builds
           </h2>
           {!builds ? (
             <p className="mt-2 text-sm text-fg/75">No build data available.</p>
-          ) : builds.builds.length === 0 ? (
+          ) : buildRows.length === 0 ? (
             <p className="mt-2 text-sm text-fg/75">No samples for this role.</p>
           ) : (
             <div className="mt-4 grid gap-4">
               {/* Global Core Items */}
-              {builds.globalCoreItems.length > 0 ? (
+              {globalCoreItems.length > 0 ? (
                 <ItemBuildDisplay
                   allItems={[]}
-                  coreItems={builds.globalCoreItems}
+                  coreItems={globalCoreItems}
                   situationalItems={[]}
                   version={itemVersion}
                   items={items}
                 />
               ) : null}
 
-              {builds.builds.map((b, idx) => (
+              {buildRows.map((b, idx) => (
                 <div
                   key={idx}
                   className="rounded-lg border border-border/60 bg-white/[0.02] p-3"
@@ -382,9 +379,9 @@ export default async function ChampionDetailPage({
                   {/* Items: Core + Situational */}
                   <div className="mt-3">
                     <ItemBuildDisplay
-                      allItems={b.items}
-                      coreItems={b.coreItems}
-                      situationalItems={b.situationalItems}
+                      allItems={b.items ?? []}
+                      coreItems={b.coreItems ?? []}
+                      situationalItems={b.situationalItems ?? []}
                       version={itemVersion}
                       items={items}
                       winRate={b.winRate}
@@ -396,8 +393,8 @@ export default async function ChampionDetailPage({
                   <div className="mt-3 border-t border-border/40 pt-3">
                     <p className="mb-2 text-xs font-medium text-muted">Runes</p>
                     <RuneSetupDisplay
-                      primaryStyleId={b.primaryStyleId}
-                      subStyleId={b.subStyleId}
+                      primaryStyleId={b.primaryStyleId ?? 0}
+                      subStyleId={b.subStyleId ?? 0}
                       primarySelections={b.primaryRunes ?? []}
                       subSelections={b.subRunes ?? []}
                       statShards={b.statShards ?? []}
@@ -431,35 +428,30 @@ export default async function ChampionDetailPage({
                 <p className="mt-0.5 text-xs text-muted">
                   These champions counter {champName}
                 </p>
-                {matchups.counters.length === 0 ? (
+                {counters.length === 0 ? (
                   <p className="mt-2 text-xs text-muted">No strong counters found.</p>
                 ) : (
                   <ul className="mt-2 grid gap-1.5 text-sm">
-                    {matchups.counters.map((m) => {
-                      const opp = champions[String(m.opponentChampionId)];
+                    {counters.map((m, idx) => {
+                      const opponentChampionId = m.opponentChampionId ?? 0;
+                      const opp = champions[String(opponentChampionId)];
                       return (
                         <li
-                          key={m.opponentChampionId}
+                          key={`${opponentChampionId}-${idx}`}
                           className="flex items-center justify-between rounded-md border border-border/50 bg-white/[0.02] px-3 py-2"
                         >
                           <Link
-                            href={`/champions/${m.opponentChampionId}`}
+                            href={`/champions/${opponentChampionId}`}
                             className="flex min-w-0 items-center gap-2 hover:underline"
                           >
-                            {opp?.id ? (
-                              <Image
-                                src={championIconUrl(version, opp.id)}
-                                alt={opp?.name ?? `Champion ${m.opponentChampionId}`}
-                                width={24}
-                                height={24}
-                                className="rounded-md"
-                              />
-                            ) : (
-                              <div className="h-6 w-6 rounded-md border border-border/60 bg-black/25" />
-                            )}
-                            <span className="truncate font-medium">
-                              {opp?.name ?? `Champion ${m.opponentChampionId}`}
-                            </span>
+                            <ChampionPortrait
+                              championSlug={opp?.id ?? "Unknown"}
+                              championName={opp?.name ?? `Champion ${opponentChampionId}`}
+                              version={version}
+                              size={24}
+                              showName
+                              className="min-w-0"
+                            />
                           </Link>
                           <span className="shrink-0 text-xs">
                             <WinRateText
@@ -483,37 +475,32 @@ export default async function ChampionDetailPage({
                 <p className="mt-0.5 text-xs text-muted">
                   {champName} performs well against these champions
                 </p>
-                {matchups.favorableMatchups.length === 0 ? (
+                {favorableMatchups.length === 0 ? (
                   <p className="mt-2 text-xs text-muted">
                     No strong favorable matchups found.
                   </p>
                 ) : (
                   <ul className="mt-2 grid gap-1.5 text-sm">
-                    {matchups.favorableMatchups.map((m) => {
-                      const opp = champions[String(m.opponentChampionId)];
+                    {favorableMatchups.map((m, idx) => {
+                      const opponentChampionId = m.opponentChampionId ?? 0;
+                      const opp = champions[String(opponentChampionId)];
                       return (
                         <li
-                          key={m.opponentChampionId}
+                          key={`${opponentChampionId}-${idx}`}
                           className="flex items-center justify-between rounded-md border border-border/50 bg-white/[0.02] px-3 py-2"
                         >
                           <Link
-                            href={`/champions/${m.opponentChampionId}`}
+                            href={`/champions/${opponentChampionId}`}
                             className="flex min-w-0 items-center gap-2 hover:underline"
                           >
-                            {opp?.id ? (
-                              <Image
-                                src={championIconUrl(version, opp.id)}
-                                alt={opp?.name ?? `Champion ${m.opponentChampionId}`}
-                                width={24}
-                                height={24}
-                                className="rounded-md"
-                              />
-                            ) : (
-                              <div className="h-6 w-6 rounded-md border border-border/60 bg-black/25" />
-                            )}
-                            <span className="truncate font-medium">
-                              {opp?.name ?? `Champion ${m.opponentChampionId}`}
-                            </span>
+                            <ChampionPortrait
+                              championSlug={opp?.id ?? "Unknown"}
+                              championName={opp?.name ?? `Champion ${opponentChampionId}`}
+                              version={version}
+                              size={24}
+                              showName
+                              className="min-w-0"
+                            />
                           </Link>
                           <span className="shrink-0 text-xs">
                             <WinRateText

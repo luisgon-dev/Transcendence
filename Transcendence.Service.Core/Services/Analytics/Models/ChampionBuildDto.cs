@@ -28,6 +28,43 @@ public record ChampionBuildsResponse(
     List<ChampionBuildDto> Builds // Top 3 builds ordered by (games * winRate)
 );
 
+public record ProMatchBuildDto(
+    string MatchId,
+    string? PlayerName,
+    string? TeamName,
+    bool Win,
+    long PlayedAt,
+    List<int> Items,
+    int PrimaryStyleId,
+    int SubStyleId,
+    List<int> PrimaryRunes,
+    List<int> SubRunes,
+    List<int> StatShards
+);
+
+public record ProPlayerSummaryDto(
+    string? PlayerName,
+    string? TeamName,
+    int Games,
+    double WinRate
+);
+
+public record CommonProBuildDto(
+    List<int> Items,
+    int Games,
+    double WinRate
+);
+
+public record ChampionProBuildsResponse(
+    int ChampionId,
+    string Patch,
+    string Role,
+    string Region,
+    List<ProMatchBuildDto> RecentProMatches,
+    List<ProPlayerSummaryDto> TopPlayers,
+    List<CommonProBuildDto> CommonBuilds
+);
+
 /// <summary>
 /// Skill order for ability maxing (requires Timeline API - placeholder for future).
 /// NOTE: Phase 3 does not fetch Timeline data. Skill order will be null until

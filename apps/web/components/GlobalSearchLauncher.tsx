@@ -21,8 +21,8 @@ export function GlobalSearchLauncher({
       variant="outline"
       size={size}
       className={cn(
-        "group relative justify-between overflow-hidden border-border/70 text-fg/85",
-        "before:absolute before:inset-0 before:bg-gradient-to-r before:from-white/[0.05] before:to-transparent before:opacity-0 before:transition before:duration-300 hover:before:opacity-100",
+        "group relative justify-between overflow-hidden border-border/70 bg-surface/65 text-fg/85",
+        "before:absolute before:inset-0 before:bg-gradient-to-r before:from-primary/10 before:to-transparent before:opacity-0 before:transition before:duration-300 hover:before:opacity-100",
         className
       )}
       onClick={() => window.dispatchEvent(new Event(GLOBAL_SEARCH_OPEN_EVENT))}
@@ -33,7 +33,7 @@ export function GlobalSearchLauncher({
         </span>
         <span>{isHeader ? "Search" : "Search champions, summoners, or tier list"}</span>
       </span>
-      <span className="relative z-10 rounded-md border border-border/70 bg-black/20 px-2 py-0.5 text-xs text-muted">
+      <span className="relative z-10 rounded-md border border-border/70 bg-surface/80 px-2 py-0.5 text-xs text-muted">
         Ctrl/Cmd+K
       </span>
     </Button>

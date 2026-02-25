@@ -85,6 +85,7 @@ public class ChampionAnalyticsIngestionJob(
             isStale,
             minQueued,
             maxQueued);
+        var includeAllModes = successfulMatchesForPatch >= targetMatchesForPatch;
 
         var candidates = await GetCandidatesAsync(maxCandidates, jobOptions, ct);
         if (candidates.Count == 0)
@@ -127,7 +128,7 @@ public class ChampionAnalyticsIngestionJob(
             {
                 backgroundJobClient.Enqueue<ISummonerRefreshJob>(job =>
                     job.RefreshForAnalytics(candidate.GameName, candidate.TagLine, platform, lockKey,
-                        patchStartEpoch, currentPatch, CancellationToken.None));
+                        patchStartEpoch, currentPatch, includeAllModes, CancellationToken.None));
                 queued++;
             }
             catch (Exception)
@@ -138,13 +139,14 @@ public class ChampionAnalyticsIngestionJob(
         }
 
         logger.LogInformation(
-            "Champion analytics ingestion queued {QueuedCount}/{QueuedTarget} low-priority summoner refresh jobs (patch {Patch}, matches {MatchCount}/{TargetMatchCount}, stale {IsStale}, latestFetchAt {LatestFetchAt}).",
+            "Champion analytics ingestion queued {QueuedCount}/{QueuedTarget} low-priority summoner refresh jobs (patch {Patch}, matches {MatchCount}/{TargetMatchCount}, stale {IsStale}, includeAllModes {IncludeAllModes}, latestFetchAt {LatestFetchAt}).",
             queued,
             queuedTarget,
             currentPatch,
             successfulMatchesForPatch,
             targetMatchesForPatch,
             isStale,
+            includeAllModes,
             latestFetchAtUtc);
     }
 

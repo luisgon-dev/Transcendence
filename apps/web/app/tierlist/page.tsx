@@ -97,7 +97,7 @@ export default async function TierListPage({
 
   return (
     <div className="grid gap-6">
-      <header className="flex flex-col gap-3">
+      <header className="glass-card mesh-highlight flex flex-col gap-3 rounded-3xl p-5 md:p-6">
         <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
           Tier List
         </h1>
@@ -141,7 +141,7 @@ export default async function TierListPage({
 
               {/* Champion rows */}
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px] text-left text-sm">
+                <table className="w-full min-w-[940px] text-left text-sm">
                   <thead className="text-[11px] uppercase tracking-wider text-muted">
                     <tr className="border-b border-border/30">
                       <th className="w-10 px-4 py-2 text-center">#</th>
@@ -150,8 +150,11 @@ export default async function TierListPage({
                       <th className="px-3 py-2">Role</th>
                       <th className="px-3 py-2 text-right">Win Rate</th>
                       <th className="px-3 py-2 text-right">Pick Rate</th>
+                      <th className="px-3 py-2 text-right">Ban Rate</th>
                       <th className="px-3 py-2 text-right">Games</th>
                       <th className="w-16 px-3 py-2 text-center">Trend</th>
+                      <th className="px-3 py-2 text-right">Counters</th>
+                      <th className="px-3 py-2 text-right">Build</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -160,12 +163,10 @@ export default async function TierListPage({
                       const champ = champions[String(e.championId)];
                       const champName = champ?.name ?? `Champion ${e.championId}`;
                       const champSlug = champ?.id ?? "Unknown";
+                      const championSubtitle = champ?.title ?? "";
 
                       return (
-                        <tr
-                          key={`${tier}-${e.role}-${e.championId}`}
-                          className="border-b border-border/20 transition hover:bg-white/[0.03]"
-                        >
+                        <tr key={`${tier}-${e.role}-${e.championId}`} className="border-b border-border/20 transition hover:bg-white/[0.06]">
                           <td className="px-4 py-2.5 text-center text-xs text-muted">
                             {rank}
                           </td>
@@ -184,8 +185,15 @@ export default async function TierListPage({
                                 height={28}
                                 className="rounded-md"
                               />
-                              <span className="truncate font-medium text-fg">
-                                {champName}
+                              <span className="min-w-0">
+                                <span className="block truncate font-medium text-fg">
+                                  {champName}
+                                </span>
+                                {championSubtitle ? (
+                                  <span className="block truncate text-[11px] text-muted">
+                                    {championSubtitle}
+                                  </span>
+                                ) : null}
                               </span>
                             </Link>
                           </td>
@@ -197,6 +205,9 @@ export default async function TierListPage({
                           </td>
                           <td className="px-3 py-2.5 text-right text-fg/70">
                             {formatPercent(e.pickRate, { decimals: 1 })}
+                          </td>
+                          <td className="px-3 py-2.5 text-right text-muted" title="Ban rate is not exposed by the current analytics API yet.">
+                            —
                           </td>
                           <td className="px-3 py-2.5 text-right text-fg/70">
                             {formatGames(e.games)}
@@ -212,6 +223,22 @@ export default async function TierListPage({
                             >
                               {movementIcon(e.movement)}
                             </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-right">
+                            <Link
+                              href={`/matchups/${e.championId}?role=${encodeURIComponent(e.role)}${rankTierValue ? `&rankTier=${encodeURIComponent(rankTierValue)}` : ""}`}
+                              className="text-xs text-primary hover:underline"
+                            >
+                              Analyze
+                            </Link>
+                          </td>
+                          <td className="px-3 py-2.5 text-right">
+                            <Link
+                              href={`/champions/${e.championId}?role=${encodeURIComponent(e.role)}${rankTierValue ? `&rankTier=${encodeURIComponent(rankTierValue)}` : ""}#builds`}
+                              className="text-xs text-primary hover:underline"
+                            >
+                              Open
+                            </Link>
                           </td>
                         </tr>
                       );

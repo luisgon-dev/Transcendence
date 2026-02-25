@@ -43,6 +43,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<RefreshChampionAnalyticsJob>();
         services.AddScoped<LiveGamePollingJob>();
         services.AddScoped<RuneSelectionIntegrityBackfillJob>();
+        services.AddScoped<MatchTimelineBackfillJob>();
+        services.AddScoped<SummonerMaintenanceJob>();
 
         return services;
     }
@@ -69,6 +71,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<UpdateStaticDataJob>();
         services.AddScoped<RetryFailedMatchesJob>();
         services.AddScoped<ISummonerRefreshJob, SummonerRefreshJob>();
+        services.AddScoped<MatchTimelineIngestionJob>();
         return services;
     }
 }

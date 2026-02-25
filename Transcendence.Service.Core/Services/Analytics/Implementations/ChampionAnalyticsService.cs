@@ -16,6 +16,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
     private const string WinRateCacheKeyPrefix = "analytics:champion:winrates:";
     private const string TierListCacheKeyPrefix = "analytics:tierlist:";
     private const string BuildsCacheKeyPrefix = "analytics:builds:";
+    private const string ProBuildsCacheKeyPrefix = "analytics:probuilds:";
     private const string MatchupsCacheKeyPrefix = "analytics:matchups:";
     private const string AnalyticsCacheTag = "analytics";
 
@@ -145,6 +146,38 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             cancellationToken: ct);
     }
 
+    public async Task<ChampionProBuildsResponse> GetProBuildsAsync(
+        int championId,
+        string? region,
+        string? role,
+        string? patch,
+        CancellationToken ct)
+    {
+        var resolvedPatch = string.IsNullOrWhiteSpace(patch)
+            ? await GetCurrentPatchOrFallbackAsync(ct)
+            : patch.Trim();
+        var normalizedRole = string.IsNullOrWhiteSpace(role) ? "ALL" : role.Trim().ToUpperInvariant();
+        var normalizedRegion = string.IsNullOrWhiteSpace(region) ? "ALL" : region.Trim().ToUpperInvariant();
+
+        if (string.IsNullOrWhiteSpace(resolvedPatch))
+            return new ChampionProBuildsResponse(championId, "Unknown", normalizedRole, normalizedRegion, [], [], []);
+
+        var cacheKey = $"{ProBuildsCacheKeyPrefix}{championId}:{normalizedRegion}:{normalizedRole}:{resolvedPatch}";
+        var tags = new[] { AnalyticsCacheTag, $"patch:{resolvedPatch}", "probuilds" };
+
+        return await _cache.GetOrCreateAsync(
+            cacheKey,
+            async cancel => await _computeService.ComputeProBuildsAsync(
+                championId,
+                normalizedRegion,
+                normalizedRole,
+                resolvedPatch,
+                cancel),
+            AnalyticsCacheOptions,
+            tags,
+            cancellationToken: ct);
+    }
+
     public async Task<ChampionMatchupsResponse> GetMatchupsAsync(
         int championId,
         string role,
@@ -164,7 +197,8 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
                 RankTier = normalizedTier,
                 Patch = "Unknown",
                 Counters = [],
-                FavorableMatchups = []
+                FavorableMatchups = [],
+                AllMatchups = []
             };
         }
 

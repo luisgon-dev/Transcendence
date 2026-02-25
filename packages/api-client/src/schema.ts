@@ -736,6 +736,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/analytics/champions/{championId}/pro-builds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    region?: string;
+                    role?: string;
+                    patch?: string;
+                };
+                header?: never;
+                path: {
+                    championId: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ChampionProBuildsResponse"];
+                        "application/json": components["schemas"]["ChampionProBuildsResponse"];
+                        "text/json": components["schemas"]["ChampionProBuildsResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/analytics/champions/{championId}/matchups": {
         parameters: {
             query?: never;
@@ -930,6 +984,273 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/pro-summoners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    isActive?: boolean;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TrackedProSummonerDto"][];
+                        "application/json": components["schemas"]["TrackedProSummonerDto"][];
+                        "text/json": components["schemas"]["TrackedProSummonerDto"][];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpsertTrackedProSummonerRequest"];
+                    "text/json": components["schemas"]["UpsertTrackedProSummonerRequest"];
+                    "application/*+json": components["schemas"]["UpsertTrackedProSummonerRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TrackedProSummonerDto"];
+                        "application/json": components["schemas"]["TrackedProSummonerDto"];
+                        "text/json": components["schemas"]["TrackedProSummonerDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/pro-summoners/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TrackedProSummonerDto"];
+                        "application/json": components["schemas"]["TrackedProSummonerDto"];
+                        "text/json": components["schemas"]["TrackedProSummonerDto"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpsertTrackedProSummonerRequest"];
+                    "text/json": components["schemas"]["UpsertTrackedProSummonerRequest"];
+                    "application/*+json": components["schemas"]["UpsertTrackedProSummonerRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TrackedProSummonerDto"];
+                        "application/json": components["schemas"]["TrackedProSummonerDto"];
+                        "text/json": components["schemas"]["TrackedProSummonerDto"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
         options?: never;
         head?: never;
         patch?: never;
@@ -1271,6 +1592,8 @@ export interface paths {
                 query?: {
                     page?: number;
                     pageSize?: number;
+                    queueFamily?: string;
+                    queueIds?: number[];
                 };
                 header?: never;
                 path: {
@@ -1735,6 +2058,23 @@ export interface components {
             patch?: string | null;
             counters?: components["schemas"]["MatchupEntryDto"][] | null;
             favorableMatchups?: components["schemas"]["MatchupEntryDto"][] | null;
+            allMatchups?: components["schemas"]["MatchupEntryDto"][] | null;
+            /** Format: double */
+            timelineCoverageRatio?: number | null;
+            /** Format: int32 */
+            timelineSampleSize?: number;
+            /** Format: date-time */
+            timelineDataFreshnessUtc?: string | null;
+        };
+        ChampionProBuildsResponse: {
+            /** Format: int32 */
+            championId?: number;
+            patch?: string | null;
+            role?: string | null;
+            region?: string | null;
+            recentProMatches?: components["schemas"]["ProMatchBuildDto"][] | null;
+            topPlayers?: components["schemas"]["ProPlayerSummaryDto"][] | null;
+            commonBuilds?: components["schemas"]["CommonProBuildDto"][] | null;
         };
         ChampionStatDto: {
             /** Format: int32 */
@@ -1775,6 +2115,12 @@ export interface components {
             winRate?: number;
             /** Format: double */
             pickRate?: number;
+            /** Format: double */
+            banRate?: number;
+            /** Format: int32 */
+            roleRank?: number | null;
+            /** Format: int32 */
+            rolePopulation?: number | null;
             patch?: string | null;
         };
         ChampionWinRateSummary: {
@@ -1782,6 +2128,13 @@ export interface components {
             championId?: number;
             patch?: string | null;
             byRoleTier?: components["schemas"]["ChampionWinRateDto"][] | null;
+        };
+        CommonProBuildDto: {
+            items?: number[] | null;
+            /** Format: int32 */
+            games?: number;
+            /** Format: double */
+            winRate?: number;
         };
         DataAgeMetadata: {
             /** Format: date-time */
@@ -1864,6 +2217,8 @@ export interface components {
             matchDate?: number;
             /** Format: int32 */
             duration?: number;
+            /** Format: int32 */
+            queueId?: number;
             queueType?: string | null;
             patch?: string | null;
             participants?: components["schemas"]["ParticipantDetailDto"][] | null;
@@ -1896,6 +2251,10 @@ export interface components {
             losses?: number;
             /** Format: double */
             winRate?: number;
+            /** Format: double */
+            avgGoldDiffAt15?: number | null;
+            /** Format: double */
+            avgXpDiffAt15?: number | null;
         };
         ParticipantDetailDto: {
             puuid?: string | null;
@@ -1943,6 +2302,30 @@ export interface components {
         };
         PasswordResetRequest: {
             email?: string | null;
+        };
+        ProMatchBuildDto: {
+            matchId?: string | null;
+            playerName?: string | null;
+            teamName?: string | null;
+            win?: boolean;
+            /** Format: int64 */
+            playedAt?: number;
+            items?: number[] | null;
+            /** Format: int32 */
+            primaryStyleId?: number;
+            /** Format: int32 */
+            subStyleId?: number;
+            primaryRunes?: number[] | null;
+            subRunes?: number[] | null;
+            statShards?: number[] | null;
+        };
+        ProPlayerSummaryDto: {
+            playerName?: string | null;
+            teamName?: string | null;
+            /** Format: int32 */
+            games?: number;
+            /** Format: double */
+            winRate?: number;
         };
         ProblemDetails: {
             type?: string | null;
@@ -2027,6 +2410,8 @@ export interface components {
             matchDate?: number;
             /** Format: int32 */
             durationSeconds?: number;
+            /** Format: int32 */
+            queueId?: number;
             queueType?: string | null;
             win?: boolean;
             /** Format: int32 */
@@ -2183,6 +2568,8 @@ export interface components {
             winRate?: number;
             /** Format: double */
             pickRate?: number;
+            /** Format: double */
+            banRate?: number;
             /** Format: int32 */
             games?: number;
             movement?: components["schemas"]["TierMovement"];
@@ -2199,10 +2586,38 @@ export interface components {
          * @enum {integer}
          */
         TierMovement: 0 | 1 | 2 | 3;
+        TrackedProSummonerDto: {
+            /** Format: uuid */
+            id?: string;
+            puuid?: string | null;
+            platformRegion?: string | null;
+            gameName?: string | null;
+            tagLine?: string | null;
+            proName?: string | null;
+            teamName?: string | null;
+            isPro?: boolean;
+            isHighEloOtp?: boolean;
+            isActive?: boolean;
+            /** Format: date-time */
+            createdAtUtc?: string;
+            /** Format: date-time */
+            updatedAtUtc?: string;
+        };
         UpdateUserPreferencesRequest: {
             preferredRegion?: string | null;
             preferredRankTier?: string | null;
             livePollingEnabled?: boolean;
+        };
+        UpsertTrackedProSummonerRequest: {
+            puuid?: string | null;
+            platformRegion?: string | null;
+            gameName?: string | null;
+            tagLine?: string | null;
+            proName?: string | null;
+            teamName?: string | null;
+            isPro?: boolean;
+            isHighEloOtp?: boolean;
+            isActive?: boolean;
         };
         UserPreferencesDto: {
             preferredRegion?: string | null;

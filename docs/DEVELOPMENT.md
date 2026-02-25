@@ -99,6 +99,10 @@ corepack pnpm web:lint
 corepack pnpm web:build
 ```
 
+Current `web:test` scope:
+- Utility/unit tests in `apps/web/lib/*.test.ts`
+- Runs in Vitest `node` environment (no DOM harness needed for current test suite)
+
 ## OpenAPI + TypeScript Client
 
 Source of truth: `openapi/transcendence.v1.json`
@@ -119,6 +123,8 @@ When `Transcendence.Service` runs in the `Development` environment, the `Develop
 - `refresh-champion-analytics`
 - `refresh-champion-analytics-adaptive` (when enabled)
 - `champion-analytics-ingestion` (when enabled)
+- `summoner-maintenance` (when enabled)
+- `match-timeline-backfill` (when enabled)
 
 It explicitly removes non-analytics recurring jobs (`detect-patch`, `retry-failed-matches`, `poll-live-games`) from the scheduler to keep local runs focused on analytics behavior.
 
@@ -144,12 +150,61 @@ When `Transcendence.Service` runs in non-development environments, the `Producti
 - `FallbackToTrackedSummoners`
 - `PauseWhenApiPriorityRefreshActive`
 
+This job determines when low-priority refresh can widen beyond ranked-only ingestion during early patch windows.
+
+### Match Ingestion Windows
+
+`Jobs:MatchIngestion` supports:
+
+- `MatchIdsPageSize`
+- `HighPriorityRankedPages`
+- `HighPriorityAllModesHeadPages`
+- `HighPriorityNonRankedBackfillMaxPages`
+- `LowPriorityRankedPages`
+- `LowPriorityAllModesHeadPages`
+- `LowPriorityNonRankedBackfillMaxPages`
+
+High-priority user refresh always executes ranked head sync first, then all-mode sync/backfill. Low-priority ingestion preserves ranked-first behavior and can be preempted by active API-priority refresh demand.
+
+Non-ranked backfill ordering is tracked per summoner with `SummonerIngestionCursors` to ensure monotonic progress across repeated low-priority runs.
+
+### Summoner Maintenance
+
+`Jobs:SummonerMaintenance` supports:
+
+- `MaxCandidateSummonersPerRun`
+- `MaxRefreshJobsToQueuePerRun`
+- `DataStaleAfterMinutes`
+- `RefreshLockMinutes`
+- `PrioritizeFavoriteSummoners`
+- `PauseWhenApiPriorityRefreshActive`
+
+This recurring job refreshes stale summoners in low-priority mode when no active high-priority API refresh lock exists.
+
+### Timeline Ingestion
+
+`Jobs:TimelineIngestion` supports:
+
+- `Enabled`
+- `MinuteMark`
+- `MaxRetryAttempts`
+- `BackfillBatchSize`
+- `BackfillMaxEnqueuesPerRun`
+- `BackfillCurrentPatchOnly`
+- `PauseWhenApiPriorityRefreshActive`
+
+Timeline ingestion persists ranked @15 snapshots and fetch status for matchup depth analytics.
+
 ### Rune Selection Integrity Backfill
 
 `Jobs:Schedule` now supports:
 
 - `RuneSelectionIntegrityBackfillCron`
 - `EnableRuneSelectionIntegrityBackfill`
+- `SummonerMaintenanceCron`
+- `EnableSummonerMaintenance`
+- `MatchTimelineBackfillCron`
+- `EnableMatchTimelineBackfill`
 
 `Jobs:RuneSelectionIntegrityBackfill` supports:
 

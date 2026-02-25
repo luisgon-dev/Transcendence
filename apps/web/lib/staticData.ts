@@ -1,6 +1,6 @@
 export type ChampionMap = {
   version: string;
-  champions: Record<string, { id: string; name: string }>;
+  champions: Record<string, { id: string; name: string; title?: string }>;
 };
 
 type DDragonVersions = string[];
@@ -8,6 +8,7 @@ type DDragonVersions = string[];
 type DDragonChampion = {
   id: string;
   name: string;
+  title?: string;
   key: string;
 };
 
@@ -91,7 +92,7 @@ export async function fetchChampionMap(): Promise<ChampionMap> {
   const champions: ChampionMap["champions"] = {};
 
   for (const champ of Object.values(champList.data)) {
-    champions[champ.key] = { id: champ.id, name: champ.name };
+    champions[champ.key] = { id: champ.id, name: champ.name, title: champ.title };
   }
 
   return { version, champions };

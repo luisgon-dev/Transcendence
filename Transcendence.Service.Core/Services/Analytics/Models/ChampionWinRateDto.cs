@@ -11,6 +11,9 @@ public record ChampionWinRateDto(
     int Wins,
     double WinRate,     // 0.0 to 1.0
     double PickRate,    // 0.0 to 1.0
+    double BanRate,     // 0.0 to 1.0
+    int? RoleRank,
+    int? RolePopulation,
     string Patch
 );
 

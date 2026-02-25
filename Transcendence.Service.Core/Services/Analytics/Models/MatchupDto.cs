@@ -29,6 +29,16 @@ public record MatchupEntryDto
     /// Win rate against this opponent (0.0 - 1.0).
     /// </summary>
     public double WinRate { get; init; }
+
+    /// <summary>
+    /// Average gold difference at 15 minutes from timeline frame-derived snapshots.
+    /// </summary>
+    public double? AvgGoldDiffAt15 { get; init; }
+
+    /// <summary>
+    /// Average XP difference at 15 minutes from timeline frame-derived snapshots.
+    /// </summary>
+    public double? AvgXpDiffAt15 { get; init; }
 }
 
 /// <summary>
@@ -65,4 +75,24 @@ public record ChampionMatchupsResponse
     /// Top 5 favorable matchups (champions you beat, win rate &gt; 52%).
     /// </summary>
     public List<MatchupEntryDto> FavorableMatchups { get; init; } = new();
+
+    /// <summary>
+    /// Full matchup universe sorted by games descending by default.
+    /// </summary>
+    public List<MatchupEntryDto> AllMatchups { get; init; } = new();
+
+    /// <summary>
+    /// Ratio of matchup games where both lane opponents had timeline @15 snapshots.
+    /// </summary>
+    public double? TimelineCoverageRatio { get; init; }
+
+    /// <summary>
+    /// Count of matchup games contributing to timeline-derived @15 deltas.
+    /// </summary>
+    public int TimelineSampleSize { get; init; }
+
+    /// <summary>
+    /// Latest timestamp when contributing timeline rows were derived.
+    /// </summary>
+    public DateTime? TimelineDataFreshnessUtc { get; init; }
 }

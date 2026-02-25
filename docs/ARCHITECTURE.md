@@ -16,7 +16,7 @@ Transcendence is a backend + web monorepo:
 ### `Transcendence.Service`
 - Background host that runs Hangfire server and recurring jobs
 - Executes ingestion/refresh/analytics workflows
-- In `Development`, the worker narrows recurring schedules to analytics-oriented jobs only (analytics refresh + ingestion)
+- In `Development`, the worker narrows recurring schedules to analytics-oriented jobs only (analytics refresh/ingestion, summoner maintenance, timeline backfill)
 - In `Production`, startup can bootstrap analytics immediately by running patch detection first, then queuing ingestion + adaptive analytics refresh (controlled by `Jobs:Schedule:RunPatchDetectionOnStartup`)
 
 ### `Transcendence.Service.Core`
@@ -35,6 +35,13 @@ Transcendence is a backend + web monorepo:
   - `/api/session/*` for browser auth/session interactions
   - `/api/trn/*` as proxy endpoints to backend (adds auth headers server-side)
 - Tailwind styling, SSR-first pages where possible
+- Frontend analysis routes:
+  - `/tierlist`
+  - `/champions/*`
+  - `/matchups/*`
+  - `/pro-builds/*`
+  - `/summoners/[region]/[riotId]` is the unified profile + match history surface
+    - Legacy `/summoners/[region]/[riotId]/matches*` routes redirect into this unified view using query state (`page`, `queue`, `expandMatchId`)
 
 ### `packages/api-client`
 - Generated OpenAPI TypeScript client artifacts
@@ -51,6 +58,10 @@ Transcendence is a backend + web monorepo:
 3. Worker performs refresh:
    - Calls Riot APIs
    - Upserts summoner/rank/match records
+   - High-priority refresh sequence:
+     - ranked solo/duo head sync first
+     - all-mode head sync second
+     - non-ranked backfill pagination (bounded by safety caps)
 4. Client polls GET endpoint until data is ready (200 OK)
 
 ### Refresh Priority Orchestration
@@ -71,10 +82,42 @@ Transcendence is a backend + web monorepo:
 ### Continuous Analytics Ingestion
 
 - Champion analytics ingestion now runs continuously in low-priority mode to keep growing current-patch data.
+- Summoner maintenance runs continuously in low-priority mode to refresh stale summoners when no high-priority API refresh demand is active.
 - Ingestion scales queued refresh count based on:
   - current patch coverage vs target
   - staleness of recent successful fetches
 - Even when patch data is healthy, ingestion can queue a small minimum number of low-priority refreshes per run.
+- Early patch mode remains ranked solo/duo-first until coverage targets are satisfied; once healthy, low-priority refresh can widen to all supported history queues.
+- Low-priority refresh windows stop early whenever active high-priority API refresh demand is detected.
+
+### Match Queue Scope and History
+
+- Match rows now persist queue metadata (`queueId`, `queueFamily`, `queueType` label).
+- Summoner history API defaults to all stored history and supports queue filtering by family or explicit queue IDs.
+- Ranked analytics compute paths explicitly filter to ranked solo/duo queue data, so non-ranked ingestion does not contaminate tier/winrate/build/matchup analytics.
+- Non-ranked backfill now advances with per-summoner ingestion cursors (`SummonerIngestionCursors`) so progress remains monotonic and does not skip older windows during preemption/failures.
+- Match records now persist team bans (`MatchBans`) to support champion `banRate` surfaces.
+
+### Timeline-Derived @15 Metrics
+
+- Ranked solo/duo matches are eligible for timeline ingestion.
+- Timeline ingestion persists:
+  - fetch state (`MatchTimelineFetchStates`)
+  - per-participant snapshots at minute mark 15 (`MatchParticipantTimelineSnapshots`)
+- Matchup `avgGoldDiffAt15` and `avgXpDiffAt15` are computed from timeline snapshots (not end-of-game proxies).
+- Matchup responses also expose timeline quality metadata:
+  - `timelineCoverageRatio`
+  - `timelineSampleSize`
+  - `timelineDataFreshnessUtc`
+
+### Pro Roster and Pro Builds
+
+- Tracked pro/high-ELO roster entries are stored in `TrackedProSummoners` with optional pro/team metadata.
+- Admin API (`/api/admin/pro-summoners`) allows manual curation and updates.
+- Champion pro-build analytics joins tracked roster participants against ranked solo/duo match data for:
+  - recent pro matches
+  - top players
+  - common builds
 
 ### Rune Hierarchy Pipeline
 
@@ -113,3 +156,9 @@ Backend uses a layered approach (see source and README):
 - HybridCache (L1 in-memory + L2 Redis) for derived stats/analytics
 - Persistent storage (PostgreSQL) for canonical match/summoner data
 - Summoner stats cache entries are tagged per summoner (`summoner-stats:{summonerId}`) so refresh jobs can invalidate all related stats keys in one operation
+
+## Frontend Overhaul Follow-Ups
+
+Backend work needed to fully unlock new frontend pages is tracked here:
+
+- `docs/BACKEND_TASKS_FRONTEND_OVERHAUL.md`

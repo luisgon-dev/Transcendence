@@ -21,6 +21,7 @@ public class Summoner
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;  // When summoner profile was last fetched
     public List<Match.Match> Matches { get; } = [];
     public ICollection<MatchParticipant> MatchParticipants { get; } = [];
+    public ICollection<SummonerIngestionCursor> IngestionCursors { get; } = [];
     public ICollection<Rank> Ranks { get; set; } = new List<Rank>();
     public ICollection<HistoricalRank> HistoricalRanks { get; set; } = new List<HistoricalRank>();
 }

@@ -13,11 +13,14 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 export default async function SummonerProfilePage({
-  params
+  params,
+  searchParams
 }: {
   params: Promise<{ region: string; riotId: string }>;
+  searchParams?: Promise<{ page?: string; queue?: string; expandMatchId?: string }>;
 }) {
   const resolvedParams = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const verbosity = getErrorVerbosity();
   const ctx = verbosity === "verbose" ? await getSafeRequestContext() : null;
   const pageRequestId =
@@ -145,6 +148,9 @@ export default async function SummonerProfilePage({
       tagLine={riotId.tagLine}
       initialStatus={initialStatus}
       initialBody={initialBody}
+      initialPage={Math.max(1, Number(resolvedSearchParams?.page ?? "1") || 1)}
+      initialQueue={resolvedSearchParams?.queue ?? "ALL"}
+      initialExpandMatchId={resolvedSearchParams?.expandMatchId ?? null}
     />
   );
 }

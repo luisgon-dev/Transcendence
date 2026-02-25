@@ -41,6 +41,15 @@ This is a navigational summary; the OpenAPI spec is the source of truth.
 - `GET /api/summoners/{summonerId}/matches/recent`
 - `GET /api/summoners/{summonerId}/matches/{matchId}`
 
+Default stats scope:
+- `stats/overview`, `stats/champions`, and `stats/roles` are computed from ranked solo/duo sample data.
+- `matches/recent` defaults to full stored history and can be filtered by queue metadata.
+
+`GET /api/summoners/{summonerId}/matches/recent` supports:
+- `page` / `pageSize`
+- `queueFamily` (optional; e.g. `ALL`, `RANKED_SOLO_DUO`, `RANKED_FLEX`, `NORMAL_SR`, `ARAM`, `CLASH`, `ARENA`, `ROTATING`, `BOT`, `CUSTOM`, `OTHER`)
+- `queueIds` (optional repeated query param for explicit queue IDs)
+
 When `Api:ReturnProblemDetailsOnStatsFailure=true`, stats endpoints return `500` ProblemDetails on backend errors instead of empty fallback payloads.
 
 #### Rune Payloads
@@ -51,8 +60,10 @@ When `Api:ReturnProblemDetailsOnStatsFailure=true`, stats endpoints return `500`
     - `primarySelections` (4)
     - `subSelections` (2)
     - `statShards` (3)
+  - `queueId` is included alongside `queueType`
 - `GET /api/summoners/{summonerId}/matches/{matchId}`
   - Participant runes continue to return full selections (`primarySelections`, `subSelections`, `statShards`)
+  - Match payload includes `queueId` and `queueType`
 
 #### Refresh Priority Behavior
 
@@ -65,6 +76,7 @@ When `Api:ReturnProblemDetailsOnStatsFailure=true`, stats endpoints return `500`
 - `GET /api/analytics/tierlist`
 - `GET /api/analytics/champions/{championId}/winrates`
 - `GET /api/analytics/champions/{championId}/builds`
+- `GET /api/analytics/champions/{championId}/pro-builds`
 - `GET /api/analytics/champions/{championId}/matchups`
 - `POST /api/analytics/cache/invalidate` (`AppOnly`)
 
@@ -73,6 +85,25 @@ When `Api:ReturnProblemDetailsOnStatsFailure=true`, stats endpoints return `500`
 - `primaryRunes` (4), `subRunes` (2), `statShards` (3)
 - Build item lists include only completed, build-impact items (no components, trinkets, wards, or consumables).
 - If patch item metadata is temporarily incomplete, the service uses a legacy exclusion fallback so builds still render while metadata refresh catches up.
+
+Additional analytics fields:
+- Tier list and champion winrate surfaces now include `banRate` (ranked solo queue denominator).
+- Champion winrate rows include `roleRank` and `rolePopulation` when resolvable.
+- Matchups include timeline-derived `avgGoldDiffAt15`, optional `avgXpDiffAt15`, and `allMatchups[]` in addition to `counters[]` and `favorableMatchups[]`.
+- Matchup responses include timeline quality metadata:
+  - `timelineCoverageRatio`
+  - `timelineSampleSize`
+  - `timelineDataFreshnessUtc`
+
+`GET /api/analytics/champions/{championId}/pro-builds` supports optional filters:
+- `region` (`KR|EUW|NA|CN|ALL`)
+- `role`
+- `patch`
+
+Response includes:
+- `recentProMatches[]`
+- `topPlayers[]`
+- `commonBuilds[]`
 
 ### Live Game (`AppOnly`)
 
@@ -90,6 +121,14 @@ When `Api:ReturnProblemDetailsOnStatsFailure=true`, stats endpoints return `500`
 - `POST /api/auth/refresh`
 - `GET /api/auth/me` (`AppOrUser`)
 - Key management endpoints (`AppOnly`)
+
+### Pro Roster Admin (`AppOnly`)
+
+- `GET /api/admin/pro-summoners`
+- `POST /api/admin/pro-summoners`
+- `GET /api/admin/pro-summoners/{id}`
+- `PUT /api/admin/pro-summoners/{id}`
+- `DELETE /api/admin/pro-summoners/{id}`
 
 ### User Preferences (`UserOnly`)
 

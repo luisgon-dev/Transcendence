@@ -263,6 +263,63 @@ function isCurrentProfilePlayer(
   );
 }
 
+const ROLE_ALIGNMENT_ORDER = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"] as const;
+
+type MatchParticipant = MatchDetail["participants"][number];
+type AlignedParticipantRow = {
+  roleKey: string;
+  blue: MatchParticipant | null;
+  red: MatchParticipant | null;
+};
+
+function normalizeRoleKey(role?: string | null): string {
+  const normalized = (role ?? "").trim().toUpperCase();
+  if (!normalized || normalized === "UNKNOWN" || normalized === "NONE") return "UNKNOWN";
+  if (normalized === "SUPPORT") return "UTILITY";
+  return normalized;
+}
+
+function buildAlignedParticipantRows(participants: MatchParticipant[]): AlignedParticipantRow[] {
+  const blueByRole = new Map<string, MatchParticipant[]>();
+  const redByRole = new Map<string, MatchParticipant[]>();
+
+  for (const participant of participants) {
+    const roleKey = normalizeRoleKey(participant.teamPosition);
+    const target = participant.teamId === 100 ? blueByRole : participant.teamId === 200 ? redByRole : null;
+    if (!target) continue;
+
+    const bucket = target.get(roleKey) ?? [];
+    bucket.push(participant);
+    target.set(roleKey, bucket);
+  }
+
+  const roleKeys = new Set<string>([...blueByRole.keys(), ...redByRole.keys()]);
+  const orderedRoles = ROLE_ALIGNMENT_ORDER.filter((role) => roleKeys.has(role));
+  const extraRoles = [...roleKeys]
+    .filter((role) => !ROLE_ALIGNMENT_ORDER.includes(role as (typeof ROLE_ALIGNMENT_ORDER)[number]) && role !== "UNKNOWN")
+    .sort((a, b) => a.localeCompare(b));
+
+  const finalRoleOrder = [...orderedRoles, ...extraRoles];
+  if (roleKeys.has("UNKNOWN")) finalRoleOrder.push("UNKNOWN");
+
+  const rows: AlignedParticipantRow[] = [];
+  for (const roleKey of finalRoleOrder) {
+    const bluePlayers = blueByRole.get(roleKey) ?? [];
+    const redPlayers = redByRole.get(roleKey) ?? [];
+    const maxRows = Math.max(bluePlayers.length, redPlayers.length, 1);
+
+    for (let i = 0; i < maxRows; i += 1) {
+      rows.push({
+        roleKey,
+        blue: bluePlayers[i] ?? null,
+        red: redPlayers[i] ?? null
+      });
+    }
+  }
+
+  return rows;
+}
+
 export function SummonerProfileClient({
   region,
   gameName,
@@ -698,188 +755,207 @@ export function SummonerProfileClient({
                             <div className="mt-3 border-t border-border/35 pt-3">
                               {detailBusy[m.matchId] ? <Skeleton className="h-12 w-full" /> : null}
                               {!detailBusy[m.matchId] && !d ? <p className="text-sm text-muted">Detailed rows are unavailable for this match.</p> : null}
-                              {d ? (
-                                <div className="grid gap-3 xl:grid-cols-2">
-                                  {[100, 200].map((teamId) => {
-                                    const isBlueTeam = teamId === 100;
-                                    return (
-                                    <div key={`${m.matchId}-${teamId}`} className="rounded-xl border border-border/50 bg-surface/40 p-2">
-                                      <p className={`mb-2 text-xs font-semibold ${isBlueTeam ? "text-sky-300" : "text-rose-300"}`}>
-                                        {isBlueTeam ? "Blue Team" : "Red Team"}
-                                      </p>
-                                      <div className="grid gap-1.5">
-                                        {d.participants
-                                          .filter((p) => p.teamId === teamId)
-                                          .map((p, idx) => {
-                                            const isCurrent = isCurrentProfilePlayer(p, gameName, tagLine);
-                                            const champMeta = championStatic?.champions[String(p.championId)];
-                                            const itemIds = (p.items ?? []).slice(0, 7);
-                                            const cs = (p.totalMinionsKilled + p.neutralMinionsKilled).toLocaleString();
-                                            const runeRowKey = `${m.matchId}:${teamId}:${idx}`;
-                                            const runesExpanded = expandedRunes[runeRowKey] === true;
-                                            const orderedPrimarySelections = (p.runes?.primarySelections ?? [])
-                                              .slice()
-                                              .sort((a, b) => {
-                                                const aSort =
-                                                  runeStatic?.runeSortById[String(a)] ?? Number.MAX_SAFE_INTEGER;
-                                                const bSort =
-                                                  runeStatic?.runeSortById[String(b)] ?? Number.MAX_SAFE_INTEGER;
-                                                return aSort - bSort;
-                                              });
-                                            const hasRunes =
-                                              (p.runes?.primarySelections?.length ?? 0) > 0 ||
-                                              (p.runes?.subSelections?.length ?? 0) > 0 ||
-                                              (p.runes?.statShards?.length ?? 0) > 0;
-                                            const primaryRuneId = orderedPrimarySelections[0] ?? 0;
-                                            const primaryRuneMeta = runeStatic?.runeById[String(primaryRuneId)];
-                                            const canExpandRunes = Boolean(runeStatic && hasRunes);
+                              {d
+                                ? (() => {
+                                    const alignedRows = buildAlignedParticipantRows(d.participants ?? []);
 
-                                            return (
-                                              <div
-                                                key={`${teamId}-${idx}`}
-                                                className={`rounded-lg border px-2 py-1.5 ${
-                                                  isCurrent
-                                                    ? "border-primary/50 bg-primary/10"
-                                                    : "border-border/25 bg-surface/30"
-                                                }`}
-                                              >
-                                                <div className="grid items-center gap-1.5 sm:grid-cols-[minmax(0,1fr)_auto]">
-                                                  <div className="flex items-center gap-2">
-                                                    {champMeta && championStatic ? (
-                                                      <Image
-                                                        src={championIconUrl(championStatic.version, champMeta.id)}
-                                                        alt={champMeta.name}
-                                                        width={28}
-                                                        height={28}
-                                                        className="rounded-md border border-border/50"
-                                                      />
-                                                    ) : (
-                                                      <div className="h-7 w-7 rounded-md border border-border/50 bg-surface/70" />
-                                                    )}
-                                                    <div className="min-w-0 flex-1">
-                                                      <p className="truncate text-xs font-medium text-fg/95">
-                                                        {participantDisplayName(p.gameName, p.tagLine)}
-                                                        {p.teamPosition
-                                                          ? ` · ${roleDisplayLabel(p.teamPosition)}`
-                                                          : ""}
-                                                      </p>
-                                                      <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
-                                                        <span>{p.kills}/{p.deaths}/{p.assists}</span>
-                                                        <span>{cs} CS</span>
-                                                        <span>{p.goldEarned.toLocaleString()}g</span>
-                                                        <span>{p.totalDamageDealtToChampions.toLocaleString()} dmg</span>
-                                                      </div>
-                                                    </div>
-                                                  </div>
+                                    const renderParticipantCard = (
+                                      participant: MatchParticipant | null,
+                                      teamId: 100 | 200,
+                                      roleKey: string,
+                                      rowIndex: number
+                                    ) => {
+                                      if (!participant) {
+                                        return (
+                                          <div className="rounded-lg border border-dashed border-border/35 bg-surface/20 px-2 py-2 text-xs text-muted">
+                                            {roleDisplayLabel(roleKey)} unavailable
+                                          </div>
+                                        );
+                                      }
 
-                                                  <div className="flex items-center gap-1.5 lg:justify-end">
-                                                    {[p.summonerSpell1Id, p.summonerSpell2Id].map((spellId, spellIdx) => {
-                                                      const spellMeta = spellStatic?.spells[String(spellId)];
-                                                      return spellMeta && spellStatic ? (
-                                                        <Image
-                                                          key={`${spellId}-${spellIdx}`}
-                                                          src={summonerSpellIconUrl(spellStatic.version, spellMeta.id)}
-                                                          alt={spellMeta.name}
-                                                          title={spellMeta.name}
-                                                          width={18}
-                                                          height={18}
-                                                          className="rounded-md border border-border/40"
-                                                        />
-                                                      ) : (
+                                      const isCurrent = isCurrentProfilePlayer(participant, gameName, tagLine);
+                                      const champMeta = championStatic?.champions[String(participant.championId)];
+                                      const itemIds = (participant.items ?? []).slice(0, 7);
+                                      const cs = (participant.totalMinionsKilled + participant.neutralMinionsKilled).toLocaleString();
+                                      const runeRowKey = `${m.matchId}:${teamId}:${rowIndex}:${participant.puuid ?? participant.gameName ?? "unknown"}:${participant.championId}`;
+                                      const runesExpanded = expandedRunes[runeRowKey] === true;
+                                      const orderedPrimarySelections = (participant.runes?.primarySelections ?? [])
+                                        .slice()
+                                        .sort((a, b) => {
+                                          const aSort =
+                                            runeStatic?.runeSortById[String(a)] ?? Number.MAX_SAFE_INTEGER;
+                                          const bSort =
+                                            runeStatic?.runeSortById[String(b)] ?? Number.MAX_SAFE_INTEGER;
+                                          return aSort - bSort;
+                                        });
+                                      const hasRunes =
+                                        (participant.runes?.primarySelections?.length ?? 0) > 0 ||
+                                        (participant.runes?.subSelections?.length ?? 0) > 0 ||
+                                        (participant.runes?.statShards?.length ?? 0) > 0;
+                                      const primaryRuneId = orderedPrimarySelections[0] ?? 0;
+                                      const primaryRuneMeta = runeStatic?.runeById[String(primaryRuneId)];
+                                      const canExpandRunes = Boolean(runeStatic && hasRunes);
+
+                                      return (
+                                        <div
+                                          className={`rounded-lg border px-2 py-1.5 ${
+                                            isCurrent
+                                              ? "border-primary/50 bg-primary/10"
+                                              : "border-border/25 bg-surface/30"
+                                          }`}
+                                        >
+                                          <div className="grid items-center gap-1.5 sm:grid-cols-[minmax(0,1fr)_auto]">
+                                            <div className="flex items-center gap-2">
+                                              {champMeta && championStatic ? (
+                                                <Image
+                                                  src={championIconUrl(championStatic.version, champMeta.id)}
+                                                  alt={champMeta.name}
+                                                  width={28}
+                                                  height={28}
+                                                  className="rounded-md border border-border/50"
+                                                />
+                                              ) : (
+                                                <div className="h-7 w-7 rounded-md border border-border/50 bg-surface/70" />
+                                              )}
+                                              <div className="min-w-0 flex-1">
+                                                <p className="truncate text-xs font-medium text-fg/95">
+                                                  {participantDisplayName(participant.gameName, participant.tagLine)}
+                                                </p>
+                                                <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
+                                                  <span>{participant.kills}/{participant.deaths}/{participant.assists}</span>
+                                                  <span>{cs} CS</span>
+                                                  <span>{participant.goldEarned.toLocaleString()}g</span>
+                                                  <span>{participant.totalDamageDealtToChampions.toLocaleString()} dmg</span>
+                                                </div>
+                                              </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-1.5 lg:justify-end">
+                                              {[participant.summonerSpell1Id, participant.summonerSpell2Id].map((spellId, spellIdx) => {
+                                                const spellMeta = spellStatic?.spells[String(spellId)];
+                                                return spellMeta && spellStatic ? (
+                                                  <Image
+                                                    key={`${spellId}-${spellIdx}`}
+                                                    src={summonerSpellIconUrl(spellStatic.version, spellMeta.id)}
+                                                    alt={spellMeta.name}
+                                                    title={spellMeta.name}
+                                                    width={18}
+                                                    height={18}
+                                                    className="rounded-md border border-border/40"
+                                                  />
+                                                ) : (
+                                                  <div
+                                                    key={`${spellId}-${spellIdx}`}
+                                                    className="h-[18px] w-[18px] rounded-md border border-border/40 bg-surface/60"
+                                                  />
+                                                );
+                                              })}
+                                            </div>
+                                          </div>
+
+                                          <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
+                                            <div className="flex flex-wrap items-center gap-1">
+                                              {itemIds.length > 0
+                                                ? itemIds.map((itemId, itemIdx) => {
+                                                    if (!itemId) {
+                                                      return (
                                                         <div
-                                                          key={`${spellId}-${spellIdx}`}
-                                                          className="h-[18px] w-[18px] rounded-md border border-border/40 bg-surface/60"
+                                                          key={`empty-${itemIdx}`}
+                                                          className="h-5 w-5 rounded-md border border-border/35 bg-surface/60"
                                                         />
                                                       );
-                                                    })}
-                                                  </div>
-                                                </div>
+                                                    }
 
-                                                <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
-                                                  <div className="flex flex-wrap items-center gap-1">
-                                                    {itemIds.length > 0
-                                                      ? itemIds.map((itemId, itemIdx) => {
-                                                          if (!itemId) {
-                                                            return (
-                                                              <div
-                                                                key={`empty-${itemIdx}`}
-                                                                className="h-5 w-5 rounded-md border border-border/35 bg-surface/60"
-                                                              />
-                                                            );
-                                                          }
-
-                                                          const itemMeta = itemStatic?.items[String(itemId)];
-                                                          return itemStatic ? (
-                                                            <Image
-                                                              key={`${itemId}-${itemIdx}`}
-                                                              src={itemIconUrl(itemStatic.version, itemId)}
-                                                              alt={itemMeta?.name ?? `Item ${itemId}`}
-                                                              title={itemMeta?.name ?? `Item ${itemId}`}
-                                                              width={20}
-                                                              height={20}
-                                                              className="rounded-md border border-border/35"
-                                                            />
-                                                          ) : (
-                                                            <div
-                                                              key={`${itemId}-${itemIdx}`}
-                                                              className="h-5 w-5 rounded-md border border-border/35 bg-surface/60"
-                                                            />
-                                                          );
-                                                        })
-                                                      : null}
-                                                  </div>
-
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => toggleRuneRow(runeRowKey)}
-                                                    disabled={!canExpandRunes}
-                                                    className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] ${
-                                                      canExpandRunes
-                                                        ? "border-border/50 bg-surface/40 text-fg/85 hover:bg-surface/60"
-                                                        : "border-border/25 bg-surface/25 text-muted"
-                                                    }`}
-                                                    aria-expanded={runesExpanded}
-                                                    aria-label={runesExpanded ? "Hide runes" : "Show runes"}
-                                                  >
-                                                    {primaryRuneMeta ? (
+                                                    const itemMeta = itemStatic?.items[String(itemId)];
+                                                    return itemStatic ? (
                                                       <Image
-                                                        src={runeIconUrl(primaryRuneMeta.icon)}
-                                                        alt={primaryRuneMeta.name}
-                                                        title={primaryRuneMeta.name}
+                                                        key={`${itemId}-${itemIdx}`}
+                                                        src={itemIconUrl(itemStatic.version, itemId)}
+                                                        alt={itemMeta?.name ?? `Item ${itemId}`}
+                                                        title={itemMeta?.name ?? `Item ${itemId}`}
                                                         width={20}
                                                         height={20}
-                                                        className="rounded-full border border-border/35 bg-black/20 p-0.5"
+                                                        className="rounded-md border border-border/35"
                                                       />
                                                     ) : (
-                                                      <span className="h-5 w-5 rounded-full border border-border/35 bg-black/20" />
-                                                    )}
-                                                    <span>{canExpandRunes ? (runesExpanded ? "Hide Runes" : "Show Runes") : "Runes Unavailable"}</span>
-                                                  </button>
-                                                </div>
-                                                {runeStatic && canExpandRunes && runesExpanded ? (
-                                                  <RuneSetupDisplay
-                                                    primaryStyleId={p.runes?.primaryStyleId ?? 0}
-                                                    subStyleId={p.runes?.subStyleId ?? 0}
-                                                    primarySelections={p.runes?.primarySelections ?? []}
-                                                    subSelections={p.runes?.subSelections ?? []}
-                                                    statShards={p.runes?.statShards ?? []}
-                                                    runeById={runeStatic.runeById}
-                                                    styleById={runeStatic.styleById}
-                                                    runeSortById={runeStatic.runeSortById}
-                                                    iconSize={20}
-                                                    density="compact"
-                                                    className="mt-1.5"
-                                                  />
-                                                ) : null}
+                                                      <div
+                                                        key={`${itemId}-${itemIdx}`}
+                                                        className="h-5 w-5 rounded-md border border-border/35 bg-surface/60"
+                                                      />
+                                                    );
+                                                  })
+                                                : null}
+                                            </div>
+
+                                            <button
+                                              type="button"
+                                              onClick={() => toggleRuneRow(runeRowKey)}
+                                              disabled={!canExpandRunes}
+                                              className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] ${
+                                                canExpandRunes
+                                                  ? "border-border/50 bg-surface/40 text-fg/85 hover:bg-surface/60"
+                                                  : "border-border/25 bg-surface/25 text-muted"
+                                              }`}
+                                              aria-expanded={runesExpanded}
+                                              aria-label={runesExpanded ? "Hide runes" : "Show runes"}
+                                            >
+                                              {primaryRuneMeta ? (
+                                                <Image
+                                                  src={runeIconUrl(primaryRuneMeta.icon)}
+                                                  alt={primaryRuneMeta.name}
+                                                  title={primaryRuneMeta.name}
+                                                  width={20}
+                                                  height={20}
+                                                  className="rounded-full border border-border/35 bg-black/20 p-0.5"
+                                                />
+                                              ) : (
+                                                <span className="h-5 w-5 rounded-full border border-border/35 bg-black/20" />
+                                              )}
+                                              <span>{canExpandRunes ? (runesExpanded ? "Hide Runes" : "Show Runes") : "Runes Unavailable"}</span>
+                                            </button>
+                                          </div>
+                                          {runeStatic && canExpandRunes && runesExpanded ? (
+                                            <RuneSetupDisplay
+                                              primaryStyleId={participant.runes?.primaryStyleId ?? 0}
+                                              subStyleId={participant.runes?.subStyleId ?? 0}
+                                              primarySelections={participant.runes?.primarySelections ?? []}
+                                              subSelections={participant.runes?.subSelections ?? []}
+                                              statShards={participant.runes?.statShards ?? []}
+                                              runeById={runeStatic.runeById}
+                                              styleById={runeStatic.styleById}
+                                              runeSortById={runeStatic.runeSortById}
+                                              iconSize={20}
+                                              density="compact"
+                                              className="mt-1.5"
+                                            />
+                                          ) : null}
+                                        </div>
+                                      );
+                                    };
+
+                                    return (
+                                      <div className="rounded-xl border border-border/50 bg-surface/40 p-2">
+                                        <div className="mb-2 grid grid-cols-2 gap-2">
+                                          <p className="text-xs font-semibold text-sky-300">Blue Team</p>
+                                          <p className="text-xs font-semibold text-rose-300">Red Team</p>
+                                        </div>
+                                        <div className="grid gap-1.5">
+                                          {alignedRows.map((row, rowIndex) => (
+                                            <div key={`${m.matchId}-${row.roleKey}-${rowIndex}`} className="grid gap-1">
+                                              <p className="px-1 text-[10px] uppercase tracking-wide text-muted">
+                                                {roleDisplayLabel(row.roleKey)}
+                                              </p>
+                                              <div className="grid gap-2 xl:grid-cols-2">
+                                                {renderParticipantCard(row.blue, 100, row.roleKey, rowIndex)}
+                                                {renderParticipantCard(row.red, 200, row.roleKey, rowIndex)}
                                               </div>
-                                            );
-                                          })}
+                                            </div>
+                                          ))}
+                                        </div>
                                       </div>
-                                    </div>
                                     );
-                                  })}
-                                </div>
-                              ) : null}
+                                  })()
+                                : null}
                             </div>
                           </motion.div>
                         ) : null}

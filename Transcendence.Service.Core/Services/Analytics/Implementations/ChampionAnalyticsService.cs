@@ -57,13 +57,21 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             );
         }
 
-        // Build cache key based on filter parameters
-        var cacheKey = BuildCacheKey(championId, filter, currentPatch);
+        var normalizedRankTier = NormalizeRankTier(filter.RankTier);
+        var normalizedFilter = filter with
+        {
+            RankTier = normalizedRankTier == "all" ? null : normalizedRankTier,
+            Region = string.IsNullOrWhiteSpace(filter.Region) ? null : filter.Region.Trim().ToUpperInvariant(),
+            Role = string.IsNullOrWhiteSpace(filter.Role) ? null : filter.Role.Trim().ToUpperInvariant()
+        };
+
+        // Build cache key based on normalized filter parameters
+        var cacheKey = BuildCacheKey(championId, normalizedFilter, currentPatch);
 
         // Get or compute win rates with caching
         var winRates = await _cache.GetOrCreateAsync(
             cacheKey,
-            async cancel => await _computeService.ComputeWinRatesAsync(championId, filter, currentPatch, cancel),
+            async cancel => await _computeService.ComputeWinRatesAsync(championId, normalizedFilter, currentPatch, cancel),
             AnalyticsCacheOptions,
             tags: new[] { AnalyticsCacheTag, $"champion:{championId}", $"patch:{currentPatch}" },
             cancellationToken: ct
@@ -95,10 +103,8 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 
         // Normalize parameters
         var normalizedRole = string.IsNullOrEmpty(role) ? "ALL" : role.ToUpperInvariant();
-        var normalizedTier = string.IsNullOrWhiteSpace(rankTier)
-            ? "all"
-            : rankTier.Trim().ToUpperInvariant();
-        var tierFilter = normalizedTier == "ALL" ? null : normalizedTier;
+        var normalizedTier = NormalizeRankTier(rankTier);
+        var tierFilter = normalizedTier == "all" ? null : normalizedTier;
 
         // Build cache key
         var cacheKey = $"{TierListCacheKeyPrefix}{normalizedRole}:{normalizedTier}:{currentPatch}";
@@ -264,7 +270,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         if (string.IsNullOrWhiteSpace(rankTier))
             return "all";
 
-        var normalized = rankTier.Trim().ToUpperInvariant();
+        var normalized = rankTier.Trim().ToUpperInvariant().Replace("+", "_PLUS");
         return normalized == "ALL" ? "all" : normalized;
     }
 }

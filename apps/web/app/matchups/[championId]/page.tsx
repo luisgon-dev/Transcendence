@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/Card";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { formatGames } from "@/lib/format";
+import { normalizeRankTierParam, rankTierDisplayLabel } from "@/lib/ranks";
 import { roleDisplayLabel } from "@/lib/roles";
 import { championIconUrl, fetchChampionMap } from "@/lib/staticData";
 
@@ -19,31 +20,11 @@ type ChampionMatchupsResponse = components["schemas"]["ChampionMatchupsResponse"
 type MatchupEntryDto = components["schemas"]["MatchupEntryDto"];
 
 const ROLES = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"] as const;
-const RANK_TIERS = [
-  "all",
-  "IRON",
-  "BRONZE",
-  "SILVER",
-  "GOLD",
-  "PLATINUM",
-  "EMERALD",
-  "DIAMOND",
-  "MASTER",
-  "GRANDMASTER",
-  "CHALLENGER"
-] as const;
 
 function normalizeRole(role: string | undefined) {
   if (!role) return null;
   const upper = role.toUpperCase();
   return ROLES.includes(upper as (typeof ROLES)[number]) ? upper : null;
-}
-
-function normalizeRankTier(rankTier: string | undefined) {
-  if (!rankTier) return null;
-  const upper = rankTier.toUpperCase();
-  if (upper === "ALL") return null;
-  return RANK_TIERS.includes(upper as (typeof RANK_TIERS)[number]) ? upper : null;
 }
 
 function mostPlayedRole(winrates: ChampionWinRateSummary | null) {
@@ -95,7 +76,7 @@ export default async function MatchupAnalysisPage({
   }
 
   const explicitRole = normalizeRole(resolvedSearchParams?.role);
-  const normalizedRankTier = normalizeRankTier(resolvedSearchParams?.rankTier);
+  const normalizedRankTier = normalizeRankTierParam(resolvedSearchParams?.rankTier);
   const sortKey = resolvedSearchParams?.sort === "games" ? "games" : "winRate";
 
   const verbosity = getErrorVerbosity();
@@ -189,14 +170,14 @@ export default async function MatchupAnalysisPage({
             Patch {matchups?.patch ?? winrates?.patch ?? "Unknown"}
           </Badge>
           <Badge>{roleDisplayLabel(effectiveRole)}</Badge>
-          <Badge>{normalizedRankTier ?? "All Ranks"}</Badge>
+          <Badge>{rankTierDisplayLabel(normalizedRankTier ?? "all")}</Badge>
           <Badge>{allMatchups.length} matchups</Badge>
         </div>
 
         <FilterBar
           roles={ROLES}
           activeRole={effectiveRole}
-          activeRank={normalizedRankTier?.toLowerCase() ?? "all"}
+          activeRank={normalizedRankTier ?? "all"}
           baseHref={`/matchups/${championId}`}
           patch={matchups?.patch ?? winrates?.patch}
         />

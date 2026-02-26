@@ -80,6 +80,11 @@ When `Api:ReturnProblemDetailsOnStatsFailure=true`, stats endpoints return `500`
 - `GET /api/analytics/champions/{championId}/matchups`
 - `POST /api/analytics/cache/invalidate` (`AppOnly`)
 
+`rankTier` query semantics across tier list, win rates, builds, and matchups:
+- `all` (or omitted): no rank filter
+- Exact tier token: `IRON|BRONZE|SILVER|GOLD|PLATINUM|EMERALD|DIAMOND|MASTER|GRANDMASTER|CHALLENGER`
+- Tier scope token: `EMERALD_PLUS` (alias `EMERALD+`) = `EMERALD` and above
+
 `GET /api/analytics/champions/{championId}/builds` includes full rune setup per build:
 - `primaryStyleId`, `subStyleId`
 - `primaryRunes` (4), `subRunes` (2), `statShards` (3)

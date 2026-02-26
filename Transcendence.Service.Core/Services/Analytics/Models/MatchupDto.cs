@@ -57,7 +57,7 @@ public record ChampionMatchupsResponse
     public string Role { get; init; } = string.Empty;
 
     /// <summary>
-    /// The rank tier filter (e.g., "PLATINUM").
+    /// The rank tier filter (e.g., "PLATINUM" or "EMERALD_PLUS").
     /// </summary>
     public string? RankTier { get; init; }
 

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 
 import { cn } from "@/lib/cn";
+import { rankTierDisplayLabel } from "@/lib/ranks";
 
 export function RankFilterDropdown({
   ranks,
@@ -43,7 +44,7 @@ export function RankFilterDropdown({
     >
       {ranks.map((rank) => (
         <option key={rank} value={rank}>
-          {rank === "all" ? "All Ranks" : rank}
+          {rankTierDisplayLabel(rank)}
         </option>
       ))}
     </select>

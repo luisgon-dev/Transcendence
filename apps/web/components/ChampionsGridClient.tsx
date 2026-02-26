@@ -48,7 +48,7 @@ export function ChampionsGridClient({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
         {filtered.map((c) => (
           <Link key={c.championId} href={`/champions/${c.championId}`}>
-            <Card className="group p-3 transition hover:bg-white/10">
+            <Card className="group h-full p-3 transition hover:bg-white/10">
               <div className="flex items-center gap-3">
                 <Image
                   src={championIconUrl(version, c.id)}
@@ -61,23 +61,23 @@ export function ChampionsGridClient({
                   <p className="truncate text-sm font-semibold text-fg group-hover:underline">
                     {c.name}
                   </p>
-                  <div className="mt-0.5 flex items-center gap-1.5">
-                    {c.tier ? <TierBadge tier={c.tier} /> : null}
-                    {c.primaryRole ? (
-                      <span className="text-[11px] text-muted">
-                        {roleDisplayLabel(c.primaryRole)}
-                      </span>
-                    ) : null}
+                  <div className="mt-0.5 flex min-h-[18px] items-center gap-1.5">
+                    {c.tier ? <TierBadge tier={c.tier} /> : <span className="text-[11px] text-muted">Tier -</span>}
+                    <span className="text-[11px] text-muted">
+                      {c.primaryRole ? roleDisplayLabel(c.primaryRole) : "Role -"}
+                    </span>
                   </div>
-                  {c.winRate != null ? (
-                    <div className="mt-0.5">
+                  <div className="mt-0.5 min-h-[18px]">
+                    {c.winRate != null ? (
                       <WinRateText
                         value={c.winRate}
                         decimals={1}
                         className="text-xs"
                       />
-                    </div>
-                  ) : null}
+                    ) : (
+                      <span className="text-xs text-muted">Win Rate -</span>
+                    )}
+                  </div>
                 </div>
               </div>
             </Card>

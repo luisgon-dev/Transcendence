@@ -16,6 +16,8 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
 {
     private const int MinMatchupSampleSize = 30;
     private const int MatchupsToShow = 5;
+    private static readonly string[] EmeraldPlusTiers =
+        ["EMERALD", "DIAMOND", "MASTER", "GRANDMASTER", "CHALLENGER"];
     private readonly TranscendenceContext _context;
     private readonly ChampionAnalyticsComputeOptions _options;
     private readonly ILogger<ChampionAnalyticsComputeService> _logger;
@@ -41,7 +43,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         CancellationToken ct)
     {
         var minimumGamesRequired = await GetAdaptiveMinimumGamesRequiredAsync(patch, ct);
-        var normalizedRankTierFilter = NormalizeRankTierFilter(filter.RankTier);
+        var rankTierScope = ParseRankTierScope(filter.RankTier);
 
         // Base query: Match participants for this champion in this patch
         var baseQuery = _context.MatchParticipants
@@ -81,10 +83,15 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                                };
 
         // Apply rank tier filter if specified
-        if (!string.IsNullOrEmpty(normalizedRankTierFilter))
+        if (rankTierScope.IsEmeraldPlus)
         {
             participantRanks = participantRanks
-                .Where(pr => pr.RankTier == normalizedRankTierFilter);
+                .Where(pr => EmeraldPlusTiers.Contains(pr.RankTier));
+        }
+        else if (!string.IsNullOrWhiteSpace(rankTierScope.ExactTier))
+        {
+            participantRanks = participantRanks
+                .Where(pr => pr.RankTier == rankTierScope.ExactTier);
         }
 
         var participantRankRows = await participantRanks.ToListAsync(ct);
@@ -180,7 +187,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
     {
         var normalizedRole = string.IsNullOrWhiteSpace(role) ? "ALL" : role.ToUpperInvariant();
         var isUnifiedRole = normalizedRole == "ALL";
-        var normalizedRankTierFilter = NormalizeRankTierFilter(rankTier);
+        var rankTierScope = ParseRankTierScope(rankTier);
         var minimumGamesRequired = await GetAdaptiveMinimumGamesRequiredAsync(patch, ct);
 
         // Step 1: Build base query for match participants in this patch
@@ -201,13 +208,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
 
         // Only apply rank join semantics when a tier filter is requested.
         // Unfiltered views intentionally keep unranked participants.
-        if (!string.IsNullOrEmpty(normalizedRankTierFilter))
-        {
-            baseQuery = baseQuery.Where(mp => _context.Ranks.Any(r =>
-                r.QueueType == "RANKED_SOLO_5x5" &&
-                r.SummonerId == mp.SummonerId &&
-                r.Tier == normalizedRankTierFilter));
-        }
+        baseQuery = ApplyRankTierScopeToParticipants(baseQuery, rankTierScope, _context.Ranks.AsNoTracking());
 
         var query = baseQuery.Select(mp => new { mp.ChampionId, mp.TeamPosition, mp.Win, mp.MatchId });
         var totalParticipants = await query.CountAsync(ct);
@@ -304,7 +305,11 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         // Step 5: Get previous patch tier list for movement comparison
         var previousPatch = await GetPreviousPatchAsync(patch, ct);
         var previousTiers = previousPatch != null
-            ? await GetPreviousPatchTiersAsync(normalizedRole, normalizedRankTierFilter, previousPatch, ct)
+            ? await GetPreviousPatchTiersAsync(
+                normalizedRole,
+                rankTierScope.HasFilter ? rankTierScope.CacheToken : null,
+                previousPatch,
+                ct)
             : new Dictionary<(int ChampionId, string Role), TierGrade>();
 
         // Step 6: Assign percentile-based tiers
@@ -399,13 +404,41 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         return isEarlyPatchWindow ? earlyPatchMinimum : steadyStateMinimum;
     }
 
-    private static string? NormalizeRankTierFilter(string? rankTier)
+    private static RankTierScope ParseRankTierScope(string? rankTier)
     {
         if (string.IsNullOrWhiteSpace(rankTier))
-            return null;
+            return new RankTierScope("all", null, false);
 
-        var normalized = rankTier.Trim().ToUpperInvariant();
-        return normalized == "ALL" ? null : normalized;
+        var normalized = rankTier.Trim().ToUpperInvariant().Replace("+", "_PLUS");
+        if (normalized == "ALL")
+            return new RankTierScope("all", null, false);
+
+        if (normalized == "EMERALD_PLUS")
+            return new RankTierScope("EMERALD_PLUS", null, true);
+
+        return new RankTierScope(normalized, normalized, false);
+    }
+
+    private static IQueryable<Data.Models.LoL.Match.MatchParticipant> ApplyRankTierScopeToParticipants(
+        IQueryable<Data.Models.LoL.Match.MatchParticipant> query,
+        RankTierScope scope,
+        IQueryable<Data.Models.LoL.Account.Rank> ranks)
+    {
+        if (!scope.HasFilter)
+            return query;
+
+        if (scope.IsEmeraldPlus)
+        {
+            return query.Where(mp => ranks.Any(r =>
+                r.QueueType == "RANKED_SOLO_5x5" &&
+                r.SummonerId == mp.SummonerId &&
+                EmeraldPlusTiers.Contains(r.Tier)));
+        }
+
+        return query.Where(mp => ranks.Any(r =>
+            r.QueueType == "RANKED_SOLO_5x5" &&
+            r.SummonerId == mp.SummonerId &&
+            r.Tier == scope.ExactTier));
     }
 
     private static string NormalizeRole(string? role) =>
@@ -566,7 +599,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         CancellationToken ct)
     {
         var minimumGamesRequired = await GetAdaptiveMinimumGamesRequiredAsync(patch, ct);
-        var normalizedRankTierFilter = NormalizeRankTierFilter(rankTier);
+        var rankTierScope = ParseRankTierScope(rankTier);
 
         // Step 1: Get all match data for this champion/role/patch/tier with items and runes
         var baseQuery = _context.MatchParticipants
@@ -582,13 +615,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                            mp.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString()))
                       && mp.TeamPosition == role);
 
-        if (!string.IsNullOrEmpty(normalizedRankTierFilter))
-        {
-            baseQuery = baseQuery.Where(mp => _context.Ranks.Any(r =>
-                r.QueueType == "RANKED_SOLO_5x5" &&
-                r.SummonerId == mp.SummonerId &&
-                r.Tier == normalizedRankTierFilter));
-        }
+        baseQuery = ApplyRankTierScopeToParticipants(baseQuery, rankTierScope, _context.Ranks.AsNoTracking());
 
         var matchData = await baseQuery
             .Select(mp => new
@@ -668,7 +695,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
 
         var effectiveMinimumGames = ResolveEffectiveSampleSize(minimumGamesRequired, buildEligibleMatches.Count, floor: 3);
         if (buildEligibleMatches.Count < effectiveMinimumGames)
-            return new ChampionBuildsResponse(championId, role, rankTier ?? "all", patch,
+            return new ChampionBuildsResponse(championId, role, rankTierScope.CacheToken, patch,
                 new List<int>(), new List<ChampionBuildDto>());
 
         // Step 2: Calculate global core items from completed build-impact items.
@@ -761,7 +788,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         return new ChampionBuildsResponse(
             championId,
             role,
-            rankTier ?? "all",
+            rankTierScope.CacheToken,
             patch,
             globalCoreItems,
             builds
@@ -941,6 +968,14 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         IReadOnlyList<string> Tags,
         bool InStore,
         int PriceTotal);
+
+    private readonly record struct RankTierScope(
+        string CacheToken,
+        string? ExactTier,
+        bool IsEmeraldPlus)
+    {
+        public bool HasFilter => IsEmeraldPlus || !string.IsNullOrWhiteSpace(ExactTier);
+    }
 
     private static List<int> NormalizeCompletedBuildItems(
         IReadOnlyList<int> itemIds,
@@ -1147,7 +1182,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         string patch,
         CancellationToken ct)
     {
-        var normalizedRankTierFilter = NormalizeRankTierFilter(rankTier);
+        var rankTierScope = ParseRankTierScope(rankTier);
         const int minuteMark = 15;
 
         var championQuery = _context.MatchParticipants
@@ -1161,13 +1196,10 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                            mp.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString())));
 
         // Apply rank tier filter if specified
-        if (!string.IsNullOrEmpty(normalizedRankTierFilter))
-        {
-            championQuery = championQuery.Where(mp => _context.Ranks.Any(r =>
-                r.QueueType == "RANKED_SOLO_5x5" &&
-                r.SummonerId == mp.SummonerId &&
-                r.Tier == normalizedRankTierFilter));
-        }
+        championQuery = ApplyRankTierScopeToParticipants(
+            championQuery,
+            rankTierScope,
+            _context.Ranks.AsNoTracking());
 
         var lanePairsQuery = championQuery
             .Join(
@@ -1301,7 +1333,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         {
             ChampionId = championId,
             Role = role,
-            RankTier = rankTier ?? "all",
+            RankTier = rankTierScope.CacheToken,
             Patch = patch,
             Counters = counters,
             FavorableMatchups = favorable,

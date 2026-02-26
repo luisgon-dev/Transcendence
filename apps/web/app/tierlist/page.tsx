@@ -11,6 +11,11 @@ import { Card } from "@/components/ui/Card";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { formatGames, formatPercent } from "@/lib/format";
+import {
+  DEFAULT_TIERLIST_RANK_TIER,
+  normalizeRankTierParam,
+  rankTierDisplayLabel
+} from "@/lib/ranks";
 import { roleDisplayLabel } from "@/lib/roles";
 import { championIconUrl, fetchChampionMap } from "@/lib/staticData";
 import {
@@ -34,10 +39,13 @@ export default async function TierListPage({
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const qs = new URLSearchParams();
   const roleParam = (resolvedSearchParams?.role ?? "").toUpperCase();
-  const rankParam = (resolvedSearchParams?.rankTier ?? "").toUpperCase();
+  const rawRankParam = resolvedSearchParams?.rankTier ?? null;
+  const normalizedRankParam = normalizeRankTierParam(rawRankParam);
+  const useDefaultRank = rawRankParam == null || rawRankParam.trim().length === 0;
+  const effectiveRankParam = useDefaultRank ? DEFAULT_TIERLIST_RANK_TIER : normalizedRankParam;
 
   if (roleParam && roleParam !== "ALL") qs.set("role", roleParam);
-  if (rankParam && rankParam !== "ALL") qs.set("rankTier", rankParam);
+  if (effectiveRankParam) qs.set("rankTier", effectiveRankParam);
 
   const verbosity = getErrorVerbosity();
   const res = await fetchBackendJson<TierListResponse>(
@@ -107,13 +115,13 @@ export default async function TierListPage({
             Patch {tierlist.patch ?? "Unknown"}
           </Badge>
           <Badge>{roleDisplayLabel(tierlist.role ?? "ALL")}</Badge>
-          <Badge>{rankTierValue ?? "All Ranks"}</Badge>
+          <Badge>{rankTierDisplayLabel(rankTierValue ?? "all")}</Badge>
           <Badge>{normalizedEntries.length} champions</Badge>
         </div>
 
         <FilterBar
           activeRole={roleParam || "ALL"}
-          activeRank={rankParam?.toLowerCase() || "all"}
+          activeRank={effectiveRankParam ?? "all"}
           baseHref="/tierlist"
           patch={tierlist.patch}
         />

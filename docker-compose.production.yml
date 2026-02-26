@@ -68,6 +68,7 @@ services:
       Auth__Jwt__Audience: ${JWT_AUDIENCE}
       Auth__Jwt__Key: ${JWT_SIGNING_KEY}
       Auth__Jwt__AccessTokenMinutes: ${JWT_ACCESS_TOKEN_MINUTES}
+      Auth__AdminBootstrap__Emails__0: ${ADMIN_BOOTSTRAP_EMAIL_0:-}
       Auth__BootstrapApiKey: ${AUTH_BOOTSTRAP_API_KEY}
       <<: *app-env
     ports:

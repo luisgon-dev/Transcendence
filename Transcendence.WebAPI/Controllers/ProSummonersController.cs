@@ -1,16 +1,20 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Account;
+using Transcendence.Service.Core.Services.Auth.Interfaces;
+using Transcendence.Service.Core.Services.Auth.Models;
 using Transcendence.WebAPI.Security;
 
 namespace Transcendence.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/admin/pro-summoners")]
-[Authorize(Policy = AuthPolicies.AppOnly)]
-public class ProSummonersController(TranscendenceContext db) : ControllerBase
+[Authorize(Policy = AuthPolicies.AdminOnly)]
+public class ProSummonersController(TranscendenceContext db, IAdminAuditService adminAuditService) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(List<TrackedProSummonerDto>), StatusCodes.Status200OK)]
@@ -41,6 +45,7 @@ public class ProSummonersController(TranscendenceContext db) : ControllerBase
     }
 
     [HttpPost]
+    [EnableRateLimiting("admin-write")]
     [ProducesResponseType(typeof(TrackedProSummonerDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create([FromBody] UpsertTrackedProSummonerRequest request,
@@ -76,6 +81,14 @@ public class ProSummonersController(TranscendenceContext db) : ControllerBase
 
         db.TrackedProSummoners.Add(entity);
         await db.SaveChangesAsync(ct);
+        await WriteAuditAsync("pro-summoners.create", entity.Id.ToString(), new
+        {
+            entity.Puuid,
+            entity.PlatformRegion,
+            entity.ProName,
+            entity.TeamName,
+            entity.IsActive
+        }, ct);
 
         return CreatedAtAction(nameof(GetById), new { id = entity.Id }, ToDto(entity));
     }
@@ -90,6 +103,7 @@ public class ProSummonersController(TranscendenceContext db) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [EnableRateLimiting("admin-write")]
     [ProducesResponseType(typeof(TrackedProSummonerDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Update([FromRoute] Guid id, [FromBody] UpsertTrackedProSummonerRequest request,
@@ -114,10 +128,19 @@ public class ProSummonersController(TranscendenceContext db) : ControllerBase
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
         await db.SaveChangesAsync(ct);
+        await WriteAuditAsync("pro-summoners.update", entity.Id.ToString(), new
+        {
+            entity.Puuid,
+            entity.PlatformRegion,
+            entity.ProName,
+            entity.TeamName,
+            entity.IsActive
+        }, ct);
         return Ok(ToDto(entity));
     }
 
     [HttpDelete("{id:guid}")]
+    [EnableRateLimiting("admin-write")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete([FromRoute] Guid id, CancellationToken ct = default)
@@ -128,6 +151,7 @@ public class ProSummonersController(TranscendenceContext db) : ControllerBase
 
         db.TrackedProSummoners.Remove(entity);
         await db.SaveChangesAsync(ct);
+        await WriteAuditAsync("pro-summoners.delete", id.ToString(), null, ct);
         return NoContent();
     }
 
@@ -151,6 +175,23 @@ public class ProSummonersController(TranscendenceContext db) : ControllerBase
     private static string? NormalizeOptional(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private async Task WriteAuditAsync(string action, string targetId, object? metadata, CancellationToken ct)
+    {
+        var actorIdRaw = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        Guid? actorId = Guid.TryParse(actorIdRaw, out var parsed) ? parsed : null;
+        var actorEmail = User.FindFirstValue(ClaimTypes.Name);
+        var requestId = Request.Headers["x-trn-request-id"].ToString();
+        await adminAuditService.WriteAsync(new AdminAuditWriteRequest(
+            actorId,
+            actorEmail,
+            action,
+            "tracked-pro-summoner",
+            targetId,
+            string.IsNullOrWhiteSpace(requestId) ? null : requestId,
+            true,
+            metadata), ct);
     }
 }
 

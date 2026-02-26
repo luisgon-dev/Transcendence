@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using Microsoft.Extensions.Options;
 using Transcendence.Data.Models.Auth;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Interfaces;
@@ -9,10 +10,15 @@ namespace Transcendence.Service.Core.Services.Auth.Implementations;
 public class UserAuthService(
     IUserAccountRepository userAccountRepository,
     IJwtService jwtService,
+    IOptions<AdminBootstrapOptions> adminBootstrapOptions,
     ILogger<UserAuthService> logger) : IUserAuthService
 {
     private const int RefreshTokenDays = 7;
     private const int PasswordIterations = 100_000;
+    private readonly HashSet<string> _bootstrapAdminEmails = adminBootstrapOptions.Value.Emails
+        .Where(x => !string.IsNullOrWhiteSpace(x))
+        .Select(NormalizeEmail)
+        .ToHashSet(StringComparer.Ordinal);
 
     public async Task<AuthTokenResponse> RegisterAsync(RegisterRequest request, CancellationToken ct = default)
     {
@@ -34,6 +40,7 @@ public class UserAuthService(
         };
 
         await userAccountRepository.AddUserAsync(user, ct);
+        await EnsureBootstrapAdminRoleAsync(user, ct);
 
         var response = await IssueTokensAsync(user, ct);
         await userAccountRepository.SaveChangesAsync(ct);
@@ -51,6 +58,7 @@ public class UserAuthService(
 
         user.LastLoginAtUtc = DateTime.UtcNow;
         user.UpdatedAtUtc = DateTime.UtcNow;
+        await EnsureBootstrapAdminRoleAsync(user, ct);
 
         var response = await IssueTokensAsync(user, ct);
         await userAccountRepository.SaveChangesAsync(ct);
@@ -168,5 +176,30 @@ public class UserAuthService(
             expectedHash.Length);
 
         return CryptographicOperations.FixedTimeEquals(expectedHash, actualHash);
+    }
+
+    private async Task EnsureBootstrapAdminRoleAsync(UserAccount user, CancellationToken ct)
+    {
+        if (_bootstrapAdminEmails.Count == 0)
+            return;
+
+        if (!_bootstrapAdminEmails.Contains(user.EmailNormalized))
+            return;
+
+        var hasAdminRole = user.Roles.Any(x => string.Equals(x.Role, SystemRoles.Admin, StringComparison.Ordinal));
+        if (hasAdminRole)
+            return;
+
+        var role = new UserRole
+        {
+            UserAccountId = user.Id,
+            Role = SystemRoles.Admin,
+            GrantedAtUtc = DateTime.UtcNow,
+            GrantedBy = "bootstrap:auth"
+        };
+
+        user.Roles.Add(role);
+        await userAccountRepository.AddRoleAsync(role, ct);
+        logger.LogInformation("Granted admin bootstrap role during auth flow for {Email}", user.Email);
     }
 }

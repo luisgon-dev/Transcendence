@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { logoutAction } from "@/app/account/actions";
 import { Button } from "@/components/ui/Button";
+import { hasAdminRole } from "@/lib/authz";
 import { getSessionMe } from "@/lib/session";
 
 export async function AccountNav() {
@@ -27,6 +28,14 @@ export async function AccountNav() {
 
   return (
     <div className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-surface/40 p-1">
+      {hasAdminRole(me.roles) ? (
+        <Link
+          className="rounded-full px-3 py-1.5 text-sm text-fg/75 transition hover:bg-white/10 hover:text-fg"
+          href="/admin"
+        >
+          Admin
+        </Link>
+      ) : null}
       <Link
         className="rounded-full px-3 py-1.5 text-sm text-fg/75 transition hover:bg-white/10 hover:text-fg"
         href="/account/favorites"

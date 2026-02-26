@@ -28,6 +28,7 @@ public class AuthPolicyOperationFilter : IOperationFilter
 
         var requiresAppOnly = policies.Contains(AuthPolicies.AppOnly);
         var requiresUserOnly = policies.Contains(AuthPolicies.UserOnly);
+        var requiresAdminOnly = policies.Contains(AuthPolicies.AdminOnly);
         var requiresAppOrUser = policies.Contains(AuthPolicies.AppOrUser) || policies.Count == 0;
 
         operation.Responses ??= new OpenApiResponses();
@@ -39,16 +40,16 @@ public class AuthPolicyOperationFilter : IOperationFilter
         {
             operation.Security.Add(new OpenApiSecurityRequirement
             {
-                [new OpenApiSecuritySchemeReference(AuthPolicies.ApiKeyScheme, null, null)] = new List<string>()
+                [BuildSecurityScheme(AuthPolicies.ApiKeyScheme)] = new List<string>()
             });
             return;
         }
 
-        if (requiresUserOnly)
+        if (requiresUserOnly || requiresAdminOnly)
         {
             operation.Security.Add(new OpenApiSecurityRequirement
             {
-                [new OpenApiSecuritySchemeReference(JwtBearerDefaults.AuthenticationScheme, null, null)] =
+                [BuildSecurityScheme(JwtBearerDefaults.AuthenticationScheme)] =
                     new List<string>()
             });
             return;
@@ -59,14 +60,26 @@ public class AuthPolicyOperationFilter : IOperationFilter
             // OpenAPI treats each requirement object as OR.
             operation.Security.Add(new OpenApiSecurityRequirement
             {
-                [new OpenApiSecuritySchemeReference(AuthPolicies.ApiKeyScheme, null, null)] = new List<string>()
+                [BuildSecurityScheme(AuthPolicies.ApiKeyScheme)] = new List<string>()
             });
 
             operation.Security.Add(new OpenApiSecurityRequirement
             {
-                [new OpenApiSecuritySchemeReference(JwtBearerDefaults.AuthenticationScheme, null, null)] =
+                [BuildSecurityScheme(JwtBearerDefaults.AuthenticationScheme)] =
                     new List<string>()
             });
         }
+    }
+
+    private static OpenApiSecuritySchemeReference BuildSecurityScheme(string schemeId)
+    {
+        return new OpenApiSecuritySchemeReference(schemeId, null, null)
+        {
+            Reference = new OpenApiReferenceWithDescription
+            {
+                Type = ReferenceType.SecurityScheme,
+                Id = schemeId
+            }
+        };
     }
 }

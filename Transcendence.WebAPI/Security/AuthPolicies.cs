@@ -6,4 +6,5 @@ public static class AuthPolicies
     public const string AppOnly = "AppOnly";
     public const string UserOnly = "UserOnly";
     public const string AppOrUser = "AppOrUser";
+    public const string AdminOnly = "AdminOnly";
 }

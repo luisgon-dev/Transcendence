@@ -59,6 +59,7 @@ This project is meant to demonstrate practical backend and full-stack engineerin
 ### Backend + Data Pipeline
 
 - REST API with mixed auth model (`AppOnly`, `UserOnly`, `AppOrUser`)
+- Role-based admin API surface (`AdminOnly`) for operational controls and reports
 - Hangfire-backed background processing with queue prioritization
 - Riot data ingestion and patch-aware static data updates
 - Continuous analytics ingestion and adaptive refresh jobs
@@ -72,6 +73,7 @@ This project is meant to demonstrate practical backend and full-stack engineerin
   - slot index within each tree
   - style/path id metadata
 - Rune integrity backfill job for older/legacy rows
+- Admin audit log for privileged write actions (job controls, key management, roster updates)
 
 ## Tech Stack
 
@@ -112,7 +114,7 @@ Key behavior:
 | `Transcendence.Service` | Background worker host + Hangfire server |
 | `Transcendence.Service.Core` | Core services (analytics, auth, Riot integration, jobs) |
 | `Transcendence.Data` | EF Core `DbContext`, entities, repositories |
-| `Transcendence.WebAdminPortal` | Hangfire dashboard host |
+| `Transcendence.WebAdminPortal` | Private break-glass Hangfire dashboard host |
 | `apps/web` | Next.js frontend (pages + BFF route handlers) |
 | `packages/api-client` | Generated TypeScript schema/client artifacts |
 | `openapi` | Committed OpenAPI spec |
@@ -148,6 +150,10 @@ Set at minimum:
 - `TRN_BACKEND_BASE_URL=http://localhost:8080`
 - `TRN_BACKEND_API_KEY=trn_bootstrap_dev_key` (or a generated app key)
 
+Optional (admin bootstrap):
+- `ADMIN_BOOTSTRAP_EMAIL_0=<your-admin-email>` in local shell/.env before `docker compose up`
+- Register/login that same email in the web app, then access `/admin`
+
 4. Run the web app:
 
 ```bash
@@ -156,9 +162,10 @@ corepack pnpm web:dev
 
 Local endpoints:
 - Web: `http://localhost:3000`
+- Web admin dashboard: `http://localhost:3000/admin` (admin role required)
 - API: `http://localhost:8080`
 - API health: `http://localhost:8080/health/live`, `http://localhost:8080/health/ready`
-- Hangfire admin portal: `http://localhost:8081`
+- Hangfire break-glass portal: `http://localhost:8081` (keep private/non-public)
 - pgAdmin: `http://localhost:5050`
 
 ## API and Client Contract

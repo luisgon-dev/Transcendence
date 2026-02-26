@@ -12,6 +12,7 @@ High-level model:
 
 - `AppOnly`: `X-API-Key: <key>`
 - `UserOnly`: `Authorization: Bearer <jwt>`
+- `AdminOnly`: `Authorization: Bearer <jwt>` with `admin` role claim
 - `AppOrUser`: accepts either
 
 The Next.js web frontend uses route handlers as a BFF:
@@ -125,9 +126,19 @@ Response includes:
 - `POST /api/auth/login`
 - `POST /api/auth/refresh`
 - `GET /api/auth/me` (`AppOrUser`)
-- Key management endpoints (`AppOnly`)
+- Key management endpoints under `/api/auth/keys` (`AdminOnly`)
 
-### Pro Roster Admin (`AppOnly`)
+### Admin Operations (`AdminOnly`)
+
+- `GET /api/admin/overview`
+- `GET /api/admin/jobs/recurring`
+- `POST /api/admin/jobs/recurring/{id}/trigger`
+- `GET /api/admin/jobs/failed`
+- `POST /api/admin/jobs/failed/{jobId}/retry`
+- `POST /api/admin/cache/invalidate`
+- `GET /api/admin/audit-log`
+
+### Pro Roster Admin (`AdminOnly`)
 
 - `GET /api/admin/pro-summoners`
 - `POST /api/admin/pro-summoners`

@@ -24,13 +24,16 @@ public class JwtService(IConfiguration configuration, IHostEnvironment hostEnvir
             new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_signingKey)),
             SecurityAlgorithms.HmacSha256);
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.Email, user.Email),
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new Claim(ClaimTypes.Name, user.Email)
         };
+
+        foreach (var role in user.Roles.Select(x => x.Role).Distinct(StringComparer.Ordinal))
+            claims.Add(new Claim(ClaimTypes.Role, role));
 
         var expires = GetAccessTokenExpirationUtc();
         var token = new JwtSecurityToken(

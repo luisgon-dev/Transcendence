@@ -35,9 +35,11 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<RefreshLock> RefreshLocks { get; set; }
     public DbSet<ApiClientKey> ApiClientKeys { get; set; }
     public DbSet<UserAccount> UserAccounts { get; set; }
+    public DbSet<UserRole> UserRoles { get; set; }
     public DbSet<UserRefreshToken> UserRefreshTokens { get; set; }
     public DbSet<UserFavoriteSummoner> UserFavoriteSummoners { get; set; }
     public DbSet<UserPreferences> UserPreferences { get; set; }
+    public DbSet<AdminAuditEvent> AdminAuditEvents { get; set; }
     public DbSet<LiveGameSnapshot> LiveGameSnapshots { get; set; }
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -143,6 +145,17 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             entity.Property(x => x.PasswordHash).IsRequired();
         });
 
+        modelBuilder.Entity<UserRole>(entity =>
+        {
+            entity.HasKey(x => new { x.UserAccountId, x.Role });
+            entity.Property(x => x.Role).HasMaxLength(64).IsRequired();
+            entity.HasIndex(x => x.Role);
+            entity.HasOne(x => x.UserAccount)
+                .WithMany(x => x.Roles)
+                .HasForeignKey(x => x.UserAccountId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<UserRefreshToken>(entity =>
         {
             entity.HasKey(x => x.Id);
@@ -175,6 +188,18 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
                 .WithOne(x => x.Preferences)
                 .HasForeignKey<UserPreferences>(x => x.UserAccountId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AdminAuditEvent>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Action).IsRequired().HasMaxLength(128);
+            entity.Property(x => x.TargetType).HasMaxLength(128);
+            entity.Property(x => x.TargetId).HasMaxLength(256);
+            entity.Property(x => x.RequestId).HasMaxLength(128);
+            entity.HasIndex(x => x.CreatedAtUtc);
+            entity.HasIndex(x => new { x.ActorUserAccountId, x.CreatedAtUtc });
+            entity.HasIndex(x => new { x.Action, x.CreatedAtUtc });
         });
 
         modelBuilder.Entity<LiveGameSnapshot>(entity =>

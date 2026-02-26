@@ -11,6 +11,8 @@ using System.Threading.RateLimiting;
 using System.Text;
 using Transcendence.Data;
 using Transcendence.Data.Extensions;
+using Transcendence.Service.Core.Services.Auth.Interfaces;
+using Transcendence.Service.Core.Services.Auth.Models;
 using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Extensions;
 using Transcendence.WebAPI.Security;
@@ -26,6 +28,13 @@ builder.Services.AddRateLimiter(options =>
     options.AddFixedWindowLimiter("expensive-read", limiter =>
     {
         limiter.PermitLimit = 120;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        limiter.QueueLimit = 0;
+    });
+    options.AddFixedWindowLimiter("admin-write", limiter =>
+    {
+        limiter.PermitLimit = 30;
         limiter.Window = TimeSpan.FromMinutes(1);
         limiter.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
         limiter.QueueLimit = 0;
@@ -90,6 +99,7 @@ builder.Services.AddHybridCache(options =>
 builder.Services.AddTranscendenceCore();
 builder.Services.AddProjectSyndraRepositories();
 builder.Services.Configure<ChampionAnalyticsComputeOptions>(builder.Configuration.GetSection("Analytics:Compute"));
+builder.Services.Configure<AdminBootstrapOptions>(builder.Configuration.GetSection("Auth:AdminBootstrap"));
 
 var riotApiKey = builder.Configuration.GetConnectionString("RiotApi")
                  ?? builder.Configuration["RiotApi:ApiKey"];
@@ -141,6 +151,11 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(AuthPolicies.AppOrUser, policy =>
         policy.AddAuthenticationSchemes(AuthPolicies.ApiKeyScheme, JwtBearerDefaults.AuthenticationScheme)
             .RequireAuthenticatedUser());
+
+    options.AddPolicy(AuthPolicies.AdminOnly, policy =>
+        policy.AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme)
+            .RequireAuthenticatedUser()
+            .RequireRole(SystemRoles.Admin));
 });
 
 // Configure Hangfire client (no server) for enqueueing jobs
@@ -173,5 +188,15 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHealthChecks("/health/live");
 app.MapHealthChecks("/health/ready");
+
+using (var scope = app.Services.CreateScope())
+{
+    var bootstrap = scope.ServiceProvider.GetRequiredService<IAdminBootstrapService>();
+    var bootstrapLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+        .CreateLogger("AdminBootstrap");
+    var grants = await bootstrap.EnsureBootstrapAdminsAsync();
+    if (grants > 0)
+        bootstrapLogger.LogInformation("Admin bootstrap granted {Count} account(s).", grants);
+}
 
 app.Run();

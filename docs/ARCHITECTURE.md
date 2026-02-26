@@ -28,13 +28,14 @@ Transcendence is a backend + web monorepo:
 - PostgreSQL is the intended runtime database
 
 ### `Transcendence.WebAdminPortal`
-- Hangfire dashboard host (admin/ops)
+- Private break-glass Hangfire dashboard host (not intended for public exposure)
 
 ### `apps/web` (Next.js)
 - App Router pages + route handlers used as a BFF:
   - `/api/session/*` for browser auth/session interactions
   - `/api/trn/*` as proxy endpoints to backend (adds auth headers server-side)
 - Tailwind styling, SSR-first pages where possible
+- Admin dashboard routes under `/admin/*` for ops controls/reports (JWT `admin` role required)
 - Frontend analysis routes:
   - `/tierlist`
   - `/champions/*`
@@ -146,8 +147,16 @@ The web app never exposes backend tokens to browser JS:
 - User tokens are stored as HttpOnly cookies in Next.js domain
 - Next route handlers forward requests to backend with:
   - `Authorization: Bearer ...` (UserOnly) when needed
+  - `Authorization: Bearer ...` (AdminOnly) for `/admin` flows when needed
   - `X-API-Key` (AppOnly) when needed
 - Backend never receives browser cookies (explicitly stripped in proxy)
+
+## Admin Surface and Security
+
+- Admin APIs are protected with JWT + `admin` role (`AdminOnly` policy).
+- Admin bootstrap can grant initial admin role from configured email allowlist (`Auth:AdminBootstrap:Emails`).
+- Admin mutating operations are rate-limited (`admin-write`) and audited (`AdminAuditEvents`).
+- Raw Hangfire dashboard remains a private break-glass surface; public/admin UX should use the curated `/api/admin/*` endpoints and `/admin/*` UI.
 
 ## Caching
 

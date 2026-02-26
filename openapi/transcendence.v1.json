@@ -22,7 +22,6 @@
           {
             "name": "rankTier",
             "in": "query",
-            "description": "Optional rank filter. Supports ALL, EMERALD_PLUS (alias EMERALD+), and exact tiers (IRON, BRONZE, SILVER, GOLD, PLATINUM, EMERALD, DIAMOND, MASTER, GRANDMASTER, CHALLENGER).",
             "schema": {
               "type": "string"
             }
@@ -685,7 +684,6 @@
           {
             "name": "rankTier",
             "in": "query",
-            "description": "Optional rank filter. Supports ALL, EMERALD_PLUS (alias EMERALD+), and exact tiers (IRON, BRONZE, SILVER, GOLD, PLATINUM, EMERALD, DIAMOND, MASTER, GRANDMASTER, CHALLENGER).",
             "schema": {
               "type": "string"
             }
@@ -794,7 +792,6 @@
           {
             "name": "rankTier",
             "in": "query",
-            "description": "Optional rank filter. Supports ALL, EMERALD_PLUS (alias EMERALD+), and exact tiers (IRON, BRONZE, SILVER, GOLD, PLATINUM, EMERALD, DIAMOND, MASTER, GRANDMASTER, CHALLENGER).",
             "schema": {
               "type": "string"
             }
@@ -902,6 +899,26 @@
           }
         ],
         "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "200": {
             "description": "OK",
             "content": {
@@ -970,7 +987,6 @@
           {
             "name": "rankTier",
             "in": "query",
-            "description": "Optional rank filter. Supports ALL, EMERALD_PLUS (alias EMERALD+), and exact tiers (IRON, BRONZE, SILVER, GOLD, PLATINUM, EMERALD, DIAMOND, MASTER, GRANDMASTER, CHALLENGER).",
             "schema": {
               "type": "string"
             }

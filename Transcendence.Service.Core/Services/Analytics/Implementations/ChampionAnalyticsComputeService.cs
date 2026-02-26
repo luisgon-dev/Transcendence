@@ -16,8 +16,6 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
 {
     private const int MinMatchupSampleSize = 30;
     private const int MatchupsToShow = 5;
-    private static readonly string[] EmeraldPlusTiers =
-        ["EMERALD", "DIAMOND", "MASTER", "GRANDMASTER", "CHALLENGER"];
     private readonly TranscendenceContext _context;
     private readonly ChampionAnalyticsComputeOptions _options;
     private readonly ILogger<ChampionAnalyticsComputeService> _logger;
@@ -86,7 +84,12 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         if (rankTierScope.IsEmeraldPlus)
         {
             participantRanks = participantRanks
-                .Where(pr => EmeraldPlusTiers.Contains(pr.RankTier));
+                .Where(pr =>
+                    pr.RankTier == "EMERALD" ||
+                    pr.RankTier == "DIAMOND" ||
+                    pr.RankTier == "MASTER" ||
+                    pr.RankTier == "GRANDMASTER" ||
+                    pr.RankTier == "CHALLENGER");
         }
         else if (!string.IsNullOrWhiteSpace(rankTierScope.ExactTier))
         {
@@ -432,7 +435,11 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             return query.Where(mp => ranks.Any(r =>
                 r.QueueType == "RANKED_SOLO_5x5" &&
                 r.SummonerId == mp.SummonerId &&
-                EmeraldPlusTiers.Contains(r.Tier)));
+                (r.Tier == "EMERALD" ||
+                 r.Tier == "DIAMOND" ||
+                 r.Tier == "MASTER" ||
+                 r.Tier == "GRANDMASTER" ||
+                 r.Tier == "CHALLENGER")));
         }
 
         return query.Where(mp => ranks.Any(r =>

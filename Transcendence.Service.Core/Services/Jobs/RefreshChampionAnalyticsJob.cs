@@ -36,7 +36,7 @@ public class RefreshChampionAnalyticsJob(
     private static readonly string[] Roles = { "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" };
 
     // Primary rank tiers to pre-warm (covers majority of player base)
-    private static readonly string[] PrimaryTiers = { "Gold", "Platinum", "Emerald", "Diamond" };
+    private static readonly string[] PrimaryTiers = { "Gold", "Platinum", "Emerald", "Diamond", "EMERALD_PLUS" };
 
     public async Task ExecuteAsync(CancellationToken ct)
     {
@@ -165,15 +165,16 @@ public class RefreshChampionAnalyticsJob(
                 }
             }
 
-            // Step 4: Pre-warm unified tier list
+            // Step 4: Pre-warm unified tier lists
             try
             {
                 await analyticsService.GetTierListAsync("ALL", null, ct);
-                logger.LogDebug("Pre-warmed unified tier list");
+                await analyticsService.GetTierListAsync("ALL", "EMERALD_PLUS", ct);
+                logger.LogDebug("Pre-warmed unified tier list variants");
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Failed to pre-warm unified tier list");
+                logger.LogWarning(ex, "Failed to pre-warm unified tier list variants");
             }
 
             // Step 5: Pre-warm win rates, builds, matchups for top 20 champions per role

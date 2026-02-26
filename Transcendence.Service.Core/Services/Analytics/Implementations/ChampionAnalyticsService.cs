@@ -14,7 +14,7 @@ namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 public class ChampionAnalyticsService : IChampionAnalyticsService
 {
     private const string WinRateCacheKeyPrefix = "analytics:champion:winrates:";
-    private const string TierListCacheKeyPrefix = "analytics:tierlist:";
+    private const string TierListCacheKeyPrefix = "analytics:tierlist:v2:";
     private const string BuildsCacheKeyPrefix = "analytics:builds:";
     private const string ProBuildsCacheKeyPrefix = "analytics:probuilds:";
     private const string MatchupsCacheKeyPrefix = "analytics:matchups:";

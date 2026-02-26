@@ -6,6 +6,7 @@ import {
 } from "@/components/ChampionsGridClient";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl } from "@/lib/env";
+import { DEFAULT_TIERLIST_RANK_TIER } from "@/lib/ranks";
 import { fetchChampionMap } from "@/lib/staticData";
 import {
   normalizeTierListEntries,
@@ -18,7 +19,7 @@ export default async function ChampionsPage() {
   const [{ version, champions }, tierListRes] = await Promise.all([
     fetchChampionMap(),
     fetchBackendJson<TierListResponse>(
-      `${getBackendBaseUrl()}/api/analytics/tierlist`,
+      `${getBackendBaseUrl()}/api/analytics/tierlist?rankTier=${encodeURIComponent(DEFAULT_TIERLIST_RANK_TIER)}`,
       { next: { revalidate: 60 * 60 } }
     )
   ]);

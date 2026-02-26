@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/Card";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { formatGames, formatPercent } from "@/lib/format";
+import { normalizeRankTierParam, rankTierDisplayLabel } from "@/lib/ranks";
 import { roleDisplayLabel } from "@/lib/roles";
 import {
   championIconUrl,
@@ -29,31 +30,11 @@ type ChampionBuildsResponse = components["schemas"]["ChampionBuildsResponse"];
 type ChampionMatchupsResponse = components["schemas"]["ChampionMatchupsResponse"];
 
 const ROLES = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"] as const;
-const RANK_TIERS = [
-  "all",
-  "IRON",
-  "BRONZE",
-  "SILVER",
-  "GOLD",
-  "PLATINUM",
-  "EMERALD",
-  "DIAMOND",
-  "MASTER",
-  "GRANDMASTER",
-  "CHALLENGER"
-] as const;
 
 function normalizeRole(role: string | undefined) {
   if (!role) return null;
   const upper = role.toUpperCase();
   return ROLES.includes(upper as (typeof ROLES)[number]) ? upper : null;
-}
-
-function normalizeRankTier(rankTier: string | undefined) {
-  if (!rankTier) return null;
-  const upper = rankTier.toUpperCase();
-  if (upper === "ALL") return null;
-  return RANK_TIERS.includes(upper as (typeof RANK_TIERS)[number]) ? upper : null;
 }
 
 function pickMostPlayedRole(summary: ChampionWinRateSummary | null) {
@@ -102,7 +83,7 @@ export default async function ChampionDetailPage({
   }
 
   const explicitRole = normalizeRole(resolvedSearchParams?.role);
-  const normalizedRankTier = normalizeRankTier(resolvedSearchParams?.rankTier);
+  const normalizedRankTier = normalizeRankTierParam(resolvedSearchParams?.rankTier);
   const qsTier = normalizedRankTier
     ? `?rankTier=${encodeURIComponent(normalizedRankTier)}`
     : "";
@@ -166,6 +147,7 @@ export default async function ChampionDetailPage({
   const items = itemStatic.items;
   const runeById = runeStatic.runeById;
   const styleById = runeStatic.styleById;
+  const runeSortById = runeStatic.runeSortById;
 
   if (!winRes.ok && !buildRes.ok && !matchupRes.ok) {
     const requestId = winRes.requestId || buildRes.requestId || matchupRes.requestId;
@@ -240,7 +222,7 @@ export default async function ChampionDetailPage({
             </div>
             {champ?.title ? <p className="mt-0.5 text-xs uppercase tracking-wide text-muted">{champ.title}</p> : null}
             <p className="mt-0.5 text-sm text-muted">
-              {roleDisplayLabel(effectiveRole)} &middot; {normalizedRankTier ?? "All Ranks"}
+              {roleDisplayLabel(effectiveRole)} &middot; {rankTierDisplayLabel(normalizedRankTier ?? "all")}
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
               <span className="rounded-full border border-border/60 bg-white/[0.03] px-2 py-1 text-fg/80">
@@ -280,7 +262,7 @@ export default async function ChampionDetailPage({
         <FilterBar
           roles={ROLES}
           activeRole={effectiveRole}
-          activeRank={normalizedRankTier?.toLowerCase() ?? "all"}
+          activeRank={normalizedRankTier ?? "all"}
           baseHref={`/champions/${championId}`}
           patch={winrates?.patch ?? builds?.patch}
         />
@@ -320,7 +302,9 @@ export default async function ChampionDetailPage({
                       <td className="py-2.5 pr-4 font-medium">
                         {roleDisplayLabel(w.role ?? "ALL")}
                       </td>
-                      <td className="py-2.5 pr-4 text-muted">{w.rankTier ?? "ALL"}</td>
+                      <td className="py-2.5 pr-4 text-muted">
+                        {rankTierDisplayLabel(w.rankTier ?? "all")}
+                      </td>
                       <td className="py-2.5 pr-4 text-right">
                         <WinRateText value={w.winRate} decimals={2} />
                       </td>
@@ -400,7 +384,8 @@ export default async function ChampionDetailPage({
                       statShards={b.statShards ?? []}
                       runeById={runeById}
                       styleById={styleById}
-                      iconSize={20}
+                      runeSortById={runeSortById}
+                      iconSize={24}
                     />
                   </div>
                 </div>

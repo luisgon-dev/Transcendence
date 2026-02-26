@@ -8,6 +8,7 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { FavoriteButton } from "@/components/FavoriteButton";
 import { LiveGameCard } from "@/components/LiveGameCard";
+import { RuneSetupDisplay } from "@/components/RuneSetupDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -20,9 +21,17 @@ import {
   winRateColorClass
 } from "@/lib/format";
 import { computeNextPollDelayMs } from "@/lib/polling";
+import { formatQueueLabel } from "@/lib/queues";
+import { rankEmblemUrl, rankTierDisplayLabel } from "@/lib/ranks";
 import { roleDisplayLabel } from "@/lib/roles";
 import { encodeRiotIdPath } from "@/lib/riotid";
-import { championIconUrl, profileIconUrl } from "@/lib/staticData";
+import {
+  championIconUrl,
+  itemIconUrl,
+  profileIconUrl,
+  runeIconUrl,
+  summonerSpellIconUrl
+} from "@/lib/staticData";
 
 type DataAgeMetadata = {
   fetchedAt?: string;
@@ -96,10 +105,36 @@ type ChampionStatic = {
   champions: Record<string, { id: string; name: string }>;
 };
 
+type ItemStatic = {
+  version: string;
+  items: Record<string, { name: string; plaintext?: string }>;
+};
+
+type SpellStatic = {
+  version: string;
+  spells: Record<string, { id: string; name: string }>;
+};
+
+type RuneStatic = {
+  version: string;
+  runeById: Record<string, { name: string; icon: string }>;
+  styleById: Record<string, { name: string; icon: string }>;
+  runeSortById: Record<string, number>;
+};
+
+type MatchRuneDetail = {
+  primaryStyleId: number;
+  subStyleId: number;
+  primarySelections: number[];
+  subSelections: number[];
+  statShards: number[];
+};
+
 type MatchSummary = {
   matchId: string;
   matchDate: number;
   durationSeconds: number;
+  queueId: number;
   queueType: string;
   win: boolean;
   championId: number;
@@ -110,6 +145,10 @@ type MatchSummary = {
   visionScore: number;
   damageToChamps: number;
   csPerMin: number;
+  summonerSpell1Id: number;
+  summonerSpell2Id: number;
+  items: number[];
+  runesDetail: MatchRuneDetail;
 };
 
 type PagedResultDto<T> = {
@@ -124,9 +163,11 @@ type MatchDetail = {
   matchId: string;
   matchDate: number;
   duration: number;
+  queueId: number;
   queueType: string;
   patch?: string | null;
   participants: Array<{
+    puuid?: string | null;
     gameName?: string | null;
     tagLine?: string | null;
     teamId: number;
@@ -140,7 +181,16 @@ type MatchDetail = {
     totalDamageDealtToChampions: number;
     totalMinionsKilled: number;
     neutralMinionsKilled: number;
+    summonerSpell1Id: number;
+    summonerSpell2Id: number;
+    items: number[];
+    runes: MatchRuneDetail;
   }>;
+};
+
+type QueueOption = {
+  value: string;
+  label: string;
 };
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -181,6 +231,38 @@ function rankColorClass(tier?: string): string {
   return map[tier.toUpperCase()] ?? "text-fg/80";
 }
 
+function queueValueForMatch(match: Pick<MatchSummary, "queueId" | "queueType">): string {
+  if (match.queueId > 0) return `id:${match.queueId}`;
+  return `type:${match.queueType || "UNKNOWN"}`;
+}
+
+function normalizeInitialQueue(value?: string) {
+  if (!value || value.toUpperCase() === "ALL") return "ALL";
+  if (value.startsWith("id:") || value.startsWith("type:")) return value;
+
+  if (/^\d+$/.test(value)) return `id:${value}`;
+  if (value.includes("_")) return `type:${value}`;
+
+  const normalizedLabel = formatQueueLabel(value);
+  return `label:${normalizedLabel}`;
+}
+
+function participantDisplayName(gameName?: string | null, tagLine?: string | null) {
+  if (gameName && tagLine) return `${gameName}#${tagLine}`;
+  return gameName ?? "Unknown";
+}
+
+function isCurrentProfilePlayer(
+  participant: { gameName?: string | null; tagLine?: string | null },
+  gameName: string,
+  tagLine: string
+) {
+  return (
+    (participant.gameName ?? "").toLowerCase() === gameName.toLowerCase() &&
+    (participant.tagLine ?? "").toLowerCase() === tagLine.toLowerCase()
+  );
+}
+
 export function SummonerProfileClient({
   region,
   gameName,
@@ -217,26 +299,53 @@ export function SummonerProfileClient({
   const [polling, setPolling] = useState(initialStatus === 202);
   const [pollDelayMs, setPollDelayMs] = useState(2000);
   const [championStatic, setChampionStatic] = useState<ChampionStatic | null>(null);
+  const [itemStatic, setItemStatic] = useState<ItemStatic | null>(null);
+  const [spellStatic, setSpellStatic] = useState<SpellStatic | null>(null);
+  const [runeStatic, setRuneStatic] = useState<RuneStatic | null>(null);
 
   const [page, setPage] = useState(Math.max(1, initialPage));
-  const [queue, setQueue] = useState(initialQueue || "ALL");
+  const [queue, setQueue] = useState(normalizeInitialQueue(initialQueue));
   const [expandedMatchId, setExpandedMatchId] = useState<string | null>(initialExpandMatchId);
   const [history, setHistory] = useState<PagedResultDto<MatchSummary> | null>(null);
   const [historyBusy, setHistoryBusy] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [details, setDetails] = useState<Record<string, MatchDetail | null>>({});
   const [detailBusy, setDetailBusy] = useState<Record<string, boolean>>({});
+  const [expandedRunes, setExpandedRunes] = useState<Record<string, boolean>>({});
 
-  const queueOptions = useMemo(() => {
-    const set = new Set<string>(["ALL"]);
-    for (const m of history?.items ?? []) set.add(m.queueType);
-    return Array.from(set);
+  const queueOptions = useMemo<QueueOption[]>(() => {
+    const optionMap = new Map<string, QueueOption>();
+    optionMap.set("ALL", { value: "ALL", label: "All Queues" });
+
+    for (const match of history?.items ?? []) {
+      const value = queueValueForMatch(match);
+      const label = formatQueueLabel(match.queueType, match.queueId);
+      optionMap.set(value, { value, label });
+    }
+
+    return Array.from(optionMap.values());
   }, [history?.items]);
 
   const visibleMatches = useMemo(() => {
     if (!history?.items) return [];
     if (queue === "ALL") return history.items;
-    return history.items.filter((m) => m.queueType === queue);
+
+    if (queue.startsWith("id:")) {
+      const queueId = Number(queue.slice(3));
+      return history.items.filter((m) => m.queueId === queueId);
+    }
+
+    if (queue.startsWith("type:")) {
+      const queueType = queue.slice(5);
+      return history.items.filter((m) => (m.queueType || "UNKNOWN") === queueType);
+    }
+
+    if (queue.startsWith("label:")) {
+      const label = queue.slice(6);
+      return history.items.filter((m) => formatQueueLabel(m.queueType, m.queueId) === label);
+    }
+
+    return history.items;
   }, [history?.items, queue]);
 
   useEffect(() => {
@@ -250,13 +359,41 @@ export function SummonerProfileClient({
 
   useEffect(() => {
     let cancelled = false;
-    async function load() {
-      const res = await fetch("/api/static/champions");
-      if (!res.ok) return;
-      const json = (await res.json()) as ChampionStatic;
-      if (!cancelled) setChampionStatic(json);
+    async function loadStatic() {
+      try {
+        const [champRes, itemRes, spellRes, runeRes] = await Promise.all([
+          fetch("/api/static/champions"),
+          fetch("/api/static/items"),
+          fetch("/api/static/spells"),
+          fetch("/api/static/runes")
+        ]);
+
+        if (cancelled) return;
+
+        if (champRes.ok) {
+          const json = (await champRes.json()) as ChampionStatic;
+          if (!cancelled) setChampionStatic(json);
+        }
+
+        if (itemRes.ok) {
+          const json = (await itemRes.json()) as ItemStatic;
+          if (!cancelled) setItemStatic(json);
+        }
+
+        if (spellRes.ok) {
+          const json = (await spellRes.json()) as SpellStatic;
+          if (!cancelled) setSpellStatic(json);
+        }
+
+        if (runeRes.ok) {
+          const json = (await runeRes.json()) as RuneStatic;
+          if (!cancelled) setRuneStatic(json);
+        }
+      } catch {
+        // Keep rendering profile shell even when static assets fail to load.
+      }
     }
-    void load();
+    void loadStatic();
     return () => {
       cancelled = true;
     };
@@ -375,6 +512,20 @@ export function SummonerProfileClient({
     }
   }
 
+  function toggleRuneRow(runeRowKey: string) {
+    setExpandedRunes((state) => ({
+      ...state,
+      [runeRowKey]: !state[runeRowKey]
+    }));
+  }
+
+  const rankedEntries = useMemo(() => {
+    const entries: Array<{ label: string; rank: RankInfo }> = [];
+    if (profile?.soloRank) entries.push({ label: "Solo/Duo", rank: profile.soloRank });
+    if (profile?.flexRank) entries.push({ label: "Flex", rank: profile.flexRank });
+    return entries;
+  }, [profile?.flexRank, profile?.soloRank]);
+
   const dataAge = profile?.profileAge?.ageDescription ?? "updated recently";
 
   return (
@@ -411,17 +562,59 @@ export function SummonerProfileClient({
         <Card className="p-5"><Skeleton className="h-16 w-full" /></Card>
       ) : (
         <div className="grid gap-6 lg:grid-cols-12">
-          <aside className="grid gap-4 lg:col-span-4 xl:col-span-3">
+          <aside className="grid gap-4 lg:col-span-3 xl:col-span-3">
             <Card className="p-4">
-              <h2 className="font-[var(--font-sora)] text-lg font-semibold">Ranked</h2>
-              <div className="mt-3 grid gap-2 text-sm">
-                {([["Solo", profile.soloRank], ["Flex", profile.flexRank]] as const).map(([label, rank]) => (
-                  <div key={label} className="rounded-xl border border-border/60 bg-surface/50 px-3 py-2">
-                    <p className="text-xs text-muted">{label}</p>
-                    <p className={`font-semibold ${rankColorClass(rank?.tier)}`}>{rank ? `${rank.tier} ${rank.division} · ${rank.leaguePoints} LP` : "Unranked"}</p>
-                  </div>
-                ))}
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="font-[var(--font-sora)] text-lg font-semibold">Ranked</h2>
+                <Badge>{profile.rankAge?.ageDescription ?? "updated recently"}</Badge>
               </div>
+              {rankedEntries.length === 0 ? (
+                <p className="mt-3 text-sm text-muted">No ranked data available.</p>
+              ) : (
+                <div
+                  className={`mt-3 grid gap-2 text-sm ${
+                    rankedEntries.length > 1 ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-1" : "grid-cols-1"
+                  }`}
+                >
+                  {rankedEntries.map(({ label, rank }) => {
+                    const emblem = rankEmblemUrl(rank.tier);
+                    const totalGames = rank.wins + rank.losses;
+                    const wr = totalGames > 0 ? (rank.wins / totalGames) * 100 : null;
+                    return (
+                      <div
+                        key={label}
+                        className="grid grid-cols-[78px_minmax(0,1fr)] items-center gap-2.5 rounded-xl border border-border/60 bg-surface/50 px-2.5 py-2"
+                      >
+                        {emblem ? (
+                          <div className="relative h-[72px] w-[72px] overflow-hidden rounded-lg">
+                            <Image
+                              src={emblem}
+                              alt={`${rankTierDisplayLabel(rank.tier)} emblem`}
+                              width={1280}
+                              height={720}
+                              unoptimized
+                              sizes="220px"
+                              className="absolute left-1/2 top-1/2 h-[220px] w-auto max-w-none -translate-x-1/2 -translate-y-[47%] select-none"
+                            />
+                          </div>
+                        ) : (
+                          <div className="h-[72px] w-[72px] rounded-full border border-border/60 bg-surface/70" />
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-[11px] uppercase tracking-wide text-muted">{label}</p>
+                          <p className={`truncate font-semibold ${rankColorClass(rank?.tier)}`}>
+                            {rankTierDisplayLabel(rank.tier)} {rank.division} · {rank.leaguePoints} LP
+                          </p>
+                          <p className="text-xs text-muted">
+                            {rank.wins}W {rank.losses}L
+                            {wr != null ? ` · ${formatPercent(wr, { input: "percent", decimals: 1 })}` : ""}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </Card>
             <Card className="p-4">
               <h2 className="font-[var(--font-sora)] text-lg font-semibold">Top Champions</h2>
@@ -439,13 +632,23 @@ export function SummonerProfileClient({
             <LiveGameCard region={region} gameName={gameName} tagLine={tagLine} />
           </aside>
 
-          <section className="grid gap-4 lg:col-span-8 xl:col-span-9">
+          <section className="grid gap-4 lg:col-span-9 xl:col-span-9">
             <Card className="p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="font-[var(--font-sora)] text-xl font-semibold">Match History</h2>
                 <div className="flex flex-wrap gap-2">
-                  {queueOptions.map((q) => (
-                    <button key={q} className={`rounded-full border px-3 py-1 text-xs ${q === queue ? "border-primary/45 bg-primary/15 text-primary" : "border-border/70 bg-surface/50 text-fg/80"}`} onClick={() => setQueue(q)}>{q}</button>
+                  {queueOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      className={`rounded-full border px-3 py-1 text-xs ${
+                        option.value === queue
+                          ? "border-primary/45 bg-primary/15 text-primary"
+                          : "border-border/70 bg-surface/50 text-fg/80"
+                      }`}
+                      onClick={() => setQueue(option.value)}
+                    >
+                      {option.label}
+                    </button>
                   ))}
                 </div>
               </div>
@@ -462,12 +665,13 @@ export function SummonerProfileClient({
                 {visibleMatches.map((m) => {
                   const expanded = expandedMatchId === m.matchId;
                   const d = details[m.matchId];
+                  const queueLabel = formatQueueLabel(m.queueType, m.queueId);
                   return (
                     <motion.div key={m.matchId} layout className={`rounded-2xl border p-3 ${m.win ? "border-success/35 bg-success/10" : "border-danger/35 bg-danger/10"}`}>
                       <button className="w-full text-left" onClick={() => void toggleExpanded(m.matchId)}>
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <p className={`text-xs font-semibold ${m.win ? "text-success" : "text-danger"}`}>{m.win ? "VICTORY" : "DEFEAT"}</p>
-                          <p className="text-xs text-muted">{m.queueType} · {formatDurationSeconds(m.durationSeconds)} · {formatRelativeTime(m.matchDate)}</p>
+                          <p className="text-xs text-muted">{queueLabel} · {formatDurationSeconds(m.durationSeconds)} · {formatRelativeTime(m.matchDate)}</p>
                         </div>
                         <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
                           <div className="flex items-center gap-2">
@@ -482,7 +686,7 @@ export function SummonerProfileClient({
                             ) : null}
                             <div>
                               <p className="text-sm font-semibold">{championStatic?.champions[String(m.championId)]?.name ?? `Champion ${m.championId}`}</p>
-                              <p className="text-xs text-muted">{m.teamPosition ? roleDisplayLabel(m.teamPosition) : "Unknown role"} · {formatDateTimeMs(m.matchDate)}</p>
+                              <p className="text-xs text-muted">{m.teamPosition ? roleDisplayLabel(m.teamPosition) : "Unknown"} · {formatDateTimeMs(m.matchDate)}</p>
                             </div>
                           </div>
                           <p className="text-sm text-fg/90">{m.kills}/{m.deaths}/{m.assists} · {m.csPerMin.toFixed(1)} CS/min</p>
@@ -495,20 +699,185 @@ export function SummonerProfileClient({
                               {detailBusy[m.matchId] ? <Skeleton className="h-12 w-full" /> : null}
                               {!detailBusy[m.matchId] && !d ? <p className="text-sm text-muted">Detailed rows are unavailable for this match.</p> : null}
                               {d ? (
-                                <div className="grid gap-3">
-                                  {[100, 200].map((teamId) => (
-                                    <div key={`${m.matchId}-${teamId}`} className="rounded-xl border border-border/50 bg-surface/40 p-2.5">
-                                      <p className="mb-1 text-xs font-semibold text-fg/85">Team {teamId}</p>
-                                      {d.participants.filter((p) => p.teamId === teamId).map((p, idx) => (
-                                        <div key={`${teamId}-${idx}`} className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-2 border-t border-border/20 py-1.5 first:border-t-0">
-                                          <span className="truncate text-xs">{(p.gameName && p.tagLine) ? `${p.gameName}#${p.tagLine}` : "Unknown"}{p.teamPosition ? ` · ${roleDisplayLabel(p.teamPosition)}` : ""}</span>
-                                          <span className="text-xs text-fg/80">{p.kills}/{p.deaths}/{p.assists}</span>
-                                          <span className="text-xs text-muted">{(p.totalMinionsKilled + p.neutralMinionsKilled)} CS</span>
-                                          <span className="text-xs text-muted">{p.goldEarned.toLocaleString()}g</span>
-                                        </div>
-                                      ))}
+                                <div className="grid gap-3 xl:grid-cols-2">
+                                  {[100, 200].map((teamId) => {
+                                    const isBlueTeam = teamId === 100;
+                                    return (
+                                    <div key={`${m.matchId}-${teamId}`} className="rounded-xl border border-border/50 bg-surface/40 p-2">
+                                      <p className={`mb-2 text-xs font-semibold ${isBlueTeam ? "text-sky-300" : "text-rose-300"}`}>
+                                        {isBlueTeam ? "Blue Team" : "Red Team"}
+                                      </p>
+                                      <div className="grid gap-1.5">
+                                        {d.participants
+                                          .filter((p) => p.teamId === teamId)
+                                          .map((p, idx) => {
+                                            const isCurrent = isCurrentProfilePlayer(p, gameName, tagLine);
+                                            const champMeta = championStatic?.champions[String(p.championId)];
+                                            const itemIds = (p.items ?? []).slice(0, 7);
+                                            const cs = (p.totalMinionsKilled + p.neutralMinionsKilled).toLocaleString();
+                                            const runeRowKey = `${m.matchId}:${teamId}:${idx}`;
+                                            const runesExpanded = expandedRunes[runeRowKey] === true;
+                                            const orderedPrimarySelections = (p.runes?.primarySelections ?? [])
+                                              .slice()
+                                              .sort((a, b) => {
+                                                const aSort =
+                                                  runeStatic?.runeSortById[String(a)] ?? Number.MAX_SAFE_INTEGER;
+                                                const bSort =
+                                                  runeStatic?.runeSortById[String(b)] ?? Number.MAX_SAFE_INTEGER;
+                                                return aSort - bSort;
+                                              });
+                                            const hasRunes =
+                                              (p.runes?.primarySelections?.length ?? 0) > 0 ||
+                                              (p.runes?.subSelections?.length ?? 0) > 0 ||
+                                              (p.runes?.statShards?.length ?? 0) > 0;
+                                            const primaryRuneId = orderedPrimarySelections[0] ?? 0;
+                                            const primaryRuneMeta = runeStatic?.runeById[String(primaryRuneId)];
+                                            const canExpandRunes = Boolean(runeStatic && hasRunes);
+
+                                            return (
+                                              <div
+                                                key={`${teamId}-${idx}`}
+                                                className={`rounded-lg border px-2 py-1.5 ${
+                                                  isCurrent
+                                                    ? "border-primary/50 bg-primary/10"
+                                                    : "border-border/25 bg-surface/30"
+                                                }`}
+                                              >
+                                                <div className="grid items-center gap-1.5 sm:grid-cols-[minmax(0,1fr)_auto]">
+                                                  <div className="flex items-center gap-2">
+                                                    {champMeta && championStatic ? (
+                                                      <Image
+                                                        src={championIconUrl(championStatic.version, champMeta.id)}
+                                                        alt={champMeta.name}
+                                                        width={28}
+                                                        height={28}
+                                                        className="rounded-md border border-border/50"
+                                                      />
+                                                    ) : (
+                                                      <div className="h-7 w-7 rounded-md border border-border/50 bg-surface/70" />
+                                                    )}
+                                                    <div className="min-w-0 flex-1">
+                                                      <p className="truncate text-xs font-medium text-fg/95">
+                                                        {participantDisplayName(p.gameName, p.tagLine)}
+                                                        {p.teamPosition
+                                                          ? ` · ${roleDisplayLabel(p.teamPosition)}`
+                                                          : ""}
+                                                      </p>
+                                                      <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
+                                                        <span>{p.kills}/{p.deaths}/{p.assists}</span>
+                                                        <span>{cs} CS</span>
+                                                        <span>{p.goldEarned.toLocaleString()}g</span>
+                                                        <span>{p.totalDamageDealtToChampions.toLocaleString()} dmg</span>
+                                                      </div>
+                                                    </div>
+                                                  </div>
+
+                                                  <div className="flex items-center gap-1.5 lg:justify-end">
+                                                    {[p.summonerSpell1Id, p.summonerSpell2Id].map((spellId, spellIdx) => {
+                                                      const spellMeta = spellStatic?.spells[String(spellId)];
+                                                      return spellMeta && spellStatic ? (
+                                                        <Image
+                                                          key={`${spellId}-${spellIdx}`}
+                                                          src={summonerSpellIconUrl(spellStatic.version, spellMeta.id)}
+                                                          alt={spellMeta.name}
+                                                          title={spellMeta.name}
+                                                          width={18}
+                                                          height={18}
+                                                          className="rounded-md border border-border/40"
+                                                        />
+                                                      ) : (
+                                                        <div
+                                                          key={`${spellId}-${spellIdx}`}
+                                                          className="h-[18px] w-[18px] rounded-md border border-border/40 bg-surface/60"
+                                                        />
+                                                      );
+                                                    })}
+                                                  </div>
+                                                </div>
+
+                                                <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
+                                                  <div className="flex flex-wrap items-center gap-1">
+                                                    {itemIds.length > 0
+                                                      ? itemIds.map((itemId, itemIdx) => {
+                                                          if (!itemId) {
+                                                            return (
+                                                              <div
+                                                                key={`empty-${itemIdx}`}
+                                                                className="h-5 w-5 rounded-md border border-border/35 bg-surface/60"
+                                                              />
+                                                            );
+                                                          }
+
+                                                          const itemMeta = itemStatic?.items[String(itemId)];
+                                                          return itemStatic ? (
+                                                            <Image
+                                                              key={`${itemId}-${itemIdx}`}
+                                                              src={itemIconUrl(itemStatic.version, itemId)}
+                                                              alt={itemMeta?.name ?? `Item ${itemId}`}
+                                                              title={itemMeta?.name ?? `Item ${itemId}`}
+                                                              width={20}
+                                                              height={20}
+                                                              className="rounded-md border border-border/35"
+                                                            />
+                                                          ) : (
+                                                            <div
+                                                              key={`${itemId}-${itemIdx}`}
+                                                              className="h-5 w-5 rounded-md border border-border/35 bg-surface/60"
+                                                            />
+                                                          );
+                                                        })
+                                                      : null}
+                                                  </div>
+
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => toggleRuneRow(runeRowKey)}
+                                                    disabled={!canExpandRunes}
+                                                    className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] ${
+                                                      canExpandRunes
+                                                        ? "border-border/50 bg-surface/40 text-fg/85 hover:bg-surface/60"
+                                                        : "border-border/25 bg-surface/25 text-muted"
+                                                    }`}
+                                                    aria-expanded={runesExpanded}
+                                                    aria-label={runesExpanded ? "Hide runes" : "Show runes"}
+                                                  >
+                                                    {primaryRuneMeta ? (
+                                                      <Image
+                                                        src={runeIconUrl(primaryRuneMeta.icon)}
+                                                        alt={primaryRuneMeta.name}
+                                                        title={primaryRuneMeta.name}
+                                                        width={20}
+                                                        height={20}
+                                                        className="rounded-full border border-border/35 bg-black/20 p-0.5"
+                                                      />
+                                                    ) : (
+                                                      <span className="h-5 w-5 rounded-full border border-border/35 bg-black/20" />
+                                                    )}
+                                                    <span>{canExpandRunes ? (runesExpanded ? "Hide Runes" : "Show Runes") : "Runes Unavailable"}</span>
+                                                  </button>
+                                                </div>
+                                                {runeStatic && canExpandRunes && runesExpanded ? (
+                                                  <RuneSetupDisplay
+                                                    primaryStyleId={p.runes?.primaryStyleId ?? 0}
+                                                    subStyleId={p.runes?.subStyleId ?? 0}
+                                                    primarySelections={p.runes?.primarySelections ?? []}
+                                                    subSelections={p.runes?.subSelections ?? []}
+                                                    statShards={p.runes?.statShards ?? []}
+                                                    runeById={runeStatic.runeById}
+                                                    styleById={runeStatic.styleById}
+                                                    runeSortById={runeStatic.runeSortById}
+                                                    iconSize={20}
+                                                    density="compact"
+                                                    className="mt-1.5"
+                                                  />
+                                                ) : null}
+                                              </div>
+                                            );
+                                          })}
+                                      </div>
                                     </div>
-                                  ))}
+                                    );
+                                  })}
                                 </div>
                               ) : null}
                             </div>

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { GLOBAL_SEARCH_OPEN_EVENT } from "@/lib/globalSearch";
+import { DEFAULT_TIERLIST_RANK_TIER, rankTierDisplayLabel } from "@/lib/ranks";
 import { encodeRiotIdPath, parseRiotIdInput } from "@/lib/riotid";
 
 type ChampionSearchItem = {
@@ -31,12 +32,31 @@ const REGIONS = [
 ] as const;
 
 const TIER_LINKS = [
-  { label: "Tier List · All Roles", href: "/tierlist" },
-  { label: "Tier List · Top", href: "/tierlist?role=TOP" },
-  { label: "Tier List · Jungle", href: "/tierlist?role=JUNGLE" },
-  { label: "Tier List · Middle", href: "/tierlist?role=MIDDLE" },
-  { label: "Tier List · Bottom", href: "/tierlist?role=BOTTOM" },
-  { label: "Tier List · Support", href: "/tierlist?role=UTILITY" },
+  {
+    label: `Tier List · All Roles (${rankTierDisplayLabel(DEFAULT_TIERLIST_RANK_TIER)})`,
+    href: "/tierlist"
+  },
+  {
+    label: `Tier List · Top (${rankTierDisplayLabel(DEFAULT_TIERLIST_RANK_TIER)})`,
+    href: "/tierlist?role=TOP"
+  },
+  {
+    label: `Tier List · Jungle (${rankTierDisplayLabel(DEFAULT_TIERLIST_RANK_TIER)})`,
+    href: "/tierlist?role=JUNGLE"
+  },
+  {
+    label: `Tier List · Middle (${rankTierDisplayLabel(DEFAULT_TIERLIST_RANK_TIER)})`,
+    href: "/tierlist?role=MIDDLE"
+  },
+  {
+    label: `Tier List · Bottom (${rankTierDisplayLabel(DEFAULT_TIERLIST_RANK_TIER)})`,
+    href: "/tierlist?role=BOTTOM"
+  },
+  {
+    label: `Tier List · Support (${rankTierDisplayLabel(DEFAULT_TIERLIST_RANK_TIER)})`,
+    href: "/tierlist?role=UTILITY"
+  },
+  { label: "Tier List · All Ranks", href: "/tierlist?rankTier=all" },
   { label: "Tier List · Challenger", href: "/tierlist?rankTier=CHALLENGER" },
   { label: "Matchup Analysis", href: "/matchups" },
   { label: "Pro Builds Preview", href: "/pro-builds" }
@@ -179,6 +199,14 @@ export function GlobalCommandPalette() {
     router.push(path);
   }
 
+  function handleQueryKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== "Enter") return;
+    if (!parsedRiotId) return;
+
+    e.preventDefault();
+    navigate(`/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`);
+  }
+
   if (!open) return null;
 
   const showEmpty =
@@ -200,6 +228,7 @@ export function GlobalCommandPalette() {
               ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={handleQueryKeyDown}
               placeholder="Search champions, tier list, or summoner Riot ID (GameName#TAG)"
               className="h-11 w-full rounded-md border border-border/70 bg-surface/35 px-3 text-sm text-fg shadow-glass outline-none placeholder:text-muted/70 focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
               aria-label="Global search input"

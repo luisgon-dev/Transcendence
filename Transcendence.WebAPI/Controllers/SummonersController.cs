@@ -49,8 +49,14 @@ public class SummonersController(
         if (summoner != null)
         {
             // Map to response DTO with data age metadata
-            var soloRank = summoner.Ranks.FirstOrDefault(r => r.QueueType == "RANKED_SOLO_5x5");
-            var flexRank = summoner.Ranks.FirstOrDefault(r => r.QueueType == "RANKED_FLEX_SR");
+            var soloRank = summoner.Ranks
+                .Where(r => IsSoloRankQueue(r.QueueType))
+                .OrderByDescending(r => r.UpdatedAt)
+                .FirstOrDefault();
+            var flexRank = summoner.Ranks
+                .Where(r => IsFlexRankQueue(r.QueueType))
+                .OrderByDescending(r => r.UpdatedAt)
+                .FirstOrDefault();
 
             // Keep these sequential because statsService shares a scoped DbContext, which is not thread-safe.
             var overview = await statsService.GetSummonerOverviewAsync(summoner.Id, 20, ct);
@@ -240,5 +246,19 @@ public class SummonersController(
     private static string ResolveChampionName(int championId)
     {
         return $"Champion {championId}";
+    }
+
+    private static bool IsSoloRankQueue(string? queueType)
+    {
+        if (string.IsNullOrWhiteSpace(queueType)) return false;
+        return queueType.Equals("RANKED_SOLO_5x5", StringComparison.OrdinalIgnoreCase) ||
+               queueType.Equals("RANKED_SOLO_5X5", StringComparison.OrdinalIgnoreCase) ||
+               queueType.Equals("RANKED_SOLO_5V5", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsFlexRankQueue(string? queueType)
+    {
+        if (string.IsNullOrWhiteSpace(queueType)) return false;
+        return queueType.StartsWith("RANKED_FLEX", StringComparison.OrdinalIgnoreCase);
     }
 }

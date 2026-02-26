@@ -45,6 +45,52 @@ type DDragonRuneStyle = {
   slots: DDragonRuneSlot[];
 };
 type DDragonRunesReforged = DDragonRuneStyle[];
+type CommunityDragonPerk = {
+  id: number;
+  name?: string;
+  iconPath?: string;
+};
+
+const CDRAGON_GAME_DATA_BASE =
+  "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default";
+
+const STAT_SHARD_FALLBACKS: Array<{ id: number; name: string; iconPath: string }> = [
+  {
+    id: 5001,
+    name: "Health Scaling",
+    iconPath: "/lol-game-data/assets/v1/perk-images/statmods/statmodshealthscalingicon.png"
+  },
+  {
+    id: 5002,
+    name: "Armor",
+    iconPath: "/lol-game-data/assets/v1/perk-images/statmods/statmodsarmoricon.png"
+  },
+  {
+    id: 5003,
+    name: "Magic Resist",
+    iconPath: "/lol-game-data/assets/v1/perk-images/statmods/statmodsmagicresicon.png"
+  },
+  {
+    id: 5005,
+    name: "Attack Speed",
+    iconPath: "/lol-game-data/assets/v1/perk-images/statmods/statmodsattackspeedicon.png"
+  },
+  {
+    id: 5007,
+    name: "Ability Haste",
+    iconPath: "/lol-game-data/assets/v1/perk-images/statmods/statmodscdrscalingicon.png"
+  },
+  {
+    id: 5008,
+    name: "Adaptive Force",
+    iconPath: "/lol-game-data/assets/v1/perk-images/statmods/statmodsadaptiveforceicon.png"
+  },
+  {
+    id: 5010,
+    name: "Move Speed",
+    iconPath: "/lol-game-data/assets/v1/perk-images/statmods/statmodsmovementspeedicon.png"
+  }
+];
 
 export type ItemMap = {
   version: string;
@@ -60,6 +106,7 @@ export type RuneStaticData = {
   version: string;
   runeById: Record<string, { name: string; icon: string }>;
   styleById: Record<string, { name: string; icon: string }>;
+  runeSortById: Record<string, number>;
 };
 
 async function fetchLatestVersion() {
@@ -162,20 +209,62 @@ export async function fetchRunesReforged(): Promise<RuneStaticData> {
   const styles = (await res.json()) as DDragonRunesReforged;
   const runeById: RuneStaticData["runeById"] = {};
   const styleById: RuneStaticData["styleById"] = {};
+  const runeSortById: RuneStaticData["runeSortById"] = {};
 
   for (const style of styles) {
     styleById[String(style.id)] = { name: style.name, icon: style.icon };
-    for (const slot of style.slots ?? []) {
-      for (const rune of slot.runes ?? []) {
+    for (const [slotIndex, slot] of (style.slots ?? []).entries()) {
+      for (const [runeIndex, rune] of (slot.runes ?? []).entries()) {
         runeById[String(rune.id)] = { name: rune.name, icon: rune.icon };
+        runeSortById[String(rune.id)] = slotIndex * 100 + runeIndex;
       }
     }
   }
 
-  return { version, runeById, styleById };
+  try {
+    const perksRes = await fetch(
+      `${CDRAGON_GAME_DATA_BASE}/v1/perks.json`,
+      { next: { revalidate: 60 * 60 * 24 } }
+    );
+
+    if (perksRes.ok) {
+      const perks = (await perksRes.json()) as CommunityDragonPerk[];
+      for (const perk of perks ?? []) {
+        if (!perk?.id || !perk?.iconPath) continue;
+        runeById[String(perk.id)] = {
+          name: perk.name?.trim() || `Rune ${perk.id}`,
+          icon: communityDragonAssetUrl(perk.iconPath)
+        };
+      }
+    }
+  } catch {
+    // Keep ddragon runes available even if CommunityDragon fetch is down.
+  }
+
+  for (const shard of STAT_SHARD_FALLBACKS) {
+    const key = String(shard.id);
+    if (runeById[key]) continue;
+    runeById[key] = {
+      name: shard.name,
+      icon: communityDragonAssetUrl(shard.iconPath)
+    };
+    // Keep shard display stable if upstream response omits explicit ordering metadata.
+    runeSortById[key] = 1000 + STAT_SHARD_FALLBACKS.findIndex((entry) => entry.id === shard.id);
+  }
+
+  return { version, runeById, styleById, runeSortById };
 }
 
 export function runeIconUrl(iconPath: string) {
+  if (/^https?:\/\//i.test(iconPath)) return iconPath;
   return `https://ddragon.leagueoflegends.com/cdn/img/${iconPath}`;
+}
+
+function communityDragonAssetUrl(iconPath: string) {
+  const trimmed = iconPath.trim();
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+
+  const withoutAssetPrefix = trimmed.replace(/^\/lol-game-data\/assets/i, "");
+  return `${CDRAGON_GAME_DATA_BASE}${withoutAssetPrefix.toLowerCase()}`;
 }
 

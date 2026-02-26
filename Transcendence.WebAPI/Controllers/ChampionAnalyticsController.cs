@@ -19,7 +19,7 @@ public class ChampionAnalyticsController(IChampionAnalyticsService analyticsServ
     /// Data is cached for 24 hours.
     /// </summary>
     /// <param name="championId">Champion ID (e.g., 1 for Annie)</param>
-    /// <param name="rankTier">Optional rank tier filter (Iron, Bronze, Silver, Gold, Platinum, Emerald, Diamond, Master, Grandmaster, Challenger)</param>
+    /// <param name="rankTier">Optional rank tier filter (ALL, EMERALD_PLUS, IRON, BRONZE, SILVER, GOLD, PLATINUM, EMERALD, DIAMOND, MASTER, GRANDMASTER, CHALLENGER)</param>
     /// <param name="region">Optional region filter (e.g., NA1, EUW1)</param>
     /// <param name="role">Optional role filter (TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY)</param>
     /// <param name="ct">Cancellation token</param>

@@ -19,7 +19,7 @@ public class AnalyticsController(IChampionAnalyticsService analyticsService) : C
     /// Data is cached for 24 hours.
     /// </summary>
     /// <param name="role">Optional role filter (TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY). Leave empty for unified tier list across all roles.</param>
-    /// <param name="rankTier">Optional rank tier filter (IRON, BRONZE, SILVER, GOLD, PLATINUM, EMERALD, DIAMOND, MASTER, GRANDMASTER, CHALLENGER)</param>
+    /// <param name="rankTier">Optional rank tier filter (ALL, EMERALD_PLUS, IRON, BRONZE, SILVER, GOLD, PLATINUM, EMERALD, DIAMOND, MASTER, GRANDMASTER, CHALLENGER)</param>
     /// <param name="ct">Cancellation token</param>
     [HttpGet("tierlist")]
     [ProducesResponseType(typeof(TierListResponse), StatusCodes.Status200OK)]

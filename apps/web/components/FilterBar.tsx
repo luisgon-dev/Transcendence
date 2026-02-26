@@ -1,24 +1,13 @@
 "use client";
 
 import { cn } from "@/lib/cn";
+import { RANK_TIER_FILTERS } from "@/lib/ranks";
 
 import { RankFilterDropdown } from "./RankFilterDropdown";
 import { RoleFilterTabs } from "./RoleFilterTabs";
 
 const DEFAULT_ROLES = ["ALL", "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"] as const;
-const DEFAULT_RANKS = [
-  "all",
-  "IRON",
-  "BRONZE",
-  "SILVER",
-  "GOLD",
-  "PLATINUM",
-  "EMERALD",
-  "DIAMOND",
-  "MASTER",
-  "GRANDMASTER",
-  "CHALLENGER"
-] as const;
+const DEFAULT_RANKS = RANK_TIER_FILTERS;
 
 export function FilterBar({
   roles = DEFAULT_ROLES,

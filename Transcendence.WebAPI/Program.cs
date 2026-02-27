@@ -197,6 +197,8 @@ using (var scope = app.Services.CreateScope())
     var grants = await bootstrap.EnsureBootstrapAdminsAsync();
     if (grants > 0)
         bootstrapLogger.LogInformation("Admin bootstrap granted {Count} account(s).", grants);
+    else
+        bootstrapLogger.LogInformation("Admin bootstrap: no new grants.");
 }
 
 app.Run();

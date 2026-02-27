@@ -20,7 +20,13 @@ public class AdminBootstrapService(
             .ToArray();
 
         if (configuredEmails.Length == 0)
+        {
+            logger.LogWarning(
+                "Admin bootstrap: no emails configured. Set Auth__AdminBootstrap__Emails__0 (env) or Auth:AdminBootstrap:Emails in appsettings.");
             return 0;
+        }
+
+        logger.LogInformation("Admin bootstrap: checking {Count} configured email(s).", configuredEmails.Length);
 
         var users = await userAccountRepository.ListByEmailNormalizedAsync(configuredEmails, ct);
         var grants = 0;

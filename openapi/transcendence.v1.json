@@ -4905,7 +4905,11 @@
       "UpsertTrackedProSummonerRequest": {
         "type": "object",
         "properties": {
-          "puuid": {
+          "gameName": {
+            "type": "string",
+            "nullable": true
+          },
+          "tagLine": {
             "type": "string",
             "nullable": true
           },
@@ -4913,11 +4917,7 @@
             "type": "string",
             "nullable": true
           },
-          "gameName": {
-            "type": "string",
-            "nullable": true
-          },
-          "tagLine": {
+          "puuid": {
             "type": "string",
             "nullable": true
           },

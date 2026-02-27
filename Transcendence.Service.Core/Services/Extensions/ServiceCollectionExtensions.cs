@@ -74,6 +74,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<RetryFailedMatchesJob>();
         services.AddScoped<ISummonerRefreshJob, SummonerRefreshJob>();
         services.AddScoped<MatchTimelineIngestionJob>();
+        services.AddScoped<IRiotAccountService, RiotAccountService>();
         return services;
     }
 }

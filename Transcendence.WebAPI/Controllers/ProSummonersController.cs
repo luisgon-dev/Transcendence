@@ -12,6 +12,7 @@ using Transcendence.Service.Core.Services.Auth.Models;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.RiotApi;
+using Transcendence.Service.Core.Services.RiotApi.Interfaces;
 using Transcendence.WebAPI.Security;
 
 namespace Transcendence.WebAPI.Controllers;
@@ -23,7 +24,8 @@ public class ProSummonersController(
     TranscendenceContext db,
     IAdminAuditService adminAuditService,
     IBackgroundJobClient backgroundJobClient,
-    IRefreshLockRepository refreshLockRepository) : ControllerBase
+    IRefreshLockRepository refreshLockRepository,
+    IRiotAccountService riotAccountService) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(List<TrackedProSummonerDto>), StatusCodes.Status200OK)]
@@ -60,11 +62,31 @@ public class ProSummonersController(
     public async Task<IActionResult> Create([FromBody] UpsertTrackedProSummonerRequest request,
         CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(request.Puuid) || string.IsNullOrWhiteSpace(request.PlatformRegion))
-            return BadRequest("Puuid and platformRegion are required.");
+        if (string.IsNullOrWhiteSpace(request.GameName) || string.IsNullOrWhiteSpace(request.TagLine)
+            || string.IsNullOrWhiteSpace(request.PlatformRegion))
+            return BadRequest("gameName, tagLine, and platformRegion are required.");
 
-        var normalizedPuuid = request.Puuid.Trim();
         var normalizedPlatform = request.PlatformRegion.Trim().ToUpperInvariant();
+
+        if (!PlatformRouteParser.TryParse(normalizedPlatform, out var platform))
+            return BadRequest($"Unsupported platform region '{request.PlatformRegion}'.");
+
+        var gameName = request.GameName.Trim();
+        var tagLine = request.TagLine.Trim();
+
+        // Resolve puuid from Riot ID
+        string normalizedPuuid;
+        if (!string.IsNullOrWhiteSpace(request.Puuid))
+        {
+            normalizedPuuid = request.Puuid.Trim();
+        }
+        else
+        {
+            var resolved = await riotAccountService.ResolvePuuidAsync(gameName, tagLine, platform, ct);
+            if (resolved == null)
+                return BadRequest($"Could not resolve Riot ID '{gameName}#{tagLine}' on {normalizedPlatform}.");
+            normalizedPuuid = resolved;
+        }
 
         var existing = await db.TrackedProSummoners
             .FirstOrDefaultAsync(x => x.Puuid == normalizedPuuid && x.PlatformRegion == normalizedPlatform, ct);
@@ -77,8 +99,8 @@ public class ProSummonersController(
             Id = Guid.NewGuid(),
             Puuid = normalizedPuuid,
             PlatformRegion = normalizedPlatform,
-            GameName = NormalizeOptional(request.GameName),
-            TagLine = NormalizeOptional(request.TagLine),
+            GameName = gameName,
+            TagLine = tagLine,
             ProName = NormalizeOptional(request.ProName),
             TeamName = NormalizeOptional(request.TeamName),
             IsPro = request.IsPro,
@@ -257,12 +279,12 @@ public class ProSummonersController(
 }
 
 public record UpsertTrackedProSummonerRequest(
-    string Puuid,
+    string GameName,
+    string TagLine,
     string PlatformRegion,
-    string? GameName,
-    string? TagLine,
-    string? ProName,
-    string? TeamName,
+    string? Puuid = null,
+    string? ProName = null,
+    string? TeamName = null,
     bool IsPro = true,
     bool IsHighEloOtp = false,
     bool IsActive = true

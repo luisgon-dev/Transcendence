@@ -15,6 +15,8 @@ using Transcendence.Service.Core.Services.Auth.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Models;
 using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Extensions;
+using Transcendence.Service.Core.Services.RiotApi.Implementations;
+using Transcendence.Service.Core.Services.RiotApi.Interfaces;
 using Transcendence.WebAPI.Security;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -110,6 +112,7 @@ if (string.IsNullOrWhiteSpace(riotApiKey))
 }
 
 builder.Services.AddSingleton(_ => RiotGamesApi.NewInstance(riotApiKey));
+builder.Services.AddScoped<IRiotAccountService, RiotAccountService>();
 
 var jwtIssuer = builder.Configuration["Auth:Jwt:Issuer"] ?? "Transcendence";
 var jwtAudience = builder.Configuration["Auth:Jwt:Audience"] ?? "TranscendenceClients";

@@ -3127,10 +3127,10 @@ export interface components {
             livePollingEnabled?: boolean;
         };
         UpsertTrackedProSummonerRequest: {
-            puuid?: string | null;
-            platformRegion?: string | null;
             gameName?: string | null;
             tagLine?: string | null;
+            platformRegion?: string | null;
+            puuid?: string | null;
             proName?: string | null;
             teamName?: string | null;
             isPro?: boolean;

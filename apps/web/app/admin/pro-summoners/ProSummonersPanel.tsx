@@ -102,7 +102,8 @@ function AddSummonerForm() {
       <h3 className="mb-3 text-sm font-semibold">Add Pro Summoner</h3>
       <form ref={formRef} action={handleSubmit} className="space-y-3">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          <Input name="puuid" placeholder="puuid *" required />
+          <Input name="gameName" placeholder="Game Name *" required />
+          <Input name="tagLine" placeholder="Tag Line *" required />
           <select
             name="platformRegion"
             required
@@ -115,25 +116,25 @@ function AddSummonerForm() {
               </option>
             ))}
           </select>
-          <Input name="gameName" placeholder="gameName" />
-          <Input name="tagLine" placeholder="tagLine" />
-          <Input name="proName" placeholder="proName" />
-          <Input name="teamName" placeholder="teamName" />
+          <Input name="proName" placeholder="Pro Name" />
+          <Input name="teamName" placeholder="Team Name" />
         </div>
         <div className="flex items-center gap-4">
           <label className="flex items-center gap-2 text-sm">
             <input
-              type="checkbox"
-              name="isPro"
+              type="radio"
+              name="type"
+              value="pro"
               defaultChecked
               className="accent-primary"
             />
-            Is Pro
+            Pro
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input
-              type="checkbox"
-              name="isHighEloOtp"
+              type="radio"
+              name="type"
+              value="otp"
               className="accent-primary"
             />
             High Elo OTP
@@ -166,8 +167,8 @@ function CsvImportForm() {
     <div className="rounded-2xl border border-border/70 bg-surface/40 p-4">
       <h3 className="mb-3 text-sm font-semibold">CSV Import</h3>
       <p className="mb-2 text-xs text-fg/60">
-        Columns: puuid, platformRegion, gameName, tagLine, proName, teamName
-        (isPro, isHighEloOtp optional)
+        Required columns: gameName, tagLine, platformRegion. Optional: proName,
+        teamName, type (pro|otp, defaults to pro)
       </p>
       <form ref={formRef} action={handleSubmit} className="flex items-center gap-3">
         <input

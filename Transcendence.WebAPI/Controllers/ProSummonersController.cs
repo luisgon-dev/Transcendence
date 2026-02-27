@@ -1,12 +1,17 @@
 using System.Security.Claims;
+using Hangfire;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Account;
+using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Models;
+using Transcendence.Service.Core.Services.Jobs;
+using Transcendence.Service.Core.Services.Jobs.Interfaces;
+using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.WebAPI.Security;
 
 namespace Transcendence.WebAPI.Controllers;
@@ -14,7 +19,11 @@ namespace Transcendence.WebAPI.Controllers;
 [ApiController]
 [Route("api/admin/pro-summoners")]
 [Authorize(Policy = AuthPolicies.AdminOnly)]
-public class ProSummonersController(TranscendenceContext db, IAdminAuditService adminAuditService) : ControllerBase
+public class ProSummonersController(
+    TranscendenceContext db,
+    IAdminAuditService adminAuditService,
+    IBackgroundJobClient backgroundJobClient,
+    IRefreshLockRepository refreshLockRepository) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(List<TrackedProSummonerDto>), StatusCodes.Status200OK)]
@@ -153,6 +162,58 @@ public class ProSummonersController(TranscendenceContext db, IAdminAuditService 
         await db.SaveChangesAsync(ct);
         await WriteAuditAsync("pro-summoners.delete", id.ToString(), null, ct);
         return NoContent();
+    }
+
+    [HttpPost("{id:guid}/refresh")]
+    [EnableRateLimiting("admin-write")]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Refresh([FromRoute] Guid id, CancellationToken ct = default)
+    {
+        var entity = await db.TrackedProSummoners.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (entity == null)
+            return NotFound();
+
+        if (string.IsNullOrWhiteSpace(entity.GameName) || string.IsNullOrWhiteSpace(entity.TagLine))
+            return BadRequest("Cannot refresh: summoner has no gameName/tagLine.");
+
+        if (!PlatformRouteParser.TryParse(entity.PlatformRegion, out var platform))
+            return BadRequest($"Unsupported platform region '{entity.PlatformRegion}'.");
+
+        var key = RefreshLockKeys.BuildSummonerRefreshKey(platform, entity.GameName, entity.TagLine);
+        var priorityKey = RefreshLockKeys.BuildApiPriorityKey(platform, entity.GameName, entity.TagLine);
+        var ttl = TimeSpan.FromMinutes(15);
+
+        var acquired = await refreshLockRepository.TryAcquireAsync(key, ttl, ct);
+        if (!acquired)
+            return Accepted(new { message = "Refresh already in progress." });
+
+        var priorityAcquired = await refreshLockRepository.TryAcquireAsync(priorityKey, ttl, ct);
+
+        try
+        {
+            backgroundJobClient.Enqueue<ISummonerRefreshJob>(job =>
+                job.RefreshByRiotId(entity.GameName, entity.TagLine, platform, key,
+                    priorityAcquired ? priorityKey : null, CancellationToken.None));
+        }
+        catch
+        {
+            await refreshLockRepository.ReleaseAsync(key, ct);
+            if (priorityAcquired)
+                await refreshLockRepository.ReleaseAsync(priorityKey, ct);
+            throw;
+        }
+
+        await WriteAuditAsync("pro-summoners.refresh", entity.Id.ToString(), new
+        {
+            entity.Puuid,
+            entity.PlatformRegion,
+            entity.GameName,
+            entity.TagLine
+        }, ct);
+
+        return Accepted(new { message = "Refresh queued." });
     }
 
     private static TrackedProSummonerDto ToDto(TrackedProSummoner entity)

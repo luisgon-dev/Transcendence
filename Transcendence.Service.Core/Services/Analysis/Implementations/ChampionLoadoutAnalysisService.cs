@@ -1,12 +1,17 @@
+using Microsoft.EntityFrameworkCore;
+using Transcendence.Data;
 using Transcendence.Data.Models.Service;
 using Transcendence.Service.Core.Services.Analysis.Interfaces;
 
 namespace Transcendence.Service.Core.Services.Analysis.Implementations;
 
-public class ChampionLoadoutAnalysisService : IChampionLoadoutAnalysisService
+public class ChampionLoadoutAnalysisService(TranscendenceContext context) : IChampionLoadoutAnalysisService
 {
-    public Task<List<CurrentChampionLoadout>> GetChampionLoadoutsAsync(CancellationToken stoppingToken)
+    public async Task<List<CurrentChampionLoadout>> GetChampionLoadoutsAsync(CancellationToken stoppingToken)
     {
-        throw new NotImplementedException();
+        return await context.CurrentChampionLoadouts
+            .AsNoTracking()
+            .Include(loadout => loadout.UnitWinPercents)
+            .ToListAsync(stoppingToken);
     }
 }

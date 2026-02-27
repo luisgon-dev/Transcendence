@@ -28,7 +28,7 @@ public static class QueueCatalog
         76, 78, 83, 98, 100, 310, 313, 315, 317, 318, 325, 600, 610, 720, 900, 920, 940, 1020, 1300, 1400, 1900
     ];
 
-    private static readonly HashSet<int> ExcludedQueueIds = [..CustomQueueIds, ..BotQueueIds];
+    private static readonly HashSet<int> ExcludedQueueIds = [.. CustomQueueIds, .. BotQueueIds];
     private static readonly string[] KnownFamilies =
     [
         QueueFamilyAll,

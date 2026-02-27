@@ -280,7 +280,7 @@ public class MatchService(
         // Check retention window BEFORE attempting fetch
         if (match.MatchDate > 0)
         {
-            var matchAge = DateTime.UtcNow - DateTimeOffset.FromUnixTimeMilliseconds(match.MatchDate).DateTime;
+            var matchAge = DateTime.UtcNow - DateTimeOffset.FromUnixTimeMilliseconds(match.MatchDate).UtcDateTime;
             if (matchAge.TotalDays > 730) // 2 years
             {
                 match.Status = FetchStatus.OutsideRetentionWindow;
@@ -310,7 +310,7 @@ public class MatchService(
 
             if (matchDto == null)
             {
-                throw new Exception("Riot API returned null for match");
+                throw new InvalidOperationException($"Riot API returned null for match {matchId}");
             }
 
             // Parse and store match data

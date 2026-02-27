@@ -7,17 +7,19 @@ x-app-env: &app-env
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgautoupgrade/pgautoupgrade:latest
     container_name: transcendence-postgres
     restart: unless-stopped
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -36,11 +38,13 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    labels:
+      - wud.watch=false
     networks:
       - transcendence-net
 
   web:
-    image: ghcr.io/luisgon-dev/transcendencebackend-web:main
+    image: ghcr.io/luisgon-dev/transcendence-web:main
     pull_policy: always
     container_name: transcendence-web
     restart: unless-stopped
@@ -49,6 +53,7 @@ services:
       PORT: 3000
       TRN_BACKEND_BASE_URL: http://webapi:8080
       TRN_BACKEND_API_KEY: ${WEB_TRN_BACKEND_API_KEY}
+      TRN_ERROR_VERBOSITY: verbose
     ports:
       - "${WEB_PORT:-3000}:3000"
     depends_on:
@@ -57,7 +62,7 @@ services:
       - transcendence-net
 
   webapi:
-    image: ghcr.io/luisgon-dev/transcendencebackend-webapi:main
+    image: ghcr.io/luisgon-dev/transcendence-webapi:main
     pull_policy: always
     container_name: transcendence-webapi
     restart: unless-stopped
@@ -82,7 +87,7 @@ services:
       - transcendence-net
 
   service:
-    image: ghcr.io/luisgon-dev/transcendencebackend-service:main
+    image: ghcr.io/luisgon-dev/transcendence-service:main
     pull_policy: always
     container_name: transcendence-service
     restart: unless-stopped
@@ -98,7 +103,7 @@ services:
       - transcendence-net
 
   webadmin:
-    image: ghcr.io/luisgon-dev/transcendencebackend-webadminportal:main
+    image: ghcr.io/luisgon-dev/transcendence-webadminportal:main
     pull_policy: always
     container_name: transcendence-webadminportal
     restart: unless-stopped
@@ -117,7 +122,7 @@ services:
       - transcendence-net
 
   dozzle:
-    image: amir20/dozzle:v8.15.6
+    image: amir20/dozzle:latest
     pull_policy: always
     container_name: transcendence-dozzle
     restart: unless-stopped
@@ -130,6 +135,18 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - transcendence-net
+
+  whatsupdocker:
+    image: getwud/wud
+    container_name: wud
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - 3001:3000
+    environment:
+      - WUD_TRIGGER_DOCKER_EXAMPLE_PRUNE=true
+      - WUD_WATCHER_LOCAL_CRON=* * * * *
 
 volumes:
   postgres_data:

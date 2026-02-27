@@ -110,6 +110,9 @@ Current `web:test` scope:
 - Utility/unit tests in `apps/web/lib/*.test.ts`
 - Runs in Vitest `node` environment (no DOM harness needed for current test suite)
 
+Note:
+- `apps/web` package scripts `dev` and `build` prebuild `@transcendence/api-client` automatically, so direct commands such as `pnpm --filter web dev` and `pnpm --filter web build` work without a separate manual client build step.
+
 ## OpenAPI + TypeScript Client
 
 Source of truth: `openapi/transcendence.v1.json`

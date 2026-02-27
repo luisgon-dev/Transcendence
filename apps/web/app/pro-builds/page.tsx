@@ -36,20 +36,20 @@ export default async function ProBuildsIndexPage() {
           Pro Builds
         </h1>
         <p className="text-sm text-fg/75">
-          Preview the upcoming pro analytics experience. High-ELO and pro match pipelines are in progress.
+          Browse pro and high-ELO match samples by champion, then filter by role and region.
         </p>
       </header>
 
       <Card className="border-primary/40 bg-primary/10 p-5">
-        <h2 className="font-[var(--font-sora)] text-lg font-semibold text-primary">Coming Soon</h2>
+        <h2 className="font-[var(--font-sora)] text-lg font-semibold text-primary">How To Use</h2>
         <p className="mt-2 text-sm text-fg/85">
-          The backend endpoint for pro player match ingestion is not yet available. This page is a public teaser and
-          the final data views will be enabled once pro data is integrated.
+          Pick a champion to view recent pro matches, common build paths, and top player samples. Use role and region
+          filters on the champion page to narrow the list.
         </p>
       </Card>
 
       <Card className="p-5">
-        <h2 className="font-[var(--font-sora)] text-lg font-semibold">Open Champion Preview</h2>
+        <h2 className="font-[var(--font-sora)] text-lg font-semibold">Open Champion Pro Data</h2>
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {championsToShow.map((championId) => {
             const champion = champions[String(championId)];

@@ -25,7 +25,7 @@ export function ChampionPortrait({
         alt={championName}
         width={size}
         height={size}
-        className="rounded-md"
+        className="rounded-md transition-transform duration-300 hover:scale-110"
       />
       {showName ? (
         <span className="truncate text-sm font-medium">{championName}</span>

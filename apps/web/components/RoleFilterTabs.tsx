@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { motion } from "framer-motion";
 
 import { cn } from "@/lib/cn";
 import { roleDisplayLabel } from "@/lib/roles";
@@ -39,13 +40,21 @@ export function RoleFilterTabs({
             key={role}
             href={buildHref(role)}
             className={cn(
-              "rounded-md border px-3 py-1.5 text-sm transition",
+              "relative rounded-md border px-3 py-1.5 text-sm transition overflow-hidden",
               active
-                ? "border-primary/50 bg-primary/15 text-primary font-medium"
-                : "border-border/70 bg-white/5 text-fg/80 hover:bg-white/10"
+                ? "border-primary/50 text-primary font-medium"
+                : "border-border/70 bg-white/5 text-fg/80 hover:bg-white/10 hover:text-fg"
             )}
           >
-            {roleDisplayLabel(role)}
+            {active && (
+              <motion.div
+                layoutId="activeRoleTab"
+                className="absolute inset-0 bg-primary/15"
+                initial={false}
+                transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              />
+            )}
+            <span className="relative z-10">{roleDisplayLabel(role)}</span>
           </Link>
         );
       })}

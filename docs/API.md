@@ -56,6 +56,7 @@ Default stats scope:
 - `region` (required; platform route or alias such as `NA1` or `na`)
 - `q` (required; min length 2, supports `gameName` or `gameName#tag` prefix forms)
 - `limit` (optional; default `8`, max `10`)
+- Autosuggest only returns summoners with at least one stored match participant (to avoid low-signal entries)
 
 When `Api:ReturnProblemDetailsOnStatsFailure=true`, stats endpoints return `500` ProblemDetails on backend errors instead of empty fallback payloads.
 

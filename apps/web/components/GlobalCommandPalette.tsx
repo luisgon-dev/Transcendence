@@ -291,10 +291,10 @@ export function GlobalCommandPalette() {
 
   function handleQueryKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== "Enter") return;
-    if (summonerResultPaths.length > 0) return;
     if (!parsedRiotId) return;
 
     e.preventDefault();
+    e.stopPropagation();
     navigate(`/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`);
   }
 

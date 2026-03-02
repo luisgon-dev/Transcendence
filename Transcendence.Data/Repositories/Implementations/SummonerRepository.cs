@@ -34,6 +34,7 @@ public class SummonerRepository(TranscendenceContext context, IRankRepository ra
                 s.TagLine != null &&
                 s.GameNameNormalized != null &&
                 s.TagLineNormalized != null &&
+                context.MatchParticipants.Any(mp => mp.SummonerId == s.Id) &&
                 EF.Functions.Like(s.GameNameNormalized, gameNameLike));
 
         if (tagLineLike != null)

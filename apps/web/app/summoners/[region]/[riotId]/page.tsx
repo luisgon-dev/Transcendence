@@ -17,7 +17,13 @@ export default async function SummonerProfilePage({
   searchParams
 }: {
   params: Promise<{ region: string; riotId: string }>;
-  searchParams?: Promise<{ page?: string; queue?: string; expandMatchId?: string }>;
+  searchParams?: Promise<{
+    page?: string;
+    queue?: string;
+    sort?: string;
+    champion?: string;
+    expandMatchId?: string;
+  }>;
 }) {
   const resolvedParams = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
@@ -150,6 +156,8 @@ export default async function SummonerProfilePage({
       initialBody={initialBody}
       initialPage={Math.max(1, Number(resolvedSearchParams?.page ?? "1") || 1)}
       initialQueue={resolvedSearchParams?.queue ?? "ALL"}
+      initialSort={resolvedSearchParams?.sort ?? "DATE_DESC"}
+      initialChampion={resolvedSearchParams?.champion ?? ""}
       initialExpandMatchId={resolvedSearchParams?.expandMatchId ?? null}
     />
   );

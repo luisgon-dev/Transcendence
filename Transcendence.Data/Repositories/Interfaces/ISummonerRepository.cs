@@ -6,6 +6,13 @@ namespace Transcendence.Data.Repositories.Interfaces;
 
 public interface ISummonerRepository
 {
+    Task<IReadOnlyList<SummonerSearchCandidate>> SearchByPrefixAsync(
+        string platformRegion,
+        string gameNamePrefix,
+        string? tagLinePrefix,
+        int limit,
+        CancellationToken cancellationToken = default);
+
     Task<Summoner?> GetSummonerByPuuidAsync(string puuid,
         Func<IQueryable<Summoner>, IQueryable<Summoner>>? includes = null,
         CancellationToken cancellationToken = default);
@@ -19,3 +26,10 @@ public interface ISummonerRepository
 
     Task<Summoner> AddOrUpdateSummonerAsync(Summoner summoner, CancellationToken cancellationToken);
 }
+
+public sealed record SummonerSearchCandidate(
+    string PlatformRegion,
+    string GameName,
+    string TagLine,
+    int ProfileIconId
+);

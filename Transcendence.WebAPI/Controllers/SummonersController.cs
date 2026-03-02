@@ -23,6 +23,52 @@ public class SummonersController(
 ) : ControllerBase
 {
     /// <summary>
+    ///     Search summoners already stored in the database for autosuggest.
+    /// </summary>
+    /// <param name="region">Platform route or alias (e.g., NA1 or na).</param>
+    /// <param name="q">Search input. Supports "gameName" or "gameName#tag" prefix forms.</param>
+    /// <param name="limit">Max number of items to return. Default 8, max 10.</param>
+    [HttpGet("search")]
+    [EnableRateLimiting("search-read")]
+    [ProducesResponseType(typeof(SummonerSearchResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Search(
+        [FromQuery] string region,
+        [FromQuery] string q,
+        [FromQuery] int? limit,
+        CancellationToken ct)
+    {
+        if (!PlatformRouteParser.TryParse(region, out var platform))
+            return BadRequest($"Unsupported region '{region}'. Use a platform like NA1, EUW1, EUN1, KR, etc.");
+
+        if (!TryParseSearchQuery(q, out var gameNamePrefix, out var tagLinePrefix))
+            return BadRequest("Query must be at least 2 characters and use at most one '#' delimiter.");
+
+        var safeLimit = Math.Clamp(limit ?? 8, 1, 10);
+        var candidates = await summonerRepository.SearchByPrefixAsync(
+            platform.ToString(),
+            gameNamePrefix,
+            tagLinePrefix,
+            safeLimit,
+            ct);
+
+        var response = new SummonerSearchResponse
+        {
+            Items = candidates.Select(candidate => new SummonerSearchItem
+            {
+                PlatformRegion = candidate.PlatformRegion,
+                Region = ToRegionSlug(candidate.PlatformRegion),
+                GameName = candidate.GameName,
+                TagLine = candidate.TagLine,
+                ProfileIconId = candidate.ProfileIconId
+            }).ToList()
+        };
+
+        Response.Headers.CacheControl = "public, max-age=15, stale-while-revalidate=30";
+        return Ok(response);
+    }
+
+    /// <summary>
     ///     Get summoner information by Riot ID (gameName and tagLine) and platform region (e.g., NA1, EUW1).
     ///     This endpoint reads from the database only. If the summoner is not found, a background refresh will be required.
     /// </summary>
@@ -260,5 +306,56 @@ public class SummonersController(
     {
         if (string.IsNullOrWhiteSpace(queueType)) return false;
         return queueType.StartsWith("RANKED_FLEX", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryParseSearchQuery(string? rawQuery, out string gameNamePrefix, out string? tagLinePrefix)
+    {
+        gameNamePrefix = string.Empty;
+        tagLinePrefix = null;
+
+        if (string.IsNullOrWhiteSpace(rawQuery))
+            return false;
+
+        var query = rawQuery.Trim();
+        if (query.Length < 2 || query.Length > 64)
+            return false;
+
+        var firstHashIdx = query.IndexOf('#');
+        if (firstHashIdx < 0)
+        {
+            gameNamePrefix = query;
+            return true;
+        }
+
+        if (query.IndexOf('#', firstHashIdx + 1) >= 0)
+            return false;
+
+        var gameName = query[..firstHashIdx].Trim();
+        var tagLine = query[(firstHashIdx + 1)..].Trim();
+        if (string.IsNullOrWhiteSpace(gameName))
+            return false;
+
+        gameNamePrefix = gameName;
+        tagLinePrefix = string.IsNullOrWhiteSpace(tagLine) ? null : tagLine;
+        return true;
+    }
+
+    private static string ToRegionSlug(string platformRegion)
+    {
+        return platformRegion.ToUpperInvariant() switch
+        {
+            "NA1" => "na",
+            "EUW1" => "euw",
+            "EUN1" => "eune",
+            "KR" => "kr",
+            "BR1" => "br",
+            "LA1" => "lan",
+            "LA2" => "las",
+            "OC1" => "oce",
+            "JP1" => "jp",
+            "TR1" => "tr",
+            "RU" => "ru",
+            _ => platformRegion.ToLowerInvariant()
+        };
     }
 }

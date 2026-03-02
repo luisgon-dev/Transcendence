@@ -77,6 +77,11 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             .HasIndex(s => new { s.PlatformRegion, s.GameNameNormalized, s.TagLineNormalized })
             .IsUnique();
 
+        modelBuilder.Entity<Summoner>()
+            .HasIndex(s => new { s.PlatformRegion, s.GameNameNormalized, s.TagLineNormalized })
+            .HasDatabaseName("IX_Summoners_SearchPrefix")
+            .HasFilter("\"GameNameNormalized\" IS NOT NULL AND \"TagLineNormalized\" IS NOT NULL");
+
         // Global query filter to exclude unfetchable matches from normal queries
         modelBuilder.Entity<Match>()
             .HasQueryFilter(m => m.Status != FetchStatus.PermanentlyUnfetchable);

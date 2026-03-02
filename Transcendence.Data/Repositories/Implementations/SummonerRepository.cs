@@ -8,6 +8,54 @@ namespace Transcendence.Data.Repositories.Implementations;
 
 public class SummonerRepository(TranscendenceContext context, IRankRepository rankRepository) : ISummonerRepository
 {
+    public async Task<IReadOnlyList<SummonerSearchCandidate>> SearchByPrefixAsync(
+        string platformRegion,
+        string gameNamePrefix,
+        string? tagLinePrefix,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedPlatformRegion = string.IsNullOrWhiteSpace(platformRegion) ? null : platformRegion.Trim();
+        var normalizedGameNamePrefix = NormalizeForLookup(gameNamePrefix);
+        var normalizedTagLinePrefix = NormalizeForLookup(tagLinePrefix);
+        var safeLimit = Math.Clamp(limit, 1, 25);
+
+        if (normalizedPlatformRegion == null || normalizedGameNamePrefix == null)
+            return [];
+
+        var gameNameLike = $"{normalizedGameNamePrefix}%";
+        var tagLineLike = normalizedTagLinePrefix == null ? null : $"{normalizedTagLinePrefix}%";
+
+        var query = context.Summoners
+            .AsNoTracking()
+            .Where(s =>
+                s.PlatformRegion == normalizedPlatformRegion &&
+                s.GameName != null &&
+                s.TagLine != null &&
+                s.GameNameNormalized != null &&
+                s.TagLineNormalized != null &&
+                EF.Functions.Like(s.GameNameNormalized, gameNameLike));
+
+        if (tagLineLike != null)
+        {
+            query = query.Where(s => EF.Functions.Like(s.TagLineNormalized!, tagLineLike));
+        }
+
+        return await query
+            .OrderBy(s => s.GameNameNormalized == normalizedGameNamePrefix ? 0 : 1)
+            .ThenBy(s =>
+                normalizedTagLinePrefix != null && s.TagLineNormalized == normalizedTagLinePrefix ? 0 : 1)
+            .ThenBy(s => s.GameName)
+            .ThenBy(s => s.TagLine)
+            .Take(safeLimit)
+            .Select(s => new SummonerSearchCandidate(
+                s.PlatformRegion!,
+                s.GameName!,
+                s.TagLine!,
+                s.ProfileIconId))
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<Summoner?> GetSummonerByPuuidAsync(string puuid,
         Func<IQueryable<Summoner>, IQueryable<Summoner>>? includes = null,
         CancellationToken cancellationToken = default)

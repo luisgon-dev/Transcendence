@@ -35,6 +35,7 @@ This is a navigational summary; the OpenAPI spec is the source of truth.
 ### Summoners and Stats
 
 - `GET /api/summoners/{region}/{name}/{tag}`
+- `GET /api/summoners/search`
 - `POST /api/summoners/{region}/{name}/{tag}/refresh`
 - `GET /api/summoners/{summonerId}/stats/overview`
 - `GET /api/summoners/{summonerId}/stats/champions`
@@ -50,6 +51,11 @@ Default stats scope:
 - `page` / `pageSize`
 - `queueFamily` (optional; e.g. `ALL`, `RANKED_SOLO_DUO`, `RANKED_FLEX`, `NORMAL_SR`, `ARAM`, `CLASH`, `ARENA`, `ROTATING`, `BOT`, `CUSTOM`, `OTHER`)
 - `queueIds` (optional repeated query param for explicit queue IDs)
+
+`GET /api/summoners/search` supports:
+- `region` (required; platform route or alias such as `NA1` or `na`)
+- `q` (required; min length 2, supports `gameName` or `gameName#tag` prefix forms)
+- `limit` (optional; default `8`, max `10`)
 
 When `Api:ReturnProblemDetailsOnStatsFailure=true`, stats endpoints return `500` ProblemDetails on backend errors instead of empty fallback payloads.
 

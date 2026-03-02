@@ -85,6 +85,10 @@ dotnet user-secrets set "ConnectionStrings:RiotApi" "RGAPI-your-key" --project T
 dotnet ef database update --project Transcendence.Service --startup-project Transcendence.Service
 ```
 
+Migration policy:
+- Do not hand-author or hand-edit EF migration files.
+- Generate migrations only via EF CLI (for example: `dotnet ef migrations add <Name> --project Transcendence.Service --startup-project Transcendence.Service`).
+
 ### Run services
 
 ```bash

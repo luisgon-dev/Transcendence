@@ -34,6 +34,13 @@ builder.Services.AddRateLimiter(options =>
         limiter.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
         limiter.QueueLimit = 0;
     });
+    options.AddFixedWindowLimiter("search-read", limiter =>
+    {
+        limiter.PermitLimit = 600;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        limiter.QueueLimit = 0;
+    });
     options.AddFixedWindowLimiter("admin-write", limiter =>
     {
         limiter.PermitLimit = 30;

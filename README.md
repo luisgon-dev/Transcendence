@@ -27,6 +27,7 @@ Transcendence is a monorepo for a League of Legends analytics stack:
 
 Current App Router pages include:
 
+- Global command/search supports DB-backed summoner autosuggest
 - `/`
 - `/tierlist`
 - `/champions` and `/champions/[championId]`

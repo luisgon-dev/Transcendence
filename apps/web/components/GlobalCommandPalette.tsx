@@ -1,6 +1,7 @@
 "use client";
 
 import { Command } from "cmdk";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -14,7 +15,20 @@ type ChampionSearchItem = {
 };
 
 type ChampionsResponse = {
+  version: string;
   champions: Record<string, { id: string; name: string }>;
+};
+
+type SummonerSearchItem = {
+  platformRegion: string;
+  region: string;
+  gameName: string;
+  tagLine: string;
+  profileIconId: number;
+};
+
+type SummonerSearchResponse = {
+  items: SummonerSearchItem[];
 };
 
 const REGIONS = [
@@ -82,14 +96,22 @@ function useDebouncedValue<T>(value: T, delayMs: number) {
   return debounced;
 }
 
+function profileIconSrc(version: string, profileIconId: number) {
+  return `https://ddragon.leagueoflegends.com/cdn/${version}/img/profileicon/${profileIconId}.png`;
+}
+
 export function GlobalCommandPalette() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const suggestionCacheRef = useRef<Map<string, SummonerSearchItem[]>>(new Map());
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [region, setRegion] = useState("na");
   const [champions, setChampions] = useState<ChampionSearchItem[]>([]);
+  const [ddragonVersion, setDdragonVersion] = useState<string | null>(null);
   const [championsLoaded, setChampionsLoaded] = useState(false);
+  const [summonerResults, setSummonerResults] = useState<SummonerSearchItem[]>([]);
+  const [summonerLoading, setSummonerLoading] = useState(false);
 
   const debouncedQuery = useDebouncedValue(query, 120);
   const normalizedQuery = debouncedQuery.trim().toLowerCase();
@@ -145,6 +167,7 @@ export function GlobalCommandPalette() {
           .sort((a, b) => a.name.localeCompare(b.name));
 
         if (!active) return;
+        setDdragonVersion(json.version);
         setChampions(parsed);
         setChampionsLoaded(true);
       })
@@ -157,6 +180,58 @@ export function GlobalCommandPalette() {
       active = false;
     };
   }, [open, championsLoaded]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const trimmedQuery = debouncedQuery.trim();
+    if (trimmedQuery.length < 2) {
+      setSummonerResults([]);
+      setSummonerLoading(false);
+      return;
+    }
+
+    const cacheKey = `${region}|${trimmedQuery.toLowerCase()}`;
+    const cached = suggestionCacheRef.current.get(cacheKey);
+    if (cached) {
+      setSummonerResults(cached);
+      setSummonerLoading(false);
+      return;
+    }
+
+    const abortController = new AbortController();
+    setSummonerLoading(true);
+
+    void fetch(
+      `/api/trn/public/summoners/search?region=${encodeURIComponent(region)}&q=${encodeURIComponent(trimmedQuery)}&limit=8`,
+      { cache: "no-store", signal: abortController.signal }
+    )
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Summoner search failed.");
+        const json = (await res.json()) as SummonerSearchResponse;
+        if (abortController.signal.aborted) return;
+        const items = Array.isArray(json.items) ? json.items : [];
+        setSummonerResults(items);
+
+        suggestionCacheRef.current.set(cacheKey, items);
+        if (suggestionCacheRef.current.size > 60) {
+          const oldest = suggestionCacheRef.current.keys().next().value as string | undefined;
+          if (oldest) suggestionCacheRef.current.delete(oldest);
+        }
+      })
+      .catch(() => {
+        if (abortController.signal.aborted) return;
+        setSummonerResults([]);
+      })
+      .finally(() => {
+        if (abortController.signal.aborted) return;
+        setSummonerLoading(false);
+      });
+
+    return () => {
+      abortController.abort();
+    };
+  }, [debouncedQuery, open, region]);
 
   const championResults = useMemo(() => {
     if (!normalizedQuery) return champions.slice(0, 8);
@@ -177,14 +252,29 @@ export function GlobalCommandPalette() {
     );
   }, [normalizedQuery]);
 
+  const summonerResultPaths = useMemo(
+    () =>
+      summonerResults.map((item) =>
+        `/summoners/${item.region}/${encodeRiotIdPath({
+          gameName: item.gameName,
+          tagLine: item.tagLine
+        })}`
+      ),
+    [summonerResults]
+  );
+
   const prefetchTargets = useMemo(() => {
-    const targets = championResults.slice(0, 3).map((c) => `/champions/${c.championId}`);
-    for (const tier of tierResults.slice(0, 2)) targets.push(tier.href);
-    if (parsedRiotId) {
-      targets.push(`/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`);
+    const paths = summonerResultPaths.slice(0, 3);
+    if (paths.length === 0 && parsedRiotId) {
+      paths.push(`/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`);
     }
-    return targets;
-  }, [championResults, tierResults, parsedRiotId, region]);
+
+    for (const championPath of championResults.slice(0, 3).map((c) => `/champions/${c.championId}`)) {
+      paths.push(championPath);
+    }
+    for (const tier of tierResults.slice(0, 2)) paths.push(tier.href);
+    return paths;
+  }, [championResults, tierResults, parsedRiotId, region, summonerResultPaths]);
 
   useEffect(() => {
     if (!open) return;
@@ -201,6 +291,7 @@ export function GlobalCommandPalette() {
 
   function handleQueryKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== "Enter") return;
+    if (summonerResultPaths.length > 0) return;
     if (!parsedRiotId) return;
 
     e.preventDefault();
@@ -210,7 +301,10 @@ export function GlobalCommandPalette() {
   if (!open) return null;
 
   const showEmpty =
-    championResults.length === 0 && tierResults.length === 0 && !parsedRiotId;
+    championResults.length === 0 &&
+    tierResults.length === 0 &&
+    summonerResults.length === 0 &&
+    !parsedRiotId;
 
   return (
     <div className="fixed inset-0 z-50">
@@ -229,7 +323,7 @@ export function GlobalCommandPalette() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleQueryKeyDown}
-              placeholder="Search champions, tier list, or summoner Riot ID (GameName#TAG)"
+              placeholder="Search champions, tier list, or summoner"
               className="h-11 w-full rounded-md border border-border/70 bg-surface/35 px-3 text-sm text-fg shadow-glass outline-none placeholder:text-muted/70 focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
               aria-label="Global search input"
             />
@@ -248,6 +342,75 @@ export function GlobalCommandPalette() {
           </div>
 
           <Command.List className="max-h-[65vh] overflow-y-auto p-2">
+            <Command.Group heading="Summoners">
+              {summonerResults.map((item) => {
+                const path = `/summoners/${item.region}/${encodeRiotIdPath({
+                  gameName: item.gameName,
+                  tagLine: item.tagLine
+                })}`;
+
+                return (
+                  <Command.Item
+                    key={`summoner-${item.platformRegion}-${item.gameName}-${item.tagLine}`}
+                    value={`summoner-${item.gameName}-${item.tagLine}-${item.platformRegion}`}
+                    onSelect={() => navigate(path)}
+                    className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm text-fg/90 data-[selected=true]:bg-white/10"
+                  >
+                    {ddragonVersion ? (
+                      <Image
+                        src={profileIconSrc(ddragonVersion, item.profileIconId)}
+                        alt=""
+                        width={28}
+                        height={28}
+                        className="h-7 w-7 rounded-md border border-border/60 object-cover"
+                        unoptimized
+                      />
+                    ) : (
+                      <span className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/60 bg-surface/60 text-[11px] text-muted">
+                        ?
+                      </span>
+                    )}
+                    <span className="font-medium">
+                      {item.gameName}#{item.tagLine}
+                    </span>
+                    <span className="ml-auto text-xs uppercase tracking-wide text-muted">
+                      {item.platformRegion}
+                    </span>
+                  </Command.Item>
+                );
+              })}
+
+              {summonerLoading ? (
+                <p className="px-3 py-2 text-sm text-muted">Searching summoners...</p>
+              ) : null}
+
+              {!summonerLoading &&
+              summonerResults.length === 0 &&
+              parsedRiotId ? (
+                <Command.Item
+                  key="summoner-open"
+                  value={`summoner-${parsedRiotId.gameName}-${parsedRiotId.tagLine}-${region}`}
+                  onSelect={() =>
+                    navigate(
+                      `/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`
+                    )
+                  }
+                  className="flex cursor-pointer items-center rounded-md px-3 py-2 text-sm text-fg/90 data-[selected=true]:bg-white/10"
+                >
+                  Open {parsedRiotId.gameName}#{parsedRiotId.tagLine} ({region.toUpperCase()})
+                </Command.Item>
+              ) : null}
+
+              {!summonerLoading &&
+              summonerResults.length === 0 &&
+              !parsedRiotId &&
+              query.trim().length > 0 ? (
+                <p className="px-3 py-2 text-sm text-muted">
+                  No summoners found. Enter GameName#TAG to open directly.
+                </p>
+              ) : null}
+            </Command.Group>
+
             <Command.Group heading="Champions">
               {championResults.map((champion) => (
                 <Command.Item
@@ -272,27 +435,6 @@ export function GlobalCommandPalette() {
                   {item.label}
                 </Command.Item>
               ))}
-            </Command.Group>
-
-            <Command.Group heading="Summoner">
-              {parsedRiotId ? (
-                <Command.Item
-                  key="summoner-open"
-                  value={`summoner-${parsedRiotId.gameName}-${parsedRiotId.tagLine}-${region}`}
-                  onSelect={() =>
-                    navigate(
-                      `/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`
-                    )
-                  }
-                  className="flex cursor-pointer items-center rounded-md px-3 py-2 text-sm text-fg/90 data-[selected=true]:bg-white/10"
-                >
-                  Open {parsedRiotId.gameName}#{parsedRiotId.tagLine} ({region.toUpperCase()})
-                </Command.Item>
-              ) : (
-                <p className="px-3 py-2 text-sm text-muted">
-                  Enter a Riot ID as GameName#TAG.
-                </p>
-              )}
             </Command.Group>
 
             {showEmpty ? (

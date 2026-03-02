@@ -1714,6 +1714,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/summoners/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    region?: string;
+                    q?: string;
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SummonerSearchResponse"];
+                        "application/json": components["schemas"]["SummonerSearchResponse"];
+                        "text/json": components["schemas"]["SummonerSearchResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/summoners/{region}/{name}/{tag}": {
         parameters: {
             query?: never;
@@ -3053,6 +3116,17 @@ export interface components {
             profileAge?: components["schemas"]["DataAgeMetadata"];
             rankAge?: components["schemas"]["DataAgeMetadata"];
             statsAge?: components["schemas"]["DataAgeMetadata"];
+        };
+        SummonerSearchItem: {
+            platformRegion: string | null;
+            region: string | null;
+            gameName: string | null;
+            tagLine: string | null;
+            /** Format: int32 */
+            profileIconId?: number;
+        };
+        SummonerSearchResponse: {
+            items?: components["schemas"]["SummonerSearchItem"][] | null;
         };
         TeamAnalysisDto: {
             /** Format: int32 */

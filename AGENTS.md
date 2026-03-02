@@ -31,3 +31,9 @@ If you are not sure which doc to update, add a short note to the PR explaining w
 - OpenAPI spec is committed under `openapi/`
 - TS client generation lives in `packages/api-client`
 
+## EF Migration Policy (Required)
+
+- Never hand-author or hand-edit EF migration files.
+- Always create/remove migrations via EF CLI (`dotnet ef migrations add ...`, `dotnet ef migrations remove`).
+- Always apply schema changes by updating EF model code first, then generating migrations with EF tools.
+

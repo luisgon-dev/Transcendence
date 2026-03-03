@@ -147,6 +147,53 @@ public class SummonerRepository(TranscendenceContext context, IRankRepository ra
         return persistedSummoner;
     }
 
+    public async Task<IReadOnlyList<Summoner>> FindByRiotIdsAsync(
+        string platformRegion,
+        IReadOnlyList<(string GameName, string TagLine)> riotIds,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedPlatformRegion = string.IsNullOrWhiteSpace(platformRegion) ? null : platformRegion.Trim();
+        if (normalizedPlatformRegion == null || riotIds.Count == 0)
+            return [];
+
+        // Normalize all lookup keys upfront.
+        var lookupKeys = riotIds
+            .Select(r => (GameName: NormalizeForLookup(r.GameName), TagLine: NormalizeForLookup(r.TagLine)))
+            .Where(r => r.GameName != null && r.TagLine != null)
+            .ToList();
+
+        if (lookupKeys.Count == 0)
+            return [];
+
+        // Extract distinct normalized values for the WHERE IN clause.
+        var gameNames = lookupKeys.Select(k => k.GameName!).Distinct(StringComparer.Ordinal).ToList();
+        var tagLines = lookupKeys.Select(k => k.TagLine!).Distinct(StringComparer.Ordinal).ToList();
+
+        // Fetch candidates matching region + any of the game names + any of the tag lines.
+        // This is a superset; we filter to exact pairs in memory.
+        var candidates = await context.Summoners
+            .AsNoTracking()
+            .Include(s => s.Ranks)
+            .Where(s =>
+                s.PlatformRegion == normalizedPlatformRegion &&
+                s.GameNameNormalized != null &&
+                s.TagLineNormalized != null &&
+                gameNames.Contains(s.GameNameNormalized) &&
+                tagLines.Contains(s.TagLineNormalized))
+            .ToListAsync(cancellationToken);
+
+        // Filter to exact (gameName, tagLine) pairs.
+        var lookupSet = lookupKeys
+            .Select(k => (k.GameName!, k.TagLine!))
+            .ToHashSet();
+
+        return candidates
+            .Where(s => lookupSet.Contains((s.GameNameNormalized!, s.TagLineNormalized!)))
+            .GroupBy(s => (s.GameNameNormalized, s.TagLineNormalized))
+            .Select(g => g.OrderByDescending(s => s.UpdatedAt).First())
+            .ToList();
+    }
+
     private async Task<Guid> UpsertSummonerAsync(Summoner summoner, CancellationToken cancellationToken)
     {
         const string sql = """

@@ -1,5 +1,6 @@
 using Camille.Enums;
 using Hangfire;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -9,6 +10,8 @@ using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.DTOs;
+using Transcendence.WebAPI.Models.MultiSearch;
+using Transcendence.WebAPI.Security;
 
 namespace Transcendence.WebAPI.Controllers;
 
@@ -19,7 +22,8 @@ public class SummonersController(
     ISummonerRepository summonerRepository,
     IRefreshLockRepository refreshLockRepository,
     IBackgroundJobClient backgroundJobClient,
-    ISummonerStatsService statsService
+    ISummonerStatsService statsService,
+    IMultiSearchService multiSearchService
 ) : ControllerBase
 {
     /// <summary>
@@ -284,6 +288,86 @@ public class SummonersController(
         return Accepted(new SummonerAcceptedResponse(
             "Refresh queued",
             pollUrl));
+    }
+
+    /// <summary>
+    ///     Batch lookup multiple summoners for champ select analysis.
+    ///     Returns per-summoner stats, ranks, top champions, role distribution, and team-level insights.
+    ///     Only returns data already in the database (no background refresh).
+    /// </summary>
+    [HttpPost("multi-search")]
+    [Authorize(Policy = AuthPolicies.AppOnly)]
+    [EnableRateLimiting("multisearch-read")]
+    [ProducesResponseType(typeof(MultiSearchResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> MultiSearch(
+        [FromBody] MultiSearchRequest request,
+        CancellationToken ct)
+    {
+        if (!PlatformRouteParser.TryParse(request.Region, out var platform))
+            return BadRequest($"Unsupported region '{request.Region}'. Use a platform like NA1, EUW1, EUN1, KR, etc.");
+
+        if (request.Summoners.Count == 0)
+            return BadRequest("At least one summoner is required.");
+
+        if (request.Summoners.Count > 5)
+            return BadRequest("Maximum 5 summoners per request.");
+
+        var riotIds = request.Summoners
+            .Select(s => (s.GameName, s.TagLine))
+            .ToList();
+
+        var result = await multiSearchService.SearchAsync(platform.ToString(), riotIds, ct);
+
+        // Map service models to response DTOs.
+        var response = new MultiSearchResponse(
+            Results: result.Summoners.Select(s => new MultiSearchSummonerResult(
+                GameName: s.GameName,
+                TagLine: s.TagLine,
+                Found: s.Found,
+                SummonerId: s.SummonerId,
+                ProfileIconId: s.ProfileIconId,
+                SummonerLevel: s.SummonerLevel,
+                SoloRank: s.SoloRank != null
+                    ? new MultiSearchRankInfo(s.SoloRank.Tier, s.SoloRank.Division, s.SoloRank.LeaguePoints,
+                        s.SoloRank.Wins, s.SoloRank.Losses)
+                    : null,
+                FlexRank: s.FlexRank != null
+                    ? new MultiSearchRankInfo(s.FlexRank.Tier, s.FlexRank.Division, s.FlexRank.LeaguePoints,
+                        s.FlexRank.Wins, s.FlexRank.Losses)
+                    : null,
+                OverviewStats: s.Overview != null
+                    ? new MultiSearchOverviewStats(
+                        s.Overview.TotalMatches,
+                        s.Overview.Wins,
+                        s.Overview.Losses,
+                        s.Overview.WinRate,
+                        s.Overview.AvgKills,
+                        s.Overview.AvgDeaths,
+                        s.Overview.AvgAssists,
+                        s.Overview.KdaRatio)
+                    : null,
+                TopChampions: s.TopChampions?.Select(c => new MultiSearchChampionStat(
+                    c.ChampionId, c.Games, c.Wins, c.WinRate, c.KdaRatio)).ToList(),
+                RoleDistribution: s.Roles != null && s.Overview is { TotalMatches: > 0 }
+                    ? s.Roles.Select(r => new MultiSearchRoleStat(
+                        r.Role, r.Games,
+                        Math.Round((double)r.Games / s.Overview.TotalMatches * 100.0, 1))).ToList()
+                    : null,
+                PrimaryRole: s.PrimaryRole
+            )).ToList(),
+            TeamInsights: new MultiSearchTeamInsights(
+                AverageRankScore: result.TeamAnalysis.AverageRankScore,
+                AverageRankLabel: result.TeamAnalysis.AverageRankLabel,
+                RoleCoverage: result.TeamAnalysis.RoleCoverage.ToList(),
+                MissingRoles: result.TeamAnalysis.MissingRoles.ToList(),
+                PotentialAutofills: result.TeamAnalysis.PotentialAutofills
+                    .Select(a => new MultiSearchAutofillRisk(a.GameName, a.TagLine, a.PrimaryRole, a.Note))
+                    .ToList()
+            )
+        );
+
+        return Ok(response);
     }
 
     /// <summary>

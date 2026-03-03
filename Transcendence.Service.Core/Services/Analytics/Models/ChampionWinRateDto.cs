@@ -23,5 +23,6 @@ public record ChampionWinRateDto(
 public record ChampionWinRateSummary(
     int ChampionId,
     string Patch,
-    List<ChampionWinRateDto> ByRoleTier
+    List<ChampionWinRateDto> ByRoleTier,
+    AnalyticsSampleMetadata? Sample = null
 );

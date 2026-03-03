@@ -27,6 +27,16 @@ public class ChampionAnalyticsIngestionJob(
 
     public async Task ExecuteAsync(CancellationToken ct = default)
     {
+        await ExecuteInternalAsync(rampOnly: false, ct);
+    }
+
+    public async Task ExecuteRampAsync(CancellationToken ct = default)
+    {
+        await ExecuteInternalAsync(rampOnly: true, ct);
+    }
+
+    private async Task ExecuteInternalAsync(bool rampOnly, CancellationToken ct = default)
+    {
         var jobOptions = options.Value;
         if (jobOptions.PauseWhenApiPriorityRefreshActive &&
             await refreshLockRepository.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, ct))
@@ -56,11 +66,23 @@ public class ChampionAnalyticsIngestionJob(
         }
 
         var currentPatch = currentPatchInfo.Version;
+        var releaseUtc = currentPatchInfo.ReleaseDate.Kind == DateTimeKind.Utc
+            ? currentPatchInfo.ReleaseDate
+            : DateTime.SpecifyKind(currentPatchInfo.ReleaseDate, DateTimeKind.Utc);
+        var rampHours = Math.Max(1, jobOptions.NewPatchRampHours);
+        var isRampActive = DateTime.UtcNow < releaseUtc.AddHours(rampHours);
+        if (rampOnly && !isRampActive)
+        {
+            logger.LogDebug("Champion analytics ingestion ramp run skipped: ramp window inactive.");
+            return;
+        }
+
         var patchStartEpoch = new DateTimeOffset(currentPatchInfo.ReleaseDate, TimeSpan.Zero).ToUnixTimeSeconds();
 
         var minMatchesForPatch = Math.Max(1, jobOptions.MinimumSuccessfulMatchesForCurrentPatch);
         var targetMatchesForPatch = Math.Max(minMatchesForPatch, jobOptions.TargetSuccessfulMatchesForCurrentPatch);
-        var staleAfterMinutes = Math.Max(5, jobOptions.DataStaleAfterMinutes);
+        var staleAfterMinutes = Math.Max(5,
+            isRampActive ? jobOptions.RampDataStaleAfterMinutes : jobOptions.DataStaleAfterMinutes);
         var staleCutoffUtc = DateTime.UtcNow.AddMinutes(-staleAfterMinutes);
 
         var successfulMatchesForPatch = await db.Matches
@@ -75,9 +97,14 @@ public class ChampionAnalyticsIngestionJob(
 
         var isStale = !latestFetchAtUtc.HasValue || latestFetchAtUtc.Value <= staleCutoffUtc;
 
-        var maxCandidates = Math.Max(1, jobOptions.MaxCandidateSummonersPerRun);
-        var maxQueued = Math.Max(1, jobOptions.MaxRefreshJobsToQueuePerRun);
-        var minQueued = Math.Clamp(jobOptions.MinRefreshJobsToQueuePerRun, 1, maxQueued);
+        var maxCandidates = Math.Max(1,
+            isRampActive ? jobOptions.RampMaxCandidateSummonersPerRun : jobOptions.MaxCandidateSummonersPerRun);
+        var maxQueued = Math.Max(1,
+            isRampActive ? jobOptions.RampMaxRefreshJobsToQueuePerRun : jobOptions.MaxRefreshJobsToQueuePerRun);
+        var minQueued = Math.Clamp(
+            isRampActive ? jobOptions.RampMinRefreshJobsToQueuePerRun : jobOptions.MinRefreshJobsToQueuePerRun,
+            1,
+            maxQueued);
         var lockTtl = TimeSpan.FromMinutes(Math.Max(2, jobOptions.RefreshLockMinutes));
         var queuedTarget = ResolveQueuedRefreshTarget(
             successfulMatchesForPatch,
@@ -139,7 +166,7 @@ public class ChampionAnalyticsIngestionJob(
         }
 
         logger.LogInformation(
-            "Champion analytics ingestion queued {QueuedCount}/{QueuedTarget} low-priority summoner refresh jobs (patch {Patch}, matches {MatchCount}/{TargetMatchCount}, stale {IsStale}, includeAllModes {IncludeAllModes}, latestFetchAt {LatestFetchAt}).",
+            "Champion analytics ingestion queued {QueuedCount}/{QueuedTarget} low-priority summoner refresh jobs (patch {Patch}, matches {MatchCount}/{TargetMatchCount}, stale {IsStale}, includeAllModes {IncludeAllModes}, latestFetchAt {LatestFetchAt}, ramp={Ramp}).",
             queued,
             queuedTarget,
             currentPatch,
@@ -147,7 +174,8 @@ public class ChampionAnalyticsIngestionJob(
             targetMatchesForPatch,
             isStale,
             includeAllModes,
-            latestFetchAtUtc);
+            latestFetchAtUtc,
+            isRampActive);
     }
 
     private async Task<List<CandidateSummoner>> GetCandidatesAsync(

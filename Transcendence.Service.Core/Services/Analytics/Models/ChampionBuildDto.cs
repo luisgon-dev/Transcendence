@@ -25,7 +25,8 @@ public record ChampionBuildsResponse(
     string RankTier,
     string Patch,
     List<int> GlobalCoreItems,    // Items core across ALL builds for this champion
-    List<ChampionBuildDto> Builds // Top 3 builds ordered by (games * winRate)
+    List<ChampionBuildDto> Builds, // Top 3 builds ordered by (games * winRate)
+    AnalyticsSampleMetadata? Sample = null
 );
 
 public record ProMatchBuildDto(
@@ -62,7 +63,8 @@ public record ChampionProBuildsResponse(
     string Region,
     List<ProMatchBuildDto> RecentProMatches,
     List<ProPlayerSummaryDto> TopPlayers,
-    List<CommonProBuildDto> CommonBuilds
+    List<CommonProBuildDto> CommonBuilds,
+    AnalyticsSampleMetadata? Sample = null
 );
 
 /// <summary>

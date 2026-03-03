@@ -3326,6 +3326,39 @@
         },
         "additionalProperties": false
       },
+      "AnalyticsSampleMetadata": {
+        "type": "object",
+        "properties": {
+          "sampleStatus": {
+            "$ref": "#/components/schemas/AnalyticsSampleStatus"
+          },
+          "sampleSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "minimumRecommendedSampleSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "patchAgeHours": {
+            "type": "number",
+            "format": "double"
+          },
+          "isEarlyPatchWindow": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AnalyticsSampleStatus": {
+        "enum": [
+          0,
+          1,
+          2
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
       "ApiKeyCreateRequest": {
         "type": "object",
         "properties": {
@@ -3557,6 +3590,9 @@
               "$ref": "#/components/schemas/ChampionBuildDto"
             },
             "nullable": true
+          },
+          "sample": {
+            "$ref": "#/components/schemas/AnalyticsSampleMetadata"
           }
         },
         "additionalProperties": false
@@ -3614,6 +3650,9 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "sample": {
+            "$ref": "#/components/schemas/AnalyticsSampleMetadata"
           }
         },
         "additionalProperties": false
@@ -3657,6 +3696,9 @@
               "$ref": "#/components/schemas/CommonProBuildDto"
             },
             "nullable": true
+          },
+          "sample": {
+            "$ref": "#/components/schemas/AnalyticsSampleMetadata"
           }
         },
         "additionalProperties": false
@@ -3784,6 +3826,9 @@
               "$ref": "#/components/schemas/ChampionWinRateDto"
             },
             "nullable": true
+          },
+          "sample": {
+            "$ref": "#/components/schemas/AnalyticsSampleMetadata"
           }
         },
         "additionalProperties": false
@@ -5355,6 +5400,9 @@
               "$ref": "#/components/schemas/TierListEntry"
             },
             "nullable": true
+          },
+          "sample": {
+            "$ref": "#/components/schemas/AnalyticsSampleMetadata"
           }
         },
         "additionalProperties": false

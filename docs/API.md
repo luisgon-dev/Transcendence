@@ -97,6 +97,16 @@ Stats and profile read surfaces now fail closed on backend errors:
 - `GET /api/analytics/champions/{championId}/matchups`
 - `POST /api/analytics/cache/invalidate` (`AppOnly`)
 
+Early-patch semantics:
+- Analytics endpoints return **current active patch data only** (no previous-patch fallback payloads).
+- Responses now include `sample` metadata for UI messaging:
+  - `sampleStatus` (`sufficient`, `low_sample`, `no_data`)
+  - `sampleSize`
+  - `minimumRecommendedSampleSize`
+  - `patchAgeHours`
+  - `isEarlyPatchWindow`
+- `low_sample` and `no_data` are expected during early patch windows while ingestion ramps up.
+
 `rankTier` query semantics across tier list, win rates, builds, and matchups:
 - `all` (or omitted): no rank filter
 - Exact tier token: `IRON|BRONZE|SILVER|GOLD|PLATINUM|EMERALD|DIAMOND|MASTER|GRANDMASTER|CHALLENGER`

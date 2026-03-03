@@ -3,12 +3,14 @@ import Link from "next/link";
 import type { components } from "@transcendence/api-client/schema";
 
 import { BackendErrorCard } from "@/components/BackendErrorCard";
+import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { ChampionPortrait } from "@/components/ChampionPortrait";
 import { FilterBar } from "@/components/FilterBar";
 import { WinRateText } from "@/components/WinRateText";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { fetchBackendJson } from "@/lib/backendCall";
+import { pickMostSevereAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { formatGames } from "@/lib/format";
 import { normalizeRankTierParam, rankTierDisplayLabel } from "@/lib/ranks";
@@ -145,6 +147,10 @@ export default async function MatchupAnalysisPage({
   const { version, champions } = staticData;
   const champion = champions[String(championId)];
   const championName = champion?.name ?? `Champion ${championId}`;
+  const sampleNotice = pickMostSevereAnalyticsSample(
+    (winrates as { sample?: unknown } | null)?.sample as AnalyticsSampleLike,
+    (matchups as { sample?: unknown } | null)?.sample as AnalyticsSampleLike
+  );
 
   return (
     <div className="grid gap-6">
@@ -181,6 +187,7 @@ export default async function MatchupAnalysisPage({
           baseHref={`/matchups/${championId}`}
           patch={matchups?.patch ?? winrates?.patch}
         />
+        <AnalyticsSampleBanner sample={sampleNotice} />
       </header>
 
       <div className="grid gap-6 md:grid-cols-2">

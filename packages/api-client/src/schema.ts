@@ -2654,6 +2654,21 @@ export interface components {
             lastJobState?: string | null;
             error?: string | null;
         };
+        AnalyticsSampleMetadata: {
+            sampleStatus?: components["schemas"]["AnalyticsSampleStatus"];
+            /** Format: int32 */
+            sampleSize?: number;
+            /** Format: int32 */
+            minimumRecommendedSampleSize?: number;
+            /** Format: double */
+            patchAgeHours?: number;
+            isEarlyPatchWindow?: boolean;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        AnalyticsSampleStatus: 0 | 1 | 2;
         ApiKeyCreateRequest: {
             name?: string | null;
             /** Format: date-time */
@@ -2720,6 +2735,7 @@ export interface components {
             patch?: string | null;
             globalCoreItems?: number[] | null;
             builds?: components["schemas"]["ChampionBuildDto"][] | null;
+            sample?: components["schemas"]["AnalyticsSampleMetadata"];
         };
         ChampionMatchupsResponse: {
             /** Format: int32 */
@@ -2736,6 +2752,7 @@ export interface components {
             timelineSampleSize?: number;
             /** Format: date-time */
             timelineDataFreshnessUtc?: string | null;
+            sample?: components["schemas"]["AnalyticsSampleMetadata"];
         };
         ChampionProBuildsResponse: {
             /** Format: int32 */
@@ -2746,6 +2763,7 @@ export interface components {
             recentProMatches?: components["schemas"]["ProMatchBuildDto"][] | null;
             topPlayers?: components["schemas"]["ProPlayerSummaryDto"][] | null;
             commonBuilds?: components["schemas"]["CommonProBuildDto"][] | null;
+            sample?: components["schemas"]["AnalyticsSampleMetadata"];
         };
         ChampionStatDto: {
             /** Format: int32 */
@@ -2799,6 +2817,7 @@ export interface components {
             championId?: number;
             patch?: string | null;
             byRoleTier?: components["schemas"]["ChampionWinRateDto"][] | null;
+            sample?: components["schemas"]["AnalyticsSampleMetadata"];
         };
         CommonProBuildDto: {
             items?: number[] | null;
@@ -3352,6 +3371,7 @@ export interface components {
             role?: string | null;
             rankTier?: string | null;
             entries?: components["schemas"]["TierListEntry"][] | null;
+            sample?: components["schemas"]["AnalyticsSampleMetadata"];
         };
         /**
          * Format: int32

@@ -95,4 +95,9 @@ public record ChampionMatchupsResponse
     /// Latest timestamp when contributing timeline rows were derived.
     /// </summary>
     public DateTime? TimelineDataFreshnessUtc { get; init; }
+
+    /// <summary>
+    /// Sample coverage metadata for early-patch / low-sample messaging.
+    /// </summary>
+    public AnalyticsSampleMetadata? Sample { get; init; }
 }

@@ -43,20 +43,40 @@ public class RefreshChampionAnalyticsJob(
         await ExecuteInternalAsync("daily", ct);
     }
 
+    public async Task ExecuteRampAsync(CancellationToken ct)
+    {
+        var patchState = await GetCurrentPatchStateAsync(ct);
+        if (!patchState.IsRampActive)
+        {
+            logger.LogDebug("New-patch analytics ramp refresh skipped: ramp window inactive.");
+            return;
+        }
+
+        await ExecuteAdaptiveAsync(ct);
+    }
+
     public async Task ExecuteAdaptiveAsync(CancellationToken ct)
     {
-        var currentPatch = await GetCurrentPatchAsync(ct);
-        if (string.IsNullOrWhiteSpace(currentPatch))
+        var patchState = await GetCurrentPatchStateAsync(ct);
+        if (string.IsNullOrWhiteSpace(patchState.Version))
         {
             logger.LogWarning("Adaptive analytics refresh skipped because no active patch is available.");
             return;
         }
 
+        var currentPatch = patchState.Version!;
+        var useRampTuning = patchState.IsRampActive;
         var now = DateTime.UtcNow;
-        var effectiveLookbackMinutes = Math.Max(5, options.Value.AdaptiveLookbackMinutes);
-        var effectiveMinIntervalMinutes = Math.Max(5, options.Value.MinimumRefreshIntervalMinutes);
-        var effectiveForceRefreshHours = Math.Max(1, options.Value.ForceRefreshAfterHours);
-        var effectiveThreshold = Math.Max(1, options.Value.AdaptiveNewMatchesThreshold);
+        var effectiveLookbackMinutes = Math.Max(5,
+            useRampTuning ? options.Value.RampAdaptiveLookbackMinutes : options.Value.AdaptiveLookbackMinutes);
+        var effectiveMinIntervalMinutes = Math.Max(5,
+            useRampTuning
+                ? options.Value.RampMinimumRefreshIntervalMinutes
+                : options.Value.MinimumRefreshIntervalMinutes);
+        var effectiveForceRefreshHours = Math.Max(1,
+            useRampTuning ? options.Value.RampForceRefreshAfterHours : options.Value.ForceRefreshAfterHours);
+        var effectiveThreshold = Math.Max(1,
+            useRampTuning ? options.Value.RampAdaptiveNewMatchesThreshold : options.Value.AdaptiveNewMatchesThreshold);
 
         var lastRefreshAt = await GetLastRefreshAtUtcAsync(ct);
         var lastRefreshPatch = await distributedCache.GetStringAsync(LastRefreshPatchCacheKey, ct);
@@ -102,17 +122,19 @@ public class RefreshChampionAnalyticsJob(
                 ? $"adaptive-stale ({effectiveForceRefreshHours}h)"
                 : $"adaptive-threshold ({newlyFetchedMatches} matches/{effectiveLookbackMinutes}m)";
 
-        await ExecuteInternalAsync(reason, ct);
+        await ExecuteInternalAsync($"{reason}{(useRampTuning ? ", ramp-mode" : string.Empty)}", ct, useRampTuning);
     }
 
-    private async Task ExecuteInternalAsync(string triggerReason, CancellationToken ct)
+    private async Task ExecuteInternalAsync(string triggerReason, CancellationToken ct, bool useRampTuning = false)
     {
-        logger.LogInformation("Starting champion analytics refresh ({TriggerReason})", triggerReason);
+        logger.LogInformation("Starting champion analytics refresh ({TriggerReason}, ramp={Ramp})", triggerReason,
+            useRampTuning);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         try
         {
-            var currentPatch = await GetCurrentPatchAsync(ct);
+            var patchState = await GetCurrentPatchStateAsync(ct);
+            var currentPatch = patchState.Version;
             if (string.IsNullOrWhiteSpace(currentPatch))
             {
                 logger.LogWarning("Analytics refresh skipped because no active patch was found.");
@@ -179,7 +201,9 @@ public class RefreshChampionAnalyticsJob(
 
             // Step 5: Pre-warm win rates, builds, matchups for top 20 champions per role
             var preWarmCount = 0;
-            var championsPerRole = Math.Max(1, options.Value.ChampionsPerRoleToPreWarm);
+            var championsPerRole = Math.Max(
+                1,
+                useRampTuning ? options.Value.RampChampionsPerRoleToPreWarm : options.Value.ChampionsPerRoleToPreWarm);
             foreach (var role in Roles)
             {
                 var roleChampions = popularChampions
@@ -228,13 +252,24 @@ public class RefreshChampionAnalyticsJob(
         }
     }
 
-    private Task<string?> GetCurrentPatchAsync(CancellationToken ct)
+    private async Task<PatchState> GetCurrentPatchStateAsync(CancellationToken ct)
     {
-        return db.Patches
+        var patch = await db.Patches
             .AsNoTracking()
             .Where(p => p.IsActive)
-            .Select(p => p.Version)
+            .Select(p => new { p.Version, p.ReleaseDate })
             .FirstOrDefaultAsync(ct);
+
+        if (patch == null || string.IsNullOrWhiteSpace(patch.Version))
+            return new PatchState(null, false);
+
+        var releaseUtc = patch.ReleaseDate.Kind == DateTimeKind.Utc
+            ? patch.ReleaseDate
+            : DateTime.SpecifyKind(patch.ReleaseDate, DateTimeKind.Utc);
+        var rampHours = Math.Max(1, options.Value.NewPatchRampHours);
+        var isRampActive = DateTime.UtcNow < releaseUtc.AddHours(rampHours);
+
+        return new PatchState(patch.Version, isRampActive);
     }
 
     private async Task<List<(int ChampionId, string Role, int Games)>> GetPopularChampionsAsync(
@@ -279,4 +314,6 @@ public class RefreshChampionAnalyticsJob(
         await distributedCache.SetStringAsync(LastRefreshAtCacheKey, now, RefreshStateCacheOptions, ct);
         await distributedCache.SetStringAsync(LastRefreshPatchCacheKey, patch, RefreshStateCacheOptions, ct);
     }
+
+    private sealed record PatchState(string? Version, bool IsRampActive);
 }

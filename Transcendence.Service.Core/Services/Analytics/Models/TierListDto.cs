@@ -50,5 +50,6 @@ public record TierListResponse(
     string Patch,
     string? Role,             // Null if unified (all roles)
     string? RankTier,         // "all" for all ranks, or scope token (e.g., "EMERALD_PLUS")
-    List<TierListEntry> Entries
+    List<TierListEntry> Entries,
+    AnalyticsSampleMetadata? Sample = null
 );

@@ -2,10 +2,13 @@ import Image from "next/image";
 import Link from "next/link";
 import type { components } from "@transcendence/api-client/schema";
 
+import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
+import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { fetchBackendJson } from "@/lib/backendCall";
-import { getBackendBaseUrl } from "@/lib/env";
+import { type AnalyticsSampleLike } from "@/lib/analyticsSample";
+import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { formatDateTimeMs, formatRelativeTime } from "@/lib/format";
 import { championIconUrl, fetchChampionMap, fetchItemMap, itemIconUrl } from "@/lib/staticData";
 import { normalizeTierListEntries } from "@/lib/tierlist";
@@ -71,6 +74,7 @@ export default async function ProBuildsIndexPage({
 }: {
   searchParams?: Promise<{ q?: string }>;
 }) {
+  const verbosity = getErrorVerbosity();
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const championQuery = normalizeChampionQuery(resolvedSearchParams?.q);
 
@@ -156,6 +160,27 @@ export default async function ProBuildsIndexPage({
 
   const failedFeedCount = proResponses.length - successfulFeeds.length;
 
+  if (!tierListRes.ok) {
+    return (
+      <BackendErrorCard
+        title="Pro Builds"
+        message={
+          tierListRes.errorKind === "timeout"
+            ? "Timed out reaching the backend."
+            : tierListRes.errorKind === "unreachable"
+              ? "We are having trouble reaching the backend."
+              : "Failed to load pro builds index data."
+        }
+        requestId={tierListRes.requestId}
+        detail={
+          verbosity === "verbose"
+            ? JSON.stringify({ status: tierListRes.status, errorKind: tierListRes.errorKind }, null, 2)
+            : null
+        }
+      />
+    );
+  }
+
   return (
     <div className="grid gap-6">
       <header className="grid gap-2">
@@ -172,6 +197,9 @@ export default async function ProBuildsIndexPage({
           <Badge>{feedChampionIds.length} champions sampled</Badge>
           {championQuery ? <Badge>Search: {championQuery}</Badge> : null}
         </div>
+        <AnalyticsSampleBanner
+          sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
+        />
       </header>
 
       <Card className="p-5">

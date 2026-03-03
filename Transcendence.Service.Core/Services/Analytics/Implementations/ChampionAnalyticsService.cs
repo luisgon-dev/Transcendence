@@ -1,9 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.Options;
 using Transcendence.Data;
-using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
+using Transcendence.Service.Core.Services.Jobs.Configuration;
 
 namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 
@@ -30,15 +31,18 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
     private readonly TranscendenceContext _context;
     private readonly HybridCache _cache;
     private readonly IChampionAnalyticsComputeService _computeService;
+    private readonly ChampionAnalyticsComputeOptions _computeOptions;
 
     public ChampionAnalyticsService(
         TranscendenceContext context,
         HybridCache cache,
-        IChampionAnalyticsComputeService computeService)
+        IChampionAnalyticsComputeService computeService,
+        IOptions<ChampionAnalyticsComputeOptions> computeOptions)
     {
         _context = context;
         _cache = cache;
         _computeService = computeService;
+        _computeOptions = computeOptions.Value;
     }
 
     public async Task<ChampionWinRateSummary> GetWinRatesAsync(
@@ -46,17 +50,18 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         ChampionAnalyticsFilter filter,
         CancellationToken ct)
     {
-        var currentPatch = await GetCurrentPatchOrFallbackAsync(ct);
-        if (string.IsNullOrWhiteSpace(currentPatch))
+        var patchContext = await GetActivePatchContextAsync(ct);
+        if (string.IsNullOrWhiteSpace(patchContext.Patch))
         {
-            // No active patch, return empty summary
             return new ChampionWinRateSummary(
                 ChampionId: championId,
                 Patch: "Unknown",
-                ByRoleTier: new List<ChampionWinRateDto>()
+                ByRoleTier: new List<ChampionWinRateDto>(),
+                Sample: BuildSampleMetadata(0, patchContext)
             );
         }
 
+        var currentPatch = patchContext.Patch!;
         var normalizedRankTier = NormalizeRankTier(filter.RankTier);
         var normalizedFilter = filter with
         {
@@ -77,10 +82,12 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             cancellationToken: ct
         );
 
+        var sampleSize = winRates.Sum(x => Math.Max(0, x.Games));
         return new ChampionWinRateSummary(
             ChampionId: championId,
             Patch: currentPatch,
-            ByRoleTier: winRates
+            ByRoleTier: winRates,
+            Sample: BuildSampleMetadata(sampleSize, patchContext)
         );
     }
 
@@ -89,18 +96,19 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         string? rankTier,
         CancellationToken ct)
     {
-        var currentPatch = await GetCurrentPatchOrFallbackAsync(ct);
-        if (string.IsNullOrWhiteSpace(currentPatch))
+        var patchContext = await GetActivePatchContextAsync(ct);
+        if (string.IsNullOrWhiteSpace(patchContext.Patch))
         {
-            // No active patch, return empty tier list
             return new TierListResponse(
                 Patch: "Unknown",
                 Role: role,
                 RankTier: rankTier,
-                Entries: new List<TierListEntry>()
+                Entries: new List<TierListEntry>(),
+                Sample: BuildSampleMetadata(0, patchContext)
             );
         }
 
+        var currentPatch = patchContext.Patch!;
         // Normalize parameters
         var normalizedRole = string.IsNullOrEmpty(role) ? "ALL" : role.ToUpperInvariant();
         var normalizedTier = NormalizeRankTier(rankTier);
@@ -119,11 +127,13 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             cancellationToken: ct
         );
 
+        var sampleSize = entries.Sum(x => Math.Max(0, x.Games));
         return new TierListResponse(
             Patch: currentPatch,
             Role: normalizedRole,
             RankTier: normalizedTier,
-            Entries: entries
+            Entries: entries,
+            Sample: BuildSampleMetadata(sampleSize, patchContext)
         );
     }
 
@@ -133,23 +143,34 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         string? rankTier,
         CancellationToken ct)
     {
-        var patch = await GetCurrentPatchOrFallbackAsync(ct);
+        var patchContext = await GetActivePatchContextAsync(ct);
         var normalizedRole = role.ToUpperInvariant();
         var normalizedTier = NormalizeRankTier(rankTier);
 
-        if (string.IsNullOrWhiteSpace(patch))
-            return new ChampionBuildsResponse(championId, normalizedRole, normalizedTier, "Unknown", [], []);
+        if (string.IsNullOrWhiteSpace(patchContext.Patch))
+            return new ChampionBuildsResponse(
+                championId,
+                normalizedRole,
+                normalizedTier,
+                "Unknown",
+                [],
+                [],
+                BuildSampleMetadata(0, patchContext));
+
+        var patch = patchContext.Patch!;
 
         var cacheKey = $"{BuildsCacheKeyPrefix}{championId}:{normalizedRole}:{normalizedTier}:{patch}";
         var tags = new[] { AnalyticsCacheTag, $"patch:{patch}", "builds" };
 
-        return await _cache.GetOrCreateAsync(
+        var response = await _cache.GetOrCreateAsync(
             cacheKey,
             async cancel => await _computeService.ComputeBuildsAsync(
                 championId, normalizedRole, normalizedTier == "all" ? null : normalizedTier, patch, cancel),
             AnalyticsCacheOptions,
             tags,
             cancellationToken: ct);
+        var sampleSize = response.Builds.Sum(x => Math.Max(0, x.Games));
+        return response with { Sample = BuildSampleMetadata(sampleSize, patchContext) };
     }
 
     public async Task<ChampionProBuildsResponse> GetProBuildsAsync(
@@ -159,19 +180,26 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         string? patch,
         CancellationToken ct)
     {
-        var resolvedPatch = string.IsNullOrWhiteSpace(patch)
-            ? await GetCurrentPatchOrFallbackAsync(ct)
-            : patch.Trim();
+        var patchContext = await GetActivePatchContextAsync(ct);
+        var resolvedPatch = string.IsNullOrWhiteSpace(patch) ? patchContext.Patch : patch.Trim();
         var normalizedRole = string.IsNullOrWhiteSpace(role) ? "ALL" : role.Trim().ToUpperInvariant();
         var normalizedRegion = string.IsNullOrWhiteSpace(region) ? "ALL" : region.Trim().ToUpperInvariant();
 
         if (string.IsNullOrWhiteSpace(resolvedPatch))
-            return new ChampionProBuildsResponse(championId, "Unknown", normalizedRole, normalizedRegion, [], [], []);
+            return new ChampionProBuildsResponse(
+                championId,
+                "Unknown",
+                normalizedRole,
+                normalizedRegion,
+                [],
+                [],
+                [],
+                BuildSampleMetadata(0, patchContext));
 
         var cacheKey = $"{ProBuildsCacheKeyPrefix}{championId}:{normalizedRegion}:{normalizedRole}:{resolvedPatch}";
         var tags = new[] { AnalyticsCacheTag, $"patch:{resolvedPatch}", "probuilds" };
 
-        return await _cache.GetOrCreateAsync(
+        var response = await _cache.GetOrCreateAsync(
             cacheKey,
             async cancel => await _computeService.ComputeProBuildsAsync(
                 championId,
@@ -182,6 +210,10 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             AnalyticsCacheOptions,
             tags,
             cancellationToken: ct);
+        var sampleSize = Math.Max(
+            response.CommonBuilds.Sum(x => Math.Max(0, x.Games)),
+            response.RecentProMatches.Count);
+        return response with { Sample = BuildSampleMetadata(sampleSize, patchContext) };
     }
 
     public async Task<ChampionMatchupsResponse> GetMatchupsAsync(
@@ -190,11 +222,11 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         string? rankTier,
         CancellationToken ct)
     {
-        var patch = await GetCurrentPatchOrFallbackAsync(ct);
+        var patchContext = await GetActivePatchContextAsync(ct);
         var normalizedRole = role.ToUpperInvariant();
         var normalizedTier = NormalizeRankTier(rankTier);
 
-        if (string.IsNullOrWhiteSpace(patch))
+        if (string.IsNullOrWhiteSpace(patchContext.Patch))
         {
             return new ChampionMatchupsResponse
             {
@@ -204,20 +236,24 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
                 Patch = "Unknown",
                 Counters = [],
                 FavorableMatchups = [],
-                AllMatchups = []
+                AllMatchups = [],
+                Sample = BuildSampleMetadata(0, patchContext)
             };
         }
 
+        var patch = patchContext.Patch!;
         var cacheKey = $"{MatchupsCacheKeyPrefix}{championId}:{normalizedRole}:{normalizedTier}:{patch}";
         var tags = new[] { AnalyticsCacheTag, $"patch:{patch}", "matchups" };
 
-        return await _cache.GetOrCreateAsync(
+        var response = await _cache.GetOrCreateAsync(
             cacheKey,
             async cancel => await _computeService.ComputeMatchupsAsync(
                 championId, normalizedRole, normalizedTier == "all" ? null : normalizedTier, patch, cancel),
             AnalyticsCacheOptions,
             tags,
             cancellationToken: ct);
+        var sampleSize = response.AllMatchups.Sum(x => Math.Max(0, x.Games));
+        return response with { Sample = BuildSampleMetadata(sampleSize, patchContext) };
     }
 
     public async Task InvalidateAnalyticsCacheAsync(CancellationToken ct)
@@ -225,24 +261,26 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         await _cache.RemoveByTagAsync(AnalyticsCacheTag, ct);
     }
 
-    private async Task<string?> GetCurrentPatchOrFallbackAsync(CancellationToken ct)
+    private async Task<ActivePatchContext> GetActivePatchContextAsync(CancellationToken ct)
     {
         var activePatch = await _context.Patches
             .AsNoTracking()
             .Where(p => p.IsActive)
-            .Select(p => p.Version)
+            .Select(p => new { p.Version, p.ReleaseDate })
             .FirstOrDefaultAsync(ct);
 
-        if (!string.IsNullOrWhiteSpace(activePatch))
-            return activePatch;
+        if (activePatch == null || string.IsNullOrWhiteSpace(activePatch.Version))
+            return new ActivePatchContext(null, 0, false);
 
-        return await _context.Matches
-            .AsNoTracking()
-            .Where(m => m.Status == FetchStatus.Success && m.Patch != null && m.Patch != "")
-            .OrderByDescending(m => m.FetchedAt)
-            .ThenByDescending(m => m.Id)
-            .Select(m => m.Patch)
-            .FirstOrDefaultAsync(ct);
+        var releaseUtc = activePatch.ReleaseDate.Kind == DateTimeKind.Utc
+            ? activePatch.ReleaseDate
+            : DateTime.SpecifyKind(activePatch.ReleaseDate, DateTimeKind.Utc);
+        var patchAgeHours = Math.Max(0, (DateTime.UtcNow - releaseUtc).TotalHours);
+        var earlyPatchWindowHours = Math.Max(1, _computeOptions.EarlyPatchWindowHours);
+        return new ActivePatchContext(
+            activePatch.Version,
+            patchAgeHours,
+            patchAgeHours <= earlyPatchWindowHours);
     }
 
     private static string BuildCacheKey(int championId, ChampionAnalyticsFilter filter, string patch)
@@ -273,4 +311,28 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         var normalized = rankTier.Trim().ToUpperInvariant().Replace("+", "_PLUS");
         return normalized == "ALL" ? "all" : normalized;
     }
+
+    private AnalyticsSampleMetadata BuildSampleMetadata(int sampleSize, ActivePatchContext patchContext)
+    {
+        var stableMinimum = Math.Max(1, _computeOptions.MinimumGamesRequired);
+        var earlyPatchMinimum = Math.Max(1, _computeOptions.EarlyPatchMinimumGamesRequired);
+        var minimumRecommended = patchContext.IsEarlyPatchWindow ? earlyPatchMinimum : stableMinimum;
+        var status = sampleSize <= 0
+            ? AnalyticsSampleStatus.NoData
+            : sampleSize < minimumRecommended
+                ? AnalyticsSampleStatus.LowSample
+                : AnalyticsSampleStatus.Sufficient;
+
+        return new AnalyticsSampleMetadata(
+            status,
+            sampleSize,
+            minimumRecommended,
+            Math.Round(patchContext.PatchAgeHours, 1),
+            patchContext.IsEarlyPatchWindow);
+    }
+
+    private sealed record ActivePatchContext(
+        string? Patch,
+        double PatchAgeHours,
+        bool IsEarlyPatchWindow);
 }

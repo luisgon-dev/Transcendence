@@ -3,12 +3,14 @@ import Link from "next/link";
 import type { components } from "@transcendence/api-client/schema";
 
 import { BackendErrorCard } from "@/components/BackendErrorCard";
+import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { RoleFilterTabs } from "@/components/RoleFilterTabs";
 import { RuneSetupDisplay } from "@/components/RuneSetupDisplay";
 import { WinRateText } from "@/components/WinRateText";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { fetchBackendJson, type BackendJsonResult } from "@/lib/backendCall";
+import { pickMostSevereAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { formatDateTimeMs, formatRelativeTime } from "@/lib/format";
 import {
@@ -176,6 +178,10 @@ export default async function ProBuildsChampionPage({
     proBuilds?.patch ?? winrates?.patch ?? patchFilter ?? "Unknown";
   const effectiveRole = proBuilds?.role ?? roleFilter;
   const effectiveRegion = proBuilds?.region ?? regionFilter;
+  const sampleNotice = pickMostSevereAnalyticsSample(
+    (proBuilds as { sample?: unknown } | null)?.sample as AnalyticsSampleLike,
+    (winrates as { sample?: unknown } | null)?.sample as AnalyticsSampleLike
+  );
 
   return (
     <div className="grid gap-6">
@@ -203,6 +209,7 @@ export default async function ProBuildsChampionPage({
           <Badge>{regionDisplayLabel(effectiveRegion)}</Badge>
           <Badge>{recentMatches.length} matches</Badge>
         </div>
+        <AnalyticsSampleBanner sample={sampleNotice} />
       </header>
 
       <Card className="p-5">

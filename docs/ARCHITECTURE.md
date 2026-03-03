@@ -97,6 +97,16 @@ Transcendence is a backend + web monorepo:
 - Even when patch data is healthy, ingestion can queue a small minimum number of low-priority refreshes per run.
 - Early patch mode remains ranked solo/duo-first until coverage targets are satisfied; once healthy, low-priority refresh can widen to all supported history queues.
 - Low-priority refresh windows stop early whenever active high-priority API refresh demand is detected.
+- New-patch ramp mode (first `Jobs:*:NewPatchRampHours`) schedules additional high-frequency analytics jobs:
+  - `refresh-champion-analytics-ramp`
+  - `champion-analytics-ingestion-ramp`
+  - `summoner-maintenance-ramp`
+- Ramp jobs are gated by active-patch age and no-op automatically after the configured ramp window.
+
+### Analytics Response Semantics
+
+- Analytics APIs intentionally do not fall back to previous patch payloads.
+- Responses include sample metadata (`sampleStatus`, `sampleSize`, `minimumRecommendedSampleSize`, `patchAgeHours`, `isEarlyPatchWindow`) so web surfaces can show early-patch low-sample/no-data states explicitly.
 
 ### Match Queue Scope and History
 

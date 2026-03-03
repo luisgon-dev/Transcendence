@@ -3,12 +3,14 @@ import Link from "next/link";
 import type { components } from "@transcendence/api-client/schema";
 
 import { BackendErrorCard } from "@/components/BackendErrorCard";
+import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { FilterBar } from "@/components/FilterBar";
 import { TierBadge } from "@/components/TierBadge";
 import { WinRateText } from "@/components/WinRateText";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { fetchBackendJson } from "@/lib/backendCall";
+import { type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { formatGames, formatPercent } from "@/lib/format";
 import {
@@ -118,6 +120,10 @@ export default async function TierListPage({
           <Badge>{rankTierDisplayLabel(rankTierValue ?? "all")}</Badge>
           <Badge>{normalizedEntries.length} champions</Badge>
         </div>
+
+        <AnalyticsSampleBanner
+          sample={(tierlist as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
+        />
 
         <FilterBar
           activeRole={roleParam || "ALL"}

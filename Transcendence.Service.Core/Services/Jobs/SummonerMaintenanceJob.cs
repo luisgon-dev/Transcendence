@@ -28,6 +28,17 @@ public class SummonerMaintenanceJob(
     [Queue("refresh-low")]
     public async Task ExecuteAsync(CancellationToken ct = default)
     {
+        await ExecuteInternalAsync(rampOnly: false, ct);
+    }
+
+    [Queue("refresh-low")]
+    public async Task ExecuteRampAsync(CancellationToken ct = default)
+    {
+        await ExecuteInternalAsync(rampOnly: true, ct);
+    }
+
+    private async Task ExecuteInternalAsync(bool rampOnly, CancellationToken ct = default)
+    {
         var jobOptions = options.Value;
         if (jobOptions.PauseWhenApiPriorityRefreshActive &&
             await refreshLockRepository.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, ct))
@@ -48,6 +59,17 @@ public class SummonerMaintenanceJob(
             return;
         }
 
+        var releaseUtc = activePatch.ReleaseDate.Kind == DateTimeKind.Utc
+            ? activePatch.ReleaseDate
+            : DateTime.SpecifyKind(activePatch.ReleaseDate, DateTimeKind.Utc);
+        var rampHours = Math.Max(1, jobOptions.NewPatchRampHours);
+        var isRampActive = DateTime.UtcNow < releaseUtc.AddHours(rampHours);
+        if (rampOnly && !isRampActive)
+        {
+            logger.LogDebug("[Maintenance] Ramp run skipped: ramp window inactive.");
+            return;
+        }
+
         var patchStartEpoch = new DateTimeOffset(activePatch.ReleaseDate, TimeSpan.Zero).ToUnixTimeSeconds();
         var successfulMatchesForPatch = await db.Matches
             .AsNoTracking()
@@ -59,9 +81,13 @@ public class SummonerMaintenanceJob(
                                   analyticsOptions.Value.MinimumSuccessfulMatchesForCurrentPatch,
                                   analyticsOptions.Value.TargetSuccessfulMatchesForCurrentPatch);
 
-        var staleCutoffUtc = DateTime.UtcNow.AddMinutes(-Math.Max(5, jobOptions.DataStaleAfterMinutes));
-        var maxCandidates = Math.Max(1, jobOptions.MaxCandidateSummonersPerRun);
-        var maxQueued = Math.Max(1, jobOptions.MaxRefreshJobsToQueuePerRun);
+        var staleAfterMinutes = Math.Max(5,
+            isRampActive ? jobOptions.RampDataStaleAfterMinutes : jobOptions.DataStaleAfterMinutes);
+        var staleCutoffUtc = DateTime.UtcNow.AddMinutes(-staleAfterMinutes);
+        var maxCandidates = Math.Max(1,
+            isRampActive ? jobOptions.RampMaxCandidateSummonersPerRun : jobOptions.MaxCandidateSummonersPerRun);
+        var maxQueued = Math.Max(1,
+            isRampActive ? jobOptions.RampMaxRefreshJobsToQueuePerRun : jobOptions.MaxRefreshJobsToQueuePerRun);
         var lockTtl = TimeSpan.FromMinutes(Math.Max(2, jobOptions.RefreshLockMinutes));
 
         var candidates = await GetCandidatesAsync(staleCutoffUtc, maxCandidates, jobOptions, ct);
@@ -114,12 +140,13 @@ public class SummonerMaintenanceJob(
         }
 
         logger.LogInformation(
-            "[Maintenance] Queued {Queued}/{Target} refresh jobs. includeAllModes={IncludeAllModes}, patch={Patch}, coverage={Coverage}.",
+            "[Maintenance] Queued {Queued}/{Target} refresh jobs. includeAllModes={IncludeAllModes}, patch={Patch}, coverage={Coverage}, ramp={Ramp}.",
             queued,
             maxQueued,
             includeAllModes,
             activePatch.Version,
-            successfulMatchesForPatch);
+            successfulMatchesForPatch,
+            isRampActive);
     }
 
     private async Task<List<CandidateSummoner>> GetCandidatesAsync(

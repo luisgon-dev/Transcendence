@@ -1,11 +1,14 @@
 import type { components } from "@transcendence/api-client/schema";
 
+import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
+import { BackendErrorCard } from "@/components/BackendErrorCard";
 import {
   ChampionsGridClient,
   type ChampionGridEntry
 } from "@/components/ChampionsGridClient";
 import { fetchBackendJson } from "@/lib/backendCall";
-import { getBackendBaseUrl } from "@/lib/env";
+import { type AnalyticsSampleLike } from "@/lib/analyticsSample";
+import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { DEFAULT_TIERLIST_RANK_TIER } from "@/lib/ranks";
 import { fetchChampionMap } from "@/lib/staticData";
 import {
@@ -16,6 +19,7 @@ import {
 type TierListResponse = components["schemas"]["TierListResponse"];
 
 export default async function ChampionsPage() {
+  const verbosity = getErrorVerbosity();
   const [{ version, champions }, tierListRes] = await Promise.all([
     fetchChampionMap(),
     fetchBackendJson<TierListResponse>(
@@ -23,6 +27,27 @@ export default async function ChampionsPage() {
       { next: { revalidate: 60 * 60 } }
     )
   ]);
+
+  if (!tierListRes.ok) {
+    return (
+      <BackendErrorCard
+        title="Champions"
+        message={
+          tierListRes.errorKind === "timeout"
+            ? "Timed out reaching the backend."
+            : tierListRes.errorKind === "unreachable"
+              ? "We are having trouble reaching the backend."
+              : "Failed to load champions analytics."
+        }
+        requestId={tierListRes.requestId}
+        detail={
+          verbosity === "verbose"
+            ? JSON.stringify({ status: tierListRes.status, errorKind: tierListRes.errorKind }, null, 2)
+            : null
+        }
+      />
+    );
+  }
 
   // Build a map of championId -> best tier/role/winRate from the tier list
   const tierMap = new Map<
@@ -69,6 +94,9 @@ export default async function ChampionsPage() {
         <p className="text-sm text-fg/75">
           Builds, matchups, and win rates per role.
         </p>
+        <AnalyticsSampleBanner
+          sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
+        />
       </header>
 
       <ChampionsGridClient champions={list} version={version} />

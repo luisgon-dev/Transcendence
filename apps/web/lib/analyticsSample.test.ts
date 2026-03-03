@@ -1,0 +1,45 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  normalizeAnalyticsSample,
+  normalizeAnalyticsSampleStatus,
+  pickMostSevereAnalyticsSample
+} from "@/lib/analyticsSample";
+
+describe("analyticsSample", () => {
+  it("normalizes enum-like statuses", () => {
+    expect(normalizeAnalyticsSampleStatus(0)).toBe("sufficient");
+    expect(normalizeAnalyticsSampleStatus(1)).toBe("low_sample");
+    expect(normalizeAnalyticsSampleStatus(2)).toBe("no_data");
+    expect(normalizeAnalyticsSampleStatus("LowSample")).toBe("low_sample");
+    expect(normalizeAnalyticsSampleStatus("No_Data")).toBe("no_data");
+  });
+
+  it("normalizes sample payload", () => {
+    const normalized = normalizeAnalyticsSample({
+      sampleStatus: "low_sample",
+      sampleSize: 22.7,
+      minimumRecommendedSampleSize: 40,
+      patchAgeHours: 4.5,
+      isEarlyPatchWindow: true
+    });
+
+    expect(normalized).toEqual({
+      status: "low_sample",
+      sampleSize: 22,
+      minimumRecommendedSampleSize: 40,
+      patchAgeHours: 4.5,
+      isEarlyPatchWindow: true
+    });
+  });
+
+  it("picks the most severe sample state across responses", () => {
+    const picked = pickMostSevereAnalyticsSample(
+      { sampleStatus: "sufficient", sampleSize: 200, minimumRecommendedSampleSize: 100 },
+      { sampleStatus: "low_sample", sampleSize: 20, minimumRecommendedSampleSize: 40 },
+      { sampleStatus: "no_data", sampleSize: 0, minimumRecommendedSampleSize: 40 }
+    );
+
+    expect(picked?.status).toBe("no_data");
+  });
+});

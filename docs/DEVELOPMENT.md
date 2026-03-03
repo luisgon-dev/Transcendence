@@ -172,6 +172,11 @@ When `Transcendence.Service` runs in non-development environments, the `Producti
 - `PrioritizeFavoriteSummoners`
 - `FallbackToTrackedSummoners`
 - `PauseWhenApiPriorityRefreshActive`
+- `NewPatchRampHours`
+- `RampDataStaleAfterMinutes`
+- `RampMaxCandidateSummonersPerRun`
+- `RampMinRefreshJobsToQueuePerRun`
+- `RampMaxRefreshJobsToQueuePerRun`
 
 This job determines when low-priority refresh can widen beyond ranked-only ingestion during early patch windows.
 
@@ -201,6 +206,10 @@ Non-ranked backfill ordering is tracked per summoner with `SummonerIngestionCurs
 - `RefreshLockMinutes`
 - `PrioritizeFavoriteSummoners`
 - `PauseWhenApiPriorityRefreshActive`
+- `NewPatchRampHours`
+- `RampMaxCandidateSummonersPerRun`
+- `RampMaxRefreshJobsToQueuePerRun`
+- `RampDataStaleAfterMinutes`
 
 This recurring job refreshes stale summoners in low-priority mode when no active high-priority API refresh lock exists.
 
@@ -225,9 +234,13 @@ Timeline ingestion persists ranked @15 snapshots and fetch status for matchup de
 - `RuneSelectionIntegrityBackfillCron`
 - `EnableRuneSelectionIntegrityBackfill`
 - `SummonerMaintenanceCron`
+- `SummonerMaintenanceRampCron`
 - `EnableSummonerMaintenance`
 - `MatchTimelineBackfillCron`
 - `EnableMatchTimelineBackfill`
+- `RefreshChampionAnalyticsRampCron`
+- `ChampionAnalyticsIngestionRampCron`
+- `EnableNewPatchRamp`
 
 `Jobs:RuneSelectionIntegrityBackfill` supports:
 
@@ -241,6 +254,11 @@ Analytics sampling thresholds are configurable in both API and worker hosts:
 - `Analytics:Compute:MinimumGamesRequired`
 - `Analytics:Compute:EarlyPatchMinimumGamesRequired`
 - `Analytics:Compute:EarlyPatchWindowHours`
+
+### Analytics Response Sampling
+
+- Analytics APIs now expose sample metadata fields (`sampleStatus`, `sampleSize`, `minimumRecommendedSampleSize`, `patchAgeHours`, `isEarlyPatchWindow`).
+- Current behavior is current-patch only (no previous-patch fallback responses).
 
 ## Documentation Policy (Contributor Requirement)
 

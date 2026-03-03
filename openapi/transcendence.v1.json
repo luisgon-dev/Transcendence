@@ -2265,6 +2265,103 @@
         }
       }
     },
+    "/api/summoners/multi-search": {
+      "post": {
+        "tags": [
+          "Summoners"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MultiSearchRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MultiSearchRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/MultiSearchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MultiSearchResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MultiSearchResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MultiSearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          { }
+        ]
+      }
+    },
     "/api/summoners/{summonerId}/stats/overview": {
       "get": {
         "tags": [
@@ -4059,6 +4156,286 @@
           "avgXpDiffAt15": {
             "type": "number",
             "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "MultiSearchAutofillRisk": {
+        "type": "object",
+        "properties": {
+          "gameName": {
+            "type": "string",
+            "nullable": true
+          },
+          "tagLine": {
+            "type": "string",
+            "nullable": true
+          },
+          "primaryRole": {
+            "type": "string",
+            "nullable": true
+          },
+          "note": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "MultiSearchChampionStat": {
+        "type": "object",
+        "properties": {
+          "championId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "wins": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "winRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "kdaRatio": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MultiSearchOverviewStats": {
+        "type": "object",
+        "properties": {
+          "totalMatches": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "wins": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "losses": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "winRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "avgKills": {
+            "type": "number",
+            "format": "double"
+          },
+          "avgDeaths": {
+            "type": "number",
+            "format": "double"
+          },
+          "avgAssists": {
+            "type": "number",
+            "format": "double"
+          },
+          "kdaRatio": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MultiSearchRankInfo": {
+        "type": "object",
+        "properties": {
+          "tier": {
+            "type": "string",
+            "nullable": true
+          },
+          "division": {
+            "type": "string",
+            "nullable": true
+          },
+          "leaguePoints": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "wins": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "losses": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MultiSearchRequest": {
+        "required": [
+          "region",
+          "summoners"
+        ],
+        "type": "object",
+        "properties": {
+          "region": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "summoners": {
+            "maxItems": 5,
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MultiSearchSummonerInput"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "MultiSearchResponse": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MultiSearchSummonerResult"
+            },
+            "nullable": true
+          },
+          "teamInsights": {
+            "$ref": "#/components/schemas/MultiSearchTeamInsights"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MultiSearchRoleStat": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "nullable": true
+          },
+          "games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "percentage": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MultiSearchSummonerInput": {
+        "required": [
+          "gameName",
+          "tagLine"
+        ],
+        "type": "object",
+        "properties": {
+          "gameName": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "tagLine": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MultiSearchSummonerResult": {
+        "type": "object",
+        "properties": {
+          "gameName": {
+            "type": "string",
+            "nullable": true
+          },
+          "tagLine": {
+            "type": "string",
+            "nullable": true
+          },
+          "found": {
+            "type": "boolean"
+          },
+          "summonerId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "profileIconId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "summonerLevel": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "soloRank": {
+            "$ref": "#/components/schemas/MultiSearchRankInfo"
+          },
+          "flexRank": {
+            "$ref": "#/components/schemas/MultiSearchRankInfo"
+          },
+          "overviewStats": {
+            "$ref": "#/components/schemas/MultiSearchOverviewStats"
+          },
+          "topChampions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MultiSearchChampionStat"
+            },
+            "nullable": true
+          },
+          "roleDistribution": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MultiSearchRoleStat"
+            },
+            "nullable": true
+          },
+          "primaryRole": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "MultiSearchTeamInsights": {
+        "type": "object",
+        "properties": {
+          "averageRankScore": {
+            "type": "number",
+            "format": "double"
+          },
+          "averageRankLabel": {
+            "type": "string",
+            "nullable": true
+          },
+          "roleCoverage": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "missingRoles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "potentialAutofills": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MultiSearchAutofillRisk"
+            },
             "nullable": true
           }
         },

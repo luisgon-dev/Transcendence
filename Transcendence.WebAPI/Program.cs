@@ -229,11 +229,17 @@ builder.Services.AddHangfire(config =>
             options.UseNpgsqlConnection(builder.Configuration.GetConnectionString("MainDatabase"))));
 
 var app = builder.Build();
+var enableSwagger = app.Environment.IsDevelopment()
+    || ParseBool(app.Configuration["Swagger:Enable"], false);
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+if (enableSwagger)
 {
     app.UseSwagger();
+}
+
+if (app.Environment.IsDevelopment())
+{
     app.UseSwaggerUI(options =>
     {
         options.DisplayRequestDuration();

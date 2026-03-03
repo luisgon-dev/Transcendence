@@ -135,4 +135,4 @@ corepack pnpm api:check
 
 ## License
 
-No license file is currently committed in this repository.
+This project is licensed under the [GNU General Public License v3.0](LICENSE).

@@ -69,6 +69,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRankService, RankService>();
         services.AddScoped<IMatchService, MatchService>();
         services.AddScoped<IStaticDataService, StaticDataService>();
+        services.AddScoped<IRiotMatchIdsClient, RiotMatchIdsClient>();
 
         services.AddScoped<UpdateStaticDataJob>();
         services.AddScoped<RetryFailedMatchesJob>();

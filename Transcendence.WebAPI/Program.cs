@@ -17,6 +17,7 @@ using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Extensions;
 using Transcendence.Service.Core.Services.RiotApi.Implementations;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
+using Transcendence.WebAPI.Errors;
 using Transcendence.WebAPI.Security;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -24,6 +25,8 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 
 builder.Services.AddControllers();
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -189,6 +192,7 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+app.UseExceptionHandler();
 app.UseHttpsRedirection();
 app.UseRateLimiter();
 

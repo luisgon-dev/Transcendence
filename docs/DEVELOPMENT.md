@@ -68,7 +68,6 @@ dotnet user-secrets set "ConnectionStrings:RiotApi" "RGAPI-your-key" --project T
 dotnet user-secrets set "Auth:Jwt:Key" "CHANGE_THIS_TO_A_REAL_32+_CHAR_SECRET" --project Transcendence.WebAPI
 dotnet user-secrets set "Auth:AdminBootstrap:Emails:0" "admin@example.com" --project Transcendence.WebAPI
 dotnet user-secrets set "Auth:BootstrapApiKey" "trn_bootstrap_dev_key" --project Transcendence.WebAPI
-dotnet user-secrets set "Api:ReturnProblemDetailsOnStatsFailure" "false" --project Transcendence.WebAPI
 ```
 
 `Transcendence.Service`:
@@ -104,10 +103,20 @@ Admin web UI runs in `apps/web` under `/admin` and requires an authenticated use
 From repo root:
 
 ```bash
+corepack pnpm backend:test
 corepack pnpm web:dev
 corepack pnpm web:test
 corepack pnpm web:lint
 corepack pnpm web:build
+```
+
+## Backend Tests
+
+From repo root:
+
+```bash
+dotnet test tests/Transcendence.Service.Core.Tests
+dotnet test tests/Transcendence.WebAPI.Tests
 ```
 
 Current `web:test` scope:

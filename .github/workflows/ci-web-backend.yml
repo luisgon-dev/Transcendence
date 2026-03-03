@@ -1,10 +1,14 @@
-name: Web CI
+name: CI (Web + Backend)
 
 on:
   pull_request:
     branches: ["main"]
   push:
     branches: ["main"]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   backend:

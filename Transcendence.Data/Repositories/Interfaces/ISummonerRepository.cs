@@ -25,6 +25,15 @@ public interface ISummonerRepository
         CancellationToken cancellationToken = default);
 
     Task<Summoner> AddOrUpdateSummonerAsync(Summoner summoner, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Batch lookup summoners by Riot ID pairs within a single region.
+    /// Returns summoners with Ranks eagerly loaded.
+    /// </summary>
+    Task<IReadOnlyList<Summoner>> FindByRiotIdsAsync(
+        string platformRegion,
+        IReadOnlyList<(string GameName, string TagLine)> riotIds,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed record SummonerSearchCandidate(

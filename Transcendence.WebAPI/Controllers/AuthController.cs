@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 using Transcendence.Service.Core.Services.Auth.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Models;
@@ -12,6 +13,7 @@ namespace Transcendence.WebAPI.Controllers;
 public class AuthController(IUserAuthService userAuthService) : ControllerBase
 {
     [HttpPost("register")]
+    [EnableRateLimiting("auth-register")]
     [ProducesResponseType(typeof(AuthTokenResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -22,9 +24,9 @@ public class AuthController(IUserAuthService userAuthService) : ControllerBase
             var result = await userAuthService.RegisterAsync(request, ct);
             return Ok(result);
         }
-        catch (InvalidOperationException ex)
+        catch (InvalidOperationException)
         {
-            return Conflict(ex.Message);
+            return Conflict("Registration failed.");
         }
         catch (ArgumentException ex)
         {
@@ -33,6 +35,7 @@ public class AuthController(IUserAuthService userAuthService) : ControllerBase
     }
 
     [HttpPost("login")]
+    [EnableRateLimiting("auth-login")]
     [ProducesResponseType(typeof(AuthTokenResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken ct)
@@ -43,6 +46,7 @@ public class AuthController(IUserAuthService userAuthService) : ControllerBase
     }
 
     [HttpPost("refresh")]
+    [EnableRateLimiting("auth-refresh")]
     [ProducesResponseType(typeof(AuthTokenResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Refresh([FromBody] RefreshRequest request, CancellationToken ct)
@@ -50,6 +54,15 @@ public class AuthController(IUserAuthService userAuthService) : ControllerBase
         var result = await userAuthService.RefreshAsync(request, ct);
         if (result == null) return Unauthorized("Invalid or expired refresh token.");
         return Ok(result);
+    }
+
+    [HttpPost("logout")]
+    [EnableRateLimiting("auth-refresh")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> Logout([FromBody] RefreshRequest request, CancellationToken ct)
+    {
+        await userAuthService.LogoutAsync(request, ct);
+        return NoContent();
     }
 
     [HttpPost("password-reset")]

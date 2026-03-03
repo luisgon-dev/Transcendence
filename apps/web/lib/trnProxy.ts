@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 
 import { getBackendBaseUrl, getBackendTimeoutMs, getErrorVerbosity } from "@/lib/env";
 import { fetchWithTimeout, isAbortError } from "@/lib/fetchWithTimeout";
+import { normalizeProxyPath } from "@/lib/proxyPath";
 import { newRequestId } from "@/lib/requestId";
 import { logEvent } from "@/lib/serverLog";
 
@@ -27,10 +28,18 @@ export async function proxyToBackend(
     addHeaders?: Record<string, string>;
   } = {}
 ) {
+  const normalizedPath = normalizeProxyPath(path);
+  if (!normalizedPath) {
+    return new Response(JSON.stringify({ message: "Invalid proxy path." }), {
+      status: 400,
+      headers: { "content-type": "application/json; charset=utf-8" }
+    });
+  }
+
   const requestId = newRequestId();
   const started = Date.now();
   const baseUrl = getBackendBaseUrl();
-  const url = new URL(`/api/${path.join("/")}`, baseUrl);
+  const url = new URL(`/api/${normalizedPath.join("/")}`, baseUrl);
   url.search = req.nextUrl.search;
 
   const headers = copyHeaders(req);

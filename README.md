@@ -85,6 +85,7 @@ At minimum set:
 
 - `TRN_BACKEND_BASE_URL=http://localhost:8080`
 - `TRN_BACKEND_API_KEY=trn_bootstrap_dev_key` (or another valid `AppOnly` key)
+  - `/api/trn/app/*` is path-allowlisted and not a generic AppOnly passthrough.
 
 Optional for local admin bootstrap:
 
@@ -119,6 +120,13 @@ corepack pnpm web:build
 corepack pnpm api:gen
 corepack pnpm api:check
 ```
+
+## Auth Security Notes
+
+- `POST /api/auth/logout` revokes the active refresh token server-side and is used by web logout.
+- Auth endpoints use dedicated rate limits (`login`, `register`, `refresh`, `logout`).
+- Web/API startup fails outside `Development` if `Auth:Jwt:Key` is missing or the known development placeholder is used.
+- `Auth:BootstrapApiKeyEnabledInDevelopmentOnly=true` blocks bootstrap API key auth outside `Development`.
 
 `api:gen` updates:
 

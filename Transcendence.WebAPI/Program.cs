@@ -11,6 +11,7 @@ using System.Threading.RateLimiting;
 using System.Text;
 using Transcendence.Data;
 using Transcendence.Data.Extensions;
+using Transcendence.Service.Core.Services.Auth.Implementations;
 using Transcendence.Service.Core.Services.Auth.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Models;
 using Transcendence.Service.Core.Services.Analytics.Models;
@@ -21,6 +22,14 @@ using Transcendence.WebAPI.Errors;
 using Transcendence.WebAPI.Security;
 
 var builder = WebApplication.CreateBuilder(args);
+var requireJwtKeyInDevelopment = ParseBool(builder.Configuration["Auth:Jwt:RequireKeyInDevelopment"], false);
+var bootstrapApiKey = builder.Configuration["Auth:BootstrapApiKey"];
+var bootstrapApiKeyDevOnly = ParseBool(builder.Configuration["Auth:BootstrapApiKeyEnabledInDevelopmentOnly"], true);
+if (bootstrapApiKeyDevOnly && !builder.Environment.IsDevelopment() && !string.IsNullOrWhiteSpace(bootstrapApiKey))
+{
+    throw new InvalidOperationException(
+        "Auth:BootstrapApiKey is configured outside Development while Auth:BootstrapApiKeyEnabledInDevelopmentOnly=true.");
+}
 
 // Add services to the container.
 
@@ -58,6 +67,36 @@ builder.Services.AddRateLimiter(options =>
         limiter.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
         limiter.QueueLimit = 0;
     });
+    options.AddPolicy("auth-login", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: BuildAuthRateLimitPartitionKey(httpContext),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 8,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
+    options.AddPolicy("auth-register", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: BuildAuthRateLimitPartitionKey(httpContext),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 4,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
+    options.AddPolicy("auth-refresh", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: BuildAuthRateLimitPartitionKey(httpContext),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
 });
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
@@ -133,7 +172,10 @@ builder.Services.AddScoped<IRiotAccountService, RiotAccountService>();
 
 var jwtIssuer = builder.Configuration["Auth:Jwt:Issuer"] ?? "Transcendence";
 var jwtAudience = builder.Configuration["Auth:Jwt:Audience"] ?? "TranscendenceClients";
-var jwtKey = builder.Configuration["Auth:Jwt:Key"] ?? "CHANGE_THIS_DEV_ONLY_KEY_32_CHARS_MINIMUM";
+var jwtKey = JwtService.ResolveSigningKey(
+    builder.Configuration["Auth:Jwt:Key"],
+    builder.Environment,
+    requireJwtKeyInDevelopment);
 
 builder.Services.AddAuthentication(options =>
     {
@@ -223,3 +265,27 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.Run();
+
+static bool ParseBool(string? raw, bool fallback)
+{
+    return bool.TryParse(raw, out var parsed) ? parsed : fallback;
+}
+
+static string BuildAuthRateLimitPartitionKey(HttpContext context)
+{
+    var forwardedFor = context.Request.Headers["x-forwarded-for"].ToString();
+    var clientIp = ParseForwardedFor(forwardedFor)
+        ?? context.Connection.RemoteIpAddress?.ToString()
+        ?? "unknown-ip";
+    return $"ip:{clientIp}";
+}
+
+static string? ParseForwardedFor(string value)
+{
+    if (string.IsNullOrWhiteSpace(value))
+        return null;
+
+    var first = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .FirstOrDefault();
+    return string.IsNullOrWhiteSpace(first) ? null : first;
+}

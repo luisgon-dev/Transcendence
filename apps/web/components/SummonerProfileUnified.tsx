@@ -202,11 +202,22 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 function pickApiError(status: number, json: unknown): ApiErrorResponse {
   if (!isRecord(json)) return { message: `Request failed (${status}).` };
+  const message =
+    typeof json.message === "string"
+      ? (json.message as string)
+      : typeof json.title === "string"
+        ? (json.title as string)
+        : `Request failed (${status}).`;
+
   return {
-    message:
-      typeof json.message === "string" ? (json.message as string) : `Request failed (${status}).`,
+    message,
     requestId: typeof json.requestId === "string" ? (json.requestId as string) : undefined,
-    detail: typeof json.detail === "string" ? (json.detail as string) : undefined
+    detail:
+      typeof json.detail === "string"
+        ? (json.detail as string)
+        : typeof json.traceId === "string"
+          ? `traceId: ${json.traceId as string}`
+          : undefined
   };
 }
 

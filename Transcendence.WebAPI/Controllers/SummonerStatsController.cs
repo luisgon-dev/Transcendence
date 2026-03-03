@@ -10,14 +10,8 @@ namespace Transcendence.WebAPI.Controllers;
 [Route("api/summoners/{summonerId:guid}")]
 [EnableRateLimiting("expensive-read")]
 [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
-public class SummonerStatsController(
-    ISummonerStatsService statsService,
-    ILogger<SummonerStatsController> logger,
-    IConfiguration configuration) : ControllerBase
+public class SummonerStatsController(ISummonerStatsService statsService) : ControllerBase
 {
-    private readonly bool _returnProblemDetailsOnFailure =
-        configuration.GetValue<bool>("Api:ReturnProblemDetailsOnStatsFailure");
-
     /// <summary>
     ///     Gets overall statistics for a summoner.
     /// </summary>
@@ -27,55 +21,25 @@ public class SummonerStatsController(
     public async Task<IActionResult> GetOverview([FromRoute] Guid summonerId, [FromQuery] int recent = 20,
         CancellationToken ct = default)
     {
-        try
-        {
-            var result = await statsService.GetSummonerOverviewAsync(summonerId, recent, ct);
-            var dto = new SummonerOverviewDto(
-                result.SummonerId,
-                result.TotalMatches,
-                result.Wins,
-                result.Losses,
-                result.WinRate,
-                result.AvgKills,
-                result.AvgDeaths,
-                result.AvgAssists,
-                result.KdaRatio,
-                result.AvgCsPerMin,
-                result.AvgVisionScore,
-                result.AvgDamageToChamps,
-                result.AvgGameDurationMin,
-                result.RecentPerformance.Select(p => new RecentPerformanceDto(p.MatchId, p.Win, p.Kills, p.Deaths,
-                    p.Assists, p.CsPerMin, p.VisionScore, p.DamageToChamps)).ToList()
-            );
-            return Ok(dto);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex,
-                "Request {RequestId}: failed to load overview stats for summoner {SummonerId}. Returning empty payload.",
-                HttpContext.TraceIdentifier,
-                summonerId);
-            if (_returnProblemDetailsOnFailure)
-                return Problem(
-                    title: "Failed to load summoner overview statistics.",
-                    statusCode: StatusCodes.Status500InternalServerError);
-
-            return Ok(new SummonerOverviewDto(
-                summonerId,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                []));
-        }
+        var result = await statsService.GetSummonerOverviewAsync(summonerId, recent, ct);
+        var dto = new SummonerOverviewDto(
+            result.SummonerId,
+            result.TotalMatches,
+            result.Wins,
+            result.Losses,
+            result.WinRate,
+            result.AvgKills,
+            result.AvgDeaths,
+            result.AvgAssists,
+            result.KdaRatio,
+            result.AvgCsPerMin,
+            result.AvgVisionScore,
+            result.AvgDamageToChamps,
+            result.AvgGameDurationMin,
+            result.RecentPerformance.Select(p => new RecentPerformanceDto(p.MatchId, p.Win, p.Kills, p.Deaths,
+                p.Assists, p.CsPerMin, p.VisionScore, p.DamageToChamps)).ToList()
+        );
+        return Ok(dto);
     }
 
     /// <summary>
@@ -87,38 +51,22 @@ public class SummonerStatsController(
     public async Task<IActionResult> GetChampionStats([FromRoute] Guid summonerId, [FromQuery] int top = 10,
         CancellationToken ct = default)
     {
-        try
-        {
-            var result = await statsService.GetChampionStatsAsync(summonerId, top, ct);
-            var dto = result.Select(x => new ChampionStatDto(
-                x.ChampionId,
-                x.Games,
-                x.Wins,
-                x.Losses,
-                x.WinRate,
-                x.AvgKills,
-                x.AvgDeaths,
-                x.AvgAssists,
-                x.KdaRatio,
-                x.AvgCsPerMin,
-                x.AvgVisionScore,
-                x.AvgDamageToChamps
-            )).ToList();
-            return Ok(dto);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex,
-                "Request {RequestId}: failed to load champion stats for summoner {SummonerId}. Returning empty payload.",
-                HttpContext.TraceIdentifier,
-                summonerId);
-            if (_returnProblemDetailsOnFailure)
-                return Problem(
-                    title: "Failed to load summoner champion statistics.",
-                    statusCode: StatusCodes.Status500InternalServerError);
-
-            return Ok(new List<ChampionStatDto>());
-        }
+        var result = await statsService.GetChampionStatsAsync(summonerId, top, ct);
+        var dto = result.Select(x => new ChampionStatDto(
+            x.ChampionId,
+            x.Games,
+            x.Wins,
+            x.Losses,
+            x.WinRate,
+            x.AvgKills,
+            x.AvgDeaths,
+            x.AvgAssists,
+            x.KdaRatio,
+            x.AvgCsPerMin,
+            x.AvgVisionScore,
+            x.AvgDamageToChamps
+        )).ToList();
+        return Ok(dto);
     }
 
     /// <summary>
@@ -129,25 +77,9 @@ public class SummonerStatsController(
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetRoleBreakdown([FromRoute] Guid summonerId, CancellationToken ct = default)
     {
-        try
-        {
-            var result = await statsService.GetRoleBreakdownAsync(summonerId, ct);
-            var dto = result.Select(r => new RoleStatDto(r.Role, r.Games, r.Wins, r.Losses, r.WinRate)).ToList();
-            return Ok(dto);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex,
-                "Request {RequestId}: failed to load role stats for summoner {SummonerId}. Returning empty payload.",
-                HttpContext.TraceIdentifier,
-                summonerId);
-            if (_returnProblemDetailsOnFailure)
-                return Problem(
-                    title: "Failed to load summoner role statistics.",
-                    statusCode: StatusCodes.Status500InternalServerError);
-
-            return Ok(new List<RoleStatDto>());
-        }
+        var result = await statsService.GetRoleBreakdownAsync(summonerId, ct);
+        var dto = result.Select(r => new RoleStatDto(r.Role, r.Games, r.Wins, r.Losses, r.WinRate)).ToList();
+        return Ok(dto);
     }
 
     /// <summary>
@@ -160,64 +92,46 @@ public class SummonerStatsController(
         [FromQuery] int pageSize = 20, [FromQuery] string? queueFamily = null,
         [FromQuery] List<int>? queueIds = null, CancellationToken ct = default)
     {
-        try
-        {
-            var result = await statsService.GetRecentMatchesAsync(
-                summonerId,
-                page,
-                pageSize,
-                queueFamily,
-                queueIds,
-                ct);
-            var dto = new PagedResultDto<RecentMatchSummaryDto>(
-                result.Items.Select(m => new RecentMatchSummaryDto(
-                    m.MatchId,
-                    m.MatchDate,
-                    m.DurationSeconds,
-                    m.QueueId,
-                    m.QueueType,
-                    m.Win,
-                    m.ChampionId,
-                    m.TeamPosition,
-                    m.Kills,
-                    m.Deaths,
-                    m.Assists,
-                    m.VisionScore,
-                    m.DamageToChamps,
-                    m.CsPerMin,
-                    m.SummonerSpell1Id,
-                    m.SummonerSpell2Id,
-                    m.Items,
-                    new MatchRuneSummaryDto(m.Runes.PrimaryStyleId, m.Runes.SubStyleId, m.Runes.KeystoneId),
-                    new MatchRuneDetailDto(
-                        m.RunesDetail.PrimaryStyleId,
-                        m.RunesDetail.SubStyleId,
-                        m.RunesDetail.PrimarySelections,
-                        m.RunesDetail.SubSelections,
-                        m.RunesDetail.StatShards)
-                )).ToList(),
-                result.Page,
-                result.PageSize,
-                result.TotalCount,
-                result.TotalPages
-            );
-            return Ok(dto);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex,
-                "Request {RequestId}: failed to load recent matches for summoner {SummonerId}. Returning empty payload.",
-                HttpContext.TraceIdentifier,
-                summonerId);
-            if (_returnProblemDetailsOnFailure)
-                return Problem(
-                    title: "Failed to load summoner recent matches.",
-                    statusCode: StatusCodes.Status500InternalServerError);
-
-            var normalizedPage = page <= 0 ? 1 : page;
-            var normalizedPageSize = pageSize <= 0 || pageSize > 100 ? 20 : pageSize;
-            return Ok(new PagedResultDto<RecentMatchSummaryDto>([], normalizedPage, normalizedPageSize, 0, 0));
-        }
+        var result = await statsService.GetRecentMatchesAsync(
+            summonerId,
+            page,
+            pageSize,
+            queueFamily,
+            queueIds,
+            ct);
+        var dto = new PagedResultDto<RecentMatchSummaryDto>(
+            result.Items.Select(m => new RecentMatchSummaryDto(
+                m.MatchId,
+                m.MatchDate,
+                m.DurationSeconds,
+                m.QueueId,
+                m.QueueType,
+                m.Win,
+                m.ChampionId,
+                m.TeamPosition,
+                m.Kills,
+                m.Deaths,
+                m.Assists,
+                m.VisionScore,
+                m.DamageToChamps,
+                m.CsPerMin,
+                m.SummonerSpell1Id,
+                m.SummonerSpell2Id,
+                m.Items,
+                new MatchRuneSummaryDto(m.Runes.PrimaryStyleId, m.Runes.SubStyleId, m.Runes.KeystoneId),
+                new MatchRuneDetailDto(
+                    m.RunesDetail.PrimaryStyleId,
+                    m.RunesDetail.SubStyleId,
+                    m.RunesDetail.PrimarySelections,
+                    m.RunesDetail.SubSelections,
+                    m.RunesDetail.StatShards)
+            )).ToList(),
+            result.Page,
+            result.PageSize,
+            result.TotalCount,
+            result.TotalPages
+        );
+        return Ok(dto);
     }
 
     /// <summary>
@@ -236,27 +150,10 @@ public class SummonerStatsController(
         [FromRoute] string matchId,
         CancellationToken ct = default)
     {
-        try
-        {
-            var result = await statsService.GetMatchDetailAsync(matchId, ct);
-            if (result == null)
-                return NotFound();
-
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex,
-                "Request {RequestId}: failed to load match detail {MatchId} for summoner {SummonerId}. Returning 404 fallback.",
-                HttpContext.TraceIdentifier,
-                matchId,
-                summonerId);
-            if (_returnProblemDetailsOnFailure)
-                return Problem(
-                    title: "Failed to load match detail.",
-                    statusCode: StatusCodes.Status500InternalServerError);
-
+        var result = await statsService.GetMatchDetailAsync(matchId, ct);
+        if (result == null)
             return NotFound();
-        }
+
+        return Ok(result);
     }
 }

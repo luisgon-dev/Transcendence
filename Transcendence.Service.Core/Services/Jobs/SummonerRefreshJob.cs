@@ -23,7 +23,7 @@ public class SummonerRefreshJob(
     TranscendenceContext db,
     IRefreshLockRepository refreshLockRepository,
     ILogger<SummonerRefreshJob> logger,
-    RiotGamesApi riotGamesApi,
+    IRiotMatchIdsClient riotMatchIdsClient,
     IBackgroundJobClient backgroundJobClient,
     HybridCache cache,
     IOptions<MatchIngestionOptions> ingestionOptions,
@@ -271,10 +271,16 @@ public class SummonerRefreshJob(
             }
 
             var start = page * pageSize;
-            var pageIds = (await riotGamesApi.MatchV5()
-                    .GetMatchIdsByPUUIDAsync(regional, puuid, pageSize, endTimeEpochSeconds, queue,
-                        startTimeEpochSeconds, start,
-                        type, ct))
+            var pageIds = (await riotMatchIdsClient.GetMatchIdsByPuuidAsync(
+                    regional,
+                    puuid,
+                    pageSize,
+                    endTimeEpochSeconds,
+                    queue,
+                    startTimeEpochSeconds,
+                    start,
+                    type,
+                    ct))
                 .Where(id => !string.IsNullOrWhiteSpace(id))
                 .Where(id => seenIds.Add(id))
                 .ToList();
@@ -391,17 +397,16 @@ public class SummonerRefreshJob(
             }
 
             var start = page * pageSize;
-            var pageIds = (await riotGamesApi.MatchV5()
-                    .GetMatchIdsByPUUIDAsync(
-                        regional,
-                        puuid,
-                        pageSize,
-                        backfillBeforeEpochSeconds,
-                        queue: null,
-                        startTime: null,
-                        start: start,
-                        type: null,
-                        cancellationToken: ct))
+            var pageIds = (await riotMatchIdsClient.GetMatchIdsByPuuidAsync(
+                    regional,
+                    puuid,
+                    pageSize,
+                    backfillBeforeEpochSeconds,
+                    queue: null,
+                    startTimeEpochSeconds: null,
+                    start: start,
+                    type: null,
+                    ct))
                 .Where(id => !string.IsNullOrWhiteSpace(id))
                 .Where(id => seenIds.Add(id))
                 .ToList();

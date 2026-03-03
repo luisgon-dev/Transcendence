@@ -111,6 +111,7 @@ Local endpoints:
 From repo root:
 
 ```bash
+corepack pnpm backend:test
 corepack pnpm web:dev
 corepack pnpm web:test
 corepack pnpm web:lint

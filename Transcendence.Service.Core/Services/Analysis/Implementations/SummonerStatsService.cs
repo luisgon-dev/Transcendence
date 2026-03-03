@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
 using Transcendence.Data;
+using Transcendence.Service.Core.Services.Analysis.Exceptions;
 using Transcendence.Service.Core.Services.Analysis.Interfaces;
 using Transcendence.Service.Core.Services.Analysis.Models;
 using Transcendence.Service.Core.Services.RiotApi;
@@ -9,7 +10,7 @@ using RuneSelectionTree = Transcendence.Data.Models.LoL.Match.RuneSelectionTree;
 
 namespace Transcendence.Service.Core.Services.Analysis.Implementations;
 
-public class SummonerStatsService(TranscendenceContext db, HybridCache cache, ILogger<SummonerStatsService> logger)
+public class SummonerStatsService(TranscendenceContext db, HybridCache cache)
     : ISummonerStatsService
 {
     // Cache key prefixes
@@ -38,23 +39,16 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache, IL
         CancellationToken ct)
     {
         if (recentGamesCount <= 0) recentGamesCount = 20;
-        try
-        {
-            var cacheKey = $"{OverviewCacheKeyPrefix}{summonerId}:{recentGamesCount}";
-            return await cache.GetOrCreateAsync(
+        var cacheKey = $"{OverviewCacheKeyPrefix}{summonerId}:{recentGamesCount}";
+        return await ExecuteStatsRequestAsync(
+            "Failed to compute overview stats.",
+            async token => await cache.GetOrCreateAsync(
                 cacheKey,
                 async cancel => await ComputeOverviewAsync(summonerId, recentGamesCount, cancel),
                 StatsCacheOptions,
                 tags: new[] { BuildSummonerStatsTag(summonerId) },
-                cancellationToken: ct);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex,
-                "Failed to compute overview stats for summoner {SummonerId}. Returning an empty payload.",
-                summonerId);
-            return EmptyOverview(summonerId);
-        }
+                cancellationToken: token),
+            ct);
     }
 
     private async Task<SummonerOverviewStats> ComputeOverviewAsync(Guid summonerId, int recentGamesCount,
@@ -144,23 +138,16 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache, IL
     public async Task<IReadOnlyList<ChampionStat>> GetChampionStatsAsync(Guid summonerId, int top, CancellationToken ct)
     {
         if (top <= 0) top = 10;
-        try
-        {
-            var cacheKey = $"{ChampionsCacheKeyPrefix}{summonerId}:{top}";
-            return await cache.GetOrCreateAsync(
+        var cacheKey = $"{ChampionsCacheKeyPrefix}{summonerId}:{top}";
+        return await ExecuteStatsRequestAsync(
+            "Failed to compute champion stats.",
+            async token => await cache.GetOrCreateAsync(
                 cacheKey,
                 async cancel => await ComputeChampionStatsAsync(summonerId, top, cancel),
                 StatsCacheOptions,
                 tags: new[] { BuildSummonerStatsTag(summonerId) },
-                cancellationToken: ct);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex,
-                "Failed to compute champion stats for summoner {SummonerId}. Returning an empty payload.",
-                summonerId);
-            return [];
-        }
+                cancellationToken: token),
+            ct);
     }
 
     private async Task<IReadOnlyList<ChampionStat>> ComputeChampionStatsAsync(Guid summonerId, int top,
@@ -219,23 +206,16 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache, IL
 
     public async Task<IReadOnlyList<RoleStat>> GetRoleBreakdownAsync(Guid summonerId, CancellationToken ct)
     {
-        try
-        {
-            var cacheKey = $"{RolesCacheKeyPrefix}{summonerId}";
-            return await cache.GetOrCreateAsync(
+        var cacheKey = $"{RolesCacheKeyPrefix}{summonerId}";
+        return await ExecuteStatsRequestAsync(
+            "Failed to compute role breakdown.",
+            async token => await cache.GetOrCreateAsync(
                 cacheKey,
                 async cancel => await ComputeRoleBreakdownAsync(summonerId, cancel),
                 StatsCacheOptions,
                 tags: new[] { BuildSummonerStatsTag(summonerId) },
-                cancellationToken: ct);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex,
-                "Failed to compute role breakdown for summoner {SummonerId}. Returning an empty payload.",
-                summonerId);
-            return [];
-        }
+                cancellationToken: token),
+            ct);
     }
 
     private async Task<IReadOnlyList<RoleStat>> ComputeRoleBreakdownAsync(Guid summonerId, CancellationToken ct)
@@ -266,14 +246,6 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache, IL
             .OrderByDescending(x => x.Games)
             .ToList();
 
-        if (rows.Count > 0 && list.Count == 0)
-        {
-            logger.LogWarning(
-                "Role breakdown produced no buckets for summoner {SummonerId} despite {MatchCount} matches.",
-                summonerId,
-                rows.Count);
-        }
-
         return list;
     }
 
@@ -287,16 +259,16 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache, IL
     {
         if (page <= 0) page = 1;
         if (pageSize <= 0 || pageSize > 100) pageSize = 20;
-        try
-        {
-            var normalizedFamily = NormalizeQueueFamily(queueFamily);
-            var normalizedQueueIds = NormalizeQueueIds(queueIds);
-            var queueIdsCacheKey = normalizedQueueIds.Count > 0
-                ? string.Join(",", normalizedQueueIds)
-                : "-";
-            var cacheKey =
-                $"{RecentMatchesCacheKeyPrefix}{summonerId}:{page}:{pageSize}:{normalizedFamily}:{queueIdsCacheKey}";
-            return await cache.GetOrCreateAsync(
+        var normalizedFamily = NormalizeQueueFamily(queueFamily);
+        var normalizedQueueIds = NormalizeQueueIds(queueIds);
+        var queueIdsCacheKey = normalizedQueueIds.Count > 0
+            ? string.Join(",", normalizedQueueIds)
+            : "-";
+        var cacheKey =
+            $"{RecentMatchesCacheKeyPrefix}{summonerId}:{page}:{pageSize}:{normalizedFamily}:{queueIdsCacheKey}";
+        return await ExecuteStatsRequestAsync(
+            "Failed to compute recent matches.",
+            async token => await cache.GetOrCreateAsync(
                 cacheKey,
                 async cancel => await ComputeRecentMatchesAsync(
                     summonerId,
@@ -307,17 +279,8 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache, IL
                     cancel),
                 StatsCacheOptions,
                 tags: new[] { BuildSummonerStatsTag(summonerId) },
-                cancellationToken: ct);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex,
-                "Failed to compute recent matches for summoner {SummonerId} page {Page} size {PageSize}. Returning an empty payload.",
-                summonerId,
-                page,
-                pageSize);
-            return new PagedResult<RecentMatchSummary>([], page, pageSize, 0);
-        }
+                cancellationToken: token),
+            ct);
     }
 
     private async Task<PagedResult<RecentMatchSummary>> ComputeRecentMatchesAsync(
@@ -500,22 +463,15 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache, IL
 
     public async Task<MatchDetailDto?> GetMatchDetailAsync(string matchId, CancellationToken ct)
     {
-        try
-        {
-            var cacheKey = $"{MatchDetailCacheKeyPrefix}{matchId}";
-            return await cache.GetOrCreateAsync(
+        var cacheKey = $"{MatchDetailCacheKeyPrefix}{matchId}";
+        return await ExecuteStatsRequestAsync(
+            "Failed to load match detail.",
+            async token => await cache.GetOrCreateAsync(
                 cacheKey,
                 async cancel => await ComputeMatchDetailAsync(matchId, cancel),
                 MatchDetailCacheOptions,
-                cancellationToken: ct);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex,
-                "Failed to compute match detail for match {MatchId}. Returning null.",
-                matchId);
-            return null;
-        }
+                cancellationToken: token),
+            ct);
     }
 
     private async Task<MatchDetailDto?> ComputeMatchDetailAsync(string matchId, CancellationToken ct)
@@ -787,25 +743,6 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache, IL
         return query;
     }
 
-    private static SummonerOverviewStats EmptyOverview(Guid summonerId)
-    {
-        return new SummonerOverviewStats(
-            summonerId,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            []);
-    }
-
     /// <summary>
     /// Builds a rune summary (primary/sub styles + keystone) for match history.
     /// Simpler than BuildRunesDto - just enough for match cards.
@@ -948,4 +885,27 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache, IL
         int StyleId);
 
     private readonly record struct RuneMetadata(int PathId, int Slot);
+
+    private static async Task<T> ExecuteStatsRequestAsync<T>(
+        string failureMessage,
+        Func<CancellationToken, Task<T>> operation,
+        CancellationToken ct)
+    {
+        try
+        {
+            return await operation(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (SummonerStatsComputationException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new SummonerStatsComputationException(failureMessage, ex);
+        }
+    }
 }

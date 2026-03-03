@@ -16,6 +16,7 @@
     ]
   },
   "scripts": {
+    "backend:test": "dotnet test Transcendence.sln -v minimal",
     "api:spec": "bash scripts/openapi/export.sh",
     "api:client": "pnpm --filter @transcendence/api-client gen && pnpm --filter @transcendence/api-client build",
     "api:gen": "pnpm api:spec && pnpm api:client",

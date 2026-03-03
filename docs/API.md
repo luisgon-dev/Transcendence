@@ -58,7 +58,9 @@ Default stats scope:
 - `limit` (optional; default `8`, max `10`)
 - Autosuggest only returns summoners with at least one stored match participant (to avoid low-signal entries)
 
-When `Api:ReturnProblemDetailsOnStatsFailure=true`, stats endpoints return `500` ProblemDetails on backend errors instead of empty fallback payloads.
+Stats and profile read surfaces now fail closed on backend errors:
+- `GET /api/summoners/{summonerId}/stats/*` and `GET /api/summoners/{summonerId}/matches/*` return `500` ProblemDetails on internal failures.
+- `GET /api/summoners/{region}/{name}/{tag}` also returns `500` ProblemDetails when dependent stats aggregation fails.
 
 #### Rune Payloads
 

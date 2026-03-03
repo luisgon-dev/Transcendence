@@ -65,6 +65,13 @@ Transcendence is a backend + web monorepo:
      - non-ranked backfill pagination (bounded by safety caps)
 4. Client polls GET endpoint until data is ready (200 OK)
 
+### Summoner Read Failure Semantics
+
+- Summoner profile and stats reads fail closed on backend errors.
+- `GET /api/summoners/{region}/{name}/{tag}` and `GET /api/summoners/{summonerId}/stats*` do not return synthetic empty success payloads when compute fails.
+- API-wide exception handling maps known summoner stats compute failures to `500` ProblemDetails with a request trace id.
+- The web BFF/UI consumes ProblemDetails `title`/`detail` fields so user-visible errors still degrade gracefully.
+
 ### Refresh Priority Orchestration
 
 - API-triggered summoner refreshes are implicitly high-priority.

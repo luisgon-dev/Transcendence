@@ -112,8 +112,11 @@ export default async function SummonerProfilePage({
 
   if (!result.ok && initialStatus !== 202) {
     const messageFromBackend =
-      isRecord(result.body) && typeof result.body.message === "string"
-        ? (result.body.message as string)
+      isRecord(result.body) &&
+      (typeof result.body.message === "string" || typeof result.body.title === "string")
+        ? (typeof result.body.message === "string"
+            ? result.body.message
+            : result.body.title) as string
         : null;
 
     const message =

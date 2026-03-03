@@ -83,6 +83,7 @@ public class SummonersController(
     [ProducesResponseType(typeof(SummonerProfileResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(SummonerAcceptedResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetByRiotId([FromRoute] string region, [FromRoute] string name,
         [FromRoute] string tag, CancellationToken ct)
     {

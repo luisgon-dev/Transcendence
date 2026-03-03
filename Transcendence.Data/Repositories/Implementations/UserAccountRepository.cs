@@ -78,6 +78,17 @@ public class UserAccountRepository(TranscendenceContext db) : IUserAccountReposi
         return Task.CompletedTask;
     }
 
+    public async Task<bool> RevokeActiveRefreshTokenByHashAsync(string tokenHash, CancellationToken ct = default)
+    {
+        var token = await GetActiveRefreshTokenAsync(tokenHash, ct);
+        if (token == null)
+            return false;
+
+        token.RevokedAtUtc = DateTime.UtcNow;
+        token.ReplacedByTokenHash = null;
+        return true;
+    }
+
     public Task SaveChangesAsync(CancellationToken ct = default)
     {
         return db.SaveChangesAsync(ct);

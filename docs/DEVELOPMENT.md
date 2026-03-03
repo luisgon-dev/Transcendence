@@ -34,6 +34,7 @@ cp apps/web/.env.example apps/web/.env.local
 Set:
 - `TRN_BACKEND_BASE_URL=http://localhost:8080`
 - `TRN_BACKEND_API_KEY=<api key for AppOnly endpoints>`
+  - Note: the web app allowlists AppOnly proxy paths; this key is not exposed as a generic proxy capability.
 
 Optional (admin bootstrap):
 - `ADMIN_BOOTSTRAP_EMAIL_0=<your-admin-email>` before `docker compose up`
@@ -66,9 +67,15 @@ dotnet user-secrets set "ConnectionStrings:MainDatabase" "Host=localhost;Port=54
 dotnet user-secrets set "ConnectionStrings:Redis" "localhost:6379" --project Transcendence.WebAPI
 dotnet user-secrets set "ConnectionStrings:RiotApi" "RGAPI-your-key" --project Transcendence.WebAPI
 dotnet user-secrets set "Auth:Jwt:Key" "CHANGE_THIS_TO_A_REAL_32+_CHAR_SECRET" --project Transcendence.WebAPI
+dotnet user-secrets set "Auth:Jwt:RequireKeyInDevelopment" "false" --project Transcendence.WebAPI
 dotnet user-secrets set "Auth:AdminBootstrap:Emails:0" "admin@example.com" --project Transcendence.WebAPI
 dotnet user-secrets set "Auth:BootstrapApiKey" "trn_bootstrap_dev_key" --project Transcendence.WebAPI
+dotnet user-secrets set "Auth:BootstrapApiKeyEnabledInDevelopmentOnly" "true" --project Transcendence.WebAPI
 ```
+
+Security notes:
+- `Auth:Jwt:Key` is required outside `Development`; startup fails if missing or if the known development placeholder is used.
+- `Auth:BootstrapApiKeyEnabledInDevelopmentOnly=true` rejects bootstrap API key auth outside `Development`.
 
 `Transcendence.Service`:
 
@@ -97,6 +104,7 @@ dotnet run --project Transcendence.WebAdminPortal
 ```
 
 Admin web UI runs in `apps/web` under `/admin` and requires an authenticated user with `admin` role.
+`/api/auth/logout` revokes the active refresh token server-side and the web logout flow calls it before clearing cookies.
 
 ## Web Commands
 

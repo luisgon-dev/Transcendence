@@ -15,7 +15,10 @@ public class JwtService(IConfiguration configuration, IHostEnvironment hostEnvir
 
     private readonly string _issuer = configuration["Auth:Jwt:Issuer"] ?? "Transcendence";
     private readonly string _audience = configuration["Auth:Jwt:Audience"] ?? "TranscendenceClients";
-    private readonly string _signingKey = ResolveSigningKey(configuration["Auth:Jwt:Key"], hostEnvironment);
+    private readonly string _signingKey = ResolveSigningKey(
+        configuration["Auth:Jwt:Key"],
+        hostEnvironment,
+        ParseBool(configuration["Auth:Jwt:RequireKeyInDevelopment"], false));
     private readonly int _accessTokenMinutes = ParseInt(configuration["Auth:Jwt:AccessTokenMinutes"], 15);
 
     public string GenerateAccessToken(UserAccount user)
@@ -68,11 +71,14 @@ public class JwtService(IConfiguration configuration, IHostEnvironment hostEnvir
         return int.TryParse(value, out var parsed) ? parsed : fallback;
     }
 
-    private static string ResolveSigningKey(string? configuredKey, IHostEnvironment hostEnvironment)
+    public static string ResolveSigningKey(
+        string? configuredKey,
+        IHostEnvironment hostEnvironment,
+        bool requireKeyInDevelopment)
     {
         if (string.IsNullOrWhiteSpace(configuredKey))
         {
-            if (hostEnvironment.IsDevelopment())
+            if (hostEnvironment.IsDevelopment() && !requireKeyInDevelopment)
                 return DevelopmentFallbackSigningKey;
 
             throw new InvalidOperationException(
@@ -88,5 +94,10 @@ public class JwtService(IConfiguration configuration, IHostEnvironment hostEnvir
         }
 
         return signingKey;
+    }
+
+    private static bool ParseBool(string? raw, bool fallback)
+    {
+        return bool.TryParse(raw, out var parsed) ? parsed : fallback;
     }
 }

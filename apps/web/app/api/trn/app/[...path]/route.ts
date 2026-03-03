@@ -17,6 +17,14 @@ function resolveApiKey() {
 
 type Ctx = { params: Promise<{ path: string[] }> };
 
+function isAllowedAppProxyPath(method: string, path: string[]) {
+  if (method !== "GET") return false;
+  if (path.length !== 5) return false;
+  if (path[0] !== "summoners") return false;
+  if (path[4] !== "live-game") return false;
+  return true;
+}
+
 async function handler(req: NextRequest, ctx: Ctx) {
   const key = resolveApiKey();
   if (!key.ok) {
@@ -28,6 +36,10 @@ async function handler(req: NextRequest, ctx: Ctx) {
   }
 
   const { path } = await ctx.params;
+  if (!isAllowedAppProxyPath(req.method, path)) {
+    return NextResponse.json({ message: "Not found." }, { status: 404 });
+  }
+
   return proxyToBackend(req, path, {
     addHeaders: { "X-API-Key": key.value }
   });

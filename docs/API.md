@@ -21,12 +21,16 @@ The Next.js web frontend uses route handlers as a BFF:
 - Next talks to the backend at `TRN_BACKEND_BASE_URL`
 - Tokens live in HttpOnly cookies on the web domain (never exposed to browser JS)
 - AppOnly calls attach `X-API-Key` server-side from `TRN_BACKEND_API_KEY`
+- `/api/trn/app/*` is allowlisted to approved AppOnly routes only (not a generic AppOnly passthrough)
+- Proxy route handlers reject invalid path segments (`.`/`..`)
 
 ## Rate Limiting
 
 Read-heavy endpoints are protected by server-side fixed-window rate limiting and may return:
 
 - `429 Too Many Requests`
+
+Auth endpoints (`/api/auth/register`, `/api/auth/login`, `/api/auth/refresh`, `/api/auth/logout`) also use dedicated per-client rate limits.
 
 ## Key Endpoint Areas (Current)
 
@@ -151,8 +155,13 @@ Response includes:
 - `POST /api/auth/register`
 - `POST /api/auth/login`
 - `POST /api/auth/refresh`
+- `POST /api/auth/logout`
 - `GET /api/auth/me` (`AppOrUser`)
 - Key management endpoints under `/api/auth/keys` (`AdminOnly`)
+
+Auth behavior notes:
+- Registration duplicate-email responses are intentionally generic (`Registration failed.`).
+- Password minimum length is 12 characters.
 
 ### Admin Operations (`AdminOnly`)
 

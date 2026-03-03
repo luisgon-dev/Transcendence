@@ -1,0 +1,165 @@
+name: Docker Images
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["v*.*.*"]
+  pull_request:
+    branches: ["main"]
+
+concurrency:
+  group: docker-images-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: webapi
+            image_suffix: webapi
+            dockerfile: ./Transcendence.WebAPI/Dockerfile
+            filter_key: webapi
+          - component: service
+            image_suffix: service
+            dockerfile: ./Transcendence.Service/Dockerfile
+            filter_key: service
+          - component: web
+            image_suffix: web
+            dockerfile: ./apps/web/Dockerfile
+            filter_key: web
+          - component: webadminportal
+            image_suffix: webadminportal
+            dockerfile: ./Transcendence.WebAdminPortal/Dockerfile
+            filter_key: webadminportal
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Detect changed paths
+        id: changes
+        if: github.ref_type != 'tag'
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            webapi:
+              - 'Transcendence.WebAPI/**'
+              - 'Transcendence.Service.Core/**'
+              - 'Transcendence.Data/**'
+              - 'Transcendence.Service/**'
+              - 'global.json'
+              - 'Transcendence.sln'
+              - 'Transcendence.WebAPI/Dockerfile'
+            service:
+              - 'Transcendence.Service/**'
+              - 'Transcendence.Service.Core/**'
+              - 'Transcendence.Data/**'
+              - 'global.json'
+              - 'Transcendence.sln'
+              - 'Transcendence.Service/Dockerfile'
+            web:
+              - 'apps/web/**'
+              - 'packages/api-client/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - '.nvmrc'
+              - 'apps/web/Dockerfile'
+            webadminportal:
+              - 'Transcendence.WebAdminPortal/**'
+              - 'Transcendence.Service.Core/**'
+              - 'Transcendence.Data/**'
+              - 'global.json'
+              - 'Transcendence.sln'
+              - 'Transcendence.WebAdminPortal/Dockerfile'
+
+      - name: Plan component build
+        id: plan
+        shell: bash
+        env:
+          WEBAPI_CHANGED: ${{ steps.changes.outputs.webapi }}
+          SERVICE_CHANGED: ${{ steps.changes.outputs.service }}
+          WEB_CHANGED: ${{ steps.changes.outputs.web }}
+          WEBADMINPORTAL_CHANGED: ${{ steps.changes.outputs.webadminportal }}
+        run: |
+          if [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          run="false"
+          case "${{ matrix.filter_key }}" in
+            webapi)
+              run="${WEBAPI_CHANGED:-false}"
+              ;;
+            service)
+              run="${SERVICE_CHANGED:-false}"
+              ;;
+            web)
+              run="${WEB_CHANGED:-false}"
+              ;;
+            webadminportal)
+              run="${WEBADMINPORTAL_CHANGED:-false}"
+              ;;
+          esac
+
+          echo "run=${run}" >> "$GITHUB_OUTPUT"
+
+      - name: Skip unchanged component
+        if: steps.plan.outputs.run != 'true'
+        run: echo "Skipping ${{ matrix.component }}; no relevant changes detected."
+
+      - name: Install cosign
+        if: steps.plan.outputs.run == 'true' && github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20 # v3.5.0
+        with:
+          cosign-release: "v2.2.4"
+
+      - name: Set up Docker Buildx
+        if: steps.plan.outputs.run == 'true'
+        uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3.0.0
+
+      - name: Log into registry ${{ env.REGISTRY }}
+        if: steps.plan.outputs.run == 'true' && github.event_name != 'pull_request'
+        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        if: steps.plan.outputs.run == 'true'
+        uses: docker/metadata-action@96383f45573cb7f253c731d3b3ab81c87ef81934 # v5.0.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}-${{ matrix.image_suffix }}
+
+      - name: Build and push Docker image
+        id: build-and-push
+        if: steps.plan.outputs.run == 'true'
+        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          file: ${{ matrix.dockerfile }}
+
+      - name: Sign the published Docker image
+        if: steps.plan.outputs.run == 'true' && github.event_name != 'pull_request'
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          DIGEST: ${{ steps.build-and-push.outputs.digest }}
+        run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}

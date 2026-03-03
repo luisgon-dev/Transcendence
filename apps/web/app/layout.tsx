@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans, Space_Grotesk } from "next/font/google";
 
 import "@/app/globals.css";
 import { GlobalCommandPalette } from "@/components/GlobalCommandPalette";
+import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 
 const headingFont = Space_Grotesk({
@@ -38,6 +39,7 @@ export default function RootLayout({
         <main className="mx-auto w-full max-w-[1440px] px-4 py-8 md:px-6 md:py-10">
           {children}
         </main>
+        <SiteFooter />
         <GlobalCommandPalette />
       </body>
     </html>

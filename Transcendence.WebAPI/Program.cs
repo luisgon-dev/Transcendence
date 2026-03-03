@@ -273,19 +273,6 @@ static bool ParseBool(string? raw, bool fallback)
 
 static string BuildAuthRateLimitPartitionKey(HttpContext context)
 {
-    var forwardedFor = context.Request.Headers["x-forwarded-for"].ToString();
-    var clientIp = ParseForwardedFor(forwardedFor)
-        ?? context.Connection.RemoteIpAddress?.ToString()
-        ?? "unknown-ip";
+    var clientIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown-ip";
     return $"ip:{clientIp}";
-}
-
-static string? ParseForwardedFor(string value)
-{
-    if (string.IsNullOrWhiteSpace(value))
-        return null;
-
-    var first = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-        .FirstOrDefault();
-    return string.IsNullOrWhiteSpace(first) ? null : first;
 }

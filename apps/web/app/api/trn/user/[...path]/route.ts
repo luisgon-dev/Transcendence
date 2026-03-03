@@ -14,6 +14,7 @@ import {
   getErrorVerbosity
 } from "@/lib/env";
 import { fetchWithTimeout, isAbortError } from "@/lib/fetchWithTimeout";
+import { normalizeProxyPath } from "@/lib/proxyPath";
 import { newRequestId } from "@/lib/requestId";
 import { logEvent } from "@/lib/serverLog";
 import { getTrnClient } from "@/lib/trnClient";
@@ -40,6 +41,11 @@ async function refreshAccessToken(requestId: string): Promise<string | null> {
 }
 
 async function proxy(req: NextRequest, path: string[]) {
+  const normalizedPath = normalizeProxyPath(path);
+  if (!normalizedPath) {
+    return NextResponse.json({ message: "Invalid proxy path." }, { status: 400 });
+  }
+
   const requestId = newRequestId();
   const { accessToken, accessExpiresAtUtc } = await getAuthCookies();
   let token = accessToken;
@@ -56,7 +62,7 @@ async function proxy(req: NextRequest, path: string[]) {
     );
   }
 
-  const url = new URL(`/api/${path.join("/")}`, getBackendBaseUrl());
+  const url = new URL(`/api/${normalizedPath.join("/")}`, getBackendBaseUrl());
   url.search = req.nextUrl.search;
 
   const headers = new Headers(req.headers);

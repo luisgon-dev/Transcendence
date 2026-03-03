@@ -14,7 +14,7 @@ public class UserAuthService(
     ILogger<UserAuthService> logger) : IUserAuthService
 {
     private const int RefreshTokenDays = 7;
-    private const int PasswordIterations = 100_000;
+    private const int PasswordIterations = 310_000;
     private readonly HashSet<string> _bootstrapAdminEmails = adminBootstrapOptions.Value.Emails
         .Where(x => !string.IsNullOrWhiteSpace(x))
         .Select(NormalizeEmail)
@@ -53,11 +53,16 @@ public class UserAuthService(
         var user = await userAccountRepository.GetByEmailNormalizedAsync(emailNormalized, ct);
         if (user == null) return null;
 
-        if (!VerifyPassword(request.Password, user.PasswordHash))
+        if (!VerifyPassword(request.Password, user.PasswordHash, out var storedIterations))
             return null;
 
         user.LastLoginAtUtc = DateTime.UtcNow;
         user.UpdatedAtUtc = DateTime.UtcNow;
+        if (storedIterations < PasswordIterations)
+        {
+            user.PasswordHash = HashPassword(request.Password);
+            logger.LogInformation("Upgraded password hash cost factor for {Email}", user.Email);
+        }
         await EnsureBootstrapAdminRoleAsync(user, ct);
 
         var response = await IssueTokensAsync(user, ct);
@@ -97,6 +102,17 @@ public class UserAuthService(
             RefreshToken: newRefreshToken,
             AccessTokenExpiresAtUtc: jwtService.GetAccessTokenExpirationUtc()
         );
+    }
+
+    public async Task LogoutAsync(RefreshRequest request, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.RefreshToken))
+            return;
+
+        var tokenHash = jwtService.HashRefreshToken(request.RefreshToken);
+        var revoked = await userAccountRepository.RevokeActiveRefreshTokenByHashAsync(tokenHash, ct);
+        if (revoked)
+            await userAccountRepository.SaveChangesAsync(ct);
     }
 
     public Task InitiatePasswordResetAsync(PasswordResetRequest request, CancellationToken ct = default)
@@ -140,8 +156,8 @@ public class UserAuthService(
     {
         if (string.IsNullOrWhiteSpace(email))
             throw new ArgumentException("Email is required.", nameof(email));
-        if (string.IsNullOrWhiteSpace(password) || password.Length < 8)
-            throw new ArgumentException("Password must be at least 8 characters.", nameof(password));
+        if (string.IsNullOrWhiteSpace(password) || password.Length < 12)
+            throw new ArgumentException("Password must be at least 12 characters.", nameof(password));
     }
 
     private static string HashPassword(string password)
@@ -157,14 +173,16 @@ public class UserAuthService(
         return $"pbkdf2${PasswordIterations}${Convert.ToBase64String(salt)}${Convert.ToBase64String(hash)}";
     }
 
-    private static bool VerifyPassword(string password, string storedHash)
+    private static bool VerifyPassword(string password, string storedHash, out int storedIterations)
     {
+        storedIterations = 0;
         var parts = storedHash.Split('$');
         if (parts.Length != 4 || !parts[0].Equals("pbkdf2", StringComparison.OrdinalIgnoreCase))
             return false;
 
         if (!int.TryParse(parts[1], out var iterations))
             return false;
+        storedIterations = iterations;
 
         var salt = Convert.FromBase64String(parts[2]);
         var expectedHash = Convert.FromBase64String(parts[3]);

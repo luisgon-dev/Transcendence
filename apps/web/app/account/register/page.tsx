@@ -42,7 +42,7 @@ export default function RegisterPage() {
               autoComplete="new-password"
               required
             />
-            <span className="text-xs text-muted">Minimum 8 characters.</span>
+            <span className="text-xs text-muted">Minimum 12 characters.</span>
           </label>
 
           {state.error ? <p className="text-sm text-danger">{state.error}</p> : null}

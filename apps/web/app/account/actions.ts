@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { clearAuthCookies, setAuthCookies, type AuthTokenResponse } from "@/lib/authCookies";
+import { clearAuthCookies, getAuthCookies, setAuthCookies, type AuthTokenResponse } from "@/lib/authCookies";
 import { logEvent } from "@/lib/serverLog";
 import { getTrnClient } from "@/lib/trnClient";
 
@@ -80,6 +80,18 @@ export async function registerAction(
 }
 
 export async function logoutAction() {
+  const { refreshToken } = await getAuthCookies();
+  if (refreshToken) {
+    try {
+      const client = getTrnClient();
+      await client.POST("/api/auth/logout", {
+        body: { refreshToken }
+      });
+    } catch (caught: unknown) {
+      logEvent("warn", "logout revoke request failed", { error: caught });
+    }
+  }
+
   await clearAuthCookies();
   revalidateAuthShell();
   redirect("/");

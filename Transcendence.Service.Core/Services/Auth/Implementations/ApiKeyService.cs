@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Extensions.Hosting;
 using Transcendence.Data.Models.Auth;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Interfaces;
@@ -9,9 +10,12 @@ namespace Transcendence.Service.Core.Services.Auth.Implementations;
 
 public class ApiKeyService(
     IApiClientKeyRepository apiKeyRepository,
-    IConfiguration configuration) : IApiKeyService
+    IConfiguration configuration,
+    IHostEnvironment hostEnvironment,
+    ILogger<ApiKeyService> logger) : IApiKeyService
 {
     private const string BootstrapKeyConfigPath = "Auth:BootstrapApiKey";
+    private const string BootstrapKeyDevOnlyPath = "Auth:BootstrapApiKeyEnabledInDevelopmentOnly";
     private static readonly TimeSpan LastUsedWriteInterval = TimeSpan.FromMinutes(10);
 
     public async Task<ApiKeyCreateResult> CreateAsync(ApiKeyCreateRequest request, CancellationToken ct = default)
@@ -54,9 +58,17 @@ public class ApiKeyService(
             return null;
 
         var bootstrap = configuration[BootstrapKeyConfigPath];
+        var devOnly = ParseBool(configuration[BootstrapKeyDevOnlyPath], true);
         if (!string.IsNullOrWhiteSpace(bootstrap) &&
             string.Equals(bootstrap.Trim(), plaintextKey.Trim(), StringComparison.Ordinal))
         {
+            if (devOnly && !hostEnvironment.IsDevelopment())
+            {
+                logger.LogError(
+                    "Rejected bootstrap API key outside Development because {Path}=true.",
+                    BootstrapKeyDevOnlyPath);
+                return null;
+            }
             return new ApiKeyValidationResult(Guid.Empty, "Bootstrap", true);
         }
 
@@ -122,5 +134,10 @@ public class ApiKeyService(
     {
         if (key.Length <= 12) return key;
         return key[..12];
+    }
+
+    private static bool ParseBool(string? raw, bool fallback)
+    {
+        return bool.TryParse(raw, out var parsed) ? parsed : fallback;
     }
 }

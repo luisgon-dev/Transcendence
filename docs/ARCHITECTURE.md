@@ -167,12 +167,16 @@ The web app never exposes backend tokens to browser JS:
   - `Authorization: Bearer ...` (AdminOnly) for `/admin` flows when needed
   - `X-API-Key` (AppOnly) when needed
 - Backend never receives browser cookies (explicitly stripped in proxy)
+- Catch-all proxy routes reject invalid path segments (`.`/`..`) to avoid path normalization escapes.
+- AppOnly proxy route `/api/trn/app/*` is explicitly allowlisted for approved paths (not a generic arbitrary AppOnly relay).
+- Logout flow revokes refresh tokens server-side via `POST /api/auth/logout` before cookie clear.
 
 ## Admin Surface and Security
 
 - Admin APIs are protected with JWT + `admin` role (`AdminOnly` policy).
 - Admin bootstrap can grant initial admin role from configured email allowlist (`Auth:AdminBootstrap:Emails`).
 - Admin mutating operations are rate-limited (`admin-write`) and audited (`AdminAuditEvents`).
+- Auth endpoints have dedicated rate limits for login/register/refresh/logout protection.
 - Raw Hangfire dashboard remains a private break-glass surface; public/admin UX should use the curated `/api/admin/*` endpoints and `/admin/*` UI.
 
 ## Caching

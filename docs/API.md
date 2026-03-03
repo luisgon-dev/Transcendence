@@ -36,6 +36,7 @@ This is a navigational summary; the OpenAPI spec is the source of truth.
 
 - `GET /api/summoners/{region}/{name}/{tag}`
 - `GET /api/summoners/search`
+- `POST /api/summoners/multi-search` (`AppOnly`)
 - `POST /api/summoners/{region}/{name}/{tag}/refresh`
 - `GET /api/summoners/{summonerId}/stats/overview`
 - `GET /api/summoners/{summonerId}/stats/champions`
@@ -57,6 +58,12 @@ Default stats scope:
 - `q` (required; min length 2, supports `gameName` or `gameName#tag` prefix forms)
 - `limit` (optional; default `8`, max `10`)
 - Autosuggest only returns summoners with at least one stored match participant (to avoid low-signal entries)
+
+`POST /api/summoners/multi-search` supports:
+- `region` (required; platform route or alias such as `NA1` or `na`)
+- `summoners` (required array; min `1`, max `5`)
+- Each `summoners[]` entry requires `gameName` and `tagLine`
+- Returns only already-stored data (no refresh side effects); includes per-summoner stats plus team insights in a single response
 
 Stats and profile read surfaces now fail closed on backend errors:
 - `GET /api/summoners/{summonerId}/stats/*` and `GET /api/summoners/{summonerId}/matches/*` return `500` ProblemDetails on internal failures.

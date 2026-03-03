@@ -1925,6 +1925,85 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/summoners/multi-search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["MultiSearchRequest"];
+                    "text/json": components["schemas"]["MultiSearchRequest"];
+                    "application/*+json": components["schemas"]["MultiSearchRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MultiSearchResponse"];
+                        "application/json": components["schemas"]["MultiSearchResponse"];
+                        "text/json": components["schemas"]["MultiSearchResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/summoners/{summonerId}/stats/overview": {
         parameters: {
             query?: never;
@@ -2847,6 +2926,96 @@ export interface components {
             avgGoldDiffAt15?: number | null;
             /** Format: double */
             avgXpDiffAt15?: number | null;
+        };
+        MultiSearchAutofillRisk: {
+            gameName?: string | null;
+            tagLine?: string | null;
+            primaryRole?: string | null;
+            note?: string | null;
+        };
+        MultiSearchChampionStat: {
+            /** Format: int32 */
+            championId?: number;
+            /** Format: int32 */
+            games?: number;
+            /** Format: int32 */
+            wins?: number;
+            /** Format: double */
+            winRate?: number;
+            /** Format: double */
+            kdaRatio?: number;
+        };
+        MultiSearchOverviewStats: {
+            /** Format: int32 */
+            totalMatches?: number;
+            /** Format: int32 */
+            wins?: number;
+            /** Format: int32 */
+            losses?: number;
+            /** Format: double */
+            winRate?: number;
+            /** Format: double */
+            avgKills?: number;
+            /** Format: double */
+            avgDeaths?: number;
+            /** Format: double */
+            avgAssists?: number;
+            /** Format: double */
+            kdaRatio?: number;
+        };
+        MultiSearchRankInfo: {
+            tier?: string | null;
+            division?: string | null;
+            /** Format: int32 */
+            leaguePoints?: number;
+            /** Format: int32 */
+            wins?: number;
+            /** Format: int32 */
+            losses?: number;
+        };
+        MultiSearchRequest: {
+            region: string;
+            summoners: components["schemas"]["MultiSearchSummonerInput"][];
+        };
+        MultiSearchResponse: {
+            results?: components["schemas"]["MultiSearchSummonerResult"][] | null;
+            teamInsights?: components["schemas"]["MultiSearchTeamInsights"];
+        };
+        MultiSearchRoleStat: {
+            role?: string | null;
+            /** Format: int32 */
+            games?: number;
+            /** Format: double */
+            percentage?: number;
+        };
+        MultiSearchSummonerInput: {
+            gameName: string;
+            tagLine: string;
+        };
+        MultiSearchSummonerResult: {
+            gameName?: string | null;
+            tagLine?: string | null;
+            found?: boolean;
+            /** Format: uuid */
+            summonerId?: string | null;
+            /** Format: int32 */
+            profileIconId?: number | null;
+            /** Format: int32 */
+            summonerLevel?: number | null;
+            soloRank?: components["schemas"]["MultiSearchRankInfo"];
+            flexRank?: components["schemas"]["MultiSearchRankInfo"];
+            overviewStats?: components["schemas"]["MultiSearchOverviewStats"];
+            topChampions?: components["schemas"]["MultiSearchChampionStat"][] | null;
+            roleDistribution?: components["schemas"]["MultiSearchRoleStat"][] | null;
+            primaryRole?: string | null;
+        };
+        MultiSearchTeamInsights: {
+            /** Format: double */
+            averageRankScore?: number;
+            averageRankLabel?: string | null;
+            roleCoverage?: string[] | null;
+            missingRoles?: string[] | null;
+            potentialAutofills?: components["schemas"]["MultiSearchAutofillRisk"][] | null;
         };
         ParticipantDetailDto: {
             puuid?: string | null;

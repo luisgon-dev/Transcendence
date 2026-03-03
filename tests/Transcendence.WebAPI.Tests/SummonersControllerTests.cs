@@ -111,13 +111,15 @@ public class SummonersControllerTests
         ISummonerRepository? summonerRepository = null,
         IRefreshLockRepository? refreshLockRepository = null,
         IBackgroundJobClient? backgroundJobClient = null,
-        ISummonerStatsService? statsService = null)
+        ISummonerStatsService? statsService = null,
+        IMultiSearchService? multiSearchService = null)
     {
         return new SummonersController(
             summonerRepository ?? Mock.Of<ISummonerRepository>(),
             refreshLockRepository ?? Mock.Of<IRefreshLockRepository>(),
             backgroundJobClient ?? Mock.Of<IBackgroundJobClient>(),
-            statsService ?? Mock.Of<ISummonerStatsService>())
+            statsService ?? Mock.Of<ISummonerStatsService>(),
+            multiSearchService ?? Mock.Of<IMultiSearchService>())
         {
             ControllerContext = new ControllerContext
             {

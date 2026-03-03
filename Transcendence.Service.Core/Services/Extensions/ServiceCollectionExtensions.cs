@@ -33,6 +33,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUserPreferencesService, UserPreferencesService>();
         services.AddScoped<ILiveGameService, LiveGameService>();
         services.AddScoped<ILiveGameAnalysisService, LiveGameAnalysisService>();
+        services.AddScoped<IMultiSearchService, MultiSearchService>();
 
         // Analytics services
         services.AddScoped<IChampionAnalyticsComputeService, ChampionAnalyticsComputeService>();

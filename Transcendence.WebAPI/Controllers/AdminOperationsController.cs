@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 using Hangfire;
 using Hangfire.Storage;
@@ -344,15 +345,57 @@ public class AdminOperationsController(
 
     private static IEnumerable<string> ReadMostRecentLines(string path, int maxLines)
     {
-        var queue = new Queue<string>(maxLines);
-        foreach (var line in System.IO.File.ReadLines(path))
+        if (maxLines <= 0)
+            return [];
+
+        var lines = new List<string>(maxLines);
+        var reversedLineBuffer = new List<byte>(1024);
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        if (stream.Length == 0)
+            return lines;
+
+        const int readBufferSize = 4096;
+        var readBuffer = new byte[readBufferSize];
+        var position = stream.Length;
+
+        while (position > 0 && lines.Count < maxLines)
         {
-            queue.Enqueue(line);
-            if (queue.Count > maxLines)
-                queue.Dequeue();
+            var bytesToRead = (int)Math.Min(readBufferSize, position);
+            position -= bytesToRead;
+            stream.Seek(position, SeekOrigin.Begin);
+            var bytesRead = stream.Read(readBuffer, 0, bytesToRead);
+
+            for (var i = bytesRead - 1; i >= 0 && lines.Count < maxLines; i--)
+            {
+                var current = readBuffer[i];
+                if (current == (byte)'\n')
+                {
+                    AddLineFromReversedBytes(reversedLineBuffer, lines);
+                    continue;
+                }
+
+                reversedLineBuffer.Add(current);
+            }
         }
 
-        return queue.Reverse();
+        if (lines.Count < maxLines)
+            AddLineFromReversedBytes(reversedLineBuffer, lines);
+
+        return lines;
+    }
+
+    private static void AddLineFromReversedBytes(List<byte> reversedBytes, List<string> lines)
+    {
+        if (reversedBytes.Count == 0)
+            return;
+
+        var lineBytes = reversedBytes.ToArray();
+        Array.Reverse(lineBytes);
+        reversedBytes.Clear();
+
+        var line = Encoding.UTF8.GetString(lineBytes).TrimEnd('\r');
+        if (line.Length > 0)
+            lines.Add(line);
     }
 
     private static bool TryParseOperationalLogLine(string line, out AdminServiceLogDto dto)

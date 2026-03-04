@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
@@ -7,11 +8,17 @@ namespace Transcendence.Service.Core.Services.Diagnostics;
 
 public sealed class OperationalFileLoggerProvider : ILoggerProvider
 {
+    private const long MinimumFileSizeBytes = 64 * 1024;
+    private const int MaxRetainedFiles = 20;
+    private static readonly int NewLineByteCount = Encoding.UTF8.GetByteCount(Environment.NewLine);
+
     private readonly ConcurrentDictionary<string, OperationalFileLogger> loggers = new(StringComparer.Ordinal);
     private readonly object gate = new();
     private readonly string logFilePath;
     private readonly LogLevel minLevel;
     private readonly string serviceName;
+    private readonly long maxFileSizeBytes;
+    private readonly int retainedFileCount;
 
     public OperationalFileLoggerProvider(OperationalFileLoggerOptions options)
     {
@@ -26,6 +33,8 @@ public sealed class OperationalFileLoggerProvider : ILoggerProvider
         Directory.CreateDirectory(directory);
         logFilePath = Path.Combine(directory, $"{serviceName}.log");
         minLevel = options.MinLevel;
+        maxFileSizeBytes = Math.Max(MinimumFileSizeBytes, options.MaxFileSizeBytes);
+        retainedFileCount = Math.Clamp(options.RetainedFileCount, 1, MaxRetainedFiles);
     }
 
     public ILogger CreateLogger(string categoryName)
@@ -47,13 +56,44 @@ public sealed class OperationalFileLoggerProvider : ILoggerProvider
         {
             lock (gate)
             {
-                File.AppendAllText(logFilePath, payload + Environment.NewLine);
+                RotateIfNeeded(Encoding.UTF8.GetByteCount(payload) + NewLineByteCount);
+                File.AppendAllText(logFilePath, payload + Environment.NewLine, Encoding.UTF8);
             }
         }
         catch
         {
             // Best-effort logging; avoid recursive failures from the logger itself.
         }
+    }
+
+    private void RotateIfNeeded(int incomingBytes)
+    {
+        if (!File.Exists(logFilePath))
+            return;
+
+        var currentLength = new FileInfo(logFilePath).Length;
+        if (currentLength + incomingBytes <= maxFileSizeBytes)
+            return;
+
+        var oldestArchivePath = $"{logFilePath}.{retainedFileCount}";
+        if (File.Exists(oldestArchivePath))
+            File.Delete(oldestArchivePath);
+
+        for (var i = retainedFileCount - 1; i >= 1; i--)
+        {
+            var sourceArchivePath = $"{logFilePath}.{i}";
+            if (!File.Exists(sourceArchivePath))
+                continue;
+
+            var destinationArchivePath = $"{logFilePath}.{i + 1}";
+            File.Move(sourceArchivePath, destinationArchivePath);
+        }
+
+        var firstArchivePath = $"{logFilePath}.1";
+        if (File.Exists(firstArchivePath))
+            File.Delete(firstArchivePath);
+
+        File.Move(logFilePath, firstArchivePath);
     }
 }
 
@@ -107,6 +147,8 @@ public sealed record OperationalFileLoggerOptions
     public string DirectoryPath { get; init; } = Path.Combine(AppContext.BaseDirectory, "logs");
     public string ServiceName { get; init; } = "service";
     public LogLevel MinLevel { get; init; } = LogLevel.Information;
+    public long MaxFileSizeBytes { get; init; } = 10 * 1024 * 1024;
+    public int RetainedFileCount { get; init; } = 5;
 }
 
 public sealed record OperationalLogEntry(

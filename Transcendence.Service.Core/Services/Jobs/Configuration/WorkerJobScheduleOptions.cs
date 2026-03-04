@@ -2,6 +2,8 @@ namespace Transcendence.Service.Core.Services.Jobs.Configuration;
 
 public class WorkerJobScheduleOptions
 {
+    public string Profile { get; set; } = "default";
+    public string DefaultProfile { get; set; } = "default";
     public string DetectPatchCron { get; set; } = "0 */6 * * *";
     public string RetryFailedMatchesCron { get; set; } = "0 * * * *";
     public string RefreshChampionAnalyticsDailyCron { get; set; } = "0 4 * * *";

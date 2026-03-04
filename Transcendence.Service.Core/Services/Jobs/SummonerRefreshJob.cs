@@ -37,6 +37,7 @@ public class SummonerRefreshJob(
     {
         try
         {
+            ct.ThrowIfCancellationRequested();
             var options = ingestionOptions.Value;
 
             // Fetch/update summoner first.
@@ -108,6 +109,10 @@ public class SummonerRefreshJob(
                 allModesHeadPersisted,
                 nonRankedBackfillResult.PersistedCount);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "[Refresh] Error refreshing {GameName}#{Tag} on {Platform}", gameName, tagLine,
@@ -128,6 +133,7 @@ public class SummonerRefreshJob(
     {
         try
         {
+            ct.ThrowIfCancellationRequested();
             if (await refreshLockRepository.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, ct))
             {
                 logger.LogInformation(
@@ -223,6 +229,10 @@ public class SummonerRefreshJob(
                 allModesHeadPersisted,
                 nonRankedBackfillPersisted);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "[AnalyticsRefresh] Error refreshing {GameName}#{Tag} on {Platform}",
@@ -261,6 +271,7 @@ public class SummonerRefreshJob(
 
         for (var page = 0; page < maxPages; page++)
         {
+            ct.ThrowIfCancellationRequested();
             if (shouldStop != null && await shouldStop())
             {
                 logger.LogInformation(
@@ -304,6 +315,7 @@ public class SummonerRefreshJob(
             var matchesToPersist = new List<DataMatch>(pendingIds.Count);
             foreach (var matchId in pendingIds)
             {
+                ct.ThrowIfCancellationRequested();
                 if (shouldStop != null && await shouldStop())
                     break;
 
@@ -332,6 +344,10 @@ public class SummonerRefreshJob(
                         continue;
 
                     matchesToPersist.Add(match);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -386,6 +402,7 @@ public class SummonerRefreshJob(
 
         for (var page = 0; page < maxPages; page++)
         {
+            ct.ThrowIfCancellationRequested();
             if (shouldStop != null && await shouldStop())
             {
                 stoppedEarly = true;
@@ -442,6 +459,7 @@ public class SummonerRefreshJob(
             var matchesToPersist = new List<DataMatch>(pendingIds.Count);
             foreach (var matchId in pendingIds)
             {
+                ct.ThrowIfCancellationRequested();
                 if (shouldStop != null && await shouldStop())
                 {
                     stoppedEarly = true;
@@ -476,6 +494,10 @@ public class SummonerRefreshJob(
                         continue;
 
                     matchesToPersist.Add(match);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -596,6 +618,7 @@ public class SummonerRefreshJob(
         string tagLine,
         CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         var persisted = new List<DataMatch>(matches.Count);
         if (matches.Count == 0)
             return persisted;
@@ -608,6 +631,10 @@ public class SummonerRefreshJob(
             await db.SaveChangesAsync(ct);
             persisted.AddRange(matches);
             return persisted;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (DbUpdateException ex) when (MatchPersistenceErrorClassifier.IsDuplicateMatchIdViolation(ex))
         {
@@ -629,11 +656,16 @@ public class SummonerRefreshJob(
 
         foreach (var match in matches)
         {
+            ct.ThrowIfCancellationRequested();
             try
             {
                 await matchRepository.AddMatchAsync(match, ct);
                 await db.SaveChangesAsync(ct);
                 persisted.Add(match);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch (DbUpdateException ex) when (MatchPersistenceErrorClassifier.IsDuplicateMatchIdViolation(ex))
             {

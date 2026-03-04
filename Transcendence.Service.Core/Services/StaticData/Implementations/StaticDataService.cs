@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Net;
 using System.Text.Json;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Static;
@@ -223,15 +224,22 @@ public class StaticDataService(
         string patch,
         CancellationToken cancellationToken)
     {
-        var perkUrl =
-            $"https://raw.communitydragon.org/{patch}/plugins/rcp-be-lol-game-data/global/default/v1/perks.json";
-        var perkStylesUrl =
-            $"https://raw.communitydragon.org/{patch}/plugins/rcp-be-lol-game-data/global/default/v1/perkstyles.json";
+        const string perksPath = "plugins/rcp-be-lol-game-data/global/default/v1/perks.json";
+        const string perkStylesPath = "plugins/rcp-be-lol-game-data/global/default/v1/perkstyles.json";
 
-        var communityDragonRunes = await GetAndDeserializeAsync<List<CommunityDragonRune>>(client, perkUrl,
-            cancellationToken);
-        var communityDragonStyles =
-            await GetAndDeserializeAsync<CommunityDragonPerkStylesRoot>(client, perkStylesUrl, cancellationToken);
+        var (communityDragonRunes, resolvedPatch) =
+            await GetCommunityDragonDataWithPatchFallbackAsync<List<CommunityDragonRune>>(
+                client,
+                patch,
+                perksPath,
+                cancellationToken);
+        var (communityDragonStyles, _) =
+            await GetCommunityDragonDataWithPatchFallbackAsync<CommunityDragonPerkStylesRoot>(
+                client,
+                patch,
+                perkStylesPath,
+                cancellationToken,
+                preferredPatch: resolvedPatch);
 
         if (communityDragonRunes == null || communityDragonRunes.Count == 0)
         {
@@ -305,10 +313,12 @@ public class StaticDataService(
         string patch,
         CancellationToken cancellationToken)
     {
-        var url =
-            $"https://raw.communitydragon.org/{patch}/plugins/rcp-be-lol-game-data/global/default/v1/items.json";
+        const string itemsPath = "plugins/rcp-be-lol-game-data/global/default/v1/items.json";
 
-        var communityDragonItems = await GetAndDeserializeAsync<List<CommunityDragonItem>>(client, url,
+        var (communityDragonItems, _) = await GetCommunityDragonDataWithPatchFallbackAsync<List<CommunityDragonItem>>(
+            client,
+            patch,
+            itemsPath,
             cancellationToken);
 
         if (communityDragonItems == null || communityDragonItems.Count == 0)
@@ -360,6 +370,83 @@ public class StaticDataService(
         return true;
     }
 
+    private async Task<(T? Data, string ResolvedPatch)> GetCommunityDragonDataWithPatchFallbackAsync<T>(
+        HttpClient client,
+        string requestedPatch,
+        string relativePath,
+        CancellationToken cancellationToken,
+        string? preferredPatch = null)
+    {
+        var candidates = BuildCommunityDragonPatchCandidates(requestedPatch, preferredPatch);
+
+        for (var i = 0; i < candidates.Count; i++)
+        {
+            var candidate = candidates[i];
+            var url = $"https://raw.communitydragon.org/{candidate}/{relativePath}";
+
+            try
+            {
+                var payload = await GetAndDeserializeAsync<T>(client, url, cancellationToken);
+                if (!string.Equals(candidate, requestedPatch, StringComparison.OrdinalIgnoreCase))
+                {
+                    logger.LogWarning(
+                        "Community Dragon static data path '{RelativePath}' was missing for patch '{RequestedPatch}'. Using '{ResolvedPatch}' instead.",
+                        relativePath,
+                        requestedPatch,
+                        candidate);
+                }
+
+                return (payload, candidate);
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound && i < candidates.Count - 1)
+            {
+                logger.LogInformation(
+                    "Community Dragon returned 404 for patch candidate '{PatchCandidate}' and path '{RelativePath}'. Trying fallback.",
+                    candidate,
+                    relativePath);
+            }
+        }
+
+        var finalUrl = $"https://raw.communitydragon.org/{candidates[^1]}/{relativePath}";
+        throw new HttpRequestException(
+            $"Community Dragon returned 404 for all patch candidates ({string.Join(", ", candidates)}) at '{finalUrl}'.",
+            null,
+            HttpStatusCode.NotFound);
+    }
+
+    private static IReadOnlyList<string> BuildCommunityDragonPatchCandidates(string requestedPatch, string? preferredPatch)
+    {
+        var candidates = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void AddCandidate(string? value)
+        {
+            var candidate = value?.Trim();
+            if (string.IsNullOrWhiteSpace(candidate) || !seen.Add(candidate))
+                return;
+
+            candidates.Add(candidate);
+        }
+
+        AddCandidate(preferredPatch);
+        AddCandidate(requestedPatch);
+
+        var trimmedPatch = TrimPatch(requestedPatch);
+        AddCandidate(trimmedPatch);
+
+        var patchParts = trimmedPatch.Split('.');
+        if (patchParts.Length == 2 &&
+            int.TryParse(patchParts[0], out _) &&
+            int.TryParse(patchParts[1], out _))
+        {
+            AddCandidate($"{trimmedPatch}.1");
+        }
+
+        AddCandidate("latest");
+
+        return candidates;
+    }
+
     private static async Task<T?> GetAndDeserializeAsync<T>(
         HttpClient client,
         string url,
@@ -372,4 +459,3 @@ public class StaticDataService(
         return await JsonSerializer.DeserializeAsync<T>(stream, CaseInsensitiveJsonOptions, cancellationToken);
     }
 }
-

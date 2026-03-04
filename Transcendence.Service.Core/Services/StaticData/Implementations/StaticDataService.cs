@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Net;
 using System.Text.Json;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Static;
@@ -15,6 +16,8 @@ public class StaticDataService(
     ILogger<StaticDataService> logger)
     : IStaticDataService
 {
+    private sealed class NonCacheablePatchFallbackException(string message) : Exception(message);
+
     private static readonly JsonSerializerOptions CaseInsensitiveJsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -74,21 +77,59 @@ public class StaticDataService(
             await context.SaveChangesAsync(cancellationToken);
         }
 
-        await cacheService.GetOrCreateAsync(
+        await MemoizeStaticDataIfAuthoritativeAsync(
             $"static:runes:{patchVersion}",
-            ct => FetchAndStoreRunesAsync(patchVersion, ct),
-            expiration: TimeSpan.FromDays(30),
-            localExpiration: TimeSpan.FromMinutes(5),
-            tags: [$"patch-{patchVersion}"],
-            cancellationToken: cancellationToken);
+            patchVersion,
+            ct => FetchStoreRunesAndValidateCacheabilityAsync(patchVersion, ct),
+            cancellationToken);
 
-        await cacheService.GetOrCreateAsync(
+        await MemoizeStaticDataIfAuthoritativeAsync(
             $"static:items:v2:{patchVersion}",
-            ct => FetchAndStoreItemsAsync(patchVersion, ct),
-            expiration: TimeSpan.FromDays(30),
-            localExpiration: TimeSpan.FromMinutes(5),
-            tags: [$"patch-{patchVersion}"],
-            cancellationToken: cancellationToken);
+            patchVersion,
+            ct => FetchStoreItemsAndValidateCacheabilityAsync(patchVersion, ct),
+            cancellationToken);
+    }
+
+    private async Task MemoizeStaticDataIfAuthoritativeAsync(
+        string cacheKey,
+        string patchVersion,
+        Func<CancellationToken, Task<bool>> fetchAndStore,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await cacheService.GetOrCreateAsync(
+                cacheKey,
+                fetchAndStore,
+                expiration: TimeSpan.FromDays(30),
+                localExpiration: TimeSpan.FromMinutes(5),
+                tags: [$"patch-{patchVersion}"],
+                cancellationToken: cancellationToken);
+        }
+        catch (NonCacheablePatchFallbackException ex)
+        {
+            logger.LogWarning(ex,
+                "Community Dragon data for patch '{PatchVersion}' used the 'latest' fallback and was not memoized.",
+                patchVersion);
+        }
+    }
+
+    private async Task<bool> FetchStoreRunesAndValidateCacheabilityAsync(string patchVersion, CancellationToken cancellationToken)
+    {
+        var shouldCache = await FetchAndStoreRunesAsync(patchVersion, cancellationToken);
+        if (!shouldCache)
+            throw new NonCacheablePatchFallbackException($"Rune static data for patch '{patchVersion}' used 'latest' fallback.");
+
+        return true;
+    }
+
+    private async Task<bool> FetchStoreItemsAndValidateCacheabilityAsync(string patchVersion, CancellationToken cancellationToken)
+    {
+        var shouldCache = await FetchAndStoreItemsAsync(patchVersion, cancellationToken);
+        if (!shouldCache)
+            throw new NonCacheablePatchFallbackException($"Item static data for patch '{patchVersion}' used 'latest' fallback.");
+
+        return true;
     }
 
     private async Task<string?> GetLatestPatchVersionAsync(CancellationToken cancellationToken)
@@ -108,7 +149,8 @@ public class StaticDataService(
     private async Task<bool> FetchAndStoreRunesAsync(string patchVersion, CancellationToken cancellationToken)
     {
         var client = httpClientFactory.CreateClient();
-        var runes = await FetchRunesForPatchAsync(client, patchVersion, cancellationToken);
+        var runeFetchResult = await FetchRunesForPatchAsync(client, patchVersion, cancellationToken);
+        var runes = runeFetchResult.Items;
 
         if (runes.Count == 0)
             throw new InvalidOperationException($"No rune data was returned for patch '{patchVersion}'.");
@@ -148,13 +190,14 @@ public class StaticDataService(
         if (changed)
             await context.SaveChangesAsync(cancellationToken);
 
-        return true;
+        return !runeFetchResult.UsedLatestFallback;
     }
 
     private async Task<bool> FetchAndStoreItemsAsync(string patchVersion, CancellationToken cancellationToken)
     {
         var client = httpClientFactory.CreateClient();
-        var items = await FetchItemsForPatchAsync(client, patchVersion, cancellationToken);
+        var itemFetchResult = await FetchItemsForPatchAsync(client, patchVersion, cancellationToken);
+        var items = itemFetchResult.Items;
 
         if (items.Count == 0)
             throw new InvalidOperationException($"No item data was returned for patch '{patchVersion}'.");
@@ -199,7 +242,7 @@ public class StaticDataService(
         if (changed)
             await context.SaveChangesAsync(cancellationToken);
 
-        return true;
+        return !itemFetchResult.UsedLatestFallback;
     }
 
     private static string TrimPatch(string patch)
@@ -218,30 +261,40 @@ public class StaticDataService(
         return versions?.Select(v => new DataDragonPatch { Patch = v }).ToList();
     }
 
-    private async Task<List<RuneVersion>> FetchRunesForPatchAsync(
+    private async Task<PatchFetchResult<RuneVersion>> FetchRunesForPatchAsync(
         HttpClient client,
         string patch,
         CancellationToken cancellationToken)
     {
-        var perkUrl =
-            $"https://raw.communitydragon.org/{patch}/plugins/rcp-be-lol-game-data/global/default/v1/perks.json";
-        var perkStylesUrl =
-            $"https://raw.communitydragon.org/{patch}/plugins/rcp-be-lol-game-data/global/default/v1/perkstyles.json";
+        const string perksPath = "plugins/rcp-be-lol-game-data/global/default/v1/perks.json";
+        const string perkStylesPath = "plugins/rcp-be-lol-game-data/global/default/v1/perkstyles.json";
 
-        var communityDragonRunes = await GetAndDeserializeAsync<List<CommunityDragonRune>>(client, perkUrl,
-            cancellationToken);
-        var communityDragonStyles =
-            await GetAndDeserializeAsync<CommunityDragonPerkStylesRoot>(client, perkStylesUrl, cancellationToken);
+        var (communityDragonRunes, resolvedPatch) =
+            await GetCommunityDragonDataWithPatchFallbackAsync<List<CommunityDragonRune>>(
+                client,
+                patch,
+                perksPath,
+                cancellationToken);
+        var (communityDragonStyles, stylesResolvedPatch) =
+            await GetCommunityDragonDataWithPatchFallbackAsync<CommunityDragonPerkStylesRoot>(
+                client,
+                patch,
+                perkStylesPath,
+                cancellationToken,
+                preferredPatch: resolvedPatch);
 
         if (communityDragonRunes == null || communityDragonRunes.Count == 0)
         {
             logger.LogWarning("No runes returned from Community Dragon for patch {Patch}.", patch);
-            return [];
+            return new PatchFetchResult<RuneVersion>([], UsedLatestFallback: false);
         }
 
         var runeMetadata = BuildRuneMetadataByRuneId(communityDragonStyles?.Styles ?? []);
 
-        return communityDragonRunes.Select(r =>
+        var usedLatestFallback = string.Equals(resolvedPatch, "latest", StringComparison.OrdinalIgnoreCase) ||
+                                 string.Equals(stylesResolvedPatch, "latest", StringComparison.OrdinalIgnoreCase);
+
+        return new PatchFetchResult<RuneVersion>(communityDragonRunes.Select(r =>
         {
             var hasMetadata = runeMetadata.TryGetValue(r.Id, out var metadata);
 
@@ -260,7 +313,7 @@ public class StaticDataService(
                 RunePathName = hasMetadata ? metadata.PathName : null,
                 Slot = hasMetadata ? metadata.Slot : 0
             };
-        }).ToList();
+        }).ToList(), usedLatestFallback);
     }
 
     private static Dictionary<int, RuneStaticMetadata> BuildRuneMetadataByRuneId(
@@ -300,24 +353,26 @@ public class StaticDataService(
 
     private readonly record struct RuneStaticMetadata(int PathId, string PathName, int Slot);
 
-    private async Task<List<ItemVersion>> FetchItemsForPatchAsync(
+    private async Task<PatchFetchResult<ItemVersion>> FetchItemsForPatchAsync(
         HttpClient client,
         string patch,
         CancellationToken cancellationToken)
     {
-        var url =
-            $"https://raw.communitydragon.org/{patch}/plugins/rcp-be-lol-game-data/global/default/v1/items.json";
+        const string itemsPath = "plugins/rcp-be-lol-game-data/global/default/v1/items.json";
 
-        var communityDragonItems = await GetAndDeserializeAsync<List<CommunityDragonItem>>(client, url,
+        var (communityDragonItems, resolvedPatch) = await GetCommunityDragonDataWithPatchFallbackAsync<List<CommunityDragonItem>>(
+            client,
+            patch,
+            itemsPath,
             cancellationToken);
 
         if (communityDragonItems == null || communityDragonItems.Count == 0)
         {
             logger.LogWarning("No items returned from Community Dragon for patch {Patch}.", patch);
-            return [];
+            return new PatchFetchResult<ItemVersion>([], UsedLatestFallback: false);
         }
 
-        return communityDragonItems.Select(i => new ItemVersion
+        return new PatchFetchResult<ItemVersion>(communityDragonItems.Select(i => new ItemVersion
         {
             ItemId = i.Id,
             PatchVersion = patch,
@@ -328,8 +383,10 @@ public class StaticDataService(
             BuildsInto = NormalizeIntList(i.To),
             InStore = i.InStore ?? true,
             PriceTotal = i.PriceTotal ?? 0
-        }).ToList();
+        }).ToList(), string.Equals(resolvedPatch, "latest", StringComparison.OrdinalIgnoreCase));
     }
+
+    private readonly record struct PatchFetchResult<T>(List<T> Items, bool UsedLatestFallback);
 
     private static List<string> NormalizeStringList(List<string>? values) =>
         (values ?? [])
@@ -360,6 +417,83 @@ public class StaticDataService(
         return true;
     }
 
+    private async Task<(T? Data, string ResolvedPatch)> GetCommunityDragonDataWithPatchFallbackAsync<T>(
+        HttpClient client,
+        string requestedPatch,
+        string relativePath,
+        CancellationToken cancellationToken,
+        string? preferredPatch = null)
+    {
+        var candidates = BuildCommunityDragonPatchCandidates(requestedPatch, preferredPatch);
+
+        for (var i = 0; i < candidates.Count; i++)
+        {
+            var candidate = candidates[i];
+            var url = $"https://raw.communitydragon.org/{candidate}/{relativePath}";
+
+            try
+            {
+                var payload = await GetAndDeserializeAsync<T>(client, url, cancellationToken);
+                if (!string.Equals(candidate, requestedPatch, StringComparison.OrdinalIgnoreCase))
+                {
+                    logger.LogWarning(
+                        "Community Dragon static data path '{RelativePath}' was missing for patch '{RequestedPatch}'. Using '{ResolvedPatch}' instead.",
+                        relativePath,
+                        requestedPatch,
+                        candidate);
+                }
+
+                return (payload, candidate);
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound && i < candidates.Count - 1)
+            {
+                logger.LogInformation(
+                    "Community Dragon returned 404 for patch candidate '{PatchCandidate}' and path '{RelativePath}'. Trying fallback.",
+                    candidate,
+                    relativePath);
+            }
+        }
+
+        var finalUrl = $"https://raw.communitydragon.org/{candidates[^1]}/{relativePath}";
+        throw new HttpRequestException(
+            $"Community Dragon returned 404 for all patch candidates ({string.Join(", ", candidates)}) at '{finalUrl}'.",
+            null,
+            HttpStatusCode.NotFound);
+    }
+
+    private static IReadOnlyList<string> BuildCommunityDragonPatchCandidates(string requestedPatch, string? preferredPatch)
+    {
+        var candidates = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void AddCandidate(string? value)
+        {
+            var candidate = value?.Trim();
+            if (string.IsNullOrWhiteSpace(candidate) || !seen.Add(candidate))
+                return;
+
+            candidates.Add(candidate);
+        }
+
+        AddCandidate(preferredPatch);
+        AddCandidate(requestedPatch);
+
+        var trimmedPatch = TrimPatch(requestedPatch);
+        AddCandidate(trimmedPatch);
+
+        var patchParts = trimmedPatch.Split('.');
+        if (patchParts.Length == 2 &&
+            int.TryParse(patchParts[0], out _) &&
+            int.TryParse(patchParts[1], out _))
+        {
+            AddCandidate($"{trimmedPatch}.1");
+        }
+
+        AddCandidate("latest");
+
+        return candidates;
+    }
+
     private static async Task<T?> GetAndDeserializeAsync<T>(
         HttpClient client,
         string url,
@@ -372,4 +506,3 @@ public class StaticDataService(
         return await JsonSerializer.DeserializeAsync<T>(stream, CaseInsensitiveJsonOptions, cancellationToken);
     }
 }
-

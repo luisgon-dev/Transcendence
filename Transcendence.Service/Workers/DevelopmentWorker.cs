@@ -1,7 +1,6 @@
 using Hangfire;
 using Microsoft.Extensions.Options;
 using Transcendence.Service.Core.Services.Extensions;
-using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 
 namespace Transcendence.Service.Workers;
@@ -9,22 +8,11 @@ namespace Transcendence.Service.Workers;
 public class DevelopmentWorker(
     JobStorage jobStorage,
     IOptions<WorkerJobScheduleOptions> options,
+    IWorkerRecurringJobPolicy recurringJobPolicy,
+    IRecurringJobManager recurringJobManager,
     ILogger<DevelopmentWorker> logger)
     : BackgroundService
 {
-    private const string DetectPatchJobId = "detect-patch";
-    private const string RetryFailedMatchesJobId = "retry-failed-matches";
-    private const string RefreshChampionAnalyticsJobId = "refresh-champion-analytics";
-    private const string RefreshChampionAnalyticsAdaptiveJobId = "refresh-champion-analytics-adaptive";
-    private const string RefreshChampionAnalyticsRampJobId = "refresh-champion-analytics-ramp";
-    private const string ChampionAnalyticsIngestionJobId = "champion-analytics-ingestion";
-    private const string ChampionAnalyticsIngestionRampJobId = "champion-analytics-ingestion-ramp";
-    private const string SummonerMaintenanceJobId = "summoner-maintenance";
-    private const string SummonerMaintenanceRampJobId = "summoner-maintenance-ramp";
-    private const string MatchTimelineBackfillJobId = "match-timeline-backfill";
-    private const string RuneSelectionIntegrityBackfillJobId = "rune-selection-integrity-backfill";
-    private const string PollLiveGamesJobId = "poll-live-games";
-
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
         TryRemoveInvalidRecurringJobs();
@@ -33,177 +21,45 @@ public class DevelopmentWorker(
         if (schedule.CleanupOnStartup)
             TryCleanupHangfireJobs();
 
-        // Development worker intentionally runs analytics-only recurring jobs.
-        TryRemoveNonAnalyticsRecurringJobs();
-        logger.LogInformation("Development worker is configured for analytics-only recurring jobs.");
+        var profileName = recurringJobPolicy.ResolveProfile(schedule);
+        var descriptors = recurringJobPolicy.BuildDescriptors(schedule);
 
-        // Schedule analytics refresh daily at 4 AM UTC
-        TryConfigureRecurringJob(
-            RefreshChampionAnalyticsJobId,
-            schedule.RefreshChampionAnalyticsDailyCron,
-            () => RecurringJob.AddOrUpdate<RefreshChampionAnalyticsJob>(
-                RefreshChampionAnalyticsJobId,
-                job => job.ExecuteAsync(CancellationToken.None),
-                schedule.RefreshChampionAnalyticsDailyCron,
-                new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc }));
-
-        if (schedule.EnableAdaptiveAnalyticsRefresh)
+        foreach (var descriptor in descriptors)
         {
-            TryConfigureRecurringJob(
-                RefreshChampionAnalyticsAdaptiveJobId,
-                schedule.RefreshChampionAnalyticsAdaptiveCron,
-                () => RecurringJob.AddOrUpdate<RefreshChampionAnalyticsJob>(
-                    RefreshChampionAnalyticsAdaptiveJobId,
-                    job => job.ExecuteAdaptiveAsync(CancellationToken.None),
-                    schedule.RefreshChampionAnalyticsAdaptiveCron,
-                    new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc }));
-
-            if (schedule.EnableNewPatchRamp)
+            if (descriptor.IsEnabled)
             {
                 TryConfigureRecurringJob(
-                    RefreshChampionAnalyticsRampJobId,
-                    schedule.RefreshChampionAnalyticsRampCron,
-                    () => RecurringJob.AddOrUpdate<RefreshChampionAnalyticsJob>(
-                        RefreshChampionAnalyticsRampJobId,
-                        job => job.ExecuteRampAsync(CancellationToken.None),
-                        schedule.RefreshChampionAnalyticsRampCron,
-                        new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc }));
+                    descriptor.JobId,
+                    descriptor.CronExpression,
+                    () => descriptor.Apply(recurringJobManager));
             }
             else
             {
-                TryRemoveRecurringJob(RefreshChampionAnalyticsRampJobId);
+                TryRemoveRecurringJob(descriptor.JobId);
             }
         }
-        else
-        {
-            TryRemoveRecurringJob(RefreshChampionAnalyticsAdaptiveJobId);
-            TryRemoveRecurringJob(RefreshChampionAnalyticsRampJobId);
-        }
 
-        if (schedule.EnableChampionAnalyticsIngestion)
-        {
-            TryConfigureRecurringJob(
-                ChampionAnalyticsIngestionJobId,
-                schedule.ChampionAnalyticsIngestionCron,
-                () => RecurringJob.AddOrUpdate<ChampionAnalyticsIngestionJob>(
-                    ChampionAnalyticsIngestionJobId,
-                    job => job.ExecuteAsync(CancellationToken.None),
-                    schedule.ChampionAnalyticsIngestionCron,
-                    new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc }));
+        var configuredJobs = string.Join(
+            ", ",
+            descriptors.Select(descriptor =>
+                $"{descriptor.JobId}={(descriptor.IsEnabled ? descriptor.CronExpression : "disabled")}"));
 
-            if (schedule.EnableNewPatchRamp)
-            {
-                TryConfigureRecurringJob(
-                    ChampionAnalyticsIngestionRampJobId,
-                    schedule.ChampionAnalyticsIngestionRampCron,
-                    () => RecurringJob.AddOrUpdate<ChampionAnalyticsIngestionJob>(
-                        ChampionAnalyticsIngestionRampJobId,
-                        job => job.ExecuteRampAsync(CancellationToken.None),
-                        schedule.ChampionAnalyticsIngestionRampCron,
-                        new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc }));
-            }
-            else
-            {
-                TryRemoveRecurringJob(ChampionAnalyticsIngestionRampJobId);
-            }
-        }
-        else
-        {
-            TryRemoveRecurringJob(ChampionAnalyticsIngestionJobId);
-            TryRemoveRecurringJob(ChampionAnalyticsIngestionRampJobId);
-        }
-
-        if (schedule.EnableSummonerMaintenance)
-        {
-            TryConfigureRecurringJob(
-                SummonerMaintenanceJobId,
-                schedule.SummonerMaintenanceCron,
-                () => RecurringJob.AddOrUpdate<SummonerMaintenanceJob>(
-                    SummonerMaintenanceJobId,
-                    job => job.ExecuteAsync(CancellationToken.None),
-                    schedule.SummonerMaintenanceCron,
-                    new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc }));
-
-            if (schedule.EnableNewPatchRamp)
-            {
-                TryConfigureRecurringJob(
-                    SummonerMaintenanceRampJobId,
-                    schedule.SummonerMaintenanceRampCron,
-                    () => RecurringJob.AddOrUpdate<SummonerMaintenanceJob>(
-                        SummonerMaintenanceRampJobId,
-                        job => job.ExecuteRampAsync(CancellationToken.None),
-                        schedule.SummonerMaintenanceRampCron,
-                        new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc }));
-            }
-            else
-            {
-                TryRemoveRecurringJob(SummonerMaintenanceRampJobId);
-            }
-        }
-        else
-        {
-            TryRemoveRecurringJob(SummonerMaintenanceJobId);
-            TryRemoveRecurringJob(SummonerMaintenanceRampJobId);
-        }
-
-        if (schedule.EnableMatchTimelineBackfill)
-        {
-            TryConfigureRecurringJob(
-                MatchTimelineBackfillJobId,
-                schedule.MatchTimelineBackfillCron,
-                () => RecurringJob.AddOrUpdate<MatchTimelineBackfillJob>(
-                    MatchTimelineBackfillJobId,
-                    job => job.ExecuteAsync(CancellationToken.None),
-                    schedule.MatchTimelineBackfillCron,
-                    new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc }));
-        }
-        else
-        {
-            TryRemoveRecurringJob(MatchTimelineBackfillJobId);
-        }
-
-        if (schedule.EnableRuneSelectionIntegrityBackfill)
-        {
-            TryConfigureRecurringJob(
-                RuneSelectionIntegrityBackfillJobId,
-                schedule.RuneSelectionIntegrityBackfillCron,
-                () => RecurringJob.AddOrUpdate<RuneSelectionIntegrityBackfillJob>(
-                    RuneSelectionIntegrityBackfillJobId,
-                    job => job.ExecuteAsync(CancellationToken.None),
-                    schedule.RuneSelectionIntegrityBackfillCron,
-                    new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc }));
-        }
-        else
-        {
-            TryRemoveRecurringJob(RuneSelectionIntegrityBackfillJobId);
-        }
+        logger.LogInformation(
+            "Development worker configured recurring jobs with profile {Profile}: {ConfiguredJobs}",
+            profileName,
+            configuredJobs);
 
         return Task.CompletedTask;
-    }
-
-    private void TryRemoveNonAnalyticsRecurringJobs()
-    {
-        TryRemoveRecurringJob(DetectPatchJobId);
-        TryRemoveRecurringJob(RetryFailedMatchesJobId);
-        TryRemoveRecurringJob(PollLiveGamesJobId);
     }
 
     private void CleanupHangfireJobs()
     {
         // clear any queued job or failed jobs
         JobStorage.Current?.GetMonitoringApi()?.PurgeJobs();
-        RecurringJob.RemoveIfExists(DetectPatchJobId);
-        RecurringJob.RemoveIfExists(RetryFailedMatchesJobId);
-        RecurringJob.RemoveIfExists(RefreshChampionAnalyticsJobId);
-        RecurringJob.RemoveIfExists(RefreshChampionAnalyticsAdaptiveJobId);
-        RecurringJob.RemoveIfExists(RefreshChampionAnalyticsRampJobId);
-        RecurringJob.RemoveIfExists(ChampionAnalyticsIngestionJobId);
-        RecurringJob.RemoveIfExists(ChampionAnalyticsIngestionRampJobId);
-        RecurringJob.RemoveIfExists(SummonerMaintenanceJobId);
-        RecurringJob.RemoveIfExists(SummonerMaintenanceRampJobId);
-        RecurringJob.RemoveIfExists(MatchTimelineBackfillJobId);
-        RecurringJob.RemoveIfExists(RuneSelectionIntegrityBackfillJobId);
-        RecurringJob.RemoveIfExists(PollLiveGamesJobId);
+
+        foreach (var recurringJobId in recurringJobPolicy.KnownJobIds)
+            RecurringJob.RemoveIfExists(recurringJobId);
+
         logger.LogInformation("Cleared all jobs");
     }
 

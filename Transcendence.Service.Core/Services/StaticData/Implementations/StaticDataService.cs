@@ -150,7 +150,7 @@ public class StaticDataService(
     {
         var client = httpClientFactory.CreateClient();
         var runeFetchResult = await FetchRunesForPatchAsync(client, patchVersion, cancellationToken);
-        var runes = runeFetchResult.Runes;
+        var runes = runeFetchResult.Items;
 
         if (runes.Count == 0)
             throw new InvalidOperationException($"No rune data was returned for patch '{patchVersion}'.");

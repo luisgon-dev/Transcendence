@@ -54,4 +54,41 @@ public class RefreshLockRepository(TranscendenceContext db) : IRefreshLockReposi
             .AsNoTracking()
             .AnyAsync(x => x.Key.StartsWith(prefix) && x.LockedUntilUtc > now, ct);
     }
+
+    public async Task<int> DeleteExpiredAsync(DateTime expiresOnOrBeforeUtc, int batchSize, CancellationToken ct = default)
+    {
+        if (batchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be greater than zero.");
+
+        var expiredIds = await db.RefreshLocks
+            .AsNoTracking()
+            .Where(x => x.LockedUntilUtc <= expiresOnOrBeforeUtc)
+            .OrderBy(x => x.LockedUntilUtc)
+            .Select(x => x.Id)
+            .Take(batchSize)
+            .ToListAsync(ct);
+
+        if (expiredIds.Count == 0)
+            return 0;
+
+        return await db.RefreshLocks
+            .Where(x => expiredIds.Contains(x.Id))
+            .ExecuteDeleteAsync(ct);
+    }
+
+    public async Task<RefreshLockGrowthSnapshot> GetGrowthSnapshotAsync(DateTime nowUtc, CancellationToken ct = default)
+    {
+        var activeCount = await db.RefreshLocks
+            .AsNoTracking()
+            .CountAsync(x => x.LockedUntilUtc > nowUtc, ct);
+
+        var expiredCount = await db.RefreshLocks
+            .AsNoTracking()
+            .CountAsync(x => x.LockedUntilUtc <= nowUtc, ct);
+
+        return new RefreshLockGrowthSnapshot(
+            ActiveCount: activeCount,
+            ExpiredCount: expiredCount
+        );
+    }
 }

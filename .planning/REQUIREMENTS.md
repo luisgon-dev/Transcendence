@@ -22,8 +22,8 @@ Requirements for this milestone. Each will map to exactly one roadmap phase.
 
 ### Worker Reliability
 
-- [ ] **WORK-01**: Operator can verify mandatory recurring jobs are registered at startup before traffic is served.
-- [ ] **WORK-02**: Operator receives fail-fast startup behavior when mandatory scheduling fails (no partial healthy state).
+- [x] **WORK-01**: Operator can verify mandatory recurring jobs are registered at startup before traffic is served.
+- [x] **WORK-02**: Operator receives fail-fast startup behavior when mandatory scheduling fails (no partial healthy state).
 - [x] **WORK-03**: User avoids stale or duplicated updates during deploys because cancellation is propagated through long-running ingestion/refresh paths.
 - [x] **WORK-04**: Operator gets consistent job behavior across development and production environments through shared scheduling policy logic.
 
@@ -73,8 +73,8 @@ Updated during roadmap creation.
 | FRSH-01 | Phase 4 - Deterministic Freshness Contract | Pending |
 | FRSH-02 | Phase 4 - Deterministic Freshness Contract | Pending |
 | FRSH-03 | Phase 4 - Deterministic Freshness Contract | Pending |
-| WORK-01 | Phase 1 - Worker Startup Integrity | Pending |
-| WORK-02 | Phase 1 - Worker Startup Integrity | Pending |
+| WORK-01 | Phase 1 - Worker Startup Integrity | Complete |
+| WORK-02 | Phase 1 - Worker Startup Integrity | Complete |
 | WORK-03 | Phase 1 - Worker Startup Integrity | Complete |
 | WORK-04 | Phase 1 - Worker Startup Integrity | Complete |
 | LOCK-01 | Phase 2 - Refresh Lock Lifecycle Control | Pending |

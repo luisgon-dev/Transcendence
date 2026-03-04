@@ -66,28 +66,28 @@ Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INGT-01 | TBD | Pending |
-| INGT-02 | TBD | Pending |
-| INGT-03 | TBD | Pending |
-| INGT-04 | TBD | Pending |
-| FRSH-01 | TBD | Pending |
-| FRSH-02 | TBD | Pending |
-| FRSH-03 | TBD | Pending |
-| WORK-01 | TBD | Pending |
-| WORK-02 | TBD | Pending |
-| WORK-03 | TBD | Pending |
-| WORK-04 | TBD | Pending |
-| LOCK-01 | TBD | Pending |
-| LOCK-02 | TBD | Pending |
-| LOCK-03 | TBD | Pending |
-| QUAL-01 | TBD | Pending |
-| QUAL-02 | TBD | Pending |
+| INGT-01 | Phase 3 - Priority Ingestion Throughput | Pending |
+| INGT-02 | Phase 3 - Priority Ingestion Throughput | Pending |
+| INGT-03 | Phase 3 - Priority Ingestion Throughput | Pending |
+| INGT-04 | Phase 3 - Priority Ingestion Throughput | Pending |
+| FRSH-01 | Phase 4 - Deterministic Freshness Contract | Pending |
+| FRSH-02 | Phase 4 - Deterministic Freshness Contract | Pending |
+| FRSH-03 | Phase 4 - Deterministic Freshness Contract | Pending |
+| WORK-01 | Phase 1 - Worker Startup Integrity | Pending |
+| WORK-02 | Phase 1 - Worker Startup Integrity | Pending |
+| WORK-03 | Phase 1 - Worker Startup Integrity | Pending |
+| WORK-04 | Phase 1 - Worker Startup Integrity | Pending |
+| LOCK-01 | Phase 2 - Refresh Lock Lifecycle Control | Pending |
+| LOCK-02 | Phase 2 - Refresh Lock Lifecycle Control | Pending |
+| LOCK-03 | Phase 2 - Refresh Lock Lifecycle Control | Pending |
+| QUAL-01 | Phase 5 - Quality Gates and Documentation Parity | Pending |
+| QUAL-02 | Phase 5 - Quality Gates and Documentation Parity | Pending |
 
 **Coverage:**
 - v1 requirements: 16 total
-- Mapped to phases: 0
-- Unmapped: 16 ⚠️
+- Mapped to phases: 16
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-04*
-*Last updated: 2026-03-04 after initial definition*
+*Last updated: 2026-03-04 after roadmap mapping*

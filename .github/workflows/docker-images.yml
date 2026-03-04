@@ -37,10 +37,6 @@ jobs:
             image_suffix: web
             dockerfile: ./apps/web/Dockerfile
             filter_key: web
-          - component: webadminportal
-            image_suffix: webadminportal
-            dockerfile: ./Transcendence.WebAdminPortal/Dockerfile
-            filter_key: webadminportal
 
     steps:
       - name: Checkout repository
@@ -75,13 +71,6 @@ jobs:
               - 'pnpm-workspace.yaml'
               - '.nvmrc'
               - 'apps/web/Dockerfile'
-            webadminportal:
-              - 'Transcendence.WebAdminPortal/**'
-              - 'Transcendence.Service.Core/**'
-              - 'Transcendence.Data/**'
-              - 'global.json'
-              - 'Transcendence.sln'
-              - 'Transcendence.WebAdminPortal/Dockerfile'
 
       - name: Plan component build
         id: plan
@@ -90,7 +79,6 @@ jobs:
           WEBAPI_CHANGED: ${{ steps.changes.outputs.webapi }}
           SERVICE_CHANGED: ${{ steps.changes.outputs.service }}
           WEB_CHANGED: ${{ steps.changes.outputs.web }}
-          WEBADMINPORTAL_CHANGED: ${{ steps.changes.outputs.webadminportal }}
         run: |
           if [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -107,9 +95,6 @@ jobs:
               ;;
             web)
               run="${WEB_CHANGED:-false}"
-              ;;
-            webadminportal)
-              run="${WEBADMINPORTAL_CHANGED:-false}"
               ;;
           esac
 

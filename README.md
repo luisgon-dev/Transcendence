@@ -4,7 +4,6 @@ Transcendence is a monorepo for a League of Legends analytics stack:
 
 - `Transcendence.WebAPI`: ASP.NET Core Web API
 - `Transcendence.Service`: .NET worker running Hangfire jobs
-- `Transcendence.WebAdminPortal`: break-glass Hangfire dashboard host
 - `apps/web`: Next.js App Router frontend (SSR + BFF route handlers)
 - `Transcendence.Data` + `Transcendence.Service.Core`: data + domain/service layers
 - `openapi/transcendence.v1.json`: committed API contract
@@ -19,7 +18,7 @@ Transcendence is a monorepo for a League of Legends analytics stack:
   - summoner profile, refresh, and match history
   - champion analytics (tier list, win rates, builds, matchups, pro builds)
   - auth/session and API key management
-  - admin operations (jobs, cache invalidate, audit log, pro roster CRUD)
+  - admin operations (jobs, failed-job detail, service logs, cache invalidate, audit log, pro roster CRUD)
   - live game lookup and health checks
 - Hangfire recurring and queued job execution for ingestion, refresh, analytics, and backfills
 
@@ -55,7 +54,6 @@ The web app proxies backend calls through BFF-style route handlers under `apps/w
 | `Transcendence.Service` | Worker host + Hangfire server |
 | `Transcendence.Service.Core` | Domain/application services |
 | `Transcendence.Data` | EF Core DbContext, entities, repositories |
-| `Transcendence.WebAdminPortal` | Hangfire dashboard host |
 | `apps/web` | Next.js frontend + BFF routes |
 | `packages/api-client` | Generated TS API client artifacts |
 | `openapi` | Committed OpenAPI spec |
@@ -75,7 +73,13 @@ docker compose up --build
 corepack pnpm install
 ```
 
-3. Configure the web app:
+3. Install repo Git hooks (recommended once per clone):
+
+```bash
+corepack pnpm hooks:install
+```
+
+4. Configure the web app:
 
 ```bash
 cp apps/web/.env.example apps/web/.env.local
@@ -92,7 +96,7 @@ Optional for local admin bootstrap:
 - Set `ADMIN_BOOTSTRAP_EMAIL_0=<your-email>` before `docker compose up`
 - Register/login that same email in the web app, then open `/admin`
 
-4. Run the web app:
+5. Run the web app:
 
 ```bash
 corepack pnpm web:dev
@@ -104,7 +108,7 @@ Local endpoints:
 - API: `http://localhost:8080`
 - API health: `http://localhost:8080/health/live`, `http://localhost:8080/health/ready`
 - Web admin UI: `http://localhost:3000/admin` (admin role required)
-- Hangfire break-glass portal: `http://localhost:8081`
+- Service log tooling (prod compose): Dozzle on `${DOZZLE_PORT}`
 - pgAdmin: `http://localhost:5050`
 
 ## Common Commands
@@ -113,6 +117,8 @@ From repo root:
 
 ```bash
 corepack pnpm backend:test
+corepack pnpm hooks:install
+corepack pnpm precommit:check
 corepack pnpm web:dev
 corepack pnpm web:test
 corepack pnpm web:lint
@@ -132,6 +138,11 @@ corepack pnpm api:check
 
 - `openapi/transcendence.v1.json`
 - `packages/api-client/src/schema.ts`
+
+Installed pre-commit hook behavior:
+- Runs `pnpm precommit:api-sync` only when staged files include API-relevant paths (`Transcendence.WebAPI/`, `Transcendence.Service.Core/`, `Transcendence.Data/`, `scripts/openapi/export.sh`, OpenAPI/client artifacts)
+- Regenerates OpenAPI/client artifacts and stages them when that condition is met
+- Runs `git diff --cached --check` to catch whitespace issues before commit
 
 ## Documentation
 

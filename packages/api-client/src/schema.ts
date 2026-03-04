@@ -220,6 +220,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/jobs/failed/{jobId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    jobId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AdminFailedJobDetailDto"];
+                        "application/json": components["schemas"]["AdminFailedJobDetailDto"];
+                        "text/json": components["schemas"]["AdminFailedJobDetailDto"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/jobs/failed/{jobId}/retry": {
         parameters: {
             query?: never;
@@ -354,6 +418,73 @@ export interface paths {
                         "text/plain": components["schemas"]["AdminAuditEntryDto"][];
                         "application/json": components["schemas"]["AdminAuditEntryDto"][];
                         "text/json": components["schemas"]["AdminAuditEntryDto"][];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/logs/services": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    service?: string;
+                    level?: string;
+                    q?: string;
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AdminServiceLogDto"][];
+                        "application/json": components["schemas"]["AdminServiceLogDto"][];
+                        "text/json": components["schemas"]["AdminServiceLogDto"][];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
                 /** @description Unauthorized */
@@ -2648,6 +2779,25 @@ export interface components {
             /** Format: date-time */
             createdAtUtc?: string;
         };
+        AdminFailedJobDetailDto: {
+            jobId?: string | null;
+            jobType?: string | null;
+            jobMethod?: string | null;
+            arguments?: string[] | null;
+            /** Format: date-time */
+            failedAtUtc?: string | null;
+            currentState?: string | null;
+            reason?: string | null;
+            exceptionType?: string | null;
+            exceptionMessage?: string | null;
+            exceptionDetails?: string | null;
+            /** Format: int32 */
+            failedCount?: number;
+            states?: components["schemas"]["AdminJobStateTransitionDto"][] | null;
+            properties?: {
+                [key: string]: string;
+            } | null;
+        };
         AdminFailedJobDto: {
             jobId?: string | null;
             reason?: string | null;
@@ -2655,6 +2805,15 @@ export interface components {
             exceptionMessage?: string | null;
             /** Format: date-time */
             failedAt?: string | null;
+        };
+        AdminJobStateTransitionDto: {
+            stateName?: string | null;
+            /** Format: date-time */
+            createdAtUtc?: string;
+            reason?: string | null;
+            data?: {
+                [key: string]: string;
+            } | null;
         };
         AdminOverviewResponse: {
             /** Format: date-time */
@@ -2692,6 +2851,17 @@ export interface components {
             lastJobId?: string | null;
             lastJobState?: string | null;
             error?: string | null;
+        };
+        AdminServiceLogDto: {
+            /** Format: date-time */
+            timestampUtc?: string;
+            service?: string | null;
+            level?: string | null;
+            category?: string | null;
+            /** Format: int32 */
+            eventId?: number;
+            message?: string | null;
+            exception?: string | null;
         };
         AnalyticsSampleMetadata: {
             sampleStatus?: components["schemas"]["AnalyticsSampleStatus"];

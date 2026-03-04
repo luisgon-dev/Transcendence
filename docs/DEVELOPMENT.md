@@ -25,7 +25,13 @@ docker compose up --build
 corepack pnpm install
 ```
 
-3. Configure the web app:
+3. Install repo Git hooks (recommended once per clone):
+
+```bash
+corepack pnpm hooks:install
+```
+
+4. Configure the web app:
 
 ```bash
 cp apps/web/.env.example apps/web/.env.local
@@ -44,7 +50,7 @@ Optional:
 - `TRN_BACKEND_TIMEOUT_MS=10000` (server-side backend timeout, milliseconds)
 - `TRN_ERROR_VERBOSITY=safe|verbose` (controls user-visible error detail from Next route handlers)
 
-4. Run the web app:
+5. Run the web app:
 
 ```bash
 corepack pnpm web:dev
@@ -100,11 +106,23 @@ Migration policy:
 ```bash
 dotnet run --project Transcendence.WebAPI
 dotnet run --project Transcendence.Service
-dotnet run --project Transcendence.WebAdminPortal
 ```
 
 Admin web UI runs in `apps/web` under `/admin` and requires an authenticated user with `admin` role.
+Admin diagnostics include `/admin/jobs` (including failed-job detail) and `/admin/logs` (service/webapi operational logs).
 `/api/auth/logout` revokes the active refresh token server-side and the web logout flow calls it before clearing cookies.
+
+### Operational Log Files
+
+`Transcendence.WebAPI` and `Transcendence.Service` both write structured operational log lines to files.
+
+- Config section: `OperationalLogs`
+- Keys:
+  - `OperationalLogs:ServiceName` (`webapi` or `service`)
+  - `OperationalLogs:DirectoryPath` (default `logs`)
+  - `OperationalLogs:MinLevel` (default `Information`)
+
+In Docker Compose (`docker-compose.yml` and `docker-compose.production.yml`), both services mount a shared `operational_logs` volume at `/var/log/transcendence` so admin APIs can read both log streams.
 
 ## Web Commands
 
@@ -112,6 +130,8 @@ From repo root:
 
 ```bash
 corepack pnpm backend:test
+corepack pnpm hooks:install
+corepack pnpm precommit:check
 corepack pnpm web:dev
 corepack pnpm web:test
 corepack pnpm web:lint
@@ -142,6 +162,10 @@ Source of truth: `openapi/transcendence.v1.json`
 corepack pnpm api:gen
 corepack pnpm api:check
 ```
+
+If hooks are installed (`corepack pnpm hooks:install`), pre-commit runs path-aware checks automatically before each commit:
+- `pnpm precommit:api-sync` runs only when staged files touch API-relevant paths (`Transcendence.WebAPI/`, `Transcendence.Service.Core/`, `Transcendence.Data/`, `scripts/openapi/export.sh`, OpenAPI/client artifacts), then stages regenerated artifacts.
+- `pnpm precommit:check` runs `git diff --cached --check` to catch staged whitespace issues.
 
 ## Background Job Tuning
 

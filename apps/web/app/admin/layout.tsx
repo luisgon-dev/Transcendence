@@ -5,6 +5,7 @@ import { requireAdminSession } from "@/lib/adminSession";
 const links = [
   { href: "/admin", label: "Overview" },
   { href: "/admin/jobs", label: "Jobs" },
+  { href: "/admin/logs", label: "Service Logs" },
   { href: "/admin/pro-summoners", label: "Pro Summoners" },
   { href: "/admin/api-keys", label: "API Keys" },
   { href: "/admin/audit", label: "Audit Log" }

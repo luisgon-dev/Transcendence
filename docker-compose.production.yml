@@ -75,6 +75,7 @@ services:
       Auth__Jwt__AccessTokenMinutes: ${JWT_ACCESS_TOKEN_MINUTES}
       Auth__AdminBootstrap__Emails__0: ${ADMIN_BOOTSTRAP_EMAIL_0:-}
       Auth__BootstrapApiKey: ${AUTH_BOOTSTRAP_API_KEY}
+      OperationalLogs__DirectoryPath: /var/log/transcendence
       <<: *app-env
     ports:
       - "${WEBAPI_PORT}:8080"
@@ -83,6 +84,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - operational_logs:/var/log/transcendence
     networks:
       - transcendence-net
 
@@ -93,31 +96,15 @@ services:
     restart: unless-stopped
     environment:
       DOTNET_ENVIRONMENT: Production
+      OperationalLogs__DirectoryPath: /var/log/transcendence
       <<: *app-env
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    networks:
-      - transcendence-net
-
-  webadmin:
-    image: ghcr.io/luisgon-dev/transcendence-webadminportal:main
-    pull_policy: always
-    container_name: transcendence-webadminportal
-    restart: unless-stopped
-    environment:
-      ASPNETCORE_ENVIRONMENT: Production
-      ASPNETCORE_URLS: http://+:8080
-      Hangfire__Dashboard__Username: ${HANGFIRE_DASHBOARD_USERNAME}
-      Hangfire__Dashboard__Password: ${HANGFIRE_DASHBOARD_PASSWORD}
-      ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
-    ports:
-      - "${WEBADMIN_PORT}:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
+    volumes:
+      - operational_logs:/var/log/transcendence
     networks:
       - transcendence-net
 
@@ -151,6 +138,7 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  operational_logs:
 
 networks:
   transcendence-net:

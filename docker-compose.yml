@@ -66,6 +66,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
       Auth__AdminBootstrap__Emails__0: ${ADMIN_BOOTSTRAP_EMAIL_0:-}
+      OperationalLogs__DirectoryPath: /var/log/transcendence
       <<: *app-env
     ports:
       - "8080:8080"
@@ -74,6 +75,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - operational_logs:/var/log/transcendence
 
   transcendence.service:
     image: transcendence.service
@@ -83,30 +86,18 @@ services:
     container_name: transcendence-service
     environment:
       DOTNET_ENVIRONMENT: Development
+      OperationalLogs__DirectoryPath: /var/log/transcendence
       <<: *app-env
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-
-  transcendence.webadminportal:
-    image: transcendence.webadminportal
-    build:
-      context: .
-      dockerfile: Transcendence.WebAdminPortal/Dockerfile
-    container_name: transcendence-webadminportal
-    environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ASPNETCORE_URLS: http://+:8080
-      <<: *app-env
-    ports:
-      - "8081:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
+    volumes:
+      - operational_logs:/var/log/transcendence
 
 volumes:
   postgres_data:
   redis_data:
   pgadmin_data:
+  operational_logs:

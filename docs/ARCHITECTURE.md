@@ -27,9 +27,6 @@ Transcendence is a backend + web monorepo:
 - EF Core DbContext + entities + repositories
 - PostgreSQL is the intended runtime database
 
-### `Transcendence.WebAdminPortal`
-- Private break-glass Hangfire dashboard host (not intended for public exposure)
-
 ### `apps/web` (Next.js)
 - App Router pages + route handlers used as a BFF:
   - `/api/session/*` for browser auth/session interactions
@@ -177,7 +174,15 @@ The web app never exposes backend tokens to browser JS:
 - Admin bootstrap can grant initial admin role from configured email allowlist (`Auth:AdminBootstrap:Emails`).
 - Admin mutating operations are rate-limited (`admin-write`) and audited (`AdminAuditEvents`).
 - Auth endpoints have dedicated rate limits for login/register/refresh/logout protection.
-- Raw Hangfire dashboard remains a private break-glass surface; public/admin UX should use the curated `/api/admin/*` endpoints and `/admin/*` UI.
+- Admin UX uses curated `/api/admin/*` endpoints and `/admin/*` pages, including:
+  - recurring/failed job controls
+  - failed-job detail with state history and exception details
+  - service operational log viewer (`webapi` and `service`)
+
+### Operational Logging
+
+- `Transcendence.WebAPI` and `Transcendence.Service` emit structured operational log entries to file via a shared logger provider.
+- In compose deployments, both hosts mount a shared `operational_logs` volume so `/api/admin/logs/services` can surface both streams from a single admin API.
 
 ## Caching
 

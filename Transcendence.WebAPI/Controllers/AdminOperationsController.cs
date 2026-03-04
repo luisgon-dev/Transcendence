@@ -1,13 +1,18 @@
 using System.Security.Claims;
+using System.Text;
+using System.Text.Json;
 using Hangfire;
 using Hangfire.Storage;
+using Hangfire.Storage.Monitoring;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Configuration;
 using Transcendence.Data;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Models;
+using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.WebAPI.Security;
 
 namespace Transcendence.WebAPI.Controllers;
@@ -17,10 +22,13 @@ namespace Transcendence.WebAPI.Controllers;
 [Authorize(Policy = AuthPolicies.AdminOnly)]
 public class AdminOperationsController(
     JobStorage jobStorage,
+    IConfiguration configuration,
     TranscendenceContext db,
     IChampionAnalyticsService analyticsService,
     IAdminAuditService adminAuditService) : ControllerBase
 {
+    private static readonly HashSet<string> AllowedServiceLogKeys = ["webapi", "service"];
+
     [HttpGet("overview")]
     [ProducesResponseType(typeof(AdminOverviewResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetOverview(CancellationToken ct)
@@ -121,6 +129,52 @@ public class AdminOperationsController(
         return Ok(failed);
     }
 
+    [HttpGet("jobs/failed/{jobId}")]
+    [ProducesResponseType(typeof(AdminFailedJobDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public IActionResult GetFailedJobDetail([FromRoute] string jobId)
+    {
+        if (string.IsNullOrWhiteSpace(jobId))
+            return NotFound();
+
+        var safeJobId = jobId.Trim();
+        var monitoring = jobStorage.GetMonitoringApi();
+        var details = monitoring.JobDetails(safeJobId);
+        if (details is null)
+            return NotFound(new { message = "Job not found.", jobId = safeJobId });
+
+        var history = details.History ?? [];
+        var states = history
+            .Select(MapStateTransition)
+            .OrderByDescending(x => x.CreatedAtUtc)
+            .ToList();
+
+        var failedState = states.FirstOrDefault(x => string.Equals(x.StateName, "Failed", StringComparison.OrdinalIgnoreCase));
+        var exceptionType = failedState?.Data.GetValueOrDefault("ExceptionType");
+        var exceptionMessage = failedState?.Data.GetValueOrDefault("ExceptionMessage");
+        var exceptionDetails = failedState?.Data.GetValueOrDefault("ExceptionDetails");
+
+        var dto = new AdminFailedJobDetailDto(
+            JobId: safeJobId,
+            JobType: details.Job?.Type?.FullName,
+            JobMethod: details.Job?.Method?.Name,
+            Arguments: details.Job?.Args?.Select(SafeSerialize).ToList() ?? [],
+            FailedAtUtc: failedState?.CreatedAtUtc,
+            CurrentState: states.FirstOrDefault()?.StateName,
+            Reason: failedState?.Reason,
+            ExceptionType: exceptionType,
+            ExceptionMessage: exceptionMessage,
+            ExceptionDetails: exceptionDetails,
+            FailedCount: states.Count(x => string.Equals(x.StateName, "Failed", StringComparison.OrdinalIgnoreCase)),
+            States: states,
+            Properties: details.Properties is null
+                ? new Dictionary<string, string>(StringComparer.Ordinal)
+                : new Dictionary<string, string>(details.Properties, StringComparer.Ordinal)
+        );
+
+        return Ok(dto);
+    }
+
     [HttpPost("jobs/failed/{jobId}/retry")]
     [EnableRateLimiting("admin-write")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -179,6 +233,62 @@ public class AdminOperationsController(
         return Ok(rows);
     }
 
+    [HttpGet("logs/services")]
+    [ProducesResponseType(typeof(IReadOnlyList<AdminServiceLogDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public IActionResult GetServiceLogs(
+        [FromQuery] string service = "service",
+        [FromQuery] string? level = null,
+        [FromQuery] string? q = null,
+        [FromQuery] int limit = 200)
+    {
+        var serviceKey = service.Trim().ToLowerInvariant();
+        if (!AllowedServiceLogKeys.Contains(serviceKey))
+        {
+            return BadRequest(new
+            {
+                message = "Unsupported service. Allowed values: webapi, service."
+            });
+        }
+
+        var safeLimit = Math.Clamp(limit, 1, 500);
+        var configuredDirectory = configuration["OperationalLogs:DirectoryPath"];
+        var directory = string.IsNullOrWhiteSpace(configuredDirectory)
+            ? Path.Combine(AppContext.BaseDirectory, "logs")
+            : configuredDirectory;
+        var path = Path.Combine(directory, $"{serviceKey}.log");
+
+        if (!System.IO.File.Exists(path))
+            return Ok(Array.Empty<AdminServiceLogDto>());
+
+        var normalizedLevel = string.IsNullOrWhiteSpace(level)
+            ? null
+            : level.Trim().ToUpperInvariant();
+        var search = string.IsNullOrWhiteSpace(q) ? null : q.Trim();
+
+        var entries = new List<AdminServiceLogDto>(safeLimit);
+        foreach (var line in ReadMostRecentLines(path, maxLines: 4000))
+        {
+            if (!TryParseOperationalLogLine(line, out var parsed))
+                continue;
+
+            if (normalizedLevel is not null && !string.Equals(parsed.Level, normalizedLevel, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (search is not null &&
+                !ContainsSearch(parsed.Message, search) &&
+                !ContainsSearch(parsed.Category, search) &&
+                !ContainsSearch(parsed.Exception, search))
+                continue;
+
+            entries.Add(parsed);
+            if (entries.Count >= safeLimit)
+                break;
+        }
+
+        return Ok(entries);
+    }
+
     private async Task WriteAuditAsync(
         string action,
         string? targetType,
@@ -206,6 +316,117 @@ public class AdminOperationsController(
     {
         var value = User.FindFirstValue(claimType);
         return Guid.TryParse(value, out var parsed) ? parsed : null;
+    }
+
+    private static string SafeSerialize(object? arg)
+    {
+        if (arg is null)
+            return "null";
+
+        try
+        {
+            return JsonSerializer.Serialize(arg);
+        }
+        catch
+        {
+            return arg.ToString() ?? "<unserializable>";
+        }
+    }
+
+    private static AdminJobStateTransitionDto MapStateTransition(StateHistoryDto state)
+    {
+        var data = state.Data ?? new Dictionary<string, string>(StringComparer.Ordinal);
+        return new AdminJobStateTransitionDto(
+            state.StateName,
+            state.CreatedAt,
+            state.Reason,
+            new Dictionary<string, string>(data, StringComparer.Ordinal));
+    }
+
+    private static IEnumerable<string> ReadMostRecentLines(string path, int maxLines)
+    {
+        if (maxLines <= 0)
+            return [];
+
+        var lines = new List<string>(maxLines);
+        var reversedLineBuffer = new List<byte>(1024);
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        if (stream.Length == 0)
+            return lines;
+
+        const int readBufferSize = 4096;
+        var readBuffer = new byte[readBufferSize];
+        var position = stream.Length;
+
+        while (position > 0 && lines.Count < maxLines)
+        {
+            var bytesToRead = (int)Math.Min(readBufferSize, position);
+            position -= bytesToRead;
+            stream.Seek(position, SeekOrigin.Begin);
+            var bytesRead = stream.Read(readBuffer, 0, bytesToRead);
+
+            for (var i = bytesRead - 1; i >= 0 && lines.Count < maxLines; i--)
+            {
+                var current = readBuffer[i];
+                if (current == (byte)'\n')
+                {
+                    AddLineFromReversedBytes(reversedLineBuffer, lines);
+                    continue;
+                }
+
+                reversedLineBuffer.Add(current);
+            }
+        }
+
+        if (lines.Count < maxLines)
+            AddLineFromReversedBytes(reversedLineBuffer, lines);
+
+        return lines;
+    }
+
+    private static void AddLineFromReversedBytes(List<byte> reversedBytes, List<string> lines)
+    {
+        if (reversedBytes.Count == 0)
+            return;
+
+        var lineBytes = reversedBytes.ToArray();
+        Array.Reverse(lineBytes);
+        reversedBytes.Clear();
+
+        var line = Encoding.UTF8.GetString(lineBytes).TrimEnd('\r');
+        if (line.Length > 0)
+            lines.Add(line);
+    }
+
+    private static bool TryParseOperationalLogLine(string line, out AdminServiceLogDto dto)
+    {
+        dto = default!;
+        try
+        {
+            var entry = JsonSerializer.Deserialize<OperationalLogEntry>(line);
+            if (entry is null)
+                return false;
+
+            dto = new AdminServiceLogDto(
+                entry.TimestampUtc,
+                entry.Service,
+                entry.Level,
+                entry.Category,
+                entry.EventId,
+                entry.Message,
+                entry.Exception);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool ContainsSearch(string? value, string search)
+    {
+        return !string.IsNullOrWhiteSpace(value) &&
+               value.Contains(search, StringComparison.OrdinalIgnoreCase);
     }
 }
 
@@ -240,4 +461,37 @@ public record AdminFailedJobDto(
     string? ExceptionType,
     string? ExceptionMessage,
     DateTime? FailedAt
+);
+
+public record AdminFailedJobDetailDto(
+    string JobId,
+    string? JobType,
+    string? JobMethod,
+    IReadOnlyList<string> Arguments,
+    DateTime? FailedAtUtc,
+    string? CurrentState,
+    string? Reason,
+    string? ExceptionType,
+    string? ExceptionMessage,
+    string? ExceptionDetails,
+    int FailedCount,
+    IReadOnlyList<AdminJobStateTransitionDto> States,
+    IReadOnlyDictionary<string, string> Properties
+);
+
+public record AdminJobStateTransitionDto(
+    string StateName,
+    DateTime CreatedAtUtc,
+    string? Reason,
+    IReadOnlyDictionary<string, string> Data
+);
+
+public record AdminServiceLogDto(
+    DateTime TimestampUtc,
+    string Service,
+    string Level,
+    string Category,
+    int EventId,
+    string? Message,
+    string? Exception
 );

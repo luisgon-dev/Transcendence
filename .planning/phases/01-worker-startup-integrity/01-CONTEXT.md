@@ -14,9 +14,9 @@ Harden worker startup integrity so required recurring jobs are verified before h
 ## Implementation Decisions
 
 ### Startup strictness and health gating
-- Startup should use a degraded startup path when required recurring job registration fails, rather than immediately crash or silently report healthy.
+- Startup must fail fast when required recurring job registration/verification cannot be established after bounded retries.
 - Health must only be reported green after required jobs are verified.
-- On transient startup dependency failures (Hangfire/DB), use bounded retries before declaring startup failure/degraded state.
+- On transient startup dependency failures (Hangfire/DB), use bounded retries before declaring mandatory startup failure.
 - Startup integrity failures must be surfaced through health checks and structured logs.
 
 ### Mandatory job policy

@@ -2,7 +2,7 @@
 phase: 1
 slug: worker-startup-integrity
 status: draft
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-03-04
 ---
@@ -19,18 +19,18 @@ created: 2026-03-04
 |----------|-------|
 | **Framework** | xUnit + Moq + FluentAssertions |
 | **Config file** | `tests/Transcendence.Service.Core.Tests/Transcendence.Service.Core.Tests.csproj` |
-| **Quick run command** | `dotnet test tests/Transcendence.Service.Core.Tests/Transcendence.Service.Core.Tests.csproj -c Release --filter "FullyQualifiedName~SummonerRefreshJobTests|FullyQualifiedName~ChampionAnalyticsIngestionJobRampTests"` |
+| **Quick run command** | `dotnet test tests/Transcendence.Service.Core.Tests/Transcendence.Service.Core.Tests.csproj -c Release --filter "FullyQualifiedName~WorkerSchedulingPolicy"` |
 | **Full suite command** | `corepack pnpm backend:test` |
-| **Estimated runtime** | ~180 seconds |
+| **Estimated runtime** | ~25 seconds (quick), ~180 seconds (full) |
 
 ---
 
 ## Sampling Rate
 
-- **After every task commit:** Run `dotnet test tests/Transcendence.Service.Core.Tests/Transcendence.Service.Core.Tests.csproj -c Release --filter "FullyQualifiedName~SummonerRefreshJobTests|FullyQualifiedName~ChampionAnalyticsIngestionJobRampTests"`
+- **After every task commit:** Run `dotnet test tests/Transcendence.Service.Core.Tests/Transcendence.Service.Core.Tests.csproj -c Release --filter "FullyQualifiedName~WorkerSchedulingPolicy"`
 - **After every plan wave:** Run `corepack pnpm backend:test`
 - **Before `$gsd-verify-work`:** Full suite must be green
-- **Max feedback latency:** 240 seconds
+- **Max feedback latency:** 30 seconds (quick), 240 seconds (full-wave gate)
 
 ---
 
@@ -73,7 +73,7 @@ created: 2026-03-04
 - [ ] Sampling continuity: no 3 consecutive tasks without automated verify
 - [ ] Wave 0 covers all MISSING references
 - [ ] No watch-mode flags
-- [ ] Feedback latency < 240s
+- [ ] Quick feedback latency < 30s
 - [ ] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** pending

@@ -30,6 +30,7 @@ public class SummonerRefreshJob(
     IOptions<TimelineIngestionOptions> timelineIngestionOptions) : ISummonerRefreshJob
 {
     private sealed record BackfillSyncResult(int PersistedCount, bool StoppedEarly, bool HadFetchFailure);
+    private static readonly TimeSpan LockReleaseTimeout = TimeSpan.FromSeconds(5);
 
     [Queue("refresh-high")]
     public async Task RefreshByRiotId(string gameName, string tagLine, PlatformRoute platformRoute, string lockKey,
@@ -121,9 +122,9 @@ public class SummonerRefreshJob(
         }
         finally
         {
-            await ReleaseLockSafeAsync(lockKey, ct, "[Refresh]");
+            await ReleaseLockSafeAsync(lockKey, "[Refresh]");
             if (!string.IsNullOrWhiteSpace(priorityLockKey))
-                await ReleaseLockSafeAsync(priorityLockKey, ct, "[Refresh]");
+                await ReleaseLockSafeAsync(priorityLockKey, "[Refresh]");
         }
     }
 
@@ -241,7 +242,7 @@ public class SummonerRefreshJob(
         }
         finally
         {
-            await ReleaseLockSafeAsync(lockKey, ct, "[AnalyticsRefresh]");
+            await ReleaseLockSafeAsync(lockKey, "[AnalyticsRefresh]");
         }
     }
 
@@ -600,11 +601,20 @@ public class SummonerRefreshJob(
         return Task.CompletedTask;
     }
 
-    private async Task ReleaseLockSafeAsync(string lockKey, CancellationToken ct, string operation)
+    private async Task ReleaseLockSafeAsync(string lockKey, string operation)
     {
+        using var releaseTimeoutCts = new CancellationTokenSource(LockReleaseTimeout);
         try
         {
-            await refreshLockRepository.ReleaseAsync(lockKey, ct);
+            await refreshLockRepository.ReleaseAsync(lockKey, releaseTimeoutCts.Token);
+        }
+        catch (OperationCanceledException) when (releaseTimeoutCts.IsCancellationRequested)
+        {
+            logger.LogWarning(
+                "{Operation} Timed out releasing refresh lock {LockKey} after {TimeoutSeconds}s",
+                operation,
+                lockKey,
+                LockReleaseTimeout.TotalSeconds);
         }
         catch (Exception ex)
         {

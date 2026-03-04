@@ -19,6 +19,8 @@ public class ChampionAnalyticsIngestionJob(
     IOptions<ChampionAnalyticsIngestionJobOptions> options,
     ILogger<ChampionAnalyticsIngestionJob> logger)
 {
+    private static readonly TimeSpan QueueFailureLockReleaseTimeout = TimeSpan.FromSeconds(5);
+
     private sealed record CandidateSummoner(
         string PlatformRegion,
         string GameName,
@@ -125,6 +127,7 @@ public class ChampionAnalyticsIngestionJob(
         var queued = 0;
         foreach (var candidate in candidates)
         {
+            ct.ThrowIfCancellationRequested();
             if (queued >= queuedTarget) break;
 
             if (jobOptions.PauseWhenApiPriorityRefreshActive &&
@@ -148,19 +151,26 @@ public class ChampionAnalyticsIngestionJob(
             }
 
             var lockKey = RefreshLockKeys.BuildSummonerRefreshKey(platform, candidate.GameName, candidate.TagLine);
+            ct.ThrowIfCancellationRequested();
             var acquired = await refreshLockRepository.TryAcquireAsync(lockKey, lockTtl, ct);
             if (!acquired) continue;
 
             try
             {
+                ct.ThrowIfCancellationRequested();
                 backgroundJobClient.Enqueue<ISummonerRefreshJob>(job =>
                     job.RefreshForAnalytics(candidate.GameName, candidate.TagLine, platform, lockKey,
                         patchStartEpoch, currentPatch, includeAllModes, CancellationToken.None));
                 queued++;
             }
+            catch (OperationCanceledException)
+            {
+                await ReleaseLockAfterQueueFailureAsync(lockKey);
+                throw;
+            }
             catch (Exception)
             {
-                await refreshLockRepository.ReleaseAsync(lockKey, ct);
+                await ReleaseLockAfterQueueFailureAsync(lockKey);
                 throw;
             }
         }
@@ -176,6 +186,28 @@ public class ChampionAnalyticsIngestionJob(
             includeAllModes,
             latestFetchAtUtc,
             isRampActive);
+    }
+
+    private async Task ReleaseLockAfterQueueFailureAsync(string lockKey)
+    {
+        using var releaseTimeoutCts = new CancellationTokenSource(QueueFailureLockReleaseTimeout);
+        try
+        {
+            await refreshLockRepository.ReleaseAsync(lockKey, releaseTimeoutCts.Token);
+        }
+        catch (OperationCanceledException) when (releaseTimeoutCts.IsCancellationRequested)
+        {
+            logger.LogWarning(
+                "Champion analytics ingestion timed out releasing refresh lock {LockKey} after queue failure (timeout {TimeoutSeconds}s).",
+                lockKey,
+                QueueFailureLockReleaseTimeout.TotalSeconds);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Champion analytics ingestion failed to release refresh lock {LockKey} after queue failure.",
+                lockKey);
+        }
     }
 
     private async Task<List<CandidateSummoner>> GetCandidatesAsync(

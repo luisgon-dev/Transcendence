@@ -32,6 +32,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Transcendence.Data\Transcendence.Data.csproj" />
+    <ProjectReference Include="..\..\Transcendence.Service\Transcendence.Service.csproj" />
     <ProjectReference Include="..\..\Transcendence.Service.Core\Transcendence.Service.Core.csproj" />
   </ItemGroup>
 

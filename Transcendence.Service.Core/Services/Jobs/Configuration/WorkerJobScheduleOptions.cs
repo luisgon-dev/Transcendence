@@ -24,4 +24,6 @@ public class WorkerJobScheduleOptions
     public bool EnableRuneSelectionIntegrityBackfill { get; set; } = true;
     public bool CleanupOnStartup { get; set; } = false;
     public bool RunPatchDetectionOnStartup { get; set; } = false;
+    public int StartupIntegrityMaxAttempts { get; set; } = 3;
+    public int StartupIntegrityRetryBackoffSeconds { get; set; } = 2;
 }

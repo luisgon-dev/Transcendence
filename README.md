@@ -73,7 +73,13 @@ docker compose up --build
 corepack pnpm install
 ```
 
-3. Configure the web app:
+3. Install repo Git hooks (recommended once per clone):
+
+```bash
+corepack pnpm hooks:install
+```
+
+4. Configure the web app:
 
 ```bash
 cp apps/web/.env.example apps/web/.env.local
@@ -90,7 +96,7 @@ Optional for local admin bootstrap:
 - Set `ADMIN_BOOTSTRAP_EMAIL_0=<your-email>` before `docker compose up`
 - Register/login that same email in the web app, then open `/admin`
 
-4. Run the web app:
+5. Run the web app:
 
 ```bash
 corepack pnpm web:dev
@@ -111,6 +117,8 @@ From repo root:
 
 ```bash
 corepack pnpm backend:test
+corepack pnpm hooks:install
+corepack pnpm precommit:check
 corepack pnpm web:dev
 corepack pnpm web:test
 corepack pnpm web:lint
@@ -130,6 +138,11 @@ corepack pnpm api:check
 
 - `openapi/transcendence.v1.json`
 - `packages/api-client/src/schema.ts`
+
+Installed pre-commit hook behavior:
+- Runs `pnpm precommit:api-sync` only when staged files include API-relevant paths (`Transcendence.WebAPI/`, `Transcendence.Service.Core/`, `Transcendence.Data/`, `scripts/openapi/export.sh`, OpenAPI/client artifacts)
+- Regenerates OpenAPI/client artifacts and stages them when that condition is met
+- Runs `git diff --cached --check` to catch whitespace issues before commit
 
 ## Documentation
 

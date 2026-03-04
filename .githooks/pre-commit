@@ -1,0 +1,38 @@
+#!/usr/bin/env sh
+set -eu
+
+echo "Running pre-commit checks..."
+
+run_pnpm_script() {
+  script_name="$1"
+
+  if command -v pnpm >/dev/null 2>&1 && pnpm --version >/dev/null 2>&1; then
+    pnpm "$script_name"
+    return 0
+  fi
+
+  if command -v corepack >/dev/null 2>&1 && corepack pnpm --version >/dev/null 2>&1; then
+    corepack pnpm "$script_name"
+    return 0
+  fi
+
+  if command -v powershell.exe >/dev/null 2>&1; then
+    powershell.exe -NoProfile -Command "corepack pnpm $script_name"
+    return 0
+  fi
+
+  echo "Unable to run pre-commit checks. Install pnpm/corepack and ensure it is on PATH."
+  return 1
+}
+
+STAGED_FILES="$(git diff --cached --name-only --diff-filter=ACMR)"
+API_PATTERN='^(Transcendence\.WebAPI/|Transcendence\.Service\.Core/|Transcendence\.Data/|openapi/transcendence\.v1\.json|packages/api-client/src/schema\.ts|scripts/openapi/export\.sh)$'
+
+if printf '%s\n' "$STAGED_FILES" | grep -Eq "$API_PATTERN"; then
+  echo "Detected API-relevant staged changes; refreshing OpenAPI/client artifacts."
+  run_pnpm_script precommit:api-sync
+else
+  echo "No API-relevant staged changes detected; skipping OpenAPI/client regeneration."
+fi
+
+run_pnpm_script precommit:check

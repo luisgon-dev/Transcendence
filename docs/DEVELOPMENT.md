@@ -25,7 +25,13 @@ docker compose up --build
 corepack pnpm install
 ```
 
-3. Configure the web app:
+3. Install repo Git hooks (recommended once per clone):
+
+```bash
+corepack pnpm hooks:install
+```
+
+4. Configure the web app:
 
 ```bash
 cp apps/web/.env.example apps/web/.env.local
@@ -44,7 +50,7 @@ Optional:
 - `TRN_BACKEND_TIMEOUT_MS=10000` (server-side backend timeout, milliseconds)
 - `TRN_ERROR_VERBOSITY=safe|verbose` (controls user-visible error detail from Next route handlers)
 
-4. Run the web app:
+5. Run the web app:
 
 ```bash
 corepack pnpm web:dev
@@ -124,6 +130,8 @@ From repo root:
 
 ```bash
 corepack pnpm backend:test
+corepack pnpm hooks:install
+corepack pnpm precommit:check
 corepack pnpm web:dev
 corepack pnpm web:test
 corepack pnpm web:lint
@@ -154,6 +162,10 @@ Source of truth: `openapi/transcendence.v1.json`
 corepack pnpm api:gen
 corepack pnpm api:check
 ```
+
+If hooks are installed (`corepack pnpm hooks:install`), pre-commit runs path-aware checks automatically before each commit:
+- `pnpm precommit:api-sync` runs only when staged files touch API-relevant paths (`Transcendence.WebAPI/`, `Transcendence.Service.Core/`, `Transcendence.Data/`, `scripts/openapi/export.sh`, OpenAPI/client artifacts), then stages regenerated artifacts.
+- `pnpm precommit:check` runs `git diff --cached --check` to catch staged whitespace issues.
 
 ## Background Job Tuning
 

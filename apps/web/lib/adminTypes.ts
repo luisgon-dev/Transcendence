@@ -29,6 +29,39 @@ export type AdminFailedJob = {
   failedAt: string | null;
 };
 
+export type AdminJobStateTransition = {
+  stateName: string;
+  createdAtUtc: string;
+  reason: string | null;
+  data: Record<string, string>;
+};
+
+export type AdminFailedJobDetail = {
+  jobId: string;
+  jobType: string | null;
+  jobMethod: string | null;
+  arguments: string[];
+  failedAtUtc: string | null;
+  currentState: string | null;
+  reason: string | null;
+  exceptionType: string | null;
+  exceptionMessage: string | null;
+  exceptionDetails: string | null;
+  failedCount: number;
+  states: AdminJobStateTransition[];
+  properties: Record<string, string>;
+};
+
+export type AdminServiceLog = {
+  timestampUtc: string;
+  service: string;
+  level: string;
+  category: string;
+  eventId: number;
+  message: string | null;
+  exception: string | null;
+};
+
 export type AdminAuditEntry = {
   id: string;
   actorUserAccountId: string | null;

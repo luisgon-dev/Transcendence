@@ -4,11 +4,13 @@ using Microsoft.EntityFrameworkCore;
 using Transcendence.Data;
 using Transcendence.Data.Extensions;
 using Transcendence.Service.Core.Services.Analytics.Models;
+using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Extensions;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Workers;
 
 var builder = Host.CreateApplicationBuilder(args);
+builder.Logging.AddOperationalFileLogger(builder.Configuration, defaultServiceName: "service");
 
 // Add services to the container.
 builder.Services.AddDbContextPool<TranscendenceContext>(options =>

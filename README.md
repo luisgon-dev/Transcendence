@@ -4,7 +4,6 @@ Transcendence is a monorepo for a League of Legends analytics stack:
 
 - `Transcendence.WebAPI`: ASP.NET Core Web API
 - `Transcendence.Service`: .NET worker running Hangfire jobs
-- `Transcendence.WebAdminPortal`: break-glass Hangfire dashboard host
 - `apps/web`: Next.js App Router frontend (SSR + BFF route handlers)
 - `Transcendence.Data` + `Transcendence.Service.Core`: data + domain/service layers
 - `openapi/transcendence.v1.json`: committed API contract
@@ -19,7 +18,7 @@ Transcendence is a monorepo for a League of Legends analytics stack:
   - summoner profile, refresh, and match history
   - champion analytics (tier list, win rates, builds, matchups, pro builds)
   - auth/session and API key management
-  - admin operations (jobs, cache invalidate, audit log, pro roster CRUD)
+  - admin operations (jobs, failed-job detail, service logs, cache invalidate, audit log, pro roster CRUD)
   - live game lookup and health checks
 - Hangfire recurring and queued job execution for ingestion, refresh, analytics, and backfills
 
@@ -55,7 +54,6 @@ The web app proxies backend calls through BFF-style route handlers under `apps/w
 | `Transcendence.Service` | Worker host + Hangfire server |
 | `Transcendence.Service.Core` | Domain/application services |
 | `Transcendence.Data` | EF Core DbContext, entities, repositories |
-| `Transcendence.WebAdminPortal` | Hangfire dashboard host |
 | `apps/web` | Next.js frontend + BFF routes |
 | `packages/api-client` | Generated TS API client artifacts |
 | `openapi` | Committed OpenAPI spec |
@@ -104,7 +102,7 @@ Local endpoints:
 - API: `http://localhost:8080`
 - API health: `http://localhost:8080/health/live`, `http://localhost:8080/health/ready`
 - Web admin UI: `http://localhost:3000/admin` (admin role required)
-- Hangfire break-glass portal: `http://localhost:8081`
+- Service log tooling (prod compose): Dozzle on `${DOZZLE_PORT}`
 - pgAdmin: `http://localhost:5050`
 
 ## Common Commands

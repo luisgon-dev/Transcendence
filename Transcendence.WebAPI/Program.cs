@@ -15,6 +15,7 @@ using Transcendence.Service.Core.Services.Auth.Implementations;
 using Transcendence.Service.Core.Services.Auth.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Models;
 using Transcendence.Service.Core.Services.Analytics.Models;
+using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Extensions;
 using Transcendence.Service.Core.Services.RiotApi.Implementations;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
@@ -22,6 +23,7 @@ using Transcendence.WebAPI.Errors;
 using Transcendence.WebAPI.Security;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Logging.AddOperationalFileLogger(builder.Configuration, defaultServiceName: "webapi");
 var requireJwtKeyInDevelopment = ParseBool(builder.Configuration["Auth:Jwt:RequireKeyInDevelopment"], false);
 var bootstrapApiKey = builder.Configuration["Auth:BootstrapApiKey"];
 var bootstrapApiKeyDevOnly = ParseBool(builder.Configuration["Auth:BootstrapApiKeyEnabledInDevelopmentOnly"], true);

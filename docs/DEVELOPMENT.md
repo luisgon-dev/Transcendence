@@ -100,11 +100,23 @@ Migration policy:
 ```bash
 dotnet run --project Transcendence.WebAPI
 dotnet run --project Transcendence.Service
-dotnet run --project Transcendence.WebAdminPortal
 ```
 
 Admin web UI runs in `apps/web` under `/admin` and requires an authenticated user with `admin` role.
+Admin diagnostics include `/admin/jobs` (including failed-job detail) and `/admin/logs` (service/webapi operational logs).
 `/api/auth/logout` revokes the active refresh token server-side and the web logout flow calls it before clearing cookies.
+
+### Operational Log Files
+
+`Transcendence.WebAPI` and `Transcendence.Service` both write structured operational log lines to files.
+
+- Config section: `OperationalLogs`
+- Keys:
+  - `OperationalLogs:ServiceName` (`webapi` or `service`)
+  - `OperationalLogs:DirectoryPath` (default `logs`)
+  - `OperationalLogs:MinLevel` (default `Information`)
+
+In Docker Compose (`docker-compose.yml` and `docker-compose.production.yml`), both services mount a shared `operational_logs` volume at `/var/log/transcendence` so admin APIs can read both log streams.
 
 ## Web Commands
 

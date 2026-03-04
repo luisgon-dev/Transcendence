@@ -169,9 +169,24 @@ Auth behavior notes:
 - `GET /api/admin/jobs/recurring`
 - `POST /api/admin/jobs/recurring/{id}/trigger`
 - `GET /api/admin/jobs/failed`
+- `GET /api/admin/jobs/failed/{jobId}`
 - `POST /api/admin/jobs/failed/{jobId}/retry`
 - `POST /api/admin/cache/invalidate`
 - `GET /api/admin/audit-log`
+- `GET /api/admin/logs/services`
+
+`GET /api/admin/jobs/failed/{jobId}` returns deep diagnostics for a job, including:
+- invocation type/method
+- serialized arguments
+- state history timeline
+- failed-at timestamp
+- exception type/message/details (when available)
+
+`GET /api/admin/logs/services` query params:
+- `service` (`webapi` or `service`)
+- `level` (optional; e.g. `ERROR`, `WARNING`, `INFORMATION`)
+- `q` (optional case-insensitive search over category/message/exception)
+- `limit` (optional; min `1`, max `500`)
 
 ### Pro Roster Admin (`AdminOnly`)
 

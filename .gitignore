@@ -395,3 +395,4 @@ FodyWeavers.xsd
 .env.production
 .env.production.local
 apps/web/.env
+.worktrees/

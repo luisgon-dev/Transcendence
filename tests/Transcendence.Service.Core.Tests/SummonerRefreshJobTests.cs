@@ -62,6 +62,58 @@ public class SummonerRefreshJobTests
     }
 
     [Fact]
+    public async Task RefreshByRiotId_PropagatesCancellationAndStillReleasesLocks()
+    {
+        await using var harness = await SummonerRefreshJobHarness.CreateAsync();
+        var summoner = harness.SeedSummoner("name", "tag", "puuid-cancel");
+        await harness.Db.SaveChangesAsync();
+
+        using var cts = new CancellationTokenSource();
+
+        harness.SummonerService
+            .Setup(x => x.GetSummonerByRiotIdAsync("name", "tag", PlatformRoute.NA1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(summoner);
+
+        harness.SummonerRepository
+            .Setup(x => x.AddOrUpdateSummonerAsync(summoner, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(summoner);
+
+        harness.RiotMatchIdsClient
+            .Setup(x => x.GetMatchIdsByPuuidAsync(
+                It.IsAny<RegionalRoute>(),
+                "puuid-cancel",
+                It.IsAny<int>(),
+                It.IsAny<long?>(),
+                It.IsAny<Queue?>(),
+                It.IsAny<long?>(),
+                It.IsAny<int>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(["NA1_cancel_1"]);
+
+        harness.MatchService
+            .Setup(x => x.GetMatchDetailsAsync(
+                "NA1_cancel_1",
+                It.IsAny<RegionalRoute>(),
+                PlatformRoute.NA1,
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException(cts.Token));
+
+        Func<Task> act = async () => await harness.Job.RefreshByRiotId(
+            "name",
+            "tag",
+            PlatformRoute.NA1,
+            "lock:main",
+            "lock:priority",
+            cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        harness.RefreshLockRepository.Verify(x => x.ReleaseAsync("lock:main", It.IsAny<CancellationToken>()), Times.Once);
+        harness.RefreshLockRepository.Verify(x => x.ReleaseAsync("lock:priority", It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task RefreshForAnalytics_ExitsEarly_WhenApiPriorityDemandIsActive()
     {
         await using var harness = await SummonerRefreshJobHarness.CreateAsync();

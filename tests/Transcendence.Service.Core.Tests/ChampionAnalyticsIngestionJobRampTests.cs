@@ -51,6 +51,35 @@ public class ChampionAnalyticsIngestionJobRampTests
             Times.AtLeast(6));
     }
 
+    [Fact]
+    public async Task ExecuteRampAsync_WhenCancellationIsSignaledAfterLockAcquire_DoesNotEnqueueAdditionalRefreshJobs()
+    {
+        await using var harness = await Harness.CreateAsync();
+        harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        harness.SeedSummoner("RampCancel", "NA1");
+        await harness.Db.SaveChangesAsync();
+
+        using var cts = new CancellationTokenSource();
+
+        harness.RefreshLockRepository
+            .Setup(x => x.TryAcquireAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .Returns(() =>
+            {
+                cts.Cancel();
+                return Task.FromResult(true);
+            });
+
+        Func<Task> act = async () => await harness.Job.ExecuteRampAsync(cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        harness.BackgroundJobClient.Verify(
+            x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()),
+            Times.Never);
+        harness.RefreshLockRepository.Verify(
+            x => x.ReleaseAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
@@ -59,17 +88,20 @@ public class ChampionAnalyticsIngestionJobRampTests
             SqliteConnection connection,
             TestSqliteTranscendenceContext db,
             ChampionAnalyticsIngestionJob job,
-            Mock<IBackgroundJobClient> backgroundJobClient)
+            Mock<IBackgroundJobClient> backgroundJobClient,
+            Mock<IRefreshLockRepository> refreshLockRepository)
         {
             _connection = connection;
             Db = db;
             Job = job;
             BackgroundJobClient = backgroundJobClient;
+            RefreshLockRepository = refreshLockRepository;
         }
 
         public TestSqliteTranscendenceContext Db { get; }
         public ChampionAnalyticsIngestionJob Job { get; }
         public Mock<IBackgroundJobClient> BackgroundJobClient { get; }
+        public Mock<IRefreshLockRepository> RefreshLockRepository { get; }
 
         public static async Task<Harness> CreateAsync()
         {
@@ -122,7 +154,7 @@ public class ChampionAnalyticsIngestionJobRampTests
                 }),
                 Mock.Of<ILogger<ChampionAnalyticsIngestionJob>>());
 
-            return new Harness(connection, db, job, backgroundJobs);
+            return new Harness(connection, db, job, backgroundJobs, refreshLocks);
         }
 
         public void SeedActivePatch(string version, DateTime releaseUtc)

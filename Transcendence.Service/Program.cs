@@ -8,6 +8,7 @@ using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Extensions;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Workers;
+using Transcendence.Service.Workers.Startup;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Logging.AddOperationalFileLogger(builder.Configuration, defaultServiceName: "service");
@@ -69,6 +70,8 @@ builder.Services.Configure<RuneSelectionIntegrityBackfillJobOptions>(
 builder.Services.Configure<SummonerBootstrapOptions>(builder.Configuration.GetSection("Jobs:SummonerBootstrap"));
 builder.Services.Configure<ChampionAnalyticsComputeOptions>(builder.Configuration.GetSection("Analytics:Compute"));
 builder.Services.AddSingleton<IWorkerRecurringJobPolicy, WorkerRecurringJobPolicy>();
+builder.Services.AddSingleton<WorkerStartupIntegrityState>();
+builder.Services.AddSingleton<IWorkerStartupIntegrityService, WorkerStartupIntegrityService>();
 
 // worker that initiates services
 if (builder.Environment.IsDevelopment())

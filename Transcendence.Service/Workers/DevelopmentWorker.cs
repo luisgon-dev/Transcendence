@@ -2,6 +2,7 @@ using Hangfire;
 using Microsoft.Extensions.Options;
 using Transcendence.Service.Core.Services.Extensions;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
+using Transcendence.Service.Workers.Startup;
 
 namespace Transcendence.Service.Workers;
 
@@ -9,11 +10,11 @@ public class DevelopmentWorker(
     JobStorage jobStorage,
     IOptions<WorkerJobScheduleOptions> options,
     IWorkerRecurringJobPolicy recurringJobPolicy,
-    IRecurringJobManager recurringJobManager,
+    IWorkerStartupIntegrityService startupIntegrityService,
     ILogger<DevelopmentWorker> logger)
     : BackgroundService
 {
-    protected override Task ExecuteAsync(CancellationToken stoppingToken)
+    public override async Task StartAsync(CancellationToken cancellationToken)
     {
         TryRemoveInvalidRecurringJobs();
 
@@ -22,35 +23,37 @@ public class DevelopmentWorker(
             TryCleanupHangfireJobs();
 
         var profileName = recurringJobPolicy.ResolveProfile(schedule);
-        var descriptors = recurringJobPolicy.BuildDescriptors(schedule);
-
-        foreach (var descriptor in descriptors)
-        {
-            if (descriptor.IsEnabled)
-            {
-                TryConfigureRecurringJob(
-                    descriptor.JobId,
-                    descriptor.CronExpression,
-                    () => descriptor.Apply(recurringJobManager));
-            }
-            else
-            {
-                TryRemoveRecurringJob(descriptor.JobId);
-            }
-        }
-
-        var configuredJobs = string.Join(
-            ", ",
-            descriptors.Select(descriptor =>
-                $"{descriptor.JobId}={(descriptor.IsEnabled ? descriptor.CronExpression : "disabled")}"));
+        var startupResult = await startupIntegrityService.EvaluateAsync(cancellationToken);
 
         logger.LogInformation(
-            "Development worker configured recurring jobs with profile {Profile}: {ConfiguredJobs}",
+            "Startup integrity summary for development profile {Profile}: status={Status}, attempt={Attempt}/{MaxAttempts}, mandatoryVerified={VerifiedMandatoryCount}, mandatoryFailures={MandatoryFailureCount}, optionalFailures={OptionalFailureCount}.",
             profileName,
-            configuredJobs);
+            startupResult.Status,
+            startupResult.Attempt,
+            startupResult.MaxAttempts,
+            startupResult.VerifiedMandatoryJobIds.Count,
+            startupResult.MandatoryFailures.Count,
+            startupResult.OptionalFailures.Count);
 
-        return Task.CompletedTask;
+        if (startupResult.OptionalFailures.Count > 0)
+        {
+            logger.LogWarning(
+                "Startup integrity optional failures for development profile {Profile}: {OptionalFailures}",
+                profileName,
+                string.Join("; ", startupResult.OptionalFailures));
+        }
+
+        if (startupResult.Status == WorkerStartupIntegrityStatus.FailFast)
+        {
+            throw new InvalidOperationException(
+                $"Development worker startup integrity failed mandatory verification after attempt {startupResult.Attempt}/{startupResult.MaxAttempts}. " +
+                $"Failures: {string.Join("; ", startupResult.MandatoryFailures)}");
+        }
+
+        await base.StartAsync(cancellationToken);
     }
+
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) => Task.CompletedTask;
 
     private void CleanupHangfireJobs()
     {
@@ -98,36 +101,6 @@ public class DevelopmentWorker(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to clean Hangfire jobs during startup. Continuing startup.");
-        }
-    }
-
-    private void TryConfigureRecurringJob(string jobId, string cronExpression, Action configure)
-    {
-        try
-        {
-            configure();
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex,
-                "Failed to configure recurring job {RecurringJobId} with cron {CronExpression}. Continuing startup.",
-                jobId,
-                cronExpression);
-            TryRemoveRecurringJob(jobId);
-        }
-    }
-
-    private void TryRemoveRecurringJob(string jobId)
-    {
-        try
-        {
-            RecurringJob.RemoveIfExists(jobId);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex,
-                "Failed to remove recurring job {RecurringJobId}. Continuing startup.",
-                jobId);
         }
     }
 }

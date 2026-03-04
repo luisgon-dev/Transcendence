@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using Transcendence.Service.Core.Services.Extensions;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
+using Transcendence.Service.Workers.Startup;
 
 namespace Transcendence.Service.Workers;
 
@@ -12,9 +13,9 @@ public class ProductionWorker(
     JobStorage jobStorage,
     IOptions<WorkerJobScheduleOptions> options,
     IWorkerRecurringJobPolicy recurringJobPolicy,
-    IRecurringJobManager recurringJobManager) : BackgroundService
+    IWorkerStartupIntegrityService startupIntegrityService) : BackgroundService
 {
-    public override Task StartAsync(CancellationToken cancellationToken)
+    public override async Task StartAsync(CancellationToken cancellationToken)
     {
         var schedule = options.Value;
         if (schedule.CleanupOnStartup)
@@ -24,24 +25,20 @@ public class ProductionWorker(
 
         var profileName = recurringJobPolicy.ResolveProfile(schedule);
         var descriptors = recurringJobPolicy.BuildDescriptors(schedule);
+        var startupResult = await startupIntegrityService.EvaluateAsync(cancellationToken);
+
+        LogStartupIntegritySummary(profileName, startupResult);
+
+        if (startupResult.Status == WorkerStartupIntegrityStatus.FailFast)
+        {
+            throw new InvalidOperationException(
+                $"Worker startup integrity failed mandatory verification after attempt {startupResult.Attempt}/{startupResult.MaxAttempts}. " +
+                $"Failures: {string.Join("; ", startupResult.MandatoryFailures)}");
+        }
+
         var descriptorsById = descriptors.ToDictionary(
             descriptor => descriptor.JobId,
             StringComparer.OrdinalIgnoreCase);
-
-        foreach (var descriptor in descriptors)
-        {
-            if (descriptor.IsEnabled)
-            {
-                TryConfigureRecurringJob(
-                    descriptor.JobId,
-                    descriptor.CronExpression,
-                    () => descriptor.Apply(recurringJobManager));
-            }
-            else
-            {
-                TryRemoveRecurringJob(descriptor.JobId);
-            }
-        }
 
         var configuredJobs = string.Join(
             ", ",
@@ -68,7 +65,7 @@ public class ProductionWorker(
                 "startup-match-timeline-backfill",
                 () => backgroundJobClient.Enqueue<MatchTimelineBackfillJob>(job => job.ExecuteAsync(CancellationToken.None)));
 
-        return base.StartAsync(cancellationToken);
+        await base.StartAsync(cancellationToken);
     }
 
     private void EnqueueStartupAnalyticsBootstrap(
@@ -164,6 +161,27 @@ public class ProductionWorker(
         string recurringJobId) =>
         descriptorsById.TryGetValue(recurringJobId, out var descriptor) && descriptor.IsEnabled;
 
+    private void LogStartupIntegritySummary(string profileName, WorkerStartupIntegrityResult startupResult)
+    {
+        logger.LogInformation(
+            "Startup integrity summary for profile {Profile}: status={Status}, attempt={Attempt}/{MaxAttempts}, mandatoryVerified={VerifiedMandatoryCount}, mandatoryFailures={MandatoryFailureCount}, optionalFailures={OptionalFailureCount}.",
+            profileName,
+            startupResult.Status,
+            startupResult.Attempt,
+            startupResult.MaxAttempts,
+            startupResult.VerifiedMandatoryJobIds.Count,
+            startupResult.MandatoryFailures.Count,
+            startupResult.OptionalFailures.Count);
+
+        if (startupResult.OptionalFailures.Count > 0)
+        {
+            logger.LogWarning(
+                "Startup integrity optional failures for profile {Profile}: {OptionalFailures}",
+                profileName,
+                string.Join("; ", startupResult.OptionalFailures));
+        }
+    }
+
     private void TryRemoveInvalidRecurringJobs()
     {
         try
@@ -199,36 +217,6 @@ public class ProductionWorker(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to clean Hangfire jobs during startup. Continuing startup.");
-        }
-    }
-
-    private void TryConfigureRecurringJob(string jobId, string cronExpression, Action configure)
-    {
-        try
-        {
-            configure();
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex,
-                "Failed to configure recurring job {RecurringJobId} with cron {CronExpression}. Continuing startup.",
-                jobId,
-                cronExpression);
-            TryRemoveRecurringJob(jobId);
-        }
-    }
-
-    private void TryRemoveRecurringJob(string jobId)
-    {
-        try
-        {
-            RecurringJob.RemoveIfExists(jobId);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex,
-                "Failed to remove recurring job {RecurringJobId}. Continuing startup.",
-                jobId);
         }
     }
 

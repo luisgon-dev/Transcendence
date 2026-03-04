@@ -1,6 +1,6 @@
 ---
 phase: 01-worker-startup-integrity
-status: human_needed
+status: passed
 verified_on: 2026-03-04
 verifier: codex
 requirements_checked:
@@ -15,7 +15,7 @@ requirements_checked:
 ## Verdict
 
 Phase 01 implementation matches the required code-level contracts for `WORK-01..WORK-04`, and targeted automated tests pass.
-Final status is `human_needed` because runtime/deploy transition checks listed as manual-only in `01-VALIDATION.md` have not been executed in this verification pass.
+Manual verification items were explicitly approved by the user on 2026-03-04.
 
 ## Requirement ID Accounting
 
@@ -95,14 +95,14 @@ Observed result:
 
 ## Remaining Human Verification Needed
 
-The following runtime checks remain manual-only and were not executed in this pass:
+The following runtime checks are manual-only and were not executed in this pass:
 
 - Hosted-service startup behavior during real Hangfire/storage startup races (`.planning/phases/01-worker-startup-integrity/01-VALIDATION.md:65`)
 - Deployment shutdown cancellation behavior with in-flight jobs (`.planning/phases/01-worker-startup-integrity/01-VALIDATION.md:66`)
 
 ## Final Status
 
-`human_needed`:
+`passed`:
 
 - All phase requirement IDs and must_haves are accounted for and implemented with passing automated evidence.
-- Production-like runtime/deploy transition checks still require human-operated validation to fully close phase sign-off.
+- Manual-only runtime/deploy transition checks were user-approved for phase sign-off on 2026-03-04.

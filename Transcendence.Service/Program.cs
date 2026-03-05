@@ -66,6 +66,8 @@ builder.Services.Configure<ChampionAnalyticsIngestionJobOptions>(
 builder.Services.Configure<SummonerMaintenanceJobOptions>(builder.Configuration.GetSection("Jobs:SummonerMaintenance"));
 builder.Services.Configure<AdaptiveThroughputBudgetOptions>(
     builder.Configuration.GetSection("Jobs:AdaptiveThroughputBudget"));
+builder.Services.Configure<StarvationGuardrailOptions>(
+    builder.Configuration.GetSection("Jobs:StarvationGuardrail"));
 builder.Services.Configure<IngestionPriorityPolicyOptions>(
     builder.Configuration.GetSection("Jobs:IngestionPriorityPolicy"));
 builder.Services.Configure<MatchIngestionOptions>(builder.Configuration.GetSection("Jobs:MatchIngestion"));
@@ -78,6 +80,7 @@ builder.Services.AddSingleton<IWorkerRecurringJobPolicy, WorkerRecurringJobPolic
 builder.Services.AddSingleton<WorkerStartupIntegrityState>();
 builder.Services.AddSingleton<IWorkerStartupIntegrityService, WorkerStartupIntegrityService>();
 builder.Services.AddSingleton<IAdaptiveThroughputBudgetPolicy, AdaptiveThroughputBudgetPolicy>();
+builder.Services.AddSingleton<IStarvationGuardrailPolicy, StarvationGuardrailPolicy>();
 
 // worker that initiates services
 if (builder.Environment.IsDevelopment())

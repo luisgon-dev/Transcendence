@@ -173,11 +173,20 @@ public class ChampionAnalyticsIngestionJobRampTests
                 LockedUntilUtc = DateTime.UtcNow.AddMinutes(5)
             });
 
+        var queuedJobs = new List<Job>();
+        harness.BackgroundJobClient
+            .Setup(x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()))
+            .Callback<Job, IState>((job, _) => queuedJobs.Add(job))
+            .Returns("job-1");
+
         await harness.Job.ExecuteRampAsync(CancellationToken.None);
 
         harness.BackgroundJobClient.Verify(
             x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()),
             Times.Once);
+        queuedJobs.Should().ContainSingle();
+        queuedJobs[0].Args[3].Should().BeOfType<string>()
+            .Which.Should().EndWith("|forced-catch-up");
     }
 
     [Fact]

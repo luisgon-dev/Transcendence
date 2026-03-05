@@ -32,6 +32,8 @@ bld/
 [Oo]ut/
 [Ll]og/
 [Ll]ogs/
+**/[Bb]in\\*/
+**/[Oo]bj\\*/
 !apps/web/app/admin/logs/
 !apps/web/app/admin/logs/**
 

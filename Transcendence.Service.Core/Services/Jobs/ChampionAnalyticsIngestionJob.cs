@@ -259,7 +259,8 @@ public class ChampionAnalyticsIngestionJob(
             {
                 ct.ThrowIfCancellationRequested();
                 backgroundJobClient.Enqueue<ISummonerRefreshJob>(job =>
-                    job.RefreshForAnalytics(candidate.GameName, candidate.TagLine, platform, lockKey,
+                    job.RefreshForAnalytics(candidate.GameName, candidate.TagLine, platform,
+                        SummonerRefreshJob.BuildAnalyticsExecutionLockKey(lockKey, forcedCatchUpActive),
                         patchStartEpoch, currentPatch, includeAllModes, CancellationToken.None));
                 queued++;
             }

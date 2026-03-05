@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_plan: 4
-status: verifying
-stopped_at: Completed 03-priority-ingestion-throughput-04-PLAN.md
-last_updated: "2026-03-05T19:53:20.826Z"
+current_plan: Not started
+status: planning
+stopped_at: Completed 03-priority-ingestion-throughput-05-PLAN.md
+last_updated: "2026-03-05T21:17:13.493Z"
 last_activity: 2026-03-05
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 13
-  completed_plans: 13
-  percent: 100
+  total_plans: 14
+  completed_plans: 14
+  percent: 60
 ---
 
 # Project State
@@ -22,34 +22,36 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-04)
 
 **Core value:** Users should see relevant, patch-current statistics quickly and reliably, even when upstream API capacity is constrained.
-**Current focus:** Phase 3 - Priority Ingestion Throughput
+**Current focus:** Phase 4 - Deterministic Freshness Contract
 
 ## Current Position
 
-**Phase:** 3 of 5 (Priority Ingestion Throughput)
-**Current Plan:** 4
-**Total Plans in Phase:** 4
-**Status:** Phase complete — ready for verification
+**Phase:** 4 of 5 (Deterministic Freshness Contract)
+**Current Plan:** Not started
+**Total Plans in Phase:** TBD
+**Status:** Ready to plan
 **Last Activity:** 2026-03-05
 
-Progress: [██████████] 100%
+Progress: [██████░░░░] 60%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: 9 min
-- Total execution time: 0.5 hours
+- Total plans completed: 14
+- Average duration: 14 min
+- Total execution time: 3.3 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 01-worker-startup-integrity | 3 | 27 min | 9 min |
+| 02-refresh-lock-lifecycle-control | 6 | 84 min | 14 min |
+| 03-priority-ingestion-throughput | 5 | 84 min | 17 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01, 01-02, 01-03
-- Trend: Improving
+- Last 5 plans: 03-01, 03-02, 03-03, 03-04, 03-05
+- Trend: Stable
 
 *Updated after each plan completion*
 | Phase 01-worker-startup-integrity P01 | 7min | 3 tasks | 8 files |
@@ -65,6 +67,7 @@ Progress: [██████████] 100%
 | Phase 03-priority-ingestion-throughput P02 | 12min | 3 tasks | 11 files |
 | Phase 03-priority-ingestion-throughput P03 | 12min | 3 tasks | 12 files |
 | Phase 03-priority-ingestion-throughput P04 | 15 min | 3 tasks | 12 files |
+| Phase 03-priority-ingestion-throughput P05 | 36 min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -108,6 +111,7 @@ Recent decisions affecting current work:
 - [Phase 03-priority-ingestion-throughput]: Throughput telemetry uses non-blocking emission and cannot block ingestion execution.
 - [Phase 03-priority-ingestion-throughput]: Low-priority producers emit queue-output outcomes on skip, preemption, and completion paths for operator diagnostics.
 - [Phase 03-priority-ingestion-throughput]: Regression coverage keeps manual refresh all-mode behavior protected while adaptive and guardrail policies evolve.
+- [Phase 03-priority-ingestion-throughput]: Forced catch-up execution context is propagated through a marked refresh lock key so only guardrail-authorized low-priority work bypasses API-priority executor preemption.
 
 ### Pending Todos
 
@@ -119,6 +123,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-05T19:52:24.517Z
-Stopped at: Completed 03-priority-ingestion-throughput-04-PLAN.md
+Last session: 2026-03-05T21:17:13.493Z
+Stopped at: Completed 03-priority-ingestion-throughput-05-PLAN.md
 Resume file: None

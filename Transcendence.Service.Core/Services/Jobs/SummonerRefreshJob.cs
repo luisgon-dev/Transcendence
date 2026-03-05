@@ -32,7 +32,17 @@ public class SummonerRefreshJob(
     IRefreshLockLifecycleTelemetry? lockTelemetry = null) : ISummonerRefreshJob
 {
     private sealed record BackfillSyncResult(int PersistedCount, bool StoppedEarly, bool HadFetchFailure);
+    private sealed record AnalyticsExecutionContext(string LockKey, bool AllowForcedCatchUpExecution);
+
     private static readonly TimeSpan LockReleaseTimeout = TimeSpan.FromSeconds(5);
+    private const string ForcedCatchUpExecutionSuffix = "|forced-catch-up";
+
+    internal static string BuildAnalyticsExecutionLockKey(string lockKey, bool allowForcedCatchUpExecution)
+    {
+        return allowForcedCatchUpExecution
+            ? $"{lockKey}{ForcedCatchUpExecutionSuffix}"
+            : lockKey;
+    }
 
     [Queue("refresh-high")]
     public async Task RefreshByRiotId(string gameName, string tagLine, PlatformRoute platformRoute, string lockKey,
@@ -134,10 +144,12 @@ public class SummonerRefreshJob(
     public async Task RefreshForAnalytics(string gameName, string tagLine, PlatformRoute platformRoute, string lockKey,
         long startTimeEpochSeconds, string currentPatch, bool includeAllModes, CancellationToken ct = default)
     {
+        var executionContext = ParseAnalyticsExecutionContext(lockKey);
         try
         {
             ct.ThrowIfCancellationRequested();
-            if (await refreshLockRepository.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, ct))
+            if (!executionContext.AllowForcedCatchUpExecution &&
+                await refreshLockRepository.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, ct))
             {
                 logger.LogInformation(
                     "[AnalyticsRefresh] Skipping {GameName}#{Tag} because high-priority API refresh demand is active.",
@@ -166,6 +178,9 @@ public class SummonerRefreshJob(
 
             async Task<bool> ShouldStopAsync()
             {
+                if (executionContext.AllowForcedCatchUpExecution)
+                    return false;
+
                 return await refreshLockRepository.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, ct);
             }
 
@@ -249,8 +264,18 @@ public class SummonerRefreshJob(
         }
         finally
         {
-            await ReleaseLockSafeAsync(lockKey, "[AnalyticsRefresh]");
+            await ReleaseLockSafeAsync(executionContext.LockKey, "[AnalyticsRefresh]");
         }
+    }
+
+    private static AnalyticsExecutionContext ParseAnalyticsExecutionContext(string lockKey)
+    {
+        if (lockKey.EndsWith(ForcedCatchUpExecutionSuffix, StringComparison.Ordinal))
+            return new AnalyticsExecutionContext(
+                lockKey[..^ForcedCatchUpExecutionSuffix.Length],
+                AllowForcedCatchUpExecution: true);
+
+        return new AnalyticsExecutionContext(lockKey, AllowForcedCatchUpExecution: false);
     }
 
     private async Task<int> SyncMatchWindowAsync(

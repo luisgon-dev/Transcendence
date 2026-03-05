@@ -179,6 +179,65 @@ public class SummonerRefreshJobTests
     }
 
     [Fact]
+    public async Task RefreshForAnalytics_WhenForcedCatchUpExecutionIsMarked_MakesProgressDespiteApiPriorityDemand()
+    {
+        await using var harness = await SummonerRefreshJobHarness.CreateAsync();
+        var summoner = harness.SeedSummoner("name", "tag", "puuid-forced-catchup");
+        await harness.Db.SaveChangesAsync();
+        var previousUpdatedAt = summoner.UpdatedAt;
+
+        harness.RefreshLockRepository
+            .Setup(x => x.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        harness.SummonerRepository
+            .Setup(x => x.FindByRiotIdAsync(
+                "NA1",
+                "name",
+                "tag",
+                It.IsAny<Func<IQueryable<Summoner>, IQueryable<Summoner>>?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(summoner);
+
+        harness.RiotMatchIdsClient
+            .Setup(x => x.GetMatchIdsByPuuidAsync(
+                It.IsAny<RegionalRoute>(),
+                "puuid-forced-catchup",
+                It.IsAny<int>(),
+                It.IsAny<long?>(),
+                It.IsAny<Queue?>(),
+                It.IsAny<long?>(),
+                It.IsAny<int>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(["NA1_ranked_forced"]);
+
+        harness.MatchService
+            .Setup(x => x.GetMatchDetailsLightweightAsync(
+                "NA1_ranked_forced",
+                It.IsAny<RegionalRoute>(),
+                PlatformRoute.NA1,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildMatch("NA1_ranked_forced", QueueCatalog.RankedSoloDuoQueueId));
+
+        await harness.Job.RefreshForAnalytics(
+            "name",
+            "tag",
+            PlatformRoute.NA1,
+            "lock:low|forced-catch-up",
+            startTimeEpochSeconds: 0,
+            currentPatch: "14.2",
+            includeAllModes: false);
+
+        harness.Db.Matches.Should().ContainSingle(m => m.MatchId == "NA1_ranked_forced");
+        summoner.UpdatedAt.Should().BeAfter(previousUpdatedAt);
+        harness.RefreshLockRepository.Verify(x => x.ReleaseAsync("lock:low", It.IsAny<CancellationToken>()), Times.Once);
+        harness.RefreshLockRepository.Verify(
+            x => x.ReleaseAsync("lock:low|forced-catch-up", It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task RefreshForAnalytics_Skips_WhenSummonerIsMissing()
     {
         await using var harness = await SummonerRefreshJobHarness.CreateAsync();

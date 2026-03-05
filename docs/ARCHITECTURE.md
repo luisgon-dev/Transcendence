@@ -130,8 +130,8 @@ Transcendence is a backend + web monorepo:
   - `CatchUp`: burst queue target/candidate ceiling when coverage/velocity/backlog signals indicate lag.
 - Starvation guardrail is applied after adaptive budgeting:
   - Defer-age breach (`max eligible defer age >= threshold`) starts a forced catch-up window.
-  - Catch-up windows are lock-backed (`refresh-starvation:catch-up:*`) and paired with cooldown locks (`refresh-starvation:cooldown:*`) to prevent oscillation.
-  - Forced catch-up can override high-pressure pause to maintain bounded low-priority forward progress.
+  - Catch-up windows are lock-backed (`refresh-priority:guardrail:catchup:*`) and paired with cooldown locks (`refresh-priority:guardrail:cooldown:*`) to prevent oscillation.
+  - Forced catch-up can override producer pause and the low-priority executor's API-demand early exit only for guardrail-authorized work, preserving normal preemption for ordinary low-priority refreshes.
 - New-patch ramp mode (first `Jobs:*:NewPatchRampHours`) schedules additional high-frequency analytics jobs:
   - `refresh-champion-analytics-ramp`
   - `champion-analytics-ingestion-ramp`

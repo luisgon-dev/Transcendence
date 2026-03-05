@@ -111,11 +111,50 @@ public class SummonerMaintenanceJobTests
                 LockedUntilUtc = DateTime.UtcNow.AddMinutes(5)
             });
 
+        var queuedJobs = new List<Job>();
+        harness.BackgroundJobClient
+            .Setup(x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()))
+            .Callback<Job, IState>((job, _) => queuedJobs.Add(job))
+            .Returns("job-1");
+
         await harness.Job.ExecuteRampAsync(CancellationToken.None);
 
         harness.BackgroundJobClient.Verify(
             x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()),
             Times.Once);
+        queuedJobs.Should().ContainSingle();
+        queuedJobs[0].Args[3].Should().BeOfType<string>()
+            .Which.Should().EndWith("|forced-catch-up");
+    }
+
+    [Fact]
+    public async Task ExecuteRampAsync_WhenApiPriorityIsActiveAndGuardrailIsNotForced_DoesNotQueueRefreshJobs()
+    {
+        var adaptivePolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
+            AdaptiveThroughputBudgetMode.Balanced,
+            MaxCandidates: 2,
+            QueueTarget: 2,
+            IncludeAllModes: false,
+            CoverageRatio: 0.8d,
+            BacklogAgeMinutes: 20d,
+            RecentVelocityPerHour: 12d,
+            CandidatePressureRatio: 1d));
+
+        await using var harness = await Harness.CreateAsync(adaptivePolicy);
+        harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        harness.SeedSummoner("MaintenanceBlockedOne", "NA1", DateTime.UtcNow.AddHours(-12));
+        harness.SeedSummoner("MaintenanceBlockedTwo", "NA1", DateTime.UtcNow.AddHours(-11));
+        await harness.Db.SaveChangesAsync();
+
+        harness.RefreshLockRepository
+            .Setup(x => x.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        await harness.Job.ExecuteRampAsync(CancellationToken.None);
+
+        harness.BackgroundJobClient.Verify(
+            x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()),
+            Times.Never);
     }
 
     private sealed class Harness : IAsyncDisposable

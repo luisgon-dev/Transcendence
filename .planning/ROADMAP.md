@@ -81,6 +81,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|----------------|--------|-----------|
 | 1. Worker Startup Integrity | 3/3 | Complete | 2026-03-04 |
 | 2. Refresh Lock Lifecycle Control | 6/6 | Complete | 2026-03-05 |
-| 3. Priority Ingestion Throughput | 4/4 | Complete   | 2026-03-05 |
+| 3. Priority Ingestion Throughput | 5/5 | Complete   | 2026-03-05 |
 | 4. Deterministic Freshness Contract | 0/TBD | Not started | - |
 | 5. Quality Gates and Documentation Parity | 0/TBD | Not started | - |

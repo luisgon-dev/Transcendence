@@ -250,7 +250,7 @@ public class SummonerMaintenanceJob(
                         candidate.GameName,
                         candidate.TagLine,
                         platform,
-                        lockKey,
+                        SummonerRefreshJob.BuildAnalyticsExecutionLockKey(lockKey, forcedCatchUpActive),
                         patchStartEpoch,
                         activePatch.Version,
                         includeAllModes,

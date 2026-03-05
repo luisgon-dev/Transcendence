@@ -1,33 +1,52 @@
 using Hangfire;
+using Microsoft.Extensions.Options;
 using Transcendence.Data.Repositories.Interfaces;
+using Transcendence.Service.Core.Services.Jobs.Configuration;
 
 namespace Transcendence.Service.Core.Services.Jobs;
 
 [DisableConcurrentExecution(timeoutInSeconds: 5 * 60)]
 public class RefreshLockLifecycleJob(
     IRefreshLockRepository refreshLockRepository,
+    IOptions<WorkerJobScheduleOptions> scheduleOptionsAccessor,
     ILogger<RefreshLockLifecycleJob> logger)
 {
-    private static readonly TimeSpan DefaultForensicsWindow = TimeSpan.FromMinutes(30);
-    private const int DefaultCleanupBatchSize = 250;
-    private const int DefaultMaxBatchesPerRun = 8;
     private const int CleanupBatchSizeCap = 1000;
     private const int MaxBatchesPerRunCap = 100;
+    private const int ForensicsWindowMinutesCap = 24 * 60;
 
     [Queue("refresh-low")]
     public async Task ExecuteAsync(CancellationToken ct = default)
     {
-        var forensicsWindow = DefaultForensicsWindow;
-        var batchSize = Math.Min(DefaultCleanupBatchSize, CleanupBatchSizeCap);
-        var maxBatches = Math.Min(DefaultMaxBatchesPerRun, MaxBatchesPerRunCap);
-        var cutoffUtc = DateTime.UtcNow.Subtract(forensicsWindow);
+        var schedule = scheduleOptionsAccessor.Value;
+        if (!schedule.EnableRefreshLockLifecycleCleanup)
+        {
+            logger.LogInformation("[RefreshLockLifecycle] Cleanup skipped because scheduling toggle is disabled.");
+            return;
+        }
+
+        var forensicsWindowMinutes = Math.Clamp(
+            schedule.RefreshLockLifecycleForensicsWindowMinutes,
+            1,
+            ForensicsWindowMinutesCap);
+        var batchSize = Math.Clamp(
+            schedule.RefreshLockLifecycleCleanupBatchSize,
+            1,
+            CleanupBatchSizeCap);
+        var maxBatches = Math.Clamp(
+            schedule.RefreshLockLifecycleCleanupMaxBatchesPerRun,
+            1,
+            MaxBatchesPerRunCap);
+        var cutoffUtc = DateTime.UtcNow.AddMinutes(-forensicsWindowMinutes);
 
         var batchesProcessed = 0;
         var totalDeleted = 0;
+        var stoppedByBatchCap = false;
 
         logger.LogInformation(
-            "[RefreshLockLifecycle] Starting cleanup run with cutoff={CutoffUtc:o}, batchSize={BatchSize}, maxBatches={MaxBatches}.",
+            "[RefreshLockLifecycle] Starting cleanup run with cutoff={CutoffUtc:o}, forensicsWindowMinutes={ForensicsWindowMinutes}, batchSize={BatchSize}, maxBatches={MaxBatches}.",
             cutoffUtc,
+            forensicsWindowMinutes,
             batchSize,
             maxBatches);
 
@@ -46,11 +65,13 @@ public class RefreshLockLifecycleJob(
                     break;
             }
 
+            stoppedByBatchCap = batchesProcessed >= maxBatches;
             var growthSnapshot = await refreshLockRepository.GetGrowthSnapshotAsync(DateTime.UtcNow, ct);
             logger.LogInformation(
-                "[RefreshLockLifecycle] Cleanup completed. batchesProcessed={BatchesProcessed}, deleted={DeletedCount}, activeLocks={ActiveCount}, expiredLocks={ExpiredCount}.",
+                "[RefreshLockLifecycle] Cleanup completed. batchesProcessed={BatchesProcessed}, deleted={DeletedCount}, stoppedByBatchCap={StoppedByBatchCap}, activeLocks={ActiveCount}, expiredLocks={ExpiredCount}.",
                 batchesProcessed,
                 totalDeleted,
+                stoppedByBatchCap,
                 growthSnapshot.ActiveCount,
                 growthSnapshot.ExpiredCount);
         }

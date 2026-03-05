@@ -73,6 +73,56 @@ public class WorkerSchedulingPolicyTests
         descriptor.IsEnabled.Should().BeTrue();
     }
 
+    [Fact]
+    public void BuildDescriptors_DefaultProfile_RegistersRefreshLockLifecycleCleanupByDefault()
+    {
+        var policy = CreatePolicyWithDevelopmentOverrides(new WorkerSchedulingProfileDefinition());
+        var schedule = new WorkerJobScheduleOptions
+        {
+            Profile = "default",
+            DefaultProfile = "default",
+            RefreshLockLifecycleCleanupCron = "*/7 * * * *",
+            EnableRefreshLockLifecycleCleanup = true
+        };
+
+        var descriptor = policy.BuildDescriptors(schedule)
+            .Single(x => x.JobId == WorkerRecurringJobPolicy.RefreshLockLifecycleCleanupJobId);
+
+        descriptor.CronExpression.Should().Be("*/7 * * * *");
+        descriptor.CronSource.Should().Be("Jobs:Schedule:RefreshLockLifecycleCleanupCron");
+        descriptor.IsEnabled.Should().BeTrue();
+        descriptor.IsMandatoryBaseline.Should().BeTrue();
+    }
+
+    [Fact]
+    public void BuildDescriptors_DevelopmentProfileOverride_CanDisableRefreshLockLifecycleCleanup()
+    {
+        var policy = CreatePolicyWithDevelopmentOverrides(new WorkerSchedulingProfileDefinition
+        {
+            JobOverrides = new Dictionary<string, WorkerSchedulingJobOverrideOptions>(StringComparer.OrdinalIgnoreCase)
+            {
+                [WorkerRecurringJobPolicy.RefreshLockLifecycleCleanupJobId] =
+                    new() { Enabled = false, Cron = "*/13 * * * *" }
+            }
+        });
+
+        var schedule = new WorkerJobScheduleOptions
+        {
+            Profile = "development",
+            DefaultProfile = "default",
+            EnableRefreshLockLifecycleCleanup = true,
+            RefreshLockLifecycleCleanupCron = "*/7 * * * *"
+        };
+
+        var descriptor = policy.BuildDescriptors(schedule)
+            .Single(x => x.JobId == WorkerRecurringJobPolicy.RefreshLockLifecycleCleanupJobId);
+
+        descriptor.CronExpression.Should().Be("*/13 * * * *");
+        descriptor.CronSource.Should()
+            .Be("Jobs:SchedulingProfiles:Profiles:development:JobOverrides:refresh-lock-lifecycle-cleanup:Cron");
+        descriptor.IsEnabled.Should().BeFalse();
+    }
+
     private static WorkerRecurringJobPolicy CreatePolicyWithDevelopmentOverrides(
         WorkerSchedulingProfileDefinition developmentProfile) =>
         new(Options.Create(new WorkerSchedulingProfileOptions

@@ -38,6 +38,7 @@ public sealed class WorkerRecurringJobPolicy(
     public const string MatchTimelineBackfillJobId = "match-timeline-backfill";
     public const string RuneSelectionIntegrityBackfillJobId = "rune-selection-integrity-backfill";
     public const string PollLiveGamesJobId = "poll-live-games";
+    public const string RefreshLockLifecycleCleanupJobId = "refresh-lock-lifecycle-cleanup";
 
     private static readonly HashSet<string> MandatoryBaselineJobIds = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -45,7 +46,8 @@ public sealed class WorkerRecurringJobPolicy(
         RetryFailedMatchesJobId,
         RefreshChampionAnalyticsJobId,
         ChampionAnalyticsIngestionJobId,
-        SummonerMaintenanceJobId
+        SummonerMaintenanceJobId,
+        RefreshLockLifecycleCleanupJobId
     };
 
     private static readonly string[] KnownJobIdValues =
@@ -61,7 +63,8 @@ public sealed class WorkerRecurringJobPolicy(
         SummonerMaintenanceRampJobId,
         MatchTimelineBackfillJobId,
         RuneSelectionIntegrityBackfillJobId,
-        PollLiveGamesJobId
+        PollLiveGamesJobId,
+        RefreshLockLifecycleCleanupJobId
     ];
 
     private readonly WorkerSchedulingProfileOptions profileOptions = profileOptionsAccessor.Value;
@@ -154,7 +157,13 @@ public sealed class WorkerRecurringJobPolicy(
                 "Jobs:Schedule:LiveGamePollingCron",
                 schedule.LiveGamePollingCron,
                 isEnabled: true,
-                ConfigureLiveGamePolling)
+                ConfigureLiveGamePolling),
+            CreateDescriptor(
+                RefreshLockLifecycleCleanupJobId,
+                "Jobs:Schedule:RefreshLockLifecycleCleanupCron",
+                schedule.RefreshLockLifecycleCleanupCron,
+                schedule.EnableRefreshLockLifecycleCleanup,
+                ConfigureRefreshLockLifecycleCleanup)
         };
 
         var profileName = ResolveProfile(schedule);
@@ -300,6 +309,15 @@ public sealed class WorkerRecurringJobPolicy(
     private static void ConfigureLiveGamePolling(IRecurringJobManager recurringJobManager, string cronExpression) =>
         recurringJobManager.AddOrUpdate<LiveGamePollingJob>(
             PollLiveGamesJobId,
+            job => job.ExecuteAsync(CancellationToken.None),
+            cronExpression,
+            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
+    private static void ConfigureRefreshLockLifecycleCleanup(
+        IRecurringJobManager recurringJobManager,
+        string cronExpression) =>
+        recurringJobManager.AddOrUpdate<RefreshLockLifecycleJob>(
+            RefreshLockLifecycleCleanupJobId,
             job => job.ExecuteAsync(CancellationToken.None),
             cronExpression,
             new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });

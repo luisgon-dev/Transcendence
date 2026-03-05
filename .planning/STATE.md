@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_plan: 03-02
-status: in_progress
-stopped_at: Completed 03-priority-ingestion-throughput-01-PLAN.md
-last_updated: "2026-03-05T19:04:48.391Z"
+current_plan: 3
+status: executing
+stopped_at: Completed 03-priority-ingestion-throughput-02-PLAN.md
+last_updated: "2026-03-05T19:20:41.952Z"
 last_activity: 2026-03-05
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 13
-  completed_plans: 10
+  completed_plans: 11
   percent: 77
 ---
 
@@ -27,9 +27,9 @@ See: .planning/PROJECT.md (updated 2026-03-04)
 ## Current Position
 
 **Phase:** 3 of 5 (Priority Ingestion Throughput)
-**Current Plan:** 2 of 4
+**Current Plan:** 3
 **Total Plans in Phase:** 4
-**Status:** In progress
+**Status:** Ready to execute
 **Last Activity:** 2026-03-05
 
 Progress: [████████░░] 77%
@@ -62,6 +62,7 @@ Progress: [████████░░] 77%
 | Phase 02-refresh-lock-lifecycle-control P03 | 12min | 3 tasks | 9 files |
 | Phase 02-refresh-lock-lifecycle-control P06 | 4 min | 2 tasks | 4 files |
 | Phase 03-priority-ingestion-throughput P01 | 9 min | 3 tasks | 12 files |
+| Phase 03-priority-ingestion-throughput P02 | 12min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,9 @@ Recent decisions affecting current work:
 - [Phase 03-priority-ingestion-throughput]: Automatic ingestion ranking now uses weighted patch relevance, staleness age, and favorite signal via shared policy options.
 - [Phase 03-priority-ingestion-throughput]: Equivalent-score ordering is deterministic through canonical identity then UpdatedAt with canonical dedupe applied after ranking.
 - [Phase 03-priority-ingestion-throughput]: Champion analytics ingestion and summoner maintenance now share one scoring contract to prevent ordering heuristic drift.
+- [Phase 03-priority-ingestion-throughput]: Adaptive mode selection is centralized in one policy that combines API-priority pressure, patch coverage, backlog age, and recent velocity.
+- [Phase 03-priority-ingestion-throughput]: Low-priority producers consume policy output for both max-candidate selection and queue-target truncation while retaining shared INGT-02 ranking order.
+- [Phase 03-priority-ingestion-throughput]: Mode hysteresis and cooldown are persisted per producer key to avoid oscillating between high-pressure, balanced, and catch-up decisions.
 
 ### Pending Todos
 
@@ -107,6 +111,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-05T19:04:48.389Z
-Stopped at: Completed 03-priority-ingestion-throughput-01-PLAN.md
-Resume file: .planning/phases/03-priority-ingestion-throughput/03-02-PLAN.md
+Last session: 2026-03-05T19:20:41.950Z
+Stopped at: Completed 03-priority-ingestion-throughput-02-PLAN.md
+Resume file: None

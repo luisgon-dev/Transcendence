@@ -15,6 +15,7 @@ using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
+using Transcendence.Service.Core.Services.Jobs.Priority;
 
 namespace Transcendence.Service.Core.Tests;
 
@@ -153,12 +154,14 @@ public class ChampionAnalyticsIngestionJobRampTests
             var backgroundJobs = new Mock<IBackgroundJobClient>();
             backgroundJobs.Setup(x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()))
                 .Returns("job-1");
+            var scoringPolicy = new IngestionPriorityScoringPolicy(Options.Create(new IngestionPriorityPolicyOptions()));
 
             var job = new ChampionAnalyticsIngestionJob(
                 db,
                 bootstrap.Object,
                 refreshLocks.Object,
                 backgroundJobs.Object,
+                scoringPolicy,
                 Options.Create(new ChampionAnalyticsIngestionJobOptions
                 {
                     MinimumSuccessfulMatchesForCurrentPatch = 50,

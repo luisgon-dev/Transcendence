@@ -15,6 +15,7 @@ using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
+using Transcendence.Service.Core.Services.Jobs.Priority;
 using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
 
@@ -112,6 +113,7 @@ public class CancellationPropagationTests
             bootstrap.Object,
             refreshLocks.Object,
             backgroundJobs.Object,
+            new IngestionPriorityScoringPolicy(Options.Create(new IngestionPriorityPolicyOptions())),
             Options.Create(new ChampionAnalyticsIngestionJobOptions()),
             Mock.Of<ILogger<ChampionAnalyticsIngestionJob>>());
 

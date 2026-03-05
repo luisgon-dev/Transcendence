@@ -6,6 +6,7 @@ using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
+using Transcendence.Service.Core.Services.Jobs.Priority;
 using Transcendence.Service.Core.Services.RiotApi;
 
 namespace Transcendence.Service.Core.Services.Jobs;
@@ -16,6 +17,7 @@ public class ChampionAnalyticsIngestionJob(
     ISummonerBootstrapService bootstrapService,
     IRefreshLockRepository refreshLockRepository,
     IBackgroundJobClient backgroundJobClient,
+    IIngestionPriorityScoringPolicy scoringPolicy,
     IOptions<ChampionAnalyticsIngestionJobOptions> options,
     ILogger<ChampionAnalyticsIngestionJob> logger)
 {
@@ -25,7 +27,8 @@ public class ChampionAnalyticsIngestionJob(
         string PlatformRegion,
         string GameName,
         string TagLine,
-        DateTime UpdatedAt);
+        DateTime UpdatedAt,
+        bool IsFavorite);
 
     public async Task ExecuteAsync(CancellationToken ct = default)
     {
@@ -116,7 +119,7 @@ public class ChampionAnalyticsIngestionJob(
             maxQueued);
         var includeAllModes = successfulMatchesForPatch >= targetMatchesForPatch;
 
-        var candidates = await GetCandidatesAsync(maxCandidates, jobOptions, ct);
+        var candidates = await GetCandidatesAsync(maxCandidates, jobOptions, releaseUtc, ct);
         if (candidates.Count == 0)
         {
             logger.LogWarning(
@@ -213,6 +216,7 @@ public class ChampionAnalyticsIngestionJob(
     private async Task<List<CandidateSummoner>> GetCandidatesAsync(
         int maxCandidates,
         ChampionAnalyticsIngestionJobOptions jobOptions,
+        DateTime patchReleaseUtc,
         CancellationToken ct)
     {
         var combined = new List<CandidateSummoner>();
@@ -231,7 +235,8 @@ public class ChampionAnalyticsIngestionJob(
                     s.PlatformRegion!,
                     s.GameName!,
                     s.TagLine!,
-                    s.UpdatedAt)
+                    s.UpdatedAt,
+                    true)
             ).ToListAsync(ct);
 
             combined.AddRange(favoriteCandidates);
@@ -248,17 +253,23 @@ public class ChampionAnalyticsIngestionJob(
                     s.PlatformRegion!,
                     s.GameName!,
                     s.TagLine!,
-                    s.UpdatedAt))
+                    s.UpdatedAt,
+                    false))
                 .ToListAsync(ct);
 
             combined.AddRange(fallbackCandidates);
         }
 
-        return combined
-            .OrderBy(c => c.UpdatedAt)
-            .DistinctBy(c => RefreshLockKeys.BuildCanonicalIdentity(c.PlatformRegion, c.GameName, c.TagLine))
-            .Take(maxCandidates)
-            .ToList();
+        var rankedCandidates = scoringPolicy.RankCandidates(
+            combined,
+            candidate => new IngestionPriorityCandidate(
+                RefreshLockKeys.BuildCanonicalIdentity(candidate.PlatformRegion, candidate.GameName, candidate.TagLine),
+                candidate.UpdatedAt,
+                candidate.IsFavorite),
+            new IngestionPriorityContext(patchReleaseUtc, DateTime.UtcNow),
+            maxCandidates);
+
+        return rankedCandidates.ToList();
     }
 
     private static int ResolveQueuedRefreshTarget(

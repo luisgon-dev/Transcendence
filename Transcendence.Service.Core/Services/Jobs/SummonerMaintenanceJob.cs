@@ -6,6 +6,7 @@ using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
+using Transcendence.Service.Core.Services.Jobs.Priority;
 using Transcendence.Service.Core.Services.RiotApi;
 
 namespace Transcendence.Service.Core.Services.Jobs;
@@ -15,6 +16,7 @@ public class SummonerMaintenanceJob(
     TranscendenceContext db,
     IBackgroundJobClient backgroundJobClient,
     IRefreshLockRepository refreshLockRepository,
+    IIngestionPriorityScoringPolicy scoringPolicy,
     IOptions<SummonerMaintenanceJobOptions> options,
     IOptions<ChampionAnalyticsIngestionJobOptions> analyticsOptions,
     ILogger<SummonerMaintenanceJob> logger)
@@ -23,7 +25,8 @@ public class SummonerMaintenanceJob(
         string PlatformRegion,
         string GameName,
         string TagLine,
-        DateTime UpdatedAt);
+        DateTime UpdatedAt,
+        bool IsFavorite);
 
     [Queue("refresh-low")]
     public async Task ExecuteAsync(CancellationToken ct = default)
@@ -90,7 +93,7 @@ public class SummonerMaintenanceJob(
             isRampActive ? jobOptions.RampMaxRefreshJobsToQueuePerRun : jobOptions.MaxRefreshJobsToQueuePerRun);
         var lockTtl = TimeSpan.FromMinutes(Math.Max(2, jobOptions.RefreshLockMinutes));
 
-        var candidates = await GetCandidatesAsync(staleCutoffUtc, maxCandidates, jobOptions, ct);
+        var candidates = await GetCandidatesAsync(staleCutoffUtc, maxCandidates, releaseUtc, jobOptions, ct);
         if (candidates.Count == 0)
         {
             logger.LogInformation("[Maintenance] No stale summoner candidates were eligible.");
@@ -152,6 +155,7 @@ public class SummonerMaintenanceJob(
     private async Task<List<CandidateSummoner>> GetCandidatesAsync(
         DateTime staleCutoffUtc,
         int maxCandidates,
+        DateTime patchReleaseUtc,
         SummonerMaintenanceJobOptions options,
         CancellationToken ct)
     {
@@ -172,7 +176,8 @@ public class SummonerMaintenanceJob(
                     s.PlatformRegion!,
                     s.GameName!,
                     s.TagLine!,
-                    s.UpdatedAt)
+                    s.UpdatedAt,
+                    true)
             ).ToListAsync(ct);
 
             combined.AddRange(favoriteCandidates);
@@ -188,15 +193,21 @@ public class SummonerMaintenanceJob(
                 s.PlatformRegion!,
                 s.GameName!,
                 s.TagLine!,
-                s.UpdatedAt))
+                s.UpdatedAt,
+                false))
             .ToListAsync(ct);
 
         combined.AddRange(trackedCandidates);
 
-        return combined
-            .OrderBy(c => c.UpdatedAt)
-            .DistinctBy(c => RefreshLockKeys.BuildCanonicalIdentity(c.PlatformRegion, c.GameName, c.TagLine))
-            .Take(maxCandidates)
-            .ToList();
+        var rankedCandidates = scoringPolicy.RankCandidates(
+            combined,
+            candidate => new IngestionPriorityCandidate(
+                RefreshLockKeys.BuildCanonicalIdentity(candidate.PlatformRegion, candidate.GameName, candidate.TagLine),
+                candidate.UpdatedAt,
+                candidate.IsFavorite),
+            new IngestionPriorityContext(patchReleaseUtc, DateTime.UtcNow),
+            maxCandidates);
+
+        return rankedCandidates.ToList();
     }
 }

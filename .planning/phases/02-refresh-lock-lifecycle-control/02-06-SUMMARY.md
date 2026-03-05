@@ -58,7 +58,8 @@ Each task was committed atomically:
 1. **Task 1: Add API/controller telemetry regressions for contention observability** - `89d4526` (test)
 2. **Task 2: Update operator docs for lock lifecycle telemetry and retention monitoring** - `867d619` (chore)
 
-**Plan metadata:** `(pending)`
+**Plan metadata:** `77db02d` (docs)
+**Post-metadata correction:** `1c87b9a` (docs)
 
 ## Files Created/Modified
 
@@ -74,7 +75,30 @@ Each task was committed atomically:
 
 ## Deviations from Plan
 
-None - plan executed exactly as written.
+### Auto-fixed Issues
+
+**1. [Rule 3 - Blocking] Roadmap progress update command did not mutate roadmap progress table**
+
+- **Found during:** Metadata/state update step after Task 2
+- **Issue:** `roadmap update-plan-progress` reported success but `.planning/ROADMAP.md` still showed `4/6 In Progress` for Phase 2.
+- **Fix:** Manually aligned phase checkbox and progress row to `6/6 Complete (2026-03-05)`.
+- **Files modified:** `.planning/ROADMAP.md`
+- **Verification:** Re-checked roadmap progress row reflects `6/6 | Complete | 2026-03-05`.
+- **Committed in:** `77db02d`
+
+**2. [Rule 3 - Blocking] State progress command output and STATE.md content diverged**
+
+- **Found during:** Metadata validation after initial metadata commit
+- **Issue:** `state update-progress` output indicated `100%` but `.planning/STATE.md` still showed `78%` and `status: verifying`.
+- **Fix:** Aligned STATE frontmatter/status and rendered progress bar to `100%` + `ready_for_verification`.
+- **Files modified:** `.planning/STATE.md`
+- **Verification:** STATE frontmatter now reports `percent: 100`, `completed_plans: 9`, and status `ready_for_verification`.
+- **Committed in:** `1c87b9a`
+
+---
+
+**Total deviations:** 2 auto-fixed (2 blocking)
+**Impact on plan:** Fixes were metadata consistency corrections only; functional/task deliverables unchanged.
 
 ## Issues Encountered
 

@@ -2,16 +2,17 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Completed 01-worker-startup-integrity-03-PLAN.md
-last_updated: "2026-03-04T22:45:25.392Z"
-last_activity: 2026-03-04 - Completed plan 01-03 startup integrity orchestration with fail-fast gating and regression coverage.
+current_plan: 3
+status: executing
+stopped_at: Completed 02-refresh-lock-lifecycle-control-02-PLAN.md
+last_updated: "2026-03-05T00:28:00.455Z"
+last_activity: 2026-03-05
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
-  percent: 100
+  total_plans: 9
+  completed_plans: 4
+  percent: 44
 ---
 
 # Project State
@@ -21,16 +22,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-04)
 
 **Core value:** Users should see relevant, patch-current statistics quickly and reliably, even when upstream API capacity is constrained.
-**Current focus:** Phase 1 - Worker Startup Integrity
+**Current focus:** Phase 2 - Refresh Lock Lifecycle Control
 
 ## Current Position
 
-Phase: 1 of 5 (Worker Startup Integrity)
-Plan: 3 of 3 in current phase
-Status: Phase 1 complete
-Last activity: 2026-03-04 - Completed plan 01-03 startup integrity orchestration with fail-fast gating and regression coverage.
+**Phase:** 2 of 5 (Refresh Lock Lifecycle Control)
+**Current Plan:** 3
+**Total Plans in Phase:** 6
+**Status:** Ready to execute
+**Last Activity:** 2026-03-05
 
-Progress: [██████████] 100%
+Progress: [████░░░░░░] 44%
 
 ## Performance Metrics
 
@@ -53,6 +55,7 @@ Progress: [██████████] 100%
 | Phase 01-worker-startup-integrity P01 | 7min | 3 tasks | 8 files |
 | Phase 01-worker-startup-integrity P02 | 9min | 3 tasks | 5 files |
 | Phase 01-worker-startup-integrity P03 | 11min | 3 tasks | 10 files |
+| Phase 02-refresh-lock-lifecycle-control P02 | 44min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -71,6 +74,8 @@ Recent decisions affecting current work:
 - [Phase 01-worker-startup-integrity]: Mandatory startup verification now requires Hangfire recurring hash metadata and deserializable invocation payloads before healthy startup.
 - [Phase 01-worker-startup-integrity]: Workers now fail startup after bounded retry exhaustion for mandatory integrity failures while optional failures remain degraded warnings.
 - [Phase 01-worker-startup-integrity]: Core tests now reference the worker project to assert startup throw semantics and policy parity regressions.
+- [Phase 02-refresh-lock-lifecycle-control]: Cleanup deletion remains expired-only (LockedUntilUtc <= cutoff) with bounded ID batches so active leases are never targeted.
+- [Phase 02-refresh-lock-lifecycle-control]: Retention query optimization is delivered with an EF model index and migration generated strictly via dotnet ef migrations add.
 
 ### Pending Todos
 
@@ -82,6 +87,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-04T22:38:56.387Z
-Stopped at: Completed 01-worker-startup-integrity-03-PLAN.md
+Last session: 2026-03-05T00:28:00.453Z
+Stopped at: Completed 02-refresh-lock-lifecycle-control-02-PLAN.md
 Resume file: None

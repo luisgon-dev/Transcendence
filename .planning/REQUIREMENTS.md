@@ -30,7 +30,7 @@ Requirements for this milestone. Each will map to exactly one roadmap phase.
 ### Refresh Lock Lifecycle
 
 - [ ] **LOCK-01**: User refresh requests use normalized lock keys to reduce lock collisions and inconsistent lock ownership.
-- [ ] **LOCK-02**: Operator can bound lock storage growth via retention cleanup of expired/stale lock entries.
+- [x] **LOCK-02**: Operator can bound lock storage growth via retention cleanup of expired/stale lock entries.
 - [ ] **LOCK-03**: Operator can monitor lock contention and growth via lock lifecycle telemetry.
 
 ### Quality and Safety
@@ -78,7 +78,7 @@ Updated during roadmap creation.
 | WORK-03 | Phase 1 - Worker Startup Integrity | Complete |
 | WORK-04 | Phase 1 - Worker Startup Integrity | Complete |
 | LOCK-01 | Phase 2 - Refresh Lock Lifecycle Control | Pending |
-| LOCK-02 | Phase 2 - Refresh Lock Lifecycle Control | Pending |
+| LOCK-02 | Phase 2 - Refresh Lock Lifecycle Control | Complete |
 | LOCK-03 | Phase 2 - Refresh Lock Lifecycle Control | Pending |
 | QUAL-01 | Phase 5 - Quality Gates and Documentation Parity | Pending |
 | QUAL-02 | Phase 5 - Quality Gates and Documentation Parity | Pending |

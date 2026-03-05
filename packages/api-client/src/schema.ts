@@ -1838,7 +1838,11 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["SummonerAcceptedResponse"];
+                        "application/json": components["schemas"]["SummonerAcceptedResponse"];
+                        "text/json": components["schemas"]["SummonerAcceptedResponse"];
+                    };
                 };
                 /** @description Bad Request */
                 400: {

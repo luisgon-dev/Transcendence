@@ -248,6 +248,12 @@ public class SummonersController(
         var key = RefreshLockKeys.BuildSummonerRefreshKey(platform, name, tag);
         var priorityKey = RefreshLockKeys.BuildApiPriorityKey(platform, name, tag);
         var ttl = TimeSpan.FromMinutes(15);
+        var pollUrl = Url.ActionLink(nameof(GetByRiotId), null, new
+        {
+            region,
+            name,
+            tag
+        });
 
         var acquired = await refreshLockRepository.TryAcquireAsync(key, ttl, ct);
         if (!acquired)
@@ -258,7 +264,7 @@ public class SummonersController(
                 : (int)Math.Max(1, (existing.LockedUntilUtc - DateTime.UtcNow).TotalSeconds);
             return Accepted(new SummonerAcceptedResponse(
                 "Refresh in process",
-                null,
+                pollUrl,
                 seconds));
         }
 
@@ -279,12 +285,6 @@ public class SummonersController(
             throw;
         }
 
-        var pollUrl = Url.ActionLink(nameof(GetByRiotId), null, new
-        {
-            region,
-            name,
-            tag
-        });
         return Accepted(new SummonerAcceptedResponse(
             "Refresh queued",
             pollUrl));

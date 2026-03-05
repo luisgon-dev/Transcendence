@@ -12,6 +12,7 @@ using Transcendence.Service.Core.Services.Auth.Models;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.RiotApi;
+using Transcendence.Service.Core.Services.RiotApi.DTOs;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
 using Transcendence.WebAPI.Security;
 
@@ -188,7 +189,7 @@ public class ProSummonersController(
 
     [HttpPost("{id:guid}/refresh")]
     [EnableRateLimiting("admin-write")]
-    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(SummonerAcceptedResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Refresh([FromRoute] Guid id, CancellationToken ct = default)
@@ -206,10 +207,20 @@ public class ProSummonersController(
         var key = RefreshLockKeys.BuildSummonerRefreshKey(platform, entity.GameName, entity.TagLine);
         var priorityKey = RefreshLockKeys.BuildApiPriorityKey(platform, entity.GameName, entity.TagLine);
         var ttl = TimeSpan.FromMinutes(15);
+        var pollUrl = Url.ActionLink(nameof(GetById), null, new { id });
 
         var acquired = await refreshLockRepository.TryAcquireAsync(key, ttl, ct);
         if (!acquired)
-            return Accepted(new { message = "Refresh already in progress." });
+        {
+            var existing = await refreshLockRepository.GetAsync(key, ct);
+            var seconds = existing == null
+                ? (int)ttl.TotalSeconds
+                : (int)Math.Max(1, (existing.LockedUntilUtc - DateTime.UtcNow).TotalSeconds);
+            return Accepted(new SummonerAcceptedResponse(
+                "Refresh in process",
+                pollUrl,
+                seconds));
+        }
 
         var priorityAcquired = await refreshLockRepository.TryAcquireAsync(priorityKey, ttl, ct);
 
@@ -235,7 +246,9 @@ public class ProSummonersController(
             entity.TagLine
         }, ct);
 
-        return Accepted(new { message = "Refresh queued." });
+        return Accepted(new SummonerAcceptedResponse(
+            "Refresh queued",
+            pollUrl));
     }
 
     private static TrackedProSummonerDto ToDto(TrackedProSummoner entity)

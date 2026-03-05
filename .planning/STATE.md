@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_plan: 3
+current_plan: 4
 status: executing
-stopped_at: Completed 03-priority-ingestion-throughput-02-PLAN.md
-last_updated: "2026-03-05T19:20:41.952Z"
+stopped_at: Completed 03-priority-ingestion-throughput-03-PLAN.md
+last_updated: "2026-03-05T19:35:37.999Z"
 last_activity: 2026-03-05
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 13
-  completed_plans: 11
-  percent: 77
+  completed_plans: 12
+  percent: 92
 ---
 
 # Project State
@@ -27,12 +27,12 @@ See: .planning/PROJECT.md (updated 2026-03-04)
 ## Current Position
 
 **Phase:** 3 of 5 (Priority Ingestion Throughput)
-**Current Plan:** 3
+**Current Plan:** 4
 **Total Plans in Phase:** 4
 **Status:** Ready to execute
 **Last Activity:** 2026-03-05
 
-Progress: [████████░░] 77%
+Progress: [█████████░] 92%
 
 ## Performance Metrics
 
@@ -63,6 +63,7 @@ Progress: [████████░░] 77%
 | Phase 02-refresh-lock-lifecycle-control P06 | 4 min | 2 tasks | 4 files |
 | Phase 03-priority-ingestion-throughput P01 | 9 min | 3 tasks | 12 files |
 | Phase 03-priority-ingestion-throughput P02 | 12min | 3 tasks | 11 files |
+| Phase 03-priority-ingestion-throughput P03 | 12min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -100,6 +101,9 @@ Recent decisions affecting current work:
 - [Phase 03-priority-ingestion-throughput]: Adaptive mode selection is centralized in one policy that combines API-priority pressure, patch coverage, backlog age, and recent velocity.
 - [Phase 03-priority-ingestion-throughput]: Low-priority producers consume policy output for both max-candidate selection and queue-target truncation while retaining shared INGT-02 ranking order.
 - [Phase 03-priority-ingestion-throughput]: Mode hysteresis and cooldown are persisted per producer key to avoid oscillating between high-pressure, balanced, and catch-up decisions.
+- [Phase 03-priority-ingestion-throughput]: Catch-up cooldown is lock-backed by acquiring a cooldown key for window+cooldown TTL at activation time.
+- [Phase 03-priority-ingestion-throughput]: Forced catch-up is a queue-floor override layered on adaptive budget output, not a replacement policy.
+- [Phase 03-priority-ingestion-throughput]: Both low-priority producers use the same guardrail contract and producer-scoped lock keys.
 
 ### Pending Todos
 
@@ -111,6 +115,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-05T19:20:41.950Z
-Stopped at: Completed 03-priority-ingestion-throughput-02-PLAN.md
+Last session: 2026-03-05T19:35:37.996Z
+Stopped at: Completed 03-priority-ingestion-throughput-03-PLAN.md
 Resume file: None

@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_plan: Not started
-status: planning
-stopped_at: Phase 3 context gathered
-last_updated: "2026-03-05T17:58:54.590Z"
+current_plan: 03-02
+status: in_progress
+stopped_at: Completed 03-priority-ingestion-throughput-01-PLAN.md
+last_updated: "2026-03-05T19:04:48.391Z"
 last_activity: 2026-03-05
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 9
-  completed_plans: 9
-  percent: 100
+  total_plans: 13
+  completed_plans: 10
+  percent: 77
 ---
 
 # Project State
@@ -22,17 +22,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-04)
 
 **Core value:** Users should see relevant, patch-current statistics quickly and reliably, even when upstream API capacity is constrained.
-**Current focus:** Phase 2 - Refresh Lock Lifecycle Control
+**Current focus:** Phase 3 - Priority Ingestion Throughput
 
 ## Current Position
 
-**Phase:** 2 of 5 (Refresh Lock Lifecycle Control)
-**Current Plan:** Not started
-**Total Plans in Phase:** 6
-**Status:** Ready to plan
+**Phase:** 3 of 5 (Priority Ingestion Throughput)
+**Current Plan:** 2 of 4
+**Total Plans in Phase:** 4
+**Status:** In progress
 **Last Activity:** 2026-03-05
 
-Progress: [██████████] 100%
+Progress: [████████░░] 77%
 
 ## Performance Metrics
 
@@ -61,6 +61,7 @@ Progress: [██████████] 100%
 | Phase 02-refresh-lock-lifecycle-control P05 | 4 min | 2 tasks | 8 files |
 | Phase 02-refresh-lock-lifecycle-control P03 | 12min | 3 tasks | 9 files |
 | Phase 02-refresh-lock-lifecycle-control P06 | 4 min | 2 tasks | 4 files |
+| Phase 03-priority-ingestion-throughput P01 | 9 min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,9 @@ Recent decisions affecting current work:
 - [Phase 02-refresh-lock-lifecycle-control]: Lock lifecycle dimensions are standardized to lock_class, platform_region, and outcome with source tags for call-site attribution.
 - [Phase 02-refresh-lock-lifecycle-control]: Telemetry-adjacent refresh controller regressions now verify lifecycle outcome and contention wait-hint emission parity across user and admin endpoints.
 - [Phase 02-refresh-lock-lifecycle-control]: Operator lock lifecycle runbooks now document metric/event names, dimensions, cleanup cadence defaults, and contention/growth monitoring thresholds aligned with emitted telemetry.
+- [Phase 03-priority-ingestion-throughput]: Automatic ingestion ranking now uses weighted patch relevance, staleness age, and favorite signal via shared policy options.
+- [Phase 03-priority-ingestion-throughput]: Equivalent-score ordering is deterministic through canonical identity then UpdatedAt with canonical dedupe applied after ranking.
+- [Phase 03-priority-ingestion-throughput]: Champion analytics ingestion and summoner maintenance now share one scoring contract to prevent ordering heuristic drift.
 
 ### Pending Todos
 
@@ -103,6 +107,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-05T17:58:54.588Z
-Stopped at: Phase 3 context gathered
-Resume file: .planning/phases/03-priority-ingestion-throughput/03-CONTEXT.md
+Last session: 2026-03-05T19:04:48.389Z
+Stopped at: Completed 03-priority-ingestion-throughput-01-PLAN.md
+Resume file: .planning/phases/03-priority-ingestion-throughput/03-02-PLAN.md

@@ -10,7 +10,7 @@ Requirements for this milestone. Each will map to exactly one roadmap phase.
 ### Ingestion Prioritization
 
 - [ ] **INGT-01**: User-triggered refresh requests are prioritized over non-interactive background ingestion during patch spikes.
-- [ ] **INGT-02**: User sees patch-relevant champion/stat data ingested first via configurable priority scoring.
+- [x] **INGT-02**: User sees patch-relevant champion/stat data ingested first via configurable priority scoring.
 - [ ] **INGT-03**: User-facing freshness remains responsive because queue-tier throughput budgets prevent background starvation of high-priority work.
 - [ ] **INGT-04**: User still receives long-tail updates over time because starvation guardrails prevent permanent deferral of low-priority ingestion.
 
@@ -67,7 +67,7 @@ Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | INGT-01 | Phase 3 - Priority Ingestion Throughput | Pending |
-| INGT-02 | Phase 3 - Priority Ingestion Throughput | Pending |
+| INGT-02 | Phase 3 - Priority Ingestion Throughput | Complete |
 | INGT-03 | Phase 3 - Priority Ingestion Throughput | Pending |
 | INGT-04 | Phase 3 - Priority Ingestion Throughput | Pending |
 | FRSH-01 | Phase 4 - Deterministic Freshness Contract | Pending |

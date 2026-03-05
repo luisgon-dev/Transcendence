@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Worker Startup Integrity** - Ensure recurring-job registration, fail-fast startup, and cancellation-safe execution.
 - [x] **Phase 2: Refresh Lock Lifecycle Control** - Normalize lock behavior and bound lock-store growth with telemetry.
-- [ ] **Phase 3: Priority Ingestion Throughput** - Prioritize patch-relevant/high-value ingestion without starving long-tail work.
+- [x] **Phase 3: Priority Ingestion Throughput** - Prioritize patch-relevant/high-value ingestion without starving long-tail work. (completed 2026-03-05)
 - [ ] **Phase 4: Deterministic Freshness Contract** - Provide consistent fallback semantics and additive freshness metadata.
 - [ ] **Phase 5: Quality Gates and Documentation Parity** - Protect behavior with tests and keep API/ops docs in sync.
 
@@ -81,6 +81,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|----------------|--------|-----------|
 | 1. Worker Startup Integrity | 3/3 | Complete | 2026-03-04 |
 | 2. Refresh Lock Lifecycle Control | 6/6 | Complete | 2026-03-05 |
-| 3. Priority Ingestion Throughput | 3/4 | In Progress | - |
+| 3. Priority Ingestion Throughput | 4/4 | Complete   | 2026-03-05 |
 | 4. Deterministic Freshness Contract | 0/TBD | Not started | - |
 | 5. Quality Gates and Documentation Parity | 0/TBD | Not started | - |

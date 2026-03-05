@@ -13,6 +13,7 @@ using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Models.Service;
 using Transcendence.Data.Models.LoL.Static;
 using Transcendence.Data.Repositories.Interfaces;
+using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
@@ -179,6 +180,81 @@ public class ChampionAnalyticsIngestionJobRampTests
             Times.Once);
     }
 
+    [Fact]
+    public async Task ExecuteRampAsync_WhenApiPriorityIsActiveAndGuardrailIsNotForced_DoesNotQueueRefreshJobs()
+    {
+        var fixedBudgetPolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
+            AdaptiveThroughputBudgetMode.Balanced,
+            MaxCandidates: 2,
+            QueueTarget: 2,
+            IncludeAllModes: false,
+            CoverageRatio: 1d,
+            BacklogAgeMinutes: 15d,
+            RecentVelocityPerHour: 20d,
+            CandidatePressureRatio: 0.8d));
+
+        await using var harness = await Harness.CreateAsync(fixedBudgetPolicy);
+        harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        harness.SeedSummoner("PriorityBlockedOne", "NA1", DateTime.UtcNow.AddHours(-8));
+        harness.SeedSummoner("PriorityBlockedTwo", "NA1", DateTime.UtcNow.AddHours(-7));
+        await harness.Db.SaveChangesAsync();
+
+        harness.RefreshLockRepository
+            .Setup(x => x.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        await harness.Job.ExecuteRampAsync(CancellationToken.None);
+
+        harness.BackgroundJobClient.Verify(
+            x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ExecuteRampAsync_WhenForcedCatchUpWindowIsActive_QueuesOldestCandidateFirst()
+    {
+        var fixedBudgetPolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
+            AdaptiveThroughputBudgetMode.HighPressure,
+            MaxCandidates: 1,
+            QueueTarget: 0,
+            IncludeAllModes: false,
+            CoverageRatio: 0.1d,
+            BacklogAgeMinutes: 300d,
+            RecentVelocityPerHour: 0.5d,
+            CandidatePressureRatio: 2d));
+
+        await using var harness = await Harness.CreateAsync(fixedBudgetPolicy);
+        harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        harness.SeedSummoner("OldestBacklog", "NA1", DateTime.UtcNow.AddHours(-24));
+        await harness.Db.SaveChangesAsync();
+
+        harness.RefreshLockRepository
+            .Setup(x => x.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var catchUpKey = RefreshLockKeys.BuildStarvationGuardrailCatchUpKey(nameof(ChampionAnalyticsIngestionJob));
+        harness.RefreshLockRepository
+            .Setup(x => x.GetAsync(catchUpKey, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RefreshLock
+            {
+                Id = Guid.NewGuid(),
+                Key = catchUpKey,
+                CreatedAtUtc = DateTime.UtcNow.AddMinutes(-1),
+                LockedUntilUtc = DateTime.UtcNow.AddMinutes(5)
+            });
+
+        var queuedJobs = new List<Job>();
+        harness.BackgroundJobClient
+            .Setup(x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()))
+            .Callback<Job, IState>((job, _) => queuedJobs.Add(job))
+            .Returns("job-1");
+
+        await harness.Job.ExecuteRampAsync(CancellationToken.None);
+
+        queuedJobs.Should().ContainSingle();
+        queuedJobs[0].Args[0].Should().Be("OldestBacklog");
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
@@ -258,6 +334,7 @@ public class ChampionAnalyticsIngestionJobRampTests
                 scoringPolicy,
                 adaptiveBudgetPolicy,
                 starvationGuardrailPolicy,
+                Mock.Of<IIngestionThroughputTelemetry>(),
                 Options.Create(new ChampionAnalyticsIngestionJobOptions
                 {
                     MinimumSuccessfulMatchesForCurrentPatch = 50,

@@ -112,20 +112,91 @@ public class AdaptiveThroughputBudgetPolicyTests
         second.MaxCandidates.Should().Be(first.MaxCandidates);
     }
 
+    [Fact]
+    public void ComputeBudget_TransitionsIntoCatchUpUnderSpikePressure_ThenReturnsBalanced()
+    {
+        var policy = CreatePolicy(new AdaptiveThroughputBudgetOptions
+        {
+            VelocityLookbackMinutes = 30,
+            ModeSwitchCooldownMinutes = 0,
+            HighPressureCooldownMinutes = 0,
+            CatchUpHoldMinutes = 3,
+            CatchUpCoverageThreshold = 0.85d,
+            CatchUpBacklogAgeMinutes = 45,
+            CatchUpCandidatePressureThreshold = 1.1d,
+            MinimumRecentVelocityPerHour = 12d,
+            CatchUpQueueBurstMultiplier = 2d,
+            CatchUpCandidateBurstMultiplier = 2d,
+            MaxQueueTargetHardCap = 20,
+            MaxCandidateHardCap = 120
+        });
+
+        var now = new DateTime(2026, 3, 5, 19, 40, 0, DateTimeKind.Utc);
+        var spikeCatchUp = policy.ComputeBudget(CreateInput(
+            now,
+            isApiPriorityDemandActive: false,
+            successfulMatchesForPatch: 60,
+            targetSuccessfulMatchesForPatch: 100,
+            latestPatchSuccessFetchUtc: now.AddMinutes(-120),
+            recentSuccessfulMatches: 2,
+            pendingCandidateCount: 150,
+            baselineMaxCandidates: 50,
+            baselineMinQueueTarget: 2,
+            baselineMaxQueueTarget: 6));
+        var holdCatchUp = policy.ComputeBudget(CreateInput(
+            now.AddMinutes(1),
+            isApiPriorityDemandActive: false,
+            successfulMatchesForPatch: 100,
+            targetSuccessfulMatchesForPatch: 100,
+            latestPatchSuccessFetchUtc: now.AddMinutes(-2),
+            recentSuccessfulMatches: 60,
+            pendingCandidateCount: 20,
+            baselineMaxCandidates: 50,
+            baselineMinQueueTarget: 2,
+            baselineMaxQueueTarget: 6));
+        var backToBalanced = policy.ComputeBudget(CreateInput(
+            now.AddMinutes(4),
+            isApiPriorityDemandActive: false,
+            successfulMatchesForPatch: 100,
+            targetSuccessfulMatchesForPatch: 100,
+            latestPatchSuccessFetchUtc: now.AddMinutes(-2),
+            recentSuccessfulMatches: 60,
+            pendingCandidateCount: 20,
+            baselineMaxCandidates: 50,
+            baselineMinQueueTarget: 2,
+            baselineMaxQueueTarget: 6));
+
+        spikeCatchUp.Mode.Should().Be(AdaptiveThroughputBudgetMode.CatchUp);
+        spikeCatchUp.QueueTarget.Should().BeGreaterThan(6);
+        holdCatchUp.Mode.Should().Be(AdaptiveThroughputBudgetMode.CatchUp);
+        backToBalanced.Mode.Should().Be(AdaptiveThroughputBudgetMode.Balanced);
+        backToBalanced.QueueTarget.Should().BeInRange(2, 6);
+    }
+
     private static AdaptiveThroughputBudgetPolicy CreatePolicy(AdaptiveThroughputBudgetOptions options) =>
         new(Options.Create(options));
 
-    private static AdaptiveThroughputBudgetInput CreateInput(DateTime evaluationUtc, bool isApiPriorityDemandActive) =>
+    private static AdaptiveThroughputBudgetInput CreateInput(
+        DateTime evaluationUtc,
+        bool isApiPriorityDemandActive,
+        int successfulMatchesForPatch = 120,
+        int targetSuccessfulMatchesForPatch = 100,
+        DateTime? latestPatchSuccessFetchUtc = null,
+        int recentSuccessfulMatches = 40,
+        int pendingCandidateCount = 12,
+        int baselineMaxCandidates = 50,
+        int baselineMinQueueTarget = 2,
+        int baselineMaxQueueTarget = 8) =>
         new(
             ProducerKey: "champion-ingestion",
             EvaluationUtc: evaluationUtc,
             IsApiPriorityDemandActive: isApiPriorityDemandActive,
-            SuccessfulMatchesForPatch: 120,
-            TargetSuccessfulMatchesForPatch: 100,
-            LatestPatchSuccessFetchUtc: evaluationUtc.AddMinutes(-10),
-            RecentSuccessfulMatches: 40,
-            PendingCandidateCount: 12,
-            BaselineMaxCandidates: 50,
-            BaselineMinQueueTarget: 2,
-            BaselineMaxQueueTarget: 8);
+            SuccessfulMatchesForPatch: successfulMatchesForPatch,
+            TargetSuccessfulMatchesForPatch: targetSuccessfulMatchesForPatch,
+            LatestPatchSuccessFetchUtc: latestPatchSuccessFetchUtc ?? evaluationUtc.AddMinutes(-10),
+            RecentSuccessfulMatches: recentSuccessfulMatches,
+            PendingCandidateCount: pendingCandidateCount,
+            BaselineMaxCandidates: baselineMaxCandidates,
+            BaselineMinQueueTarget: baselineMinQueueTarget,
+            BaselineMaxQueueTarget: baselineMaxQueueTarget);
 }

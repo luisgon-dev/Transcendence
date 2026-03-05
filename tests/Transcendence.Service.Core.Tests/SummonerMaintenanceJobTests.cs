@@ -12,6 +12,7 @@ using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Models.Service;
 using Transcendence.Data.Models.LoL.Static;
 using Transcendence.Data.Repositories.Interfaces;
+using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
@@ -177,6 +178,7 @@ public class SummonerMaintenanceJobTests
                 scoringPolicy,
                 adaptiveBudgetPolicy,
                 starvationGuardrailPolicy,
+                Mock.Of<IIngestionThroughputTelemetry>(),
                 Options.Create(new SummonerMaintenanceJobOptions
                 {
                     MaxCandidateSummonersPerRun = 10,

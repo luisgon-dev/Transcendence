@@ -122,6 +122,39 @@ public class StarvationGuardrailPolicyTests
         secondActivation.QueueTarget.Should().Be(3);
     }
 
+    [Fact]
+    public void Evaluate_WhenDeferAgeRecoversAfterCatchUp_ReturnsNormalBaselineTargets()
+    {
+        var policy = CreatePolicy(new StarvationGuardrailOptions
+        {
+            Enabled = true,
+            MaxEligibleDeferAgeMinutes = 120,
+            ForcedCatchUpQueueTargetFloor = 2,
+            ForcedCatchUpCandidateBurstMultiplier = 1.5d,
+            ForcedCatchUpMaxCandidateHardCap = 40
+        });
+
+        var start = policy.Evaluate(CreateInput(
+            maxEligibleDeferAgeMinutes: 180,
+            isCatchUpWindowActive: false,
+            isCatchUpCooldownActive: false,
+            baselineQueueTarget: 0,
+            baselineMaxCandidates: 10));
+        var recovered = policy.Evaluate(CreateInput(
+            maxEligibleDeferAgeMinutes: 45,
+            isCatchUpWindowActive: false,
+            isCatchUpCooldownActive: false,
+            baselineQueueTarget: 1,
+            baselineMaxCandidates: 10));
+
+        start.Outcome.Should().Be(StarvationGuardrailOutcome.CatchUpWindowStart);
+        recovered.Outcome.Should().Be(StarvationGuardrailOutcome.Normal);
+        recovered.IsForcedCatchUpActive.Should().BeFalse();
+        recovered.ShouldStartCatchUpWindow.Should().BeFalse();
+        recovered.QueueTarget.Should().Be(1);
+        recovered.MaxCandidates.Should().Be(10);
+    }
+
     private static StarvationGuardrailPolicy CreatePolicy(StarvationGuardrailOptions options) =>
         new(Options.Create(options));
 

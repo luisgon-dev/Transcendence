@@ -467,6 +467,91 @@ public class SummonerRefreshJobTests
             Times.Once);
     }
 
+    [Fact]
+    public async Task RefreshByRiotId_WhenApiPriorityDemandIsActive_StillFetchesAllModesForManualRefresh()
+    {
+        await using var harness = await SummonerRefreshJobHarness.CreateAsync();
+        var summoner = harness.SeedSummoner("name", "tag", "puuid-manual-all-modes");
+        await harness.Db.SaveChangesAsync();
+
+        harness.RefreshLockRepository
+            .Setup(x => x.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        harness.SummonerService
+            .Setup(x => x.GetSummonerByRiotIdAsync("name", "tag", PlatformRoute.NA1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(summoner);
+
+        harness.SummonerRepository
+            .Setup(x => x.AddOrUpdateSummonerAsync(summoner, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(summoner);
+
+        var ids = new System.Collections.Generic.Queue<IReadOnlyList<string>>(
+        [
+            ["NA1_ranked_manual"],
+            ["NA1_aram_manual"],
+            []
+        ]);
+
+        harness.RiotMatchIdsClient
+            .Setup(x => x.GetMatchIdsByPuuidAsync(
+                It.IsAny<RegionalRoute>(),
+                "puuid-manual-all-modes",
+                It.IsAny<int>(),
+                It.IsAny<long?>(),
+                It.IsAny<Queue?>(),
+                It.IsAny<long?>(),
+                It.IsAny<int>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => ids.Count > 0 ? ids.Dequeue() : []);
+
+        harness.MatchService
+            .Setup(x => x.GetMatchDetailsAsync(
+                "NA1_ranked_manual",
+                It.IsAny<RegionalRoute>(),
+                PlatformRoute.NA1,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildMatch("NA1_ranked_manual", QueueCatalog.RankedSoloDuoQueueId));
+        harness.MatchService
+            .Setup(x => x.GetMatchDetailsAsync(
+                "NA1_aram_manual",
+                It.IsAny<RegionalRoute>(),
+                PlatformRoute.NA1,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildMatch("NA1_aram_manual", 450));
+
+        await harness.Job.RefreshByRiotId("name", "tag", PlatformRoute.NA1, "lock:main", "lock:priority");
+
+        harness.RiotMatchIdsClient.Verify(
+            x => x.GetMatchIdsByPuuidAsync(
+                It.IsAny<RegionalRoute>(),
+                "puuid-manual-all-modes",
+                It.IsAny<int>(),
+                It.IsAny<long?>(),
+                Queue.SUMMONERS_RIFT_5V5_RANKED_SOLO,
+                It.IsAny<long?>(),
+                It.IsAny<int>(),
+                "ranked",
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        harness.RiotMatchIdsClient.Verify(
+            x => x.GetMatchIdsByPuuidAsync(
+                It.IsAny<RegionalRoute>(),
+                "puuid-manual-all-modes",
+                It.IsAny<int>(),
+                It.IsAny<long?>(),
+                It.Is<Queue?>(q => q == null),
+                It.IsAny<long?>(),
+                It.IsAny<int>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Exactly(2));
+
+        harness.Db.Matches.Should().Contain(m => m.MatchId == "NA1_ranked_manual");
+        harness.Db.Matches.Should().Contain(m => m.MatchId == "NA1_aram_manual");
+    }
+
     private static MatchEntity BuildMatch(string matchId, int queueId)
     {
         return new MatchEntity

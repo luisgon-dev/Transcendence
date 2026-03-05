@@ -12,6 +12,7 @@ using Moq;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Static;
 using Transcendence.Data.Repositories.Interfaces;
+using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
@@ -120,6 +121,7 @@ public class CancellationPropagationTests
                 Enabled = true,
                 MaxEligibleDeferAgeMinutes = 50_000
             })),
+            Mock.Of<IIngestionThroughputTelemetry>(),
             Options.Create(new ChampionAnalyticsIngestionJobOptions()),
             Mock.Of<ILogger<ChampionAnalyticsIngestionJob>>());
 

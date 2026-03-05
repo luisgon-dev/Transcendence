@@ -13,6 +13,7 @@ using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Models.LoL.Static;
 using Transcendence.Data.Repositories.Interfaces;
+using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
@@ -59,6 +60,29 @@ public class SummonerRefreshJobTests
         harness.RefreshLockRepository.Verify(
             x => x.ReleaseAsync(It.Is<string>(k => k != "lock:main"), It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    [Fact]
+    public async Task RefreshByRiotId_WhenTelemetryThrows_DoesNotBlockRefreshFlow()
+    {
+        await using var harness = await SummonerRefreshJobHarness.CreateAsync();
+
+        harness.LockTelemetry
+            .Setup(x => x.RecordLifecycleOutcome(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .Throws(new InvalidOperationException("telemetry unavailable"));
+
+        harness.SummonerService
+            .Setup(x => x.GetSummonerByRiotIdAsync("name", "tag", PlatformRoute.NA1, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("lookup failed"));
+
+        Func<Task> act = async () =>
+            await harness.Job.RefreshByRiotId("name", "tag", PlatformRoute.NA1, "lock:main", "lock:priority");
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("lookup failed");
+        harness.RefreshLockRepository.Verify(x => x.ReleaseAsync("lock:main", It.IsAny<CancellationToken>()), Times.Once);
+        harness.RefreshLockRepository.Verify(x => x.ReleaseAsync("lock:priority", It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]
@@ -475,7 +499,8 @@ public class SummonerRefreshJobTests
             Mock<IMatchService> matchService,
             Mock<IRefreshLockRepository> refreshLockRepository,
             Mock<IRiotMatchIdsClient> riotMatchIdsClient,
-            Mock<IBackgroundJobClient> backgroundJobClient)
+            Mock<IBackgroundJobClient> backgroundJobClient,
+            Mock<IRefreshLockLifecycleTelemetry> lockTelemetry)
         {
             _connection = connection;
             Db = db;
@@ -488,6 +513,7 @@ public class SummonerRefreshJobTests
             RefreshLockRepository = refreshLockRepository;
             RiotMatchIdsClient = riotMatchIdsClient;
             BackgroundJobClient = backgroundJobClient;
+            LockTelemetry = lockTelemetry;
         }
 
         public TestSqliteTranscendenceContext Db { get; }
@@ -500,6 +526,7 @@ public class SummonerRefreshJobTests
         public Mock<IRefreshLockRepository> RefreshLockRepository { get; }
         public Mock<IRiotMatchIdsClient> RiotMatchIdsClient { get; }
         public Mock<IBackgroundJobClient> BackgroundJobClient { get; }
+        public Mock<IRefreshLockLifecycleTelemetry> LockTelemetry { get; }
 
         public static async Task<SummonerRefreshJobHarness> CreateAsync()
         {
@@ -525,6 +552,7 @@ public class SummonerRefreshJobTests
             var refreshLockRepository = new Mock<IRefreshLockRepository>();
             var riotMatchIdsClient = new Mock<IRiotMatchIdsClient>();
             var backgroundJobClient = new Mock<IBackgroundJobClient>();
+            var lockTelemetry = new Mock<IRefreshLockLifecycleTelemetry>();
 
             refreshLockRepository
                 .Setup(x => x.ReleaseAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -586,7 +614,8 @@ public class SummonerRefreshJobTests
                 backgroundJobClient.Object,
                 services.GetRequiredService<HybridCache>(),
                 ingestionOptions,
-                timelineOptions);
+                timelineOptions,
+                lockTelemetry.Object);
 
             return new SummonerRefreshJobHarness(
                 connection,
@@ -599,7 +628,8 @@ public class SummonerRefreshJobTests
                 matchService,
                 refreshLockRepository,
                 riotMatchIdsClient,
-                backgroundJobClient);
+                backgroundJobClient,
+                lockTelemetry);
         }
 
         public Summoner SeedSummoner(string gameName, string tagLine, string puuid)

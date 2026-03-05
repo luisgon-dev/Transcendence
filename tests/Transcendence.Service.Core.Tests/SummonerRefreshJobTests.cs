@@ -13,6 +13,7 @@ using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Models.LoL.Static;
 using Transcendence.Data.Repositories.Interfaces;
+using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
@@ -62,6 +63,81 @@ public class SummonerRefreshJobTests
     }
 
     [Fact]
+    public async Task RefreshByRiotId_WhenTelemetryThrows_DoesNotBlockRefreshFlow()
+    {
+        await using var harness = await SummonerRefreshJobHarness.CreateAsync();
+
+        harness.LockTelemetry
+            .Setup(x => x.RecordLifecycleOutcome(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .Throws(new InvalidOperationException("telemetry unavailable"));
+
+        harness.SummonerService
+            .Setup(x => x.GetSummonerByRiotIdAsync("name", "tag", PlatformRoute.NA1, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("lookup failed"));
+
+        Func<Task> act = async () =>
+            await harness.Job.RefreshByRiotId("name", "tag", PlatformRoute.NA1, "lock:main", "lock:priority");
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("lookup failed");
+        harness.RefreshLockRepository.Verify(x => x.ReleaseAsync("lock:main", It.IsAny<CancellationToken>()), Times.Once);
+        harness.RefreshLockRepository.Verify(x => x.ReleaseAsync("lock:priority", It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task RefreshByRiotId_PropagatesCancellationAndStillReleasesLocks()
+    {
+        await using var harness = await SummonerRefreshJobHarness.CreateAsync();
+        var summoner = harness.SeedSummoner("name", "tag", "puuid-cancel");
+        await harness.Db.SaveChangesAsync();
+
+        using var cts = new CancellationTokenSource();
+
+        harness.SummonerService
+            .Setup(x => x.GetSummonerByRiotIdAsync("name", "tag", PlatformRoute.NA1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(summoner);
+
+        harness.SummonerRepository
+            .Setup(x => x.AddOrUpdateSummonerAsync(summoner, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(summoner);
+
+        harness.RiotMatchIdsClient
+            .Setup(x => x.GetMatchIdsByPuuidAsync(
+                It.IsAny<RegionalRoute>(),
+                "puuid-cancel",
+                It.IsAny<int>(),
+                It.IsAny<long?>(),
+                It.IsAny<Queue?>(),
+                It.IsAny<long?>(),
+                It.IsAny<int>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(["NA1_cancel_1"]);
+
+        harness.MatchService
+            .Setup(x => x.GetMatchDetailsAsync(
+                "NA1_cancel_1",
+                It.IsAny<RegionalRoute>(),
+                PlatformRoute.NA1,
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException(cts.Token));
+
+        Func<Task> act = async () => await harness.Job.RefreshByRiotId(
+            "name",
+            "tag",
+            PlatformRoute.NA1,
+            "lock:main",
+            "lock:priority",
+            cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        harness.RefreshLockRepository.Verify(x => x.ReleaseAsync("lock:main", It.IsAny<CancellationToken>()), Times.Once);
+        harness.RefreshLockRepository.Verify(x => x.ReleaseAsync("lock:priority", It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task RefreshForAnalytics_ExitsEarly_WhenApiPriorityDemandIsActive()
     {
         await using var harness = await SummonerRefreshJobHarness.CreateAsync();
@@ -100,6 +176,65 @@ public class SummonerRefreshJobTests
                 It.IsAny<CancellationToken>()),
             Times.Never);
         harness.RefreshLockRepository.Verify(x => x.ReleaseAsync("lock:low", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RefreshForAnalytics_WhenForcedCatchUpExecutionIsMarked_MakesProgressDespiteApiPriorityDemand()
+    {
+        await using var harness = await SummonerRefreshJobHarness.CreateAsync();
+        var summoner = harness.SeedSummoner("name", "tag", "puuid-forced-catchup");
+        await harness.Db.SaveChangesAsync();
+        var previousUpdatedAt = summoner.UpdatedAt;
+
+        harness.RefreshLockRepository
+            .Setup(x => x.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        harness.SummonerRepository
+            .Setup(x => x.FindByRiotIdAsync(
+                "NA1",
+                "name",
+                "tag",
+                It.IsAny<Func<IQueryable<Summoner>, IQueryable<Summoner>>?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(summoner);
+
+        harness.RiotMatchIdsClient
+            .Setup(x => x.GetMatchIdsByPuuidAsync(
+                It.IsAny<RegionalRoute>(),
+                "puuid-forced-catchup",
+                It.IsAny<int>(),
+                It.IsAny<long?>(),
+                It.IsAny<Queue?>(),
+                It.IsAny<long?>(),
+                It.IsAny<int>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(["NA1_ranked_forced"]);
+
+        harness.MatchService
+            .Setup(x => x.GetMatchDetailsLightweightAsync(
+                "NA1_ranked_forced",
+                It.IsAny<RegionalRoute>(),
+                PlatformRoute.NA1,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildMatch("NA1_ranked_forced", QueueCatalog.RankedSoloDuoQueueId));
+
+        await harness.Job.RefreshForAnalytics(
+            "name",
+            "tag",
+            PlatformRoute.NA1,
+            "lock:low|forced-catch-up",
+            startTimeEpochSeconds: 0,
+            currentPatch: "14.2",
+            includeAllModes: false);
+
+        harness.Db.Matches.Should().ContainSingle(m => m.MatchId == "NA1_ranked_forced");
+        summoner.UpdatedAt.Should().BeAfter(previousUpdatedAt);
+        harness.RefreshLockRepository.Verify(x => x.ReleaseAsync("lock:low", It.IsAny<CancellationToken>()), Times.Once);
+        harness.RefreshLockRepository.Verify(
+            x => x.ReleaseAsync("lock:low|forced-catch-up", It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
@@ -391,6 +526,91 @@ public class SummonerRefreshJobTests
             Times.Once);
     }
 
+    [Fact]
+    public async Task RefreshByRiotId_WhenApiPriorityDemandIsActive_StillFetchesAllModesForManualRefresh()
+    {
+        await using var harness = await SummonerRefreshJobHarness.CreateAsync();
+        var summoner = harness.SeedSummoner("name", "tag", "puuid-manual-all-modes");
+        await harness.Db.SaveChangesAsync();
+
+        harness.RefreshLockRepository
+            .Setup(x => x.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        harness.SummonerService
+            .Setup(x => x.GetSummonerByRiotIdAsync("name", "tag", PlatformRoute.NA1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(summoner);
+
+        harness.SummonerRepository
+            .Setup(x => x.AddOrUpdateSummonerAsync(summoner, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(summoner);
+
+        var ids = new System.Collections.Generic.Queue<IReadOnlyList<string>>(
+        [
+            ["NA1_ranked_manual"],
+            ["NA1_aram_manual"],
+            []
+        ]);
+
+        harness.RiotMatchIdsClient
+            .Setup(x => x.GetMatchIdsByPuuidAsync(
+                It.IsAny<RegionalRoute>(),
+                "puuid-manual-all-modes",
+                It.IsAny<int>(),
+                It.IsAny<long?>(),
+                It.IsAny<Queue?>(),
+                It.IsAny<long?>(),
+                It.IsAny<int>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => ids.Count > 0 ? ids.Dequeue() : []);
+
+        harness.MatchService
+            .Setup(x => x.GetMatchDetailsAsync(
+                "NA1_ranked_manual",
+                It.IsAny<RegionalRoute>(),
+                PlatformRoute.NA1,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildMatch("NA1_ranked_manual", QueueCatalog.RankedSoloDuoQueueId));
+        harness.MatchService
+            .Setup(x => x.GetMatchDetailsAsync(
+                "NA1_aram_manual",
+                It.IsAny<RegionalRoute>(),
+                PlatformRoute.NA1,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildMatch("NA1_aram_manual", 450));
+
+        await harness.Job.RefreshByRiotId("name", "tag", PlatformRoute.NA1, "lock:main", "lock:priority");
+
+        harness.RiotMatchIdsClient.Verify(
+            x => x.GetMatchIdsByPuuidAsync(
+                It.IsAny<RegionalRoute>(),
+                "puuid-manual-all-modes",
+                It.IsAny<int>(),
+                It.IsAny<long?>(),
+                Queue.SUMMONERS_RIFT_5V5_RANKED_SOLO,
+                It.IsAny<long?>(),
+                It.IsAny<int>(),
+                "ranked",
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        harness.RiotMatchIdsClient.Verify(
+            x => x.GetMatchIdsByPuuidAsync(
+                It.IsAny<RegionalRoute>(),
+                "puuid-manual-all-modes",
+                It.IsAny<int>(),
+                It.IsAny<long?>(),
+                It.Is<Queue?>(q => q == null),
+                It.IsAny<long?>(),
+                It.IsAny<int>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Exactly(2));
+
+        harness.Db.Matches.Should().Contain(m => m.MatchId == "NA1_ranked_manual");
+        harness.Db.Matches.Should().Contain(m => m.MatchId == "NA1_aram_manual");
+    }
+
     private static MatchEntity BuildMatch(string matchId, int queueId)
     {
         return new MatchEntity
@@ -423,7 +643,8 @@ public class SummonerRefreshJobTests
             Mock<IMatchService> matchService,
             Mock<IRefreshLockRepository> refreshLockRepository,
             Mock<IRiotMatchIdsClient> riotMatchIdsClient,
-            Mock<IBackgroundJobClient> backgroundJobClient)
+            Mock<IBackgroundJobClient> backgroundJobClient,
+            Mock<IRefreshLockLifecycleTelemetry> lockTelemetry)
         {
             _connection = connection;
             Db = db;
@@ -436,6 +657,7 @@ public class SummonerRefreshJobTests
             RefreshLockRepository = refreshLockRepository;
             RiotMatchIdsClient = riotMatchIdsClient;
             BackgroundJobClient = backgroundJobClient;
+            LockTelemetry = lockTelemetry;
         }
 
         public TestSqliteTranscendenceContext Db { get; }
@@ -448,6 +670,7 @@ public class SummonerRefreshJobTests
         public Mock<IRefreshLockRepository> RefreshLockRepository { get; }
         public Mock<IRiotMatchIdsClient> RiotMatchIdsClient { get; }
         public Mock<IBackgroundJobClient> BackgroundJobClient { get; }
+        public Mock<IRefreshLockLifecycleTelemetry> LockTelemetry { get; }
 
         public static async Task<SummonerRefreshJobHarness> CreateAsync()
         {
@@ -473,6 +696,7 @@ public class SummonerRefreshJobTests
             var refreshLockRepository = new Mock<IRefreshLockRepository>();
             var riotMatchIdsClient = new Mock<IRiotMatchIdsClient>();
             var backgroundJobClient = new Mock<IBackgroundJobClient>();
+            var lockTelemetry = new Mock<IRefreshLockLifecycleTelemetry>();
 
             refreshLockRepository
                 .Setup(x => x.ReleaseAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -534,7 +758,8 @@ public class SummonerRefreshJobTests
                 backgroundJobClient.Object,
                 services.GetRequiredService<HybridCache>(),
                 ingestionOptions,
-                timelineOptions);
+                timelineOptions,
+                lockTelemetry.Object);
 
             return new SummonerRefreshJobHarness(
                 connection,
@@ -547,7 +772,8 @@ public class SummonerRefreshJobTests
                 matchService,
                 refreshLockRepository,
                 riotMatchIdsClient,
-                backgroundJobClient);
+                backgroundJobClient,
+                lockTelemetry);
         }
 
         public Summoner SeedSummoner(string gameName, string tagLine, string puuid)

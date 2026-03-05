@@ -30,7 +30,7 @@ else
   WEBAPI_PROJECT="$ROOT/Transcendence.WebAPI/Transcendence.WebAPI.csproj"
 fi
 
-"$DOTNET_BIN" build -c Release "$WEBAPI_PROJECT"
+"$DOTNET_BIN" build -c Release -m:1 "$WEBAPI_PROJECT"
 
 # The WebAPI program requires these values at startup (even for Swagger generation).
 export ConnectionStrings__MainDatabase="${ConnectionStrings__MainDatabase:-Host=localhost;Port=5432;Database=transcendence;Username=postgres;Password=postgres}"

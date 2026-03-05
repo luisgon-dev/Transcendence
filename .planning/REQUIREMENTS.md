@@ -9,10 +9,10 @@ Requirements for this milestone. Each will map to exactly one roadmap phase.
 
 ### Ingestion Prioritization
 
-- [ ] **INGT-01**: User-triggered refresh requests are prioritized over non-interactive background ingestion during patch spikes.
-- [ ] **INGT-02**: User sees patch-relevant champion/stat data ingested first via configurable priority scoring.
-- [ ] **INGT-03**: User-facing freshness remains responsive because queue-tier throughput budgets prevent background starvation of high-priority work.
-- [ ] **INGT-04**: User still receives long-tail updates over time because starvation guardrails prevent permanent deferral of low-priority ingestion.
+- [x] **INGT-01**: User-triggered refresh requests are prioritized over non-interactive background ingestion during patch spikes.
+- [x] **INGT-02**: User sees patch-relevant champion/stat data ingested first via configurable priority scoring.
+- [x] **INGT-03**: User-facing freshness remains responsive because queue-tier throughput budgets prevent background starvation of high-priority work.
+- [x] **INGT-04**: User still receives long-tail updates over time because starvation guardrails prevent permanent deferral of low-priority ingestion.
 
 ### Freshness and Fallback Contract
 
@@ -22,16 +22,16 @@ Requirements for this milestone. Each will map to exactly one roadmap phase.
 
 ### Worker Reliability
 
-- [ ] **WORK-01**: Operator can verify mandatory recurring jobs are registered at startup before traffic is served.
-- [ ] **WORK-02**: Operator receives fail-fast startup behavior when mandatory scheduling fails (no partial healthy state).
-- [ ] **WORK-03**: User avoids stale or duplicated updates during deploys because cancellation is propagated through long-running ingestion/refresh paths.
-- [ ] **WORK-04**: Operator gets consistent job behavior across development and production environments through shared scheduling policy logic.
+- [x] **WORK-01**: Operator can verify mandatory recurring jobs are registered at startup before traffic is served.
+- [x] **WORK-02**: Operator receives fail-fast startup behavior when mandatory scheduling fails (no partial healthy state).
+- [x] **WORK-03**: User avoids stale or duplicated updates during deploys because cancellation is propagated through long-running ingestion/refresh paths.
+- [x] **WORK-04**: Operator gets consistent job behavior across development and production environments through shared scheduling policy logic.
 
 ### Refresh Lock Lifecycle
 
-- [ ] **LOCK-01**: User refresh requests use normalized lock keys to reduce lock collisions and inconsistent lock ownership.
-- [ ] **LOCK-02**: Operator can bound lock storage growth via retention cleanup of expired/stale lock entries.
-- [ ] **LOCK-03**: Operator can monitor lock contention and growth via lock lifecycle telemetry.
+- [x] **LOCK-01**: User refresh requests use normalized lock keys to reduce lock collisions and inconsistent lock ownership.
+- [x] **LOCK-02**: Operator can bound lock storage growth via retention cleanup of expired/stale lock entries.
+- [x] **LOCK-03**: Operator can monitor lock contention and growth via lock lifecycle telemetry.
 
 ### Quality and Safety
 
@@ -66,20 +66,20 @@ Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INGT-01 | Phase 3 - Priority Ingestion Throughput | Pending |
-| INGT-02 | Phase 3 - Priority Ingestion Throughput | Pending |
-| INGT-03 | Phase 3 - Priority Ingestion Throughput | Pending |
-| INGT-04 | Phase 3 - Priority Ingestion Throughput | Pending |
+| INGT-01 | Phase 3 - Priority Ingestion Throughput | Complete |
+| INGT-02 | Phase 3 - Priority Ingestion Throughput | Complete |
+| INGT-03 | Phase 3 - Priority Ingestion Throughput | Complete |
+| INGT-04 | Phase 3 - Priority Ingestion Throughput | Complete |
 | FRSH-01 | Phase 4 - Deterministic Freshness Contract | Pending |
 | FRSH-02 | Phase 4 - Deterministic Freshness Contract | Pending |
 | FRSH-03 | Phase 4 - Deterministic Freshness Contract | Pending |
-| WORK-01 | Phase 1 - Worker Startup Integrity | Pending |
-| WORK-02 | Phase 1 - Worker Startup Integrity | Pending |
-| WORK-03 | Phase 1 - Worker Startup Integrity | Pending |
-| WORK-04 | Phase 1 - Worker Startup Integrity | Pending |
-| LOCK-01 | Phase 2 - Refresh Lock Lifecycle Control | Pending |
-| LOCK-02 | Phase 2 - Refresh Lock Lifecycle Control | Pending |
-| LOCK-03 | Phase 2 - Refresh Lock Lifecycle Control | Pending |
+| WORK-01 | Phase 1 - Worker Startup Integrity | Complete |
+| WORK-02 | Phase 1 - Worker Startup Integrity | Complete |
+| WORK-03 | Phase 1 - Worker Startup Integrity | Complete |
+| WORK-04 | Phase 1 - Worker Startup Integrity | Complete |
+| LOCK-01 | Phase 2 - Refresh Lock Lifecycle Control | Complete |
+| LOCK-02 | Phase 2 - Refresh Lock Lifecycle Control | Complete |
+| LOCK-03 | Phase 2 - Refresh Lock Lifecycle Control | Complete |
 | QUAL-01 | Phase 5 - Quality Gates and Documentation Parity | Pending |
 | QUAL-02 | Phase 5 - Quality Gates and Documentation Parity | Pending |
 

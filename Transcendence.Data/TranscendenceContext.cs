@@ -129,7 +129,11 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
         modelBuilder.Entity<Patch>(entity => { entity.HasKey(p => p.Version); });
 
         // RefreshLock configuration
-        modelBuilder.Entity<RefreshLock>(entity => { entity.HasIndex(x => x.Key).IsUnique(); });
+        modelBuilder.Entity<RefreshLock>(entity =>
+        {
+            entity.HasIndex(x => x.Key).IsUnique();
+            entity.HasIndex(x => x.LockedUntilUtc);
+        });
 
         // API key authentication
         modelBuilder.Entity<ApiClientKey>(entity =>

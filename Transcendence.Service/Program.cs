@@ -7,7 +7,9 @@ using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Extensions;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
+using Transcendence.Service.Core.Services.Jobs.Priority;
 using Transcendence.Service.Workers;
+using Transcendence.Service.Workers.Startup;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Logging.AddOperationalFileLogger(builder.Configuration, defaultServiceName: "service");
@@ -54,6 +56,7 @@ builder.Services.AddHybridCache(options =>
 });
 
 builder.Services.Configure<WorkerJobScheduleOptions>(builder.Configuration.GetSection("Jobs:Schedule"));
+builder.Services.Configure<WorkerSchedulingProfileOptions>(builder.Configuration.GetSection("Jobs:SchedulingProfiles"));
 builder.Services.Configure<LiveGamePollingJobOptions>(builder.Configuration.GetSection("Jobs:LiveGamePolling"));
 builder.Services.Configure<RetryFailedMatchesJobOptions>(builder.Configuration.GetSection("Jobs:RetryFailedMatches"));
 builder.Services.Configure<RefreshChampionAnalyticsJobOptions>(
@@ -61,12 +64,23 @@ builder.Services.Configure<RefreshChampionAnalyticsJobOptions>(
 builder.Services.Configure<ChampionAnalyticsIngestionJobOptions>(
     builder.Configuration.GetSection("Jobs:ChampionAnalyticsIngestion"));
 builder.Services.Configure<SummonerMaintenanceJobOptions>(builder.Configuration.GetSection("Jobs:SummonerMaintenance"));
+builder.Services.Configure<AdaptiveThroughputBudgetOptions>(
+    builder.Configuration.GetSection("Jobs:AdaptiveThroughputBudget"));
+builder.Services.Configure<StarvationGuardrailOptions>(
+    builder.Configuration.GetSection("Jobs:StarvationGuardrail"));
+builder.Services.Configure<IngestionPriorityPolicyOptions>(
+    builder.Configuration.GetSection("Jobs:IngestionPriorityPolicy"));
 builder.Services.Configure<MatchIngestionOptions>(builder.Configuration.GetSection("Jobs:MatchIngestion"));
 builder.Services.Configure<TimelineIngestionOptions>(builder.Configuration.GetSection("Jobs:TimelineIngestion"));
 builder.Services.Configure<RuneSelectionIntegrityBackfillJobOptions>(
     builder.Configuration.GetSection("Jobs:RuneSelectionIntegrityBackfill"));
 builder.Services.Configure<SummonerBootstrapOptions>(builder.Configuration.GetSection("Jobs:SummonerBootstrap"));
 builder.Services.Configure<ChampionAnalyticsComputeOptions>(builder.Configuration.GetSection("Analytics:Compute"));
+builder.Services.AddSingleton<IWorkerRecurringJobPolicy, WorkerRecurringJobPolicy>();
+builder.Services.AddSingleton<WorkerStartupIntegrityState>();
+builder.Services.AddSingleton<IWorkerStartupIntegrityService, WorkerStartupIntegrityService>();
+builder.Services.AddSingleton<IAdaptiveThroughputBudgetPolicy, AdaptiveThroughputBudgetPolicy>();
+builder.Services.AddSingleton<IStarvationGuardrailPolicy, StarvationGuardrailPolicy>();
 
 // worker that initiates services
 if (builder.Environment.IsDevelopment())

@@ -5,12 +5,15 @@ using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Analysis.Exceptions;
 using Transcendence.Service.Core.Services.Analysis.Interfaces;
 using Transcendence.Service.Core.Services.Analysis.Models;
+using Transcendence.Service.Core.Services.Diagnostics;
+using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.RiotApi.DTOs;
 using Transcendence.WebAPI.Controllers;
 
@@ -105,6 +108,135 @@ public class SummonersControllerTests
         var accepted = result.Should().BeOfType<AcceptedResult>().Subject;
         var payload = accepted.Value.Should().BeOfType<SummonerAcceptedResponse>().Subject;
         payload.Message.Should().Contain("Summoner not found");
+    }
+
+    [Fact]
+    public async Task RefreshByRiotId_WhenLockHeld_ReturnsRetryHintWithPollLink()
+    {
+        var refreshLockRepository = new Mock<IRefreshLockRepository>();
+        var backgroundJobClient = new Mock<IBackgroundJobClient>();
+        var lockTelemetry = new Mock<IRefreshLockLifecycleTelemetry>();
+        var lockExpiry = DateTime.UtcNow.AddSeconds(45);
+        refreshLockRepository
+            .Setup(x => x.TryAcquireAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        refreshLockRepository
+            .Setup(x => x.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Data.Models.Service.RefreshLock
+            {
+                Key = "summoner-refresh:NA1:NAME:TAG",
+                LockedUntilUtc = lockExpiry
+            });
+
+        var controller = BuildController(
+            refreshLockRepository: refreshLockRepository.Object,
+            backgroundJobClient: backgroundJobClient.Object);
+        controller.Url = new StaticUrlHelper("https://localhost/api/summoners/na1/name/tag");
+        controller.ControllerContext.HttpContext.RequestServices = new ServiceCollection()
+            .AddSingleton<IRefreshLockLifecycleTelemetry>(lockTelemetry.Object)
+            .BuildServiceProvider();
+
+        var result = await controller.RefreshByRiotId("na1", "name", "tag", CancellationToken.None);
+
+        var accepted = result.Should().BeOfType<AcceptedResult>().Subject;
+        var payload = accepted.Value.Should().BeOfType<SummonerAcceptedResponse>().Subject;
+        payload.Message.Should().Be("Refresh in process");
+        payload.Poll.Should().Be("https://localhost/api/summoners/na1/name/tag");
+        payload.RetryAfterSeconds.Should().BeGreaterThan(0);
+        var expectedKey = RefreshLockKeys.BuildSummonerRefreshKey(Camille.Enums.PlatformRoute.NA1, "name", "tag");
+        lockTelemetry.Verify(
+            x => x.RecordLifecycleOutcome(expectedKey, "contention", "summoners-controller"),
+            Times.Once);
+        lockTelemetry.Verify(
+            x => x.RecordContentionWaitHint(
+                expectedKey,
+                It.Is<int>(waitHint => waitHint == payload.RetryAfterSeconds),
+                "summoners-controller"),
+            Times.Once);
+        backgroundJobClient.Verify(
+            x => x.Create(It.IsAny<Hangfire.Common.Job>(), It.IsAny<Hangfire.States.IState>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task RefreshByRiotId_UsesCanonicalLockKeyNormalizationForContentionChecks()
+    {
+        var refreshLockRepository = new Mock<IRefreshLockRepository>();
+        var observedKeys = new List<string>();
+        refreshLockRepository
+            .Setup(x => x.TryAcquireAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .Returns<string, TimeSpan, CancellationToken>((key, _, _) =>
+            {
+                observedKeys.Add(key);
+                return Task.FromResult(false);
+            });
+        refreshLockRepository
+            .Setup(x => x.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Data.Models.Service.RefreshLock
+            {
+                Key = "summoner-refresh:NA1:NAME:TAG",
+                LockedUntilUtc = DateTime.UtcNow.AddSeconds(30)
+            });
+
+        var controller = BuildController(
+            refreshLockRepository: refreshLockRepository.Object,
+            backgroundJobClient: Mock.Of<IBackgroundJobClient>());
+        controller.Url = new StaticUrlHelper("https://localhost/api/summoners/na1/name/tag");
+
+        await controller.RefreshByRiotId("na1", "  Name  ", "  tag ", CancellationToken.None);
+
+        observedKeys.Should().ContainSingle();
+        observedKeys[0].Should()
+            .Be(RefreshLockKeys.BuildSummonerRefreshKey(Camille.Enums.PlatformRoute.NA1, "Name", "tag"));
+        refreshLockRepository.Verify(
+            x => x.GetAsync(observedKeys[0], It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task RefreshByRiotId_WhenPriorityLockUnavailable_RecordsMainAcquireAndPriorityContentionTelemetry()
+    {
+        var expectedMainKey = RefreshLockKeys.BuildSummonerRefreshKey(Camille.Enums.PlatformRoute.NA1, "Name", "Tag");
+        var expectedPriorityKey =
+            RefreshLockKeys.BuildApiPriorityKey(Camille.Enums.PlatformRoute.NA1, "Name", "Tag");
+        var refreshLockRepository = new Mock<IRefreshLockRepository>();
+        refreshLockRepository
+            .Setup(x => x.TryAcquireAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .Returns<string, TimeSpan, CancellationToken>((key, _, _) => Task.FromResult(key == expectedMainKey));
+        var backgroundJobClient = new Mock<IBackgroundJobClient>();
+        backgroundJobClient
+            .Setup(x => x.Create(It.IsAny<Hangfire.Common.Job>(), It.IsAny<Hangfire.States.IState>()))
+            .Returns("job-1");
+        var lockTelemetry = new Mock<IRefreshLockLifecycleTelemetry>();
+
+        var controller = BuildController(
+            refreshLockRepository: refreshLockRepository.Object,
+            backgroundJobClient: backgroundJobClient.Object);
+        controller.Url = new StaticUrlHelper("https://localhost/api/summoners/na1/name/tag");
+        controller.ControllerContext.HttpContext.RequestServices = new ServiceCollection()
+            .AddSingleton<IRefreshLockLifecycleTelemetry>(lockTelemetry.Object)
+            .BuildServiceProvider();
+
+        var result = await controller.RefreshByRiotId("na1", "Name", "Tag", CancellationToken.None);
+
+        var accepted = result.Should().BeOfType<AcceptedResult>().Subject;
+        var payload = accepted.Value.Should().BeOfType<SummonerAcceptedResponse>().Subject;
+        payload.Message.Should().Be("Refresh queued");
+        payload.Poll.Should().Be("https://localhost/api/summoners/na1/name/tag");
+        payload.RetryAfterSeconds.Should().BeNull();
+
+        lockTelemetry.Verify(
+            x => x.RecordLifecycleOutcome(expectedMainKey, "acquired", "summoners-controller"),
+            Times.Once);
+        lockTelemetry.Verify(
+            x => x.RecordLifecycleOutcome(expectedPriorityKey, "contention", "summoners-controller"),
+            Times.Once);
+        lockTelemetry.Verify(
+            x => x.RecordContentionWaitHint(expectedPriorityKey, 900, "summoners-controller"),
+            Times.Once);
+        backgroundJobClient.Verify(
+            x => x.Create(It.IsAny<Hangfire.Common.Job>(), It.IsAny<Hangfire.States.IState>()),
+            Times.Once);
     }
 
     private static SummonersController BuildController(

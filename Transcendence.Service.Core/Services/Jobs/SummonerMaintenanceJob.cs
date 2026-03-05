@@ -3,9 +3,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Match;
+using Transcendence.Data.Models.Service;
 using Transcendence.Data.Repositories.Interfaces;
+using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
+using Transcendence.Service.Core.Services.Jobs.Priority;
 using Transcendence.Service.Core.Services.RiotApi;
 
 namespace Transcendence.Service.Core.Services.Jobs;
@@ -15,15 +18,23 @@ public class SummonerMaintenanceJob(
     TranscendenceContext db,
     IBackgroundJobClient backgroundJobClient,
     IRefreshLockRepository refreshLockRepository,
+    IIngestionPriorityScoringPolicy scoringPolicy,
+    IAdaptiveThroughputBudgetPolicy adaptiveThroughputBudgetPolicy,
+    IStarvationGuardrailPolicy starvationGuardrailPolicy,
+    IIngestionThroughputTelemetry ingestionThroughputTelemetry,
     IOptions<SummonerMaintenanceJobOptions> options,
     IOptions<ChampionAnalyticsIngestionJobOptions> analyticsOptions,
     ILogger<SummonerMaintenanceJob> logger)
 {
+    private const string ProducerKey = nameof(SummonerMaintenanceJob);
+    private const string TelemetrySource = "summoner-maintenance-job";
+
     private sealed record CandidateSummoner(
         string PlatformRegion,
         string GameName,
         string TagLine,
-        DateTime UpdatedAt);
+        DateTime UpdatedAt,
+        bool IsFavorite);
 
     [Queue("refresh-low")]
     public async Task ExecuteAsync(CancellationToken ct = default)
@@ -40,12 +51,10 @@ public class SummonerMaintenanceJob(
     private async Task ExecuteInternalAsync(bool rampOnly, CancellationToken ct = default)
     {
         var jobOptions = options.Value;
-        if (jobOptions.PauseWhenApiPriorityRefreshActive &&
-            await refreshLockRepository.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, ct))
-        {
-            logger.LogInformation("[Maintenance] Skipped due to active high-priority API refresh demand.");
-            return;
-        }
+        var evaluationUtc = DateTime.UtcNow;
+        var apiPriorityDemandActive = await refreshLockRepository.AnyActiveByPrefixAsync(
+            RefreshLockKeys.ApiPriorityRefreshPrefix,
+            ct);
 
         var activePatch = await db.Patches
             .AsNoTracking()
@@ -63,7 +72,7 @@ public class SummonerMaintenanceJob(
             ? activePatch.ReleaseDate
             : DateTime.SpecifyKind(activePatch.ReleaseDate, DateTimeKind.Utc);
         var rampHours = Math.Max(1, jobOptions.NewPatchRampHours);
-        var isRampActive = DateTime.UtcNow < releaseUtc.AddHours(rampHours);
+        var isRampActive = evaluationUtc < releaseUtc.AddHours(rampHours);
         if (rampOnly && !isRampActive)
         {
             logger.LogDebug("[Maintenance] Ramp run skipped: ramp window inactive.");
@@ -76,32 +85,148 @@ public class SummonerMaintenanceJob(
             .Where(m => m.Status == FetchStatus.Success && m.Patch == activePatch.Version)
             .CountAsync(ct);
 
-        var includeAllModes = successfulMatchesForPatch >=
-                              Math.Max(
-                                  analyticsOptions.Value.MinimumSuccessfulMatchesForCurrentPatch,
-                                  analyticsOptions.Value.TargetSuccessfulMatchesForCurrentPatch);
+        var targetMatchesForPatch = Math.Max(
+            analyticsOptions.Value.MinimumSuccessfulMatchesForCurrentPatch,
+            analyticsOptions.Value.TargetSuccessfulMatchesForCurrentPatch);
+
+        var latestFetchAtUtc = await db.Matches
+            .AsNoTracking()
+            .Where(m => m.Status == FetchStatus.Success && m.Patch == activePatch.Version && m.FetchedAt != null)
+            .MaxAsync(m => m.FetchedAt, ct);
 
         var staleAfterMinutes = Math.Max(5,
             isRampActive ? jobOptions.RampDataStaleAfterMinutes : jobOptions.DataStaleAfterMinutes);
-        var staleCutoffUtc = DateTime.UtcNow.AddMinutes(-staleAfterMinutes);
-        var maxCandidates = Math.Max(1,
+        var staleCutoffUtc = evaluationUtc.AddMinutes(-staleAfterMinutes);
+        var baselineMaxCandidates = Math.Max(1,
             isRampActive ? jobOptions.RampMaxCandidateSummonersPerRun : jobOptions.MaxCandidateSummonersPerRun);
-        var maxQueued = Math.Max(1,
+        var baselineMaxQueued = Math.Max(1,
             isRampActive ? jobOptions.RampMaxRefreshJobsToQueuePerRun : jobOptions.MaxRefreshJobsToQueuePerRun);
+        var baselineMinQueued = 1;
+
+        var recentSuccessWindowStartUtc = evaluationUtc.AddMinutes(-adaptiveThroughputBudgetPolicy.VelocityLookbackMinutes);
+        var recentSuccessfulMatchesForPatch = await db.Matches
+            .AsNoTracking()
+            .Where(m => m.Status == FetchStatus.Success &&
+                        m.Patch == activePatch.Version &&
+                        m.FetchedAt != null &&
+                        m.FetchedAt >= recentSuccessWindowStartUtc)
+            .CountAsync(ct);
+        var pendingCandidateCount = await EstimatePendingCandidateCountAsync(staleCutoffUtc, ct);
+
+        var budget = adaptiveThroughputBudgetPolicy.ComputeBudget(new AdaptiveThroughputBudgetInput(
+            ProducerKey,
+            evaluationUtc,
+            apiPriorityDemandActive,
+            successfulMatchesForPatch,
+            targetMatchesForPatch,
+            latestFetchAtUtc,
+            recentSuccessfulMatchesForPatch,
+            pendingCandidateCount,
+            baselineMaxCandidates,
+            baselineMinQueued,
+            baselineMaxQueued));
+        ingestionThroughputTelemetry.RecordBudgetDecision(
+            ProducerKey,
+            budget,
+            apiPriorityDemandActive,
+            TelemetrySource);
+
+        var guardrailDecision = await EvaluateStarvationGuardrailAsync(
+            evaluationUtc,
+            staleCutoffUtc,
+            budget.QueueTarget,
+            budget.MaxCandidates,
+            ct);
+        ingestionThroughputTelemetry.RecordGuardrailDecision(
+            ProducerKey,
+            guardrailDecision,
+            TelemetrySource);
+        var maxCandidates = guardrailDecision.MaxCandidates;
+        var maxQueued = guardrailDecision.QueueTarget;
+        var forcedCatchUpActive = guardrailDecision.IsForcedCatchUpActive;
+
+        if (maxQueued <= 0)
+        {
+            ingestionThroughputTelemetry.RecordQueueTargetOutput(
+                ProducerKey,
+                maxQueued,
+                queuedCount: 0,
+                maxCandidates,
+                budget.Mode,
+                guardrailDecision.Outcome,
+                forcedCatchUpActive,
+                "skipped_zero_queue_target",
+                TelemetrySource);
+            logger.LogInformation(
+                "[Maintenance] Skipped because adaptive mode {Mode} and guardrail outcome {GuardrailOutcome} produced queue target {QueueTarget} (apiPriority={ApiPriority}, coverage={Coverage:F2}, backlogAgeMinutes={BacklogAge:F1}, velocityPerHour={Velocity:F2}, pressure={Pressure:F2}, deferAgeMinutes={DeferAge:F1}, deferThresholdMinutes={DeferThreshold:F1}).",
+                budget.Mode,
+                guardrailDecision.Outcome,
+                maxQueued,
+                apiPriorityDemandActive,
+                budget.CoverageRatio,
+                budget.BacklogAgeMinutes,
+                budget.RecentVelocityPerHour,
+                budget.CandidatePressureRatio,
+                guardrailDecision.MaxEligibleDeferAgeMinutes,
+                guardrailDecision.DeferAgeThresholdMinutes);
+            return;
+        }
+
+        if (jobOptions.PauseWhenApiPriorityRefreshActive && apiPriorityDemandActive && !forcedCatchUpActive)
+        {
+            ingestionThroughputTelemetry.RecordQueueTargetOutput(
+                ProducerKey,
+                maxQueued,
+                queuedCount: 0,
+                maxCandidates,
+                budget.Mode,
+                guardrailDecision.Outcome,
+                forcedCatchUpActive,
+                "skipped_api_priority_pause",
+                TelemetrySource);
+            logger.LogInformation("[Maintenance] Skipped due to active high-priority API refresh demand.");
+            return;
+        }
+
+        var includeAllModes = budget.IncludeAllModes;
         var lockTtl = TimeSpan.FromMinutes(Math.Max(2, jobOptions.RefreshLockMinutes));
 
-        var candidates = await GetCandidatesAsync(staleCutoffUtc, maxCandidates, jobOptions, ct);
+        var candidates = await GetCandidatesAsync(staleCutoffUtc, maxCandidates, releaseUtc, evaluationUtc, jobOptions, ct);
         if (candidates.Count == 0)
         {
+            ingestionThroughputTelemetry.RecordQueueTargetOutput(
+                ProducerKey,
+                maxQueued,
+                queuedCount: 0,
+                maxCandidates,
+                budget.Mode,
+                guardrailDecision.Outcome,
+                forcedCatchUpActive,
+                "skipped_no_candidates",
+                TelemetrySource);
             logger.LogInformation("[Maintenance] No stale summoner candidates were eligible.");
             return;
         }
 
         var queued = 0;
+        var preemptedByApiPriority = false;
         foreach (var candidate in candidates)
         {
+            ct.ThrowIfCancellationRequested();
             if (queued >= maxQueued)
                 break;
+
+            if (jobOptions.PauseWhenApiPriorityRefreshActive &&
+                !forcedCatchUpActive &&
+                await refreshLockRepository.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, ct))
+            {
+                logger.LogInformation(
+                    "[Maintenance] Stopped early after queueing {QueuedCount}/{QueuedTarget} jobs due to active high-priority API refresh demand.",
+                    queued,
+                    maxQueued);
+                preemptedByApiPriority = true;
+                break;
+            }
 
             if (!PlatformRouteParser.TryParse(candidate.PlatformRegion, out var platform))
             {
@@ -125,7 +250,7 @@ public class SummonerMaintenanceJob(
                         candidate.GameName,
                         candidate.TagLine,
                         platform,
-                        lockKey,
+                        SummonerRefreshJob.BuildAnalyticsExecutionLockKey(lockKey, forcedCatchUpActive),
                         patchStartEpoch,
                         activePatch.Version,
                         includeAllModes,
@@ -139,19 +264,45 @@ public class SummonerMaintenanceJob(
             }
         }
 
+        var queueOutcome = preemptedByApiPriority
+            ? "stopped_api_priority_preemption"
+            : queued >= maxQueued
+                ? "queued_target_met"
+                : "queued_target_partial";
+        ingestionThroughputTelemetry.RecordQueueTargetOutput(
+            ProducerKey,
+            maxQueued,
+            queued,
+            maxCandidates,
+            budget.Mode,
+            guardrailDecision.Outcome,
+            forcedCatchUpActive,
+            queueOutcome,
+            TelemetrySource);
+
         logger.LogInformation(
-            "[Maintenance] Queued {Queued}/{Target} refresh jobs. includeAllModes={IncludeAllModes}, patch={Patch}, coverage={Coverage}, ramp={Ramp}.",
+            "[Maintenance] Queued {Queued}/{Target} refresh jobs. includeAllModes={IncludeAllModes}, patch={Patch}, mode={Mode}, guardrail={GuardrailOutcome}, forceCatchUp={ForceCatchUp}, coverage={Coverage}, ramp={Ramp}, backlogAgeMinutes={BacklogAge:F1}, velocityPerHour={Velocity:F2}, pressure={Pressure:F2}, deferAgeMinutes={DeferAge:F1}, deferThresholdMinutes={DeferThreshold:F1}.",
             queued,
             maxQueued,
             includeAllModes,
             activePatch.Version,
+            budget.Mode,
+            guardrailDecision.Outcome,
+            forcedCatchUpActive,
             successfulMatchesForPatch,
-            isRampActive);
+            isRampActive,
+            budget.BacklogAgeMinutes,
+            budget.RecentVelocityPerHour,
+            budget.CandidatePressureRatio,
+            guardrailDecision.MaxEligibleDeferAgeMinutes,
+            guardrailDecision.DeferAgeThresholdMinutes);
     }
 
     private async Task<List<CandidateSummoner>> GetCandidatesAsync(
         DateTime staleCutoffUtc,
         int maxCandidates,
+        DateTime patchReleaseUtc,
+        DateTime evaluationUtc,
         SummonerMaintenanceJobOptions options,
         CancellationToken ct)
     {
@@ -172,7 +323,8 @@ public class SummonerMaintenanceJob(
                     s.PlatformRegion!,
                     s.GameName!,
                     s.TagLine!,
-                    s.UpdatedAt)
+                    s.UpdatedAt,
+                    true)
             ).ToListAsync(ct);
 
             combined.AddRange(favoriteCandidates);
@@ -188,16 +340,132 @@ public class SummonerMaintenanceJob(
                 s.PlatformRegion!,
                 s.GameName!,
                 s.TagLine!,
-                s.UpdatedAt))
+                s.UpdatedAt,
+                false))
             .ToListAsync(ct);
 
         combined.AddRange(trackedCandidates);
 
-        return combined
-            .OrderBy(c => c.UpdatedAt)
-            .DistinctBy(c =>
-                $"{c.PlatformRegion.ToUpperInvariant()}:{c.GameName.ToUpperInvariant()}:{c.TagLine.ToUpperInvariant()}")
-            .Take(maxCandidates)
-            .ToList();
+        var rankedCandidates = scoringPolicy.RankCandidates(
+            combined,
+            candidate => new IngestionPriorityCandidate(
+                RefreshLockKeys.BuildCanonicalIdentity(candidate.PlatformRegion, candidate.GameName, candidate.TagLine),
+                candidate.UpdatedAt,
+                candidate.IsFavorite),
+            new IngestionPriorityContext(patchReleaseUtc, evaluationUtc),
+            maxCandidates);
+
+        return rankedCandidates.ToList();
     }
+
+    private Task<int> EstimatePendingCandidateCountAsync(DateTime staleCutoffUtc, CancellationToken ct) =>
+        db.Summoners
+            .AsNoTracking()
+            .Where(s => s.GameName != null && s.TagLine != null && s.PlatformRegion != null)
+            .Where(s => s.UpdatedAt <= staleCutoffUtc)
+            .CountAsync(ct);
+
+    private async Task<StarvationGuardrailDecision> EvaluateStarvationGuardrailAsync(
+        DateTime evaluationUtc,
+        DateTime staleCutoffUtc,
+        int baselineQueueTarget,
+        int baselineMaxCandidates,
+        CancellationToken ct)
+    {
+        var catchUpWindowKey = RefreshLockKeys.BuildStarvationGuardrailCatchUpKey(ProducerKey);
+        var catchUpCooldownKey = RefreshLockKeys.BuildStarvationGuardrailCooldownKey(ProducerKey);
+        var maxDeferAgeMinutes = await EstimateMaxEligibleDeferAgeMinutesAsync(evaluationUtc, staleCutoffUtc, ct);
+
+        var catchUpWindowState = await refreshLockRepository.GetAsync(catchUpWindowKey, ct);
+        var catchUpCooldownState = await refreshLockRepository.GetAsync(catchUpCooldownKey, ct);
+        var catchUpWindowActive = IsLockActive(catchUpWindowState, evaluationUtc);
+        var catchUpCooldownActive = IsLockActive(catchUpCooldownState, evaluationUtc);
+
+        StarvationGuardrailDecision Evaluate(bool windowActive, bool cooldownActive) =>
+            starvationGuardrailPolicy.Evaluate(new StarvationGuardrailInput(
+                ProducerKey,
+                evaluationUtc,
+                maxDeferAgeMinutes,
+                windowActive,
+                cooldownActive,
+                baselineQueueTarget,
+                baselineMaxCandidates));
+
+        var decision = Evaluate(catchUpWindowActive, catchUpCooldownActive);
+        if (!decision.ShouldStartCatchUpWindow)
+        {
+            if (decision.Outcome is StarvationGuardrailOutcome.CatchUpWindowContinue or StarvationGuardrailOutcome.CatchUpCooldown)
+            {
+                var lifecycleOutcome = decision.Outcome == StarvationGuardrailOutcome.CatchUpWindowContinue
+                    ? "continue"
+                    : "cooldown";
+                ingestionThroughputTelemetry.RecordCatchUpWindowLifecycle(
+                    ProducerKey,
+                    lifecycleOutcome,
+                    decision.CatchUpWindowTtl,
+                    decision.CatchUpCooldownTtl,
+                    TelemetrySource);
+            }
+
+            return decision;
+        }
+
+        var catchUpStarted = await refreshLockRepository.TryAcquireAsync(catchUpWindowKey, decision.CatchUpWindowTtl, ct);
+        if (catchUpStarted)
+        {
+            var cooldownTtl = decision.CatchUpWindowTtl + decision.CatchUpCooldownTtl;
+            await refreshLockRepository.TryAcquireAsync(catchUpCooldownKey, cooldownTtl, ct);
+            ingestionThroughputTelemetry.RecordCatchUpWindowLifecycle(
+                ProducerKey,
+                "started",
+                decision.CatchUpWindowTtl,
+                decision.CatchUpCooldownTtl,
+                TelemetrySource);
+            return Evaluate(windowActive: true, cooldownActive: true);
+        }
+
+        ingestionThroughputTelemetry.RecordCatchUpWindowLifecycle(
+            ProducerKey,
+            "start_contention",
+            decision.CatchUpWindowTtl,
+            decision.CatchUpCooldownTtl,
+            TelemetrySource);
+
+        catchUpWindowState = await refreshLockRepository.GetAsync(catchUpWindowKey, ct);
+        catchUpCooldownState = await refreshLockRepository.GetAsync(catchUpCooldownKey, ct);
+        return Evaluate(
+            IsLockActive(catchUpWindowState, evaluationUtc),
+            IsLockActive(catchUpCooldownState, evaluationUtc));
+    }
+
+    private async Task<double?> EstimateMaxEligibleDeferAgeMinutesAsync(
+        DateTime evaluationUtc,
+        DateTime staleCutoffUtc,
+        CancellationToken ct)
+    {
+        var oldestUpdatedAt = await db.Summoners
+            .AsNoTracking()
+            .Where(s => s.GameName != null && s.TagLine != null && s.PlatformRegion != null)
+            .Where(s => s.UpdatedAt <= staleCutoffUtc)
+            .Select(s => (DateTime?)s.UpdatedAt)
+            .MinAsync(ct);
+
+        if (!oldestUpdatedAt.HasValue)
+            return null;
+
+        var oldestUtc = EnsureUtc(oldestUpdatedAt.Value);
+        var resolvedEvaluationUtc = EnsureUtc(evaluationUtc);
+        return Math.Max(0d, (resolvedEvaluationUtc - oldestUtc).TotalMinutes);
+    }
+
+    private static bool IsLockActive(RefreshLock? refreshLock, DateTime evaluationUtc)
+    {
+        if (refreshLock == null)
+            return false;
+
+        return EnsureUtc(refreshLock.LockedUntilUtc) > EnsureUtc(evaluationUtc);
+    }
+
+    private static DateTime EnsureUtc(DateTime value) =>
+        value.Kind == DateTimeKind.Utc ? value : DateTime.SpecifyKind(value, DateTimeKind.Utc);
 }

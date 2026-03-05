@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Repositories.Interfaces;
+using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.RiotApi;
@@ -27,9 +28,21 @@ public class SummonerRefreshJob(
     IBackgroundJobClient backgroundJobClient,
     HybridCache cache,
     IOptions<MatchIngestionOptions> ingestionOptions,
-    IOptions<TimelineIngestionOptions> timelineIngestionOptions) : ISummonerRefreshJob
+    IOptions<TimelineIngestionOptions> timelineIngestionOptions,
+    IRefreshLockLifecycleTelemetry? lockTelemetry = null) : ISummonerRefreshJob
 {
     private sealed record BackfillSyncResult(int PersistedCount, bool StoppedEarly, bool HadFetchFailure);
+    private sealed record AnalyticsExecutionContext(string LockKey, bool AllowForcedCatchUpExecution);
+
+    private static readonly TimeSpan LockReleaseTimeout = TimeSpan.FromSeconds(5);
+    private const string ForcedCatchUpExecutionSuffix = "|forced-catch-up";
+
+    internal static string BuildAnalyticsExecutionLockKey(string lockKey, bool allowForcedCatchUpExecution)
+    {
+        return allowForcedCatchUpExecution
+            ? $"{lockKey}{ForcedCatchUpExecutionSuffix}"
+            : lockKey;
+    }
 
     [Queue("refresh-high")]
     public async Task RefreshByRiotId(string gameName, string tagLine, PlatformRoute platformRoute, string lockKey,
@@ -37,6 +50,7 @@ public class SummonerRefreshJob(
     {
         try
         {
+            ct.ThrowIfCancellationRequested();
             var options = ingestionOptions.Value;
 
             // Fetch/update summoner first.
@@ -108,6 +122,10 @@ public class SummonerRefreshJob(
                 allModesHeadPersisted,
                 nonRankedBackfillResult.PersistedCount);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "[Refresh] Error refreshing {GameName}#{Tag} on {Platform}", gameName, tagLine,
@@ -116,9 +134,9 @@ public class SummonerRefreshJob(
         }
         finally
         {
-            await ReleaseLockSafeAsync(lockKey, ct, "[Refresh]");
+            await ReleaseLockSafeAsync(lockKey, "[Refresh]");
             if (!string.IsNullOrWhiteSpace(priorityLockKey))
-                await ReleaseLockSafeAsync(priorityLockKey, ct, "[Refresh]");
+                await ReleaseLockSafeAsync(priorityLockKey, "[Refresh]");
         }
     }
 
@@ -126,14 +144,22 @@ public class SummonerRefreshJob(
     public async Task RefreshForAnalytics(string gameName, string tagLine, PlatformRoute platformRoute, string lockKey,
         long startTimeEpochSeconds, string currentPatch, bool includeAllModes, CancellationToken ct = default)
     {
+        var executionContext = ParseAnalyticsExecutionContext(lockKey);
         try
         {
-            if (await refreshLockRepository.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, ct))
+            ct.ThrowIfCancellationRequested();
+            if (!executionContext.AllowForcedCatchUpExecution &&
+                await refreshLockRepository.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, ct))
             {
                 logger.LogInformation(
                     "[AnalyticsRefresh] Skipping {GameName}#{Tag} because high-priority API refresh demand is active.",
                     gameName,
                     tagLine);
+                EmitTelemetry(() =>
+                    lockTelemetry?.RecordLifecycleOutcome(
+                        RefreshLockKeys.ApiPriorityRefreshPrefix,
+                        "contention",
+                        "summoner-refresh-job"));
                 return;
             }
 
@@ -152,6 +178,9 @@ public class SummonerRefreshJob(
 
             async Task<bool> ShouldStopAsync()
             {
+                if (executionContext.AllowForcedCatchUpExecution)
+                    return false;
+
                 return await refreshLockRepository.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, ct);
             }
 
@@ -223,6 +252,10 @@ public class SummonerRefreshJob(
                 allModesHeadPersisted,
                 nonRankedBackfillPersisted);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "[AnalyticsRefresh] Error refreshing {GameName}#{Tag} on {Platform}",
@@ -231,8 +264,18 @@ public class SummonerRefreshJob(
         }
         finally
         {
-            await ReleaseLockSafeAsync(lockKey, ct, "[AnalyticsRefresh]");
+            await ReleaseLockSafeAsync(executionContext.LockKey, "[AnalyticsRefresh]");
         }
+    }
+
+    private static AnalyticsExecutionContext ParseAnalyticsExecutionContext(string lockKey)
+    {
+        if (lockKey.EndsWith(ForcedCatchUpExecutionSuffix, StringComparison.Ordinal))
+            return new AnalyticsExecutionContext(
+                lockKey[..^ForcedCatchUpExecutionSuffix.Length],
+                AllowForcedCatchUpExecution: true);
+
+        return new AnalyticsExecutionContext(lockKey, AllowForcedCatchUpExecution: false);
     }
 
     private async Task<int> SyncMatchWindowAsync(
@@ -261,6 +304,7 @@ public class SummonerRefreshJob(
 
         for (var page = 0; page < maxPages; page++)
         {
+            ct.ThrowIfCancellationRequested();
             if (shouldStop != null && await shouldStop())
             {
                 logger.LogInformation(
@@ -304,6 +348,7 @@ public class SummonerRefreshJob(
             var matchesToPersist = new List<DataMatch>(pendingIds.Count);
             foreach (var matchId in pendingIds)
             {
+                ct.ThrowIfCancellationRequested();
                 if (shouldStop != null && await shouldStop())
                     break;
 
@@ -332,6 +377,10 @@ public class SummonerRefreshJob(
                         continue;
 
                     matchesToPersist.Add(match);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -386,6 +435,7 @@ public class SummonerRefreshJob(
 
         for (var page = 0; page < maxPages; page++)
         {
+            ct.ThrowIfCancellationRequested();
             if (shouldStop != null && await shouldStop())
             {
                 stoppedEarly = true;
@@ -442,6 +492,7 @@ public class SummonerRefreshJob(
             var matchesToPersist = new List<DataMatch>(pendingIds.Count);
             foreach (var matchId in pendingIds)
             {
+                ct.ThrowIfCancellationRequested();
                 if (shouldStop != null && await shouldStop())
                 {
                     stoppedEarly = true;
@@ -476,6 +527,10 @@ public class SummonerRefreshJob(
                         continue;
 
                     matchesToPersist.Add(match);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -578,15 +633,44 @@ public class SummonerRefreshJob(
         return Task.CompletedTask;
     }
 
-    private async Task ReleaseLockSafeAsync(string lockKey, CancellationToken ct, string operation)
+    private async Task ReleaseLockSafeAsync(string lockKey, string operation)
     {
+        using var releaseTimeoutCts = new CancellationTokenSource(LockReleaseTimeout);
         try
         {
-            await refreshLockRepository.ReleaseAsync(lockKey, ct);
+            await refreshLockRepository.ReleaseAsync(lockKey, releaseTimeoutCts.Token);
+            EmitTelemetry(() =>
+                lockTelemetry?.RecordLifecycleOutcome(lockKey, "released", "summoner-refresh-job"));
+        }
+        catch (OperationCanceledException) when (releaseTimeoutCts.IsCancellationRequested)
+        {
+            logger.LogWarning(
+                "{Operation} Timed out releasing refresh lock {LockKey} after {TimeoutSeconds}s",
+                operation,
+                lockKey,
+                LockReleaseTimeout.TotalSeconds);
+            EmitTelemetry(() =>
+                lockTelemetry?.RecordLifecycleOutcome(lockKey, "release_timeout", "summoner-refresh-job"));
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "{Operation} Failed to release refresh lock {LockKey}", operation, lockKey);
+            EmitTelemetry(() =>
+                lockTelemetry?.RecordLifecycleOutcome(lockKey, "release_error", "summoner-refresh-job"));
+        }
+    }
+
+    private void EmitTelemetry(Action emit)
+    {
+        try
+        {
+            emit();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "[RefreshTelemetry] Non-blocking telemetry emission failed during summoner refresh flow.");
         }
     }
 
@@ -596,6 +680,7 @@ public class SummonerRefreshJob(
         string tagLine,
         CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         var persisted = new List<DataMatch>(matches.Count);
         if (matches.Count == 0)
             return persisted;
@@ -608,6 +693,10 @@ public class SummonerRefreshJob(
             await db.SaveChangesAsync(ct);
             persisted.AddRange(matches);
             return persisted;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (DbUpdateException ex) when (MatchPersistenceErrorClassifier.IsDuplicateMatchIdViolation(ex))
         {
@@ -629,11 +718,16 @@ public class SummonerRefreshJob(
 
         foreach (var match in matches)
         {
+            ct.ThrowIfCancellationRequested();
             try
             {
                 await matchRepository.AddMatchAsync(match, ct);
                 await db.SaveChangesAsync(ct);
                 persisted.Add(match);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch (DbUpdateException ex) when (MatchPersistenceErrorClassifier.IsDuplicateMatchIdViolation(ex))
             {

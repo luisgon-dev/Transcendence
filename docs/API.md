@@ -92,6 +92,29 @@ Stats and profile read surfaces now fail closed on backend errors:
 - The request/response contract is unchanged (no priority request parameter).
 - When high-priority refresh demand is active, lower-priority Riot-calling background jobs are temporarily paused.
 
+#### Refresh Contention Contract (LOCK-01)
+
+`POST /api/summoners/{region}/{name}/{tag}/refresh` and `POST /api/admin/pro-summoners/{id}/refresh` share deterministic `202 Accepted` semantics:
+
+- **Queued (lock acquired):**
+  - `message`: `"Refresh queued"`
+  - `poll`: absolute URL to query refresh progress
+  - `retryAfterSeconds`: omitted (`null`)
+- **In progress (lock contention):**
+  - `message`: `"Refresh in process"`
+  - `poll`: absolute URL to query refresh progress
+  - `retryAfterSeconds`: positive integer hint (seconds) for next poll attempt
+
+Example (`SummonerAcceptedResponse`):
+
+```json
+{
+  "message": "Refresh in process",
+  "poll": "https://localhost/api/summoners/na1/name/tag",
+  "retryAfterSeconds": 42
+}
+```
+
 ### Analytics
 
 - `GET /api/analytics/tierlist`
@@ -195,6 +218,7 @@ Auth behavior notes:
 - `GET /api/admin/pro-summoners/{id}`
 - `PUT /api/admin/pro-summoners/{id}`
 - `DELETE /api/admin/pro-summoners/{id}`
+- `POST /api/admin/pro-summoners/{id}/refresh`
 
 ### User Preferences (`UserOnly`)
 

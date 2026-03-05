@@ -18,6 +18,7 @@ public class ChampionAnalyticsIngestionJob(
     IRefreshLockRepository refreshLockRepository,
     IBackgroundJobClient backgroundJobClient,
     IIngestionPriorityScoringPolicy scoringPolicy,
+    IAdaptiveThroughputBudgetPolicy adaptiveThroughputBudgetPolicy,
     IOptions<ChampionAnalyticsIngestionJobOptions> options,
     ILogger<ChampionAnalyticsIngestionJob> logger)
 {
@@ -43,13 +44,10 @@ public class ChampionAnalyticsIngestionJob(
     private async Task ExecuteInternalAsync(bool rampOnly, CancellationToken ct = default)
     {
         var jobOptions = options.Value;
-        if (jobOptions.PauseWhenApiPriorityRefreshActive &&
-            await refreshLockRepository.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, ct))
-        {
-            logger.LogInformation(
-                "Champion analytics ingestion skipped: active high-priority API refresh demand detected.");
-            return;
-        }
+        var evaluationUtc = DateTime.UtcNow;
+        var apiPriorityDemandActive = await refreshLockRepository.AnyActiveByPrefixAsync(
+            RefreshLockKeys.ApiPriorityRefreshPrefix,
+            ct);
 
         var hasTrackedSummoners = await db.Summoners
             .AsNoTracking()
@@ -75,7 +73,7 @@ public class ChampionAnalyticsIngestionJob(
             ? currentPatchInfo.ReleaseDate
             : DateTime.SpecifyKind(currentPatchInfo.ReleaseDate, DateTimeKind.Utc);
         var rampHours = Math.Max(1, jobOptions.NewPatchRampHours);
-        var isRampActive = DateTime.UtcNow < releaseUtc.AddHours(rampHours);
+        var isRampActive = evaluationUtc < releaseUtc.AddHours(rampHours);
         if (rampOnly && !isRampActive)
         {
             logger.LogDebug("Champion analytics ingestion ramp run skipped: ramp window inactive.");
@@ -88,7 +86,7 @@ public class ChampionAnalyticsIngestionJob(
         var targetMatchesForPatch = Math.Max(minMatchesForPatch, jobOptions.TargetSuccessfulMatchesForCurrentPatch);
         var staleAfterMinutes = Math.Max(5,
             isRampActive ? jobOptions.RampDataStaleAfterMinutes : jobOptions.DataStaleAfterMinutes);
-        var staleCutoffUtc = DateTime.UtcNow.AddMinutes(-staleAfterMinutes);
+        var staleCutoffUtc = evaluationUtc.AddMinutes(-staleAfterMinutes);
 
         var successfulMatchesForPatch = await db.Matches
             .AsNoTracking()
@@ -100,26 +98,67 @@ public class ChampionAnalyticsIngestionJob(
             .Where(m => m.Status == FetchStatus.Success && m.Patch == currentPatch && m.FetchedAt != null)
             .MaxAsync(m => m.FetchedAt, ct);
 
+        var recentSuccessWindowStartUtc = evaluationUtc.AddMinutes(-adaptiveThroughputBudgetPolicy.VelocityLookbackMinutes);
+        var recentSuccessfulMatchesForPatch = await db.Matches
+            .AsNoTracking()
+            .Where(m => m.Status == FetchStatus.Success &&
+                        m.Patch == currentPatch &&
+                        m.FetchedAt != null &&
+                        m.FetchedAt >= recentSuccessWindowStartUtc)
+            .CountAsync(ct);
+
         var isStale = !latestFetchAtUtc.HasValue || latestFetchAtUtc.Value <= staleCutoffUtc;
 
-        var maxCandidates = Math.Max(1,
+        var baselineMaxCandidates = Math.Max(1,
             isRampActive ? jobOptions.RampMaxCandidateSummonersPerRun : jobOptions.MaxCandidateSummonersPerRun);
-        var maxQueued = Math.Max(1,
+        var baselineMaxQueued = Math.Max(1,
             isRampActive ? jobOptions.RampMaxRefreshJobsToQueuePerRun : jobOptions.MaxRefreshJobsToQueuePerRun);
-        var minQueued = Math.Clamp(
+        var baselineMinQueued = Math.Clamp(
             isRampActive ? jobOptions.RampMinRefreshJobsToQueuePerRun : jobOptions.MinRefreshJobsToQueuePerRun,
             1,
-            maxQueued);
-        var lockTtl = TimeSpan.FromMinutes(Math.Max(2, jobOptions.RefreshLockMinutes));
-        var queuedTarget = ResolveQueuedRefreshTarget(
+            baselineMaxQueued);
+
+        var pendingCandidateCount = await EstimatePendingCandidateCountAsync(ct);
+        var budget = adaptiveThroughputBudgetPolicy.ComputeBudget(new AdaptiveThroughputBudgetInput(
+            nameof(ChampionAnalyticsIngestionJob),
+            evaluationUtc,
+            apiPriorityDemandActive,
             successfulMatchesForPatch,
             targetMatchesForPatch,
-            isStale,
-            minQueued,
-            maxQueued);
-        var includeAllModes = successfulMatchesForPatch >= targetMatchesForPatch;
+            latestFetchAtUtc,
+            recentSuccessfulMatchesForPatch,
+            pendingCandidateCount,
+            baselineMaxCandidates,
+            baselineMinQueued,
+            baselineMaxQueued));
 
-        var candidates = await GetCandidatesAsync(maxCandidates, jobOptions, releaseUtc, ct);
+        if (budget.QueueTarget <= 0)
+        {
+            logger.LogInformation(
+                "Champion analytics ingestion skipped: adaptive mode {Mode} produced queue target {QueueTarget} (apiPriority={ApiPriority}, coverage={Coverage:F2}, backlogAgeMinutes={BacklogAge:F1}, velocityPerHour={Velocity:F2}, pressure={Pressure:F2}).",
+                budget.Mode,
+                budget.QueueTarget,
+                apiPriorityDemandActive,
+                budget.CoverageRatio,
+                budget.BacklogAgeMinutes,
+                budget.RecentVelocityPerHour,
+                budget.CandidatePressureRatio);
+            return;
+        }
+
+        if (jobOptions.PauseWhenApiPriorityRefreshActive && apiPriorityDemandActive)
+        {
+            logger.LogInformation(
+                "Champion analytics ingestion skipped: active high-priority API refresh demand detected while pause mode is enabled.");
+            return;
+        }
+
+        var lockTtl = TimeSpan.FromMinutes(Math.Max(2, jobOptions.RefreshLockMinutes));
+        var queuedTarget = budget.QueueTarget;
+        var maxCandidates = budget.MaxCandidates;
+        var includeAllModes = budget.IncludeAllModes;
+
+        var candidates = await GetCandidatesAsync(maxCandidates, jobOptions, releaseUtc, evaluationUtc, ct);
         if (candidates.Count == 0)
         {
             logger.LogWarning(
@@ -179,16 +218,21 @@ public class ChampionAnalyticsIngestionJob(
         }
 
         logger.LogInformation(
-            "Champion analytics ingestion queued {QueuedCount}/{QueuedTarget} low-priority summoner refresh jobs (patch {Patch}, matches {MatchCount}/{TargetMatchCount}, stale {IsStale}, includeAllModes {IncludeAllModes}, latestFetchAt {LatestFetchAt}, ramp={Ramp}).",
+            "Champion analytics ingestion queued {QueuedCount}/{QueuedTarget} low-priority summoner refresh jobs (patch {Patch}, mode {Mode}, matches {MatchCount}/{TargetMatchCount}, stale {IsStale}, includeAllModes {IncludeAllModes}, latestFetchAt {LatestFetchAt}, ramp={Ramp}, coverage={Coverage:F2}, backlogAgeMinutes={BacklogAge:F1}, velocityPerHour={Velocity:F2}, pressure={Pressure:F2}).",
             queued,
             queuedTarget,
             currentPatch,
+            budget.Mode,
             successfulMatchesForPatch,
             targetMatchesForPatch,
             isStale,
             includeAllModes,
             latestFetchAtUtc,
-            isRampActive);
+            isRampActive,
+            budget.CoverageRatio,
+            budget.BacklogAgeMinutes,
+            budget.RecentVelocityPerHour,
+            budget.CandidatePressureRatio);
     }
 
     private async Task ReleaseLockAfterQueueFailureAsync(string lockKey)
@@ -217,6 +261,7 @@ public class ChampionAnalyticsIngestionJob(
         int maxCandidates,
         ChampionAnalyticsIngestionJobOptions jobOptions,
         DateTime patchReleaseUtc,
+        DateTime evaluationUtc,
         CancellationToken ct)
     {
         var combined = new List<CandidateSummoner>();
@@ -266,28 +311,15 @@ public class ChampionAnalyticsIngestionJob(
                 RefreshLockKeys.BuildCanonicalIdentity(candidate.PlatformRegion, candidate.GameName, candidate.TagLine),
                 candidate.UpdatedAt,
                 candidate.IsFavorite),
-            new IngestionPriorityContext(patchReleaseUtc, DateTime.UtcNow),
+            new IngestionPriorityContext(patchReleaseUtc, evaluationUtc),
             maxCandidates);
 
         return rankedCandidates.ToList();
     }
 
-    private static int ResolveQueuedRefreshTarget(
-        int successfulMatchesForPatch,
-        int targetMatchesForPatch,
-        bool isStale,
-        int minQueued,
-        int maxQueued)
-    {
-        if (isStale)
-            return maxQueued;
-
-        if (successfulMatchesForPatch >= targetMatchesForPatch)
-            return minQueued;
-
-        var deficit = targetMatchesForPatch - successfulMatchesForPatch;
-        var deficitRatio = (double)deficit / targetMatchesForPatch;
-        var scaled = minQueued + (int)Math.Ceiling((maxQueued - minQueued) * deficitRatio);
-        return Math.Clamp(scaled, minQueued, maxQueued);
-    }
+    private Task<int> EstimatePendingCandidateCountAsync(CancellationToken ct) =>
+        db.Summoners
+            .AsNoTracking()
+            .Where(s => s.GameName != null && s.TagLine != null && s.PlatformRegion != null)
+            .CountAsync(ct);
 }

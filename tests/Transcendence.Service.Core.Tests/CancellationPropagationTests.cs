@@ -114,6 +114,7 @@ public class CancellationPropagationTests
             refreshLocks.Object,
             backgroundJobs.Object,
             new IngestionPriorityScoringPolicy(Options.Create(new IngestionPriorityPolicyOptions())),
+            new AdaptiveThroughputBudgetPolicy(Options.Create(new AdaptiveThroughputBudgetOptions())),
             Options.Create(new ChampionAnalyticsIngestionJobOptions()),
             Mock.Of<ILogger<ChampionAnalyticsIngestionJob>>());
 

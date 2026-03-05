@@ -106,6 +106,38 @@ public class ChampionAnalyticsIngestionJobRampTests
             RefreshLockKeys.BuildSummonerRefreshKey(Camille.Enums.PlatformRoute.NA1, "PlayerOne", "tagone"));
     }
 
+    [Fact]
+    public async Task ExecuteRampAsync_AppliesScoredOrderBeforeAdaptiveQueueTruncation()
+    {
+        var fixedBudgetPolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
+            AdaptiveThroughputBudgetMode.Balanced,
+            MaxCandidates: 10,
+            QueueTarget: 1,
+            IncludeAllModes: false,
+            CoverageRatio: 0.2d,
+            BacklogAgeMinutes: 120d,
+            RecentVelocityPerHour: 2d,
+            CandidatePressureRatio: 2d));
+
+        await using var harness = await Harness.CreateAsync(fixedBudgetPolicy);
+        harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        harness.SeedSummoner("PatchFirst", "NA1", DateTime.UtcNow.AddHours(-6));
+        harness.SeedSummoner("NonPatchSecond", "NA1", DateTime.UtcNow.AddMinutes(-40));
+        await harness.Db.SaveChangesAsync();
+
+        var queuedJobs = new List<Job>();
+        harness.BackgroundJobClient
+            .Setup(x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()))
+            .Callback<Job, IState>((job, _) => queuedJobs.Add(job))
+            .Returns("job-1");
+
+        await harness.Job.ExecuteRampAsync(CancellationToken.None);
+
+        queuedJobs.Should().ContainSingle();
+        queuedJobs[0].Args[0].Should().Be("PatchFirst");
+        queuedJobs[0].Args[6].Should().Be(false);
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
@@ -129,7 +161,7 @@ public class ChampionAnalyticsIngestionJobRampTests
         public Mock<IBackgroundJobClient> BackgroundJobClient { get; }
         public Mock<IRefreshLockRepository> RefreshLockRepository { get; }
 
-        public static async Task<Harness> CreateAsync()
+        public static async Task<Harness> CreateAsync(IAdaptiveThroughputBudgetPolicy? adaptiveBudgetPolicy = null)
         {
             var connection = new SqliteConnection("Data Source=:memory:");
             await connection.OpenAsync();
@@ -155,6 +187,22 @@ public class ChampionAnalyticsIngestionJobRampTests
             backgroundJobs.Setup(x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()))
                 .Returns("job-1");
             var scoringPolicy = new IngestionPriorityScoringPolicy(Options.Create(new IngestionPriorityPolicyOptions()));
+            adaptiveBudgetPolicy ??= new AdaptiveThroughputBudgetPolicy(Options.Create(new AdaptiveThroughputBudgetOptions
+            {
+                VelocityLookbackMinutes = 30,
+                HighPressureCooldownMinutes = 8,
+                CatchUpHoldMinutes = 12,
+                ModeSwitchCooldownMinutes = 4,
+                CatchUpCoverageThreshold = 0.85d,
+                CatchUpBacklogAgeMinutes = 45,
+                CatchUpCandidatePressureThreshold = 1.1d,
+                MinimumRecentVelocityPerHour = 12d,
+                CatchUpQueueBurstMultiplier = 1.6d,
+                CatchUpCandidateBurstMultiplier = 1.8d,
+                HighPressureCandidateMultiplier = 0.25d,
+                MaxQueueTargetHardCap = 40,
+                MaxCandidateHardCap = 500
+            }));
 
             var job = new ChampionAnalyticsIngestionJob(
                 db,
@@ -162,6 +210,7 @@ public class ChampionAnalyticsIngestionJobRampTests
                 refreshLocks.Object,
                 backgroundJobs.Object,
                 scoringPolicy,
+                adaptiveBudgetPolicy,
                 Options.Create(new ChampionAnalyticsIngestionJobOptions
                 {
                     MinimumSuccessfulMatchesForCurrentPatch = 50,
@@ -199,6 +248,23 @@ public class ChampionAnalyticsIngestionJobRampTests
             });
         }
 
+        public void SeedSummoner(string gameName, string tagLine, DateTime updatedAtUtc)
+        {
+            Db.Summoners.Add(new Summoner
+            {
+                Id = Guid.NewGuid(),
+                PlatformRegion = "NA1",
+                Region = "americas",
+                Puuid = $"puuid-{Guid.NewGuid():N}",
+                GameName = gameName,
+                TagLine = tagLine,
+                GameNameNormalized = gameName.ToUpperInvariant(),
+                TagLineNormalized = tagLine.ToUpperInvariant(),
+                SummonerLevel = 100,
+                UpdatedAt = updatedAtUtc
+            });
+        }
+
         public void SeedSummoner(string gameName, string tagLine)
         {
             Db.Summoners.Add(new Summoner
@@ -221,6 +287,14 @@ public class ChampionAnalyticsIngestionJobRampTests
             await Db.DisposeAsync();
             await _connection.DisposeAsync();
         }
+    }
+
+    private sealed class FixedAdaptiveBudgetPolicy(AdaptiveThroughputBudgetDecision decision)
+        : IAdaptiveThroughputBudgetPolicy
+    {
+        public int VelocityLookbackMinutes => 30;
+
+        public AdaptiveThroughputBudgetDecision ComputeBudget(AdaptiveThroughputBudgetInput input) => decision;
     }
 
     private sealed class TestSqliteTranscendenceContext(DbContextOptions<TranscendenceContext> options)

@@ -6,6 +6,8 @@ public static class RefreshLockKeys
 {
     public const string SummonerRefreshPrefix = "summoner-refresh:";
     public const string ApiPriorityRefreshPrefix = "refresh-priority:api:";
+    public const string StarvationGuardrailCatchUpPrefix = "refresh-priority:guardrail:catchup:";
+    public const string StarvationGuardrailCooldownPrefix = "refresh-priority:guardrail:cooldown:";
 
     public static string BuildCanonicalIdentity(PlatformRoute platform, string gameName, string tagLine)
     {
@@ -28,6 +30,16 @@ public static class RefreshLockKeys
         return $"{ApiPriorityRefreshPrefix}{BuildCanonicalIdentity(platform, gameName, tagLine)}";
     }
 
+    public static string BuildStarvationGuardrailCatchUpKey(string producerKey)
+    {
+        return $"{StarvationGuardrailCatchUpPrefix}{NormalizeGuardrailProducerKey(producerKey)}";
+    }
+
+    public static string BuildStarvationGuardrailCooldownKey(string producerKey)
+    {
+        return $"{StarvationGuardrailCooldownPrefix}{NormalizeGuardrailProducerKey(producerKey)}";
+    }
+
     public static string NormalizePlatform(string platformRegion)
     {
         return platformRegion.Trim().ToUpperInvariant();
@@ -36,5 +48,13 @@ public static class RefreshLockKeys
     public static string NormalizeRiotIdPart(string value)
     {
         return value.Trim().ToUpperInvariant();
+    }
+
+    private static string NormalizeGuardrailProducerKey(string producerKey)
+    {
+        if (string.IsNullOrWhiteSpace(producerKey))
+            return "default";
+
+        return producerKey.Trim().ToLowerInvariant().Replace(':', '-');
     }
 }

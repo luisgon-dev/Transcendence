@@ -189,7 +189,11 @@ public class ProSummonersController(
 
     [HttpPost("{id:guid}/refresh")]
     [EnableRateLimiting("admin-write")]
-    [ProducesResponseType(typeof(SummonerAcceptedResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(
+        typeof(SummonerAcceptedResponse),
+        StatusCodes.Status202Accepted,
+        Description =
+            "Accepted. Returns \"Refresh queued\" when the refresh lock is acquired, or \"Refresh in process\" with retryAfterSeconds when contention is detected.")]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Refresh([FromRoute] Guid id, CancellationToken ct = default)

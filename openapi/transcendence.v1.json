@@ -2087,7 +2087,7 @@
         ],
         "responses": {
           "202": {
-            "description": "Accepted",
+            "description": "Accepted. Returns \"Refresh queued\" when the refresh lock is acquired, or \"Refresh in process\" with retryAfterSeconds when contention is detected.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2459,7 +2459,7 @@
             }
           },
           "202": {
-            "description": "Accepted",
+            "description": "Accepted. Returns \"Refresh queued\" when the refresh lock is acquired, or \"Refresh in process\" with retryAfterSeconds when contention is detected.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -5438,14 +5438,17 @@
         "properties": {
           "message": {
             "type": "string",
+            "description": "Refresh state message. \"Refresh queued\" when accepted now, \"Refresh in process\" when contention is detected.",
             "nullable": true
           },
           "poll": {
             "type": "string",
+            "description": "Absolute URL clients can poll for current refresh status/result.",
             "nullable": true
           },
           "retryAfterSeconds": {
             "type": "integer",
+            "description": "Retry hint in seconds for contention responses; null when refresh was just queued.",
             "format": "int32",
             "nullable": true
           }

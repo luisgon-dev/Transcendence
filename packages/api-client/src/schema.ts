@@ -1833,7 +1833,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Accepted */
+                /** @description Accepted. Returns "Refresh queued" when the refresh lock is acquired, or "Refresh in process" with retryAfterSeconds when contention is detected. */
                 202: {
                     headers: {
                         [name: string]: unknown;
@@ -2058,7 +2058,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Accepted */
+                /** @description Accepted. Returns "Refresh queued" when the refresh lock is acquired, or "Refresh in process" with retryAfterSeconds when contention is detected. */
                 202: {
                     headers: {
                         [name: string]: unknown;
@@ -3476,9 +3476,14 @@ export interface components {
             winRate?: number;
         };
         SummonerAcceptedResponse: {
+            /** @description Refresh state message. "Refresh queued" when accepted now, "Refresh in process" when contention is detected. */
             message?: string | null;
+            /** @description Absolute URL clients can poll for current refresh status/result. */
             poll?: string | null;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Retry hint in seconds for contention responses; null when refresh was just queued.
+             */
             retryAfterSeconds?: number | null;
         };
         SummonerOverviewDto: {

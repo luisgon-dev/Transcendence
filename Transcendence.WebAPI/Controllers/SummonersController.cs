@@ -238,7 +238,11 @@ public class SummonersController(
     [HttpPost("{region}/{name}/{tag}/refresh")]
     [EnableRateLimiting("expensive-read")]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(SummonerAcceptedResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(
+        typeof(SummonerAcceptedResponse),
+        StatusCodes.Status202Accepted,
+        Description =
+            "Accepted. Returns \"Refresh queued\" when the refresh lock is acquired, or \"Refresh in process\" with retryAfterSeconds when contention is detected.")]
     public async Task<IActionResult> RefreshByRiotId([FromRoute] string region, [FromRoute] string name,
         [FromRoute] string tag, CancellationToken ct)
     {

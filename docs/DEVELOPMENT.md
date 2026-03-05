@@ -212,6 +212,40 @@ When `Transcendence.Service` runs in non-development environments, the `Producti
 
 This job determines when low-priority refresh can widen beyond ranked-only ingestion during early patch windows.
 
+### Adaptive Throughput Budget Policy
+
+`Jobs:AdaptiveThroughputBudget` supports:
+
+- `VelocityLookbackMinutes` (default `30`)
+- `HighPressureCooldownMinutes` (default `8`)
+- `CatchUpHoldMinutes` (default `12`)
+- `ModeSwitchCooldownMinutes` (default `4`)
+- `CatchUpCoverageThreshold` (default `0.85`)
+- `CatchUpBacklogAgeMinutes` (default `45`)
+- `CatchUpCandidatePressureThreshold` (default `1.1`)
+- `MinimumRecentVelocityPerHour` (default `12.0`)
+- `CatchUpQueueBurstMultiplier` (default `1.6`)
+- `CatchUpCandidateBurstMultiplier` (default `1.8`)
+- `HighPressureCandidateMultiplier` (default `0.25`)
+- `MaxQueueTargetHardCap` (default `40`)
+- `MaxCandidateHardCap` (default `500`)
+
+These settings determine per-run producer mode (`HighPressure`, `Balanced`, `CatchUp`), queue target, and candidate ceiling for low-priority ingestion producers.
+
+### Starvation Guardrail Policy
+
+`Jobs:StarvationGuardrail` supports:
+
+- `Enabled` (default `true`)
+- `MaxEligibleDeferAgeMinutes` (default `360`)
+- `CatchUpWindowMinutes` (default `12`)
+- `CatchUpCooldownMinutes` (default `20`)
+- `ForcedCatchUpQueueTargetFloor` (default `1`)
+- `ForcedCatchUpCandidateBurstMultiplier` (default `1.5`)
+- `ForcedCatchUpMaxCandidateHardCap` (default `500`)
+
+When defer age breaches the threshold, producers open a forced catch-up window and can continue low-priority progress even when API-priority demand is present.
+
 ### Match Ingestion Windows
 
 `Jobs:MatchIngestion` supports:
@@ -284,6 +318,38 @@ Operational monitoring baseline:
 - Track contention trend by lock class/region: compare `outcome=contention` against `outcome=acquired`.
 - Track cleanup effectiveness: watch `growth.expired` and `growth.deleted_last_run` together; rising expired with flat deleted indicates retention pressure.
 - Track cleanup health: watch `refresh_lock.cleanup` outcomes (`completed`, `canceled`, `failed`) and duration growth over time.
+
+### Ingestion Throughput Telemetry
+
+Throughput telemetry emitted by low-priority producers uses these tags:
+
+- `producer`
+- `queue_tier`
+- `mode`
+- `outcome`
+- `source`
+
+Metric names:
+
+- `transcendence.ingestion_throughput.decisions`
+- `transcendence.ingestion_throughput.defer_age_breaches`
+- `transcendence.ingestion_throughput.catch_up.lifecycle`
+- `transcendence.ingestion_throughput.queue_target`
+- `transcendence.ingestion_throughput.queued_count`
+- `transcendence.ingestion_throughput.catch_up.window_minutes`
+
+Structured log event names:
+
+- `ingestion_throughput.budget_decision`
+- `ingestion_throughput.guardrail_decision`
+- `ingestion_throughput.catch_up_window`
+- `ingestion_throughput.queue_output`
+
+Operational monitoring baseline:
+
+- Rising `outcome=api_priority_active` with `mode=highpressure` confirms high-priority demand is preempting low-priority throughput.
+- Track `defer_age_breach` and catch-up lifecycle starts to verify starvation guardrails are triggering when expected.
+- Compare `queue_target` against `queued_count` and queue-output outcomes to identify throttling (`stopped_api_priority_preemption`) vs candidate scarcity (`skipped_no_candidates`).
 
 ### Timeline Ingestion
 

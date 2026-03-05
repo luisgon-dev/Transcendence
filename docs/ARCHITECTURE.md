@@ -124,11 +124,45 @@ Transcendence is a backend + web monorepo:
 - Even when patch data is healthy, ingestion can queue a small minimum number of low-priority refreshes per run.
 - Early patch mode remains ranked solo/duo-first until coverage targets are satisfied; once healthy, low-priority refresh can widen to all supported history queues.
 - Low-priority refresh windows stop early whenever active high-priority API refresh demand is detected.
+- Low-priority producer budgets (`ChampionAnalyticsIngestionJob`, `SummonerMaintenanceJob`) are selected by adaptive mode each run:
+  - `HighPressure`: queue target `0` while API-priority demand is active.
+  - `Balanced`: bounded queue target in normal conditions.
+  - `CatchUp`: burst queue target/candidate ceiling when coverage/velocity/backlog signals indicate lag.
+- Starvation guardrail is applied after adaptive budgeting:
+  - Defer-age breach (`max eligible defer age >= threshold`) starts a forced catch-up window.
+  - Catch-up windows are lock-backed (`refresh-starvation:catch-up:*`) and paired with cooldown locks (`refresh-starvation:cooldown:*`) to prevent oscillation.
+  - Forced catch-up can override high-pressure pause to maintain bounded low-priority forward progress.
 - New-patch ramp mode (first `Jobs:*:NewPatchRampHours`) schedules additional high-frequency analytics jobs:
   - `refresh-champion-analytics-ramp`
   - `champion-analytics-ingestion-ramp`
   - `summoner-maintenance-ramp`
 - Ramp jobs are gated by active-patch age and no-op automatically after the configured ramp window.
+
+### Ingestion Throughput Telemetry
+
+- Throughput telemetry follows the same best-effort/non-blocking pattern as refresh-lock lifecycle telemetry so instrumentation failures cannot block producer execution.
+- Shared throughput tags:
+  - `producer` (`championanalyticsingestionjob`, `summonermaintenancejob`)
+  - `queue_tier` (`refresh-low`)
+  - `mode` (`highpressure`, `balanced`, `catchup`, `guardrail`)
+  - `outcome` (for example `budget_applied`, `api_priority_active`, `defer_age_breach`, `started`, `queued_target_met`)
+  - `source` (`champion-analytics-ingestion-job`, `summoner-maintenance-job`)
+- Metric instruments:
+  - `transcendence.ingestion_throughput.decisions` (counter)
+  - `transcendence.ingestion_throughput.defer_age_breaches` (counter)
+  - `transcendence.ingestion_throughput.catch_up.lifecycle` (counter)
+  - `transcendence.ingestion_throughput.queue_target` (histogram)
+  - `transcendence.ingestion_throughput.queued_count` (histogram)
+  - `transcendence.ingestion_throughput.catch_up.window_minutes` (histogram)
+- Structured log event names:
+  - `ingestion_throughput.budget_decision`
+  - `ingestion_throughput.guardrail_decision`
+  - `ingestion_throughput.catch_up_window`
+  - `ingestion_throughput.queue_output`
+- Operational interpretation:
+  - Sustained `mode=highpressure` with `outcome=api_priority_active` indicates API-triggered refresh demand is dominating throughput.
+  - `defer_age_breach` and `catch_up_window` starts indicate fairness guardrail activation.
+  - Compare queue target vs queued output to identify preemption (`stopped_api_priority_preemption`) or candidate scarcity (`skipped_no_candidates`).
 
 ### Analytics Response Semantics
 

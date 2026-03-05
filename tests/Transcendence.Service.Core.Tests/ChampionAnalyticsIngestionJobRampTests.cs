@@ -80,6 +80,31 @@ public class ChampionAnalyticsIngestionJobRampTests
             Times.Once);
     }
 
+    [Fact]
+    public async Task ExecuteRampAsync_DeduplicatesCandidatesUsingCanonicalLockIdentity()
+    {
+        await using var harness = await Harness.CreateAsync();
+        harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        harness.SeedSummoner("  PlayerOne ", " tagone ");
+        harness.SeedSummoner("playerone", "TAGONE");
+        await harness.Db.SaveChangesAsync();
+
+        var acquiredKeys = new List<string>();
+        harness.RefreshLockRepository
+            .Setup(x => x.TryAcquireAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .Returns<string, TimeSpan, CancellationToken>((key, _, _) =>
+            {
+                acquiredKeys.Add(key);
+                return Task.FromResult(true);
+            });
+
+        await harness.Job.ExecuteRampAsync(CancellationToken.None);
+
+        acquiredKeys.Should().ContainSingle();
+        acquiredKeys[0].Should().Be(
+            RefreshLockKeys.BuildSummonerRefreshKey(Camille.Enums.PlatformRoute.NA1, "PlayerOne", "tagone"));
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;

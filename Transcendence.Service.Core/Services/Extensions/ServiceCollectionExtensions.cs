@@ -37,6 +37,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ILiveGameAnalysisService, LiveGameAnalysisService>();
         services.AddScoped<IMultiSearchService, MultiSearchService>();
         services.AddSingleton<IRefreshLockLifecycleTelemetry, RefreshLockLifecycleTelemetry>();
+        services.AddSingleton<IIngestionThroughputTelemetry, IngestionThroughputTelemetry>();
 
         // Analytics services
         services.AddScoped<IChampionAnalyticsComputeService, ChampionAnalyticsComputeService>();

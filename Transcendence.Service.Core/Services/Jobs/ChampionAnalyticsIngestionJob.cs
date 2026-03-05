@@ -5,6 +5,7 @@ using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Models.Service;
 using Transcendence.Data.Repositories.Interfaces;
+using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.Jobs.Priority;
@@ -21,10 +22,13 @@ public class ChampionAnalyticsIngestionJob(
     IIngestionPriorityScoringPolicy scoringPolicy,
     IAdaptiveThroughputBudgetPolicy adaptiveThroughputBudgetPolicy,
     IStarvationGuardrailPolicy starvationGuardrailPolicy,
+    IIngestionThroughputTelemetry ingestionThroughputTelemetry,
     IOptions<ChampionAnalyticsIngestionJobOptions> options,
     ILogger<ChampionAnalyticsIngestionJob> logger)
 {
     private static readonly TimeSpan QueueFailureLockReleaseTimeout = TimeSpan.FromSeconds(5);
+    private const string ProducerKey = nameof(ChampionAnalyticsIngestionJob);
+    private const string TelemetrySource = "champion-analytics-ingestion-job";
 
     private sealed record CandidateSummoner(
         string PlatformRegion,
@@ -122,7 +126,7 @@ public class ChampionAnalyticsIngestionJob(
 
         var pendingCandidateCount = await EstimatePendingCandidateCountAsync(ct);
         var budget = adaptiveThroughputBudgetPolicy.ComputeBudget(new AdaptiveThroughputBudgetInput(
-            nameof(ChampionAnalyticsIngestionJob),
+            ProducerKey,
             evaluationUtc,
             apiPriorityDemandActive,
             successfulMatchesForPatch,
@@ -133,18 +137,37 @@ public class ChampionAnalyticsIngestionJob(
             baselineMaxCandidates,
             baselineMinQueued,
             baselineMaxQueued));
+        ingestionThroughputTelemetry.RecordBudgetDecision(
+            ProducerKey,
+            budget,
+            apiPriorityDemandActive,
+            TelemetrySource);
 
         var guardrailDecision = await EvaluateStarvationGuardrailAsync(
             evaluationUtc,
             budget.QueueTarget,
             budget.MaxCandidates,
             ct);
+        ingestionThroughputTelemetry.RecordGuardrailDecision(
+            ProducerKey,
+            guardrailDecision,
+            TelemetrySource);
         var queuedTarget = guardrailDecision.QueueTarget;
         var maxCandidates = guardrailDecision.MaxCandidates;
         var forcedCatchUpActive = guardrailDecision.IsForcedCatchUpActive;
 
         if (queuedTarget <= 0)
         {
+            ingestionThroughputTelemetry.RecordQueueTargetOutput(
+                ProducerKey,
+                queuedTarget,
+                queuedCount: 0,
+                maxCandidates,
+                budget.Mode,
+                guardrailDecision.Outcome,
+                forcedCatchUpActive,
+                "skipped_zero_queue_target",
+                TelemetrySource);
             logger.LogInformation(
                 "Champion analytics ingestion skipped: adaptive mode {Mode} and guardrail outcome {GuardrailOutcome} produced queue target {QueueTarget} (apiPriority={ApiPriority}, coverage={Coverage:F2}, backlogAgeMinutes={BacklogAge:F1}, velocityPerHour={Velocity:F2}, pressure={Pressure:F2}, deferAgeMinutes={DeferAge:F1}, deferThresholdMinutes={DeferThreshold:F1}).",
                 budget.Mode,
@@ -162,6 +185,16 @@ public class ChampionAnalyticsIngestionJob(
 
         if (jobOptions.PauseWhenApiPriorityRefreshActive && apiPriorityDemandActive && !forcedCatchUpActive)
         {
+            ingestionThroughputTelemetry.RecordQueueTargetOutput(
+                ProducerKey,
+                queuedTarget,
+                queuedCount: 0,
+                maxCandidates,
+                budget.Mode,
+                guardrailDecision.Outcome,
+                forcedCatchUpActive,
+                "skipped_api_priority_pause",
+                TelemetrySource);
             logger.LogInformation(
                 "Champion analytics ingestion skipped: active high-priority API refresh demand detected while pause mode is enabled.");
             return;
@@ -173,12 +206,23 @@ public class ChampionAnalyticsIngestionJob(
         var candidates = await GetCandidatesAsync(maxCandidates, jobOptions, releaseUtc, evaluationUtc, ct);
         if (candidates.Count == 0)
         {
+            ingestionThroughputTelemetry.RecordQueueTargetOutput(
+                ProducerKey,
+                queuedTarget,
+                queuedCount: 0,
+                maxCandidates,
+                budget.Mode,
+                guardrailDecision.Outcome,
+                forcedCatchUpActive,
+                "skipped_no_candidates",
+                TelemetrySource);
             logger.LogWarning(
                 "Champion analytics ingestion skipped: no candidate summoners with Riot IDs are available.");
             return;
         }
 
         var queued = 0;
+        var preemptedByApiPriority = false;
         foreach (var candidate in candidates)
         {
             ct.ThrowIfCancellationRequested();
@@ -192,6 +236,7 @@ public class ChampionAnalyticsIngestionJob(
                     "Champion analytics ingestion stopped early after queueing {QueuedCount}/{QueuedTarget} jobs due to active high-priority API refresh demand.",
                     queued,
                     queuedTarget);
+                preemptedByApiPriority = true;
                 break;
             }
 
@@ -229,6 +274,22 @@ public class ChampionAnalyticsIngestionJob(
                 throw;
             }
         }
+
+        var queueOutcome = preemptedByApiPriority
+            ? "stopped_api_priority_preemption"
+            : queued >= queuedTarget
+                ? "queued_target_met"
+                : "queued_target_partial";
+        ingestionThroughputTelemetry.RecordQueueTargetOutput(
+            ProducerKey,
+            queuedTarget,
+            queued,
+            maxCandidates,
+            budget.Mode,
+            guardrailDecision.Outcome,
+            forcedCatchUpActive,
+            queueOutcome,
+            TelemetrySource);
 
         logger.LogInformation(
             "Champion analytics ingestion queued {QueuedCount}/{QueuedTarget} low-priority summoner refresh jobs (patch {Patch}, mode {Mode}, guardrail={GuardrailOutcome}, forceCatchUp={ForceCatchUp}, matches {MatchCount}/{TargetMatchCount}, stale {IsStale}, includeAllModes {IncludeAllModes}, latestFetchAt {LatestFetchAt}, ramp={Ramp}, coverage={Coverage:F2}, backlogAgeMinutes={BacklogAge:F1}, velocityPerHour={Velocity:F2}, pressure={Pressure:F2}, deferAgeMinutes={DeferAge:F1}, deferThresholdMinutes={DeferThreshold:F1}).",
@@ -346,9 +407,8 @@ public class ChampionAnalyticsIngestionJob(
         int baselineMaxCandidates,
         CancellationToken ct)
     {
-        var producerKey = nameof(ChampionAnalyticsIngestionJob);
-        var catchUpWindowKey = RefreshLockKeys.BuildStarvationGuardrailCatchUpKey(producerKey);
-        var catchUpCooldownKey = RefreshLockKeys.BuildStarvationGuardrailCooldownKey(producerKey);
+        var catchUpWindowKey = RefreshLockKeys.BuildStarvationGuardrailCatchUpKey(ProducerKey);
+        var catchUpCooldownKey = RefreshLockKeys.BuildStarvationGuardrailCooldownKey(ProducerKey);
         var maxDeferAgeMinutes = await EstimateMaxEligibleDeferAgeMinutesAsync(evaluationUtc, ct);
 
         var catchUpWindowState = await refreshLockRepository.GetAsync(catchUpWindowKey, ct);
@@ -358,7 +418,7 @@ public class ChampionAnalyticsIngestionJob(
 
         StarvationGuardrailDecision Evaluate(bool windowActive, bool cooldownActive) =>
             starvationGuardrailPolicy.Evaluate(new StarvationGuardrailInput(
-                producerKey,
+                ProducerKey,
                 evaluationUtc,
                 maxDeferAgeMinutes,
                 windowActive,
@@ -368,15 +428,43 @@ public class ChampionAnalyticsIngestionJob(
 
         var decision = Evaluate(catchUpWindowActive, catchUpCooldownActive);
         if (!decision.ShouldStartCatchUpWindow)
+        {
+            if (decision.Outcome is StarvationGuardrailOutcome.CatchUpWindowContinue or StarvationGuardrailOutcome.CatchUpCooldown)
+            {
+                var lifecycleOutcome = decision.Outcome == StarvationGuardrailOutcome.CatchUpWindowContinue
+                    ? "continue"
+                    : "cooldown";
+                ingestionThroughputTelemetry.RecordCatchUpWindowLifecycle(
+                    ProducerKey,
+                    lifecycleOutcome,
+                    decision.CatchUpWindowTtl,
+                    decision.CatchUpCooldownTtl,
+                    TelemetrySource);
+            }
+
             return decision;
+        }
 
         var catchUpStarted = await refreshLockRepository.TryAcquireAsync(catchUpWindowKey, decision.CatchUpWindowTtl, ct);
         if (catchUpStarted)
         {
             var cooldownTtl = decision.CatchUpWindowTtl + decision.CatchUpCooldownTtl;
             await refreshLockRepository.TryAcquireAsync(catchUpCooldownKey, cooldownTtl, ct);
+            ingestionThroughputTelemetry.RecordCatchUpWindowLifecycle(
+                ProducerKey,
+                "started",
+                decision.CatchUpWindowTtl,
+                decision.CatchUpCooldownTtl,
+                TelemetrySource);
             return Evaluate(windowActive: true, cooldownActive: true);
         }
+
+        ingestionThroughputTelemetry.RecordCatchUpWindowLifecycle(
+            ProducerKey,
+            "start_contention",
+            decision.CatchUpWindowTtl,
+            decision.CatchUpCooldownTtl,
+            TelemetrySource);
 
         catchUpWindowState = await refreshLockRepository.GetAsync(catchUpWindowKey, ct);
         catchUpCooldownState = await refreshLockRepository.GetAsync(catchUpCooldownKey, ct);

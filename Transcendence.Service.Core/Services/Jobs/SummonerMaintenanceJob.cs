@@ -5,6 +5,7 @@ using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Models.Service;
 using Transcendence.Data.Repositories.Interfaces;
+using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.Jobs.Priority;
@@ -20,10 +21,14 @@ public class SummonerMaintenanceJob(
     IIngestionPriorityScoringPolicy scoringPolicy,
     IAdaptiveThroughputBudgetPolicy adaptiveThroughputBudgetPolicy,
     IStarvationGuardrailPolicy starvationGuardrailPolicy,
+    IIngestionThroughputTelemetry ingestionThroughputTelemetry,
     IOptions<SummonerMaintenanceJobOptions> options,
     IOptions<ChampionAnalyticsIngestionJobOptions> analyticsOptions,
     ILogger<SummonerMaintenanceJob> logger)
 {
+    private const string ProducerKey = nameof(SummonerMaintenanceJob);
+    private const string TelemetrySource = "summoner-maintenance-job";
+
     private sealed record CandidateSummoner(
         string PlatformRegion,
         string GameName,
@@ -109,7 +114,7 @@ public class SummonerMaintenanceJob(
         var pendingCandidateCount = await EstimatePendingCandidateCountAsync(staleCutoffUtc, ct);
 
         var budget = adaptiveThroughputBudgetPolicy.ComputeBudget(new AdaptiveThroughputBudgetInput(
-            nameof(SummonerMaintenanceJob),
+            ProducerKey,
             evaluationUtc,
             apiPriorityDemandActive,
             successfulMatchesForPatch,
@@ -120,6 +125,11 @@ public class SummonerMaintenanceJob(
             baselineMaxCandidates,
             baselineMinQueued,
             baselineMaxQueued));
+        ingestionThroughputTelemetry.RecordBudgetDecision(
+            ProducerKey,
+            budget,
+            apiPriorityDemandActive,
+            TelemetrySource);
 
         var guardrailDecision = await EvaluateStarvationGuardrailAsync(
             evaluationUtc,
@@ -127,12 +137,26 @@ public class SummonerMaintenanceJob(
             budget.QueueTarget,
             budget.MaxCandidates,
             ct);
+        ingestionThroughputTelemetry.RecordGuardrailDecision(
+            ProducerKey,
+            guardrailDecision,
+            TelemetrySource);
         var maxCandidates = guardrailDecision.MaxCandidates;
         var maxQueued = guardrailDecision.QueueTarget;
         var forcedCatchUpActive = guardrailDecision.IsForcedCatchUpActive;
 
         if (maxQueued <= 0)
         {
+            ingestionThroughputTelemetry.RecordQueueTargetOutput(
+                ProducerKey,
+                maxQueued,
+                queuedCount: 0,
+                maxCandidates,
+                budget.Mode,
+                guardrailDecision.Outcome,
+                forcedCatchUpActive,
+                "skipped_zero_queue_target",
+                TelemetrySource);
             logger.LogInformation(
                 "[Maintenance] Skipped because adaptive mode {Mode} and guardrail outcome {GuardrailOutcome} produced queue target {QueueTarget} (apiPriority={ApiPriority}, coverage={Coverage:F2}, backlogAgeMinutes={BacklogAge:F1}, velocityPerHour={Velocity:F2}, pressure={Pressure:F2}, deferAgeMinutes={DeferAge:F1}, deferThresholdMinutes={DeferThreshold:F1}).",
                 budget.Mode,
@@ -150,6 +174,16 @@ public class SummonerMaintenanceJob(
 
         if (jobOptions.PauseWhenApiPriorityRefreshActive && apiPriorityDemandActive && !forcedCatchUpActive)
         {
+            ingestionThroughputTelemetry.RecordQueueTargetOutput(
+                ProducerKey,
+                maxQueued,
+                queuedCount: 0,
+                maxCandidates,
+                budget.Mode,
+                guardrailDecision.Outcome,
+                forcedCatchUpActive,
+                "skipped_api_priority_pause",
+                TelemetrySource);
             logger.LogInformation("[Maintenance] Skipped due to active high-priority API refresh demand.");
             return;
         }
@@ -160,11 +194,22 @@ public class SummonerMaintenanceJob(
         var candidates = await GetCandidatesAsync(staleCutoffUtc, maxCandidates, releaseUtc, evaluationUtc, jobOptions, ct);
         if (candidates.Count == 0)
         {
+            ingestionThroughputTelemetry.RecordQueueTargetOutput(
+                ProducerKey,
+                maxQueued,
+                queuedCount: 0,
+                maxCandidates,
+                budget.Mode,
+                guardrailDecision.Outcome,
+                forcedCatchUpActive,
+                "skipped_no_candidates",
+                TelemetrySource);
             logger.LogInformation("[Maintenance] No stale summoner candidates were eligible.");
             return;
         }
 
         var queued = 0;
+        var preemptedByApiPriority = false;
         foreach (var candidate in candidates)
         {
             ct.ThrowIfCancellationRequested();
@@ -179,6 +224,7 @@ public class SummonerMaintenanceJob(
                     "[Maintenance] Stopped early after queueing {QueuedCount}/{QueuedTarget} jobs due to active high-priority API refresh demand.",
                     queued,
                     maxQueued);
+                preemptedByApiPriority = true;
                 break;
             }
 
@@ -217,6 +263,22 @@ public class SummonerMaintenanceJob(
                 throw;
             }
         }
+
+        var queueOutcome = preemptedByApiPriority
+            ? "stopped_api_priority_preemption"
+            : queued >= maxQueued
+                ? "queued_target_met"
+                : "queued_target_partial";
+        ingestionThroughputTelemetry.RecordQueueTargetOutput(
+            ProducerKey,
+            maxQueued,
+            queued,
+            maxCandidates,
+            budget.Mode,
+            guardrailDecision.Outcome,
+            forcedCatchUpActive,
+            queueOutcome,
+            TelemetrySource);
 
         logger.LogInformation(
             "[Maintenance] Queued {Queued}/{Target} refresh jobs. includeAllModes={IncludeAllModes}, patch={Patch}, mode={Mode}, guardrail={GuardrailOutcome}, forceCatchUp={ForceCatchUp}, coverage={Coverage}, ramp={Ramp}, backlogAgeMinutes={BacklogAge:F1}, velocityPerHour={Velocity:F2}, pressure={Pressure:F2}, deferAgeMinutes={DeferAge:F1}, deferThresholdMinutes={DeferThreshold:F1}.",
@@ -310,9 +372,8 @@ public class SummonerMaintenanceJob(
         int baselineMaxCandidates,
         CancellationToken ct)
     {
-        var producerKey = nameof(SummonerMaintenanceJob);
-        var catchUpWindowKey = RefreshLockKeys.BuildStarvationGuardrailCatchUpKey(producerKey);
-        var catchUpCooldownKey = RefreshLockKeys.BuildStarvationGuardrailCooldownKey(producerKey);
+        var catchUpWindowKey = RefreshLockKeys.BuildStarvationGuardrailCatchUpKey(ProducerKey);
+        var catchUpCooldownKey = RefreshLockKeys.BuildStarvationGuardrailCooldownKey(ProducerKey);
         var maxDeferAgeMinutes = await EstimateMaxEligibleDeferAgeMinutesAsync(evaluationUtc, staleCutoffUtc, ct);
 
         var catchUpWindowState = await refreshLockRepository.GetAsync(catchUpWindowKey, ct);
@@ -322,7 +383,7 @@ public class SummonerMaintenanceJob(
 
         StarvationGuardrailDecision Evaluate(bool windowActive, bool cooldownActive) =>
             starvationGuardrailPolicy.Evaluate(new StarvationGuardrailInput(
-                producerKey,
+                ProducerKey,
                 evaluationUtc,
                 maxDeferAgeMinutes,
                 windowActive,
@@ -332,15 +393,43 @@ public class SummonerMaintenanceJob(
 
         var decision = Evaluate(catchUpWindowActive, catchUpCooldownActive);
         if (!decision.ShouldStartCatchUpWindow)
+        {
+            if (decision.Outcome is StarvationGuardrailOutcome.CatchUpWindowContinue or StarvationGuardrailOutcome.CatchUpCooldown)
+            {
+                var lifecycleOutcome = decision.Outcome == StarvationGuardrailOutcome.CatchUpWindowContinue
+                    ? "continue"
+                    : "cooldown";
+                ingestionThroughputTelemetry.RecordCatchUpWindowLifecycle(
+                    ProducerKey,
+                    lifecycleOutcome,
+                    decision.CatchUpWindowTtl,
+                    decision.CatchUpCooldownTtl,
+                    TelemetrySource);
+            }
+
             return decision;
+        }
 
         var catchUpStarted = await refreshLockRepository.TryAcquireAsync(catchUpWindowKey, decision.CatchUpWindowTtl, ct);
         if (catchUpStarted)
         {
             var cooldownTtl = decision.CatchUpWindowTtl + decision.CatchUpCooldownTtl;
             await refreshLockRepository.TryAcquireAsync(catchUpCooldownKey, cooldownTtl, ct);
+            ingestionThroughputTelemetry.RecordCatchUpWindowLifecycle(
+                ProducerKey,
+                "started",
+                decision.CatchUpWindowTtl,
+                decision.CatchUpCooldownTtl,
+                TelemetrySource);
             return Evaluate(windowActive: true, cooldownActive: true);
         }
+
+        ingestionThroughputTelemetry.RecordCatchUpWindowLifecycle(
+            ProducerKey,
+            "start_contention",
+            decision.CatchUpWindowTtl,
+            decision.CatchUpCooldownTtl,
+            TelemetrySource);
 
         catchUpWindowState = await refreshLockRepository.GetAsync(catchUpWindowKey, ct);
         catchUpCooldownState = await refreshLockRepository.GetAsync(catchUpCooldownKey, ct);

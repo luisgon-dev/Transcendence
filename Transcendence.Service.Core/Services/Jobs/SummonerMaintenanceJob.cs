@@ -24,9 +24,10 @@ public class SummonerMaintenanceJob(
     IIngestionThroughputTelemetry ingestionThroughputTelemetry,
     IOptions<SummonerMaintenanceJobOptions> options,
     IOptions<ChampionAnalyticsIngestionJobOptions> analyticsOptions,
+    IOptions<MultiRegionIngestionOptions> multiRegionOptions,
     ILogger<SummonerMaintenanceJob> logger)
 {
-    private const string ProducerKey = nameof(SummonerMaintenanceJob);
+    private const string ProducerKeyBase = nameof(SummonerMaintenanceJob);
     private const string TelemetrySource = "summoner-maintenance-job";
 
     private sealed record CandidateSummoner(
@@ -39,17 +40,65 @@ public class SummonerMaintenanceJob(
     [Queue("refresh-low")]
     public async Task ExecuteAsync(CancellationToken ct = default)
     {
-        await ExecuteInternalAsync(rampOnly: false, ct);
+        var multiRegion = multiRegionOptions.Value;
+
+        if (multiRegion.Enabled && multiRegion.Regions.Count > 0)
+        {
+            var enabledRegions = multiRegion.Regions.Where(r => r.Enabled).ToList();
+            foreach (var regionConfig in enabledRegions)
+            {
+                backgroundJobClient.Enqueue<SummonerMaintenanceJob>(
+                    job => job.ExecuteForRegionAsync(regionConfig.Region, CancellationToken.None));
+            }
+
+            logger.LogInformation(
+                "[Maintenance] Fan-out: enqueued {Count} per-region jobs.",
+                enabledRegions.Count);
+            return;
+        }
+
+        await ExecuteForRegionInternalAsync(region: null, rampOnly: false, ct);
     }
 
     [Queue("refresh-low")]
     public async Task ExecuteRampAsync(CancellationToken ct = default)
     {
-        await ExecuteInternalAsync(rampOnly: true, ct);
+        var multiRegion = multiRegionOptions.Value;
+
+        if (multiRegion.Enabled && multiRegion.Regions.Count > 0)
+        {
+            var enabledRegions = multiRegion.Regions.Where(r => r.Enabled).ToList();
+            foreach (var regionConfig in enabledRegions)
+            {
+                backgroundJobClient.Enqueue<SummonerMaintenanceJob>(
+                    job => job.ExecuteForRegionRampAsync(regionConfig.Region, CancellationToken.None));
+            }
+
+            logger.LogInformation(
+                "[Maintenance] Ramp fan-out: enqueued {Count} per-region jobs.",
+                enabledRegions.Count);
+            return;
+        }
+
+        await ExecuteForRegionInternalAsync(region: null, rampOnly: true, ct);
     }
 
-    private async Task ExecuteInternalAsync(bool rampOnly, CancellationToken ct = default)
+    [Queue("refresh-low")]
+    public async Task ExecuteForRegionAsync(string region, CancellationToken ct = default)
     {
+        await ExecuteForRegionInternalAsync(region, rampOnly: false, ct);
+    }
+
+    [Queue("refresh-low")]
+    public async Task ExecuteForRegionRampAsync(string region, CancellationToken ct = default)
+    {
+        await ExecuteForRegionInternalAsync(region, rampOnly: true, ct);
+    }
+
+    private async Task ExecuteForRegionInternalAsync(string? region, bool rampOnly, CancellationToken ct = default)
+    {
+        var producerKey = region != null ? $"{ProducerKeyBase}:{region}" : ProducerKeyBase;
+        var telemetrySource = region != null ? $"{TelemetrySource}:{region}" : TelemetrySource;
         var jobOptions = options.Value;
         var evaluationUtc = DateTime.UtcNow;
         var apiPriorityDemandActive = await refreshLockRepository.AnyActiveByPrefixAsync(
@@ -64,7 +113,7 @@ public class SummonerMaintenanceJob(
 
         if (activePatch == null || string.IsNullOrWhiteSpace(activePatch.Version))
         {
-            logger.LogWarning("[Maintenance] Skipped because no active patch exists.");
+            logger.LogWarning("[Maintenance] Skipped because no active patch exists. region={Region}", region);
             return;
         }
 
@@ -75,23 +124,26 @@ public class SummonerMaintenanceJob(
         var isRampActive = evaluationUtc < releaseUtc.AddHours(rampHours);
         if (rampOnly && !isRampActive)
         {
-            logger.LogDebug("[Maintenance] Ramp run skipped: ramp window inactive.");
+            logger.LogDebug("[Maintenance] Ramp run skipped: ramp window inactive. region={Region}", region);
             return;
         }
 
         var patchStartEpoch = new DateTimeOffset(activePatch.ReleaseDate, TimeSpan.Zero).ToUnixTimeSeconds();
-        var successfulMatchesForPatch = await db.Matches
-            .AsNoTracking()
-            .Where(m => m.Status == FetchStatus.Success && m.Patch == activePatch.Version)
-            .CountAsync(ct);
+
+        // Region-scoped match queries
+        var matchQuery = db.Matches.AsNoTracking()
+            .Where(m => m.Status == FetchStatus.Success && m.Patch == activePatch.Version);
+        if (region != null)
+            matchQuery = matchQuery.Where(m => m.PlatformRegion == region);
+
+        var successfulMatchesForPatch = await matchQuery.CountAsync(ct);
 
         var targetMatchesForPatch = Math.Max(
             analyticsOptions.Value.MinimumSuccessfulMatchesForCurrentPatch,
             analyticsOptions.Value.TargetSuccessfulMatchesForCurrentPatch);
 
-        var latestFetchAtUtc = await db.Matches
-            .AsNoTracking()
-            .Where(m => m.Status == FetchStatus.Success && m.Patch == activePatch.Version && m.FetchedAt != null)
+        var latestFetchAtUtc = await matchQuery
+            .Where(m => m.FetchedAt != null)
             .MaxAsync(m => m.FetchedAt, ct);
 
         var staleAfterMinutes = Math.Max(5,
@@ -104,17 +156,13 @@ public class SummonerMaintenanceJob(
         var baselineMinQueued = 1;
 
         var recentSuccessWindowStartUtc = evaluationUtc.AddMinutes(-adaptiveThroughputBudgetPolicy.VelocityLookbackMinutes);
-        var recentSuccessfulMatchesForPatch = await db.Matches
-            .AsNoTracking()
-            .Where(m => m.Status == FetchStatus.Success &&
-                        m.Patch == activePatch.Version &&
-                        m.FetchedAt != null &&
-                        m.FetchedAt >= recentSuccessWindowStartUtc)
+        var recentSuccessfulMatchesForPatch = await matchQuery
+            .Where(m => m.FetchedAt != null && m.FetchedAt >= recentSuccessWindowStartUtc)
             .CountAsync(ct);
-        var pendingCandidateCount = await EstimatePendingCandidateCountAsync(staleCutoffUtc, ct);
+        var pendingCandidateCount = await EstimatePendingCandidateCountAsync(region, staleCutoffUtc, ct);
 
         var budget = adaptiveThroughputBudgetPolicy.ComputeBudget(new AdaptiveThroughputBudgetInput(
-            ProducerKey,
+            producerKey,
             evaluationUtc,
             apiPriorityDemandActive,
             successfulMatchesForPatch,
@@ -126,21 +174,23 @@ public class SummonerMaintenanceJob(
             baselineMinQueued,
             baselineMaxQueued));
         ingestionThroughputTelemetry.RecordBudgetDecision(
-            ProducerKey,
+            producerKey,
             budget,
             apiPriorityDemandActive,
-            TelemetrySource);
+            telemetrySource);
 
         var guardrailDecision = await EvaluateStarvationGuardrailAsync(
+            producerKey,
+            region,
             evaluationUtc,
             staleCutoffUtc,
             budget.QueueTarget,
             budget.MaxCandidates,
             ct);
         ingestionThroughputTelemetry.RecordGuardrailDecision(
-            ProducerKey,
+            producerKey,
             guardrailDecision,
-            TelemetrySource);
+            telemetrySource);
         var maxCandidates = guardrailDecision.MaxCandidates;
         var maxQueued = guardrailDecision.QueueTarget;
         var forcedCatchUpActive = guardrailDecision.IsForcedCatchUpActive;
@@ -148,7 +198,7 @@ public class SummonerMaintenanceJob(
         if (maxQueued <= 0)
         {
             ingestionThroughputTelemetry.RecordQueueTargetOutput(
-                ProducerKey,
+                producerKey,
                 maxQueued,
                 queuedCount: 0,
                 maxCandidates,
@@ -156,12 +206,13 @@ public class SummonerMaintenanceJob(
                 guardrailDecision.Outcome,
                 forcedCatchUpActive,
                 "skipped_zero_queue_target",
-                TelemetrySource);
+                telemetrySource);
             logger.LogInformation(
-                "[Maintenance] Skipped because adaptive mode {Mode} and guardrail outcome {GuardrailOutcome} produced queue target {QueueTarget} (apiPriority={ApiPriority}, coverage={Coverage:F2}, backlogAgeMinutes={BacklogAge:F1}, velocityPerHour={Velocity:F2}, pressure={Pressure:F2}, deferAgeMinutes={DeferAge:F1}, deferThresholdMinutes={DeferThreshold:F1}).",
+                "[Maintenance] Skipped because adaptive mode {Mode} and guardrail outcome {GuardrailOutcome} produced queue target {QueueTarget} (region={Region}, apiPriority={ApiPriority}, coverage={Coverage:F2}, backlogAgeMinutes={BacklogAge:F1}, velocityPerHour={Velocity:F2}, pressure={Pressure:F2}, deferAgeMinutes={DeferAge:F1}, deferThresholdMinutes={DeferThreshold:F1}).",
                 budget.Mode,
                 guardrailDecision.Outcome,
                 maxQueued,
+                region,
                 apiPriorityDemandActive,
                 budget.CoverageRatio,
                 budget.BacklogAgeMinutes,
@@ -175,7 +226,7 @@ public class SummonerMaintenanceJob(
         if (jobOptions.PauseWhenApiPriorityRefreshActive && apiPriorityDemandActive && !forcedCatchUpActive)
         {
             ingestionThroughputTelemetry.RecordQueueTargetOutput(
-                ProducerKey,
+                producerKey,
                 maxQueued,
                 queuedCount: 0,
                 maxCandidates,
@@ -183,19 +234,19 @@ public class SummonerMaintenanceJob(
                 guardrailDecision.Outcome,
                 forcedCatchUpActive,
                 "skipped_api_priority_pause",
-                TelemetrySource);
-            logger.LogInformation("[Maintenance] Skipped due to active high-priority API refresh demand.");
+                telemetrySource);
+            logger.LogInformation("[Maintenance] Skipped due to active high-priority API refresh demand. region={Region}", region);
             return;
         }
 
         var includeAllModes = budget.IncludeAllModes;
         var lockTtl = TimeSpan.FromMinutes(Math.Max(2, jobOptions.RefreshLockMinutes));
 
-        var candidates = await GetCandidatesAsync(staleCutoffUtc, maxCandidates, releaseUtc, evaluationUtc, jobOptions, ct);
+        var candidates = await GetCandidatesAsync(region, staleCutoffUtc, maxCandidates, releaseUtc, evaluationUtc, jobOptions, ct);
         if (candidates.Count == 0)
         {
             ingestionThroughputTelemetry.RecordQueueTargetOutput(
-                ProducerKey,
+                producerKey,
                 maxQueued,
                 queuedCount: 0,
                 maxCandidates,
@@ -203,8 +254,8 @@ public class SummonerMaintenanceJob(
                 guardrailDecision.Outcome,
                 forcedCatchUpActive,
                 "skipped_no_candidates",
-                TelemetrySource);
-            logger.LogInformation("[Maintenance] No stale summoner candidates were eligible.");
+                telemetrySource);
+            logger.LogInformation("[Maintenance] No stale summoner candidates were eligible. region={Region}", region);
             return;
         }
 
@@ -221,9 +272,10 @@ public class SummonerMaintenanceJob(
                 await refreshLockRepository.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, ct))
             {
                 logger.LogInformation(
-                    "[Maintenance] Stopped early after queueing {QueuedCount}/{QueuedTarget} jobs due to active high-priority API refresh demand.",
+                    "[Maintenance] Stopped early after queueing {QueuedCount}/{QueuedTarget} jobs due to active high-priority API refresh demand. region={Region}",
                     queued,
-                    maxQueued);
+                    maxQueued,
+                    region);
                 preemptedByApiPriority = true;
                 break;
             }
@@ -270,7 +322,7 @@ public class SummonerMaintenanceJob(
                 ? "queued_target_met"
                 : "queued_target_partial";
         ingestionThroughputTelemetry.RecordQueueTargetOutput(
-            ProducerKey,
+            producerKey,
             maxQueued,
             queued,
             maxCandidates,
@@ -278,12 +330,13 @@ public class SummonerMaintenanceJob(
             guardrailDecision.Outcome,
             forcedCatchUpActive,
             queueOutcome,
-            TelemetrySource);
+            telemetrySource);
 
         logger.LogInformation(
-            "[Maintenance] Queued {Queued}/{Target} refresh jobs. includeAllModes={IncludeAllModes}, patch={Patch}, mode={Mode}, guardrail={GuardrailOutcome}, forceCatchUp={ForceCatchUp}, coverage={Coverage}, ramp={Ramp}, backlogAgeMinutes={BacklogAge:F1}, velocityPerHour={Velocity:F2}, pressure={Pressure:F2}, deferAgeMinutes={DeferAge:F1}, deferThresholdMinutes={DeferThreshold:F1}.",
+            "[Maintenance] Queued {Queued}/{Target} refresh jobs. region={Region}, includeAllModes={IncludeAllModes}, patch={Patch}, mode={Mode}, guardrail={GuardrailOutcome}, forceCatchUp={ForceCatchUp}, coverage={Coverage}, ramp={Ramp}, backlogAgeMinutes={BacklogAge:F1}, velocityPerHour={Velocity:F2}, pressure={Pressure:F2}, deferAgeMinutes={DeferAge:F1}, deferThresholdMinutes={DeferThreshold:F1}.",
             queued,
             maxQueued,
+            region,
             includeAllModes,
             activePatch.Version,
             budget.Mode,
@@ -299,6 +352,7 @@ public class SummonerMaintenanceJob(
     }
 
     private async Task<List<CandidateSummoner>> GetCandidatesAsync(
+        string? region,
         DateTime staleCutoffUtc,
         int maxCandidates,
         DateTime patchReleaseUtc,
@@ -310,8 +364,7 @@ public class SummonerMaintenanceJob(
 
         if (options.PrioritizeFavoriteSummoners)
         {
-            var favoriteCandidates = await (
-                from s in db.Summoners.AsNoTracking()
+            var query = from s in db.Summoners.AsNoTracking()
                 join f in db.UserFavoriteSummoners.AsNoTracking()
                     on new { Puuid = s.Puuid!, PlatformRegion = s.PlatformRegion! }
                     equals new { Puuid = f.SummonerPuuid, PlatformRegion = f.PlatformRegion }
@@ -319,21 +372,32 @@ public class SummonerMaintenanceJob(
                       && s.TagLine != null
                       && s.PlatformRegion != null
                       && s.UpdatedAt <= staleCutoffUtc
-                select new CandidateSummoner(
+                select s;
+
+            if (region != null)
+                query = query.Where(s => s.PlatformRegion == region);
+
+            var favoriteCandidates = await query
+                .Select(s => new CandidateSummoner(
                     s.PlatformRegion!,
                     s.GameName!,
                     s.TagLine!,
                     s.UpdatedAt,
-                    true)
-            ).ToListAsync(ct);
+                    true))
+                .ToListAsync(ct);
 
             combined.AddRange(favoriteCandidates);
         }
 
-        var trackedCandidates = await db.Summoners
+        var trackedQuery = db.Summoners
             .AsNoTracking()
             .Where(s => s.GameName != null && s.TagLine != null && s.PlatformRegion != null)
-            .Where(s => s.UpdatedAt <= staleCutoffUtc)
+            .Where(s => s.UpdatedAt <= staleCutoffUtc);
+
+        if (region != null)
+            trackedQuery = trackedQuery.Where(s => s.PlatformRegion == region);
+
+        var trackedCandidates = await trackedQuery
             .OrderBy(s => s.UpdatedAt)
             .Take(maxCandidates * 3)
             .Select(s => new CandidateSummoner(
@@ -358,23 +422,32 @@ public class SummonerMaintenanceJob(
         return rankedCandidates.ToList();
     }
 
-    private Task<int> EstimatePendingCandidateCountAsync(DateTime staleCutoffUtc, CancellationToken ct) =>
-        db.Summoners
+    private Task<int> EstimatePendingCandidateCountAsync(string? region, DateTime staleCutoffUtc, CancellationToken ct)
+    {
+        var query = db.Summoners
             .AsNoTracking()
             .Where(s => s.GameName != null && s.TagLine != null && s.PlatformRegion != null)
-            .Where(s => s.UpdatedAt <= staleCutoffUtc)
-            .CountAsync(ct);
+            .Where(s => s.UpdatedAt <= staleCutoffUtc);
+
+        if (region != null)
+            query = query.Where(s => s.PlatformRegion == region);
+
+        return query.CountAsync(ct);
+    }
 
     private async Task<StarvationGuardrailDecision> EvaluateStarvationGuardrailAsync(
+        string producerKey,
+        string? region,
         DateTime evaluationUtc,
         DateTime staleCutoffUtc,
         int baselineQueueTarget,
         int baselineMaxCandidates,
         CancellationToken ct)
     {
-        var catchUpWindowKey = RefreshLockKeys.BuildStarvationGuardrailCatchUpKey(ProducerKey);
-        var catchUpCooldownKey = RefreshLockKeys.BuildStarvationGuardrailCooldownKey(ProducerKey);
-        var maxDeferAgeMinutes = await EstimateMaxEligibleDeferAgeMinutesAsync(evaluationUtc, staleCutoffUtc, ct);
+        var catchUpWindowKey = RefreshLockKeys.BuildStarvationGuardrailCatchUpKey(producerKey);
+        var catchUpCooldownKey = RefreshLockKeys.BuildStarvationGuardrailCooldownKey(producerKey);
+        var maxDeferAgeMinutes = await EstimateMaxEligibleDeferAgeMinutesAsync(region, evaluationUtc, staleCutoffUtc, ct);
+        var telemetrySource = region != null ? $"{TelemetrySource}:{region}" : TelemetrySource;
 
         var catchUpWindowState = await refreshLockRepository.GetAsync(catchUpWindowKey, ct);
         var catchUpCooldownState = await refreshLockRepository.GetAsync(catchUpCooldownKey, ct);
@@ -383,7 +456,7 @@ public class SummonerMaintenanceJob(
 
         StarvationGuardrailDecision Evaluate(bool windowActive, bool cooldownActive) =>
             starvationGuardrailPolicy.Evaluate(new StarvationGuardrailInput(
-                ProducerKey,
+                producerKey,
                 evaluationUtc,
                 maxDeferAgeMinutes,
                 windowActive,
@@ -400,11 +473,11 @@ public class SummonerMaintenanceJob(
                     ? "continue"
                     : "cooldown";
                 ingestionThroughputTelemetry.RecordCatchUpWindowLifecycle(
-                    ProducerKey,
+                    producerKey,
                     lifecycleOutcome,
                     decision.CatchUpWindowTtl,
                     decision.CatchUpCooldownTtl,
-                    TelemetrySource);
+                    telemetrySource);
             }
 
             return decision;
@@ -416,20 +489,20 @@ public class SummonerMaintenanceJob(
             var cooldownTtl = decision.CatchUpWindowTtl + decision.CatchUpCooldownTtl;
             await refreshLockRepository.TryAcquireAsync(catchUpCooldownKey, cooldownTtl, ct);
             ingestionThroughputTelemetry.RecordCatchUpWindowLifecycle(
-                ProducerKey,
+                producerKey,
                 "started",
                 decision.CatchUpWindowTtl,
                 decision.CatchUpCooldownTtl,
-                TelemetrySource);
+                telemetrySource);
             return Evaluate(windowActive: true, cooldownActive: true);
         }
 
         ingestionThroughputTelemetry.RecordCatchUpWindowLifecycle(
-            ProducerKey,
+            producerKey,
             "start_contention",
             decision.CatchUpWindowTtl,
             decision.CatchUpCooldownTtl,
-            TelemetrySource);
+            telemetrySource);
 
         catchUpWindowState = await refreshLockRepository.GetAsync(catchUpWindowKey, ct);
         catchUpCooldownState = await refreshLockRepository.GetAsync(catchUpCooldownKey, ct);
@@ -439,14 +512,20 @@ public class SummonerMaintenanceJob(
     }
 
     private async Task<double?> EstimateMaxEligibleDeferAgeMinutesAsync(
+        string? region,
         DateTime evaluationUtc,
         DateTime staleCutoffUtc,
         CancellationToken ct)
     {
-        var oldestUpdatedAt = await db.Summoners
+        var query = db.Summoners
             .AsNoTracking()
             .Where(s => s.GameName != null && s.TagLine != null && s.PlatformRegion != null)
-            .Where(s => s.UpdatedAt <= staleCutoffUtc)
+            .Where(s => s.UpdatedAt <= staleCutoffUtc);
+
+        if (region != null)
+            query = query.Where(s => s.PlatformRegion == region);
+
+        var oldestUpdatedAt = await query
             .Select(s => (DateTime?)s.UpdatedAt)
             .MinAsync(ct);
 

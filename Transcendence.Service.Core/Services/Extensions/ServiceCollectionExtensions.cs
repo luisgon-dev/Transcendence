@@ -48,6 +48,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<RuneSelectionIntegrityBackfillJob>();
         services.AddScoped<MatchTimelineBackfillJob>();
         services.AddScoped<SummonerMaintenanceJob>();
+        services.AddScoped<RefreshLockLifecycleJob>();
 
         return services;
     }

@@ -256,8 +256,7 @@ public class ChampionAnalyticsIngestionJob(
 
         return combined
             .OrderBy(c => c.UpdatedAt)
-            .DistinctBy(c =>
-                $"{c.PlatformRegion.ToUpperInvariant()}:{c.GameName.ToUpperInvariant()}:{c.TagLine.ToUpperInvariant()}")
+            .DistinctBy(c => RefreshLockKeys.BuildCanonicalIdentity(c.PlatformRegion, c.GameName, c.TagLine))
             .Take(maxCandidates)
             .ToList();
     }

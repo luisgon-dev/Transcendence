@@ -4,8 +4,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Analysis.Interfaces;
+using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.RiotApi;
@@ -221,6 +223,13 @@ public class SummonersController(
         if (lockRow != null && lockRow.LockedUntilUtc > DateTime.UtcNow)
         {
             var seconds = (int)(lockRow.LockedUntilUtc - DateTime.UtcNow).TotalSeconds;
+            EmitTelemetry(() =>
+            {
+                var lockTelemetry = TryGetLockTelemetry();
+                lockTelemetry?.RecordLifecycleOutcome(refreshKey, "contention", "summoners-controller");
+                lockTelemetry?.RecordContentionWaitHint(refreshKey, Math.Max(1, seconds), "summoners-controller");
+            });
+
             return Accepted(new SummonerAcceptedResponse(
                 "Refresh in process",
                 pollUrl,
@@ -238,7 +247,11 @@ public class SummonersController(
     [HttpPost("{region}/{name}/{tag}/refresh")]
     [EnableRateLimiting("expensive-read")]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(SummonerAcceptedResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(
+        typeof(SummonerAcceptedResponse),
+        StatusCodes.Status202Accepted,
+        Description =
+            "Accepted. Returns \"Refresh queued\" when the refresh lock is acquired, or \"Refresh in process\" with retryAfterSeconds when contention is detected.")]
     public async Task<IActionResult> RefreshByRiotId([FromRoute] string region, [FromRoute] string name,
         [FromRoute] string tag, CancellationToken ct)
     {
@@ -248,6 +261,13 @@ public class SummonersController(
         var key = RefreshLockKeys.BuildSummonerRefreshKey(platform, name, tag);
         var priorityKey = RefreshLockKeys.BuildApiPriorityKey(platform, name, tag);
         var ttl = TimeSpan.FromMinutes(15);
+        var lockTelemetry = TryGetLockTelemetry();
+        var pollUrl = Url.ActionLink(nameof(GetByRiotId), null, new
+        {
+            region,
+            name,
+            tag
+        });
 
         var acquired = await refreshLockRepository.TryAcquireAsync(key, ttl, ct);
         if (!acquired)
@@ -256,13 +276,32 @@ public class SummonersController(
             var seconds = existing == null
                 ? (int)ttl.TotalSeconds
                 : (int)Math.Max(1, (existing.LockedUntilUtc - DateTime.UtcNow).TotalSeconds);
+            EmitTelemetry(() =>
+            {
+                lockTelemetry?.RecordLifecycleOutcome(key, "contention", "summoners-controller");
+                lockTelemetry?.RecordContentionWaitHint(key, Math.Max(1, seconds), "summoners-controller");
+            });
+
             return Accepted(new SummonerAcceptedResponse(
                 "Refresh in process",
-                null,
+                pollUrl,
                 seconds));
         }
 
+        EmitTelemetry(() => lockTelemetry?.RecordLifecycleOutcome(key, "acquired", "summoners-controller"));
+
         var priorityAcquired = await refreshLockRepository.TryAcquireAsync(priorityKey, ttl, ct);
+        if (!priorityAcquired)
+        {
+            EmitTelemetry(() =>
+            {
+                lockTelemetry?.RecordLifecycleOutcome(priorityKey, "contention", "summoners-controller");
+                lockTelemetry?.RecordContentionWaitHint(
+                    priorityKey,
+                    (int)ttl.TotalSeconds,
+                    "summoners-controller");
+            });
+        }
 
         // Enqueue refresh job
         try
@@ -279,12 +318,6 @@ public class SummonersController(
             throw;
         }
 
-        var pollUrl = Url.ActionLink(nameof(GetByRiotId), null, new
-        {
-            region,
-            name,
-            tag
-        });
         return Accepted(new SummonerAcceptedResponse(
             "Refresh queued",
             pollUrl));
@@ -442,5 +475,29 @@ public class SummonersController(
             "RU" => "ru",
             _ => platformRegion.ToLowerInvariant()
         };
+    }
+
+    private IRefreshLockLifecycleTelemetry? TryGetLockTelemetry()
+    {
+        try
+        {
+            return HttpContext?.RequestServices.GetService<IRefreshLockLifecycleTelemetry>();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void EmitTelemetry(Action emit)
+    {
+        try
+        {
+            emit();
+        }
+        catch
+        {
+            // non-blocking telemetry only
+        }
     }
 }

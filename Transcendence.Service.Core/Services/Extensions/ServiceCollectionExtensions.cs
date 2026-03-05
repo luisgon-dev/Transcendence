@@ -6,8 +6,10 @@ using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Implementations;
 using Transcendence.Service.Core.Services.Auth.Interfaces;
 using Transcendence.Service.Core.Services.Cache;
+using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
+using Transcendence.Service.Core.Services.Jobs.Priority;
 using Transcendence.Service.Core.Services.LiveGame.Implementations;
 using Transcendence.Service.Core.Services.LiveGame.Interfaces;
 using Transcendence.Service.Core.Services.RiotApi.Implementations;
@@ -34,6 +36,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ILiveGameService, LiveGameService>();
         services.AddScoped<ILiveGameAnalysisService, LiveGameAnalysisService>();
         services.AddScoped<IMultiSearchService, MultiSearchService>();
+        services.AddSingleton<IRefreshLockLifecycleTelemetry, RefreshLockLifecycleTelemetry>();
+        services.AddSingleton<IIngestionThroughputTelemetry, IngestionThroughputTelemetry>();
 
         // Analytics services
         services.AddScoped<IChampionAnalyticsComputeService, ChampionAnalyticsComputeService>();
@@ -48,6 +52,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<RuneSelectionIntegrityBackfillJob>();
         services.AddScoped<MatchTimelineBackfillJob>();
         services.AddScoped<SummonerMaintenanceJob>();
+        services.AddScoped<RefreshLockLifecycleJob>();
+        services.AddScoped<IIngestionPriorityScoringPolicy, IngestionPriorityScoringPolicy>();
 
         return services;
     }

@@ -84,6 +84,36 @@ Transcendence is a backend + web monorepo:
 - API refresh jobs run on `refresh-high`; ingestion-driven refresh jobs run on `refresh-low`.
 - Refresh locks use DB-backed lease semantics (atomic acquire/renew + explicit lease expiry on release) so concurrent lock races do not require lock-row deletion.
 
+### Refresh Lock Lifecycle Telemetry and Retention
+
+- Lock lifecycle telemetry is emitted as best-effort/non-blocking instrumentation from API controllers, repository lock operations, and the lifecycle cleanup job.
+- Shared telemetry dimensions/tags:
+  - `lock_class` (for example `summoner-refresh`, `refresh-priority:api`, `refresh-lock-lifecycle`)
+  - `platform_region` (for example `NA1`, `EUW1`, `GLOBAL`)
+  - `outcome` (for example `acquired`, `contention`, `completed`, `failed`, `snapshot`, `active`, `expired`, `deleted_last_run`)
+  - `source` (call site, for example `summoners-controller`, `pro-summoners-controller`, `refresh-lock-lifecycle-job`)
+- Primary metric instruments:
+  - `transcendence.refresh_lock.lifecycle.events` (counter)
+  - `transcendence.refresh_lock.contention.wait_hint_seconds` (histogram)
+  - `transcendence.refresh_lock.cleanup.deleted` (counter)
+  - `transcendence.refresh_lock.cleanup.duration_ms` (histogram)
+  - `transcendence.refresh_lock.growth.active` / `.expired` / `.deleted_last_run` (observable gauges)
+- Structured log event names are aligned to the same lifecycle contract:
+  - `refresh_lock.lifecycle`
+  - `refresh_lock.contention_wait_hint`
+  - `refresh_lock.cleanup`
+  - `refresh_lock.growth_snapshot`
+- Default cleanup retention controls:
+  - `Jobs:Schedule:EnableRefreshLockLifecycleCleanup=true`
+  - `Jobs:Schedule:RefreshLockLifecycleCleanupCron=*/5 * * * *` (every 5 minutes)
+  - `Jobs:Schedule:RefreshLockLifecycleForensicsWindowMinutes=30`
+  - `Jobs:Schedule:RefreshLockLifecycleCleanupBatchSize=250` (`100` in development profile)
+  - `Jobs:Schedule:RefreshLockLifecycleCleanupMaxBatchesPerRun=8` (`4` in development profile)
+- Monitoring guidance (trend + threshold):
+  - Alert on sustained contention trend: `outcome=contention` rising against `outcome=acquired` for the same `lock_class` + `platform_region` (for example >20% contention over a 15-minute window).
+  - Alert on lock growth pressure: `growth.expired` rising across multiple cleanup runs while `growth.deleted_last_run` stays flat or near zero.
+  - Alert on cleanup degradation: repeated `refresh_lock.cleanup` outcomes of `failed`/`canceled`, or `outcome=completed` runs where `stopped_by_batch_cap=true` persists with rising expired backlog.
+
 ### Continuous Analytics Ingestion
 
 - Champion analytics ingestion now runs continuously in low-priority mode to keep growing current-patch data.
@@ -94,11 +124,45 @@ Transcendence is a backend + web monorepo:
 - Even when patch data is healthy, ingestion can queue a small minimum number of low-priority refreshes per run.
 - Early patch mode remains ranked solo/duo-first until coverage targets are satisfied; once healthy, low-priority refresh can widen to all supported history queues.
 - Low-priority refresh windows stop early whenever active high-priority API refresh demand is detected.
+- Low-priority producer budgets (`ChampionAnalyticsIngestionJob`, `SummonerMaintenanceJob`) are selected by adaptive mode each run:
+  - `HighPressure`: queue target `0` while API-priority demand is active.
+  - `Balanced`: bounded queue target in normal conditions.
+  - `CatchUp`: burst queue target/candidate ceiling when coverage/velocity/backlog signals indicate lag.
+- Starvation guardrail is applied after adaptive budgeting:
+  - Defer-age breach (`max eligible defer age >= threshold`) starts a forced catch-up window.
+  - Catch-up windows are lock-backed (`refresh-priority:guardrail:catchup:*`) and paired with cooldown locks (`refresh-priority:guardrail:cooldown:*`) to prevent oscillation.
+  - Forced catch-up can override producer pause and the low-priority executor's API-demand early exit only for guardrail-authorized work, preserving normal preemption for ordinary low-priority refreshes.
 - New-patch ramp mode (first `Jobs:*:NewPatchRampHours`) schedules additional high-frequency analytics jobs:
   - `refresh-champion-analytics-ramp`
   - `champion-analytics-ingestion-ramp`
   - `summoner-maintenance-ramp`
 - Ramp jobs are gated by active-patch age and no-op automatically after the configured ramp window.
+
+### Ingestion Throughput Telemetry
+
+- Throughput telemetry follows the same best-effort/non-blocking pattern as refresh-lock lifecycle telemetry so instrumentation failures cannot block producer execution.
+- Shared throughput tags:
+  - `producer` (`championanalyticsingestionjob`, `summonermaintenancejob`)
+  - `queue_tier` (`refresh-low`)
+  - `mode` (`highpressure`, `balanced`, `catchup`, `guardrail`)
+  - `outcome` (for example `budget_applied`, `api_priority_active`, `defer_age_breach`, `started`, `queued_target_met`)
+  - `source` (`champion-analytics-ingestion-job`, `summoner-maintenance-job`)
+- Metric instruments:
+  - `transcendence.ingestion_throughput.decisions` (counter)
+  - `transcendence.ingestion_throughput.defer_age_breaches` (counter)
+  - `transcendence.ingestion_throughput.catch_up.lifecycle` (counter)
+  - `transcendence.ingestion_throughput.queue_target` (histogram)
+  - `transcendence.ingestion_throughput.queued_count` (histogram)
+  - `transcendence.ingestion_throughput.catch_up.window_minutes` (histogram)
+- Structured log event names:
+  - `ingestion_throughput.budget_decision`
+  - `ingestion_throughput.guardrail_decision`
+  - `ingestion_throughput.catch_up_window`
+  - `ingestion_throughput.queue_output`
+- Operational interpretation:
+  - Sustained `mode=highpressure` with `outcome=api_priority_active` indicates API-triggered refresh demand is dominating throughput.
+  - `defer_age_breach` and `catch_up_window` starts indicate fairness guardrail activation.
+  - Compare queue target vs queued output to identify preemption (`stopped_api_priority_preemption`) or candidate scarcity (`skipped_no_candidates`).
 
 ### Analytics Response Semantics
 

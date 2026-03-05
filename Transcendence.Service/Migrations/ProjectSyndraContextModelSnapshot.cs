@@ -1036,6 +1036,8 @@ namespace Transcendence.Service.Migrations
                     b.HasIndex("Key")
                         .IsUnique();
 
+                    b.HasIndex("LockedUntilUtc");
+
                     b.ToTable("RefreshLocks");
                 });
 

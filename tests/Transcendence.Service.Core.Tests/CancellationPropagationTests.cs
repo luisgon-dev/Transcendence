@@ -115,6 +115,11 @@ public class CancellationPropagationTests
             backgroundJobs.Object,
             new IngestionPriorityScoringPolicy(Options.Create(new IngestionPriorityPolicyOptions())),
             new AdaptiveThroughputBudgetPolicy(Options.Create(new AdaptiveThroughputBudgetOptions())),
+            new StarvationGuardrailPolicy(Options.Create(new StarvationGuardrailOptions
+            {
+                Enabled = true,
+                MaxEligibleDeferAgeMinutes = 50_000
+            })),
             Options.Create(new ChampionAnalyticsIngestionJobOptions()),
             Mock.Of<ILogger<ChampionAnalyticsIngestionJob>>());
 

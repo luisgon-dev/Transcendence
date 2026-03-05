@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Match;
+using Transcendence.Data.Models.Service;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
@@ -19,6 +20,7 @@ public class ChampionAnalyticsIngestionJob(
     IBackgroundJobClient backgroundJobClient,
     IIngestionPriorityScoringPolicy scoringPolicy,
     IAdaptiveThroughputBudgetPolicy adaptiveThroughputBudgetPolicy,
+    IStarvationGuardrailPolicy starvationGuardrailPolicy,
     IOptions<ChampionAnalyticsIngestionJobOptions> options,
     ILogger<ChampionAnalyticsIngestionJob> logger)
 {
@@ -132,21 +134,33 @@ public class ChampionAnalyticsIngestionJob(
             baselineMinQueued,
             baselineMaxQueued));
 
-        if (budget.QueueTarget <= 0)
+        var guardrailDecision = await EvaluateStarvationGuardrailAsync(
+            evaluationUtc,
+            budget.QueueTarget,
+            budget.MaxCandidates,
+            ct);
+        var queuedTarget = guardrailDecision.QueueTarget;
+        var maxCandidates = guardrailDecision.MaxCandidates;
+        var forcedCatchUpActive = guardrailDecision.IsForcedCatchUpActive;
+
+        if (queuedTarget <= 0)
         {
             logger.LogInformation(
-                "Champion analytics ingestion skipped: adaptive mode {Mode} produced queue target {QueueTarget} (apiPriority={ApiPriority}, coverage={Coverage:F2}, backlogAgeMinutes={BacklogAge:F1}, velocityPerHour={Velocity:F2}, pressure={Pressure:F2}).",
+                "Champion analytics ingestion skipped: adaptive mode {Mode} and guardrail outcome {GuardrailOutcome} produced queue target {QueueTarget} (apiPriority={ApiPriority}, coverage={Coverage:F2}, backlogAgeMinutes={BacklogAge:F1}, velocityPerHour={Velocity:F2}, pressure={Pressure:F2}, deferAgeMinutes={DeferAge:F1}, deferThresholdMinutes={DeferThreshold:F1}).",
                 budget.Mode,
-                budget.QueueTarget,
+                guardrailDecision.Outcome,
+                queuedTarget,
                 apiPriorityDemandActive,
                 budget.CoverageRatio,
                 budget.BacklogAgeMinutes,
                 budget.RecentVelocityPerHour,
-                budget.CandidatePressureRatio);
+                budget.CandidatePressureRatio,
+                guardrailDecision.MaxEligibleDeferAgeMinutes,
+                guardrailDecision.DeferAgeThresholdMinutes);
             return;
         }
 
-        if (jobOptions.PauseWhenApiPriorityRefreshActive && apiPriorityDemandActive)
+        if (jobOptions.PauseWhenApiPriorityRefreshActive && apiPriorityDemandActive && !forcedCatchUpActive)
         {
             logger.LogInformation(
                 "Champion analytics ingestion skipped: active high-priority API refresh demand detected while pause mode is enabled.");
@@ -154,8 +168,6 @@ public class ChampionAnalyticsIngestionJob(
         }
 
         var lockTtl = TimeSpan.FromMinutes(Math.Max(2, jobOptions.RefreshLockMinutes));
-        var queuedTarget = budget.QueueTarget;
-        var maxCandidates = budget.MaxCandidates;
         var includeAllModes = budget.IncludeAllModes;
 
         var candidates = await GetCandidatesAsync(maxCandidates, jobOptions, releaseUtc, evaluationUtc, ct);
@@ -173,6 +185,7 @@ public class ChampionAnalyticsIngestionJob(
             if (queued >= queuedTarget) break;
 
             if (jobOptions.PauseWhenApiPriorityRefreshActive &&
+                !forcedCatchUpActive &&
                 await refreshLockRepository.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, ct))
             {
                 logger.LogInformation(
@@ -218,11 +231,13 @@ public class ChampionAnalyticsIngestionJob(
         }
 
         logger.LogInformation(
-            "Champion analytics ingestion queued {QueuedCount}/{QueuedTarget} low-priority summoner refresh jobs (patch {Patch}, mode {Mode}, matches {MatchCount}/{TargetMatchCount}, stale {IsStale}, includeAllModes {IncludeAllModes}, latestFetchAt {LatestFetchAt}, ramp={Ramp}, coverage={Coverage:F2}, backlogAgeMinutes={BacklogAge:F1}, velocityPerHour={Velocity:F2}, pressure={Pressure:F2}).",
+            "Champion analytics ingestion queued {QueuedCount}/{QueuedTarget} low-priority summoner refresh jobs (patch {Patch}, mode {Mode}, guardrail={GuardrailOutcome}, forceCatchUp={ForceCatchUp}, matches {MatchCount}/{TargetMatchCount}, stale {IsStale}, includeAllModes {IncludeAllModes}, latestFetchAt {LatestFetchAt}, ramp={Ramp}, coverage={Coverage:F2}, backlogAgeMinutes={BacklogAge:F1}, velocityPerHour={Velocity:F2}, pressure={Pressure:F2}, deferAgeMinutes={DeferAge:F1}, deferThresholdMinutes={DeferThreshold:F1}).",
             queued,
             queuedTarget,
             currentPatch,
             budget.Mode,
+            guardrailDecision.Outcome,
+            forcedCatchUpActive,
             successfulMatchesForPatch,
             targetMatchesForPatch,
             isStale,
@@ -232,7 +247,9 @@ public class ChampionAnalyticsIngestionJob(
             budget.CoverageRatio,
             budget.BacklogAgeMinutes,
             budget.RecentVelocityPerHour,
-            budget.CandidatePressureRatio);
+            budget.CandidatePressureRatio,
+            guardrailDecision.MaxEligibleDeferAgeMinutes,
+            guardrailDecision.DeferAgeThresholdMinutes);
     }
 
     private async Task ReleaseLockAfterQueueFailureAsync(string lockKey)
@@ -322,4 +339,76 @@ public class ChampionAnalyticsIngestionJob(
             .AsNoTracking()
             .Where(s => s.GameName != null && s.TagLine != null && s.PlatformRegion != null)
             .CountAsync(ct);
+
+    private async Task<StarvationGuardrailDecision> EvaluateStarvationGuardrailAsync(
+        DateTime evaluationUtc,
+        int baselineQueueTarget,
+        int baselineMaxCandidates,
+        CancellationToken ct)
+    {
+        var producerKey = nameof(ChampionAnalyticsIngestionJob);
+        var catchUpWindowKey = RefreshLockKeys.BuildStarvationGuardrailCatchUpKey(producerKey);
+        var catchUpCooldownKey = RefreshLockKeys.BuildStarvationGuardrailCooldownKey(producerKey);
+        var maxDeferAgeMinutes = await EstimateMaxEligibleDeferAgeMinutesAsync(evaluationUtc, ct);
+
+        var catchUpWindowState = await refreshLockRepository.GetAsync(catchUpWindowKey, ct);
+        var catchUpCooldownState = await refreshLockRepository.GetAsync(catchUpCooldownKey, ct);
+        var catchUpWindowActive = IsLockActive(catchUpWindowState, evaluationUtc);
+        var catchUpCooldownActive = IsLockActive(catchUpCooldownState, evaluationUtc);
+
+        StarvationGuardrailDecision Evaluate(bool windowActive, bool cooldownActive) =>
+            starvationGuardrailPolicy.Evaluate(new StarvationGuardrailInput(
+                producerKey,
+                evaluationUtc,
+                maxDeferAgeMinutes,
+                windowActive,
+                cooldownActive,
+                baselineQueueTarget,
+                baselineMaxCandidates));
+
+        var decision = Evaluate(catchUpWindowActive, catchUpCooldownActive);
+        if (!decision.ShouldStartCatchUpWindow)
+            return decision;
+
+        var catchUpStarted = await refreshLockRepository.TryAcquireAsync(catchUpWindowKey, decision.CatchUpWindowTtl, ct);
+        if (catchUpStarted)
+        {
+            var cooldownTtl = decision.CatchUpWindowTtl + decision.CatchUpCooldownTtl;
+            await refreshLockRepository.TryAcquireAsync(catchUpCooldownKey, cooldownTtl, ct);
+            return Evaluate(windowActive: true, cooldownActive: true);
+        }
+
+        catchUpWindowState = await refreshLockRepository.GetAsync(catchUpWindowKey, ct);
+        catchUpCooldownState = await refreshLockRepository.GetAsync(catchUpCooldownKey, ct);
+        return Evaluate(
+            IsLockActive(catchUpWindowState, evaluationUtc),
+            IsLockActive(catchUpCooldownState, evaluationUtc));
+    }
+
+    private async Task<double?> EstimateMaxEligibleDeferAgeMinutesAsync(DateTime evaluationUtc, CancellationToken ct)
+    {
+        var oldestUpdatedAt = await db.Summoners
+            .AsNoTracking()
+            .Where(s => s.GameName != null && s.TagLine != null && s.PlatformRegion != null)
+            .Select(s => (DateTime?)s.UpdatedAt)
+            .MinAsync(ct);
+
+        if (!oldestUpdatedAt.HasValue)
+            return null;
+
+        var oldestUtc = EnsureUtc(oldestUpdatedAt.Value);
+        var resolvedEvaluationUtc = EnsureUtc(evaluationUtc);
+        return Math.Max(0d, (resolvedEvaluationUtc - oldestUtc).TotalMinutes);
+    }
+
+    private static bool IsLockActive(RefreshLock? refreshLock, DateTime evaluationUtc)
+    {
+        if (refreshLock == null)
+            return false;
+
+        return EnsureUtc(refreshLock.LockedUntilUtc) > EnsureUtc(evaluationUtc);
+    }
+
+    private static DateTime EnsureUtc(DateTime value) =>
+        value.Kind == DateTimeKind.Utc ? value : DateTime.SpecifyKind(value, DateTimeKind.Utc);
 }

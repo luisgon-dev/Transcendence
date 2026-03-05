@@ -10,6 +10,7 @@ using Moq;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Models.LoL.Match;
+using Transcendence.Data.Models.Service;
 using Transcendence.Data.Models.LoL.Static;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Jobs;
@@ -138,6 +139,46 @@ public class ChampionAnalyticsIngestionJobRampTests
         queuedJobs[0].Args[6].Should().Be(false);
     }
 
+    [Fact]
+    public async Task ExecuteRampAsync_WhenApiPriorityIsActive_AllowsProgressDuringForcedCatchUpWindow()
+    {
+        var fixedBudgetPolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
+            AdaptiveThroughputBudgetMode.HighPressure,
+            MaxCandidates: 1,
+            QueueTarget: 0,
+            IncludeAllModes: false,
+            CoverageRatio: 0.1d,
+            BacklogAgeMinutes: 300d,
+            RecentVelocityPerHour: 0.5d,
+            CandidatePressureRatio: 2d));
+
+        await using var harness = await Harness.CreateAsync(fixedBudgetPolicy);
+        harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        harness.SeedSummoner("CatchUpUser", "NA1", DateTime.UtcNow.AddHours(-12));
+        await harness.Db.SaveChangesAsync();
+
+        harness.RefreshLockRepository
+            .Setup(x => x.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var catchUpKey = RefreshLockKeys.BuildStarvationGuardrailCatchUpKey(nameof(ChampionAnalyticsIngestionJob));
+        harness.RefreshLockRepository
+            .Setup(x => x.GetAsync(catchUpKey, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RefreshLock
+            {
+                Id = Guid.NewGuid(),
+                Key = catchUpKey,
+                CreatedAtUtc = DateTime.UtcNow.AddMinutes(-1),
+                LockedUntilUtc = DateTime.UtcNow.AddMinutes(5)
+            });
+
+        await harness.Job.ExecuteRampAsync(CancellationToken.None);
+
+        harness.BackgroundJobClient.Verify(
+            x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()),
+            Times.Once);
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
@@ -187,6 +228,11 @@ public class ChampionAnalyticsIngestionJobRampTests
             backgroundJobs.Setup(x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()))
                 .Returns("job-1");
             var scoringPolicy = new IngestionPriorityScoringPolicy(Options.Create(new IngestionPriorityPolicyOptions()));
+            var starvationGuardrailPolicy = new StarvationGuardrailPolicy(Options.Create(new StarvationGuardrailOptions
+            {
+                Enabled = true,
+                MaxEligibleDeferAgeMinutes = 50_000
+            }));
             adaptiveBudgetPolicy ??= new AdaptiveThroughputBudgetPolicy(Options.Create(new AdaptiveThroughputBudgetOptions
             {
                 VelocityLookbackMinutes = 30,
@@ -211,6 +257,7 @@ public class ChampionAnalyticsIngestionJobRampTests
                 backgroundJobs.Object,
                 scoringPolicy,
                 adaptiveBudgetPolicy,
+                starvationGuardrailPolicy,
                 Options.Create(new ChampionAnalyticsIngestionJobOptions
                 {
                     MinimumSuccessfulMatchesForCurrentPatch = 50,

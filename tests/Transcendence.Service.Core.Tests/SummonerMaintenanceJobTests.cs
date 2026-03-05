@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Account;
+using Transcendence.Data.Models.Service;
 using Transcendence.Data.Models.LoL.Static;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Jobs;
@@ -77,6 +78,45 @@ public class SummonerMaintenanceJobTests
             Times.Never);
     }
 
+    [Fact]
+    public async Task ExecuteRampAsync_WhenApiPriorityIsActive_AllowsProgressDuringForcedCatchUpWindow()
+    {
+        var adaptivePolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
+            AdaptiveThroughputBudgetMode.HighPressure,
+            MaxCandidates: 1,
+            QueueTarget: 0,
+            IncludeAllModes: false,
+            CoverageRatio: 0.2d,
+            BacklogAgeMinutes: 180d,
+            RecentVelocityPerHour: 1d,
+            CandidatePressureRatio: 2d));
+
+        await using var harness = await Harness.CreateAsync(adaptivePolicy);
+        harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        harness.SeedSummoner("MaintenanceCatchUp", "NA1", DateTime.UtcNow.AddHours(-12));
+        await harness.Db.SaveChangesAsync();
+
+        var catchUpKey = RefreshLockKeys.BuildStarvationGuardrailCatchUpKey(nameof(SummonerMaintenanceJob));
+        harness.RefreshLockRepository
+            .Setup(x => x.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        harness.RefreshLockRepository
+            .Setup(x => x.GetAsync(catchUpKey, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RefreshLock
+            {
+                Id = Guid.NewGuid(),
+                Key = catchUpKey,
+                CreatedAtUtc = DateTime.UtcNow.AddMinutes(-1),
+                LockedUntilUtc = DateTime.UtcNow.AddMinutes(5)
+            });
+
+        await harness.Job.ExecuteRampAsync(CancellationToken.None);
+
+        harness.BackgroundJobClient.Verify(
+            x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()),
+            Times.Once);
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
@@ -85,17 +125,20 @@ public class SummonerMaintenanceJobTests
             SqliteConnection connection,
             TestSqliteTranscendenceContext db,
             SummonerMaintenanceJob job,
-            Mock<IBackgroundJobClient> backgroundJobClient)
+            Mock<IBackgroundJobClient> backgroundJobClient,
+            Mock<IRefreshLockRepository> refreshLockRepository)
         {
             _connection = connection;
             Db = db;
             Job = job;
             BackgroundJobClient = backgroundJobClient;
+            RefreshLockRepository = refreshLockRepository;
         }
 
         public TestSqliteTranscendenceContext Db { get; }
         public SummonerMaintenanceJob Job { get; }
         public Mock<IBackgroundJobClient> BackgroundJobClient { get; }
+        public Mock<IRefreshLockRepository> RefreshLockRepository { get; }
 
         public static async Task<Harness> CreateAsync(IAdaptiveThroughputBudgetPolicy adaptiveBudgetPolicy)
         {
@@ -122,12 +165,18 @@ public class SummonerMaintenanceJobTests
                 .Returns("job-1");
 
             var scoringPolicy = new IngestionPriorityScoringPolicy(Options.Create(new IngestionPriorityPolicyOptions()));
+            var starvationGuardrailPolicy = new StarvationGuardrailPolicy(Options.Create(new StarvationGuardrailOptions
+            {
+                Enabled = true,
+                MaxEligibleDeferAgeMinutes = 50_000
+            }));
             var job = new SummonerMaintenanceJob(
                 db,
                 backgroundJobs.Object,
                 refreshLocks.Object,
                 scoringPolicy,
                 adaptiveBudgetPolicy,
+                starvationGuardrailPolicy,
                 Options.Create(new SummonerMaintenanceJobOptions
                 {
                     MaxCandidateSummonersPerRun = 10,
@@ -148,7 +197,7 @@ public class SummonerMaintenanceJobTests
                 }),
                 Mock.Of<ILogger<SummonerMaintenanceJob>>());
 
-            return new Harness(connection, db, job, backgroundJobs);
+            return new Harness(connection, db, job, backgroundJobs, refreshLocks);
         }
 
         public void SeedActivePatch(string version, DateTime releaseUtc)

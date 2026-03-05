@@ -7,6 +7,7 @@ using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Extensions;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
+using Transcendence.Service.Core.Services.Jobs.Priority;
 using Transcendence.Service.Workers;
 using Transcendence.Service.Workers.Startup;
 
@@ -63,6 +64,8 @@ builder.Services.Configure<RefreshChampionAnalyticsJobOptions>(
 builder.Services.Configure<ChampionAnalyticsIngestionJobOptions>(
     builder.Configuration.GetSection("Jobs:ChampionAnalyticsIngestion"));
 builder.Services.Configure<SummonerMaintenanceJobOptions>(builder.Configuration.GetSection("Jobs:SummonerMaintenance"));
+builder.Services.Configure<AdaptiveThroughputBudgetOptions>(
+    builder.Configuration.GetSection("Jobs:AdaptiveThroughputBudget"));
 builder.Services.Configure<IngestionPriorityPolicyOptions>(
     builder.Configuration.GetSection("Jobs:IngestionPriorityPolicy"));
 builder.Services.Configure<MatchIngestionOptions>(builder.Configuration.GetSection("Jobs:MatchIngestion"));
@@ -74,6 +77,7 @@ builder.Services.Configure<ChampionAnalyticsComputeOptions>(builder.Configuratio
 builder.Services.AddSingleton<IWorkerRecurringJobPolicy, WorkerRecurringJobPolicy>();
 builder.Services.AddSingleton<WorkerStartupIntegrityState>();
 builder.Services.AddSingleton<IWorkerStartupIntegrityService, WorkerStartupIntegrityService>();
+builder.Services.AddSingleton<IAdaptiveThroughputBudgetPolicy, AdaptiveThroughputBudgetPolicy>();
 
 // worker that initiates services
 if (builder.Environment.IsDevelopment())

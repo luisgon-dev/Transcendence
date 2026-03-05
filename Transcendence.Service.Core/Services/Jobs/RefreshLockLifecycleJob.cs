@@ -1,6 +1,7 @@
 using Hangfire;
 using Microsoft.Extensions.Options;
 using Transcendence.Data.Repositories.Interfaces;
+using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 
 namespace Transcendence.Service.Core.Services.Jobs;
@@ -9,7 +10,8 @@ namespace Transcendence.Service.Core.Services.Jobs;
 public class RefreshLockLifecycleJob(
     IRefreshLockRepository refreshLockRepository,
     IOptions<WorkerJobScheduleOptions> scheduleOptionsAccessor,
-    ILogger<RefreshLockLifecycleJob> logger)
+    ILogger<RefreshLockLifecycleJob> logger,
+    IRefreshLockLifecycleTelemetry? lockTelemetry = null)
 {
     private const int CleanupBatchSizeCap = 1000;
     private const int MaxBatchesPerRunCap = 100;
@@ -18,6 +20,7 @@ public class RefreshLockLifecycleJob(
     [Queue("refresh-low")]
     public async Task ExecuteAsync(CancellationToken ct = default)
     {
+        var startedUtc = DateTime.UtcNow;
         var schedule = scheduleOptionsAccessor.Value;
         if (!schedule.EnableRefreshLockLifecycleCleanup)
         {
@@ -67,6 +70,20 @@ public class RefreshLockLifecycleJob(
 
             stoppedByBatchCap = batchesProcessed >= maxBatches;
             var growthSnapshot = await refreshLockRepository.GetGrowthSnapshotAsync(DateTime.UtcNow, ct);
+            EmitTelemetry(() =>
+                lockTelemetry?.RecordCleanupOutcome(
+                    totalDeleted,
+                    batchesProcessed,
+                    stoppedByBatchCap,
+                    DateTime.UtcNow - startedUtc,
+                    "completed",
+                    "refresh-lock-lifecycle-job"));
+            EmitTelemetry(() =>
+                lockTelemetry?.RecordGrowthSnapshot(
+                    growthSnapshot.ActiveCount,
+                    growthSnapshot.ExpiredCount,
+                    totalDeleted,
+                    "refresh-lock-lifecycle-job"));
             logger.LogInformation(
                 "[RefreshLockLifecycle] Cleanup completed. batchesProcessed={BatchesProcessed}, deleted={DeletedCount}, stoppedByBatchCap={StoppedByBatchCap}, activeLocks={ActiveCount}, expiredLocks={ExpiredCount}.",
                 batchesProcessed,
@@ -81,6 +98,14 @@ public class RefreshLockLifecycleJob(
                 "[RefreshLockLifecycle] Cleanup canceled after {BatchesProcessed} batches and {DeletedCount} deletions.",
                 batchesProcessed,
                 totalDeleted);
+            EmitTelemetry(() =>
+                lockTelemetry?.RecordCleanupOutcome(
+                    totalDeleted,
+                    batchesProcessed,
+                    stoppedByBatchCap: false,
+                    DateTime.UtcNow - startedUtc,
+                    "canceled",
+                    "refresh-lock-lifecycle-job"));
         }
         catch (Exception ex)
         {
@@ -89,6 +114,28 @@ public class RefreshLockLifecycleJob(
                 "[RefreshLockLifecycle] Cleanup failed after {BatchesProcessed} batches and {DeletedCount} deletions. Continuing worker execution.",
                 batchesProcessed,
                 totalDeleted);
+            EmitTelemetry(() =>
+                lockTelemetry?.RecordCleanupOutcome(
+                    totalDeleted,
+                    batchesProcessed,
+                    stoppedByBatchCap: false,
+                    DateTime.UtcNow - startedUtc,
+                    "failed",
+                    "refresh-lock-lifecycle-job"));
+        }
+    }
+
+    private void EmitTelemetry(Action emit)
+    {
+        try
+        {
+            emit();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "[RefreshLockLifecycle] Telemetry emission failed. Continuing cleanup execution.");
         }
     }
 }

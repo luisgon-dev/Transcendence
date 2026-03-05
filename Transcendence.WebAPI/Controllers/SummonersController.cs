@@ -4,8 +4,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Analysis.Interfaces;
+using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.RiotApi;
@@ -221,6 +223,13 @@ public class SummonersController(
         if (lockRow != null && lockRow.LockedUntilUtc > DateTime.UtcNow)
         {
             var seconds = (int)(lockRow.LockedUntilUtc - DateTime.UtcNow).TotalSeconds;
+            EmitTelemetry(() =>
+            {
+                var lockTelemetry = TryGetLockTelemetry();
+                lockTelemetry?.RecordLifecycleOutcome(refreshKey, "contention", "summoners-controller");
+                lockTelemetry?.RecordContentionWaitHint(refreshKey, Math.Max(1, seconds), "summoners-controller");
+            });
+
             return Accepted(new SummonerAcceptedResponse(
                 "Refresh in process",
                 pollUrl,
@@ -252,6 +261,7 @@ public class SummonersController(
         var key = RefreshLockKeys.BuildSummonerRefreshKey(platform, name, tag);
         var priorityKey = RefreshLockKeys.BuildApiPriorityKey(platform, name, tag);
         var ttl = TimeSpan.FromMinutes(15);
+        var lockTelemetry = TryGetLockTelemetry();
         var pollUrl = Url.ActionLink(nameof(GetByRiotId), null, new
         {
             region,
@@ -266,13 +276,32 @@ public class SummonersController(
             var seconds = existing == null
                 ? (int)ttl.TotalSeconds
                 : (int)Math.Max(1, (existing.LockedUntilUtc - DateTime.UtcNow).TotalSeconds);
+            EmitTelemetry(() =>
+            {
+                lockTelemetry?.RecordLifecycleOutcome(key, "contention", "summoners-controller");
+                lockTelemetry?.RecordContentionWaitHint(key, Math.Max(1, seconds), "summoners-controller");
+            });
+
             return Accepted(new SummonerAcceptedResponse(
                 "Refresh in process",
                 pollUrl,
                 seconds));
         }
 
+        EmitTelemetry(() => lockTelemetry?.RecordLifecycleOutcome(key, "acquired", "summoners-controller"));
+
         var priorityAcquired = await refreshLockRepository.TryAcquireAsync(priorityKey, ttl, ct);
+        if (!priorityAcquired)
+        {
+            EmitTelemetry(() =>
+            {
+                lockTelemetry?.RecordLifecycleOutcome(priorityKey, "contention", "summoners-controller");
+                lockTelemetry?.RecordContentionWaitHint(
+                    priorityKey,
+                    (int)ttl.TotalSeconds,
+                    "summoners-controller");
+            });
+        }
 
         // Enqueue refresh job
         try
@@ -446,5 +475,29 @@ public class SummonersController(
             "RU" => "ru",
             _ => platformRegion.ToLowerInvariant()
         };
+    }
+
+    private IRefreshLockLifecycleTelemetry? TryGetLockTelemetry()
+    {
+        try
+        {
+            return HttpContext?.RequestServices.GetService<IRefreshLockLifecycleTelemetry>();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void EmitTelemetry(Action emit)
+    {
+        try
+        {
+            emit();
+        }
+        catch
+        {
+            // non-blocking telemetry only
+        }
     }
 }

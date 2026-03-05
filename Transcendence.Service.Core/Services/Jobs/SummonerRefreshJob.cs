@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Repositories.Interfaces;
+using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.RiotApi;
@@ -27,7 +28,8 @@ public class SummonerRefreshJob(
     IBackgroundJobClient backgroundJobClient,
     HybridCache cache,
     IOptions<MatchIngestionOptions> ingestionOptions,
-    IOptions<TimelineIngestionOptions> timelineIngestionOptions) : ISummonerRefreshJob
+    IOptions<TimelineIngestionOptions> timelineIngestionOptions,
+    IRefreshLockLifecycleTelemetry? lockTelemetry = null) : ISummonerRefreshJob
 {
     private sealed record BackfillSyncResult(int PersistedCount, bool StoppedEarly, bool HadFetchFailure);
     private static readonly TimeSpan LockReleaseTimeout = TimeSpan.FromSeconds(5);
@@ -141,6 +143,11 @@ public class SummonerRefreshJob(
                     "[AnalyticsRefresh] Skipping {GameName}#{Tag} because high-priority API refresh demand is active.",
                     gameName,
                     tagLine);
+                EmitTelemetry(() =>
+                    lockTelemetry?.RecordLifecycleOutcome(
+                        RefreshLockKeys.ApiPriorityRefreshPrefix,
+                        "contention",
+                        "summoner-refresh-job"));
                 return;
             }
 
@@ -607,6 +614,8 @@ public class SummonerRefreshJob(
         try
         {
             await refreshLockRepository.ReleaseAsync(lockKey, releaseTimeoutCts.Token);
+            EmitTelemetry(() =>
+                lockTelemetry?.RecordLifecycleOutcome(lockKey, "released", "summoner-refresh-job"));
         }
         catch (OperationCanceledException) when (releaseTimeoutCts.IsCancellationRequested)
         {
@@ -615,10 +624,28 @@ public class SummonerRefreshJob(
                 operation,
                 lockKey,
                 LockReleaseTimeout.TotalSeconds);
+            EmitTelemetry(() =>
+                lockTelemetry?.RecordLifecycleOutcome(lockKey, "release_timeout", "summoner-refresh-job"));
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "{Operation} Failed to release refresh lock {LockKey}", operation, lockKey);
+            EmitTelemetry(() =>
+                lockTelemetry?.RecordLifecycleOutcome(lockKey, "release_error", "summoner-refresh-job"));
+        }
+    }
+
+    private void EmitTelemetry(Action emit)
+    {
+        try
+        {
+            emit();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "[RefreshTelemetry] Non-blocking telemetry emission failed during summoner refresh flow.");
         }
     }
 

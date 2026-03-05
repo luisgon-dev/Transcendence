@@ -4,11 +4,13 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Models;
+using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.RiotApi;
@@ -211,6 +213,7 @@ public class ProSummonersController(
         var key = RefreshLockKeys.BuildSummonerRefreshKey(platform, entity.GameName, entity.TagLine);
         var priorityKey = RefreshLockKeys.BuildApiPriorityKey(platform, entity.GameName, entity.TagLine);
         var ttl = TimeSpan.FromMinutes(15);
+        var lockTelemetry = TryGetLockTelemetry();
         var pollUrl = Url.ActionLink(nameof(GetById), null, new { id });
 
         var acquired = await refreshLockRepository.TryAcquireAsync(key, ttl, ct);
@@ -220,13 +223,32 @@ public class ProSummonersController(
             var seconds = existing == null
                 ? (int)ttl.TotalSeconds
                 : (int)Math.Max(1, (existing.LockedUntilUtc - DateTime.UtcNow).TotalSeconds);
+            EmitTelemetry(() =>
+            {
+                lockTelemetry?.RecordLifecycleOutcome(key, "contention", "pro-summoners-controller");
+                lockTelemetry?.RecordContentionWaitHint(key, Math.Max(1, seconds), "pro-summoners-controller");
+            });
+
             return Accepted(new SummonerAcceptedResponse(
                 "Refresh in process",
                 pollUrl,
                 seconds));
         }
 
+        EmitTelemetry(() => lockTelemetry?.RecordLifecycleOutcome(key, "acquired", "pro-summoners-controller"));
+
         var priorityAcquired = await refreshLockRepository.TryAcquireAsync(priorityKey, ttl, ct);
+        if (!priorityAcquired)
+        {
+            EmitTelemetry(() =>
+            {
+                lockTelemetry?.RecordLifecycleOutcome(priorityKey, "contention", "pro-summoners-controller");
+                lockTelemetry?.RecordContentionWaitHint(
+                    priorityKey,
+                    (int)ttl.TotalSeconds,
+                    "pro-summoners-controller");
+            });
+        }
 
         try
         {
@@ -275,6 +297,30 @@ public class ProSummonersController(
     private static string? NormalizeOptional(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private IRefreshLockLifecycleTelemetry? TryGetLockTelemetry()
+    {
+        try
+        {
+            return HttpContext?.RequestServices.GetService<IRefreshLockLifecycleTelemetry>();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void EmitTelemetry(Action emit)
+    {
+        try
+        {
+            emit();
+        }
+        catch
+        {
+            // non-blocking telemetry only
+        }
     }
 
     private async Task WriteAuditAsync(string action, string targetId, object? metadata, CancellationToken ct)

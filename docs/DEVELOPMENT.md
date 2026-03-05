@@ -245,6 +245,46 @@ Non-ranked backfill ordering is tracked per summoner with `SummonerIngestionCurs
 
 This recurring job refreshes stale summoners in low-priority mode when no active high-priority API refresh lock exists.
 
+### Refresh Lock Lifecycle Cleanup and Telemetry
+
+`Jobs:Schedule` refresh-lock lifecycle settings:
+
+- `RefreshLockLifecycleCleanupCron` (default `*/5 * * * *`)
+- `EnableRefreshLockLifecycleCleanup` (default `true`)
+- `RefreshLockLifecycleForensicsWindowMinutes` (default `30`)
+- `RefreshLockLifecycleCleanupBatchSize` (default `250`, development profile `100`)
+- `RefreshLockLifecycleCleanupMaxBatchesPerRun` (default `8`, development profile `4`)
+
+Telemetry emitted by refresh lock lifecycle instrumentation uses consistent tags:
+
+- `lock_class`
+- `platform_region`
+- `outcome`
+- `source`
+
+Metric names:
+
+- `transcendence.refresh_lock.lifecycle.events`
+- `transcendence.refresh_lock.contention.wait_hint_seconds`
+- `transcendence.refresh_lock.cleanup.deleted`
+- `transcendence.refresh_lock.cleanup.duration_ms`
+- `transcendence.refresh_lock.growth.active`
+- `transcendence.refresh_lock.growth.expired`
+- `transcendence.refresh_lock.growth.deleted_last_run`
+
+Structured log event names:
+
+- `refresh_lock.lifecycle`
+- `refresh_lock.contention_wait_hint`
+- `refresh_lock.cleanup`
+- `refresh_lock.growth_snapshot`
+
+Operational monitoring baseline:
+
+- Track contention trend by lock class/region: compare `outcome=contention` against `outcome=acquired`.
+- Track cleanup effectiveness: watch `growth.expired` and `growth.deleted_last_run` together; rising expired with flat deleted indicates retention pressure.
+- Track cleanup health: watch `refresh_lock.cleanup` outcomes (`completed`, `canceled`, `failed`) and duration growth over time.
+
 ### Timeline Ingestion
 
 `Jobs:TimelineIngestion` supports:

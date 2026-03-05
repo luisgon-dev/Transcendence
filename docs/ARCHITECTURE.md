@@ -84,6 +84,36 @@ Transcendence is a backend + web monorepo:
 - API refresh jobs run on `refresh-high`; ingestion-driven refresh jobs run on `refresh-low`.
 - Refresh locks use DB-backed lease semantics (atomic acquire/renew + explicit lease expiry on release) so concurrent lock races do not require lock-row deletion.
 
+### Refresh Lock Lifecycle Telemetry and Retention
+
+- Lock lifecycle telemetry is emitted as best-effort/non-blocking instrumentation from API controllers, repository lock operations, and the lifecycle cleanup job.
+- Shared telemetry dimensions/tags:
+  - `lock_class` (for example `summoner-refresh`, `refresh-priority:api`, `refresh-lock-lifecycle`)
+  - `platform_region` (for example `NA1`, `EUW1`, `GLOBAL`)
+  - `outcome` (for example `acquired`, `contention`, `completed`, `failed`, `snapshot`, `active`, `expired`, `deleted_last_run`)
+  - `source` (call site, for example `summoners-controller`, `pro-summoners-controller`, `refresh-lock-lifecycle-job`)
+- Primary metric instruments:
+  - `transcendence.refresh_lock.lifecycle.events` (counter)
+  - `transcendence.refresh_lock.contention.wait_hint_seconds` (histogram)
+  - `transcendence.refresh_lock.cleanup.deleted` (counter)
+  - `transcendence.refresh_lock.cleanup.duration_ms` (histogram)
+  - `transcendence.refresh_lock.growth.active` / `.expired` / `.deleted_last_run` (observable gauges)
+- Structured log event names are aligned to the same lifecycle contract:
+  - `refresh_lock.lifecycle`
+  - `refresh_lock.contention_wait_hint`
+  - `refresh_lock.cleanup`
+  - `refresh_lock.growth_snapshot`
+- Default cleanup retention controls:
+  - `Jobs:Schedule:EnableRefreshLockLifecycleCleanup=true`
+  - `Jobs:Schedule:RefreshLockLifecycleCleanupCron=*/5 * * * *` (every 5 minutes)
+  - `Jobs:Schedule:RefreshLockLifecycleForensicsWindowMinutes=30`
+  - `Jobs:Schedule:RefreshLockLifecycleCleanupBatchSize=250` (`100` in development profile)
+  - `Jobs:Schedule:RefreshLockLifecycleCleanupMaxBatchesPerRun=8` (`4` in development profile)
+- Monitoring guidance (trend + threshold):
+  - Alert on sustained contention trend: `outcome=contention` rising against `outcome=acquired` for the same `lock_class` + `platform_region` (for example >20% contention over a 15-minute window).
+  - Alert on lock growth pressure: `growth.expired` rising across multiple cleanup runs while `growth.deleted_last_run` stays flat or near zero.
+  - Alert on cleanup degradation: repeated `refresh_lock.cleanup` outcomes of `failed`/`canceled`, or `outcome=completed` runs where `stopped_by_batch_cap=true` persists with rising expired backlog.
+
 ### Continuous Analytics Ingestion
 
 - Champion analytics ingestion now runs continuously in low-priority mode to keep growing current-patch data.

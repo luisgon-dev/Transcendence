@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_plan: 5
+current_plan: 6
 status: executing
-stopped_at: Completed 02-refresh-lock-lifecycle-control-04-PLAN.md
-last_updated: "2026-03-05T00:56:37.182Z"
+stopped_at: Completed 02-refresh-lock-lifecycle-control-05-PLAN.md
+last_updated: "2026-03-05T16:51:47.833Z"
 last_activity: 2026-03-05
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 9
-  completed_plans: 6
-  percent: 67
+  completed_plans: 7
+  percent: 78
 ---
 
 # Project State
@@ -27,12 +27,12 @@ See: .planning/PROJECT.md (updated 2026-03-04)
 ## Current Position
 
 **Phase:** 2 of 5 (Refresh Lock Lifecycle Control)
-**Current Plan:** 5
+**Current Plan:** 6
 **Total Plans in Phase:** 6
 **Status:** Ready to execute
 **Last Activity:** 2026-03-05
 
-Progress: [███████░░░] 67%
+Progress: [████████░░] 78%
 
 ## Performance Metrics
 
@@ -58,6 +58,7 @@ Progress: [███████░░░] 67%
 | Phase 02-refresh-lock-lifecycle-control P02 | 44min | 2 tasks | 6 files |
 | Phase 02-refresh-lock-lifecycle-control P01 | 6min | 3 tasks | 11 files |
 | Phase 02-refresh-lock-lifecycle-control P04 | 14 min | 1 tasks | 6 files |
+| Phase 02-refresh-lock-lifecycle-control P05 | 4 min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -83,6 +84,8 @@ Recent decisions affecting current work:
 - [Phase 02-refresh-lock-lifecycle-control]: Admin refresh keeps main-lock queue progress even when API-priority marker acquisition fails.
 - [Phase 02-refresh-lock-lifecycle-control]: Refresh endpoint 202 contention semantics are documented in API.md and generated OpenAPI response descriptions.
 - [Phase 02-refresh-lock-lifecycle-control]: SummonerAcceptedResponse property semantics are expressed as source annotations so OpenAPI regeneration preserves contract clarity.
+- [Phase 02-refresh-lock-lifecycle-control]: Refresh lock lifecycle cleanup is enabled by default as a mandatory baseline recurring job with profile override support.
+- [Phase 02-refresh-lock-lifecycle-control]: Lifecycle retention controls are centralized in WorkerJobScheduleOptions (forensics window, batch size, max batches) and enforced with bounded caps in job execution.
 
 ### Pending Todos
 
@@ -94,6 +97,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-05T00:54:28.806Z
-Stopped at: Completed 02-refresh-lock-lifecycle-control-04-PLAN.md
+Last session: 2026-03-05T16:51:01.762Z
+Stopped at: Completed 02-refresh-lock-lifecycle-control-05-PLAN.md
 Resume file: None

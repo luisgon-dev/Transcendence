@@ -22,6 +22,7 @@ public class Match
     public string? QueueFamily { get; set; }
     public string? QueueType { get; set; }
     public string? EndOfGameResult { get; set; }
+    public string? PlatformRegion { get; set; }
 
     // Fetch metadata
     public FetchStatus Status { get; set; } = FetchStatus.Unfetched;

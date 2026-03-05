@@ -236,6 +236,7 @@ public class SummonerMaintenanceJobTests
                     MinimumSuccessfulMatchesForCurrentPatch = 50,
                     TargetSuccessfulMatchesForCurrentPatch = 100
                 }),
+                Options.Create(new MultiRegionIngestionOptions()),
                 Mock.Of<ILogger<SummonerMaintenanceJob>>());
 
             return new Harness(connection, db, job, backgroundJobs, refreshLocks);

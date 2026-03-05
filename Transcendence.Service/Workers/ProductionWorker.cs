@@ -57,6 +57,9 @@ public class ProductionWorker(
             "startup-backfill-match-status",
             () => backgroundJobClient.Enqueue<BackfillMatchStatusJob>(job => job.ExecuteAsync(CancellationToken.None)));
         TryEnqueueStartupJob(
+            "startup-backfill-match-platform-region",
+            () => backgroundJobClient.Enqueue<BackfillMatchPlatformRegionJob>(job => job.ExecuteAsync(CancellationToken.None)));
+        TryEnqueueStartupJob(
             "startup-rune-selection-integrity-backfill",
             () => backgroundJobClient.Enqueue<RuneSelectionIntegrityBackfillJob>(
                 job => job.ExecuteAsync(CancellationToken.None)));

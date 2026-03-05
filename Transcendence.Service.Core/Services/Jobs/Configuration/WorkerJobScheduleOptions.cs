@@ -23,6 +23,8 @@ public class WorkerJobScheduleOptions
     public bool EnableSummonerMaintenance { get; set; } = true;
     public bool EnableMatchTimelineBackfill { get; set; } = true;
     public bool EnableRuneSelectionIntegrityBackfill { get; set; } = true;
+    public bool EnableHighEloProfileRefresh { get; set; } = true;
+    public string HighEloProfileRefreshCron { get; set; } = "0 */12 * * *";
     public bool EnableRefreshLockLifecycleCleanup { get; set; } = true;
     public int RefreshLockLifecycleForensicsWindowMinutes { get; set; } = 30;
     public int RefreshLockLifecycleCleanupBatchSize { get; set; } = 250;

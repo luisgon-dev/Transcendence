@@ -123,6 +123,7 @@ public class CancellationPropagationTests
             })),
             Mock.Of<IIngestionThroughputTelemetry>(),
             Options.Create(new ChampionAnalyticsIngestionJobOptions()),
+            Options.Create(new MultiRegionIngestionOptions()),
             Mock.Of<ILogger<ChampionAnalyticsIngestionJob>>());
 
         using var cts = new CancellationTokenSource();

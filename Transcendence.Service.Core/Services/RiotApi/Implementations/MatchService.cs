@@ -49,6 +49,7 @@ public class MatchService(
             Duration = (int)info.GameDuration,
             Patch = NormalizePatch(info.GameVersion),
             EndOfGameResult = info.EndOfGameResult,
+            PlatformRegion = platformRoute.ToString(),
             Status = FetchStatus.Success,
             FetchedAt = DateTime.UtcNow
         };
@@ -159,6 +160,7 @@ public class MatchService(
             Duration = (int)info.GameDuration,
             Patch = NormalizePatch(info.GameVersion),
             EndOfGameResult = info.EndOfGameResult,
+            PlatformRegion = platformRoute.ToString(),
             Status = FetchStatus.Success,
             FetchedAt = DateTime.UtcNow
         };
@@ -322,6 +324,7 @@ public class MatchService(
             match.Duration = (int)info.GameDuration;
             match.Patch = NormalizePatch(info.GameVersion);
             match.EndOfGameResult = info.EndOfGameResult;
+            match.PlatformRegion = platformRoute.ToString();
             ApplyQueueMetadata(match, (int)info.QueueId);
             PopulateMatchBans(match, info);
 

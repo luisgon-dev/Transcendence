@@ -38,6 +38,7 @@ public sealed class WorkerRecurringJobPolicy(
     public const string MatchTimelineBackfillJobId = "match-timeline-backfill";
     public const string RuneSelectionIntegrityBackfillJobId = "rune-selection-integrity-backfill";
     public const string PollLiveGamesJobId = "poll-live-games";
+    public const string HighEloProfileRefreshJobId = "high-elo-profile-refresh";
     public const string RefreshLockLifecycleCleanupJobId = "refresh-lock-lifecycle-cleanup";
 
     private static readonly HashSet<string> MandatoryBaselineJobIds = new(StringComparer.OrdinalIgnoreCase)
@@ -64,6 +65,7 @@ public sealed class WorkerRecurringJobPolicy(
         MatchTimelineBackfillJobId,
         RuneSelectionIntegrityBackfillJobId,
         PollLiveGamesJobId,
+        HighEloProfileRefreshJobId,
         RefreshLockLifecycleCleanupJobId
     ];
 
@@ -152,6 +154,12 @@ public sealed class WorkerRecurringJobPolicy(
                 schedule.RuneSelectionIntegrityBackfillCron,
                 schedule.EnableRuneSelectionIntegrityBackfill,
                 ConfigureRuneSelectionIntegrityBackfill),
+            CreateDescriptor(
+                HighEloProfileRefreshJobId,
+                "Jobs:Schedule:HighEloProfileRefreshCron",
+                schedule.HighEloProfileRefreshCron,
+                schedule.EnableHighEloProfileRefresh,
+                ConfigureHighEloProfileRefresh),
             CreateDescriptor(
                 PollLiveGamesJobId,
                 "Jobs:Schedule:LiveGamePollingCron",
@@ -303,6 +311,15 @@ public sealed class WorkerRecurringJobPolicy(
         recurringJobManager.AddOrUpdate<RuneSelectionIntegrityBackfillJob>(
             RuneSelectionIntegrityBackfillJobId,
             job => job.ExecuteAsync(CancellationToken.None),
+            cronExpression,
+            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
+    private static void ConfigureHighEloProfileRefresh(
+        IRecurringJobManager recurringJobManager,
+        string cronExpression) =>
+        recurringJobManager.AddOrUpdate<AddOrUpdateHighEloProfiles>(
+            HighEloProfileRefreshJobId,
+            job => job.Execute(CancellationToken.None),
             cronExpression,
             new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
 

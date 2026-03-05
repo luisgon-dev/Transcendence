@@ -67,6 +67,8 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             .HasIndex(x => x.QueueId);
         modelBuilder.Entity<Match>()
             .HasIndex(x => x.QueueFamily);
+        modelBuilder.Entity<Match>()
+            .HasIndex(x => new { x.PlatformRegion, x.Status, x.Patch });
 
         // Summoner lookups by Puuid
         modelBuilder.Entity<Summoner>()

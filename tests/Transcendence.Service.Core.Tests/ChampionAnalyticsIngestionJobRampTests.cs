@@ -362,6 +362,7 @@ public class ChampionAnalyticsIngestionJobRampTests
                     RampMinRefreshJobsToQueuePerRun = 6,
                     RampMaxRefreshJobsToQueuePerRun = 10
                 }),
+                Options.Create(new MultiRegionIngestionOptions()),
                 Mock.Of<ILogger<ChampionAnalyticsIngestionJob>>());
 
             return new Harness(connection, db, job, backgroundJobs, refreshLocks);

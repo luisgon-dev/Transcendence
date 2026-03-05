@@ -53,6 +53,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MatchTimelineBackfillJob>();
         services.AddScoped<SummonerMaintenanceJob>();
         services.AddScoped<RefreshLockLifecycleJob>();
+        services.AddScoped<BackfillMatchPlatformRegionJob>();
         services.AddScoped<IIngestionPriorityScoringPolicy, IngestionPriorityScoringPolicy>();
 
         return services;

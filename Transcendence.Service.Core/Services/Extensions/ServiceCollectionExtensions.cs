@@ -9,6 +9,7 @@ using Transcendence.Service.Core.Services.Cache;
 using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
+using Transcendence.Service.Core.Services.Jobs.Priority;
 using Transcendence.Service.Core.Services.LiveGame.Implementations;
 using Transcendence.Service.Core.Services.LiveGame.Interfaces;
 using Transcendence.Service.Core.Services.RiotApi.Implementations;
@@ -51,6 +52,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MatchTimelineBackfillJob>();
         services.AddScoped<SummonerMaintenanceJob>();
         services.AddScoped<RefreshLockLifecycleJob>();
+        services.AddScoped<IIngestionPriorityScoringPolicy, IngestionPriorityScoringPolicy>();
 
         return services;
     }

@@ -63,6 +63,8 @@ builder.Services.Configure<RefreshChampionAnalyticsJobOptions>(
 builder.Services.Configure<ChampionAnalyticsIngestionJobOptions>(
     builder.Configuration.GetSection("Jobs:ChampionAnalyticsIngestion"));
 builder.Services.Configure<SummonerMaintenanceJobOptions>(builder.Configuration.GetSection("Jobs:SummonerMaintenance"));
+builder.Services.Configure<IngestionPriorityPolicyOptions>(
+    builder.Configuration.GetSection("Jobs:IngestionPriorityPolicy"));
 builder.Services.Configure<MatchIngestionOptions>(builder.Configuration.GetSection("Jobs:MatchIngestion"));
 builder.Services.Configure<TimelineIngestionOptions>(builder.Configuration.GetSection("Jobs:TimelineIngestion"));
 builder.Services.Configure<RuneSelectionIntegrityBackfillJobOptions>(

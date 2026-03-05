@@ -7,12 +7,14 @@ using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Models;
+using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.RiotApi.DTOs;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
@@ -42,11 +44,15 @@ public class ProSummonersControllerTests
             });
 
         var backgroundJobClient = new Mock<IBackgroundJobClient>();
+        var lockTelemetry = new Mock<IRefreshLockLifecycleTelemetry>();
         var controller = BuildController(
             db,
             refreshLockRepository.Object,
             backgroundJobClient.Object);
         controller.Url = new StaticUrlHelper("https://localhost/api/admin/pro-summoners/tracked-id");
+        controller.ControllerContext.HttpContext.RequestServices = new ServiceCollection()
+            .AddSingleton<IRefreshLockLifecycleTelemetry>(lockTelemetry.Object)
+            .BuildServiceProvider();
 
         var result = await controller.Refresh(tracked.Id, CancellationToken.None);
 
@@ -55,6 +61,17 @@ public class ProSummonersControllerTests
         payload.Message.Should().Be("Refresh in process");
         payload.Poll.Should().Be("https://localhost/api/admin/pro-summoners/tracked-id");
         payload.RetryAfterSeconds.Should().BeGreaterThan(0);
+        var expectedKey = RefreshLockKeys.BuildSummonerRefreshKey(Camille.Enums.PlatformRoute.NA1, tracked.GameName!,
+            tracked.TagLine!);
+        lockTelemetry.Verify(
+            x => x.RecordLifecycleOutcome(expectedKey, "contention", "pro-summoners-controller"),
+            Times.Once);
+        lockTelemetry.Verify(
+            x => x.RecordContentionWaitHint(
+                expectedKey,
+                It.Is<int>(waitHint => waitHint == payload.RetryAfterSeconds),
+                "pro-summoners-controller"),
+            Times.Once);
         backgroundJobClient.Verify(
             x => x.Create(It.IsAny<Hangfire.Common.Job>(), It.IsAny<Hangfire.States.IState>()),
             Times.Never);
@@ -81,6 +98,7 @@ public class ProSummonersControllerTests
         backgroundJobClient
             .Setup(x => x.Create(It.IsAny<Hangfire.Common.Job>(), It.IsAny<Hangfire.States.IState>()))
             .Returns("job-1");
+        var lockTelemetry = new Mock<IRefreshLockLifecycleTelemetry>();
 
         var auditService = new Mock<IAdminAuditService>();
         auditService
@@ -93,6 +111,9 @@ public class ProSummonersControllerTests
             backgroundJobClient.Object,
             auditService.Object);
         controller.Url = new StaticUrlHelper("https://localhost/api/admin/pro-summoners/tracked-id");
+        controller.ControllerContext.HttpContext.RequestServices = new ServiceCollection()
+            .AddSingleton<IRefreshLockLifecycleTelemetry>(lockTelemetry.Object)
+            .BuildServiceProvider();
 
         var result = await controller.Refresh(tracked.Id, CancellationToken.None);
 
@@ -101,6 +122,15 @@ public class ProSummonersControllerTests
         payload.Message.Should().Be("Refresh queued");
         payload.Poll.Should().Be("https://localhost/api/admin/pro-summoners/tracked-id");
         payload.RetryAfterSeconds.Should().BeNull();
+        lockTelemetry.Verify(
+            x => x.RecordLifecycleOutcome(expectedMainKey, "acquired", "pro-summoners-controller"),
+            Times.Once);
+        lockTelemetry.Verify(
+            x => x.RecordLifecycleOutcome(expectedPriorityKey, "contention", "pro-summoners-controller"),
+            Times.Once);
+        lockTelemetry.Verify(
+            x => x.RecordContentionWaitHint(expectedPriorityKey, 900, "pro-summoners-controller"),
+            Times.Once);
 
         refreshLockRepository.Verify(
             x => x.TryAcquireAsync(expectedMainKey, It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()),

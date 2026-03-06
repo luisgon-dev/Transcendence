@@ -42,7 +42,7 @@ Transcendence is a backend + web monorepo:
     - Legacy `/summoners/[region]/[riotId]/matches*` routes redirect into this unified view using query state (`page`, `queue`, `expandMatchId`)
 
 ### `packages/api-client`
-- Generated OpenAPI TypeScript client artifacts
+- Generated OpenAPI TypeScript client artifacts built from the committed spec
 - Schema generation uses `openapi-typescript` + `openapi-fetch`
 
 ## Data Flow: Summoner Refresh
@@ -260,6 +260,8 @@ The web app never exposes backend tokens to browser JS:
 
 - `Transcendence.WebAPI` and `Transcendence.Service` emit structured operational log entries to file via a shared logger provider.
 - In compose deployments, both hosts mount a shared `operational_logs` volume so `/api/admin/logs/services` can surface both streams from a single admin API.
+- Outside shared-volume deployments, the Web API can resolve per-source reader paths via `AdminLogs:Sources:webapi:DirectoryPath` and `AdminLogs:Sources:service:DirectoryPath`.
+- The file logger creates the target log file eagerly and emits a one-time stderr warning when the process cannot write the configured path, so container log streams expose permission/path failures even if the operational file itself is absent.
 
 ## Caching
 

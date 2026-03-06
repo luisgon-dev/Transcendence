@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { components } from "@transcendence/api-client/schema";
+import type { components } from "@transcendence/api-client";
 
 import {
   clearAuthCookies,

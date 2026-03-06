@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using System.ComponentModel.DataAnnotations;
 using Hangfire;
 using Hangfire.Common;
 using Hangfire.Storage;
@@ -628,7 +629,14 @@ public class AdminOperationsController(
                 deleted,
                 new { expectedState, currentState, request?.Reason, message },
                 ct);
-            return Ok(new AdminDeleteJobResultDto(normalizedId, deleted, expectedState, currentState, message));
+            return Ok(new AdminDeleteJobResultDto
+            {
+                JobId = normalizedId,
+                Deleted = deleted,
+                ExpectedState = expectedState,
+                CurrentState = currentState,
+                Message = message
+            });
         }
         catch (Exception ex)
         {
@@ -756,11 +764,10 @@ public class AdminOperationsController(
         }
 
         var safeLimit = Math.Clamp(limit, 1, 500);
-        var configuredDirectory = configuration["OperationalLogs:DirectoryPath"];
-        var directory = string.IsNullOrWhiteSpace(configuredDirectory)
-            ? Path.Combine(AppContext.BaseDirectory, "logs")
-            : configuredDirectory;
-        var logFiles = GetOperationalLogFiles(directory, serviceKey).ToList();
+        var directory = ResolveOperationalLogDirectory(serviceKey);
+        var logFiles = directory is null
+            ? []
+            : GetOperationalLogFiles(directory, serviceKey).ToList();
         if (logFiles.Count == 0)
         {
             return Ok(new AdminServiceLogsResponse(
@@ -1366,6 +1373,21 @@ public class AdminOperationsController(
                value.Contains(search, StringComparison.OrdinalIgnoreCase);
     }
 
+    private string? ResolveOperationalLogDirectory(string serviceKey)
+    {
+        var sourceSpecificDirectory = configuration[$"AdminLogs:Sources:{serviceKey}:DirectoryPath"];
+        if (!string.IsNullOrWhiteSpace(sourceSpecificDirectory))
+            return sourceSpecificDirectory.Trim();
+
+        var sharedDirectory = configuration["OperationalLogs:DirectoryPath"];
+        if (!string.IsNullOrWhiteSpace(sharedDirectory))
+            return sharedDirectory.Trim();
+
+        return string.Equals(serviceKey, "webapi", StringComparison.OrdinalIgnoreCase)
+            ? Path.Combine(AppContext.BaseDirectory, "logs")
+            : null;
+    }
+
     private static IEnumerable<string> GetOperationalLogFiles(string directory, string serviceKey)
     {
         if (!Directory.Exists(directory))
@@ -1591,12 +1613,20 @@ public record AdminJobStateTransitionDto(
 
 public record AdminDeleteJobRequest(string? ExpectedState, string? Reason);
 
-public record AdminDeleteJobResultDto(
-    string JobId,
-    bool Deleted,
-    string? ExpectedState,
-    string? CurrentState,
-    string Message);
+public sealed class AdminDeleteJobResultDto
+{
+    [Required]
+    public string JobId { get; init; } = string.Empty;
+
+    public bool Deleted { get; init; }
+
+    public string? ExpectedState { get; init; }
+
+    public string? CurrentState { get; init; }
+
+    [Required]
+    public string Message { get; init; } = string.Empty;
+}
 
 public record AdminBulkDeleteJobsRequest(
     IReadOnlyList<string>? States,

@@ -3419,11 +3419,11 @@ export interface components {
             reason?: string | null;
         };
         AdminDeleteJobResultDto: {
-            jobId?: string | null;
+            jobId: string;
             deleted?: boolean;
             expectedState?: string | null;
             currentState?: string | null;
-            message?: string | null;
+            message: string;
         };
         AdminFailedJobDto: {
             jobId?: string | null;

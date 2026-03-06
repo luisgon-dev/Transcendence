@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 
-import type { components } from "@transcendence/api-client/schema";
+import type { components } from "@transcendence/api-client";
 
 export const ACCESS_TOKEN_COOKIE = "trn_access_token";
 export const REFRESH_TOKEN_COOKIE = "trn_refresh_token";

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using Hangfire;
 using Hangfire.Common;
@@ -14,6 +15,7 @@ using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Models.LoL.Static;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Interfaces;
+using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.WebAPI.Controllers;
@@ -218,19 +220,137 @@ public class AdminOperationsControllerTests
             x.Health == "blocked");
     }
 
+    [Fact]
+    public async Task GetServiceLogs_UsesSourceSpecificDirectoryForService()
+    {
+        await using var db = CreateDbContext();
+        var monitoring = new Mock<IMonitoringApi>();
+        var serviceLogDirectory = CreateTempDirectory();
+        var serviceLogPath = Path.Combine(serviceLogDirectory, "service.log");
+        var now = DateTime.UtcNow;
+        await File.WriteAllTextAsync(
+            serviceLogPath,
+            JsonSerializer.Serialize(new OperationalLogEntry(
+                now,
+                "service",
+                "Information",
+                "Tests.Service",
+                42,
+                "worker booted",
+                null)) + Environment.NewLine);
+
+        try
+        {
+            var controller = BuildController(
+                db,
+                monitoring.Object,
+                new Dictionary<string, string?>
+                {
+                    ["AdminLogs:Sources:service:DirectoryPath"] = serviceLogDirectory
+                },
+                includeDefaultOperationalLogDirectory: false);
+
+            var result = controller.GetServiceLogs(service: "service");
+
+            var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+            var payload = ok.Value.Should().BeOfType<AdminServiceLogsResponse>().Subject;
+            payload.Source.Available.Should().BeTrue();
+            payload.Source.FilesScanned.Should().Be(1);
+            payload.Items.Should().ContainSingle(x =>
+                x.Service == "service" &&
+                x.Message == "worker booted" &&
+                x.TimestampUtc == now);
+        }
+        finally
+        {
+            Directory.Delete(serviceLogDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task GetServiceLogs_UsesSharedOperationalDirectoryWhenConfigured()
+    {
+        await using var db = CreateDbContext();
+        var monitoring = new Mock<IMonitoringApi>();
+        var sharedDirectory = CreateTempDirectory();
+        var serviceLogPath = Path.Combine(sharedDirectory, "service.log");
+        await File.WriteAllTextAsync(
+            serviceLogPath,
+            JsonSerializer.Serialize(new OperationalLogEntry(
+                DateTime.UtcNow,
+                "service",
+                "Warning",
+                "Tests.Shared",
+                7,
+                "shared path",
+                null)) + Environment.NewLine);
+
+        try
+        {
+            var controller = BuildController(
+                db,
+                monitoring.Object,
+                new Dictionary<string, string?>
+                {
+                    ["OperationalLogs:DirectoryPath"] = sharedDirectory
+                },
+                includeDefaultOperationalLogDirectory: false);
+
+            var result = controller.GetServiceLogs(service: "service");
+
+            var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+            var payload = ok.Value.Should().BeOfType<AdminServiceLogsResponse>().Subject;
+            payload.Source.Available.Should().BeTrue();
+            payload.Items.Should().ContainSingle(x => x.Message == "shared path");
+        }
+        finally
+        {
+            Directory.Delete(sharedDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task GetServiceLogs_WithoutSharedOrSourceSpecificDirectory_ReturnsUnavailableForService()
+    {
+        await using var db = CreateDbContext();
+        var monitoring = new Mock<IMonitoringApi>();
+        var controller = BuildController(
+            db,
+            monitoring.Object,
+            configValues: new Dictionary<string, string?>(),
+            includeDefaultOperationalLogDirectory: false);
+
+        var result = controller.GetServiceLogs(service: "service");
+
+        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+        var payload = ok.Value.Should().BeOfType<AdminServiceLogsResponse>().Subject;
+        payload.Source.Available.Should().BeFalse();
+        payload.Source.FilesScanned.Should().Be(0);
+        payload.Items.Should().BeEmpty();
+    }
+
     private static AdminOperationsController BuildController(
         TranscendenceContext db,
-        IMonitoringApi monitoring)
+        IMonitoringApi monitoring,
+        IReadOnlyDictionary<string, string?>? configValues = null,
+        bool includeDefaultOperationalLogDirectory = true)
     {
         var storage = new Mock<JobStorage>();
         storage.Setup(x => x.GetMonitoringApi()).Returns(monitoring);
         storage.Setup(x => x.GetConnection()).Returns(Mock.Of<IStorageConnection>());
 
+        var effectiveConfigValues = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        if (includeDefaultOperationalLogDirectory)
+            effectiveConfigValues["OperationalLogs:DirectoryPath"] = "logs";
+
+        if (configValues is not null)
+        {
+            foreach (var pair in configValues)
+                effectiveConfigValues[pair.Key] = pair.Value;
+        }
+
         var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["OperationalLogs:DirectoryPath"] = "logs"
-            })
+            .AddInMemoryCollection(effectiveConfigValues)
             .Build();
 
         var recurringPolicy = new WorkerRecurringJobPolicy(Options.Create(new WorkerSchedulingProfileOptions()));
@@ -268,6 +388,13 @@ public class AdminOperationsControllerTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
             .Options;
         return new TranscendenceContext(options);
+    }
+
+    private static string CreateTempDirectory()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"trn-admin-logs-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(path);
+        return path;
     }
 
     public static class FakeJobs

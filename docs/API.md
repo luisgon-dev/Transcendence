@@ -247,7 +247,7 @@ Auth behavior notes:
 - `deleted` to distinguish a successful state transition from a no-op
 - `expectedState` echo when provided
 - `currentState` when Hangfire can still resolve the job after the attempt
-- `message` with an operator-facing outcome summary for stale-state / already-missing jobs
+- `message` always included with an operator-facing outcome summary for stale-state / already-missing jobs
 
 `POST /api/admin/jobs/bulk-delete` accepts:
 - `states[]` restricted to backlog states (`enqueued`, `scheduled`, `failed`)
@@ -288,10 +288,10 @@ Auth behavior notes:
 
 ## OpenAPI Generation Workflow
 
-The repo keeps the exported spec committed and uses it to generate the TypeScript schema.
+The repo keeps the exported spec committed and uses it to generate the TypeScript client during build/check flows.
 
 - Export spec: `scripts/openapi/export.sh` (invoked via `pnpm api:spec`)
-- Generate client schema: `packages/api-client` (invoked via `pnpm api:client`)
+- Generate client package from the spec: `packages/api-client` (invoked via `pnpm api:client`)
 
 See root `package.json` scripts:
 - `api:gen`

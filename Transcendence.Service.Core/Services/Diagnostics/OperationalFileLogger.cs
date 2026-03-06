@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
 using Microsoft.Extensions.Logging;
 
 namespace Transcendence.Service.Core.Services.Diagnostics;
@@ -19,6 +20,7 @@ public sealed class OperationalFileLoggerProvider : ILoggerProvider
     private readonly string serviceName;
     private readonly long maxFileSizeBytes;
     private readonly int retainedFileCount;
+    private int reportedWriteFailure;
 
     public OperationalFileLoggerProvider(OperationalFileLoggerOptions options)
     {
@@ -35,6 +37,8 @@ public sealed class OperationalFileLoggerProvider : ILoggerProvider
         minLevel = options.MinLevel;
         maxFileSizeBytes = Math.Max(MinimumFileSizeBytes, options.MaxFileSizeBytes);
         retainedFileCount = Math.Clamp(options.RetainedFileCount, 1, MaxRetainedFiles);
+
+        TryEnsureLogFileExists();
     }
 
     public ILogger CreateLogger(string categoryName)
@@ -60,10 +64,32 @@ public sealed class OperationalFileLoggerProvider : ILoggerProvider
                 File.AppendAllText(logFilePath, payload + Environment.NewLine, Encoding.UTF8);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Best-effort logging; avoid recursive failures from the logger itself.
+            ReportWriteFailure(ex);
         }
+    }
+
+    private void TryEnsureLogFileExists()
+    {
+        try
+        {
+            using var stream = File.Open(logFilePath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite);
+            stream.Flush();
+        }
+        catch (Exception ex)
+        {
+            ReportWriteFailure(ex);
+        }
+    }
+
+    private void ReportWriteFailure(Exception ex)
+    {
+        if (Interlocked.Exchange(ref reportedWriteFailure, 1) != 0)
+            return;
+
+        Console.Error.WriteLine(
+            $"Operational file logging unavailable for '{serviceName}' at '{logFilePath}': {ex.Message}");
     }
 
     private void RotateIfNeeded(int incomingBytes)

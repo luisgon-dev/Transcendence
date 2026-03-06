@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import type { components } from "@transcendence/api-client/schema";
+import type { components } from "@transcendence/api-client";
 
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";

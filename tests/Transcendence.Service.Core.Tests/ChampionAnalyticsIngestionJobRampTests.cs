@@ -343,7 +343,6 @@ public class ChampionAnalyticsIngestionJobRampTests
             x => x.EnsureSeededFromChallengerAsync(It.IsAny<CancellationToken>()),
             Times.Never);
     }
-
     private sealed class Harness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;

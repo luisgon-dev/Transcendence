@@ -24,7 +24,6 @@ type MutationStatus =
   | null;
 
 const BULK_DELETE_MAX_LIMIT = 5000;
-
 type BulkDeleteRequest = {
   state: string;
   queue: string;
@@ -126,7 +125,6 @@ export function AdminRecurringJobsTable({ jobs }: { jobs: AdminRecurringJob[] })
   useEffect(() => {
     setRows(jobs);
   }, [jobs]);
-
   // eslint-disable-next-line no-unused-vars
   function updateRow(id: string, recipe: (currentJob: AdminRecurringJob) => AdminRecurringJob) {
     setRows((current) =>
@@ -358,7 +356,6 @@ export function AdminJobsTable({
   useEffect(() => {
     setRows(jobs);
   }, [jobs]);
-
   function removeRow(jobId: string) {
     setRows((current) => current.filter((row) => row.jobId !== jobId));
   }

@@ -1,15 +1,14 @@
 import "server-only";
 
-import type { components } from "@transcendence/api-client/schema";
+import type { components } from "@transcendence/api-client";
 
 import {
   clearAuthCookies,
   getAuthCookies,
-  setAuthCookies,
-  shouldRefreshAccessToken,
-  type AuthTokenResponse
+  shouldRefreshAccessToken
 } from "@/lib/authCookies";
 import { logEvent } from "@/lib/serverLog";
+import { refreshAccessToken } from "@/lib/sessionToken";
 import { getTrnClient } from "@/lib/trnClient";
 
 export type SessionMe =
@@ -29,27 +28,6 @@ function isDynamicServerUsageError(error: unknown) {
     error instanceof Error &&
     error.message.includes("Dynamic server usage")
   );
-}
-
-async function refreshAccessToken(): Promise<string | null> {
-  const { refreshToken } = await getAuthCookies();
-  if (!refreshToken) return null;
-
-  try {
-    const client = getTrnClient();
-    const { data } = await client.POST("/api/auth/refresh", {
-      body: { refreshToken }
-    });
-
-    if (!data) return null;
-    const token = data as AuthTokenResponse;
-    await setAuthCookies(token);
-    return token.accessToken ?? null;
-  } catch (error: unknown) {
-    if (isDynamicServerUsageError(error)) throw error;
-    logEvent("warn", "session refresh failed", { error });
-    return null;
-  }
 }
 
 export async function getSessionMe(): Promise<SessionMe> {

@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { getBackendApiKey } from "@/lib/env";
+import { logEvent } from "@/lib/serverLog";
 import { proxyToBackend } from "@/lib/trnProxy";
 
 function resolveApiKey() {
@@ -28,7 +29,7 @@ function isAllowedAppProxyPath(method: string, path: string[]) {
 async function handler(req: NextRequest, ctx: Ctx) {
   const key = resolveApiKey();
   if (!key.ok) {
-    console.error("Missing backend API key for AppOnly proxy:", key.value);
+    logEvent("error", "Missing backend API key for AppOnly proxy", { detail: key.value });
     if (process.env.NODE_ENV === "production") {
       return NextResponse.json({ message: "Service unavailable." }, { status: 503 });
     }

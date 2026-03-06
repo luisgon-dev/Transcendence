@@ -1,4 +1,4 @@
-import type { components } from "@transcendence/api-client/schema";
+import type { components } from "@transcendence/api-client";
 
 export type UITierGrade = "S" | "A" | "B" | "C" | "D";
 export type UITierMovement = "NEW" | "UP" | "DOWN" | "SAME";

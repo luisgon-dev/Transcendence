@@ -1,4 +1,4 @@
-import type { components } from "@transcendence/api-client/schema";
+import type { components } from "@transcendence/api-client";
 
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { AnalyticsRegionFilter } from "@/components/AnalyticsRegionFilter";

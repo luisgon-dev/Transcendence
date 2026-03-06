@@ -9,32 +9,43 @@ function revalidateAdminSurfaces() {
   revalidatePath("/admin/jobs");
 }
 
-export async function triggerRecurringJobAction(formData: FormData) {
-  const id = String(formData.get("id") ?? "").trim();
+async function simpleAdminAction(
+  formData: FormData,
+  formKey: string,
+  // eslint-disable-next-line no-unused-vars
+  pathFn: (encodedId: string) => string,
+  revalidateFn: () => void,
+  method: "POST" | "DELETE" = "POST"
+) {
+  const id = String(formData.get(formKey) ?? "").trim();
   if (!id) return;
-  await adminPost(`/api/admin/jobs/recurring/${encodeURIComponent(id)}/trigger`);
-  revalidateAdminSurfaces();
+  const path = pathFn(encodeURIComponent(id));
+  if (method === "DELETE") {
+    await adminDelete(path);
+  } else {
+    await adminPost(path);
+  }
+  revalidateFn();
+}
+
+export async function triggerRecurringJobAction(formData: FormData) {
+  return simpleAdminAction(formData, "id",
+    (id) => `/api/admin/jobs/recurring/${id}/trigger`, revalidateAdminSurfaces);
 }
 
 export async function pauseRecurringJobAction(formData: FormData) {
-  const id = String(formData.get("id") ?? "").trim();
-  if (!id) return;
-  await adminPost(`/api/admin/jobs/recurring/${encodeURIComponent(id)}/pause`);
-  revalidateAdminSurfaces();
+  return simpleAdminAction(formData, "id",
+    (id) => `/api/admin/jobs/recurring/${id}/pause`, revalidateAdminSurfaces);
 }
 
 export async function resumeRecurringJobAction(formData: FormData) {
-  const id = String(formData.get("id") ?? "").trim();
-  if (!id) return;
-  await adminPost(`/api/admin/jobs/recurring/${encodeURIComponent(id)}/resume`);
-  revalidateAdminSurfaces();
+  return simpleAdminAction(formData, "id",
+    (id) => `/api/admin/jobs/recurring/${id}/resume`, revalidateAdminSurfaces);
 }
 
 export async function retryFailedJobAction(formData: FormData) {
-  const id = String(formData.get("jobId") ?? "").trim();
-  if (!id) return;
-  await adminPost(`/api/admin/jobs/failed/${encodeURIComponent(id)}/retry`);
-  revalidateAdminSurfaces();
+  return simpleAdminAction(formData, "jobId",
+    (id) => `/api/admin/jobs/failed/${id}/retry`, revalidateAdminSurfaces);
 }
 
 export async function deleteJobAction(formData: FormData) {
@@ -85,24 +96,19 @@ export async function invalidateAnalyticsCacheAction() {
 }
 
 export async function revokeApiKeyAction(formData: FormData) {
-  const id = String(formData.get("id") ?? "").trim();
-  if (!id) return;
-  await adminPost(`/api/auth/keys/${encodeURIComponent(id)}/revoke`);
-  revalidatePath("/admin/api-keys");
+  return simpleAdminAction(formData, "id",
+    (id) => `/api/auth/keys/${id}/revoke`, () => revalidatePath("/admin/api-keys"));
 }
 
 export async function rotateApiKeyAction(formData: FormData) {
-  const id = String(formData.get("id") ?? "").trim();
-  if (!id) return;
-  await adminPost(`/api/auth/keys/${encodeURIComponent(id)}/rotate`);
-  revalidatePath("/admin/api-keys");
+  return simpleAdminAction(formData, "id",
+    (id) => `/api/auth/keys/${id}/rotate`, () => revalidatePath("/admin/api-keys"));
 }
 
 export async function deleteProSummonerAction(formData: FormData) {
-  const id = String(formData.get("id") ?? "").trim();
-  if (!id) return;
-  await adminDelete(`/api/admin/pro-summoners/${encodeURIComponent(id)}`);
-  revalidatePath("/admin/pro-summoners");
+  return simpleAdminAction(formData, "id",
+    (id) => `/api/admin/pro-summoners/${id}`,
+    () => revalidatePath("/admin/pro-summoners"), "DELETE");
 }
 
 export async function createProSummonerAction(formData: FormData) {
@@ -133,10 +139,9 @@ export async function createProSummonerAction(formData: FormData) {
 }
 
 export async function refreshProSummonerAction(formData: FormData) {
-  const id = String(formData.get("id") ?? "").trim();
-  if (!id) return;
-  await adminPost(`/api/admin/pro-summoners/${encodeURIComponent(id)}/refresh`);
-  revalidatePath("/admin/pro-summoners");
+  return simpleAdminAction(formData, "id",
+    (id) => `/api/admin/pro-summoners/${id}/refresh`,
+    () => revalidatePath("/admin/pro-summoners"));
 }
 
 export type BulkImportResult = {

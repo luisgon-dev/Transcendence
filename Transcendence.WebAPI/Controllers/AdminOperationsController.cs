@@ -764,11 +764,10 @@ public class AdminOperationsController(
         }
 
         var safeLimit = Math.Clamp(limit, 1, 500);
-        var configuredDirectory = configuration["OperationalLogs:DirectoryPath"];
-        var directory = string.IsNullOrWhiteSpace(configuredDirectory)
-            ? Path.Combine(AppContext.BaseDirectory, "logs")
-            : configuredDirectory;
-        var logFiles = GetOperationalLogFiles(directory, serviceKey).ToList();
+        var directory = ResolveOperationalLogDirectory(serviceKey);
+        var logFiles = directory is null
+            ? []
+            : GetOperationalLogFiles(directory, serviceKey).ToList();
         if (logFiles.Count == 0)
         {
             return Ok(new AdminServiceLogsResponse(
@@ -1372,6 +1371,21 @@ public class AdminOperationsController(
     {
         return !string.IsNullOrWhiteSpace(value) &&
                value.Contains(search, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string? ResolveOperationalLogDirectory(string serviceKey)
+    {
+        var sourceSpecificDirectory = configuration[$"AdminLogs:Sources:{serviceKey}:DirectoryPath"];
+        if (!string.IsNullOrWhiteSpace(sourceSpecificDirectory))
+            return sourceSpecificDirectory.Trim();
+
+        var sharedDirectory = configuration["OperationalLogs:DirectoryPath"];
+        if (!string.IsNullOrWhiteSpace(sharedDirectory))
+            return sharedDirectory.Trim();
+
+        return string.Equals(serviceKey, "webapi", StringComparison.OrdinalIgnoreCase)
+            ? Path.Combine(AppContext.BaseDirectory, "logs")
+            : null;
     }
 
     private static IEnumerable<string> GetOperationalLogFiles(string directory, string serviceKey)

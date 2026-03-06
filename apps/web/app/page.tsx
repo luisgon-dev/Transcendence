@@ -4,8 +4,10 @@ import type { components } from "@transcendence/api-client/schema";
 
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { AnalyticsRegionFilter } from "@/components/AnalyticsRegionFilter";
 import { GlobalSearchLauncher } from "@/components/GlobalSearchLauncher";
 import { fetchBackendJson } from "@/lib/backendCall";
+import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { getBackendBaseUrl } from "@/lib/env";
 import { formatGames, formatPercent } from "@/lib/format";
 import { roleDisplayLabel } from "@/lib/roles";
@@ -23,10 +25,20 @@ const QUICK_LINKS = [
   { label: "Best Support", href: "/tierlist?role=UTILITY" }
 ] as const;
 
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams
+}: {
+  searchParams?: Promise<{ region?: string }>;
+}) {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const { activeRegion, activeRegionLabel, options: regionOptions } = await resolveAnalyticsRegion(
+    resolvedSearchParams?.region
+  );
+  const tierListQuery = new URLSearchParams();
+  if (activeRegion !== "ALL") tierListQuery.set("region", activeRegion);
   const [{ version, champions }, tierListRes] = await Promise.all([
     fetchChampionMap(),
-    fetchBackendJson<TierListResponse>(`${getBackendBaseUrl()}/api/analytics/tierlist`, {
+    fetchBackendJson<TierListResponse>(`${getBackendBaseUrl()}/api/analytics/tierlist?${tierListQuery.toString()}`, {
       next: { revalidate: 60 * 60 }
     })
   ]);
@@ -51,6 +63,7 @@ export default async function HomePage() {
           <div className="flex flex-wrap items-center gap-2">
             <Badge className="border-primary/40 bg-primary/10 text-primary">Patch {patch}</Badge>
             <Badge className="border-success/40 bg-success/10 text-success">Live Analysis</Badge>
+            <Badge>{activeRegionLabel}</Badge>
           </div>
 
           <h1 className="mt-4 max-w-2xl font-[var(--font-sora)] text-3xl font-semibold tracking-tight sm:text-4xl">
@@ -63,23 +76,27 @@ export default async function HomePage() {
           <GlobalSearchLauncher variant="hero" className="mt-6 h-14 w-full max-w-2xl px-4 text-left" />
 
           <div className="mt-5 flex flex-wrap gap-2">
+            <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} className="flex flex-wrap gap-2" />
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
             {QUICK_LINKS.map((link) => (
               <Link
                 key={link.href}
-                href={link.href}
+                href={`${link.href}${activeRegion !== "ALL" ? `${link.href.includes("?") ? "&" : "?"}region=${encodeURIComponent(activeRegion)}` : ""}`}
                 className="rounded-full border border-border/65 bg-white/[0.03] px-3 py-1.5 text-sm text-fg/80 transition hover:bg-white/[0.08] hover:text-fg"
               >
                 {link.label}
               </Link>
             ))}
             <Link
-              href="/matchups"
+              href={`/matchups${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
               className="rounded-full border border-border/65 bg-white/[0.03] px-3 py-1.5 text-sm text-fg/80 transition hover:bg-white/[0.08] hover:text-fg"
             >
               Matchups
             </Link>
             <Link
-              href="/pro-builds"
+              href={`/pro-builds${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
               className="rounded-full border border-primary/50 bg-primary/10 px-3 py-1.5 text-sm text-primary transition hover:bg-primary/20"
             >
               Pro Builds
@@ -95,7 +112,7 @@ export default async function HomePage() {
               <h2 className="font-[var(--font-sora)] text-lg font-semibold">Tier List Platinum+</h2>
               <p className="text-xs text-muted">Top performers this patch</p>
             </div>
-            <Link href="/tierlist" className="text-xs text-primary hover:underline">
+            <Link href={`/tierlist${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`} className="text-xs text-primary hover:underline">
               View full tier list
             </Link>
           </div>
@@ -120,7 +137,7 @@ export default async function HomePage() {
                     return (
                       <tr key={`${entry.championId}-${entry.role}`} className="border-b border-border/20">
                         <td className="px-4 py-2.5">
-                          <Link href={`/champions/${entry.championId}?role=${entry.role}`} className="flex min-w-0 items-center gap-2.5 hover:underline">
+                          <Link href={`/champions/${entry.championId}?role=${entry.role}${activeRegion !== "ALL" ? `&region=${encodeURIComponent(activeRegion)}` : ""}`} className="flex min-w-0 items-center gap-2.5 hover:underline">
                             <Image
                               src={championIconUrl(version, champ?.id ?? "Unknown")}
                               alt={name}
@@ -161,7 +178,7 @@ export default async function HomePage() {
                   return (
                     <Link
                       key={`${entry.championId}-trend`}
-                      href={`/champions/${entry.championId}?role=${entry.role}`}
+                      href={`/champions/${entry.championId}?role=${entry.role}${activeRegion !== "ALL" ? `&region=${encodeURIComponent(activeRegion)}` : ""}`}
                       className="rounded-lg border border-border/60 bg-white/[0.03] p-3 transition hover:bg-white/[0.08]"
                     >
                       <p className="text-sm font-medium text-fg">{name}</p>
@@ -181,7 +198,7 @@ export default async function HomePage() {
               Pro builds and scouting are being prepared. Explore the preview and upcoming feature scope.
             </p>
             <Link
-              href="/pro-builds/222"
+              href={`/pro-builds/222${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
               className="mt-4 inline-flex rounded-md border border-primary/40 bg-primary/15 px-3 py-1.5 text-sm font-medium text-primary transition hover:bg-primary/25"
             >
               Open Pro Preview

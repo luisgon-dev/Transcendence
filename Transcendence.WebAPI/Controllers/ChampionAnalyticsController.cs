@@ -54,6 +54,7 @@ public class ChampionAnalyticsController(IChampionAnalyticsService analyticsServ
     /// <param name="championId">Champion ID</param>
     /// <param name="role">Role: TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY</param>
     /// <param name="rankTier">Optional: Filter by rank tier</param>
+    /// <param name="region">Optional: Filter by platform region</param>
     [HttpGet("{championId}/builds")]
     [ProducesResponseType(typeof(ChampionBuildsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -61,12 +62,13 @@ public class ChampionAnalyticsController(IChampionAnalyticsService analyticsServ
         int championId,
         [FromQuery] string role,
         [FromQuery] string? rankTier = null,
+        [FromQuery] string? region = null,
         CancellationToken ct = default)
     {
         if (string.IsNullOrEmpty(role))
             return BadRequest("Role parameter is required");
 
-        var result = await analyticsService.GetBuildsAsync(championId, role, rankTier, ct);
+        var result = await analyticsService.GetBuildsAsync(championId, role, rankTier, region, ct);
         return Ok(result);
     }
 
@@ -98,6 +100,7 @@ public class ChampionAnalyticsController(IChampionAnalyticsService analyticsServ
     /// <param name="championId">Champion ID</param>
     /// <param name="role">Role: TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY</param>
     /// <param name="rankTier">Optional: Filter by rank tier</param>
+    /// <param name="region">Optional: Filter by platform region</param>
     [HttpGet("{championId}/matchups")]
     [ProducesResponseType(typeof(ChampionMatchupsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -105,12 +108,13 @@ public class ChampionAnalyticsController(IChampionAnalyticsService analyticsServ
         int championId,
         [FromQuery] string role,
         [FromQuery] string? rankTier = null,
+        [FromQuery] string? region = null,
         CancellationToken ct = default)
     {
         if (string.IsNullOrEmpty(role))
             return BadRequest("Role parameter is required");
 
-        var result = await analyticsService.GetMatchupsAsync(championId, role, rankTier, ct);
+        var result = await analyticsService.GetMatchupsAsync(championId, role, rankTier, region, ct);
         return Ok(result);
     }
 

@@ -9,24 +9,10 @@ export const PRO_BUILD_ROLES = [
 
 export type ProBuildRole = (typeof PRO_BUILD_ROLES)[number];
 
-export const PRO_BUILD_REGIONS = ["ALL", "KR", "EUW", "NA", "CN"] as const;
-
-export type ProBuildRegion = (typeof PRO_BUILD_REGIONS)[number];
-
 export function normalizeProBuildRole(role: string | undefined | null): ProBuildRole {
   if (!role) return "ALL";
   const upper = role.trim().toUpperCase();
   return PRO_BUILD_ROLES.includes(upper as ProBuildRole) ? (upper as ProBuildRole) : "ALL";
-}
-
-export function normalizeProBuildRegion(
-  region: string | undefined | null
-): ProBuildRegion {
-  if (!region) return "ALL";
-  const upper = region.trim().toUpperCase();
-  return PRO_BUILD_REGIONS.includes(upper as ProBuildRegion)
-    ? (upper as ProBuildRegion)
-    : "ALL";
 }
 
 export function normalizeProBuildPatch(patch: string | undefined | null): string | null {
@@ -41,7 +27,7 @@ export function buildProBuildFilterParams({
   patch
 }: {
   role: ProBuildRole;
-  region: ProBuildRegion;
+  region: string;
   patch: string | null;
 }): URLSearchParams {
   const params = new URLSearchParams();
@@ -55,7 +41,7 @@ export function buildProBuildPageHref(
   championId: number,
   filters: {
     role: ProBuildRole;
-    region: ProBuildRegion;
+    region: string;
     patch: string | null;
   }
 ): string {

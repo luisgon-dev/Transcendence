@@ -1,8 +1,10 @@
 "use client";
 
 import { cn } from "@/lib/cn";
+import { type AnalyticsRegionOption } from "@/lib/analyticsRegionShared";
 import { RANK_TIER_FILTERS } from "@/lib/ranks";
 
+import { AnalyticsRegionFilter } from "./AnalyticsRegionFilter";
 import { RankFilterDropdown } from "./RankFilterDropdown";
 import { RoleFilterTabs } from "./RoleFilterTabs";
 
@@ -14,6 +16,8 @@ export function FilterBar({
   activeRole = "ALL",
   ranks = DEFAULT_RANKS,
   activeRank = "all",
+  regionOptions,
+  activeRegion,
   baseHref,
   patch,
   className
@@ -22,6 +26,8 @@ export function FilterBar({
   activeRole?: string;
   ranks?: readonly string[];
   activeRank?: string;
+  regionOptions?: readonly AnalyticsRegionOption[];
+  activeRegion?: string;
   baseHref: string;
   patch?: string | null;
   className?: string;
@@ -50,6 +56,9 @@ export function FilterBar({
         baseHref={baseHref}
         extraParams={rankExtraParams}
       />
+      {regionOptions && activeRegion ? (
+        <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />
+      ) : null}
       {patch ? (
         <span className="rounded-full border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
           Patch {patch}

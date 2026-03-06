@@ -166,7 +166,7 @@ public class RefreshChampionAnalyticsJob(
                 {
                     try
                     {
-                        await analyticsService.GetTierListAsync(role, tier, ct);
+                        await analyticsService.GetTierListAsync(role, tier, null, ct);
                         logger.LogDebug("Pre-warmed tier list: {Role}/{Tier}", role, tier);
                     }
                     catch (Exception ex)
@@ -178,7 +178,7 @@ public class RefreshChampionAnalyticsJob(
                 // Also pre-warm "all tiers" tier list per role
                 try
                 {
-                    await analyticsService.GetTierListAsync(role, null, ct);
+                    await analyticsService.GetTierListAsync(role, null, null, ct);
                     logger.LogDebug("Pre-warmed tier list: {Role}/all", role);
                 }
                 catch (Exception ex)
@@ -190,8 +190,8 @@ public class RefreshChampionAnalyticsJob(
             // Step 4: Pre-warm unified tier lists
             try
             {
-                await analyticsService.GetTierListAsync("ALL", null, ct);
-                await analyticsService.GetTierListAsync("ALL", "EMERALD_PLUS", ct);
+                await analyticsService.GetTierListAsync("ALL", null, null, ct);
+                await analyticsService.GetTierListAsync("ALL", "EMERALD_PLUS", null, ct);
                 logger.LogDebug("Pre-warmed unified tier list variants");
             }
             catch (Exception ex)
@@ -220,8 +220,8 @@ public class RefreshChampionAnalyticsJob(
                             new ChampionAnalyticsFilter(Role: role),
                             ct);
 
-                        await analyticsService.GetBuildsAsync(champ.ChampionId, role, null, ct);
-                        await analyticsService.GetMatchupsAsync(champ.ChampionId, role, null, ct);
+                        await analyticsService.GetBuildsAsync(champ.ChampionId, role, null, null, ct);
+                        await analyticsService.GetMatchupsAsync(champ.ChampionId, role, null, null, ct);
 
                         preWarmCount++;
                         logger.LogDebug("Pre-warmed analytics for champion {ChampId} in {Role}",

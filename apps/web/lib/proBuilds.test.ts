@@ -4,7 +4,6 @@ import {
   buildProBuildFilterParams,
   buildProBuildPageHref,
   normalizeProBuildPatch,
-  normalizeProBuildRegion,
   normalizeProBuildRole
 } from "@/lib/proBuilds";
 
@@ -17,18 +16,6 @@ describe("normalizeProBuildRole", () => {
   it("falls back to ALL for invalid or missing values", () => {
     expect(normalizeProBuildRole(undefined)).toBe("ALL");
     expect(normalizeProBuildRole("adc")).toBe("ALL");
-  });
-});
-
-describe("normalizeProBuildRegion", () => {
-  it("normalizes valid region values", () => {
-    expect(normalizeProBuildRegion("kr")).toBe("KR");
-    expect(normalizeProBuildRegion("EUW")).toBe("EUW");
-  });
-
-  it("falls back to ALL for invalid or missing values", () => {
-    expect(normalizeProBuildRegion(undefined)).toBe("ALL");
-    expect(normalizeProBuildRegion("OCE")).toBe("ALL");
   });
 });
 

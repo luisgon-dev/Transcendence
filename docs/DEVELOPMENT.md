@@ -109,8 +109,12 @@ dotnet run --project Transcendence.Service
 ```
 
 Admin web UI runs in `apps/web` under `/admin` and requires an authenticated user with `admin` role.
-Admin diagnostics include `/admin/jobs` (including failed-job detail) and `/admin/logs` (service/webapi operational logs).
+Admin diagnostics include:
+- `/admin` for worker/server status, database + analysis metrics, and top backlog groups
+- `/admin/jobs` for queue-state exploration, recurring-producer pause/resume, and backlog clearing
+- `/admin/logs` for service/webapi operational logs
 `/api/auth/logout` revokes the active refresh token server-side and the web logout flow calls it before clearing cookies.
+WebAPI now defaults `Microsoft.EntityFrameworkCore.Database.Command` to `Warning` so operational logs are not dominated by insert/update chatter.
 
 ### Operational Log Files
 
@@ -123,6 +127,7 @@ Admin diagnostics include `/admin/jobs` (including failed-job detail) and `/admi
   - `OperationalLogs:MinLevel` (default `Information`)
 
 In Docker Compose (`docker-compose.yml` and `docker-compose.production.yml`), both services mount a shared `operational_logs` volume at `/var/log/transcendence` so admin APIs can read both log streams.
+The admin logs API scans the live file plus rotated `*.log.N` archives and reports whether the selected source is currently available.
 
 ## Web Commands
 

@@ -1,3 +1,11 @@
+export type AdminServerSnapshot = {
+  name: string;
+  workersCount: number;
+  startedAtUtc: string;
+  heartbeatUtc: string | null;
+  queues: string[];
+};
+
 export type AdminOverview = {
   generatedAtUtc: string;
   databaseConnected: boolean;
@@ -7,7 +15,52 @@ export type AdminOverview = {
   failed: number;
   succeeded: number;
   recurring: number;
-  queues: { name: string; length: number; fetched: number }[];
+  deleted: number;
+  effectiveConcurrency: number;
+  servers: AdminServerSnapshot[];
+  queues: { name: string; length: number; fetched: number | null }[];
+};
+
+export type AdminAnalysisSummary = {
+  summoners: number;
+  matches: number;
+  currentPatchSuccessfulMatches: number;
+  currentPatchRankedMatches: number;
+  timelineCoverageRatio: number;
+  activeRefreshLocks: number;
+  expiredRefreshLocks: number;
+  trackedProSummoners: number;
+};
+
+export type AdminAnalysisRegionMetrics = {
+  region: string;
+  enabled: boolean;
+  summoners: number;
+  currentPatchTotalMatches: number;
+  currentPatchSuccessfulMatches: number;
+  currentPatchTemporaryFailures: number;
+  currentPatchUnfetchedMatches: number;
+  currentPatchPermanentlyUnfetchableMatches: number;
+  currentPatchOutsideRetentionMatches: number;
+  rankedCurrentPatchMatches: number;
+  latestSuccessfulFetchUtc: string | null;
+  timelineSuccessfulMatches: number;
+  timelinePendingMatches: number;
+  timelineTemporaryFailures: number;
+  timelinePermanentFailures: number;
+  trackedProSummoners: number;
+  enqueuedJobs: number;
+  processingJobs: number;
+  scheduledJobs: number;
+  health: string;
+};
+
+export type AdminAnalysisMetricsResponse = {
+  generatedAtUtc: string;
+  activePatchVersion: string | null;
+  activePatchReleasedAtUtc: string | null;
+  summary: AdminAnalysisSummary;
+  regions: AdminAnalysisRegionMetrics[];
 };
 
 export type AdminRecurringJob = {
@@ -19,6 +72,103 @@ export type AdminRecurringJob = {
   lastJobId: string | null;
   lastJobState: string | null;
   error: string | null;
+  isPresentInStorage: boolean;
+  isEnabledByConfiguration: boolean;
+  isPaused: boolean;
+  isPausable: boolean;
+};
+
+export type AdminJobGroup = {
+  state: string;
+  queue: string;
+  jobType: string | null;
+  jobMethod: string | null;
+  region: string | null;
+  count: number;
+  oldestSeenAtUtc: string | null;
+  newestSeenAtUtc: string | null;
+};
+
+export type AdminQueueSummaryResponse = {
+  generatedAtUtc: string;
+  truncated: boolean;
+  scanLimit: number;
+  queues: { name: string; length: number; fetched: number | null }[];
+  topGroups: AdminJobGroup[];
+};
+
+export type AdminJobListItem = {
+  jobId: string;
+  state: string;
+  queue: string;
+  jobType: string | null;
+  jobMethod: string | null;
+  region: string | null;
+  createdAtUtc: string | null;
+  stateChangedAtUtc: string | null;
+  startedAtUtc: string | null;
+  serverId: string | null;
+  reason: string | null;
+  exceptionType: string | null;
+  exceptionMessage: string | null;
+  arguments: string[];
+};
+
+export type AdminJobListResponse = {
+  generatedAtUtc: string;
+  from: number;
+  count: number;
+  totalMatched: number;
+  truncated: boolean;
+  scanLimit: number;
+  items: AdminJobListItem[];
+};
+
+export type AdminJobStateTransition = {
+  stateName: string;
+  createdAtUtc: string;
+  reason: string | null;
+  data: Record<string, string>;
+};
+
+export type AdminJobDetail = {
+  jobId: string;
+  currentState: string | null;
+  queue: string;
+  jobType: string | null;
+  jobMethod: string | null;
+  arguments: string[];
+  region: string | null;
+  createdAtUtc: string | null;
+  enqueuedAtUtc: string | null;
+  scheduledAtUtc: string | null;
+  startedAtUtc: string | null;
+  stateChangedAtUtc: string | null;
+  failedAtUtc: string | null;
+  deletedAtUtc: string | null;
+  serverId: string | null;
+  reason: string | null;
+  exceptionType: string | null;
+  exceptionMessage: string | null;
+  exceptionDetails: string | null;
+  failedCount: number;
+  states: AdminJobStateTransition[];
+  properties: Record<string, string>;
+};
+
+export type AdminDeleteJobResult = {
+  jobId: string;
+  deleted: boolean;
+  expectedState: string | null;
+};
+
+export type AdminBulkDeleteJobsResult = {
+  dryRun: boolean;
+  truncated: boolean;
+  matched: number;
+  deleted: number;
+  failed: number;
+  sampleJobIds: string[];
 };
 
 export type AdminFailedJob = {
@@ -29,28 +179,7 @@ export type AdminFailedJob = {
   failedAt: string | null;
 };
 
-export type AdminJobStateTransition = {
-  stateName: string;
-  createdAtUtc: string;
-  reason: string | null;
-  data: Record<string, string>;
-};
-
-export type AdminFailedJobDetail = {
-  jobId: string;
-  jobType: string | null;
-  jobMethod: string | null;
-  arguments: string[];
-  failedAtUtc: string | null;
-  currentState: string | null;
-  reason: string | null;
-  exceptionType: string | null;
-  exceptionMessage: string | null;
-  exceptionDetails: string | null;
-  failedCount: number;
-  states: AdminJobStateTransition[];
-  properties: Record<string, string>;
-};
+export type AdminFailedJobDetail = AdminJobDetail;
 
 export type AdminServiceLog = {
   timestampUtc: string;
@@ -60,6 +189,19 @@ export type AdminServiceLog = {
   eventId: number;
   message: string | null;
   exception: string | null;
+};
+
+export type AdminLogSource = {
+  service: string;
+  available: boolean;
+  filesScanned: number;
+  latestTimestampUtc: string | null;
+  truncated: boolean;
+};
+
+export type AdminServiceLogsResponse = {
+  source: AdminLogSource;
+  items: AdminServiceLog[];
 };
 
 export type AdminAuditEntry = {

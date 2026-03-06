@@ -23,6 +23,7 @@ public record ChampionBuildsResponse(
     int ChampionId,
     string Role,
     string RankTier,
+    string Region,
     string Patch,
     List<int> GlobalCoreItems,    // Items core across ALL builds for this champion
     List<ChampionBuildDto> Builds, // Top 3 builds ordered by (games * winRate)

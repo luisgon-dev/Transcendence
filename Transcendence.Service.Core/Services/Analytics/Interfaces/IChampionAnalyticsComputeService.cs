@@ -25,6 +25,7 @@ public interface IChampionAnalyticsComputeService
     Task<List<TierListEntry>> ComputeTierListAsync(
         string? role,
         string? rankTier,
+        string? region,
         string patch,
         CancellationToken ct);
 
@@ -37,6 +38,7 @@ public interface IChampionAnalyticsComputeService
         int championId,
         string role,
         string? rankTier,
+        string? region,
         string patch,
         CancellationToken ct);
 
@@ -55,6 +57,7 @@ public interface IChampionAnalyticsComputeService
         int championId,
         string role,
         string? rankTier,
+        string? region,
         string patch,
         CancellationToken ct);
 }

@@ -1,12 +1,14 @@
 import type { components } from "@transcendence/api-client/schema";
 
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
+import { AnalyticsRegionFilter } from "@/components/AnalyticsRegionFilter";
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import {
   ChampionsGridClient,
   type ChampionGridEntry
 } from "@/components/ChampionsGridClient";
 import { fetchBackendJson } from "@/lib/backendCall";
+import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { DEFAULT_TIERLIST_RANK_TIER } from "@/lib/ranks";
@@ -18,12 +20,24 @@ import {
 
 type TierListResponse = components["schemas"]["TierListResponse"];
 
-export default async function ChampionsPage() {
+export default async function ChampionsPage({
+  searchParams
+}: {
+  searchParams?: Promise<{ region?: string }>;
+}) {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const { activeRegion, activeRegionLabel, options: regionOptions } = await resolveAnalyticsRegion(
+    resolvedSearchParams?.region
+  );
   const verbosity = getErrorVerbosity();
+  const tierListQuery = new URLSearchParams({
+    rankTier: DEFAULT_TIERLIST_RANK_TIER
+  });
+  if (activeRegion !== "ALL") tierListQuery.set("region", activeRegion);
   const [{ version, champions }, tierListRes] = await Promise.all([
     fetchChampionMap(),
     fetchBackendJson<TierListResponse>(
-      `${getBackendBaseUrl()}/api/analytics/tierlist?rankTier=${encodeURIComponent(DEFAULT_TIERLIST_RANK_TIER)}`,
+      `${getBackendBaseUrl()}/api/analytics/tierlist?${tierListQuery.toString()}`,
       { next: { revalidate: 60 * 60 } }
     )
   ]);
@@ -94,12 +108,20 @@ export default async function ChampionsPage() {
         <p className="text-sm text-fg/75">
           Builds, matchups, and win rates per role.
         </p>
-        <AnalyticsSampleBanner
-          sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <AnalyticsSampleBanner
+            sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+            {activeRegionLabel}
+          </span>
+          <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />
+        </div>
       </header>
 
-      <ChampionsGridClient champions={list} version={version} />
+      <ChampionsGridClient champions={list} version={version} activeRegion={activeRegion} />
     </div>
   );
 }

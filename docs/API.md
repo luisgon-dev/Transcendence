@@ -118,6 +118,7 @@ Example (`SummonerAcceptedResponse`):
 ### Analytics
 
 - `GET /api/analytics/tierlist`
+- `GET /api/analytics/regions`
 - `GET /api/analytics/champions/{championId}/winrates`
 - `GET /api/analytics/champions/{championId}/builds`
 - `GET /api/analytics/champions/{championId}/pro-builds`
@@ -139,6 +140,12 @@ Early-patch semantics:
 - Exact tier token: `IRON|BRONZE|SILVER|GOLD|PLATINUM|EMERALD|DIAMOND|MASTER|GRANDMASTER|CHALLENGER`
 - Tier scope token: `EMERALD_PLUS` (alias `EMERALD+`) = `EMERALD` and above
 
+`region` query semantics across tier list, win rates, builds, and matchups:
+- `ALL` (or omitted): global aggregate across enabled ingestion regions
+- Concrete platform region token: for example `NA1|EUW1|EUN1|KR`
+- Supported public region tokens are discoverable via `GET /api/analytics/regions`
+- Tier list, builds, and matchup responses now echo the resolved `region` field so the UI can badge active scope without guessing
+
 `GET /api/analytics/champions/{championId}/builds` includes full rune setup per build:
 - `primaryStyleId`, `subStyleId`
 - `primaryRunes` (4), `subRunes` (2), `statShards` (3)
@@ -155,7 +162,7 @@ Additional analytics fields:
   - `timelineDataFreshnessUtc`
 
 `GET /api/analytics/champions/{championId}/pro-builds` supports optional filters:
-- `region` (`KR|EUW|NA|CN|ALL`)
+- `region` (`ALL` or supported platform-region token such as `NA1|EUW1|EUN1|KR`)
 - `role`
 - `patch`
 
@@ -189,8 +196,16 @@ Auth behavior notes:
 ### Admin Operations (`AdminOnly`)
 
 - `GET /api/admin/overview`
+- `GET /api/admin/metrics/analysis`
 - `GET /api/admin/jobs/recurring`
 - `POST /api/admin/jobs/recurring/{id}/trigger`
+- `POST /api/admin/jobs/recurring/{id}/pause`
+- `POST /api/admin/jobs/recurring/{id}/resume`
+- `GET /api/admin/jobs/queues`
+- `GET /api/admin/jobs/list`
+- `GET /api/admin/jobs/inspect/{jobId}`
+- `POST /api/admin/jobs/inspect/{jobId}/delete`
+- `POST /api/admin/jobs/bulk-delete`
 - `GET /api/admin/jobs/failed`
 - `GET /api/admin/jobs/failed/{jobId}`
 - `POST /api/admin/jobs/failed/{jobId}/retry`
@@ -198,18 +213,59 @@ Auth behavior notes:
 - `GET /api/admin/audit-log`
 - `GET /api/admin/logs/services`
 
-`GET /api/admin/jobs/failed/{jobId}` returns deep diagnostics for a job, including:
+`GET /api/admin/overview` now includes:
+- queue totals plus deleted-job count
+- active Hangfire server snapshots (`name`, `workersCount`, `queues`, heartbeat)
+- `effectiveConcurrency` as the sum of active worker counts
+
+`GET /api/admin/metrics/analysis` returns:
+- active patch metadata
+- global database/analysis summary cards
+- per-region ingestion health rows including fetch-status counts, timeline coverage, tracked pro-summoner counts, and queue backlog by region
+
+`GET /api/admin/jobs/list` query params:
+- `state` (`enqueued`, `processing`, `scheduled`, `failed`)
+- `queue`, `type`, `region`, `q` (optional filters)
+- `olderThanMinutes` (optional age filter)
+- `from`, `count` (paged response)
+- `scanLimit` (optional admin scan cap)
+
+`GET /api/admin/jobs/queues` returns queue snapshots plus grouped backlog contributors by state, queue, job type, method, and inferred region.
+
+`GET /api/admin/jobs/inspect/{jobId}` returns deep diagnostics for any job, including:
 - invocation type/method
 - serialized arguments
 - state history timeline
-- failed-at timestamp
+- queue, server id, inferred region, and state timestamps
 - exception type/message/details (when available)
+
+`POST /api/admin/jobs/inspect/{jobId}/delete` accepts:
+- `expectedState` (optional state assertion such as `Processing` or `Failed`)
+- `reason` (optional audit metadata)
+
+`POST /api/admin/jobs/bulk-delete` accepts:
+- `states[]` restricted to backlog states (`enqueued`, `scheduled`, `failed`)
+- optional filters: `queues[]`, `jobType`, `region`, `query`, `olderThanMinutes`
+- `limit`, `scanLimit`
+- `dryRun`
+
+`GET /api/admin/jobs/recurring` now distinguishes:
+- configured vs present-in-storage recurring jobs
+- pause state for producer jobs
+- whether a recurring job is pausable from admin
 
 `GET /api/admin/logs/services` query params:
 - `service` (`webapi` or `service`)
 - `level` (optional; e.g. `ERROR`, `WARNING`, `INFORMATION`)
 - `q` (optional case-insensitive search over category/message/exception)
+- `sinceUtc` / `untilUtc` (optional timestamp window filters)
 - `limit` (optional; min `1`, max `500`)
+
+`GET /api/admin/logs/services` returns:
+- `source.available` to distinguish missing log files from empty filtered results
+- `source.filesScanned` and `source.latestTimestampUtc` for diagnostics
+- `source.truncated` when the response hit the current row limit
+- `items[]` with the matching structured log rows
 
 ### Pro Roster Admin (`AdminOnly`)
 

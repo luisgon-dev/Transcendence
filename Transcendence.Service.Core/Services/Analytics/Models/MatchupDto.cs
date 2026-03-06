@@ -62,6 +62,11 @@ public record ChampionMatchupsResponse
     public string? RankTier { get; init; }
 
     /// <summary>
+    /// The platform region filter or ALL/global aggregate.
+    /// </summary>
+    public string Region { get; init; } = AnalyticsRegionCatalog.GlobalRegionCode;
+
+    /// <summary>
     /// The patch version for which matchups are calculated.
     /// </summary>
     public string Patch { get; init; } = string.Empty;

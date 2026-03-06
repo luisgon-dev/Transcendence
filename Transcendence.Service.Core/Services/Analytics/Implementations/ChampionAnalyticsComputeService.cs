@@ -57,7 +57,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         // Apply region filter if specified
         if (!string.IsNullOrEmpty(filter.Region))
         {
-            baseQuery = baseQuery.Where(mp => mp.Summoner.Region == filter.Region);
+            baseQuery = baseQuery.Where(mp => mp.Summoner.PlatformRegion == filter.Region);
         }
 
         // Apply role filter if specified
@@ -185,6 +185,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
     public async Task<List<TierListEntry>> ComputeTierListAsync(
         string? role,
         string? rankTier,
+        string? region,
         string patch,
         CancellationToken ct)
     {
@@ -192,6 +193,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         var isUnifiedRole = normalizedRole == "ALL";
         var rankTierScope = ParseRankTierScope(rankTier);
         var minimumGamesRequired = await GetAdaptiveMinimumGamesRequiredAsync(patch, ct);
+        var regionFilter = AnalyticsRegionCatalog.NormalizeToFilter(region);
 
         // Step 1: Build base query for match participants in this patch
         var baseQuery = _context.MatchParticipants
@@ -207,6 +209,11 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         if (!isUnifiedRole)
         {
             baseQuery = baseQuery.Where(mp => mp.TeamPosition == normalizedRole);
+        }
+
+        if (!string.IsNullOrWhiteSpace(regionFilter))
+        {
+            baseQuery = baseQuery.Where(mp => mp.Summoner.PlatformRegion == regionFilter);
         }
 
         // Only apply rank join semantics when a tier filter is requested.
@@ -311,6 +318,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             ? await GetPreviousPatchTiersAsync(
                 normalizedRole,
                 rankTierScope.HasFilter ? rankTierScope.CacheToken : null,
+                regionFilter,
                 previousPatch,
                 ct)
             : new Dictionary<(int ChampionId, string Role), TierGrade>();
@@ -375,11 +383,12 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
     private async Task<Dictionary<(int ChampionId, string Role), TierGrade>> GetPreviousPatchTiersAsync(
         string role,
         string? rankTier,
+        string? region,
         string patch,
         CancellationToken ct)
     {
         // Simplified query - just need champion -> tier mapping
-        var previousList = await ComputeTierListAsync(role, rankTier, patch, ct);
+        var previousList = await ComputeTierListAsync(role, rankTier, region, patch, ct);
         return previousList
             .GroupBy(e => (e.ChampionId, Role: NormalizeRole(e.Role)))
             .ToDictionary(g => g.Key, g => g.First().Tier);
@@ -485,7 +494,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             .Where(mp => mp.TeamPosition == role);
 
         if (!string.IsNullOrWhiteSpace(region))
-            roleQuery = roleQuery.Where(mp => mp.Summoner.Region == region);
+            roleQuery = roleQuery.Where(mp => mp.Summoner.PlatformRegion == region);
 
         roleQuery = roleQuery.Where(mp => _context.Ranks.Any(r =>
             r.QueueType == "RANKED_SOLO_5x5" &&
@@ -602,11 +611,14 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         int championId,
         string role,
         string? rankTier,
+        string? region,
         string patch,
         CancellationToken ct)
     {
         var minimumGamesRequired = await GetAdaptiveMinimumGamesRequiredAsync(patch, ct);
         var rankTierScope = ParseRankTierScope(rankTier);
+        var normalizedRegion = AnalyticsRegionCatalog.NormalizeOrDefault(region);
+        var regionFilter = AnalyticsRegionCatalog.NormalizeToFilter(region);
 
         // Step 1: Get all match data for this champion/role/patch/tier with items and runes
         var baseQuery = _context.MatchParticipants
@@ -621,6 +633,11 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                           (mp.Match.QueueId == 0 &&
                            mp.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString()))
                       && mp.TeamPosition == role);
+
+        if (!string.IsNullOrWhiteSpace(regionFilter))
+        {
+            baseQuery = baseQuery.Where(mp => mp.Summoner.PlatformRegion == regionFilter);
+        }
 
         baseQuery = ApplyRankTierScopeToParticipants(baseQuery, rankTierScope, _context.Ranks.AsNoTracking());
 
@@ -702,7 +719,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
 
         var effectiveMinimumGames = ResolveEffectiveSampleSize(minimumGamesRequired, buildEligibleMatches.Count, floor: 3);
         if (buildEligibleMatches.Count < effectiveMinimumGames)
-            return new ChampionBuildsResponse(championId, role, rankTierScope.CacheToken, patch,
+            return new ChampionBuildsResponse(championId, role, rankTierScope.CacheToken, normalizedRegion, patch,
                 new List<int>(), new List<ChampionBuildDto>());
 
         // Step 2: Calculate global core items from completed build-impact items.
@@ -796,6 +813,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             championId,
             role,
             rankTierScope.CacheToken,
+            normalizedRegion,
             patch,
             globalCoreItems,
             builds
@@ -1186,11 +1204,14 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         int championId,
         string role,
         string? rankTier,
+        string? region,
         string patch,
         CancellationToken ct)
     {
         var rankTierScope = ParseRankTierScope(rankTier);
         const int minuteMark = 15;
+        var normalizedRegion = AnalyticsRegionCatalog.NormalizeOrDefault(region);
+        var regionFilter = AnalyticsRegionCatalog.NormalizeToFilter(region);
 
         var championQuery = _context.MatchParticipants
             .AsNoTracking()
@@ -1201,6 +1222,11 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                       && (mp.Match.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
                           (mp.Match.QueueId == 0 &&
                            mp.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString())));
+
+        if (!string.IsNullOrWhiteSpace(regionFilter))
+        {
+            championQuery = championQuery.Where(mp => mp.Summoner.PlatformRegion == regionFilter);
+        }
 
         // Apply rank tier filter if specified
         championQuery = ApplyRankTierScopeToParticipants(
@@ -1341,6 +1367,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             ChampionId = championId,
             Role = role,
             RankTier = rankTierScope.CacheToken,
+            Region = normalizedRegion,
             Patch = patch,
             Counters = counters,
             FavorableMatchups = favorable,

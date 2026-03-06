@@ -1,23 +1,43 @@
 import Link from "next/link";
 
-import { retryFailedJobAction } from "@/app/admin/actions";
+import { deleteJobAction, retryFailedJobAction } from "@/app/admin/actions";
 import { adminGet } from "@/lib/adminBackend";
-import type { AdminFailedJobDetail } from "@/lib/adminTypes";
+import type { AdminJobDetail } from "@/lib/adminTypes";
 
-export default async function AdminFailedJobDetailPage({
+function buildLogsHref(detail: AdminJobDetail) {
+  const params = new URLSearchParams({
+    service: "service",
+    limit: "200"
+  });
+
+  if (detail.exceptionType) params.set("q", detail.exceptionType);
+  if (detail.region) params.set("q", `${detail.exceptionType ?? ""} ${detail.region}`.trim());
+  const anchor = detail.failedAtUtc ?? detail.startedAtUtc ?? detail.stateChangedAtUtc;
+  if (anchor) {
+    const at = new Date(anchor);
+    const since = new Date(at.getTime() - 15 * 60 * 1000);
+    const until = new Date(at.getTime() + 15 * 60 * 1000);
+    params.set("sinceUtc", since.toISOString().slice(0, 16));
+    params.set("untilUtc", until.toISOString().slice(0, 16));
+  }
+
+  return `/admin/logs?${params.toString()}`;
+}
+
+export default async function AdminJobDetailPage({
   params
 }: {
   params: Promise<{ jobId: string }>;
 }) {
   const { jobId } = await params;
-  const detail = await adminGet<AdminFailedJobDetail>(`/api/admin/jobs/failed/${encodeURIComponent(jobId)}`);
+  const detail = await adminGet<AdminJobDetail>(`/api/admin/jobs/inspect/${encodeURIComponent(jobId)}`);
 
   return (
     <section className="grid gap-6">
-      <div className="rounded-2xl border border-border/70 bg-surface/40 p-4">
+      <div className="rounded-[1.75rem] border border-border/70 bg-surface/50 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">Failed Job Detail</h2>
+            <h2 className="text-lg font-semibold">Job Detail</h2>
             <p className="mt-1 font-mono text-xs text-fg/70">{detail.jobId}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -27,46 +47,84 @@ export default async function AdminFailedJobDetailPage({
             >
               Back to Jobs
             </Link>
-            <form action={retryFailedJobAction}>
+            <Link
+              href={buildLogsHref(detail)}
+              className="rounded-full border border-border/80 px-3 py-1 text-xs text-fg/85 transition hover:bg-white/10"
+            >
+              Nearby Logs
+            </Link>
+            {detail.currentState === "Failed" ? (
+              <form action={retryFailedJobAction}>
+                <input type="hidden" name="jobId" value={detail.jobId} />
+                <button
+                  type="submit"
+                  className="rounded-full border border-border/80 px-3 py-1 text-xs text-fg/85 transition hover:bg-white/10"
+                >
+                  Retry
+                </button>
+              </form>
+            ) : null}
+            <form action={deleteJobAction}>
               <input type="hidden" name="jobId" value={detail.jobId} />
+              <input type="hidden" name="expectedState" value={detail.currentState ?? ""} />
+              <input type="hidden" name="reason" value="Deleted from admin job detail" />
               <button
                 type="submit"
-                className="rounded-full border border-border/80 px-3 py-1 text-xs text-fg/85 transition hover:bg-white/10"
+                className="rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-100 transition hover:bg-rose-500/20"
               >
-                Retry
+                Delete
               </button>
             </form>
           </div>
         </div>
-        <dl className="mt-4 grid gap-2 text-sm md:grid-cols-2">
+
+        <dl className="mt-4 grid gap-3 text-sm md:grid-cols-3">
           <div>
-            <dt className="text-fg/65">Type</dt>
-            <dd>{detail.jobType ?? "-"}</dd>
-          </div>
-          <div>
-            <dt className="text-fg/65">Method</dt>
-            <dd>{detail.jobMethod ?? "-"}</dd>
-          </div>
-          <div>
-            <dt className="text-fg/65">Current State</dt>
+            <dt className="text-fg/60">State</dt>
             <dd>{detail.currentState ?? "-"}</dd>
           </div>
           <div>
-            <dt className="text-fg/65">Failed Attempts</dt>
+            <dt className="text-fg/60">Queue</dt>
+            <dd>{detail.queue}</dd>
+          </div>
+          <div>
+            <dt className="text-fg/60">Region</dt>
+            <dd>{detail.region ?? "-"}</dd>
+          </div>
+          <div>
+            <dt className="text-fg/60">Type</dt>
+            <dd>{detail.jobType ?? "-"}</dd>
+          </div>
+          <div>
+            <dt className="text-fg/60">Method</dt>
+            <dd>{detail.jobMethod ?? "-"}</dd>
+          </div>
+          <div>
+            <dt className="text-fg/60">Server</dt>
+            <dd>{detail.serverId ?? "-"}</dd>
+          </div>
+          <div>
+            <dt className="text-fg/60">Created</dt>
+            <dd>{detail.createdAtUtc ? new Date(detail.createdAtUtc).toLocaleString() : "-"}</dd>
+          </div>
+          <div>
+            <dt className="text-fg/60">State Changed</dt>
+            <dd>{detail.stateChangedAtUtc ? new Date(detail.stateChangedAtUtc).toLocaleString() : "-"}</dd>
+          </div>
+          <div>
+            <dt className="text-fg/60">Failed Attempts</dt>
             <dd>{detail.failedCount}</dd>
-          </div>
-          <div>
-            <dt className="text-fg/65">Failed At</dt>
-            <dd>{detail.failedAtUtc ? new Date(detail.failedAtUtc).toLocaleString() : "-"}</dd>
-          </div>
-          <div>
-            <dt className="text-fg/65">Reason</dt>
-            <dd>{detail.reason ?? "-"}</dd>
           </div>
         </dl>
       </div>
 
-      <div className="rounded-2xl border border-border/70 bg-surface/40 p-4">
+      {detail.currentState === "Processing" ? (
+        <div className="rounded-[1.75rem] border border-rose-400/20 bg-rose-500/10 p-5 text-sm text-rose-100/85">
+          Deleting a processing job changes Hangfire state to deleted, but already-started side effects may still complete before the worker observes cancellation.
+        </div>
+      ) : null}
+
+      <div className="rounded-[1.75rem] border border-border/70 bg-surface/50 p-5">
         <h3 className="text-base font-semibold">Exception</h3>
         <p className="mt-2 text-sm text-fg/75">{detail.exceptionType ?? "-"}</p>
         <p className="mt-1 text-sm">{detail.exceptionMessage ?? "-"}</p>
@@ -75,11 +133,11 @@ export default async function AdminFailedJobDetailPage({
         </pre>
       </div>
 
-      <div className="rounded-2xl border border-border/70 bg-surface/40 p-4">
+      <div className="rounded-[1.75rem] border border-border/70 bg-surface/50 p-5">
         <h3 className="text-base font-semibold">State Timeline</h3>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="text-fg/65">
+            <thead className="text-fg/60">
               <tr>
                 <th className="py-2">When</th>
                 <th className="py-2">State</th>
@@ -99,7 +157,7 @@ export default async function AdminFailedJobDetailPage({
         </div>
       </div>
 
-      <div className="rounded-2xl border border-border/70 bg-surface/40 p-4">
+      <div className="rounded-[1.75rem] border border-border/70 bg-surface/50 p-5">
         <h3 className="text-base font-semibold">Invocation Arguments</h3>
         <pre className="mt-3 overflow-x-auto whitespace-pre-wrap rounded-xl border border-border/60 bg-black/20 p-3 text-xs text-fg/85">
           {detail.arguments.length > 0 ? detail.arguments.join("\n") : "No arguments."}

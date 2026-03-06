@@ -10,6 +10,7 @@ import { WinRateText } from "@/components/WinRateText";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { fetchBackendJson } from "@/lib/backendCall";
+import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { formatGames, formatPercent } from "@/lib/format";
@@ -36,9 +37,12 @@ type TierListResponse = components["schemas"]["TierListResponse"];
 export default async function TierListPage({
   searchParams
 }: {
-  searchParams?: Promise<{ role?: string; rankTier?: string }>;
+  searchParams?: Promise<{ role?: string; rankTier?: string; region?: string }>;
 }) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const { activeRegion, activeRegionLabel, options: regionOptions } = await resolveAnalyticsRegion(
+    resolvedSearchParams?.region
+  );
   const qs = new URLSearchParams();
   const roleParam = (resolvedSearchParams?.role ?? "").toUpperCase();
   const rawRankParam = resolvedSearchParams?.rankTier ?? null;
@@ -48,6 +52,7 @@ export default async function TierListPage({
 
   if (roleParam && roleParam !== "ALL") qs.set("role", roleParam);
   if (effectiveRankParam) qs.set("rankTier", effectiveRankParam);
+  if (activeRegion !== "ALL") qs.set("region", activeRegion);
 
   const verbosity = getErrorVerbosity();
   const res = await fetchBackendJson<TierListResponse>(
@@ -116,6 +121,7 @@ export default async function TierListPage({
           <Badge className="border-primary/40 bg-primary/10 text-primary">
             Patch {tierlist.patch ?? "Unknown"}
           </Badge>
+          <Badge>{activeRegionLabel}</Badge>
           <Badge>{roleDisplayLabel(tierlist.role ?? "ALL")}</Badge>
           <Badge>{rankTierDisplayLabel(rankTierValue ?? "all")}</Badge>
           <Badge>{normalizedEntries.length} champions</Badge>
@@ -128,6 +134,8 @@ export default async function TierListPage({
         <FilterBar
           activeRole={roleParam || "ALL"}
           activeRank={effectiveRankParam ?? "all"}
+          regionOptions={regionOptions}
+          activeRegion={activeRegion}
           baseHref="/tierlist"
           patch={tierlist.patch}
         />
@@ -189,7 +197,7 @@ export default async function TierListPage({
                           </td>
                           <td className="px-3 py-2.5">
                             <Link
-                              href={`/champions/${e.championId}?role=${encodeURIComponent(e.role)}${rankTierValue ? `&rankTier=${encodeURIComponent(rankTierValue)}` : ""}`}
+                              href={`/champions/${e.championId}?role=${encodeURIComponent(e.role)}${rankTierValue ? `&rankTier=${encodeURIComponent(rankTierValue)}` : ""}${activeRegion !== "ALL" ? `&region=${encodeURIComponent(activeRegion)}` : ""}`}
                               className="flex items-center gap-2.5 hover:underline"
                             >
                               <Image

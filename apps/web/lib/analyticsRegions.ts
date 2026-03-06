@@ -1,0 +1,53 @@
+import "server-only";
+
+import { cookies } from "next/headers";
+
+import { fetchBackendJson } from "@/lib/backendCall";
+import { getBackendBaseUrl } from "@/lib/env";
+import {
+  ANALYTICS_REGION_COOKIE,
+  analyticsRegionLabel,
+  GLOBAL_ANALYTICS_REGION,
+  normalizeAnalyticsRegionCode,
+  type AnalyticsRegionOption
+} from "@/lib/analyticsRegionShared";
+
+const FALLBACK_OPTIONS: AnalyticsRegionOption[] = [
+  { code: GLOBAL_ANALYTICS_REGION, label: "Global", isDefault: true },
+  { code: "NA1", label: "North America" },
+  { code: "EUW1", label: "Europe West" },
+  { code: "EUN1", label: "Europe Nordic & East" },
+  { code: "KR", label: "Korea" }
+];
+
+export async function fetchAnalyticsRegions(): Promise<AnalyticsRegionOption[]> {
+  const result = await fetchBackendJson<AnalyticsRegionOption[]>(
+    `${getBackendBaseUrl()}/api/analytics/regions`,
+    { next: { revalidate: 60 * 60 } }
+  );
+
+  if (!result.ok || !result.body || result.body.length === 0) {
+    return FALLBACK_OPTIONS;
+  }
+
+  return result.body;
+}
+
+export async function resolveAnalyticsRegion(
+  regionParam: string | null | undefined
+): Promise<{
+  activeRegion: string;
+  activeRegionLabel: string;
+  options: AnalyticsRegionOption[];
+}> {
+  const options = await fetchAnalyticsRegions();
+  const cookieStore = await cookies();
+  const cookieRegion = cookieStore.get(ANALYTICS_REGION_COOKIE)?.value ?? null;
+  const activeRegion = normalizeAnalyticsRegionCode(regionParam ?? cookieRegion, options);
+
+  return {
+    activeRegion,
+    activeRegionLabel: analyticsRegionLabel(activeRegion, options),
+    options
+  };
+}

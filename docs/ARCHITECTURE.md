@@ -239,9 +239,22 @@ The web app never exposes backend tokens to browser JS:
 - Admin mutating operations are rate-limited (`admin-write`) and audited (`AdminAuditEvents`).
 - Auth endpoints have dedicated rate limits for login/register/refresh/logout protection.
 - Admin UX uses curated `/api/admin/*` endpoints and `/admin/*` pages, including:
-  - recurring/failed job controls
-  - failed-job detail with state history and exception details
-  - service operational log viewer (`webapi` and `service`)
+  - pipeline overview with worker/server snapshots and effective concurrency
+  - database + analysis metrics with per-region ingestion health
+  - queue explorer for `enqueued`, `processing`, `scheduled`, and `failed` jobs
+  - recurring producer pause/resume controls
+  - generic job detail with state history, inferred region, and delete/retry actions
+  - bulk backlog delete for `enqueued`/`scheduled`/`failed` states
+  - service operational log viewer (`webapi` and `service`) with source-availability metadata and rotated-log scanning
+- Admin queue observability is read from Hangfire monitoring APIs, not directly from worker-memory state, so observed backlog and active servers reflect storage-backed Hangfire truth.
+- Processing-job delete is exposed as an advanced operator control only; it transitions Hangfire job state to `Deleted`, but already-started side effects may still complete before the worker observes cancellation.
+
+## Analytics Region UX
+
+- Public analytics now treat region as explicit UI state instead of an implicit backend assumption.
+- `GET /api/analytics/regions` exposes the enabled ingestion regions plus `ALL`/global for the web app.
+- Tier list, builds, matchup, and winrate queries accept the same platform-region tokens and use `PlatformRegion` filtering so region-scoped pages match the ingestion model.
+- The web app persists the last selected analytics region in client storage/cookie and best-effort syncs it to `UserPreferences.PreferredRegion`.
 
 ### Operational Logging
 

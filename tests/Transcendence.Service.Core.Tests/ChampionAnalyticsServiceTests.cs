@@ -36,7 +36,7 @@ public class ChampionAnalyticsServiceTests
         });
         await harness.Db.SaveChangesAsync();
 
-        var result = await harness.Service.GetTierListAsync("ALL", null, CancellationToken.None);
+        var result = await harness.Service.GetTierListAsync("ALL", null, null, CancellationToken.None);
 
         result.Patch.Should().Be("Unknown");
         result.Entries.Should().BeEmpty();
@@ -101,6 +101,23 @@ public class ChampionAnalyticsServiceTests
         result.Sample.MinimumRecommendedSampleSize.Should().Be(100);
     }
 
+    [Fact]
+    public async Task GetTierListAsync_UnsupportedRegion_FallsBackToGlobal()
+    {
+        await using var harness = await Harness.CreateAsync();
+        harness.SetActivePatch("15.2", DateTime.UtcNow.AddHours(-6));
+        await harness.Db.SaveChangesAsync();
+
+        await harness.Service.GetTierListAsync("ALL", null, "OCE1", CancellationToken.None);
+
+        harness.ComputeService.Verify(x => x.ComputeTierListAsync(
+            "ALL",
+            null,
+            "ALL",
+            "15.2",
+            It.IsAny<CancellationToken>()));
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
@@ -143,8 +160,9 @@ public class ChampionAnalyticsServiceTests
 
             var compute = new Mock<IChampionAnalyticsComputeService>();
             compute
-                .Setup(x => x.ComputeTierListAsync(
+            .Setup(x => x.ComputeTierListAsync(
                     It.IsAny<string>(),
+                    It.IsAny<string?>(),
                     It.IsAny<string?>(),
                     It.IsAny<string>(),
                     It.IsAny<CancellationToken>()))
@@ -159,6 +177,15 @@ public class ChampionAnalyticsServiceTests
                     MinimumGamesRequired = 100,
                     EarlyPatchMinimumGamesRequired = 40,
                     EarlyPatchWindowHours = 72
+                }),
+                Options.Create(new MultiRegionIngestionOptions
+                {
+                    Regions =
+                    [
+                        new RegionConfig { Region = "NA1", Enabled = true },
+                        new RegionConfig { Region = "EUW1", Enabled = true },
+                        new RegionConfig { Region = "KR", Enabled = true }
+                    ]
                 }));
 
             return new Harness(connection, db, services, compute, service);

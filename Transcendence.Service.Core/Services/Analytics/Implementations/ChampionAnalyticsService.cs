@@ -32,17 +32,20 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
     private readonly HybridCache _cache;
     private readonly IChampionAnalyticsComputeService _computeService;
     private readonly ChampionAnalyticsComputeOptions _computeOptions;
+    private readonly MultiRegionIngestionOptions _multiRegionOptions;
 
     public ChampionAnalyticsService(
         TranscendenceContext context,
         HybridCache cache,
         IChampionAnalyticsComputeService computeService,
-        IOptions<ChampionAnalyticsComputeOptions> computeOptions)
+        IOptions<ChampionAnalyticsComputeOptions> computeOptions,
+        IOptions<MultiRegionIngestionOptions> multiRegionOptions)
     {
         _context = context;
         _cache = cache;
         _computeService = computeService;
         _computeOptions = computeOptions.Value;
+        _multiRegionOptions = multiRegionOptions.Value;
     }
 
     public async Task<ChampionWinRateSummary> GetWinRatesAsync(
@@ -66,7 +69,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         var normalizedFilter = filter with
         {
             RankTier = normalizedRankTier == "all" ? null : normalizedRankTier,
-            Region = string.IsNullOrWhiteSpace(filter.Region) ? null : filter.Region.Trim().ToUpperInvariant(),
+            Region = AnalyticsRegionCatalog.NormalizeToFilter(NormalizeAnalyticsRegion(filter.Region)),
             Role = string.IsNullOrWhiteSpace(filter.Role) ? null : filter.Role.Trim().ToUpperInvariant()
         };
 
@@ -94,15 +97,18 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
     public async Task<TierListResponse> GetTierListAsync(
         string? role,
         string? rankTier,
+        string? region,
         CancellationToken ct)
     {
         var patchContext = await GetActivePatchContextAsync(ct);
+        var normalizedRegion = NormalizeAnalyticsRegion(region);
         if (string.IsNullOrWhiteSpace(patchContext.Patch))
         {
             return new TierListResponse(
                 Patch: "Unknown",
                 Role: role,
                 RankTier: rankTier,
+                Region: normalizedRegion,
                 Entries: new List<TierListEntry>(),
                 Sample: BuildSampleMetadata(0, patchContext)
             );
@@ -115,13 +121,18 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         var tierFilter = normalizedTier == "all" ? null : normalizedTier;
 
         // Build cache key
-        var cacheKey = $"{TierListCacheKeyPrefix}{normalizedRole}:{normalizedTier}:{currentPatch}";
+        var cacheKey = $"{TierListCacheKeyPrefix}{normalizedRole}:{normalizedTier}:{normalizedRegion}:{currentPatch}";
         var tags = new[] { AnalyticsCacheTag, $"patch:{currentPatch}", "tierlist" };
 
         // Get or compute tier list with caching
         var entries = await _cache.GetOrCreateAsync(
             cacheKey,
-            async cancel => await _computeService.ComputeTierListAsync(normalizedRole, tierFilter, currentPatch, cancel),
+            async cancel => await _computeService.ComputeTierListAsync(
+                normalizedRole,
+                tierFilter,
+                normalizedRegion,
+                currentPatch,
+                cancel),
             AnalyticsCacheOptions,
             tags: tags,
             cancellationToken: ct
@@ -132,6 +143,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             Patch: currentPatch,
             Role: normalizedRole,
             RankTier: normalizedTier,
+            Region: normalizedRegion,
             Entries: entries,
             Sample: BuildSampleMetadata(sampleSize, patchContext)
         );
@@ -141,17 +153,20 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         int championId,
         string role,
         string? rankTier,
+        string? region,
         CancellationToken ct)
     {
         var patchContext = await GetActivePatchContextAsync(ct);
         var normalizedRole = role.ToUpperInvariant();
         var normalizedTier = NormalizeRankTier(rankTier);
+        var normalizedRegion = NormalizeAnalyticsRegion(region);
 
         if (string.IsNullOrWhiteSpace(patchContext.Patch))
             return new ChampionBuildsResponse(
                 championId,
                 normalizedRole,
                 normalizedTier,
+                normalizedRegion,
                 "Unknown",
                 [],
                 [],
@@ -159,13 +174,18 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 
         var patch = patchContext.Patch!;
 
-        var cacheKey = $"{BuildsCacheKeyPrefix}{championId}:{normalizedRole}:{normalizedTier}:{patch}";
+        var cacheKey = $"{BuildsCacheKeyPrefix}{championId}:{normalizedRole}:{normalizedTier}:{normalizedRegion}:{patch}";
         var tags = new[] { AnalyticsCacheTag, $"patch:{patch}", "builds" };
 
         var response = await _cache.GetOrCreateAsync(
             cacheKey,
             async cancel => await _computeService.ComputeBuildsAsync(
-                championId, normalizedRole, normalizedTier == "all" ? null : normalizedTier, patch, cancel),
+                championId,
+                normalizedRole,
+                normalizedTier == "all" ? null : normalizedTier,
+                normalizedRegion,
+                patch,
+                cancel),
             AnalyticsCacheOptions,
             tags,
             cancellationToken: ct);
@@ -220,11 +240,13 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         int championId,
         string role,
         string? rankTier,
+        string? region,
         CancellationToken ct)
     {
         var patchContext = await GetActivePatchContextAsync(ct);
         var normalizedRole = role.ToUpperInvariant();
         var normalizedTier = NormalizeRankTier(rankTier);
+        var normalizedRegion = NormalizeAnalyticsRegion(region);
 
         if (string.IsNullOrWhiteSpace(patchContext.Patch))
         {
@@ -233,6 +255,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
                 ChampionId = championId,
                 Role = normalizedRole,
                 RankTier = normalizedTier,
+                Region = normalizedRegion,
                 Patch = "Unknown",
                 Counters = [],
                 FavorableMatchups = [],
@@ -242,13 +265,18 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         }
 
         var patch = patchContext.Patch!;
-        var cacheKey = $"{MatchupsCacheKeyPrefix}{championId}:{normalizedRole}:{normalizedTier}:{patch}";
+        var cacheKey = $"{MatchupsCacheKeyPrefix}{championId}:{normalizedRole}:{normalizedTier}:{normalizedRegion}:{patch}";
         var tags = new[] { AnalyticsCacheTag, $"patch:{patch}", "matchups" };
 
         var response = await _cache.GetOrCreateAsync(
             cacheKey,
             async cancel => await _computeService.ComputeMatchupsAsync(
-                championId, normalizedRole, normalizedTier == "all" ? null : normalizedTier, patch, cancel),
+                championId,
+                normalizedRole,
+                normalizedTier == "all" ? null : normalizedTier,
+                normalizedRegion,
+                patch,
+                cancel),
             AnalyticsCacheOptions,
             tags,
             cancellationToken: ct);
@@ -301,6 +329,18 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             keyParts.Add($"role:{filter.Role}");
 
         return string.Join(":", keyParts);
+    }
+
+    private string NormalizeAnalyticsRegion(string? region)
+    {
+        var normalized = AnalyticsRegionCatalog.NormalizeOrDefault(region);
+        var allowed = AnalyticsRegionCatalog.BuildAvailableRegions(_multiRegionOptions)
+            .Select(x => x.Code)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return allowed.Contains(normalized)
+            ? normalized
+            : AnalyticsRegionCatalog.GlobalRegionCode;
     }
 
     private static string NormalizeRankTier(string? rankTier)

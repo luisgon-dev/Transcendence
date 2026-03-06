@@ -24,6 +24,7 @@ public interface IChampionAnalyticsService
     Task<TierListResponse> GetTierListAsync(
         string? role,
         string? rankTier,
+        string? region,
         CancellationToken ct);
 
     /// <summary>
@@ -34,6 +35,7 @@ public interface IChampionAnalyticsService
         int championId,
         string role,
         string? rankTier,
+        string? region,
         CancellationToken ct);
 
     Task<ChampionProBuildsResponse> GetProBuildsAsync(
@@ -52,6 +54,7 @@ public interface IChampionAnalyticsService
         int championId,
         string role,
         string? rankTier,
+        string? region,
         CancellationToken ct);
 
     /// <summary>

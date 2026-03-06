@@ -3,10 +3,12 @@ import Link from "next/link";
 import type { components } from "@transcendence/api-client/schema";
 
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
+import { AnalyticsRegionFilter } from "@/components/AnalyticsRegionFilter";
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { fetchBackendJson } from "@/lib/backendCall";
+import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { formatDateTimeMs, formatRelativeTime } from "@/lib/format";
@@ -72,16 +74,21 @@ function compareChampionQueryRelevance(
 export default async function ProBuildsIndexPage({
   searchParams
 }: {
-  searchParams?: Promise<{ q?: string }>;
+  searchParams?: Promise<{ q?: string; region?: string }>;
 }) {
   const verbosity = getErrorVerbosity();
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const { activeRegion, activeRegionLabel, options: regionOptions } = await resolveAnalyticsRegion(
+    resolvedSearchParams?.region
+  );
   const championQuery = normalizeChampionQuery(resolvedSearchParams?.q);
+  const tierListQuery = new URLSearchParams();
+  if (activeRegion !== "ALL") tierListQuery.set("region", activeRegion);
 
   const [{ version, champions }, itemStatic, tierListRes] = await Promise.all([
     fetchChampionMap(),
     fetchItemMap(),
-    fetchBackendJson<TierListResponse>(`${getBackendBaseUrl()}/api/analytics/tierlist`, {
+    fetchBackendJson<TierListResponse>(`${getBackendBaseUrl()}/api/analytics/tierlist?${tierListQuery.toString()}`, {
       next: { revalidate: 60 * 60 }
     })
   ]);
@@ -126,7 +133,7 @@ export default async function ProBuildsIndexPage({
     feedChampionIds.map(async (championId) => ({
       championId,
       response: await fetchBackendJson<ChampionProBuildsResponse>(
-        `${getBackendBaseUrl()}/api/analytics/champions/${championId}/pro-builds?region=ALL&role=ALL`,
+        `${getBackendBaseUrl()}/api/analytics/champions/${championId}/pro-builds?region=${encodeURIComponent(activeRegion)}&role=ALL`,
         { next: { revalidate: 60 * 30 } }
       )
     }))
@@ -195,8 +202,10 @@ export default async function ProBuildsIndexPage({
             {recentMatchesFeed.length} matches loaded
           </Badge>
           <Badge>{feedChampionIds.length} champions sampled</Badge>
+          <Badge>{activeRegionLabel}</Badge>
           {championQuery ? <Badge>Search: {championQuery}</Badge> : null}
         </div>
+        <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />
         <AnalyticsSampleBanner
           sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
         />
@@ -205,6 +214,7 @@ export default async function ProBuildsIndexPage({
       <Card className="p-5">
         <h2 className="font-[var(--font-sora)] text-lg font-semibold">Search Champions</h2>
         <form action="/pro-builds" method="get" className="mt-3 flex flex-wrap items-center gap-2">
+          {activeRegion !== "ALL" ? <input type="hidden" name="region" value={activeRegion} /> : null}
           <input
             type="text"
             name="q"
@@ -220,7 +230,7 @@ export default async function ProBuildsIndexPage({
           </button>
           {championQuery ? (
             <Link
-              href="/pro-builds"
+              href={`/pro-builds${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
               className="h-11 rounded-xl border border-border/70 bg-white/[0.03] px-4 text-sm leading-[44px] text-fg/85 transition hover:bg-white/[0.08]"
             >
               Clear
@@ -237,7 +247,7 @@ export default async function ProBuildsIndexPage({
             championsToShow.map((champion) => (
               <Link
                 key={champion.championId}
-                href={`/pro-builds/${champion.championId}`}
+                href={`/pro-builds/${champion.championId}${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
                 className="rounded-lg border border-border/60 bg-white/[0.03] p-3 transition hover:bg-white/[0.08]"
               >
                 <div className="flex items-center gap-2.5">

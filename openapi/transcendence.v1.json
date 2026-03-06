@@ -44,6 +44,44 @@
         ]
       }
     },
+    "/api/admin/metrics/analysis": {
+      "get": {
+        "tags": [
+          "AdminOperations"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAnalysisMetricsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAnalysisMetricsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAnalysisMetricsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          { }
+        ]
+      }
+    },
     "/api/admin/jobs/recurring": {
       "get": {
         "tags": [
@@ -142,6 +180,268 @@
         ]
       }
     },
+    "/api/admin/jobs/recurring/{id}/pause": {
+      "post": {
+        "tags": [
+          "AdminOperations"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          { }
+        ]
+      }
+    },
+    "/api/admin/jobs/recurring/{id}/resume": {
+      "post": {
+        "tags": [
+          "AdminOperations"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          { }
+        ]
+      }
+    },
+    "/api/admin/jobs/queues": {
+      "get": {
+        "tags": [
+          "AdminOperations"
+        ],
+        "parameters": [
+          {
+            "name": "scanLimit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminQueueSummaryResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminQueueSummaryResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminQueueSummaryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          { }
+        ]
+      }
+    },
+    "/api/admin/jobs/list": {
+      "get": {
+        "tags": [
+          "AdminOperations"
+        ],
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "failed"
+            }
+          },
+          {
+            "name": "queue",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "olderThanMinutes",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "count",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 25
+            }
+          },
+          {
+            "name": "scanLimit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminJobListResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminJobListResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminJobListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          { }
+        ]
+      }
+    },
     "/api/admin/jobs/failed": {
       "get": {
         "tags": [
@@ -209,6 +509,74 @@
         ]
       }
     },
+    "/api/admin/jobs/inspect/{jobId}": {
+      "get": {
+        "tags": [
+          "AdminOperations"
+        ],
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminJobDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminJobDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminJobDetailDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          { }
+        ]
+      }
+    },
     "/api/admin/jobs/failed/{jobId}": {
       "get": {
         "tags": [
@@ -230,17 +598,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/AdminFailedJobDetailDto"
+                  "$ref": "#/components/schemas/AdminJobDetailDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AdminFailedJobDetailDto"
+                  "$ref": "#/components/schemas/AdminJobDetailDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AdminFailedJobDetailDto"
+                  "$ref": "#/components/schemas/AdminJobDetailDto"
                 }
               }
             }
@@ -295,6 +663,170 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          { }
+        ]
+      }
+    },
+    "/api/admin/jobs/inspect/{jobId}/delete": {
+      "post": {
+        "tags": [
+          "AdminOperations"
+        ],
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminDeleteJobRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminDeleteJobRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminDeleteJobRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDeleteJobResultDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDeleteJobResultDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDeleteJobResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          { }
+        ]
+      }
+    },
+    "/api/admin/jobs/bulk-delete": {
+      "post": {
+        "tags": [
+          "AdminOperations"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminBulkDeleteJobsRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminBulkDeleteJobsRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminBulkDeleteJobsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminBulkDeleteJobsResultDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminBulkDeleteJobsResultDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminBulkDeleteJobsResultDto"
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad Request",
@@ -436,6 +968,22 @@
             }
           },
           {
+            "name": "sinceUtc",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "untilUtc",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "schema": {
@@ -451,26 +999,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/AdminServiceLogDto"
-                  }
+                  "$ref": "#/components/schemas/AdminServiceLogsResponse"
                 }
               },
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/AdminServiceLogDto"
-                  }
+                  "$ref": "#/components/schemas/AdminServiceLogsResponse"
                 }
               },
               "text/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/AdminServiceLogDto"
-                  }
+                  "$ref": "#/components/schemas/AdminServiceLogsResponse"
                 }
               }
             }
@@ -526,6 +1065,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -565,6 +1111,64 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TierListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analytics/regions": {
+      "get": {
+        "tags": [
+          "Analytics"
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AnalyticsRegionDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AnalyticsRegionDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AnalyticsRegionDto"
+                  }
                 }
               }
             }
@@ -1327,6 +1931,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1518,6 +2129,13 @@
           },
           {
             "name": "rankTier",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "region",
             "in": "query",
             "schema": {
               "type": "string"
@@ -3366,6 +3984,159 @@
         },
         "additionalProperties": false
       },
+      "AdminAnalysisMetricsResponse": {
+        "type": "object",
+        "properties": {
+          "generatedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "activePatchVersion": {
+            "type": "string",
+            "nullable": true
+          },
+          "activePatchReleasedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "summary": {
+            "$ref": "#/components/schemas/AdminAnalysisSummaryDto"
+          },
+          "regions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminAnalysisRegionMetricsDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdminAnalysisRegionMetricsDto": {
+        "type": "object",
+        "properties": {
+          "region": {
+            "type": "string",
+            "nullable": true
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "summoners": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "currentPatchTotalMatches": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "currentPatchSuccessfulMatches": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "currentPatchTemporaryFailures": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "currentPatchUnfetchedMatches": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "currentPatchPermanentlyUnfetchableMatches": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "currentPatchOutsideRetentionMatches": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "rankedCurrentPatchMatches": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "latestSuccessfulFetchUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "timelineSuccessfulMatches": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "timelinePendingMatches": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "timelineTemporaryFailures": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "timelinePermanentFailures": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "trackedProSummoners": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "enqueuedJobs": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "processingJobs": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "scheduledJobs": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "health": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdminAnalysisSummaryDto": {
+        "type": "object",
+        "properties": {
+          "summoners": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "matches": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "currentPatchSuccessfulMatches": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "currentPatchRankedMatches": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "timelineCoverageRatio": {
+            "type": "number",
+            "format": "double"
+          },
+          "activeRefreshLocks": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "expiredRefreshLocks": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "trackedProSummoners": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
       "AdminAuditEntryDto": {
         "type": "object",
         "properties": {
@@ -3412,10 +4183,157 @@
         },
         "additionalProperties": false
       },
-      "AdminFailedJobDetailDto": {
+      "AdminBulkDeleteJobsRequest": {
+        "type": "object",
+        "properties": {
+          "states": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "queues": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "jobType": {
+            "type": "string",
+            "nullable": true
+          },
+          "region": {
+            "type": "string",
+            "nullable": true
+          },
+          "query": {
+            "type": "string",
+            "nullable": true
+          },
+          "olderThanMinutes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "scanLimit": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "dryRun": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdminBulkDeleteJobsResultDto": {
+        "type": "object",
+        "properties": {
+          "dryRun": {
+            "type": "boolean"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "matched": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "deleted": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "failed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "sampleJobIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdminDeleteJobRequest": {
+        "type": "object",
+        "properties": {
+          "expectedState": {
+            "type": "string",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdminDeleteJobResultDto": {
         "type": "object",
         "properties": {
           "jobId": {
+            "type": "string",
+            "nullable": true
+          },
+          "deleted": {
+            "type": "boolean"
+          },
+          "expectedState": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdminFailedJobDto": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "exceptionType": {
+            "type": "string",
+            "nullable": true
+          },
+          "exceptionMessage": {
+            "type": "string",
+            "nullable": true
+          },
+          "failedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdminJobDetailDto": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "nullable": true
+          },
+          "currentState": {
+            "type": "string",
+            "nullable": true
+          },
+          "queue": {
             "type": "string",
             "nullable": true
           },
@@ -3434,12 +4352,46 @@
             },
             "nullable": true
           },
+          "region": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "enqueuedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "scheduledAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "startedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "stateChangedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
           "failedAtUtc": {
             "type": "string",
             "format": "date-time",
             "nullable": true
           },
-          "currentState": {
+          "deletedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "serverId": {
             "type": "string",
             "nullable": true
           },
@@ -3480,10 +4432,89 @@
         },
         "additionalProperties": false
       },
-      "AdminFailedJobDto": {
+      "AdminJobGroupDto": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "nullable": true
+          },
+          "queue": {
+            "type": "string",
+            "nullable": true
+          },
+          "jobType": {
+            "type": "string",
+            "nullable": true
+          },
+          "jobMethod": {
+            "type": "string",
+            "nullable": true
+          },
+          "region": {
+            "type": "string",
+            "nullable": true
+          },
+          "count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "oldestSeenAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "newestSeenAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdminJobListItemDto": {
         "type": "object",
         "properties": {
           "jobId": {
+            "type": "string",
+            "nullable": true
+          },
+          "state": {
+            "type": "string",
+            "nullable": true
+          },
+          "queue": {
+            "type": "string",
+            "nullable": true
+          },
+          "jobType": {
+            "type": "string",
+            "nullable": true
+          },
+          "jobMethod": {
+            "type": "string",
+            "nullable": true
+          },
+          "region": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "stateChangedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "startedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "serverId": {
             "type": "string",
             "nullable": true
           },
@@ -3499,9 +4530,47 @@
             "type": "string",
             "nullable": true
           },
-          "failedAt": {
+          "arguments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdminJobListResponse": {
+        "type": "object",
+        "properties": {
+          "generatedAtUtc": {
             "type": "string",
-            "format": "date-time",
+            "format": "date-time"
+          },
+          "from": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalMatched": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "scanLimit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminJobListItemDto"
+            },
             "nullable": true
           }
         },
@@ -3528,6 +4597,31 @@
               "type": "string"
             },
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdminLogSourceDto": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "nullable": true
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "filesScanned": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "latestTimestampUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "truncated": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -3566,6 +4660,21 @@
             "type": "integer",
             "format": "int64"
           },
+          "deleted": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "effectiveConcurrency": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "servers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminServerSnapshot"
+            },
+            "nullable": true
+          },
           "queues": {
             "type": "array",
             "items": {
@@ -3590,6 +4699,37 @@
           "fetched": {
             "type": "integer",
             "format": "int64",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdminQueueSummaryResponse": {
+        "type": "object",
+        "properties": {
+          "generatedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "scanLimit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "queues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminQueueSnapshot"
+            },
+            "nullable": true
+          },
+          "topGroups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminJobGroupDto"
+            },
             "nullable": true
           }
         },
@@ -3631,6 +4771,48 @@
           "error": {
             "type": "string",
             "nullable": true
+          },
+          "isPresentInStorage": {
+            "type": "boolean"
+          },
+          "isEnabledByConfiguration": {
+            "type": "boolean"
+          },
+          "isPaused": {
+            "type": "boolean"
+          },
+          "isPausable": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdminServerSnapshot": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "workersCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "startedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "heartbeatUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "queues": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -3665,6 +4847,39 @@
           "exception": {
             "type": "string",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdminServiceLogsResponse": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/AdminLogSourceDto"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminServiceLogDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AnalyticsRegionDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "nullable": true
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "isDefault": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -3915,6 +5130,10 @@
             "type": "string",
             "nullable": true
           },
+          "region": {
+            "type": "string",
+            "nullable": true
+          },
           "patch": {
             "type": "string",
             "nullable": true
@@ -3952,6 +5171,10 @@
             "nullable": true
           },
           "rankTier": {
+            "type": "string",
+            "nullable": true
+          },
+          "region": {
             "type": "string",
             "nullable": true
           },
@@ -5737,6 +6960,10 @@
             "nullable": true
           },
           "rankTier": {
+            "type": "string",
+            "nullable": true
+          },
+          "region": {
             "type": "string",
             "nullable": true
           },

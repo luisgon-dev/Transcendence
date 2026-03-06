@@ -10,6 +10,7 @@ import { WinRateText } from "@/components/WinRateText";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { fetchBackendJson } from "@/lib/backendCall";
+import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { pickMostSevereAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { formatGames } from "@/lib/format";
@@ -51,15 +52,18 @@ function buildSortHref({
   championId,
   role,
   rankTier,
+  region,
   sort
 }: {
   championId: number;
   role: string;
   rankTier: string | null;
+  region: string;
   sort: string;
 }) {
   const params = new URLSearchParams({ role, sort });
   if (rankTier) params.set("rankTier", rankTier);
+  if (region !== "ALL") params.set("region", region);
   return `/matchups/${championId}?${params.toString()}`;
 }
 
@@ -68,10 +72,13 @@ export default async function MatchupAnalysisPage({
   searchParams
 }: {
   params: Promise<{ championId: string }>;
-  searchParams?: Promise<{ role?: string; rankTier?: string; sort?: string }>;
+  searchParams?: Promise<{ role?: string; rankTier?: string; sort?: string; region?: string }>;
 }) {
   const resolvedParams = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const { activeRegion, activeRegionLabel, options: regionOptions } = await resolveAnalyticsRegion(
+    resolvedSearchParams?.region
+  );
   const championId = Number(resolvedParams.championId);
   if (!Number.isFinite(championId) || championId <= 0) {
     return <BackendErrorCard title="Matchup Analysis" message="Invalid champion id." />;
@@ -82,7 +89,10 @@ export default async function MatchupAnalysisPage({
   const sortKey = resolvedSearchParams?.sort === "games" ? "games" : "winRate";
 
   const verbosity = getErrorVerbosity();
-  const qsTier = normalizedRankTier ? `?rankTier=${encodeURIComponent(normalizedRankTier)}` : "";
+  const winrateQuery = new URLSearchParams();
+  if (normalizedRankTier) winrateQuery.set("rankTier", normalizedRankTier);
+  if (activeRegion !== "ALL") winrateQuery.set("region", activeRegion);
+  const qsTier = winrateQuery.toString() ? `?${winrateQuery.toString()}` : "";
   const [staticData, winRes] = await Promise.all([
     fetchChampionMap(),
     fetchBackendJson<ChampionWinRateSummary>(
@@ -94,9 +104,11 @@ export default async function MatchupAnalysisPage({
   const winrates = winRes.ok ? winRes.body! : null;
   const effectiveRole = explicitRole ?? mostPlayedRole(winrates) ?? "MIDDLE";
 
-  const qsRank = normalizedRankTier ? `&rankTier=${encodeURIComponent(normalizedRankTier)}` : "";
+  const matchupQuery = new URLSearchParams({ role: effectiveRole });
+  if (normalizedRankTier) matchupQuery.set("rankTier", normalizedRankTier);
+  if (activeRegion !== "ALL") matchupQuery.set("region", activeRegion);
   const matchupRes = await fetchBackendJson<ChampionMatchupsResponse>(
-    `${getBackendBaseUrl()}/api/analytics/champions/${championId}/matchups?role=${encodeURIComponent(effectiveRole)}${qsRank}`,
+    `${getBackendBaseUrl()}/api/analytics/champions/${championId}/matchups?${matchupQuery.toString()}`,
     { next: { revalidate: 60 * 60 } }
   );
 
@@ -175,6 +187,7 @@ export default async function MatchupAnalysisPage({
           <Badge className="border-primary/40 bg-primary/10 text-primary">
             Patch {matchups?.patch ?? winrates?.patch ?? "Unknown"}
           </Badge>
+          <Badge>{activeRegionLabel}</Badge>
           <Badge>{roleDisplayLabel(effectiveRole)}</Badge>
           <Badge>{rankTierDisplayLabel(normalizedRankTier ?? "all")}</Badge>
           <Badge>{allMatchups.length} matchups</Badge>
@@ -184,6 +197,8 @@ export default async function MatchupAnalysisPage({
           roles={ROLES}
           activeRole={effectiveRole}
           activeRank={normalizedRankTier ?? "all"}
+          regionOptions={regionOptions}
+          activeRegion={activeRegion}
           baseHref={`/matchups/${championId}`}
           patch={matchups?.patch ?? winrates?.patch}
         />
@@ -203,7 +218,7 @@ export default async function MatchupAnalysisPage({
                 const opponent = champions[String(opponentId)];
                 return (
                   <li key={`${opponentId}-${idx}`} className="flex items-center justify-between rounded-lg border border-border/50 bg-white/[0.03] px-3 py-2">
-                    <Link href={`/champions/${opponentId}`} className="min-w-0 hover:underline">
+                    <Link href={`/champions/${opponentId}${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`} className="min-w-0 hover:underline">
                       <ChampionPortrait
                         championSlug={opponent?.id ?? "Unknown"}
                         championName={opponent?.name ?? `Champion ${opponentId}`}
@@ -233,7 +248,7 @@ export default async function MatchupAnalysisPage({
                 const opponent = champions[String(opponentId)];
                 return (
                   <li key={`${opponentId}-${idx}`} className="flex items-center justify-between rounded-lg border border-border/50 bg-white/[0.03] px-3 py-2">
-                    <Link href={`/champions/${opponentId}`} className="min-w-0 hover:underline">
+                    <Link href={`/champions/${opponentId}${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`} className="min-w-0 hover:underline">
                       <ChampionPortrait
                         championSlug={opponent?.id ?? "Unknown"}
                         championName={opponent?.name ?? `Champion ${opponentId}`}
@@ -261,6 +276,7 @@ export default async function MatchupAnalysisPage({
                 championId,
                 role: effectiveRole,
                 rankTier: normalizedRankTier,
+                region: activeRegion,
                 sort: "winRate"
               })}
               className={`rounded-full border px-2.5 py-1 ${
@@ -276,6 +292,7 @@ export default async function MatchupAnalysisPage({
                 championId,
                 role: effectiveRole,
                 rankTier: normalizedRankTier,
+                region: activeRegion,
                 sort: "games"
               })}
               className={`rounded-full border px-2.5 py-1 ${
@@ -314,7 +331,7 @@ export default async function MatchupAnalysisPage({
                   return (
                     <tr key={`${opponentId}-${idx}`} className="border-b border-border/20">
                       <td className="py-2.5 pr-4">
-                        <Link href={`/champions/${opponentId}`} className="hover:underline">
+                        <Link href={`/champions/${opponentId}${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`} className="hover:underline">
                           <ChampionPortrait
                             championSlug={opponent?.id ?? "Unknown"}
                             championName={opponent?.name ?? `Champion ${opponentId}`}

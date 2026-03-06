@@ -20,11 +20,13 @@ type MatchupEntry = {
 export function MatchupsExplorerClient({
   entries,
   champions,
-  version
+  version,
+  activeRegion = "ALL"
 }: {
   entries: MatchupEntry[];
   champions: ChampionMap;
   version: string;
+  activeRegion?: string;
 }) {
   const [query, setQuery] = useState("");
   const [role, setRole] = useState("ALL");
@@ -83,7 +85,7 @@ export function MatchupsExplorerClient({
           return (
             <motion.div key={`${entry.championId}-${entry.role}`} whileHover={{ y: -2 }}>
               <Link
-                href={`/matchups/${entry.championId}?role=${encodeURIComponent(entry.role)}`}
+                href={`/matchups/${entry.championId}?role=${encodeURIComponent(entry.role)}${activeRegion !== "ALL" ? `&region=${encodeURIComponent(activeRegion)}` : ""}`}
                 className="block rounded-2xl border border-border/60 bg-surface/65 p-3 transition hover:border-border-strong hover:bg-surface/80"
               >
                 <div className="flex items-center gap-3">

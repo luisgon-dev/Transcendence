@@ -22,10 +22,12 @@ export type ChampionGridEntry = {
 
 export function ChampionsGridClient({
   champions,
-  version
+  version,
+  activeRegion = "ALL"
 }: {
   champions: ChampionGridEntry[];
   version: string;
+  activeRegion?: string;
 }) {
   const [query, setQuery] = useState("");
 
@@ -47,7 +49,7 @@ export function ChampionsGridClient({
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
         {filtered.map((c) => (
-          <Link key={c.championId} href={`/champions/${c.championId}`}>
+          <Link key={c.championId} href={`/champions/${c.championId}${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}>
             <Card className="group h-full p-3 transition hover:bg-white/10">
               <div className="flex items-center gap-3">
                 <Image

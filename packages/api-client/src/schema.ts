@@ -55,6 +55,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/metrics/analysis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AdminAnalysisMetricsResponse"];
+                        "application/json": components["schemas"]["AdminAnalysisMetricsResponse"];
+                        "text/json": components["schemas"]["AdminAnalysisMetricsResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/jobs/recurring": {
         parameters: {
             query?: never;
@@ -166,6 +217,240 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/jobs/recurring/{id}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/jobs/recurring/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/jobs/queues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    scanLimit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AdminQueueSummaryResponse"];
+                        "application/json": components["schemas"]["AdminQueueSummaryResponse"];
+                        "text/json": components["schemas"]["AdminQueueSummaryResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/jobs/list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    state?: string;
+                    queue?: string;
+                    type?: string;
+                    region?: string;
+                    q?: string;
+                    olderThanMinutes?: number;
+                    from?: number;
+                    count?: number;
+                    scanLimit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AdminJobListResponse"];
+                        "application/json": components["schemas"]["AdminJobListResponse"];
+                        "text/json": components["schemas"]["AdminJobListResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/jobs/failed": {
         parameters: {
             query?: never;
@@ -220,6 +505,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/jobs/inspect/{jobId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    jobId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AdminJobDetailDto"];
+                        "application/json": components["schemas"]["AdminJobDetailDto"];
+                        "text/json": components["schemas"]["AdminJobDetailDto"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/jobs/failed/{jobId}": {
         parameters: {
             query?: never;
@@ -244,9 +593,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["AdminFailedJobDetailDto"];
-                        "application/json": components["schemas"]["AdminFailedJobDetailDto"];
-                        "text/json": components["schemas"]["AdminFailedJobDetailDto"];
+                        "text/plain": components["schemas"]["AdminJobDetailDto"];
+                        "application/json": components["schemas"]["AdminJobDetailDto"];
+                        "text/json": components["schemas"]["AdminJobDetailDto"];
                     };
                 };
                 /** @description Unauthorized */
@@ -310,6 +659,144 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/jobs/inspect/{jobId}/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    jobId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AdminDeleteJobRequest"];
+                    "text/json": components["schemas"]["AdminDeleteJobRequest"];
+                    "application/*+json": components["schemas"]["AdminDeleteJobRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AdminDeleteJobResultDto"];
+                        "application/json": components["schemas"]["AdminDeleteJobResultDto"];
+                        "text/json": components["schemas"]["AdminDeleteJobResultDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/jobs/bulk-delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AdminBulkDeleteJobsRequest"];
+                    "text/json": components["schemas"]["AdminBulkDeleteJobsRequest"];
+                    "application/*+json": components["schemas"]["AdminBulkDeleteJobsRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AdminBulkDeleteJobsResultDto"];
+                        "application/json": components["schemas"]["AdminBulkDeleteJobsResultDto"];
+                        "text/json": components["schemas"]["AdminBulkDeleteJobsResultDto"];
+                    };
                 };
                 /** @description Bad Request */
                 400: {
@@ -457,6 +944,8 @@ export interface paths {
                     service?: string;
                     level?: string;
                     q?: string;
+                    sinceUtc?: string;
+                    untilUtc?: string;
                     limit?: number;
                 };
                 header?: never;
@@ -471,9 +960,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["AdminServiceLogDto"][];
-                        "application/json": components["schemas"]["AdminServiceLogDto"][];
-                        "text/json": components["schemas"]["AdminServiceLogDto"][];
+                        "text/plain": components["schemas"]["AdminServiceLogsResponse"];
+                        "application/json": components["schemas"]["AdminServiceLogsResponse"];
+                        "text/json": components["schemas"]["AdminServiceLogsResponse"];
                     };
                 };
                 /** @description Bad Request */
@@ -523,6 +1012,7 @@ export interface paths {
                 query?: {
                     role?: string;
                     rankTier?: string;
+                    region?: string;
                 };
                 header?: never;
                 path?: never;
@@ -539,6 +1029,54 @@ export interface paths {
                         "text/plain": components["schemas"]["TierListResponse"];
                         "application/json": components["schemas"]["TierListResponse"];
                         "text/json": components["schemas"]["TierListResponse"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/analytics/regions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AnalyticsRegionDto"][];
+                        "application/json": components["schemas"]["AnalyticsRegionDto"][];
+                        "text/json": components["schemas"]["AnalyticsRegionDto"][];
                     };
                 };
                 /** @description Too Many Requests */
@@ -1230,6 +1768,7 @@ export interface paths {
                 query?: {
                     role?: string;
                     rankTier?: string;
+                    region?: string;
                 };
                 header?: never;
                 path: {
@@ -1359,6 +1898,7 @@ export interface paths {
                 query?: {
                     role?: string;
                     rankTier?: string;
+                    region?: string;
                 };
                 header?: never;
                 path: {
@@ -2768,6 +3308,72 @@ export interface components {
             gameName?: string | null;
             tagLine?: string | null;
         };
+        AdminAnalysisMetricsResponse: {
+            /** Format: date-time */
+            generatedAtUtc?: string;
+            activePatchVersion?: string | null;
+            /** Format: date-time */
+            activePatchReleasedAtUtc?: string | null;
+            summary?: components["schemas"]["AdminAnalysisSummaryDto"];
+            regions?: components["schemas"]["AdminAnalysisRegionMetricsDto"][] | null;
+        };
+        AdminAnalysisRegionMetricsDto: {
+            region?: string | null;
+            enabled?: boolean;
+            /** Format: int64 */
+            summoners?: number;
+            /** Format: int64 */
+            currentPatchTotalMatches?: number;
+            /** Format: int64 */
+            currentPatchSuccessfulMatches?: number;
+            /** Format: int64 */
+            currentPatchTemporaryFailures?: number;
+            /** Format: int64 */
+            currentPatchUnfetchedMatches?: number;
+            /** Format: int64 */
+            currentPatchPermanentlyUnfetchableMatches?: number;
+            /** Format: int64 */
+            currentPatchOutsideRetentionMatches?: number;
+            /** Format: int64 */
+            rankedCurrentPatchMatches?: number;
+            /** Format: date-time */
+            latestSuccessfulFetchUtc?: string | null;
+            /** Format: int64 */
+            timelineSuccessfulMatches?: number;
+            /** Format: int64 */
+            timelinePendingMatches?: number;
+            /** Format: int64 */
+            timelineTemporaryFailures?: number;
+            /** Format: int64 */
+            timelinePermanentFailures?: number;
+            /** Format: int64 */
+            trackedProSummoners?: number;
+            /** Format: int64 */
+            enqueuedJobs?: number;
+            /** Format: int64 */
+            processingJobs?: number;
+            /** Format: int64 */
+            scheduledJobs?: number;
+            health?: string | null;
+        };
+        AdminAnalysisSummaryDto: {
+            /** Format: int64 */
+            summoners?: number;
+            /** Format: int64 */
+            matches?: number;
+            /** Format: int64 */
+            currentPatchSuccessfulMatches?: number;
+            /** Format: int64 */
+            currentPatchRankedMatches?: number;
+            /** Format: double */
+            timelineCoverageRatio?: number;
+            /** Format: int32 */
+            activeRefreshLocks?: number;
+            /** Format: int32 */
+            expiredRefreshLocks?: number;
+            /** Format: int64 */
+            trackedProSummoners?: number;
+        };
         AdminAuditEntryDto: {
             /** Format: uuid */
             id?: string;
@@ -2783,14 +3389,71 @@ export interface components {
             /** Format: date-time */
             createdAtUtc?: string;
         };
-        AdminFailedJobDetailDto: {
+        AdminBulkDeleteJobsRequest: {
+            states?: string[] | null;
+            queues?: string[] | null;
+            jobType?: string | null;
+            region?: string | null;
+            query?: string | null;
+            /** Format: int32 */
+            olderThanMinutes?: number | null;
+            /** Format: int32 */
+            limit?: number | null;
+            /** Format: int32 */
+            scanLimit?: number | null;
+            dryRun?: boolean;
+        };
+        AdminBulkDeleteJobsResultDto: {
+            dryRun?: boolean;
+            truncated?: boolean;
+            /** Format: int32 */
+            matched?: number;
+            /** Format: int32 */
+            deleted?: number;
+            /** Format: int32 */
+            failed?: number;
+            sampleJobIds?: string[] | null;
+        };
+        AdminDeleteJobRequest: {
+            expectedState?: string | null;
+            reason?: string | null;
+        };
+        AdminDeleteJobResultDto: {
             jobId?: string | null;
+            deleted?: boolean;
+            expectedState?: string | null;
+        };
+        AdminFailedJobDto: {
+            jobId?: string | null;
+            reason?: string | null;
+            exceptionType?: string | null;
+            exceptionMessage?: string | null;
+            /** Format: date-time */
+            failedAt?: string | null;
+        };
+        AdminJobDetailDto: {
+            jobId?: string | null;
+            currentState?: string | null;
+            queue?: string | null;
             jobType?: string | null;
             jobMethod?: string | null;
             arguments?: string[] | null;
+            region?: string | null;
+            /** Format: date-time */
+            createdAtUtc?: string | null;
+            /** Format: date-time */
+            enqueuedAtUtc?: string | null;
+            /** Format: date-time */
+            scheduledAtUtc?: string | null;
+            /** Format: date-time */
+            startedAtUtc?: string | null;
+            /** Format: date-time */
+            stateChangedAtUtc?: string | null;
             /** Format: date-time */
             failedAtUtc?: string | null;
-            currentState?: string | null;
+            /** Format: date-time */
+            deletedAtUtc?: string | null;
+            serverId?: string | null;
             reason?: string | null;
             exceptionType?: string | null;
             exceptionMessage?: string | null;
@@ -2802,13 +3465,51 @@ export interface components {
                 [key: string]: string;
             } | null;
         };
-        AdminFailedJobDto: {
+        AdminJobGroupDto: {
+            state?: string | null;
+            queue?: string | null;
+            jobType?: string | null;
+            jobMethod?: string | null;
+            region?: string | null;
+            /** Format: int64 */
+            count?: number;
+            /** Format: date-time */
+            oldestSeenAtUtc?: string | null;
+            /** Format: date-time */
+            newestSeenAtUtc?: string | null;
+        };
+        AdminJobListItemDto: {
             jobId?: string | null;
+            state?: string | null;
+            queue?: string | null;
+            jobType?: string | null;
+            jobMethod?: string | null;
+            region?: string | null;
+            /** Format: date-time */
+            createdAtUtc?: string | null;
+            /** Format: date-time */
+            stateChangedAtUtc?: string | null;
+            /** Format: date-time */
+            startedAtUtc?: string | null;
+            serverId?: string | null;
             reason?: string | null;
             exceptionType?: string | null;
             exceptionMessage?: string | null;
+            arguments?: string[] | null;
+        };
+        AdminJobListResponse: {
             /** Format: date-time */
-            failedAt?: string | null;
+            generatedAtUtc?: string;
+            /** Format: int32 */
+            from?: number;
+            /** Format: int32 */
+            count?: number;
+            /** Format: int32 */
+            totalMatched?: number;
+            truncated?: boolean;
+            /** Format: int32 */
+            scanLimit?: number;
+            items?: components["schemas"]["AdminJobListItemDto"][] | null;
         };
         AdminJobStateTransitionDto: {
             stateName?: string | null;
@@ -2818,6 +3519,15 @@ export interface components {
             data?: {
                 [key: string]: string;
             } | null;
+        };
+        AdminLogSourceDto: {
+            service?: string | null;
+            available?: boolean;
+            /** Format: int32 */
+            filesScanned?: number;
+            /** Format: date-time */
+            latestTimestampUtc?: string | null;
+            truncated?: boolean;
         };
         AdminOverviewResponse: {
             /** Format: date-time */
@@ -2835,6 +3545,11 @@ export interface components {
             succeeded?: number;
             /** Format: int64 */
             recurring?: number;
+            /** Format: int64 */
+            deleted?: number;
+            /** Format: int32 */
+            effectiveConcurrency?: number;
+            servers?: components["schemas"]["AdminServerSnapshot"][] | null;
             queues?: components["schemas"]["AdminQueueSnapshot"][] | null;
         };
         AdminQueueSnapshot: {
@@ -2843,6 +3558,15 @@ export interface components {
             length?: number;
             /** Format: int64 */
             fetched?: number | null;
+        };
+        AdminQueueSummaryResponse: {
+            /** Format: date-time */
+            generatedAtUtc?: string;
+            truncated?: boolean;
+            /** Format: int32 */
+            scanLimit?: number;
+            queues?: components["schemas"]["AdminQueueSnapshot"][] | null;
+            topGroups?: components["schemas"]["AdminJobGroupDto"][] | null;
         };
         AdminRecurringJobDto: {
             id?: string | null;
@@ -2855,6 +3579,20 @@ export interface components {
             lastJobId?: string | null;
             lastJobState?: string | null;
             error?: string | null;
+            isPresentInStorage?: boolean;
+            isEnabledByConfiguration?: boolean;
+            isPaused?: boolean;
+            isPausable?: boolean;
+        };
+        AdminServerSnapshot: {
+            name?: string | null;
+            /** Format: int32 */
+            workersCount?: number;
+            /** Format: date-time */
+            startedAtUtc?: string;
+            /** Format: date-time */
+            heartbeatUtc?: string | null;
+            queues?: string[] | null;
         };
         AdminServiceLogDto: {
             /** Format: date-time */
@@ -2866,6 +3604,15 @@ export interface components {
             eventId?: number;
             message?: string | null;
             exception?: string | null;
+        };
+        AdminServiceLogsResponse: {
+            source?: components["schemas"]["AdminLogSourceDto"];
+            items?: components["schemas"]["AdminServiceLogDto"][] | null;
+        };
+        AnalyticsRegionDto: {
+            code?: string | null;
+            label?: string | null;
+            isDefault?: boolean;
         };
         AnalyticsSampleMetadata: {
             sampleStatus?: components["schemas"]["AnalyticsSampleStatus"];
@@ -2945,6 +3692,7 @@ export interface components {
             championId?: number;
             role?: string | null;
             rankTier?: string | null;
+            region?: string | null;
             patch?: string | null;
             globalCoreItems?: number[] | null;
             builds?: components["schemas"]["ChampionBuildDto"][] | null;
@@ -2955,6 +3703,7 @@ export interface components {
             championId?: number;
             role?: string | null;
             rankTier?: string | null;
+            region?: string | null;
             patch?: string | null;
             counters?: components["schemas"]["MatchupEntryDto"][] | null;
             favorableMatchups?: components["schemas"]["MatchupEntryDto"][] | null;
@@ -3588,6 +4337,7 @@ export interface components {
             patch?: string | null;
             role?: string | null;
             rankTier?: string | null;
+            region?: string | null;
             entries?: components["schemas"]["TierListEntry"][] | null;
             sample?: components["schemas"]["AnalyticsSampleMetadata"];
         };

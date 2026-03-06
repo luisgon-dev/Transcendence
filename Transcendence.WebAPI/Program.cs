@@ -17,6 +17,7 @@ using Transcendence.Service.Core.Services.Auth.Models;
 using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Extensions;
+using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.RiotApi.Implementations;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
 using Transcendence.WebAPI.Errors;
@@ -159,7 +160,13 @@ builder.Services.AddHybridCache(options =>
 builder.Services.AddTranscendenceCore();
 builder.Services.AddProjectSyndraRepositories();
 builder.Services.Configure<ChampionAnalyticsComputeOptions>(builder.Configuration.GetSection("Analytics:Compute"));
+builder.Services.Configure<ChampionAnalyticsIngestionJobOptions>(
+    builder.Configuration.GetSection("Jobs:ChampionAnalyticsIngestion"));
+builder.Services.Configure<MultiRegionIngestionOptions>(builder.Configuration.GetSection("Jobs:MultiRegionIngestion"));
+builder.Services.Configure<WorkerJobScheduleOptions>(builder.Configuration.GetSection("Jobs:Schedule"));
+builder.Services.Configure<WorkerSchedulingProfileOptions>(builder.Configuration.GetSection("Jobs:SchedulingProfiles"));
 builder.Services.Configure<AdminBootstrapOptions>(builder.Configuration.GetSection("Auth:AdminBootstrap"));
+builder.Services.AddSingleton<IWorkerRecurringJobPolicy, WorkerRecurringJobPolicy>();
 
 var riotApiKey = builder.Configuration.GetConnectionString("RiotApi")
                  ?? builder.Configuration["RiotApi:ApiKey"];

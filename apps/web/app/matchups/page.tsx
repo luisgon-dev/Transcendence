@@ -1,11 +1,13 @@
 import type { components } from "@transcendence/api-client/schema";
 
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
+import { AnalyticsRegionFilter } from "@/components/AnalyticsRegionFilter";
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { MatchupsExplorerClient } from "@/components/MatchupsExplorerClient";
 import { fetchBackendJson } from "@/lib/backendCall";
+import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { fetchChampionMap } from "@/lib/staticData";
@@ -13,11 +15,21 @@ import { normalizeTierListEntries } from "@/lib/tierlist";
 
 type TierListResponse = components["schemas"]["TierListResponse"];
 
-export default async function MatchupsIndexPage() {
+export default async function MatchupsIndexPage({
+  searchParams
+}: {
+  searchParams?: Promise<{ region?: string }>;
+}) {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const { activeRegion, activeRegionLabel, options: regionOptions } = await resolveAnalyticsRegion(
+    resolvedSearchParams?.region
+  );
+  const tierListQuery = new URLSearchParams();
+  if (activeRegion !== "ALL") tierListQuery.set("region", activeRegion);
   const verbosity = getErrorVerbosity();
   const [{ version, champions }, tierListRes] = await Promise.all([
     fetchChampionMap(),
-    fetchBackendJson<TierListResponse>(`${getBackendBaseUrl()}/api/analytics/tierlist`, {
+    fetchBackendJson<TierListResponse>(`${getBackendBaseUrl()}/api/analytics/tierlist?${tierListQuery.toString()}`, {
       next: { revalidate: 60 * 60 }
     })
   ]);
@@ -73,13 +85,22 @@ export default async function MatchupsIndexPage() {
         <p className="text-sm text-fg/75">
           Search champions, filter by role, and jump directly to detailed counter pages.
         </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge>{activeRegionLabel}</Badge>
+          <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />
+        </div>
         <AnalyticsSampleBanner
           sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
         />
       </header>
 
       <Card className="p-4 md:p-5">
-        <MatchupsExplorerClient entries={popular} champions={champions} version={version} />
+        <MatchupsExplorerClient
+          entries={popular}
+          champions={champions}
+          version={version}
+          activeRegion={activeRegion}
+        />
       </Card>
     </div>
   );

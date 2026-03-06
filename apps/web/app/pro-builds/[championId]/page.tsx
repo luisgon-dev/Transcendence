@@ -4,12 +4,14 @@ import type { components } from "@transcendence/api-client/schema";
 
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
+import { AnalyticsRegionFilter } from "@/components/AnalyticsRegionFilter";
 import { RoleFilterTabs } from "@/components/RoleFilterTabs";
 import { RuneSetupDisplay } from "@/components/RuneSetupDisplay";
 import { WinRateText } from "@/components/WinRateText";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { fetchBackendJson, type BackendJsonResult } from "@/lib/backendCall";
+import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { pickMostSevereAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { formatDateTimeMs, formatRelativeTime } from "@/lib/format";
@@ -17,9 +19,7 @@ import {
   buildProBuildFilterParams,
   buildProBuildPageHref,
   normalizeProBuildPatch,
-  normalizeProBuildRegion,
   normalizeProBuildRole,
-  PRO_BUILD_REGIONS,
   PRO_BUILD_ROLES
 } from "@/lib/proBuilds";
 import { roleDisplayLabel } from "@/lib/roles";
@@ -33,18 +33,6 @@ import {
 
 type ChampionWinRateSummary = components["schemas"]["ChampionWinRateSummary"];
 type ChampionProBuildsResponse = components["schemas"]["ChampionProBuildsResponse"];
-
-function regionDisplayLabel(region: string | null | undefined) {
-  const labels: Record<string, string> = {
-    ALL: "All Regions",
-    KR: "Korea",
-    EUW: "EU West",
-    NA: "North America",
-    CN: "China"
-  };
-  const normalized = (region ?? "ALL").toUpperCase();
-  return labels[normalized] ?? normalized;
-}
 
 function proFeedErrorMessage(result: BackendJsonResult<ChampionProBuildsResponse>) {
   if (result.errorKind === "timeout") return "Timed out reaching the pro feed endpoint.";
@@ -98,13 +86,16 @@ export default async function ProBuildsChampionPage({
 }) {
   const resolvedParams = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const { activeRegion, activeRegionLabel, options: regionOptions } = await resolveAnalyticsRegion(
+    resolvedSearchParams?.region
+  );
   const championId = Number(resolvedParams.championId);
   if (!Number.isFinite(championId) || championId <= 0) {
     return <BackendErrorCard title="Pro Builds" message="Invalid champion id." />;
   }
 
   const roleFilter = normalizeProBuildRole(resolvedSearchParams?.role);
-  const regionFilter = normalizeProBuildRegion(resolvedSearchParams?.region);
+  const regionFilter = activeRegion;
   const patchFilter = normalizeProBuildPatch(resolvedSearchParams?.patch);
 
   const proFilters = buildProBuildFilterParams({
@@ -177,7 +168,6 @@ export default async function ProBuildsChampionPage({
   const effectivePatch =
     proBuilds?.patch ?? winrates?.patch ?? patchFilter ?? "Unknown";
   const effectiveRole = proBuilds?.role ?? roleFilter;
-  const effectiveRegion = proBuilds?.region ?? regionFilter;
   const sampleNotice = pickMostSevereAnalyticsSample(
     (proBuilds as { sample?: unknown } | null)?.sample as AnalyticsSampleLike,
     (winrates as { sample?: unknown } | null)?.sample as AnalyticsSampleLike
@@ -206,7 +196,7 @@ export default async function ProBuildsChampionPage({
             Patch {effectivePatch}
           </Badge>
           <Badge>{roleDisplayLabel(effectiveRole)}</Badge>
-          <Badge>{regionDisplayLabel(effectiveRegion)}</Badge>
+          <Badge>{activeRegionLabel}</Badge>
           <Badge>{recentMatches.length} matches</Badge>
         </div>
         <AnalyticsSampleBanner sample={sampleNotice} />
@@ -221,28 +211,7 @@ export default async function ProBuildsChampionPage({
             baseHref={`/pro-builds/${championId}`}
             extraParams={roleExtraParams}
           />
-          <div className="flex flex-wrap items-center gap-2">
-            {PRO_BUILD_REGIONS.map((region) => {
-              const active = region === regionFilter;
-              return (
-                <Link
-                  key={region}
-                  href={buildProBuildPageHref(championId, {
-                    role: roleFilter,
-                    region,
-                    patch: patchFilter
-                  })}
-                  className={`rounded-full border px-2.5 py-1 text-xs transition ${
-                    active
-                      ? "border-primary/45 bg-primary/10 text-primary"
-                      : "border-border/60 bg-white/[0.03] text-fg/75 hover:bg-white/[0.10]"
-                  }`}
-                >
-                  {regionDisplayLabel(region)}
-                </Link>
-              );
-            })}
-          </div>
+          <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />
           <form action={`/pro-builds/${championId}`} method="get" className="flex flex-wrap items-center gap-2">
             {roleFilter !== "ALL" ? <input type="hidden" name="role" value={roleFilter} /> : null}
             {regionFilter !== "ALL" ? (

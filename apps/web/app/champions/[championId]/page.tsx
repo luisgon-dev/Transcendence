@@ -13,6 +13,7 @@ import { TierBadge } from "@/components/TierBadge";
 import { WinRateText } from "@/components/WinRateText";
 import { Card } from "@/components/ui/Card";
 import { fetchBackendJson } from "@/lib/backendCall";
+import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { pickMostSevereAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { formatGames, formatPercent } from "@/lib/format";
@@ -70,10 +71,13 @@ export default async function ChampionDetailPage({
   searchParams
 }: {
   params: Promise<{ championId: string }>;
-  searchParams?: Promise<{ role?: string; rankTier?: string }>;
+  searchParams?: Promise<{ role?: string; rankTier?: string; region?: string }>;
 }) {
   const resolvedParams = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const { activeRegion, activeRegionLabel, options: regionOptions } = await resolveAnalyticsRegion(
+    resolvedSearchParams?.region
+  );
   const championId = Number(resolvedParams.championId);
   if (!Number.isFinite(championId) || championId <= 0) {
     return (
@@ -86,9 +90,10 @@ export default async function ChampionDetailPage({
 
   const explicitRole = normalizeRole(resolvedSearchParams?.role);
   const normalizedRankTier = normalizeRankTierParam(resolvedSearchParams?.rankTier);
-  const qsTier = normalizedRankTier
-    ? `?rankTier=${encodeURIComponent(normalizedRankTier)}`
-    : "";
+  const winrateQuery = new URLSearchParams();
+  if (normalizedRankTier) winrateQuery.set("rankTier", normalizedRankTier);
+  if (activeRegion !== "ALL") winrateQuery.set("region", activeRegion);
+  const qsTier = winrateQuery.toString() ? `?${winrateQuery.toString()}` : "";
 
   const verbosity = getErrorVerbosity();
   const [staticData, itemStatic, runeStatic, winRes] = await Promise.all([
@@ -109,8 +114,10 @@ export default async function ChampionDetailPage({
     normalizedRankTier &&
     (!winrates || (winrates.byRoleTier?.length ?? 0) === 0)
   ) {
+    const fallbackQuery = new URLSearchParams();
+    if (activeRegion !== "ALL") fallbackQuery.set("region", activeRegion);
     const fallbackWinRes = await fetchBackendJson<ChampionWinRateSummary>(
-      `${getBackendBaseUrl()}/api/analytics/champions/${championId}/winrates`,
+      `${getBackendBaseUrl()}/api/analytics/champions/${championId}/winrates${fallbackQuery.toString() ? `?${fallbackQuery.toString()}` : ""}`,
       { next: { revalidate: 60 * 60 } }
     );
     fallbackWinrates = fallbackWinRes.ok ? fallbackWinRes.body! : null;
@@ -122,21 +129,17 @@ export default async function ChampionDetailPage({
     pickMostPlayedRole(fallbackWinrates) ??
     "MIDDLE";
 
-  const qsBuildAndMatchupTier = normalizedRankTier
-    ? `&rankTier=${encodeURIComponent(normalizedRankTier)}`
-    : "";
+  const buildMatchupQuery = new URLSearchParams({ role: effectiveRole });
+  if (normalizedRankTier) buildMatchupQuery.set("rankTier", normalizedRankTier);
+  if (activeRegion !== "ALL") buildMatchupQuery.set("region", activeRegion);
 
   const [buildRes, matchupRes] = await Promise.all([
     fetchBackendJson<ChampionBuildsResponse>(
-      `${getBackendBaseUrl()}/api/analytics/champions/${championId}/builds?role=${encodeURIComponent(
-        effectiveRole
-      )}${qsBuildAndMatchupTier}`,
+      `${getBackendBaseUrl()}/api/analytics/champions/${championId}/builds?${buildMatchupQuery.toString()}`,
       { next: { revalidate: 60 * 60 } }
     ),
     fetchBackendJson<ChampionMatchupsResponse>(
-      `${getBackendBaseUrl()}/api/analytics/champions/${championId}/matchups?role=${encodeURIComponent(
-        effectiveRole
-      )}${qsBuildAndMatchupTier}`,
+      `${getBackendBaseUrl()}/api/analytics/champions/${championId}/matchups?${buildMatchupQuery.toString()}`,
       { next: { revalidate: 60 * 60 } }
     )
   ]);
@@ -229,7 +232,7 @@ export default async function ChampionDetailPage({
             </div>
             {champ?.title ? <p className="mt-0.5 text-xs uppercase tracking-wide text-muted">{champ.title}</p> : null}
             <p className="mt-0.5 text-sm text-muted">
-              {roleDisplayLabel(effectiveRole)} &middot; {rankTierDisplayLabel(normalizedRankTier ?? "all")}
+              {roleDisplayLabel(effectiveRole)} &middot; {rankTierDisplayLabel(normalizedRankTier ?? "all")} &middot; {activeRegionLabel}
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
               <span className="rounded-full border border-border/60 bg-white/[0.03] px-2 py-1 text-fg/80">
@@ -242,13 +245,13 @@ export default async function ChampionDetailPage({
                 Ban Rate —
               </span>
               <Link
-                href={`/matchups/${championId}?role=${encodeURIComponent(effectiveRole)}${normalizedRankTier ? `&rankTier=${encodeURIComponent(normalizedRankTier)}` : ""}`}
+                href={`/matchups/${championId}?role=${encodeURIComponent(effectiveRole)}${normalizedRankTier ? `&rankTier=${encodeURIComponent(normalizedRankTier)}` : ""}${activeRegion !== "ALL" ? `&region=${encodeURIComponent(activeRegion)}` : ""}`}
                 className="rounded-full border border-primary/40 bg-primary/10 px-2 py-1 text-primary hover:bg-primary/20"
               >
                 Matchup Analysis
               </Link>
               <Link
-                href={`/pro-builds/${championId}`}
+                href={`/pro-builds/${championId}${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
                 className="rounded-full border border-primary/40 bg-primary/10 px-2 py-1 text-primary hover:bg-primary/20"
               >
                 Pro Builds Preview
@@ -270,6 +273,8 @@ export default async function ChampionDetailPage({
           roles={ROLES}
           activeRole={effectiveRole}
           activeRank={normalizedRankTier ?? "all"}
+          regionOptions={regionOptions}
+          activeRegion={activeRegion}
           baseHref={`/champions/${championId}`}
           patch={winrates?.patch ?? builds?.patch}
         />

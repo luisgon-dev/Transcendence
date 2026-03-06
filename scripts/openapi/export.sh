@@ -49,7 +49,9 @@ APP_ARGS=(
 
 SWAGGER_URL="${SWAGGER_URL:-http://127.0.0.1:5057/swagger/v1/swagger.json}"
 SWAGGER_OUT="$ROOT/openapi/transcendence.v1.json"
-if LOG_FILE="$(mktemp "${TMPDIR%/}/trn-openapi-XXXXXX.log" 2>/dev/null)"; then
+TMP_ROOT="${TMPDIR:-/tmp}"
+
+if LOG_FILE="$(mktemp "${TMP_ROOT%/}/trn-openapi-XXXXXX.log" 2>/dev/null)"; then
   :
 elif LOG_FILE="$(mktemp -t trn-openapi 2>/dev/null)"; then
   :

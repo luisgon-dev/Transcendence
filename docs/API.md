@@ -247,7 +247,7 @@ Auth behavior notes:
 - `deleted` to distinguish a successful state transition from a no-op
 - `expectedState` echo when provided
 - `currentState` when Hangfire can still resolve the job after the attempt
-- `message` with an operator-facing outcome summary for stale-state / already-missing jobs
+- `message` always included with an operator-facing outcome summary for stale-state / already-missing jobs
 
 `POST /api/admin/jobs/bulk-delete` accepts:
 - `states[]` restricted to backlog states (`enqueued`, `scheduled`, `failed`)

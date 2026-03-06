@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   type Dispatch,
   type SetStateAction,
+  useEffect,
   useState,
   useTransition
 } from "react";
@@ -21,6 +22,8 @@ import type {
 type MutationStatus =
   | { tone: "success" | "error" | "info"; text: string }
   | null;
+
+const BULK_DELETE_MAX_LIMIT = 5000;
 
 type BulkDeleteRequest = {
   state: string;
@@ -112,12 +115,16 @@ function buildLogsHref(job: {
 }
 
 type MutationStatusSetter = Dispatch<SetStateAction<MutationStatus>>;
-type BooleanSetter = Dispatch<SetStateAction<boolean>>;
+type PauseStateChangeHandler = (isPaused: boolean) => void;
 
 export function AdminRecurringJobsTable({ jobs }: { jobs: AdminRecurringJob[] }) {
   const router = useRouter();
   const [rows, setRows] = useState(jobs);
   const [status, setStatus] = useState<MutationStatus>(null);
+
+  useEffect(() => {
+    setRows(jobs);
+  }, [jobs]);
 
   // eslint-disable-next-line no-unused-vars
   function updateRow(id: string, recipe: (currentJob: AdminRecurringJob) => AdminRecurringJob) {
@@ -176,7 +183,7 @@ function RecurringJobRow({
   job: AdminRecurringJob;
   onStatus: MutationStatusSetter;
   onRefresh: () => void;
-  onPauseStateChange: BooleanSetter;
+  onPauseStateChange: PauseStateChangeHandler;
 }) {
   const [pending, startTransition] = useTransition();
 
@@ -279,6 +286,7 @@ export function AdminBulkDeleteButton({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [status, setStatus] = useState<MutationStatus>(null);
+  const deleteLimit = Math.min(request.limit, BULK_DELETE_MAX_LIMIT);
 
   return (
     <div className="grid gap-2">
@@ -290,7 +298,11 @@ export function AdminBulkDeleteButton({
         className="rounded-full border border-amber-300/30 bg-amber-500/10 px-4 py-2 text-xs font-medium text-amber-100 transition hover:bg-amber-500/20"
         disabled={disabled || pending}
         onClick={() => {
-          if (!window.confirm(`Delete up to ${totalMatched.toLocaleString()} matching jobs?`)) {
+          if (
+            !window.confirm(
+              `Delete up to ${deleteLimit.toLocaleString()} of ${totalMatched.toLocaleString()} matching jobs?`
+            )
+          ) {
             return;
           }
 
@@ -307,8 +319,8 @@ export function AdminBulkDeleteButton({
                   olderThanMinutes: request.olderThanMinutes
                     ? Number.parseInt(request.olderThanMinutes, 10)
                     : null,
-                  limit: request.limit,
-                  scanLimit: Math.max(5000, request.limit),
+                  limit: deleteLimit,
+                  scanLimit: Math.max(BULK_DELETE_MAX_LIMIT, deleteLimit),
                   dryRun: false
                 })
               });
@@ -341,6 +353,10 @@ export function AdminJobsTable({
   const router = useRouter();
   const [rows, setRows] = useState(jobs);
   const [status, setStatus] = useState<MutationStatus>(null);
+
+  useEffect(() => {
+    setRows(jobs);
+  }, [jobs]);
 
   function removeRow(jobId: string) {
     setRows((current) => current.filter((row) => row.jobId !== jobId));

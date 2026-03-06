@@ -3423,7 +3423,7 @@ export interface components {
             deleted?: boolean;
             expectedState?: string | null;
             currentState?: string | null;
-            message?: string | null;
+            message: string;
         };
         AdminFailedJobDto: {
             jobId?: string | null;

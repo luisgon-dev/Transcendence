@@ -16,6 +16,7 @@ import type {
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 const states = ["enqueued", "processing", "scheduled", "failed"] as const;
+const bulkDeleteMaxLimit = 5000;
 
 function toScalar(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -47,6 +48,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
       `/api/admin/jobs/list?state=${encodeURIComponent(state)}&from=${from}&count=${count}&q=${encodeURIComponent(query)}&type=${encodeURIComponent(type)}&queue=${encodeURIComponent(queue)}&region=${encodeURIComponent(region)}&olderThanMinutes=${encodeURIComponent(olderThanMinutes)}&scanLimit=${scanLimit}`
     )
   ]);
+  const bulkDeleteLimit = Math.min(Math.max(jobs.totalMatched, 1), bulkDeleteMaxLimit);
 
   return (
     <div className="grid gap-6">
@@ -178,6 +180,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
                 <p className="text-sm font-medium text-amber-100">Bulk clear current filtered backlog</p>
                 <p className="mt-1 text-xs text-amber-100/75">
                   This targets the currently filtered {state} jobs only. Preview count: {jobs.totalMatched.toLocaleString()}.
+                  {" "}Each run deletes up to {bulkDeleteLimit.toLocaleString()} jobs.
                 </p>
               </div>
               <AdminBulkDeleteButton
@@ -188,7 +191,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
                   type,
                   q: query,
                   olderThanMinutes,
-                  limit: Math.max(jobs.totalMatched, 1)
+                  limit: bulkDeleteLimit
                 }}
                 totalMatched={jobs.totalMatched}
                 disabled={jobs.totalMatched === 0}

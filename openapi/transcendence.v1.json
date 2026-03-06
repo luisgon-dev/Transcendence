@@ -4297,10 +4297,12 @@
             "nullable": true
           },
           "message": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           }
         },
+        "required": [
+          "message"
+        ],
         "additionalProperties": false
       },
       "AdminFailedJobDto": {

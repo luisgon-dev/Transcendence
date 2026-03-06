@@ -23,9 +23,12 @@ export async function proxyToBackend(
   req: NextRequest,
   path: string[],
   {
-    addHeaders
+    addHeaders,
+    onUnauthorized
   }: {
     addHeaders?: Record<string, string>;
+    // eslint-disable-next-line no-unused-vars
+    onUnauthorized?: (requestId: string) => Promise<Record<string, string> | null>;
   } = {}
 ) {
   const normalizedPath = normalizeProxyPath(path);
@@ -99,6 +102,45 @@ export async function proxyToBackend(
         "x-trn-request-id": requestId
       }
     });
+  }
+
+  if (res.status === 401 && onUnauthorized) {
+    const newHeaders = await onUnauthorized(requestId);
+    if (newHeaders) {
+      for (const [k, v] of Object.entries(newHeaders)) headers.set(k, v);
+      try {
+        res = await fetchWithTimeout(
+          url,
+          { method: req.method, headers, body, redirect: "manual" },
+          { timeoutMs: getBackendTimeoutMs() }
+        );
+      } catch (err: unknown) {
+        const durationMs = Date.now() - started;
+        const kind = isAbortError(err) ? "timeout" : "unreachable";
+        logEvent("error", "proxyToBackend upstream retry failed", {
+          requestId, kind, method: req.method, url: url.toString(), durationMs, error: err
+        });
+        const verbosity = getErrorVerbosity();
+        const status = isAbortError(err) ? 504 : 503;
+        const payload = {
+          message: status === 504
+            ? "Timed out reaching the backend."
+            : "We are having trouble reaching the backend.",
+          code: status === 504 ? "BACKEND_TIMEOUT" : "BACKEND_UNREACHABLE",
+          requestId,
+          ...(verbosity === "verbose"
+            ? { detail: err instanceof Error ? err.message : String(err) }
+            : null)
+        };
+        return new Response(JSON.stringify(payload), {
+          status,
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "x-trn-request-id": requestId
+          }
+        });
+      }
+    }
   }
 
   // Copy response headers, but never allow Set-Cookie from the backend to leak through.

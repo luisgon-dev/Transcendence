@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { AdminRefreshButton } from "@/app/admin/AdminRefreshButton";
 import { invalidateAnalyticsCacheAction } from "@/app/admin/actions";
 import { adminGet } from "@/lib/adminBackend";
 import type {
@@ -41,7 +42,7 @@ export default async function AdminOverviewPage() {
   const [overview, metrics, queues] = await Promise.all([
     adminGet<AdminOverview>("/api/admin/overview"),
     adminGet<AdminAnalysisMetricsResponse>("/api/admin/metrics/analysis"),
-    adminGet<AdminQueueSummaryResponse>("/api/admin/jobs/queues?scanLimit=12000")
+    adminGet<AdminQueueSummaryResponse>("/api/admin/jobs/queues?scanLimit=2000")
   ]);
 
   return (
@@ -64,6 +65,7 @@ export default async function AdminOverviewPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <AdminRefreshButton label="Refresh Snapshot" />
             <Link
               href="/admin/jobs?state=enqueued"
               className="rounded-full border border-border/80 px-4 py-2 text-sm text-fg/85 transition hover:bg-white/10"

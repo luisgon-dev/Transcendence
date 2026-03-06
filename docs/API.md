@@ -243,6 +243,12 @@ Auth behavior notes:
 - `expectedState` (optional state assertion such as `Processing` or `Failed`)
 - `reason` (optional audit metadata)
 
+`POST /api/admin/jobs/inspect/{jobId}/delete` returns:
+- `deleted` to distinguish a successful state transition from a no-op
+- `expectedState` echo when provided
+- `currentState` when Hangfire can still resolve the job after the attempt
+- `message` with an operator-facing outcome summary for stale-state / already-missing jobs
+
 `POST /api/admin/jobs/bulk-delete` accepts:
 - `states[]` restricted to backlog states (`enqueued`, `scheduled`, `failed`)
 - optional filters: `queues[]`, `jobType`, `region`, `query`, `olderThanMinutes`

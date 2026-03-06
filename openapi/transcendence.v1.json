@@ -294,7 +294,7 @@
             "schema": {
               "type": "integer",
               "format": "int32",
-              "default": 20000
+              "default": 5000
             }
           }
         ],
@@ -405,7 +405,7 @@
             "schema": {
               "type": "integer",
               "format": "int32",
-              "default": 20000
+              "default": 5000
             }
           }
         ],
@@ -4289,6 +4289,14 @@
             "type": "boolean"
           },
           "expectedState": {
+            "type": "string",
+            "nullable": true
+          },
+          "currentState": {
+            "type": "string",
+            "nullable": true
+          },
+          "message": {
             "type": "string",
             "nullable": true
           }

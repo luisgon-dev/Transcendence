@@ -24,6 +24,35 @@ namespace Transcendence.Service.Core.Tests;
 public class ChampionAnalyticsIngestionJobRampTests
 {
     [Fact]
+    public async Task ExecuteAsync_WhenMultiRegionEnabled_EnqueuesOneProducerPerEnabledRegion()
+    {
+        await using var harness = await Harness.CreateAsync(
+            multiRegionOptions: new MultiRegionIngestionOptions
+            {
+                Enabled = true,
+                Regions =
+                [
+                    new() { Region = "NA1", Enabled = true },
+                    new() { Region = "EUW1", Enabled = true },
+                    new() { Region = "KR", Enabled = false },
+                    new() { Region = "  euw1  ", Enabled = true }
+                ]
+            });
+
+        var queuedJobs = new List<Job>();
+        harness.BackgroundJobClient
+            .Setup(x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()))
+            .Callback<Job, IState>((job, _) => queuedJobs.Add(job))
+            .Returns("job-1");
+
+        await harness.Job.ExecuteAsync(CancellationToken.None);
+
+        queuedJobs.Should().HaveCount(2);
+        queuedJobs.Select(job => job.Method.Name).Should().OnlyContain(name => name == nameof(ChampionAnalyticsIngestionJob.ExecuteForRegionAsync));
+        queuedJobs.Select(job => job.Args[0]).Should().BeEquivalentTo(["NA1", "EUW1"]);
+    }
+
+    [Fact]
     public async Task ExecuteRampAsync_WhenRampWindowInactive_DoesNotQueueRefreshJobs()
     {
         await using var harness = await Harness.CreateAsync();
@@ -264,6 +293,40 @@ public class ChampionAnalyticsIngestionJobRampTests
         queuedJobs[0].Args[0].Should().Be("OldestBacklog");
     }
 
+    [Fact]
+    public async Task ExecuteForRegionAsync_WhenApiPriorityIsActiveAndRegionHasNoPatchSuccess_QueuesColdStartProgress()
+    {
+        var fixedBudgetPolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
+            AdaptiveThroughputBudgetMode.HighPressure,
+            MaxCandidates: 1,
+            QueueTarget: 0,
+            IncludeAllModes: false,
+            CoverageRatio: 0d,
+            BacklogAgeMinutes: double.MaxValue,
+            RecentVelocityPerHour: 0d,
+            CandidatePressureRatio: 1d));
+
+        await using var harness = await Harness.CreateAsync(fixedBudgetPolicy);
+        harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        harness.SeedSummoner("FreshRegionSeed", "EUW1", DateTime.UtcNow.AddHours(-8), platformRegion: "EUW1");
+        await harness.Db.SaveChangesAsync();
+
+        harness.RefreshLockRepository
+            .Setup(x => x.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var queuedJobs = new List<Job>();
+        harness.BackgroundJobClient
+            .Setup(x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()))
+            .Callback<Job, IState>((job, _) => queuedJobs.Add(job))
+            .Returns("job-1");
+
+        await harness.Job.ExecuteForRegionAsync("EUW1", CancellationToken.None);
+
+        queuedJobs.Should().ContainSingle();
+        queuedJobs[0].Args[2].Should().Be(Camille.Enums.PlatformRoute.EUW1);
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
@@ -287,7 +350,9 @@ public class ChampionAnalyticsIngestionJobRampTests
         public Mock<IBackgroundJobClient> BackgroundJobClient { get; }
         public Mock<IRefreshLockRepository> RefreshLockRepository { get; }
 
-        public static async Task<Harness> CreateAsync(IAdaptiveThroughputBudgetPolicy? adaptiveBudgetPolicy = null)
+        public static async Task<Harness> CreateAsync(
+            IAdaptiveThroughputBudgetPolicy? adaptiveBudgetPolicy = null,
+            MultiRegionIngestionOptions? multiRegionOptions = null)
         {
             var connection = new SqliteConnection("Data Source=:memory:");
             await connection.OpenAsync();
@@ -362,7 +427,7 @@ public class ChampionAnalyticsIngestionJobRampTests
                     RampMinRefreshJobsToQueuePerRun = 6,
                     RampMaxRefreshJobsToQueuePerRun = 10
                 }),
-                Options.Create(new MultiRegionIngestionOptions()),
+                Options.Create(multiRegionOptions ?? new MultiRegionIngestionOptions()),
                 Mock.Of<ILogger<ChampionAnalyticsIngestionJob>>());
 
             return new Harness(connection, db, job, backgroundJobs, refreshLocks);
@@ -382,13 +447,17 @@ public class ChampionAnalyticsIngestionJobRampTests
             });
         }
 
-        public void SeedSummoner(string gameName, string tagLine, DateTime updatedAtUtc)
+        public void SeedSummoner(
+            string gameName,
+            string tagLine,
+            DateTime updatedAtUtc,
+            string platformRegion = "NA1")
         {
             Db.Summoners.Add(new Summoner
             {
                 Id = Guid.NewGuid(),
-                PlatformRegion = "NA1",
-                Region = "americas",
+                PlatformRegion = platformRegion,
+                Region = platformRegion is "EUW1" or "EUN1" ? "europe" : platformRegion is "KR" ? "asia" : "americas",
                 Puuid = $"puuid-{Guid.NewGuid():N}",
                 GameName = gameName,
                 TagLine = tagLine,

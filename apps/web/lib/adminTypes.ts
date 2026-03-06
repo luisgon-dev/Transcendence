@@ -160,6 +160,8 @@ export type AdminDeleteJobResult = {
   jobId: string;
   deleted: boolean;
   expectedState: string | null;
+  currentState: string | null;
+  message: string;
 };
 
 export type AdminBulkDeleteJobsResult = {

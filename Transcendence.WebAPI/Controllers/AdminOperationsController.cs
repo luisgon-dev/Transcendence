@@ -38,7 +38,7 @@ public class AdminOperationsController(
     IChampionAnalyticsService analyticsService,
     IAdminAuditService adminAuditService) : ControllerBase
 {
-    private const int DefaultJobScanLimit = 20000;
+    private const int DefaultJobScanLimit = 5000;
     private const int DefaultJobScanPageSize = 250;
     private static readonly HashSet<string> AllowedServiceLogKeys = ["webapi", "service"];
     private static readonly HashSet<string> BulkDeletableStates = ["enqueued", "scheduled", "failed"];
@@ -105,7 +105,7 @@ public class AdminOperationsController(
         var generatedAtUtc = DateTime.UtcNow;
         var monitoring = jobStorage.GetMonitoringApi();
         var backlogByRegion = BuildBacklogByRegion(
-            ScanJobs(monitoring, ["enqueued", "processing", "scheduled"], scanLimit: 8000, out _));
+            ScanJobs(monitoring, ["enqueued", "processing", "scheduled"], scanLimit: 2500, out _));
 
         var enabledRegions = GetEnabledRegions();
         var activePatch = await db.Patches
@@ -613,17 +613,22 @@ public class AdminOperationsController(
 
         try
         {
+            var detailBeforeDelete = BuildJobDetail(normalizedId);
             var deleted = string.IsNullOrWhiteSpace(expectedState)
                 ? BackgroundJob.Delete(normalizedId)
                 : BackgroundJob.Delete(normalizedId, expectedState);
+            var currentState = deleted
+                ? "Deleted"
+                : BuildJobDetail(normalizedId)?.CurrentState ?? detailBeforeDelete?.CurrentState;
+            var message = BuildDeleteMessage(normalizedId, deleted, expectedState, currentState);
             await WriteAuditAsync(
                 "jobs.delete",
                 "background-job",
                 normalizedId,
                 deleted,
-                new { expectedState, request?.Reason },
+                new { expectedState, currentState, request?.Reason, message },
                 ct);
-            return Ok(new AdminDeleteJobResultDto(normalizedId, deleted, expectedState));
+            return Ok(new AdminDeleteJobResultDto(normalizedId, deleted, expectedState, currentState, message));
         }
         catch (Exception ex)
         {
@@ -873,6 +878,27 @@ public class AdminOperationsController(
             Properties: details.Properties is null
                 ? new Dictionary<string, string>(StringComparer.Ordinal)
                 : new Dictionary<string, string>(details.Properties, StringComparer.Ordinal));
+    }
+
+    private static string BuildDeleteMessage(
+        string jobId,
+        bool deleted,
+        string? expectedState,
+        string? currentState)
+    {
+        if (deleted)
+            return $"Job {jobId} deleted.";
+
+        if (!string.IsNullOrWhiteSpace(expectedState) && !string.IsNullOrWhiteSpace(currentState))
+        {
+            return
+                $"Job {jobId} was not deleted because it is now in state {currentState} instead of {expectedState}.";
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentState))
+            return $"Job {jobId} was not deleted. Current state: {currentState}.";
+
+        return $"Job {jobId} was not deleted because it no longer exists or its state could not be resolved.";
     }
 
     private IReadOnlyList<string> GetEnabledRegions()
@@ -1565,7 +1591,12 @@ public record AdminJobStateTransitionDto(
 
 public record AdminDeleteJobRequest(string? ExpectedState, string? Reason);
 
-public record AdminDeleteJobResultDto(string JobId, bool Deleted, string? ExpectedState);
+public record AdminDeleteJobResultDto(
+    string JobId,
+    bool Deleted,
+    string? ExpectedState,
+    string? CurrentState,
+    string Message);
 
 public record AdminBulkDeleteJobsRequest(
     IReadOnlyList<string>? States,

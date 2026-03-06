@@ -42,7 +42,7 @@ Add a dedicated pro/high-ELO builds endpoint for champion pages.
 
 ### Acceptance criteria
 - Endpoint returns at least one non-empty region for current patch in production-like data.
-- OpenAPI + generated TypeScript schema updated.
+- OpenAPI updated and API client rebuild verified.
 
 ## Priority 1: Matchup Depth Fields
 
@@ -121,7 +121,7 @@ in either champion winrate summary or a dedicated rank endpoint.
 - Update:
   - `docs/API.md`
   - `openapi/transcendence.v1.json`
-  - `packages/api-client/src/schema.ts` (via generation workflow)
+  - rebuild `packages/api-client` from the refreshed spec
 - Maintain backward compatibility where possible:
   - Additive fields preferred.
   - New endpoints should not break existing frontend pages.

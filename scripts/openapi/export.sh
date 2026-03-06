@@ -49,7 +49,14 @@ APP_ARGS=(
 
 SWAGGER_URL="${SWAGGER_URL:-http://127.0.0.1:5057/swagger/v1/swagger.json}"
 SWAGGER_OUT="$ROOT/openapi/transcendence.v1.json"
-LOG_FILE="$(mktemp "${TMPDIR:-/tmp}/trn-openapi-XXXXXX.log")"
+if LOG_FILE="$(mktemp "${TMPDIR%/}/trn-openapi-XXXXXX.log" 2>/dev/null)"; then
+  :
+elif LOG_FILE="$(mktemp -t trn-openapi 2>/dev/null)"; then
+  :
+else
+  echo "Failed to create temporary log file for OpenAPI export."
+  exit 1
+fi
 
 "$DOTNET_BIN" run --no-build --configuration Release \
   --no-launch-profile \

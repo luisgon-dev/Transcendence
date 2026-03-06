@@ -18,15 +18,15 @@
   "scripts": {
     "backend:test": "dotnet test Transcendence.sln -v minimal",
     "hooks:install": "git config core.hooksPath .githooks",
-    "precommit:api-sync": "pnpm api:gen && git add -- openapi/transcendence.v1.json packages/api-client/src/schema.ts",
+    "precommit:api-sync": "pnpm api:gen && git add -- openapi/transcendence.v1.json",
     "precommit:check": "git diff --cached --check",
     "api:spec": "bash scripts/openapi/export.sh",
-    "api:client": "pnpm --filter @transcendence/api-client gen && pnpm --filter @transcendence/api-client build",
+    "api:client": "pnpm --filter @transcendence/api-client build",
     "api:gen": "pnpm api:spec && pnpm api:client",
-    "api:check": "pnpm api:gen && git diff --exit-code -- openapi packages/api-client/src/schema.ts",
-    "web:dev": "pnpm --filter @transcendence/api-client build && pnpm exec next dev apps/web -p 3000",
-    "web:build": "pnpm --filter @transcendence/api-client build && pnpm --filter web build",
-    "web:lint": "pnpm --filter @transcendence/api-client build && pnpm --filter web lint",
-    "web:test": "pnpm --filter @transcendence/api-client build && pnpm --filter web test"
+    "api:check": "pnpm api:gen && git diff --exit-code -- openapi/transcendence.v1.json",
+    "web:dev": "pnpm --filter web dev",
+    "web:build": "pnpm --filter web build",
+    "web:lint": "pnpm --filter web lint",
+    "web:test": "pnpm --filter web test"
   }
 }

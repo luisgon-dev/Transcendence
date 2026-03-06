@@ -9,7 +9,7 @@
 [![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)](./docker-compose.yml)
 [![pnpm](https://img.shields.io/badge/pnpm-10.22.0-F69220?logo=pnpm&logoColor=white)](./package.json)
 
-Transcendence is a full-stack League of Legends analytics monorepo. It combines an ASP.NET Core API, a Hangfire-backed worker, a Next.js App Router frontend, a committed OpenAPI contract, and a generated TypeScript client in one repository.
+Transcendence is a full-stack League of Legends analytics monorepo. It combines an ASP.NET Core API, a Hangfire-backed worker, a Next.js App Router frontend, a committed OpenAPI contract, and a generated TypeScript client package in one repository.
 
 ## Overview
 
@@ -18,7 +18,7 @@ Transcendence is a full-stack League of Legends analytics monorepo. It combines 
 - `apps/web` is the SSR-first frontend and BFF layer for browser clients.
 - `Transcendence.Data` and `Transcendence.Service.Core` contain the EF Core and application-domain layers.
 - `openapi/transcendence.v1.json` is the committed API contract used for TS client generation.
-- `packages/api-client` contains the generated TypeScript schema and client artifacts used by the web app.
+- `packages/api-client` builds the generated TypeScript client artifacts used by the web app from the committed OpenAPI spec.
 
 ## What The Repository Covers
 
@@ -143,7 +143,7 @@ dotnet test tests/Transcendence.WebAPI.Tests
 
 ## API Contract And Client Generation
 
-The repository commits its OpenAPI contract and derives the TypeScript client from it.
+The repository commits its OpenAPI contract and generates the TypeScript client from it during build/check flows.
 
 - OpenAPI source of truth: [`openapi/transcendence.v1.json`](./openapi/transcendence.v1.json)
 - Spec export script: `scripts/openapi/export.sh`
@@ -156,7 +156,7 @@ corepack pnpm api:gen
 corepack pnpm api:check
 ```
 
-If Git hooks are installed, the pre-commit hook regenerates and stages OpenAPI artifacts when API-relevant files change.
+If Git hooks are installed, the pre-commit hook regenerates the client, refreshes the committed spec, and stages the OpenAPI artifact when API-relevant files change.
 
 ## Runtime Architecture
 

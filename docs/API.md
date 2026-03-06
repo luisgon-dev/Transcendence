@@ -288,10 +288,10 @@ Auth behavior notes:
 
 ## OpenAPI Generation Workflow
 
-The repo keeps the exported spec committed and uses it to generate the TypeScript schema.
+The repo keeps the exported spec committed and uses it to generate the TypeScript client during build/check flows.
 
 - Export spec: `scripts/openapi/export.sh` (invoked via `pnpm api:spec`)
-- Generate client schema: `packages/api-client` (invoked via `pnpm api:client`)
+- Generate client package from the spec: `packages/api-client` (invoked via `pnpm api:client`)
 
 See root `package.json` scripts:
 - `api:gen`

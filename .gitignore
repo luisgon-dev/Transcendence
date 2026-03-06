@@ -304,6 +304,7 @@ yarn-error.log*
 !/packages/**/*
 packages/**/node_modules/
 packages/**/dist/
+packages/api-client/src/schema.ts
 
 # Next.js env overrides (local only)
 .env.local

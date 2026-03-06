@@ -157,11 +157,11 @@ Current `web:test` scope:
 - Runs in Vitest `node` environment (no DOM harness needed for current test suite)
 
 Note:
-- `apps/web` package scripts `dev` and `build` prebuild `@transcendence/api-client` automatically, so direct commands such as `pnpm --filter web dev` and `pnpm --filter web build` work without a separate manual client build step.
+- `apps/web` package scripts `dev`, `build`, `lint`, and `test` prebuild `@transcendence/api-client` automatically, so direct commands such as `pnpm --filter web build` and `pnpm --filter web test` work without a separate manual client build step.
 
 ## OpenAPI + TypeScript Client
 
-Source of truth: `openapi/transcendence.v1.json`
+Source of truth: `openapi/transcendence.v1.json` (committed). The generated client schema is rebuilt locally from that spec and is not committed.
 
 ```bash
 corepack pnpm api:gen
@@ -169,7 +169,7 @@ corepack pnpm api:check
 ```
 
 If hooks are installed (`corepack pnpm hooks:install`), pre-commit runs path-aware checks automatically before each commit:
-- `pnpm precommit:api-sync` runs only when staged files touch API-relevant paths (`Transcendence.WebAPI/`, `Transcendence.Service.Core/`, `Transcendence.Data/`, `scripts/openapi/export.sh`, OpenAPI/client artifacts), then stages regenerated artifacts.
+- `pnpm precommit:api-sync` runs only when staged files touch API-relevant paths (`Transcendence.WebAPI/`, `Transcendence.Service.Core/`, `Transcendence.Data/`, `scripts/openapi/export.sh`, committed OpenAPI spec), regenerates the client locally, and stages the refreshed spec.
 - `pnpm precommit:check` runs `git diff --cached --check` to catch staged whitespace issues.
 
 ## Background Job Tuning

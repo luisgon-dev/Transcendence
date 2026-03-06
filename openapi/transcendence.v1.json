@@ -294,7 +294,7 @@
             "schema": {
               "type": "integer",
               "format": "int32",
-              "default": 20000
+              "default": 5000
             }
           }
         ],
@@ -405,7 +405,7 @@
             "schema": {
               "type": "integer",
               "format": "int32",
-              "default": 20000
+              "default": 5000
             }
           }
         ],
@@ -4279,11 +4279,15 @@
         "additionalProperties": false
       },
       "AdminDeleteJobResultDto": {
+        "required": [
+          "jobId",
+          "message"
+        ],
         "type": "object",
         "properties": {
           "jobId": {
-            "type": "string",
-            "nullable": true
+            "minLength": 1,
+            "type": "string"
           },
           "deleted": {
             "type": "boolean"
@@ -4291,6 +4295,14 @@
           "expectedState": {
             "type": "string",
             "nullable": true
+          },
+          "currentState": {
+            "type": "string",
+            "nullable": true
+          },
+          "message": {
+            "minLength": 1,
+            "type": "string"
           }
         },
         "additionalProperties": false

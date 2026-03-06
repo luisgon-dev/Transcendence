@@ -65,6 +65,7 @@ jobs:
               - 'Transcendence.Service/Dockerfile'
             web:
               - 'apps/web/**'
+              - 'openapi/**'
               - 'packages/api-client/**'
               - 'package.json'
               - 'pnpm-lock.yaml'

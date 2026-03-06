@@ -1,6 +1,7 @@
 import Link from "next/link";
 
-import { deleteJobAction, retryFailedJobAction } from "@/app/admin/actions";
+import { AdminRefreshButton } from "@/app/admin/AdminRefreshButton";
+import { AdminJobDetailActionBar } from "@/app/admin/jobs/AdminJobsClient";
 import { adminGet } from "@/lib/adminBackend";
 import type { AdminJobDetail } from "@/lib/adminTypes";
 
@@ -41,6 +42,7 @@ export default async function AdminJobDetailPage({
             <p className="mt-1 font-mono text-xs text-fg/70">{detail.jobId}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <AdminRefreshButton label="Refresh Detail" />
             <Link
               href="/admin/jobs"
               className="rounded-full border border-border/80 px-3 py-1 text-xs text-fg/85 transition hover:bg-white/10"
@@ -53,29 +55,10 @@ export default async function AdminJobDetailPage({
             >
               Nearby Logs
             </Link>
-            {detail.currentState === "Failed" ? (
-              <form action={retryFailedJobAction}>
-                <input type="hidden" name="jobId" value={detail.jobId} />
-                <button
-                  type="submit"
-                  className="rounded-full border border-border/80 px-3 py-1 text-xs text-fg/85 transition hover:bg-white/10"
-                >
-                  Retry
-                </button>
-              </form>
-            ) : null}
-            <form action={deleteJobAction}>
-              <input type="hidden" name="jobId" value={detail.jobId} />
-              <input type="hidden" name="expectedState" value={detail.currentState ?? ""} />
-              <input type="hidden" name="reason" value="Deleted from admin job detail" />
-              <button
-                type="submit"
-                className="rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-100 transition hover:bg-rose-500/20"
-              >
-                Delete
-              </button>
-            </form>
           </div>
+        </div>
+        <div className="mt-4">
+          <AdminJobDetailActionBar detail={detail} />
         </div>
 
         <dl className="mt-4 grid gap-3 text-sm md:grid-cols-3">

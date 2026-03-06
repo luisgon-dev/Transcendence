@@ -1,6 +1,7 @@
 using Camille.Enums;
 using Camille.RiotGames;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Account;
@@ -13,9 +14,7 @@ namespace Transcendence.Service.Core.Services.Jobs;
 
 public class SummonerBootstrapService(
     RiotGamesApi riotApi,
-    TranscendenceContext db,
-    ISummonerRepository summonerRepository,
-    IRefreshLockRepository refreshLockRepository,
+    IServiceScopeFactory scopeFactory,
     IOptions<SummonerBootstrapOptions> options,
     IOptions<MultiRegionIngestionOptions> multiRegionOptions,
     ILogger<SummonerBootstrapService> logger) : ISummonerBootstrapService
@@ -36,13 +35,55 @@ public class SummonerBootstrapService(
         return await EnsureSeededSingleRegionAsync(bootstrapOptions, ct);
     }
 
+    public async Task<int> EnsureSeededForRegionAsync(string platformRegion, CancellationToken ct = default)
+    {
+        var bootstrapOptions = options.Value;
+        if (!bootstrapOptions.Enabled)
+            return 0;
+
+        var normalizedRegion = NormalizeRegion(platformRegion);
+        if (normalizedRegion == null)
+        {
+            logger.LogWarning(
+                "Summoner bootstrap skipped: invalid platform region {PlatformRegion}.",
+                platformRegion);
+            return 0;
+        }
+
+        var multiRegion = multiRegionOptions.Value;
+        if (multiRegion.Enabled && multiRegion.Regions.Count > 0)
+        {
+            var regionConfig = multiRegion.Regions
+                .FirstOrDefault(r => r.Enabled &&
+                    string.Equals(NormalizeRegion(r.Region), normalizedRegion, StringComparison.OrdinalIgnoreCase));
+
+            if (regionConfig == null)
+            {
+                logger.LogDebug(
+                    "Summoner bootstrap skipped for {PlatformRegion}: region is not enabled in multi-region configuration.",
+                    normalizedRegion);
+                return 0;
+            }
+
+            return await SeedRegionAsync(regionConfig, bootstrapOptions.LockMinutes, ct);
+        }
+
+        return await SeedSingleRegionAsync(
+            normalizedRegion,
+            Math.Max(1, bootstrapOptions.ChallengerSeedCount),
+            Math.Max(1, bootstrapOptions.LockMinutes),
+            ct);
+    }
+
     private async Task<int> EnsureSeededMultiRegionAsync(
         MultiRegionIngestionOptions multiRegion,
         SummonerBootstrapOptions bootstrapOptions,
         CancellationToken ct)
     {
         var enabledRegions = multiRegion.Regions
-            .Where(r => r.Enabled)
+            .Where(r => r.Enabled && NormalizeRegion(r.Region) != null)
+            .GroupBy(r => NormalizeRegion(r.Region)!, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
             .ToList();
 
         if (enabledRegions.Count == 0)
@@ -51,7 +92,7 @@ public class SummonerBootstrapService(
             return 0;
         }
 
-        var semaphore = new SemaphoreSlim(Math.Max(1, multiRegion.MaxConcurrentRegionBootstraps));
+        using var semaphore = new SemaphoreSlim(Math.Max(1, multiRegion.MaxConcurrentRegionBootstraps));
         var totalSeeded = 0;
 
         var tasks = enabledRegions.Select(async regionConfig =>
@@ -81,7 +122,8 @@ public class SummonerBootstrapService(
 
     private async Task<int> SeedRegionAsync(RegionConfig regionConfig, int lockMinutes, CancellationToken ct)
     {
-        if (!PlatformRouteParser.TryParse(regionConfig.Region, out var platform))
+        var normalizedRegion = NormalizeRegion(regionConfig.Region);
+        if (normalizedRegion == null || !PlatformRouteParser.TryParse(normalizedRegion, out var platform))
         {
             logger.LogWarning(
                 "Multi-region bootstrap skipping region: invalid platform region {PlatformRegion}.",
@@ -89,71 +131,17 @@ public class SummonerBootstrapService(
             return 0;
         }
 
-        // Check if this specific region already has summoners
-        var hasRegionSummoners = await db.Summoners
-            .AsNoTracking()
-            .AnyAsync(s => s.PlatformRegion == regionConfig.Region, ct);
-
-        if (hasRegionSummoners)
-        {
-            logger.LogDebug(
-                "Multi-region bootstrap skipped for {Platform}: summoners already exist.",
-                platform);
-            return 0;
-        }
-
-        var seedCount = Math.Max(1, regionConfig.ChallengerSeedCount);
-        var lockTtl = TimeSpan.FromMinutes(Math.Max(1, lockMinutes));
-        var lockKey = $"summoner-bootstrap:challenger:{platform}";
-
-        var acquired = await refreshLockRepository.TryAcquireAsync(lockKey, lockTtl, ct);
-        if (!acquired)
-        {
-            logger.LogDebug("Multi-region bootstrap skipped for {Platform}: lock held ({LockKey}).", platform, lockKey);
-            return 0;
-        }
-
-        try
-        {
-            // Re-check once we hold the lock
-            hasRegionSummoners = await db.Summoners
-                .AsNoTracking()
-                .AnyAsync(s => s.PlatformRegion == regionConfig.Region, ct);
-
-            if (hasRegionSummoners)
-            {
-                logger.LogDebug(
-                    "Multi-region bootstrap skipped for {Platform}: summoners already exist (post-lock).",
-                    platform);
-                return 0;
-            }
-
-            return await SeedChallengerPlayersAsync(platform, seedCount, ct);
-        }
-        finally
-        {
-            try
-            {
-                await refreshLockRepository.ReleaseAsync(lockKey, ct);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Multi-region bootstrap failed to release lock {LockKey}.", lockKey);
-            }
-        }
+        return await SeedSingleRegionAsync(
+            normalizedRegion,
+            Math.Max(1, regionConfig.ChallengerSeedCount),
+            Math.Max(1, lockMinutes),
+            ct);
     }
 
     private async Task<int> EnsureSeededSingleRegionAsync(SummonerBootstrapOptions bootstrapOptions, CancellationToken ct)
     {
-        // Only seed on truly empty installs
-        var hasAnySummoners = await db.Summoners.AsNoTracking().AnyAsync(ct);
-        if (hasAnySummoners)
-        {
-            logger.LogDebug("Summoner bootstrap skipped: summoners already exist.");
-            return 0;
-        }
-
-        if (!PlatformRouteParser.TryParse(bootstrapOptions.PlatformRegion, out var platform))
+        var normalizedRegion = NormalizeRegion(bootstrapOptions.PlatformRegion);
+        if (normalizedRegion == null)
         {
             logger.LogWarning(
                 "Summoner bootstrap skipped: invalid platform region {PlatformRegion}.",
@@ -161,28 +149,69 @@ public class SummonerBootstrapService(
             return 0;
         }
 
-        var seedCount = Math.Max(1, bootstrapOptions.ChallengerSeedCount);
-        var lockTtl = TimeSpan.FromMinutes(Math.Max(1, bootstrapOptions.LockMinutes));
+        return await SeedSingleRegionAsync(
+            normalizedRegion,
+            Math.Max(1, bootstrapOptions.ChallengerSeedCount),
+            Math.Max(1, bootstrapOptions.LockMinutes),
+            ct);
+    }
+
+    private async Task<int> SeedSingleRegionAsync(
+        string platformRegion,
+        int seedCount,
+        int lockMinutes,
+        CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<TranscendenceContext>();
+        var summonerRepository = scope.ServiceProvider.GetRequiredService<ISummonerRepository>();
+        var refreshLockRepository = scope.ServiceProvider.GetRequiredService<IRefreshLockRepository>();
+
+        if (!PlatformRouteParser.TryParse(platformRegion, out var platform))
+        {
+            logger.LogWarning(
+                "Summoner bootstrap skipped: invalid platform region {PlatformRegion}.",
+                platformRegion);
+            return 0;
+        }
+
+        var hasRegionSummoners = await db.Summoners
+            .AsNoTracking()
+            .AnyAsync(s => s.PlatformRegion == platformRegion, ct);
+
+        if (hasRegionSummoners)
+        {
+            logger.LogDebug(
+                "Summoner bootstrap skipped for {Platform}: summoners already exist.",
+                platform);
+            return 0;
+        }
+
+        var lockTtl = TimeSpan.FromMinutes(lockMinutes);
         var lockKey = $"summoner-bootstrap:challenger:{platform}";
 
         var acquired = await refreshLockRepository.TryAcquireAsync(lockKey, lockTtl, ct);
         if (!acquired)
         {
-            logger.LogDebug("Summoner bootstrap skipped: lock held ({LockKey}).", lockKey);
+            logger.LogDebug("Summoner bootstrap skipped for {Platform}: lock held ({LockKey}).", platform, lockKey);
             return 0;
         }
 
         try
         {
-            // Re-check once we hold the lock
-            hasAnySummoners = await db.Summoners.AsNoTracking().AnyAsync(ct);
-            if (hasAnySummoners)
+            hasRegionSummoners = await db.Summoners
+                .AsNoTracking()
+                .AnyAsync(s => s.PlatformRegion == platformRegion, ct);
+
+            if (hasRegionSummoners)
             {
-                logger.LogDebug("Summoner bootstrap skipped: summoners already exist.");
+                logger.LogDebug(
+                    "Summoner bootstrap skipped for {Platform}: summoners already exist (post-lock).",
+                    platform);
                 return 0;
             }
 
-            return await SeedChallengerPlayersAsync(platform, seedCount, ct);
+            return await SeedChallengerPlayersAsync(platform, seedCount, db, summonerRepository, ct);
         }
         finally
         {
@@ -197,7 +226,12 @@ public class SummonerBootstrapService(
         }
     }
 
-    private async Task<int> SeedChallengerPlayersAsync(PlatformRoute platform, int seedCount, CancellationToken ct)
+    private async Task<int> SeedChallengerPlayersAsync(
+        PlatformRoute platform,
+        int seedCount,
+        TranscendenceContext db,
+        ISummonerRepository summonerRepository,
+        CancellationToken ct)
     {
         logger.LogInformation(
             "Summoner bootstrap starting: seeding {SeedCount} challenger summoners from {Platform}.",
@@ -281,5 +315,13 @@ public class SummonerBootstrapService(
             platform);
 
         return seeded;
+    }
+
+    private static string? NormalizeRegion(string? region)
+    {
+        if (string.IsNullOrWhiteSpace(region))
+            return null;
+
+        return region.Trim().ToUpperInvariant();
     }
 }

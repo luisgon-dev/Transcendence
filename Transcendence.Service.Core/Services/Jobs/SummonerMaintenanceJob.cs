@@ -44,11 +44,11 @@ public class SummonerMaintenanceJob(
 
         if (multiRegion.Enabled && multiRegion.Regions.Count > 0)
         {
-            var enabledRegions = multiRegion.Regions.Where(r => r.Enabled).ToList();
-            foreach (var regionConfig in enabledRegions)
+            var enabledRegions = GetConfiguredEnabledRegions(multiRegion);
+            foreach (var region in enabledRegions)
             {
                 backgroundJobClient.Enqueue<SummonerMaintenanceJob>(
-                    job => job.ExecuteForRegionAsync(regionConfig.Region, CancellationToken.None));
+                    job => job.ExecuteForRegionAsync(region, CancellationToken.None));
             }
 
             logger.LogInformation(
@@ -67,11 +67,11 @@ public class SummonerMaintenanceJob(
 
         if (multiRegion.Enabled && multiRegion.Regions.Count > 0)
         {
-            var enabledRegions = multiRegion.Regions.Where(r => r.Enabled).ToList();
-            foreach (var regionConfig in enabledRegions)
+            var enabledRegions = GetConfiguredEnabledRegions(multiRegion);
+            foreach (var region in enabledRegions)
             {
                 backgroundJobClient.Enqueue<SummonerMaintenanceJob>(
-                    job => job.ExecuteForRegionRampAsync(regionConfig.Region, CancellationToken.None));
+                    job => job.ExecuteForRegionRampAsync(region, CancellationToken.None));
             }
 
             logger.LogInformation(
@@ -194,6 +194,15 @@ public class SummonerMaintenanceJob(
         var maxCandidates = guardrailDecision.MaxCandidates;
         var maxQueued = guardrailDecision.QueueTarget;
         var forcedCatchUpActive = guardrailDecision.IsForcedCatchUpActive;
+        var requiresColdStartProgress = region is not null &&
+            successfulMatchesForPatch == 0 &&
+            pendingCandidateCount > 0;
+
+        if (requiresColdStartProgress)
+        {
+            maxQueued = Math.Max(maxQueued, 1);
+            maxCandidates = Math.Max(maxCandidates, maxQueued);
+        }
 
         if (maxQueued <= 0)
         {
@@ -223,7 +232,10 @@ public class SummonerMaintenanceJob(
             return;
         }
 
-        if (jobOptions.PauseWhenApiPriorityRefreshActive && apiPriorityDemandActive && !forcedCatchUpActive)
+        if (jobOptions.PauseWhenApiPriorityRefreshActive &&
+            apiPriorityDemandActive &&
+            !forcedCatchUpActive &&
+            !requiresColdStartProgress)
         {
             ingestionThroughputTelemetry.RecordQueueTargetOutput(
                 producerKey,
@@ -269,6 +281,7 @@ public class SummonerMaintenanceJob(
 
             if (jobOptions.PauseWhenApiPriorityRefreshActive &&
                 !forcedCatchUpActive &&
+                !requiresColdStartProgress &&
                 await refreshLockRepository.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, ct))
             {
                 logger.LogInformation(
@@ -349,6 +362,15 @@ public class SummonerMaintenanceJob(
             budget.CandidatePressureRatio,
             guardrailDecision.MaxEligibleDeferAgeMinutes,
             guardrailDecision.DeferAgeThresholdMinutes);
+    }
+
+    private List<string> GetConfiguredEnabledRegions(MultiRegionIngestionOptions multiRegion)
+    {
+        return multiRegion.Regions
+            .Where(r => r.Enabled && !string.IsNullOrWhiteSpace(r.Region))
+            .Select(r => r.Region.Trim().ToUpperInvariant())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private async Task<List<CandidateSummoner>> GetCandidatesAsync(

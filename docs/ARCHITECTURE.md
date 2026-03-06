@@ -42,7 +42,7 @@ Transcendence is a backend + web monorepo:
     - Legacy `/summoners/[region]/[riotId]/matches*` routes redirect into this unified view using query state (`page`, `queue`, `expandMatchId`)
 
 ### `packages/api-client`
-- Generated OpenAPI TypeScript client artifacts
+- Generated OpenAPI TypeScript client artifacts built from the committed spec
 - Schema generation uses `openapi-typescript` + `openapi-fetch`
 
 ## Data Flow: Summoner Refresh

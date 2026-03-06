@@ -9,6 +9,7 @@ RUN corepack enable
 # Copy only what we need for workspace install first (better layer caching).
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY .npmrc ./.npmrc
+COPY openapi openapi
 COPY packages/api-client/package.json packages/api-client/package.json
 COPY apps/web/package.json apps/web/package.json
 

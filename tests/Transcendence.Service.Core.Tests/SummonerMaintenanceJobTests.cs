@@ -23,6 +23,46 @@ namespace Transcendence.Service.Core.Tests;
 public class SummonerMaintenanceJobTests
 {
     [Fact]
+    public async Task ExecuteAsync_WhenMultiRegionEnabled_EnqueuesOneProducerPerEnabledRegion()
+    {
+        var adaptivePolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
+            AdaptiveThroughputBudgetMode.Balanced,
+            MaxCandidates: 4,
+            QueueTarget: 1,
+            IncludeAllModes: false,
+            CoverageRatio: 0.4d,
+            BacklogAgeMinutes: 90d,
+            RecentVelocityPerHour: 3d,
+            CandidatePressureRatio: 1.2d));
+
+        await using var harness = await Harness.CreateAsync(
+            adaptivePolicy,
+            new MultiRegionIngestionOptions
+            {
+                Enabled = true,
+                Regions =
+                [
+                    new() { Region = "NA1", Enabled = true },
+                    new() { Region = "EUW1", Enabled = true },
+                    new() { Region = "KR", Enabled = false },
+                    new() { Region = "  na1  ", Enabled = true }
+                ]
+            });
+
+        var queuedJobs = new List<Job>();
+        harness.BackgroundJobClient
+            .Setup(x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()))
+            .Callback<Job, IState>((job, _) => queuedJobs.Add(job))
+            .Returns("job-1");
+
+        await harness.Job.ExecuteAsync(CancellationToken.None);
+
+        queuedJobs.Should().HaveCount(2);
+        queuedJobs.Select(job => job.Method.Name).Should().OnlyContain(name => name == nameof(SummonerMaintenanceJob.ExecuteForRegionAsync));
+        queuedJobs.Select(job => job.Args[0]).Should().BeEquivalentTo(["NA1", "EUW1"]);
+    }
+
+    [Fact]
     public async Task ExecuteRampAsync_UsesPatchFirstScoringOrderBeforeAdaptiveQueueTruncation()
     {
         var adaptivePolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
@@ -157,6 +197,40 @@ public class SummonerMaintenanceJobTests
             Times.Never);
     }
 
+    [Fact]
+    public async Task ExecuteForRegionAsync_WhenApiPriorityIsActiveAndRegionHasNoPatchSuccess_QueuesColdStartProgress()
+    {
+        var adaptivePolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
+            AdaptiveThroughputBudgetMode.HighPressure,
+            MaxCandidates: 1,
+            QueueTarget: 0,
+            IncludeAllModes: false,
+            CoverageRatio: 0d,
+            BacklogAgeMinutes: double.MaxValue,
+            RecentVelocityPerHour: 0d,
+            CandidatePressureRatio: 1d));
+
+        await using var harness = await Harness.CreateAsync(adaptivePolicy);
+        harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        harness.SeedSummoner("MaintenanceSeed", "EUW1", DateTime.UtcNow.AddHours(-12), platformRegion: "EUW1");
+        await harness.Db.SaveChangesAsync();
+
+        harness.RefreshLockRepository
+            .Setup(x => x.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var queuedJobs = new List<Job>();
+        harness.BackgroundJobClient
+            .Setup(x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()))
+            .Callback<Job, IState>((job, _) => queuedJobs.Add(job))
+            .Returns("job-1");
+
+        await harness.Job.ExecuteForRegionAsync("EUW1", CancellationToken.None);
+
+        queuedJobs.Should().ContainSingle();
+        queuedJobs[0].Args[2].Should().Be(Camille.Enums.PlatformRoute.EUW1);
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
@@ -180,7 +254,9 @@ public class SummonerMaintenanceJobTests
         public Mock<IBackgroundJobClient> BackgroundJobClient { get; }
         public Mock<IRefreshLockRepository> RefreshLockRepository { get; }
 
-        public static async Task<Harness> CreateAsync(IAdaptiveThroughputBudgetPolicy adaptiveBudgetPolicy)
+        public static async Task<Harness> CreateAsync(
+            IAdaptiveThroughputBudgetPolicy adaptiveBudgetPolicy,
+            MultiRegionIngestionOptions? multiRegionOptions = null)
         {
             var connection = new SqliteConnection("Data Source=:memory:");
             await connection.OpenAsync();
@@ -236,7 +312,7 @@ public class SummonerMaintenanceJobTests
                     MinimumSuccessfulMatchesForCurrentPatch = 50,
                     TargetSuccessfulMatchesForCurrentPatch = 100
                 }),
-                Options.Create(new MultiRegionIngestionOptions()),
+                Options.Create(multiRegionOptions ?? new MultiRegionIngestionOptions()),
                 Mock.Of<ILogger<SummonerMaintenanceJob>>());
 
             return new Harness(connection, db, job, backgroundJobs, refreshLocks);
@@ -256,13 +332,17 @@ public class SummonerMaintenanceJobTests
             });
         }
 
-        public void SeedSummoner(string gameName, string tagLine, DateTime updatedAtUtc)
+        public void SeedSummoner(
+            string gameName,
+            string tagLine,
+            DateTime updatedAtUtc,
+            string platformRegion = "NA1")
         {
             Db.Summoners.Add(new Summoner
             {
                 Id = Guid.NewGuid(),
-                PlatformRegion = "NA1",
-                Region = "americas",
+                PlatformRegion = platformRegion,
+                Region = platformRegion is "EUW1" or "EUN1" ? "europe" : platformRegion is "KR" ? "asia" : "americas",
                 Puuid = $"puuid-{Guid.NewGuid():N}",
                 GameName = gameName,
                 TagLine = tagLine,

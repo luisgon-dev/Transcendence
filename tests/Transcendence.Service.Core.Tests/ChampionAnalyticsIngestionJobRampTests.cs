@@ -327,6 +327,23 @@ public class ChampionAnalyticsIngestionJobRampTests
         queuedJobs[0].Args[2].Should().Be(Camille.Enums.PlatformRoute.EUW1);
     }
 
+    [Fact]
+    public async Task ExecuteForRegionAsync_WhenRegionHasNoTrackedSummoners_UsesRegionScopedBootstrap()
+    {
+        await using var harness = await Harness.CreateAsync();
+        harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        await harness.Db.SaveChangesAsync();
+
+        await harness.Job.ExecuteForRegionAsync("EUW1", CancellationToken.None);
+
+        harness.BootstrapService.Verify(
+            x => x.EnsureSeededForRegionAsync("EUW1", It.IsAny<CancellationToken>()),
+            Times.Once);
+        harness.BootstrapService.Verify(
+            x => x.EnsureSeededFromChallengerAsync(It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
@@ -335,18 +352,21 @@ public class ChampionAnalyticsIngestionJobRampTests
             SqliteConnection connection,
             TestSqliteTranscendenceContext db,
             ChampionAnalyticsIngestionJob job,
+            Mock<ISummonerBootstrapService> bootstrapService,
             Mock<IBackgroundJobClient> backgroundJobClient,
             Mock<IRefreshLockRepository> refreshLockRepository)
         {
             _connection = connection;
             Db = db;
             Job = job;
+            BootstrapService = bootstrapService;
             BackgroundJobClient = backgroundJobClient;
             RefreshLockRepository = refreshLockRepository;
         }
 
         public TestSqliteTranscendenceContext Db { get; }
         public ChampionAnalyticsIngestionJob Job { get; }
+        public Mock<ISummonerBootstrapService> BootstrapService { get; }
         public Mock<IBackgroundJobClient> BackgroundJobClient { get; }
         public Mock<IRefreshLockRepository> RefreshLockRepository { get; }
 
@@ -366,6 +386,8 @@ public class ChampionAnalyticsIngestionJobRampTests
 
             var bootstrap = new Mock<ISummonerBootstrapService>();
             bootstrap.Setup(x => x.EnsureSeededFromChallengerAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(0);
+            bootstrap.Setup(x => x.EnsureSeededForRegionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(0);
 
             var refreshLocks = new Mock<IRefreshLockRepository>();
@@ -430,7 +452,7 @@ public class ChampionAnalyticsIngestionJobRampTests
                 Options.Create(multiRegionOptions ?? new MultiRegionIngestionOptions()),
                 Mock.Of<ILogger<ChampionAnalyticsIngestionJob>>());
 
-            return new Harness(connection, db, job, backgroundJobs, refreshLocks);
+            return new Harness(connection, db, job, bootstrap, backgroundJobs, refreshLocks);
         }
 
         public void SeedActivePatch(string version, DateTime releaseUtc)

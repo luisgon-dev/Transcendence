@@ -110,7 +110,12 @@ public class ChampionAnalyticsIngestionJob(
             : await db.Summoners.AsNoTracking().AnyAsync(ct);
 
         if (!hasTrackedSummoners)
-            await bootstrapService.EnsureSeededFromChallengerAsync(ct);
+        {
+            if (region != null)
+                await bootstrapService.EnsureSeededForRegionAsync(region, ct);
+            else
+                await bootstrapService.EnsureSeededFromChallengerAsync(ct);
+        }
 
         var currentPatchInfo = await db.Patches
             .AsNoTracking()

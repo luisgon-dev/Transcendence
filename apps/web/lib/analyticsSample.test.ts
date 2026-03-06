@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  analyticsSampleCoveragePercent,
+  analyticsSampleShortfall,
   normalizeAnalyticsSample,
   normalizeAnalyticsSampleStatus,
   pickMostSevereAnalyticsSample
@@ -41,5 +43,26 @@ describe("analyticsSample", () => {
     );
 
     expect(picked?.status).toBe("no_data");
+  });
+
+  it("computes confidence coverage and shortfall", () => {
+    expect(
+      analyticsSampleCoveragePercent({
+        sampleSize: 25,
+        minimumRecommendedSampleSize: 40
+      })
+    ).toBe(63);
+    expect(
+      analyticsSampleCoveragePercent({
+        sampleSize: 120,
+        minimumRecommendedSampleSize: 100
+      })
+    ).toBe(100);
+    expect(
+      analyticsSampleShortfall({
+        sampleSize: 25,
+        minimumRecommendedSampleSize: 40
+      })
+    ).toBe(15);
   });
 });

@@ -41,3 +41,13 @@ export function analyticsRegionLabel(
     normalized
   );
 }
+
+export function shouldUseFallbackAnalyticsRegions(
+  options: readonly AnalyticsRegionOption[] | null | undefined
+): boolean {
+  if (!options || options.length === 0) {
+    return true;
+  }
+
+  return options.every((option) => option.code.trim().toUpperCase() === GLOBAL_ANALYTICS_REGION);
+}

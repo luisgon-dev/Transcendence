@@ -9,6 +9,7 @@ import {
   analyticsRegionLabel,
   GLOBAL_ANALYTICS_REGION,
   normalizeAnalyticsRegionCode,
+  shouldUseFallbackAnalyticsRegions,
   type AnalyticsRegionOption
 } from "@/lib/analyticsRegionShared";
 
@@ -26,11 +27,11 @@ export async function fetchAnalyticsRegions(): Promise<AnalyticsRegionOption[]> 
     { next: { revalidate: 60 * 60 } }
   );
 
-  if (!result.ok || !result.body || result.body.length === 0) {
+  if (!result.ok || shouldUseFallbackAnalyticsRegions(result.body)) {
     return FALLBACK_OPTIONS;
   }
 
-  return result.body;
+  return result.body ?? FALLBACK_OPTIONS;
 }
 
 export async function resolveAnalyticsRegion(

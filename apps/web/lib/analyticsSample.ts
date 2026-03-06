@@ -19,6 +19,20 @@ export type NormalizedAnalyticsSample = {
   isEarlyPatchWindow: boolean;
 };
 
+export function analyticsSampleCoveragePercent(
+  sample: Pick<NormalizedAnalyticsSample, "sampleSize" | "minimumRecommendedSampleSize">
+): number {
+  const minimum = Math.max(1, sample.minimumRecommendedSampleSize);
+  const ratio = sample.sampleSize / minimum;
+  return Math.max(0, Math.min(100, Math.round(ratio * 100)));
+}
+
+export function analyticsSampleShortfall(
+  sample: Pick<NormalizedAnalyticsSample, "sampleSize" | "minimumRecommendedSampleSize">
+): number {
+  return Math.max(0, sample.minimumRecommendedSampleSize - sample.sampleSize);
+}
+
 export function normalizeAnalyticsSampleStatus(value: unknown): AnalyticsSampleStatus {
   if (typeof value === "number") {
     if (value === 0) return "sufficient";

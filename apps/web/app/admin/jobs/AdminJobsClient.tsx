@@ -115,6 +115,7 @@ function buildLogsHref(job: {
 }
 
 type MutationStatusSetter = Dispatch<SetStateAction<MutationStatus>>;
+// eslint-disable-next-line no-unused-vars
 type PauseStateChangeHandler = (isPaused: boolean) => void;
 
 export function AdminRecurringJobsTable({ jobs }: { jobs: AdminRecurringJob[] }) {

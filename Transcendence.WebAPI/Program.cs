@@ -105,8 +105,6 @@ builder.Services.AddRateLimiter(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
-    options.SupportNonNullableReferenceTypes();
-
     options.SwaggerDoc("v1", new OpenApiInfo
     {
         Title = "Transcendence API",

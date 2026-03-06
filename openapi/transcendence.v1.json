@@ -4279,11 +4279,15 @@
         "additionalProperties": false
       },
       "AdminDeleteJobResultDto": {
+        "required": [
+          "jobId",
+          "message"
+        ],
         "type": "object",
         "properties": {
           "jobId": {
-            "type": "string",
-            "nullable": true
+            "minLength": 1,
+            "type": "string"
           },
           "deleted": {
             "type": "boolean"
@@ -4297,12 +4301,10 @@
             "nullable": true
           },
           "message": {
+            "minLength": 1,
             "type": "string"
           }
         },
-        "required": [
-          "message"
-        ],
         "additionalProperties": false
       },
       "AdminFailedJobDto": {

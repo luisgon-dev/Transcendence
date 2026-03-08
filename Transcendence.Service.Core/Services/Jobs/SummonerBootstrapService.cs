@@ -1,5 +1,4 @@
 using Camille.Enums;
-using Camille.RiotGames;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -13,7 +12,7 @@ using Transcendence.Service.Core.Services.RiotApi;
 namespace Transcendence.Service.Core.Services.Jobs;
 
 public class SummonerBootstrapService(
-    RiotGamesApi riotApi,
+    LeagueRiotApiContext riotApiContext,
     IServiceScopeFactory scopeFactory,
     IOptions<SummonerBootstrapOptions> options,
     IOptions<MultiRegionIngestionOptions> multiRegionOptions,
@@ -238,7 +237,7 @@ public class SummonerBootstrapService(
             seedCount,
             platform);
 
-        var challengerLeague = await riotApi.LeagueV4()
+        var challengerLeague = await riotApiContext.Api.LeagueV4()
             .GetChallengerLeagueAsync(platform, QueueType.RANKED_SOLO_5x5, ct);
 
         var puuids = challengerLeague.Entries
@@ -262,8 +261,8 @@ public class SummonerBootstrapService(
         {
             try
             {
-                var summonerV4 = await riotApi.SummonerV4().GetByPUUIDAsync(platform, puuid, ct);
-                var account = await riotApi.AccountV1().GetByPuuidAsync(platform.ToRegional(), puuid, ct);
+                var summonerV4 = await riotApiContext.Api.SummonerV4().GetByPUUIDAsync(platform, puuid, ct);
+                var account = await riotApiContext.Api.AccountV1().GetByPuuidAsync(platform.ToRegional(), puuid, ct);
 
                 if (account == null ||
                     string.IsNullOrWhiteSpace(account.GameName) ||

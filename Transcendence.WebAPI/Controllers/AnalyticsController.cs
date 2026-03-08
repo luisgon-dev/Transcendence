@@ -10,7 +10,7 @@ using Transcendence.WebAPI.Security;
 namespace Transcendence.WebAPI.Controllers;
 
 [ApiController]
-[Route("api/analytics")]
+[Route("api/lol/analytics")]
 [EnableRateLimiting("expensive-read")]
 [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
 public class AnalyticsController(

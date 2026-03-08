@@ -10,7 +10,7 @@ function pickHeader(req: NextRequest, key: string) {
 }
 
 export const config = {
-  matcher: ["/summoners/:path*"]
+  matcher: ["/lol/summoners/:path*", "/tft/summoners/:path*"]
 };
 
 export function proxy(req: NextRequest) {
@@ -47,4 +47,3 @@ export function proxy(req: NextRequest) {
   res.headers.set("x-trn-request-id", requestId);
   return res;
 }
-

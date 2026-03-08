@@ -1,4 +1,3 @@
-using Camille.RiotGames;
 using Transcendence.Service.Core.Services.Analysis.Implementations;
 using Transcendence.Service.Core.Services.Analysis.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Implementations;
@@ -12,10 +11,13 @@ using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.Jobs.Priority;
 using Transcendence.Service.Core.Services.LiveGame.Implementations;
 using Transcendence.Service.Core.Services.LiveGame.Interfaces;
+using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.Implementations;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
 using Transcendence.Service.Core.Services.StaticData.Implementations;
 using Transcendence.Service.Core.Services.StaticData.Interfaces;
+using Transcendence.Service.Core.Services.Tft.Implementations;
+using Transcendence.Service.Core.Services.Tft.Interfaces;
 
 namespace Transcendence.Service.Core.Services.Extensions;
 
@@ -33,7 +35,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IJwtService, JwtService>();
         services.AddScoped<IUserAuthService, UserAuthService>();
         services.AddScoped<IUserPreferencesService, UserPreferencesService>();
-        services.AddScoped<ILiveGameService, LiveGameService>();
+        services.AddScoped<ILiveGameService, StoredLiveGameService>();
         services.AddScoped<ILiveGameAnalysisService, LiveGameAnalysisService>();
         services.AddScoped<IMultiSearchService, MultiSearchService>();
         services.AddSingleton<IRefreshLockLifecycleTelemetry, RefreshLockLifecycleTelemetry>();
@@ -42,6 +44,11 @@ public static class ServiceCollectionExtensions
         // Analytics services
         services.AddScoped<IChampionAnalyticsComputeService, ChampionAnalyticsComputeService>();
         services.AddScoped<IChampionAnalyticsService, ChampionAnalyticsService>();
+        services.AddScoped<ITftSummonerReadService, TftSummonerReadService>();
+        services.AddScoped<ITftSummonerBootstrapService, TftSummonerBootstrapService>();
+        services.AddScoped<ITftStaticDataService, TftStaticDataService>();
+        services.AddScoped<ITftAnalyticsComputeService, TftAnalyticsComputeService>();
+        services.AddScoped<ITftAnalyticsService, TftAnalyticsService>();
 
         services.AddScoped<ISummonerBootstrapService, SummonerBootstrapService>();
 
@@ -54,24 +61,30 @@ public static class ServiceCollectionExtensions
         services.AddScoped<SummonerMaintenanceJob>();
         services.AddScoped<RefreshLockLifecycleJob>();
         services.AddScoped<BackfillMatchPlatformRegionJob>();
+        services.AddScoped<UpdateTftStaticDataJob>();
+        services.AddScoped<RefreshTftAnalyticsJob>();
+        services.AddScoped<TftAnalyticsIngestionJob>();
+        services.AddScoped<TftSummonerMaintenanceJob>();
         services.AddScoped<IIngestionPriorityScoringPolicy, IngestionPriorityScoringPolicy>();
+        services.AddScoped<TftSummonerRefreshJob>();
 
         return services;
     }
 
-    // Riot-facing registrations; only hosts holding RiotApi:ApiKey should call this (e.g., Worker)
-    public static IServiceCollection AddTranscendenceRiot(this IServiceCollection services,
+    // Riot-facing registrations; only hosts holding RiotApi keys should call this (e.g., Worker)
+    public static IServiceCollection AddTranscendenceLeagueRiot(this IServiceCollection services,
         IConfiguration configuration)
     {
-        var riotApiKey = configuration.GetConnectionString("RiotApi")
+        var riotApiKey = configuration["RiotApi:League:ApiKey"]
+                         ?? configuration.GetConnectionString("RiotApi")
                          ?? configuration["RiotApi:ApiKey"];
         if (string.IsNullOrWhiteSpace(riotApiKey))
         {
             throw new InvalidOperationException(
-                "Missing Riot API key configuration. Set 'ConnectionStrings:RiotApi' (or 'RiotApi:ApiKey').");
+                "Missing League Riot API key configuration. Set 'RiotApi:League:ApiKey' (or legacy RiotApi key).");
         }
 
-        services.AddSingleton(_ => RiotGamesApi.NewInstance(riotApiKey));
+        services.AddSingleton(_ => new LeagueRiotApiContext(Camille.RiotGames.RiotGamesApi.NewInstance(riotApiKey)));
 
         services.AddScoped<ISummonerService, SummonerService>();
         services.AddScoped<IRankService, RankService>();
@@ -84,6 +97,27 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISummonerRefreshJob, SummonerRefreshJob>();
         services.AddScoped<MatchTimelineIngestionJob>();
         services.AddScoped<IRiotAccountService, RiotAccountService>();
+        services.AddScoped<ILiveGamePollingService, RiotLiveGamePollingService>();
+        return services;
+    }
+
+    public static IServiceCollection AddTranscendenceTftRiot(this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        var riotApiKey = configuration["RiotApi:Tft:ApiKey"];
+        if (string.IsNullOrWhiteSpace(riotApiKey))
+        {
+            throw new InvalidOperationException(
+                "Missing TFT Riot API key configuration. Set 'RiotApi:Tft:ApiKey'.");
+        }
+
+        services.AddSingleton(_ => new TftRiotApiContext(Camille.RiotGames.RiotGamesApi.NewInstance(riotApiKey)));
+        services.AddScoped<ITftSummonerService, TftSummonerService>();
+        services.AddScoped<ITftRankService, TftRankService>();
+        services.AddScoped<ITftMatchIdsClient, TftMatchIdsClient>();
+        services.AddScoped<ITftMatchService, TftMatchService>();
+        services.AddScoped<ITftSummonerRefreshJob, TftSummonerRefreshJob>();
+
         return services;
     }
 }

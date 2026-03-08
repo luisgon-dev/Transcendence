@@ -8,7 +8,7 @@ using Transcendence.WebAPI.Security;
 namespace Transcendence.WebAPI.Controllers;
 
 [ApiController]
-[Route("api/analytics/champions")]
+[Route("api/lol/analytics/champions")]
 [EnableRateLimiting("expensive-read")]
 [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
 public class ChampionAnalyticsController(IChampionAnalyticsService analyticsService) : ControllerBase

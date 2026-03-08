@@ -33,7 +33,7 @@ builder.Services.AddHangfire(config =>
             options.UseNpgsqlConnection(builder.Configuration.GetConnectionString("MainDatabase"))));
 builder.Services.AddHangfireServer(options =>
 {
-    options.Queues = ["refresh-high", "default", "refresh-low"];
+    options.Queues = ["refresh-high", "default", "refresh-low", "tft-refresh-high", "tft-default", "tft-refresh-low"];
 });
 
 builder.Services.AddHttpClient();
@@ -92,7 +92,8 @@ else
 
 // Register services
 builder.Services.AddTranscendenceCore();
-builder.Services.AddTranscendenceRiot(builder.Configuration);
+builder.Services.AddTranscendenceLeagueRiot(builder.Configuration);
+builder.Services.AddTranscendenceTftRiot(builder.Configuration);
 
 // add data repositories
 builder.Services.AddProjectSyndraRepositories();

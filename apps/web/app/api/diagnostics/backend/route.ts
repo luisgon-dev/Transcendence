@@ -6,7 +6,7 @@ import { logEvent } from "@/lib/serverLog";
 
 export async function GET() {
   const baseUrl = getBackendBaseUrl();
-  const url = `${baseUrl}/api/analytics/tierlist`;
+  const url = `${baseUrl}/api/lol/analytics/tierlist`;
 
   const result = await fetchBackendJson<unknown>(url, {
     method: "GET",

@@ -49,7 +49,7 @@ export function ChampionsGridClient({
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
         {filtered.map((c) => (
-          <Link key={c.championId} href={`/champions/${c.championId}${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}>
+          <Link key={c.championId} href={`/lol/champions/${c.championId}${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}>
             <Card className="group h-full p-3 transition hover:bg-white/10">
               <div className="flex items-center gap-3">
                 <Image

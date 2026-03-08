@@ -71,7 +71,6 @@ API health:
 ```bash
 dotnet user-secrets set "ConnectionStrings:MainDatabase" "Host=localhost;Port=5432;Database=transcendence;Username=postgres;Password=postgres" --project Transcendence.WebAPI
 dotnet user-secrets set "ConnectionStrings:Redis" "localhost:6379" --project Transcendence.WebAPI
-dotnet user-secrets set "ConnectionStrings:RiotApi" "RGAPI-your-key" --project Transcendence.WebAPI
 dotnet user-secrets set "Auth:Jwt:Key" "CHANGE_THIS_TO_A_REAL_32+_CHAR_SECRET" --project Transcendence.WebAPI
 dotnet user-secrets set "Auth:Jwt:RequireKeyInDevelopment" "false" --project Transcendence.WebAPI
 dotnet user-secrets set "Auth:AdminBootstrap:Emails:0" "admin@example.com" --project Transcendence.WebAPI
@@ -88,8 +87,14 @@ Security notes:
 ```bash
 dotnet user-secrets set "ConnectionStrings:MainDatabase" "Host=localhost;Port=5432;Database=transcendence;Username=postgres;Password=postgres" --project Transcendence.Service
 dotnet user-secrets set "ConnectionStrings:Redis" "localhost:6379" --project Transcendence.Service
-dotnet user-secrets set "ConnectionStrings:RiotApi" "RGAPI-your-key" --project Transcendence.Service
+dotnet user-secrets set "RiotApi:League:ApiKey" "RGAPI-your-lol-key" --project Transcendence.Service
+dotnet user-secrets set "RiotApi:Tft:ApiKey" "RGAPI-your-tft-key" --project Transcendence.Service
 ```
+
+Riot API key model:
+- `Transcendence.WebAPI` is keyless. It reads persisted data and enqueues refresh jobs only.
+- `Transcendence.Service` is the only host that talks to Riot through Camille.
+- LoL and TFT use separate worker-side keys: `RiotApi:League:ApiKey` and `RiotApi:Tft:ApiKey`.
 
 ### Database migrations
 
@@ -189,6 +194,10 @@ When `Transcendence.Service` runs in the `Development` environment, the `Develop
 - `refresh-champion-analytics-adaptive` (when enabled)
 - `champion-analytics-ingestion` (when enabled)
 - `summoner-maintenance` (when enabled)
+- `tft-static-data-refresh` (when enabled)
+- `tft-analytics-refresh` (when enabled)
+- `tft-analytics-ingestion` (when enabled)
+- `tft-summoner-maintenance` (when enabled)
 - `match-timeline-backfill` (when enabled)
 
 It explicitly removes non-analytics recurring jobs (`detect-patch`, `retry-failed-matches`, `poll-live-games`) from the scheduler to keep local runs focused on analytics behavior.
@@ -288,6 +297,24 @@ Non-ranked backfill ordering is tracked per summoner with `SummonerIngestionCurs
 - `RampDataStaleAfterMinutes`
 
 This recurring job refreshes stale summoners in low-priority mode when no active high-priority API refresh lock exists.
+
+### TFT Worker Jobs
+
+`Jobs:Schedule` now also supports dedicated TFT recurring jobs:
+
+- `TftStaticDataCron`
+- `TftAnalyticsRefreshCron`
+- `TftAnalyticsIngestionCron`
+- `TftSummonerMaintenanceCron`
+- `EnableTftStaticDataRefresh`
+- `EnableTftAnalyticsRefresh`
+- `EnableTftAnalyticsIngestion`
+- `EnableTftSummonerMaintenance`
+
+Queue model:
+- TFT profile refresh: `tft-refresh-high`
+- TFT analytics/static-data work: `tft-default`
+- TFT maintenance/bootstrap work: `tft-refresh-low`
 
 ### Refresh Lock Lifecycle Cleanup and Telemetry
 

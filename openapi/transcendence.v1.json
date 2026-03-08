@@ -1046,7 +1046,7 @@
         ]
       }
     },
-    "/api/analytics/tierlist": {
+    "/api/lol/analytics/tierlist": {
       "get": {
         "tags": [
           "Analytics"
@@ -1118,7 +1118,7 @@
         }
       }
     },
-    "/api/analytics/regions": {
+    "/api/lol/analytics/regions": {
       "get": {
         "tags": [
           "Analytics"
@@ -1176,7 +1176,7 @@
         }
       }
     },
-    "/api/analytics/cache/invalidate": {
+    "/api/lol/analytics/cache/invalidate": {
       "post": {
         "tags": [
           "Analytics"
@@ -1802,7 +1802,7 @@
         ]
       }
     },
-    "/api/analytics/champions/{championId}/winrates": {
+    "/api/lol/analytics/champions/{championId}/winrates": {
       "get": {
         "tags": [
           "ChampionAnalytics"
@@ -1903,7 +1903,7 @@
         }
       }
     },
-    "/api/analytics/champions/{championId}/builds": {
+    "/api/lol/analytics/champions/{championId}/builds": {
       "get": {
         "tags": [
           "ChampionAnalytics"
@@ -2004,7 +2004,7 @@
         }
       }
     },
-    "/api/analytics/champions/{championId}/pro-builds": {
+    "/api/lol/analytics/champions/{championId}/pro-builds": {
       "get": {
         "tags": [
           "ChampionAnalytics"
@@ -2105,7 +2105,7 @@
         }
       }
     },
-    "/api/analytics/champions/{championId}/matchups": {
+    "/api/lol/analytics/champions/{championId}/matchups": {
       "get": {
         "tags": [
           "ChampionAnalytics"
@@ -2206,7 +2206,7 @@
         }
       }
     },
-    "/api/analytics/champions/cache/invalidate": {
+    "/api/lol/analytics/champions/cache/invalidate": {
       "post": {
         "tags": [
           "ChampionAnalytics"
@@ -2247,7 +2247,7 @@
         ]
       }
     },
-    "/api/summoners/{region}/{gameName}/{tagLine}/live-game": {
+    "/api/lol/summoners/{region}/{gameName}/{tagLine}/live-game": {
       "get": {
         "tags": [
           "LiveGame"
@@ -2776,7 +2776,7 @@
         ]
       }
     },
-    "/api/summoners/search": {
+    "/api/lol/summoners/search": {
       "get": {
         "tags": [
           "Summoners"
@@ -2869,7 +2869,7 @@
         }
       }
     },
-    "/api/summoners/{region}/{name}/{tag}": {
+    "/api/lol/summoners/{region}/{name}/{tag}": {
       "get": {
         "tags": [
           "Summoners"
@@ -3004,7 +3004,7 @@
         }
       }
     },
-    "/api/summoners/{region}/{name}/{tag}/refresh": {
+    "/api/lol/summoners/{region}/{name}/{tag}/refresh": {
       "post": {
         "tags": [
           "Summoners"
@@ -3099,7 +3099,7 @@
         }
       }
     },
-    "/api/summoners/multi-search": {
+    "/api/lol/summoners/multi-search": {
       "post": {
         "tags": [
           "Summoners"
@@ -3196,7 +3196,7 @@
         ]
       }
     },
-    "/api/summoners/{summonerId}/stats/overview": {
+    "/api/lol/summoners/{summonerId}/stats/overview": {
       "get": {
         "tags": [
           "SummonerStats"
@@ -3285,7 +3285,7 @@
         }
       }
     },
-    "/api/summoners/{summonerId}/stats/champions": {
+    "/api/lol/summoners/{summonerId}/stats/champions": {
       "get": {
         "tags": [
           "SummonerStats"
@@ -3383,7 +3383,7 @@
         }
       }
     },
-    "/api/summoners/{summonerId}/stats/roles": {
+    "/api/lol/summoners/{summonerId}/stats/roles": {
       "get": {
         "tags": [
           "SummonerStats"
@@ -3472,7 +3472,7 @@
         }
       }
     },
-    "/api/summoners/{summonerId}/matches/recent": {
+    "/api/lol/summoners/{summonerId}/matches/recent": {
       "get": {
         "tags": [
           "SummonerStats"
@@ -3588,7 +3588,7 @@
         }
       }
     },
-    "/api/summoners/{summonerId}/matches/{matchId}": {
+    "/api/lol/summoners/{summonerId}/matches/{matchId}": {
       "get": {
         "tags": [
           "SummonerStats"
@@ -3675,6 +3675,772 @@
           },
           "500": {
             "description": "Internal Server Error",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tft/analytics/regions": {
+      "get": {
+        "tags": [
+          "TftAnalytics"
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tft/analytics/comps": {
+      "get": {
+        "tags": [
+          "TftAnalytics"
+        ],
+        "parameters": [
+          {
+            "name": "rankTier",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tft/analytics/comps/{compSlug}": {
+      "get": {
+        "tags": [
+          "TftAnalytics"
+        ],
+        "parameters": [
+          {
+            "name": "compSlug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rankTier",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tft/analytics/champions": {
+      "get": {
+        "tags": [
+          "TftAnalytics"
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tft/analytics/champions/{championId}": {
+      "get": {
+        "tags": [
+          "TftAnalytics"
+        ],
+        "parameters": [
+          {
+            "name": "championId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tft/analytics/items": {
+      "get": {
+        "tags": [
+          "TftAnalytics"
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tft/analytics/items/{itemId}": {
+      "get": {
+        "tags": [
+          "TftAnalytics"
+        ],
+        "parameters": [
+          {
+            "name": "itemId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tft/analytics/traits": {
+      "get": {
+        "tags": [
+          "TftAnalytics"
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tft/analytics/traits/{traitId}": {
+      "get": {
+        "tags": [
+          "TftAnalytics"
+        ],
+        "parameters": [
+          {
+            "name": "traitId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tft/analytics/augments": {
+      "get": {
+        "tags": [
+          "TftAnalytics"
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tft/analytics/augments/{augmentId}": {
+      "get": {
+        "tags": [
+          "TftAnalytics"
+        ],
+        "parameters": [
+          {
+            "name": "augmentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tft/analytics/cache/invalidate": {
+      "post": {
+        "tags": [
+          "TftAnalytics"
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          { }
+        ]
+      }
+    },
+    "/api/tft/summoners/search": {
+      "get": {
+        "tags": [
+          "TftSummoners"
+        ],
+        "parameters": [
+          {
+            "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tft/summoners/{region}/{name}/{tag}": {
+      "get": {
+        "tags": [
+          "TftSummoners"
+        ],
+        "parameters": [
+          {
+            "name": "region",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TftSummonerProfileDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TftSummonerProfileDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TftSummonerProfileDto"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SummonerAcceptedResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SummonerAcceptedResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SummonerAcceptedResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tft/summoners/{region}/{name}/{tag}/refresh": {
+      "post": {
+        "tags": [
+          "TftSummoners"
+        ],
+        "parameters": [
+          {
+            "name": "region",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SummonerAcceptedResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SummonerAcceptedResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SummonerAcceptedResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tft/summoners/{summonerId}/matches/recent": {
+      "get": {
+        "tags": [
+          "TftSummoners"
+        ],
+        "parameters": [
+          {
+            "name": "summonerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tft/summoners/{summonerId}/matches/{matchId}": {
+      "get": {
+        "tags": [
+          "TftSummoners"
+        ],
+        "parameters": [
+          {
+            "name": "summonerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "matchId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6906,6 +7672,217 @@
         },
         "additionalProperties": false
       },
+      "TftRankDto": {
+        "type": "object",
+        "properties": {
+          "queueType": {
+            "type": "string",
+            "nullable": true
+          },
+          "tier": {
+            "type": "string",
+            "nullable": true
+          },
+          "rankNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "leaguePoints": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "wins": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "losses": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "updatedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TftRecentMatchSummaryDto": {
+        "type": "object",
+        "properties": {
+          "matchId": {
+            "type": "string",
+            "nullable": true
+          },
+          "matchDate": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "placement": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "level": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "lastRound": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "playersEliminated": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalDamageToPlayers": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "setNumber": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "setCoreName": {
+            "type": "string",
+            "nullable": true
+          },
+          "patch": {
+            "type": "string",
+            "nullable": true
+          },
+          "augments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "units": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TftUnitSummaryDto"
+            },
+            "nullable": true
+          },
+          "traits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TftTraitSummaryDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "TftSummonerProfileDto": {
+        "type": "object",
+        "properties": {
+          "summonerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "puuid": {
+            "type": "string",
+            "nullable": true
+          },
+          "gameName": {
+            "type": "string",
+            "nullable": true
+          },
+          "tagLine": {
+            "type": "string",
+            "nullable": true
+          },
+          "profileIconId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "summonerLevel": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "platformRegion": {
+            "type": "string",
+            "nullable": true
+          },
+          "region": {
+            "type": "string",
+            "nullable": true
+          },
+          "updatedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ranks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TftRankDto"
+            },
+            "nullable": true
+          },
+          "recentMatches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TftRecentMatchSummaryDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "TftTraitSummaryDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "numUnits": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "tierCurrent": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "style": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "TftUnitSummaryDto": {
+        "type": "object",
+        "properties": {
+          "characterId": {
+            "type": "string",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "rarity": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "tier": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "TierGrade": {
         "enum": [
           0,
@@ -7173,6 +8150,12 @@
     },
     {
       "name": "SummonerStats"
+    },
+    {
+      "name": "TftAnalytics"
+    },
+    {
+      "name": "TftSummoners"
     },
     {
       "name": "UserPreferences"

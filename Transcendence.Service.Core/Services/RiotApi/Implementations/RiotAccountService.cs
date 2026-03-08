@@ -1,18 +1,19 @@
 using Camille.Enums;
 using Camille.RiotGames;
 using Camille.RiotGames.Util;
+using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
 
 namespace Transcendence.Service.Core.Services.RiotApi.Implementations;
 
-public class RiotAccountService(RiotGamesApi riotApi) : IRiotAccountService
+public class RiotAccountService(LeagueRiotApiContext riotApiContext) : IRiotAccountService
 {
     public async Task<string?> ResolvePuuidAsync(string gameName, string tagLine, PlatformRoute platform,
         CancellationToken ct = default)
     {
         try
         {
-            var account = await riotApi.AccountV1()
+            var account = await riotApiContext.Api.AccountV1()
                 .GetByRiotIdAsync(platform.ToRegional(), gameName, tagLine, ct);
             return account?.Puuid;
         }

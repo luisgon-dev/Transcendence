@@ -48,32 +48,37 @@ const REGIONS = [
 const TIER_LINKS = [
   {
     label: `Tier List · All Roles (${rankTierDisplayLabel(DEFAULT_TIERLIST_RANK_TIER)})`,
-    href: "/tierlist"
+    href: "/lol/tierlist"
   },
   {
     label: `Tier List · Top (${rankTierDisplayLabel(DEFAULT_TIERLIST_RANK_TIER)})`,
-    href: "/tierlist?role=TOP"
+    href: "/lol/tierlist?role=TOP"
   },
   {
     label: `Tier List · Jungle (${rankTierDisplayLabel(DEFAULT_TIERLIST_RANK_TIER)})`,
-    href: "/tierlist?role=JUNGLE"
+    href: "/lol/tierlist?role=JUNGLE"
   },
   {
     label: `Tier List · Middle (${rankTierDisplayLabel(DEFAULT_TIERLIST_RANK_TIER)})`,
-    href: "/tierlist?role=MIDDLE"
+    href: "/lol/tierlist?role=MIDDLE"
   },
   {
     label: `Tier List · Bottom (${rankTierDisplayLabel(DEFAULT_TIERLIST_RANK_TIER)})`,
-    href: "/tierlist?role=BOTTOM"
+    href: "/lol/tierlist?role=BOTTOM"
   },
   {
     label: `Tier List · Support (${rankTierDisplayLabel(DEFAULT_TIERLIST_RANK_TIER)})`,
-    href: "/tierlist?role=UTILITY"
+    href: "/lol/tierlist?role=UTILITY"
   },
-  { label: "Tier List · All Ranks", href: "/tierlist?rankTier=all" },
-  { label: "Tier List · Challenger", href: "/tierlist?rankTier=CHALLENGER" },
-  { label: "Matchup Analysis", href: "/matchups" },
-  { label: "Pro Builds Preview", href: "/pro-builds" }
+  { label: "Tier List · All Ranks", href: "/lol/tierlist?rankTier=all" },
+  { label: "Tier List · Challenger", href: "/lol/tierlist?rankTier=CHALLENGER" },
+  { label: "Matchup Analysis", href: "/lol/matchups" },
+  { label: "Pro Builds Preview", href: "/lol/pro-builds" },
+  { label: "TFT Comps", href: "/tft/comps" },
+  { label: "TFT Champions", href: "/tft/champions" },
+  { label: "TFT Items", href: "/tft/items" },
+  { label: "TFT Traits", href: "/tft/traits" },
+  { label: "TFT Augments", href: "/tft/augments" }
 ] as const;
 
 function isEditableTarget(target: EventTarget | null) {
@@ -255,7 +260,7 @@ export function GlobalCommandPalette() {
   const summonerResultPaths = useMemo(
     () =>
       summonerResults.map((item) =>
-        `/summoners/${item.region}/${encodeRiotIdPath({
+        `/lol/summoners/${item.region}/${encodeRiotIdPath({
           gameName: item.gameName,
           tagLine: item.tagLine
         })}`
@@ -266,10 +271,10 @@ export function GlobalCommandPalette() {
   const prefetchTargets = useMemo(() => {
     const paths = summonerResultPaths.slice(0, 3);
     if (paths.length === 0 && parsedRiotId) {
-      paths.push(`/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`);
+      paths.push(`/lol/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`);
     }
 
-    for (const championPath of championResults.slice(0, 3).map((c) => `/champions/${c.championId}`)) {
+    for (const championPath of championResults.slice(0, 3).map((c) => `/lol/champions/${c.championId}`)) {
       paths.push(championPath);
     }
     for (const tier of tierResults.slice(0, 2)) paths.push(tier.href);
@@ -295,7 +300,7 @@ export function GlobalCommandPalette() {
 
     e.preventDefault();
     e.stopPropagation();
-    navigate(`/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`);
+    navigate(`/lol/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`);
   }
 
   if (!open) return null;
@@ -344,7 +349,7 @@ export function GlobalCommandPalette() {
           <Command.List className="max-h-[65vh] overflow-y-auto p-2">
             <Command.Group heading="Summoners">
               {summonerResults.map((item) => {
-                const path = `/summoners/${item.region}/${encodeRiotIdPath({
+                const path = `/lol/summoners/${item.region}/${encodeRiotIdPath({
                   gameName: item.gameName,
                   tagLine: item.tagLine
                 })}`;
@@ -392,7 +397,7 @@ export function GlobalCommandPalette() {
                   value={`summoner-${parsedRiotId.gameName}-${parsedRiotId.tagLine}-${region}`}
                   onSelect={() =>
                     navigate(
-                      `/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`
+                      `/lol/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`
                     )
                   }
                   className="flex cursor-pointer items-center rounded-md px-3 py-2 text-sm text-fg/90 data-[selected=true]:bg-white/10"
@@ -416,7 +421,7 @@ export function GlobalCommandPalette() {
                 <Command.Item
                   key={`champion-${champion.championId}`}
                   value={`champion-${champion.name}`}
-                  onSelect={() => navigate(`/champions/${champion.championId}`)}
+                  onSelect={() => navigate(`/lol/champions/${champion.championId}`)}
                   className="flex cursor-pointer items-center rounded-md px-3 py-2 text-sm text-fg/90 data-[selected=true]:bg-white/10"
                 >
                   {champion.name}

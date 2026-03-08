@@ -42,17 +42,26 @@ export function SiteHeaderClient({
           </Link>
 
           <nav className="ml-3 hidden items-center gap-5 md:flex">
-            <Link href="/tierlist" className={navLinkClass(pathname, "/tierlist")}>
+            <Link href="/lol" className={navLinkClass(pathname, "/lol")}>
+              LoL
+            </Link>
+            <Link href="/tft" className={navLinkClass(pathname, "/tft")}>
+              TFT
+            </Link>
+            <Link href="/lol/tierlist" className={navLinkClass(pathname, "/lol/tierlist")}>
               Tier List
             </Link>
-            <Link href="/champions" className={navLinkClass(pathname, "/champions")}>
+            <Link href="/lol/champions" className={navLinkClass(pathname, "/lol/champions")}>
               Champions
             </Link>
-            <Link href="/matchups" className={navLinkClass(pathname, "/matchups")}>
+            <Link href="/lol/matchups" className={navLinkClass(pathname, "/lol/matchups")}>
               Matchups
             </Link>
-            <Link href="/pro-builds" className={navLinkClass(pathname, "/pro-builds")}>
+            <Link href="/lol/pro-builds" className={navLinkClass(pathname, "/lol/pro-builds")}>
               Pro Builds
+            </Link>
+            <Link href="/tft/comps" className={navLinkClass(pathname, "/tft/comps")}>
+              Comps
             </Link>
             {patch ? (
               <span className="rounded-full border border-primary/35 bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary">
@@ -84,17 +93,26 @@ export function SiteHeaderClient({
         </div>
 
         <nav className="flex flex-wrap items-center gap-3 border-t border-border/40 pt-2 md:hidden">
-          <Link href="/tierlist" className={navLinkClass(pathname, "/tierlist")}>
+          <Link href="/lol" className={navLinkClass(pathname, "/lol")}>
+            LoL
+          </Link>
+          <Link href="/tft" className={navLinkClass(pathname, "/tft")}>
+            TFT
+          </Link>
+          <Link href="/lol/tierlist" className={navLinkClass(pathname, "/lol/tierlist")}>
             Tier List
           </Link>
-          <Link href="/champions" className={navLinkClass(pathname, "/champions")}>
+          <Link href="/lol/champions" className={navLinkClass(pathname, "/lol/champions")}>
             Champions
           </Link>
-          <Link href="/matchups" className={navLinkClass(pathname, "/matchups")}>
+          <Link href="/lol/matchups" className={navLinkClass(pathname, "/lol/matchups")}>
             Matchups
           </Link>
-          <Link href="/pro-builds" className={navLinkClass(pathname, "/pro-builds")}>
+          <Link href="/lol/pro-builds" className={navLinkClass(pathname, "/lol/pro-builds")}>
             Pro
+          </Link>
+          <Link href="/tft/comps" className={navLinkClass(pathname, "/tft/comps")}>
+            Comps
           </Link>
           {patch ? (
             <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">

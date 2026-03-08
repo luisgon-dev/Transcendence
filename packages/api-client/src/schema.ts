@@ -1000,7 +1000,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/analytics/tierlist": {
+    "/api/lol/analytics/tierlist": {
         parameters: {
             query?: never;
             header?: never;
@@ -1052,7 +1052,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/analytics/regions": {
+    "/api/lol/analytics/regions": {
         parameters: {
             query?: never;
             header?: never;
@@ -1100,7 +1100,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/analytics/cache/invalidate": {
+    "/api/lol/analytics/cache/invalidate": {
         parameters: {
             query?: never;
             header?: never;
@@ -1691,7 +1691,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/analytics/champions/{championId}/winrates": {
+    "/api/lol/analytics/champions/{championId}/winrates": {
         parameters: {
             query?: never;
             header?: never;
@@ -1756,7 +1756,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/analytics/champions/{championId}/builds": {
+    "/api/lol/analytics/champions/{championId}/builds": {
         parameters: {
             query?: never;
             header?: never;
@@ -1821,7 +1821,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/analytics/champions/{championId}/pro-builds": {
+    "/api/lol/analytics/champions/{championId}/pro-builds": {
         parameters: {
             query?: never;
             header?: never;
@@ -1886,7 +1886,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/analytics/champions/{championId}/matchups": {
+    "/api/lol/analytics/champions/{championId}/matchups": {
         parameters: {
             query?: never;
             header?: never;
@@ -1951,7 +1951,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/analytics/champions/cache/invalidate": {
+    "/api/lol/analytics/champions/cache/invalidate": {
         parameters: {
             query?: never;
             header?: never;
@@ -2009,7 +2009,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/summoners/{region}/{gameName}/{tagLine}/live-game": {
+    "/api/lol/summoners/{region}/{gameName}/{tagLine}/live-game": {
         parameters: {
             query?: never;
             header?: never;
@@ -2428,7 +2428,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/summoners/search": {
+    "/api/lol/summoners/search": {
         parameters: {
             query?: never;
             header?: never;
@@ -2491,7 +2491,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/summoners/{region}/{name}/{tag}": {
+    "/api/lol/summoners/{region}/{name}/{tag}": {
         parameters: {
             query?: never;
             header?: never;
@@ -2576,7 +2576,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/summoners/{region}/{name}/{tag}/refresh": {
+    "/api/lol/summoners/{region}/{name}/{tag}/refresh": {
         parameters: {
             query?: never;
             header?: never;
@@ -2639,7 +2639,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/summoners/multi-search": {
+    "/api/lol/summoners/multi-search": {
         parameters: {
             query?: never;
             header?: never;
@@ -2718,7 +2718,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/summoners/{summonerId}/stats/overview": {
+    "/api/lol/summoners/{summonerId}/stats/overview": {
         parameters: {
             query?: never;
             header?: never;
@@ -2781,7 +2781,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/summoners/{summonerId}/stats/champions": {
+    "/api/lol/summoners/{summonerId}/stats/champions": {
         parameters: {
             query?: never;
             header?: never;
@@ -2844,7 +2844,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/summoners/{summonerId}/stats/roles": {
+    "/api/lol/summoners/{summonerId}/stats/roles": {
         parameters: {
             query?: never;
             header?: never;
@@ -2905,7 +2905,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/summoners/{summonerId}/matches/recent": {
+    "/api/lol/summoners/{summonerId}/matches/recent": {
         parameters: {
             query?: never;
             header?: never;
@@ -2971,7 +2971,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/summoners/{summonerId}/matches/{matchId}": {
+    "/api/lol/summoners/{summonerId}/matches/{matchId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -3025,6 +3025,718 @@ export interface paths {
                 };
                 /** @description Internal Server Error */
                 500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tft/analytics/regions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tft/analytics/comps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    rankTier?: string;
+                    region?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tft/analytics/comps/{compSlug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    rankTier?: string;
+                    region?: string;
+                };
+                header?: never;
+                path: {
+                    compSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tft/analytics/champions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tft/analytics/champions/{championId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    championId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tft/analytics/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tft/analytics/items/{itemId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    itemId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tft/analytics/traits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tft/analytics/traits/{traitId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    traitId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tft/analytics/augments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tft/analytics/augments/{augmentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    augmentId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tft/analytics/cache/invalidate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tft/summoners/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    region?: string;
+                    q?: string;
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tft/summoners/{region}/{name}/{tag}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    region: string;
+                    name: string;
+                    tag: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TftSummonerProfileDto"];
+                        "application/json": components["schemas"]["TftSummonerProfileDto"];
+                        "text/json": components["schemas"]["TftSummonerProfileDto"];
+                    };
+                };
+                /** @description Accepted */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SummonerAcceptedResponse"];
+                        "application/json": components["schemas"]["SummonerAcceptedResponse"];
+                        "text/json": components["schemas"]["SummonerAcceptedResponse"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tft/summoners/{region}/{name}/{tag}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    region: string;
+                    name: string;
+                    tag: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Accepted */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SummonerAcceptedResponse"];
+                        "application/json": components["schemas"]["SummonerAcceptedResponse"];
+                        "text/json": components["schemas"]["SummonerAcceptedResponse"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tft/summoners/{summonerId}/matches/recent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    page?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path: {
+                    summonerId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tft/summoners/{summonerId}/matches/{matchId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    summonerId: string;
+                    matchId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Too Many Requests */
+                429: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -4311,6 +5023,76 @@ export interface components {
             estimatedWinProbability?: number;
             strengths?: string[] | null;
             weaknesses?: string[] | null;
+        };
+        TftRankDto: {
+            queueType?: string | null;
+            tier?: string | null;
+            rankNumber?: string | null;
+            /** Format: int32 */
+            leaguePoints?: number;
+            /** Format: int32 */
+            wins?: number;
+            /** Format: int32 */
+            losses?: number;
+            /** Format: date-time */
+            updatedAtUtc?: string;
+        };
+        TftRecentMatchSummaryDto: {
+            matchId?: string | null;
+            /** Format: int64 */
+            matchDate?: number;
+            /** Format: int32 */
+            placement?: number;
+            /** Format: int32 */
+            level?: number;
+            /** Format: int32 */
+            lastRound?: number;
+            /** Format: int32 */
+            playersEliminated?: number;
+            /** Format: int32 */
+            totalDamageToPlayers?: number;
+            /** Format: int32 */
+            setNumber?: number | null;
+            setCoreName?: string | null;
+            patch?: string | null;
+            augments?: string[] | null;
+            units?: components["schemas"]["TftUnitSummaryDto"][] | null;
+            traits?: components["schemas"]["TftTraitSummaryDto"][] | null;
+        };
+        TftSummonerProfileDto: {
+            /** Format: uuid */
+            summonerId?: string;
+            puuid?: string | null;
+            gameName?: string | null;
+            tagLine?: string | null;
+            /** Format: int32 */
+            profileIconId?: number;
+            /** Format: int64 */
+            summonerLevel?: number;
+            platformRegion?: string | null;
+            region?: string | null;
+            /** Format: date-time */
+            updatedAtUtc?: string;
+            ranks?: components["schemas"]["TftRankDto"][] | null;
+            recentMatches?: components["schemas"]["TftRecentMatchSummaryDto"][] | null;
+        };
+        TftTraitSummaryDto: {
+            name?: string | null;
+            /** Format: int32 */
+            numUnits?: number;
+            /** Format: int32 */
+            tierCurrent?: number;
+            /** Format: int32 */
+            style?: number | null;
+        };
+        TftUnitSummaryDto: {
+            characterId?: string | null;
+            name?: string | null;
+            /** Format: int32 */
+            rarity?: number;
+            /** Format: int32 */
+            tier?: number;
+            items?: number[] | null;
         };
         /**
          * Format: int32

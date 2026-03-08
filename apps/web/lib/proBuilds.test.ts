@@ -56,12 +56,12 @@ describe("buildProBuildPageHref", () => {
   it("builds href with filters", () => {
     expect(
       buildProBuildPageHref(222, { role: "MIDDLE", region: "KR", patch: "14.5" })
-    ).toBe("/pro-builds/222?role=MIDDLE&region=KR&patch=14.5");
+    ).toBe("/lol/pro-builds/222?role=MIDDLE&region=KR&patch=14.5");
   });
 
   it("omits query string when all filters are default", () => {
     expect(buildProBuildPageHref(222, { role: "ALL", region: "ALL", patch: null })).toBe(
-      "/pro-builds/222"
+      "/lol/pro-builds/222"
     );
   });
 });

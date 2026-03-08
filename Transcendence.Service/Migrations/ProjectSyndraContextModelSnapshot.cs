@@ -1046,6 +1046,669 @@ namespace Transcendence.Service.Migrations
                     b.ToTable("RefreshLocks");
                 });
 
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Account.TftHistoricalRank", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("DateRecorded")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("LeaguePoints")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Losses")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("QueueType")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RankNumber")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("SummonerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Tier")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Wins")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SummonerId");
+
+                    b.ToTable("TftHistoricalRanks");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Account.TftRank", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("LeaguePoints")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Losses")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("QueueType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("RankNumber")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("SummonerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Tier")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Wins")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SummonerId", "QueueType")
+                        .IsUnique();
+
+                    b.ToTable("TftRanks");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Account.TftSummoner", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AccountId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("GameName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("GameNameNormalized")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PlatformRegion")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("ProfileIconId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Puuid")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Region")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<long>("RevisionDate")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("RiotSummonerId")
+                        .HasColumnType("text");
+
+                    b.Property<long>("SummonerLevel")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("TagLine")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TagLineNormalized")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Puuid")
+                        .IsUnique();
+
+                    b.HasIndex("PlatformRegion", "GameNameNormalized", "TagLineNormalized")
+                        .IsUnique();
+
+                    b.ToTable("TftSummoners");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Account.TftSummonerIngestionCursor", b =>
+                {
+                    b.Property<Guid>("SummonerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Scope")
+                        .HasColumnType("text");
+
+                    b.Property<long?>("BackfillBeforeEpochSeconds")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("ConsecutiveNoopRuns")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("LastRunAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("SummonerId", "Scope");
+
+                    b.ToTable("TftSummonerIngestionCursors");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Match.TftMatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("DurationSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("FetchedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("GameVariation")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LastAttemptAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastErrorMessage")
+                        .HasColumnType("text");
+
+                    b.Property<long>("MatchDate")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("MatchId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Patch")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PlatformRegion")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("QueueId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SetCoreName")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("SetNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TftGameType")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MatchDate");
+
+                    b.HasIndex("MatchId")
+                        .IsUnique();
+
+                    b.HasIndex("SetNumber");
+
+                    b.HasIndex("PlatformRegion", "Patch", "SetNumber", "Status");
+
+                    b.ToTable("TftMatches");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Match.TftMatchParticipant", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.PrimitiveCollection<string[]>("Augments")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'::text[]");
+
+                    b.Property<int?>("CompanionItemId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("CompanionSkinId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CompanionSpecies")
+                        .HasColumnType("text");
+
+                    b.Property<int>("GoldLeft")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LastRound")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Level")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Placement")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PlayersEliminated")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Puuid")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("RiotIdGameName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RiotIdTagLine")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("SummonerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<float>("TimeEliminatedSeconds")
+                        .HasColumnType("real");
+
+                    b.Property<int>("TotalDamageToPlayers")
+                        .HasColumnType("integer");
+
+                    b.Property<bool?>("Win")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Placement");
+
+                    b.HasIndex("MatchId", "SummonerId")
+                        .IsUnique();
+
+                    b.HasIndex("SummonerId", "Placement");
+
+                    b.ToTable("TftMatchParticipants");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Match.TftMatchParticipantAugment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ApiName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ParticipantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SlotIndex")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParticipantId");
+
+                    b.HasIndex("ApiName", "ParticipantId");
+
+                    b.ToTable("TftMatchParticipantAugments");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Match.TftMatchParticipantTrait", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("NumUnits")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ParticipantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("Style")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TierCurrent")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TierTotal")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name");
+
+                    b.HasIndex("ParticipantId");
+
+                    b.ToTable("TftMatchParticipantTraits");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Match.TftMatchParticipantUnit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CharacterId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Chosen")
+                        .HasColumnType("text");
+
+                    b.PrimitiveCollection<string[]>("ItemNames")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'::text[]");
+
+                    b.PrimitiveCollection<int[]>("Items")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer[]")
+                        .HasDefaultValueSql("'{}'::integer[]");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ParticipantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Rarity")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Tier")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CharacterId");
+
+                    b.HasIndex("ParticipantId");
+
+                    b.ToTable("TftMatchParticipantUnits");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Static.TftAugmentVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ApiName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.PrimitiveCollection<string[]>("AssociatedTraits")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'::text[]");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Icon")
+                        .HasColumnType("text");
+
+                    b.PrimitiveCollection<string[]>("IncompatibleTraits")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'::text[]");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SetNumber")
+                        .HasColumnType("integer");
+
+                    b.PrimitiveCollection<string[]>("Tags")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'::text[]");
+
+                    b.Property<bool>("Unique")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SetNumber", "ApiName")
+                        .IsUnique();
+
+                    b.ToTable("TftAugmentVersions");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Static.TftItemVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ApiName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.PrimitiveCollection<string[]>("AssociatedTraits")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'::text[]");
+
+                    b.PrimitiveCollection<string[]>("Composition")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'::text[]");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Icon")
+                        .HasColumnType("text");
+
+                    b.PrimitiveCollection<string[]>("IncompatibleTraits")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'::text[]");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("RiotItemId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SetNumber")
+                        .HasColumnType("integer");
+
+                    b.PrimitiveCollection<string[]>("Tags")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'::text[]");
+
+                    b.Property<bool>("Unique")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SetNumber", "ApiName")
+                        .IsUnique();
+
+                    b.ToTable("TftItemVersions");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Static.TftPatch", b =>
+                {
+                    b.Property<string>("Version")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ActiveSetCoreName")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("ActiveSetNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("DetectedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Version");
+
+                    b.ToTable("TftPatches");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Static.TftSet", b =>
+                {
+                    b.Property<int>("Number")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Number"));
+
+                    b.Property<string>("CoreName")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Mutator")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Number");
+
+                    b.ToTable("TftSets");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Static.TftTraitVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ApiName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Icon")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SetNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SetNumber", "ApiName")
+                        .IsUnique();
+
+                    b.ToTable("TftTraitVersions");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Static.TftUnitVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ApiName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("CharacterName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Cost")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Icon")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Role")
+                        .HasColumnType("text");
+
+                    b.Property<int>("SetNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SquareIcon")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TileIcon")
+                        .HasColumnType("text");
+
+                    b.PrimitiveCollection<string[]>("Traits")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'::text[]");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SetNumber", "ApiName")
+                        .IsUnique();
+
+                    b.ToTable("TftUnitVersions");
+                });
+
             modelBuilder.Entity("MatchSummoner", b =>
                 {
                     b.HasOne("Transcendence.Data.Models.LoL.Match.Match", null)
@@ -1255,6 +1918,100 @@ namespace Transcendence.Service.Migrations
                         .HasForeignKey("CurrentChampionLoadoutId");
                 });
 
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Account.TftHistoricalRank", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.Tft.Account.TftSummoner", "Summoner")
+                        .WithMany("HistoricalRanks")
+                        .HasForeignKey("SummonerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Summoner");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Account.TftRank", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.Tft.Account.TftSummoner", "Summoner")
+                        .WithMany("Ranks")
+                        .HasForeignKey("SummonerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Summoner");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Account.TftSummonerIngestionCursor", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.Tft.Account.TftSummoner", "Summoner")
+                        .WithMany("IngestionCursors")
+                        .HasForeignKey("SummonerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Summoner");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Match.TftMatch", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.Tft.Static.TftSet", "Set")
+                        .WithMany()
+                        .HasForeignKey("SetNumber");
+
+                    b.Navigation("Set");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Match.TftMatchParticipant", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.Tft.Match.TftMatch", "Match")
+                        .WithMany("Participants")
+                        .HasForeignKey("MatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Transcendence.Data.Models.Tft.Account.TftSummoner", "Summoner")
+                        .WithMany("MatchParticipants")
+                        .HasForeignKey("SummonerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Match");
+
+                    b.Navigation("Summoner");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Match.TftMatchParticipantAugment", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.Tft.Match.TftMatchParticipant", "Participant")
+                        .WithMany("AugmentRows")
+                        .HasForeignKey("ParticipantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Participant");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Match.TftMatchParticipantTrait", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.Tft.Match.TftMatchParticipant", "Participant")
+                        .WithMany("Traits")
+                        .HasForeignKey("ParticipantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Participant");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Match.TftMatchParticipantUnit", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.Tft.Match.TftMatchParticipant", "Participant")
+                        .WithMany("Units")
+                        .HasForeignKey("ParticipantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Participant");
+                });
+
             modelBuilder.Entity("Transcendence.Data.Models.Auth.UserAccount", b =>
                 {
                     b.Navigation("FavoriteSummoners");
@@ -1298,6 +2055,31 @@ namespace Transcendence.Service.Migrations
             modelBuilder.Entity("Transcendence.Data.Models.Service.CurrentChampionLoadout", b =>
                 {
                     b.Navigation("UnitWinPercents");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Account.TftSummoner", b =>
+                {
+                    b.Navigation("HistoricalRanks");
+
+                    b.Navigation("IngestionCursors");
+
+                    b.Navigation("MatchParticipants");
+
+                    b.Navigation("Ranks");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Match.TftMatch", b =>
+                {
+                    b.Navigation("Participants");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Tft.Match.TftMatchParticipant", b =>
+                {
+                    b.Navigation("AugmentRows");
+
+                    b.Navigation("Traits");
+
+                    b.Navigation("Units");
                 });
 #pragma warning restore 612, 618
         }

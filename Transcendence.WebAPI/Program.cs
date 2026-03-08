@@ -1,4 +1,3 @@
-using Camille.RiotGames;
 using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Authentication;
@@ -18,8 +17,6 @@ using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Extensions;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
-using Transcendence.Service.Core.Services.RiotApi.Implementations;
-using Transcendence.Service.Core.Services.RiotApi.Interfaces;
 using Transcendence.WebAPI.Errors;
 using Transcendence.WebAPI.Security;
 
@@ -167,17 +164,6 @@ builder.Services.Configure<WorkerJobScheduleOptions>(builder.Configuration.GetSe
 builder.Services.Configure<WorkerSchedulingProfileOptions>(builder.Configuration.GetSection("Jobs:SchedulingProfiles"));
 builder.Services.Configure<AdminBootstrapOptions>(builder.Configuration.GetSection("Auth:AdminBootstrap"));
 builder.Services.AddSingleton<IWorkerRecurringJobPolicy, WorkerRecurringJobPolicy>();
-
-var riotApiKey = builder.Configuration.GetConnectionString("RiotApi")
-                 ?? builder.Configuration["RiotApi:ApiKey"];
-if (string.IsNullOrWhiteSpace(riotApiKey))
-{
-    throw new InvalidOperationException(
-        "Missing Riot API key configuration. Set 'ConnectionStrings:RiotApi' (or 'RiotApi:ApiKey').");
-}
-
-builder.Services.AddSingleton(_ => RiotGamesApi.NewInstance(riotApiKey));
-builder.Services.AddScoped<IRiotAccountService, RiotAccountService>();
 
 var jwtIssuer = builder.Configuration["Auth:Jwt:Issuer"] ?? "Transcendence";
 var jwtAudience = builder.Configuration["Auth:Jwt:Audience"] ?? "TranscendenceClients";

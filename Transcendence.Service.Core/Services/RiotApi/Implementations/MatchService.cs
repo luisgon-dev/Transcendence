@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Repositories.Interfaces;
+using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
 using Transcendence.Service.Core.Services.StaticData.Interfaces;
 using Match = Transcendence.Data.Models.LoL.Match.Match;
@@ -15,7 +16,7 @@ namespace Transcendence.Service.Core.Services.RiotApi.Implementations;
 using DataMatch = Match;
 
 public class MatchService(
-    RiotGamesApi riotGamesApi,
+    LeagueRiotApiContext riotApiContext,
     TranscendenceContext context,
     IMatchRepository matchRepository,
     ISummonerService summonerService,
@@ -30,7 +31,7 @@ public class MatchService(
         CancellationToken cancellationToken = default)
     {
         // Fetch match from Riot
-        var matchDto = await riotGamesApi.MatchV5()
+        var matchDto = await riotApiContext.Api.MatchV5()
             .GetMatchAsync(regionalRoute, matchId, cancellationToken);
         if (matchDto == null)
         {
@@ -142,7 +143,7 @@ public class MatchService(
         PlatformRoute platformRoute,
         CancellationToken cancellationToken = default)
     {
-        var matchDto = await riotGamesApi.MatchV5()
+        var matchDto = await riotApiContext.Api.MatchV5()
             .GetMatchAsync(regionalRoute, matchId, cancellationToken);
         if (matchDto == null)
         {
@@ -308,7 +309,7 @@ public class MatchService(
                 throw new ArgumentException($"Unsupported region '{region}' for match retry.", nameof(region));
 
             var platformRoute = ResolvePlatformRoute(matchId, regionalRoute);
-            var matchDto = await riotGamesApi.MatchV5().GetMatchAsync(regionalRoute, matchId, cancellationToken);
+            var matchDto = await riotApiContext.Api.MatchV5().GetMatchAsync(regionalRoute, matchId, cancellationToken);
 
             if (matchDto == null)
             {

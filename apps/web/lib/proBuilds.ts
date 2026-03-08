@@ -47,5 +47,5 @@ export function buildProBuildPageHref(
 ): string {
   const params = buildProBuildFilterParams(filters);
   const qs = params.toString();
-  return qs ? `/pro-builds/${championId}?${qs}` : `/pro-builds/${championId}`;
+  return qs ? `/lol/pro-builds/${championId}?${qs}` : `/lol/pro-builds/${championId}`;
 }

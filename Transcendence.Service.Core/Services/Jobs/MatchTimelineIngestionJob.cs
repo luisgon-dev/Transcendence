@@ -15,7 +15,7 @@ namespace Transcendence.Service.Core.Services.Jobs;
 [DisableConcurrentExecution(timeoutInSeconds: 5 * 60)]
 public class MatchTimelineIngestionJob(
     TranscendenceContext db,
-    RiotGamesApi riotGamesApi,
+    LeagueRiotApiContext riotApiContext,
     IBackgroundJobClient backgroundJobClient,
     IOptions<TimelineIngestionOptions> options,
     ILogger<MatchTimelineIngestionJob> logger)
@@ -88,7 +88,7 @@ public class MatchTimelineIngestionJob(
         {
             state.LastAttemptAtUtc = DateTime.UtcNow;
 
-            var timeline = await riotGamesApi.MatchV5()
+            var timeline = await riotApiContext.Api.MatchV5()
                 .GetTimelineAsync(regionalRoute, matchId, ct);
 
             if (timeline?.Info?.Frames == null || timeline.Info.Frames.Length == 0)

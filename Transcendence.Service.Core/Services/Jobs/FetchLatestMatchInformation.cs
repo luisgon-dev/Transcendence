@@ -12,7 +12,7 @@ namespace Transcendence.Service.Core.Services.Jobs;
 
 // ReSharper disable once ClassNeverInstantiated.Global
 public class FetchLatestMatchInformation(
-    RiotGamesApi riotGamesApi,
+    LeagueRiotApiContext riotApiContext,
     TranscendenceContext context,
     IMatchService matchService,
     IMatchRepository matchRepository,
@@ -94,7 +94,7 @@ public class FetchLatestMatchInformation(
         string puuid,
         CancellationToken ct)
     {
-        var matchIds = await riotGamesApi.MatchV5()
+        var matchIds = await riotApiContext.Api.MatchV5()
             .GetMatchIdsByPUUIDAsync(platformRoute.ToRegional(), puuid, 20, null,
                 null, null, null, null, ct);
 

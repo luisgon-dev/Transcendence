@@ -5,6 +5,9 @@ using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Models.LoL.Static;
 using Transcendence.Data.Models.Service;
+using Transcendence.Data.Models.Tft.Account;
+using Transcendence.Data.Models.Tft.Match;
+using Transcendence.Data.Models.Tft.Static;
 
 namespace Transcendence.Data;
 
@@ -41,6 +44,21 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<UserPreferences> UserPreferences { get; set; }
     public DbSet<AdminAuditEvent> AdminAuditEvents { get; set; }
     public DbSet<LiveGameSnapshot> LiveGameSnapshots { get; set; }
+    public DbSet<TftSummoner> TftSummoners { get; set; }
+    public DbSet<TftRank> TftRanks { get; set; }
+    public DbSet<TftHistoricalRank> TftHistoricalRanks { get; set; }
+    public DbSet<TftSummonerIngestionCursor> TftSummonerIngestionCursors { get; set; }
+    public DbSet<TftMatch> TftMatches { get; set; }
+    public DbSet<TftMatchParticipant> TftMatchParticipants { get; set; }
+    public DbSet<TftMatchParticipantUnit> TftMatchParticipantUnits { get; set; }
+    public DbSet<TftMatchParticipantTrait> TftMatchParticipantTraits { get; set; }
+    public DbSet<TftMatchParticipantAugment> TftMatchParticipantAugments { get; set; }
+    public DbSet<TftPatch> TftPatches { get; set; }
+    public DbSet<TftSet> TftSets { get; set; }
+    public DbSet<TftUnitVersion> TftUnitVersions { get; set; }
+    public DbSet<TftItemVersion> TftItemVersions { get; set; }
+    public DbSet<TftTraitVersion> TftTraitVersions { get; set; }
+    public DbSet<TftAugmentVersion> TftAugmentVersions { get; set; }
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Rank>()
@@ -223,6 +241,116 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             entity.Property(x => x.Puuid).IsRequired();
         });
 
+        modelBuilder.Entity<TftRank>()
+            .HasIndex(x => new { x.SummonerId, x.QueueType })
+            .IsUnique();
+
+        modelBuilder.Entity<TftSummonerIngestionCursor>()
+            .HasKey(x => new { x.SummonerId, x.Scope });
+
+        modelBuilder.Entity<TftSummoner>()
+            .HasIndex(s => s.Puuid)
+            .IsUnique();
+        modelBuilder.Entity<TftSummoner>()
+            .HasIndex(s => new { s.PlatformRegion, s.GameNameNormalized, s.TagLineNormalized })
+            .IsUnique();
+
+        modelBuilder.Entity<TftMatch>()
+            .HasIndex(x => x.MatchId)
+            .IsUnique();
+        modelBuilder.Entity<TftMatch>()
+            .HasIndex(x => x.MatchDate);
+        modelBuilder.Entity<TftMatch>()
+            .HasIndex(x => new { x.PlatformRegion, x.Patch, x.SetNumber, x.Status });
+
+        modelBuilder.Entity<TftMatchParticipant>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Puuid).IsRequired();
+            entity.Property(x => x.Augments).HasDefaultValueSql("'{}'::text[]");
+
+            entity.HasOne(x => x.Match)
+                .WithMany(x => x.Participants)
+                .HasForeignKey(x => x.MatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Summoner)
+                .WithMany(x => x.MatchParticipants)
+                .HasForeignKey(x => x.SummonerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => new { x.MatchId, x.SummonerId }).IsUnique();
+            entity.HasIndex(x => new { x.SummonerId, x.Placement });
+            entity.HasIndex(x => x.Placement);
+        });
+
+        modelBuilder.Entity<TftMatchParticipantUnit>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Items).HasDefaultValueSql("'{}'::integer[]");
+            entity.Property(x => x.ItemNames).HasDefaultValueSql("'{}'::text[]");
+            entity.HasOne(x => x.Participant)
+                .WithMany(x => x.Units)
+                .HasForeignKey(x => x.ParticipantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => x.CharacterId);
+        });
+
+        modelBuilder.Entity<TftMatchParticipantTrait>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasOne(x => x.Participant)
+                .WithMany(x => x.Traits)
+                .HasForeignKey(x => x.ParticipantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => x.Name);
+        });
+
+        modelBuilder.Entity<TftMatchParticipantAugment>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasOne(x => x.Participant)
+                .WithMany(x => x.AugmentRows)
+                .HasForeignKey(x => x.ParticipantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.ApiName, x.ParticipantId });
+        });
+
+        modelBuilder.Entity<TftPatch>(entity => { entity.HasKey(x => x.Version); });
+        modelBuilder.Entity<TftSet>(entity => { entity.HasKey(x => x.Number); });
+
+        modelBuilder.Entity<TftUnitVersion>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Traits).HasDefaultValueSql("'{}'::text[]");
+            entity.HasIndex(x => new { x.SetNumber, x.ApiName }).IsUnique();
+        });
+
+        modelBuilder.Entity<TftItemVersion>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.AssociatedTraits).HasDefaultValueSql("'{}'::text[]");
+            entity.Property(x => x.IncompatibleTraits).HasDefaultValueSql("'{}'::text[]");
+            entity.Property(x => x.Composition).HasDefaultValueSql("'{}'::text[]");
+            entity.Property(x => x.Tags).HasDefaultValueSql("'{}'::text[]");
+            entity.HasIndex(x => new { x.SetNumber, x.ApiName }).IsUnique();
+        });
+
+        modelBuilder.Entity<TftTraitVersion>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.SetNumber, x.ApiName }).IsUnique();
+        });
+
+        modelBuilder.Entity<TftAugmentVersion>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.AssociatedTraits).HasDefaultValueSql("'{}'::text[]");
+            entity.Property(x => x.IncompatibleTraits).HasDefaultValueSql("'{}'::text[]");
+            entity.Property(x => x.Tags).HasDefaultValueSql("'{}'::text[]");
+            entity.HasIndex(x => new { x.SetNumber, x.ApiName }).IsUnique();
+        });
+
         modelBuilder.Entity<RuneVersion>(entity =>
         {
             entity.HasKey(rv => new
@@ -386,6 +514,4 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
         });
     }
 }
-
-
 

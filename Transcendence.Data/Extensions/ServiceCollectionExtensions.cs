@@ -16,6 +16,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ILiveGameSnapshotRepository, LiveGameSnapshotRepository>();
         services.AddScoped<IUserAccountRepository, UserAccountRepository>();
         services.AddScoped<IUserPreferencesRepository, UserPreferencesRepository>();
+        services.AddScoped<ITftSummonerRepository, TftSummonerRepository>();
+        services.AddScoped<ITftRankRepository, TftRankRepository>();
+        services.AddScoped<ITftMatchRepository, TftMatchRepository>();
 
         return services;
     }

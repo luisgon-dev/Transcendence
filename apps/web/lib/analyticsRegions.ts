@@ -23,7 +23,7 @@ const FALLBACK_OPTIONS: AnalyticsRegionOption[] = [
 
 export async function fetchAnalyticsRegions(): Promise<AnalyticsRegionOption[]> {
   const result = await fetchBackendJson<AnalyticsRegionOption[]>(
-    `${getBackendBaseUrl()}/api/analytics/regions`,
+    `${getBackendBaseUrl()}/api/lol/analytics/regions`,
     { next: { revalidate: 60 * 60 } }
   );
 

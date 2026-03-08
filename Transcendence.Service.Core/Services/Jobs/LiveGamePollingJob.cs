@@ -16,7 +16,7 @@ namespace Transcendence.Service.Core.Services.Jobs;
 public class LiveGamePollingJob(
     TranscendenceContext db,
     ISummonerBootstrapService bootstrapService,
-    ILiveGameService liveGameService,
+    ILiveGamePollingService liveGamePollingService,
     ILiveGameSnapshotRepository snapshotRepository,
     IRefreshLockRepository refreshLockRepository,
     IOptions<LiveGamePollingJobOptions> options,
@@ -166,7 +166,7 @@ public class LiveGamePollingJob(
             try
             {
                 attemptedRequests++;
-                var response = await liveGameService.GetCurrentGameAsync(
+                var response = await liveGamePollingService.FetchCurrentGameAsync(
                     summoner.PlatformRegion!,
                     summoner.GameName!,
                     summoner.TagLine!,

@@ -830,7 +830,7 @@ export function SummonerProfileClient({
                 {(profile.topChampions ?? []).slice(0, 6).map((c) => {
                   const champ = championStatic?.champions[String(c.championId)];
                   return (
-                    <Link key={c.championId} href={`/champions/${c.championId}`} className="rounded-lg border border-border/60 bg-surface/50 px-2.5 py-2 text-sm hover:bg-surface/70">
+                    <Link key={c.championId} href={`/lol/champions/${c.championId}`} className="rounded-lg border border-border/60 bg-surface/50 px-2.5 py-2 text-sm hover:bg-surface/70">
                       {champ?.name ?? c.championName} · {c.games} games · <span className={winRateColorClass(c.winRate)}>{formatPercent(c.winRate)}</span>
                     </Link>
                   );
@@ -1358,7 +1358,7 @@ export function SummonerProfileClient({
               </div>
 
               <p className="mt-3 text-xs text-muted">
-                Legacy routes redirect here: <Link href={`/summoners/${region}/${encodeRiotIdPath({ gameName, tagLine })}/matches`} className="text-primary hover:underline">/matches</Link>
+                Match history: <Link href={`/lol/summoners/${region}/${encodeRiotIdPath({ gameName, tagLine })}/matches`} className="text-primary hover:underline">/lol/summoners/.../matches</Link>
               </p>
             </Card>
           </section>

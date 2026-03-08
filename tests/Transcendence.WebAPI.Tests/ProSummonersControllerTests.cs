@@ -17,7 +17,6 @@ using Transcendence.Service.Core.Services.Auth.Models;
 using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.RiotApi.DTOs;
-using Transcendence.Service.Core.Services.RiotApi.Interfaces;
 using Transcendence.WebAPI.Controllers;
 
 namespace Transcendence.WebAPI.Tests;
@@ -166,8 +165,7 @@ public class ProSummonersControllerTests
             db,
             adminAuditService ?? Mock.Of<IAdminAuditService>(),
             backgroundJobClient,
-            refreshLockRepository,
-            Mock.Of<IRiotAccountService>())
+            refreshLockRepository)
         {
             ControllerContext = new ControllerContext
             {

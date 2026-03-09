@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { formatTftPercent, formatTftTime, type TftAcceptedResponse, type TftSummonerProfile } from "@/lib/tft";
+import { formatTftTime, type TftAcceptedResponse, type TftSummonerProfile } from "@/lib/tft";
 
 type TftSummonerPayload =
   | { kind: "profile"; profile: TftSummonerProfile }
@@ -25,17 +25,7 @@ export function TftSummonerProfileClient({
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (payload.kind !== "accepted") return;
-    const retryAfterSeconds = Math.max(3, payload.accepted.retryAfterSeconds ?? 5);
-    const timeoutId = window.setTimeout(() => {
-      void loadProfile();
-    }, retryAfterSeconds * 1000);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [payload, region, gameName, tagLine]);
-
-  async function loadProfile() {
+  const loadProfile = useCallback(async () => {
     const res = await fetch(
       `/api/trn/public/tft/summoners/${encodeURIComponent(region)}/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`,
       { cache: "no-store" }
@@ -53,7 +43,17 @@ export function TftSummonerProfileClient({
     }
 
     setPayload({ kind: "profile", profile: json as TftSummonerProfile });
-  }
+  }, [region, gameName, tagLine]);
+
+  useEffect(() => {
+    if (payload.kind !== "accepted") return;
+    const retryAfterSeconds = Math.max(3, payload.accepted.retryAfterSeconds ?? 5);
+    const timeoutId = window.setTimeout(() => {
+      void loadProfile();
+    }, retryAfterSeconds * 1000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [payload, region, gameName, tagLine, loadProfile]);
 
   async function queueRefresh() {
     setRefreshing(true);

@@ -31,6 +31,23 @@ If you are not sure which doc to update, add a short note to the PR explaining w
 - OpenAPI spec is committed under `openapi/`
 - TS client generation lives in `packages/api-client`
 
+## Frontend Debugging with Playwright
+
+Agents can use `playwright-cli` to take screenshots and interact with the live site for frontend debugging:
+
+- Use `playwright-cli open https://kronic.one` to open the live site
+- Use `playwright-cli screenshot` to capture current state
+- Use `playwright-cli snapshot` to get a DOM snapshot with element refs
+
+When working on **frontend-only changes** (no backend modifications), use the live API:
+- Live site: `https://kronic.one`
+- Live API: `https://api.kronic.one`
+- This avoids needing a local backend running
+
+Test summoner for verification: `Kronic#NA1` (region: NA)
+- LoL profile: `https://kronic.one/lol/summoners/na/Kronic-NA1`
+- TFT profile: `https://kronic.one/tft/summoners/na/Kronic-NA1`
+
 ## EF Migration Policy (Required)
 
 - Never hand-author or hand-edit EF migration files.

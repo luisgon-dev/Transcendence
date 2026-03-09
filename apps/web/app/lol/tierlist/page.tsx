@@ -1,36 +1,22 @@
-import Image from "next/image";
-import Link from "next/link";
 import type { components } from "@transcendence/api-client";
 
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { FilterBar } from "@/components/FilterBar";
-import { TierBadge } from "@/components/TierBadge";
-import { WinRateText } from "@/components/WinRateText";
+import { TierListTable } from "@/components/TierListTable";
 import { Badge } from "@/components/ui/Badge";
-import { Card } from "@/components/ui/Card";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
-import { formatGames, formatPercent } from "@/lib/format";
 import {
   DEFAULT_TIERLIST_RANK_TIER,
   normalizeRankTierParam,
   rankTierDisplayLabel
 } from "@/lib/ranks";
 import { roleDisplayLabel } from "@/lib/roles";
-import { championIconUrl, fetchChampionMap } from "@/lib/staticData";
-import {
-  movementClass,
-  movementIcon,
-  normalizeTierListEntries,
-  tierBgClass,
-  tierColorClass,
-  TIER_ORDER,
-  type UITierGrade,
-  type UITierListEntry
-} from "@/lib/tierlist";
+import { fetchChampionMap } from "@/lib/staticData";
+import { normalizeTierListEntries } from "@/lib/tierlist";
 
 type TierListResponse = components["schemas"]["TierListResponse"];
 
@@ -85,30 +71,10 @@ export default async function TierListPage({
   const { version, champions } = await fetchChampionMap();
   const normalizedEntries = normalizeTierListEntries(tierlist.entries);
 
-  const groups: Record<UITierGrade, UITierListEntry[]> = {
-    S: [],
-    A: [],
-    B: [],
-    C: [],
-    D: []
-  };
-
-  for (const e of normalizedEntries) {
-    groups[e.tier].push(e);
-  }
-
   const rankTierValue =
     typeof tierlist.rankTier === "string" && tierlist.rankTier.toLowerCase() !== "all"
       ? tierlist.rankTier
       : null;
-
-  // Precompute rank offset for each tier so we can display global rank
-  const tierRankOffset: Record<UITierGrade, number> = { S: 0, A: 0, B: 0, C: 0, D: 0 };
-  let offset = 0;
-  for (const tier of TIER_ORDER) {
-    tierRankOffset[tier] = offset;
-    offset += groups[tier].length;
-  }
 
   return (
     <div className="grid gap-6">
@@ -141,137 +107,13 @@ export default async function TierListPage({
         />
       </header>
 
-      <Card className="overflow-hidden p-0">
-        {TIER_ORDER.map((tier) => {
-          const entries = groups[tier];
-          if (entries.length === 0) return null;
-
-          return (
-            <div key={tier}>
-              {/* Tier header row */}
-              <div
-                className={`flex items-center gap-3 border-b border-border/40 px-4 py-2.5 ${tierBgClass(tier)}`}
-              >
-                <TierBadge tier={tier} size="md" />
-                <span className={`text-sm font-semibold ${tierColorClass(tier)}`}>
-                  Tier {tier}
-                </span>
-                <span className="text-xs text-muted">
-                  {entries.length} champion{entries.length !== 1 ? "s" : ""}
-                </span>
-              </div>
-
-              {/* Champion rows */}
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[940px] text-left text-sm">
-                  <thead className="text-[11px] uppercase tracking-wider text-muted">
-                    <tr className="border-b border-border/30">
-                      <th className="w-10 px-4 py-2 text-center">#</th>
-                      <th className="w-10 px-2 py-2">Tier</th>
-                      <th className="px-3 py-2">Champion</th>
-                      <th className="px-3 py-2">Role</th>
-                      <th className="px-3 py-2 text-right">Win Rate</th>
-                      <th className="px-3 py-2 text-right">Pick Rate</th>
-                      <th className="px-3 py-2 text-right">Ban Rate</th>
-                      <th className="px-3 py-2 text-right">Games</th>
-                      <th className="w-16 px-3 py-2 text-center">Trend</th>
-                      <th className="px-3 py-2 text-right">Counters</th>
-                      <th className="px-3 py-2 text-right">Build</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {entries.map((e, idx) => {
-                      const rank = tierRankOffset[tier] + idx + 1;
-                      const champ = champions[String(e.championId)];
-                      const champName = champ?.name ?? `Champion ${e.championId}`;
-                      const champSlug = champ?.id ?? "Unknown";
-                      const championSubtitle = champ?.title ?? "";
-
-                      return (
-                        <tr key={`${tier}-${e.role}-${e.championId}`} className="border-b border-border/20 transition hover:bg-white/[0.06]">
-                          <td className="px-4 py-2.5 text-center text-xs text-muted">
-                            {rank}
-                          </td>
-                          <td className="px-2 py-2.5">
-                            <TierBadge tier={e.tier} />
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <Link
-                              href={`/lol/champions/${e.championId}?role=${encodeURIComponent(e.role)}${rankTierValue ? `&rankTier=${encodeURIComponent(rankTierValue)}` : ""}${activeRegion !== "ALL" ? `&region=${encodeURIComponent(activeRegion)}` : ""}`}
-                              className="flex items-center gap-2.5 hover:underline"
-                            >
-                              <Image
-                                src={championIconUrl(version, champSlug)}
-                                alt={champName}
-                                width={28}
-                                height={28}
-                                className="rounded-md"
-                              />
-                              <span className="min-w-0">
-                                <span className="block truncate font-medium text-fg">
-                                  {champName}
-                                </span>
-                                {championSubtitle ? (
-                                  <span className="block truncate text-[11px] text-muted">
-                                    {championSubtitle}
-                                  </span>
-                                ) : null}
-                              </span>
-                            </Link>
-                          </td>
-                          <td className="px-3 py-2.5 text-xs text-muted">
-                            {roleDisplayLabel(e.role)}
-                          </td>
-                          <td className="px-3 py-2.5 text-right">
-                            <WinRateText value={e.winRate} decimals={2} />
-                          </td>
-                          <td className="px-3 py-2.5 text-right text-fg/70">
-                            {formatPercent(e.pickRate, { decimals: 1 })}
-                          </td>
-                          <td className="px-3 py-2.5 text-right text-muted" title="Ban rate is not exposed by the current analytics API yet.">
-                            —
-                          </td>
-                          <td className="px-3 py-2.5 text-right text-fg/70">
-                            {formatGames(e.games)}
-                          </td>
-                          <td className="px-3 py-2.5 text-center">
-                            <span
-                              className={`text-sm font-medium ${movementClass(e.movement)}`}
-                              title={
-                                e.previousTier
-                                  ? `Previous: ${e.previousTier}`
-                                  : undefined
-                              }
-                            >
-                              {movementIcon(e.movement)}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2.5 text-right">
-                            <Link
-                              href={`/lol/matchups/${e.championId}?role=${encodeURIComponent(e.role)}${rankTierValue ? `&rankTier=${encodeURIComponent(rankTierValue)}` : ""}`}
-                              className="text-xs text-primary hover:underline"
-                            >
-                              Analyze
-                            </Link>
-                          </td>
-                          <td className="px-3 py-2.5 text-right">
-                            <Link
-                              href={`/lol/champions/${e.championId}?role=${encodeURIComponent(e.role)}${rankTierValue ? `&rankTier=${encodeURIComponent(rankTierValue)}` : ""}#builds`}
-                              className="text-xs text-primary hover:underline"
-                            >
-                              Open
-                            </Link>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          );
-        })}
-      </Card>
+      <TierListTable
+        entries={normalizedEntries}
+        champions={champions}
+        version={version}
+        rankTierValue={rankTierValue}
+        activeRegion={activeRegion}
+      />
     </div>
   );
 }

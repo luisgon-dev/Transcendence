@@ -390,6 +390,11 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+
 # MAC OS Junk Files
 .DS_Store
 /CLAUDE.md

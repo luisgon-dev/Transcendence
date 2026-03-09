@@ -27,6 +27,11 @@
     "web:dev": "pnpm --filter web dev",
     "web:build": "pnpm --filter web build",
     "web:lint": "pnpm --filter web lint",
-    "web:test": "pnpm --filter web test"
+    "web:test": "pnpm --filter web test",
+    "e2e": "npx playwright test",
+    "e2e:local": "BASE_URL=http://localhost:3000 npx playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2"
   }
 }

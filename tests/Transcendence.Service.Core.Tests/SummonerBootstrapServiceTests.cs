@@ -8,9 +8,10 @@ using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Data.Extensions;
 using Transcendence.Data.Models.LoL.Account;
-using Transcendence.Data.Models.LoL.Static;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
+using Transcendence.Service.Core.Services.RiotApi;
+using Transcendence.Service.Core.Tests.Support;
 
 namespace Transcendence.Service.Core.Tests;
 
@@ -28,7 +29,7 @@ public class SummonerBootstrapServiceTests
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddScoped<TranscendenceContext>(_ => new TestSqliteTranscendenceContext(dbOptions));
+        services.AddScoped<TranscendenceContext>(_ => new SqliteCompatibleTranscendenceContext(dbOptions));
         services.AddProjectSyndraRepositories();
 
         await using var provider = services.BuildServiceProvider();
@@ -45,7 +46,7 @@ public class SummonerBootstrapServiceTests
         }
 
         var service = new SummonerBootstrapService(
-            RiotGamesApi.NewInstance("test-api-key"),
+            new LeagueRiotApiContext(RiotGamesApi.NewInstance("test-api-key")),
             provider.GetRequiredService<IServiceScopeFactory>(),
             Options.Create(new SummonerBootstrapOptions
             {
@@ -90,21 +91,5 @@ public class SummonerBootstrapServiceTests
             SummonerLevel = 100,
             Ranks = []
         };
-    }
-
-    private sealed class TestSqliteTranscendenceContext(DbContextOptions<TranscendenceContext> options)
-        : TranscendenceContext(options)
-    {
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
-        {
-            base.OnModelCreating(modelBuilder);
-
-            modelBuilder.Entity<ItemVersion>()
-                .Property(x => x.BuildsFrom)
-                .HasDefaultValueSql("'[]'");
-            modelBuilder.Entity<ItemVersion>()
-                .Property(x => x.BuildsInto)
-                .HasDefaultValueSql("'[]'");
-        }
     }
 }

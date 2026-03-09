@@ -1,22 +1,27 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Data.Models.Tft.Match;
+using Transcendence.Service.Core.Services.Tft.Configuration;
 using Transcendence.Service.Core.Services.Tft.Interfaces;
 using Transcendence.Service.Core.Services.Tft.Models;
 
 namespace Transcendence.Service.Core.Services.Tft.Implementations;
 
-public class TftAnalyticsComputeService(TranscendenceContext context) : ITftAnalyticsComputeService
+public class TftAnalyticsComputeService(
+    TranscendenceContext context,
+    IOptions<TftAnalyticsComputeOptions>? optionsAccessor = null) : ITftAnalyticsComputeService
 {
-    private const int MaxRecentMatchesPerSlice = 2000;
+    private readonly TftAnalyticsComputeOptions options = optionsAccessor?.Value ?? new TftAnalyticsComputeOptions();
 
     public async Task<IReadOnlyList<TftCompListItemDto>> ComputeCompListAsync(string? rankTier, string? region, CancellationToken ct = default)
     {
         var activeSet = await context.TftSets.Where(x => x.IsActive).Select(x => (int?)x.Number).FirstOrDefaultAsync(ct);
         var normalizedRegion = NormalizeRegion(region);
         var normalizedRankTier = NormalizeRankTier(rankTier);
+        // Keep comp aggregation bounded to a recent match slice so request-time grouping does not scan the full TFT corpus.
         var matchIds = await BuildMatchIdQuery(normalizedRegion, activeSet)
-            .Take(MaxRecentMatchesPerSlice)
+            .Take(options.MaxRecentMatchesPerSlice)
             .ToListAsync(ct);
         if (matchIds.Count == 0)
             return [];

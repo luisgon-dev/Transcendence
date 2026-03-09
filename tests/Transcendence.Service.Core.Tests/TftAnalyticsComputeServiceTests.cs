@@ -1,10 +1,12 @@
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Data.Models.Tft.Account;
 using Transcendence.Data.Models.Tft.Match;
 using Transcendence.Data.Models.Tft.Static;
+using Transcendence.Service.Core.Services.Tft.Configuration;
 using Transcendence.Service.Core.Services.Tft.Implementations;
 using Transcendence.Service.Core.Tests.Support;
 
@@ -60,6 +62,23 @@ public class TftAnalyticsComputeServiceTests
         detail.CoreAugments.Select(x => x.ApiName).Should().Contain("TFT13_Augment_PandorasBench");
     }
 
+    [Fact]
+    public async Task ComputeCompListAsync_UsesConfiguredRecentMatchWindow()
+    {
+        await using var harness = await Harness.CreateAsync(new TftAnalyticsComputeOptions
+        {
+            MaxRecentMatchesPerSlice = 1
+        });
+        harness.SeedParticipant("NA1", "Alpha", "NA1", "CHALLENGER", 1, "TFT13_Annie", "Annie", "Arcana", "Tiniest Titan");
+        harness.SeedParticipant("NA1", "Bravo", "NA1", "CHALLENGER", 1, "TFT13_Zed", "Zed", "Slayer", "Silver Spoon");
+        await harness.Db.SaveChangesAsync();
+
+        var result = await harness.Service.ComputeCompListAsync(null, null, CancellationToken.None);
+
+        result.Should().ContainSingle();
+        result[0].Name.Should().Be("Slayer / Zed");
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         private int _matchNumber = 1;
@@ -75,7 +94,7 @@ public class TftAnalyticsComputeServiceTests
         public SqliteCompatibleTranscendenceContext Db { get; }
         public TftAnalyticsComputeService Service { get; }
 
-        public static async Task<Harness> CreateAsync()
+        public static async Task<Harness> CreateAsync(TftAnalyticsComputeOptions? computeOptions = null)
         {
             var connection = new SqliteConnection("Data Source=:memory:");
             await connection.OpenAsync();
@@ -103,7 +122,12 @@ public class TftAnalyticsComputeServiceTests
             });
             await db.SaveChangesAsync();
 
-            return new Harness(connection, db, new TftAnalyticsComputeService(db));
+            return new Harness(
+                connection,
+                db,
+                new TftAnalyticsComputeService(
+                    db,
+                    Options.Create(computeOptions ?? new TftAnalyticsComputeOptions())));
         }
 
         public void SeedParticipant(

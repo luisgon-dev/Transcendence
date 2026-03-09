@@ -23,7 +23,7 @@ namespace Transcendence.Service.Core.Services.Extensions;
 
 public static class ServiceCollectionExtensions
 {
-    // Core services that do not require external Riot SDK
+    // Shared services used by both the keyless WebAPI host and the worker host.
     public static IServiceCollection AddTranscendenceCore(this IServiceCollection services)
     {
         services.AddScoped<ICacheService, CacheService>();
@@ -45,14 +45,18 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IChampionAnalyticsComputeService, ChampionAnalyticsComputeService>();
         services.AddScoped<IChampionAnalyticsService, ChampionAnalyticsService>();
         services.AddScoped<ITftSummonerReadService, TftSummonerReadService>();
-        services.AddScoped<ITftSummonerBootstrapService, TftSummonerBootstrapService>();
         services.AddScoped<ITftStaticDataService, TftStaticDataService>();
         services.AddScoped<ITftAnalyticsComputeService, TftAnalyticsComputeService>();
         services.AddScoped<ITftAnalyticsService, TftAnalyticsService>();
 
-        services.AddScoped<ISummonerBootstrapService, SummonerBootstrapService>();
+        return services;
+    }
 
-        // Jobs
+    // Worker-only orchestration, bootstrap, and recurring job graph.
+    public static IServiceCollection AddTranscendenceWorkerCore(this IServiceCollection services)
+    {
+        services.AddScoped<ISummonerBootstrapService, SummonerBootstrapService>();
+        services.AddScoped<ITftSummonerBootstrapService, TftSummonerBootstrapService>();
         services.AddScoped<ChampionAnalyticsIngestionJob>();
         services.AddScoped<RefreshChampionAnalyticsJob>();
         services.AddScoped<LiveGamePollingJob>();
@@ -66,7 +70,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<TftAnalyticsIngestionJob>();
         services.AddScoped<TftSummonerMaintenanceJob>();
         services.AddScoped<IIngestionPriorityScoringPolicy, IngestionPriorityScoringPolicy>();
-        services.AddScoped<TftSummonerRefreshJob>();
 
         return services;
     }

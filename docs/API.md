@@ -201,6 +201,7 @@ TFT behavior notes:
 - `POST /api/tft/summoners/{region}/{name}/{tag}/refresh` queues a background refresh behind `tft:summoner-refresh:*` locks.
 - TFT analytics are isolated from LoL analytics. The comps endpoint is a separate surface and does not share the LoL tier-list route or payload.
 - TFT catalog/detail analytics endpoints (`champions`, `items`, `traits`, `augments`) serve the active set only.
+- TFT static data remains set-versioned in storage; active-set reads preserve response shapes across set rollovers without returning duplicate cross-set rows.
 - `GET /api/tft/analytics/comps` defaults `rankTier` to `EMERALD_PLUS`; `rankTier=ALL` is treated case-insensitively as an all-ranks query.
 
 ### Operational Health

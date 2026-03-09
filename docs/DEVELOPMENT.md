@@ -74,6 +74,8 @@ API health:
 
 `Transcendence.WebAPI`:
 
+The WebAPI host is keyless. It does not need Riot API keys to start, serve reads, or export Swagger.
+
 ```bash
 dotnet user-secrets set "ConnectionStrings:MainDatabase" "Host=localhost;Port=5432;Database=transcendence;Username=postgres;Password=postgres" --project Transcendence.WebAPI
 dotnet user-secrets set "ConnectionStrings:Redis" "localhost:6379" --project Transcendence.WebAPI
@@ -233,8 +235,8 @@ If hooks are installed (`corepack pnpm hooks:install`), pre-commit runs path-awa
 
 ## Background Job Tuning
 
-Key worker settings live under `Jobs:*` in `Transcendence.Service/appsettings*.json`.
-The public Web API also consumes `Jobs:MultiRegionIngestion` from `Transcendence.WebAPI/appsettings*.json` so `/api/analytics/regions` and region-filter normalization stay aligned with the ingestion regions exposed to the frontend.
+Key worker settings live under `Jobs:*` in `Transcendence.Service/appsettings.json`.
+The public Web API also consumes `Jobs:MultiRegionIngestion` from `Transcendence.WebAPI/appsettings.json` so `/api/analytics/regions` and region-filter normalization stay aligned with the ingestion regions exposed to the frontend.
 
 ### Development Worker Scope
 

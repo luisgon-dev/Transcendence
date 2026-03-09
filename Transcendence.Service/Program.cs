@@ -9,6 +9,7 @@ using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Extensions;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Priority;
+using Transcendence.Service.Core.Services.Tft.Configuration;
 using Transcendence.Service.Workers;
 using Transcendence.Service.Workers.Startup;
 
@@ -94,8 +95,10 @@ else
 
 // Register services
 builder.Services.AddTranscendenceCore();
+builder.Services.AddTranscendenceWorkerCore();
 builder.Services.AddTranscendenceLeagueRiot(builder.Configuration);
 builder.Services.AddTranscendenceTftRiot(builder.Configuration);
+builder.Services.Configure<TftAnalyticsComputeOptions>(builder.Configuration.GetSection("Analytics:TftCompute"));
 
 // add data repositories
 builder.Services.AddProjectSyndraRepositories();

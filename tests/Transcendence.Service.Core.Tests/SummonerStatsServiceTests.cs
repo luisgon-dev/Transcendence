@@ -10,6 +10,7 @@ using Transcendence.Data.Models.LoL.Static;
 using Transcendence.Service.Core.Services.Analysis.Exceptions;
 using Transcendence.Service.Core.Services.Analysis.Implementations;
 using Transcendence.Service.Core.Services.RiotApi;
+using Transcendence.Service.Core.Tests.Support;
 
 namespace Transcendence.Service.Core.Tests;
 
@@ -316,7 +317,7 @@ public class SummonerStatsServiceTests
 
         private SummonerStatsHarness(
             SqliteConnection connection,
-            TestSqliteTranscendenceContext db,
+            SqliteCompatibleTranscendenceContext db,
             ServiceProvider services,
             SummonerStatsService service)
         {
@@ -326,7 +327,7 @@ public class SummonerStatsServiceTests
             Service = service;
         }
 
-        public TestSqliteTranscendenceContext Db { get; }
+        public SqliteCompatibleTranscendenceContext Db { get; }
         public SummonerStatsService Service { get; }
 
         public static async Task<SummonerStatsHarness> CreateAsync()
@@ -338,7 +339,7 @@ public class SummonerStatsServiceTests
                 .UseSqlite(connection)
                 .Options;
 
-            var db = new TestSqliteTranscendenceContext(options);
+            var db = new SqliteCompatibleTranscendenceContext(options);
             await db.Database.EnsureCreatedAsync();
 
             var serviceCollection = new ServiceCollection();
@@ -458,20 +459,4 @@ public class SummonerStatsServiceTests
         }
     }
 
-    private sealed class TestSqliteTranscendenceContext(DbContextOptions<TranscendenceContext> options)
-        : TranscendenceContext(options)
-    {
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
-        {
-            base.OnModelCreating(modelBuilder);
-
-            // PostgreSQL default SQL is not valid in SQLite tests.
-            modelBuilder.Entity<ItemVersion>()
-                .Property(x => x.BuildsFrom)
-                .HasDefaultValueSql("'[]'");
-            modelBuilder.Entity<ItemVersion>()
-                .Property(x => x.BuildsInto)
-                .HasDefaultValueSql("'[]'");
-        }
-    }
 }

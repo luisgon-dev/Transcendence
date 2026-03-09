@@ -11,6 +11,7 @@ using Transcendence.Data.Repositories.Implementations;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
+using Transcendence.Service.Core.Tests.Support;
 
 namespace Transcendence.Service.Core.Tests;
 
@@ -26,7 +27,7 @@ public class RefreshLockLifecycleJobTests
             .UseSqlite(connection)
             .Options;
 
-        await using var db = new TestSqliteTranscendenceContext(options);
+        await using var db = new SqliteCompatibleTranscendenceContext(options);
         await db.Database.EnsureCreatedAsync();
 
         var now = DateTime.UtcNow;
@@ -142,19 +143,4 @@ public class RefreshLockLifecycleJobTests
             RefreshLockLifecycleCleanupMaxBatchesPerRun = maxBatches
         });
 
-    private sealed class TestSqliteTranscendenceContext(DbContextOptions<TranscendenceContext> options)
-        : TranscendenceContext(options)
-    {
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
-        {
-            base.OnModelCreating(modelBuilder);
-
-            modelBuilder.Entity<ItemVersion>()
-                .Property(x => x.BuildsFrom)
-                .HasDefaultValueSql("'[]'");
-            modelBuilder.Entity<ItemVersion>()
-                .Property(x => x.BuildsInto)
-                .HasDefaultValueSql("'[]'");
-        }
-    }
 }

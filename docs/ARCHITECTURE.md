@@ -282,6 +282,7 @@ The web app never exposes backend tokens to browser JS:
   - refresh requests enqueue `ITftSummonerRefreshJob`
   - worker resolves Riot account + TFT summoner + TFT ranks + TFT matches, then persists them
 - TFT static data is refreshed independently from LoL patch/static-data flows through `UpdateTftStaticDataJob`.
+- TFT static-data rows remain set-versioned in storage, but read endpoints project only the active set so set transitions do not surface duplicate units/items/traits/augments.
 - TFT analytics cache and comp aggregation are isolated behind `ITftAnalyticsService` and `/api/tft/analytics/*`.
 
 ### Operational Logging

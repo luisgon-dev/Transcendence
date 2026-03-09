@@ -1,4 +1,4 @@
-name: transcendence-prod
+name: transcendence
 
 x-app-env: &app-env
   ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
@@ -8,19 +8,19 @@ x-app-env: &app-env
 
 services:
   postgres:
-    image: pgautoupgrade/pgautoupgrade:latest
+    image: postgres:16-alpine
     container_name: transcendence-postgres
     restart: unless-stopped
-    ports:
-      - "5432:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -39,14 +39,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-    labels:
-      - wud.watch=false
     networks:
       - transcendence-net
 
   web:
-    image: ghcr.io/luisgon-dev/transcendence-web:main
-    pull_policy: always
+    image: ${WEB_IMAGE:-ghcr.io/luisgon-dev/transcendence-web:main}
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
     container_name: transcendence-web
     restart: unless-stopped
     environment:
@@ -58,13 +58,16 @@ services:
     ports:
       - "${WEB_PORT:-3000}:3000"
     depends_on:
-      - webapi
+      webapi:
+        condition: service_started
     networks:
       - transcendence-net
 
   webapi:
-    image: ghcr.io/luisgon-dev/transcendence-webapi:main
-    pull_policy: always
+    image: ${WEBAPI_IMAGE:-ghcr.io/luisgon-dev/transcendence-webapi:main}
+    build:
+      context: .
+      dockerfile: Transcendence.WebAPI/Dockerfile
     container_name: transcendence-webapi
     restart: unless-stopped
     environment:
@@ -79,7 +82,7 @@ services:
       OperationalLogs__DirectoryPath: /var/log/transcendence
       <<: *app-env
     ports:
-      - "${WEBAPI_PORT}:8080"
+      - "${WEBAPI_PORT:-8080}:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -91,8 +94,10 @@ services:
       - transcendence-net
 
   service:
-    image: ghcr.io/luisgon-dev/transcendence-service:main
-    pull_policy: always
+    image: ${SERVICE_IMAGE:-ghcr.io/luisgon-dev/transcendence-service:main}
+    build:
+      context: .
+      dockerfile: Transcendence.Service/Dockerfile
     container_name: transcendence-service
     restart: unless-stopped
     environment:
@@ -109,36 +114,44 @@ services:
     networks:
       - transcendence-net
 
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: transcendence-pgadmin
+    restart: unless-stopped
+    profiles: ["local-tools"]
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - transcendence-net
+
   dozzle:
     image: amir20/dozzle:latest
-    pull_policy: always
     container_name: transcendence-dozzle
     restart: unless-stopped
+    profiles: ["ops-tools"]
     environment:
       DOZZLE_TAILSIZE: "300"
       DOZZLE_LEVEL: info
     ports:
-      - "${DOZZLE_PORT}:8080"
+      - "${DOZZLE_PORT:-9999}:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - transcendence-net
 
-  whatsupdocker:
-    image: getwud/wud
-    container_name: wud
-    restart: unless-stopped
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    ports:
-      - 3001:3000
-    environment:
-      - WUD_TRIGGER_DOCKER_EXAMPLE_PRUNE=true
-      - WUD_WATCHER_LOCAL_CRON=* * * * *
-
 volumes:
   postgres_data:
   redis_data:
+  pgadmin_data:
   operational_logs:
 
 networks:

@@ -307,6 +307,7 @@ packages/**/dist/
 packages/api-client/src/schema.ts
 
 # Next.js env overrides (local only)
+.env
 .env.local
 .env.*.local
 apps/**/.env.local

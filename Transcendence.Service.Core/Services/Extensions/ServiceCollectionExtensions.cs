@@ -75,13 +75,11 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddTranscendenceLeagueRiot(this IServiceCollection services,
         IConfiguration configuration)
     {
-        var riotApiKey = configuration["RiotApi:League:ApiKey"]
-                         ?? configuration.GetConnectionString("RiotApi")
-                         ?? configuration["RiotApi:ApiKey"];
+        var riotApiKey = configuration["RiotApi:League:ApiKey"];
         if (string.IsNullOrWhiteSpace(riotApiKey))
         {
             throw new InvalidOperationException(
-                "Missing League Riot API key configuration. Set 'RiotApi:League:ApiKey' (or legacy RiotApi key).");
+                "Missing League Riot API key configuration. Set 'RiotApi:League:ApiKey'.");
         }
 
         services.AddSingleton(_ => new LeagueRiotApiContext(Camille.RiotGames.RiotGamesApi.NewInstance(riotApiKey)));

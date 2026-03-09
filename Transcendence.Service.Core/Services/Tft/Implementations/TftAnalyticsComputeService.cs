@@ -8,26 +8,73 @@ namespace Transcendence.Service.Core.Services.Tft.Implementations;
 
 public class TftAnalyticsComputeService(TranscendenceContext context) : ITftAnalyticsComputeService
 {
+    private const int MaxRecentMatchesPerSlice = 2000;
+
     public async Task<IReadOnlyList<TftCompListItemDto>> ComputeCompListAsync(string? rankTier, string? region, CancellationToken ct = default)
     {
         var activeSet = await context.TftSets.Where(x => x.IsActive).Select(x => (int?)x.Number).FirstOrDefaultAsync(ct);
-        var participants = await BaseQuery(rankTier, region, activeSet, ct).ToListAsync(ct);
+        var normalizedRegion = NormalizeRegion(region);
+        var normalizedRankTier = NormalizeRankTier(rankTier);
+        var matchIds = await BuildMatchIdQuery(normalizedRegion, activeSet)
+            .Take(MaxRecentMatchesPerSlice)
+            .ToListAsync(ct);
+        if (matchIds.Count == 0)
+            return [];
+
+        var participants = await BuildParticipantQuery(matchIds, normalizedRankTier)
+            .ToListAsync(ct);
         if (participants.Count == 0)
             return [];
 
+        var participantIds = participants.Select(x => x.Id).ToArray();
+        var unitsByParticipant = await context.TftMatchParticipantUnits
+            .AsNoTracking()
+            .Where(x => participantIds.Contains(x.ParticipantId))
+            .Select(x => new UnitRow(
+                x.ParticipantId,
+                x.CharacterId,
+                x.Name,
+                x.Rarity,
+                x.Tier,
+                x.Items))
+            .ToListAsync(ct);
+        var traitsByParticipant = await context.TftMatchParticipantTraits
+            .AsNoTracking()
+            .Where(x => participantIds.Contains(x.ParticipantId))
+            .Select(x => new TraitRow(
+                x.ParticipantId,
+                x.Name,
+                x.NumUnits,
+                x.TierCurrent,
+                x.Style))
+            .ToListAsync(ct);
+
+        var unitLookup = unitsByParticipant
+            .GroupBy(x => x.ParticipantId)
+            .ToDictionary(group => group.Key, group => (IReadOnlyList<UnitRow>)group.ToList());
+        var traitLookup = traitsByParticipant
+            .GroupBy(x => x.ParticipantId)
+            .ToDictionary(group => group.Key, group => (IReadOnlyList<TraitRow>)group.ToList());
+
         var total = participants.Count;
         return participants
-            .GroupBy(BuildCompKey, StringComparer.Ordinal)
+            .GroupBy(
+                participant => BuildCompKey(
+                    unitLookup.GetValueOrDefault(participant.Id, []),
+                    traitLookup.GetValueOrDefault(participant.Id, [])),
+                StringComparer.Ordinal)
             .Select(group =>
             {
                 var exemplar = group.OrderBy(x => x.Placement).First();
-                var units = exemplar.Units
+                var exemplarUnits = unitLookup.GetValueOrDefault(exemplar.Id, []);
+                var exemplarTraits = traitLookup.GetValueOrDefault(exemplar.Id, []);
+                var units = exemplarUnits
                     .OrderByDescending(x => x.Tier)
                     .ThenByDescending(x => x.Rarity)
                     .Take(4)
                     .Select(MapUnit)
                     .ToList();
-                var traits = exemplar.Traits
+                var traits = exemplarTraits
                     .OrderByDescending(x => x.Style ?? 0)
                     .ThenByDescending(x => x.NumUnits)
                     .Take(4)
@@ -36,12 +83,12 @@ public class TftAnalyticsComputeService(TranscendenceContext context) : ITftAnal
 
                 return new TftCompListItemDto(
                     Slugify(group.Key),
-                    BuildCompName(exemplar),
-                    exemplar.Match.SetNumber,
-                    exemplar.Match.SetCoreName,
-                    exemplar.Match.Patch,
-                    NormalizeRegion(region),
-                    NormalizeRankTier(rankTier),
+                    BuildCompName(exemplarUnits, exemplarTraits),
+                    exemplar.SetNumber,
+                    exemplar.SetCoreName,
+                    exemplar.Patch,
+                    normalizedRegion,
+                    ToRankTierDisplay(normalizedRankTier),
                     group.Average(x => x.Placement),
                     group.Count(x => x.Placement <= 4) / (double)group.Count(),
                     group.Count(x => x.Placement == 1) / (double)group.Count(),
@@ -86,69 +133,95 @@ public class TftAnalyticsComputeService(TranscendenceContext context) : ITftAnal
         return new TftCompDetailDto(summary, items, augments);
     }
 
-    private IQueryable<TftMatchParticipant> BaseQuery(string? rankTier, string? region, int? activeSet, CancellationToken ct)
+    private IQueryable<Guid> BuildMatchIdQuery(string normalizedRegion, int? activeSet)
+    {
+        var query = context.TftMatches
+            .AsNoTracking()
+            .Where(x => x.Status == TftFetchStatus.Success);
+
+        if (activeSet.HasValue)
+            query = query.Where(x => x.SetNumber == activeSet.Value);
+
+        if (normalizedRegion != "ALL")
+            query = query.Where(x => x.PlatformRegion == normalizedRegion);
+
+        return query
+            .OrderByDescending(x => x.MatchDate)
+            .Select(x => x.Id);
+    }
+
+    private IQueryable<ParticipantRow> BuildParticipantQuery(IReadOnlyCollection<Guid> matchIds, string normalizedRankTier)
     {
         var query = context.TftMatchParticipants
             .AsNoTracking()
-            .Include(x => x.Match)
-            .Include(x => x.Units)
-            .Include(x => x.Traits)
-            .Include(x => x.Summoner)
-            .ThenInclude(x => x.Ranks)
-            .Where(x => x.Match.Status == TftFetchStatus.Success);
+            .Where(x => matchIds.Contains(x.MatchId));
 
-        if (activeSet.HasValue)
-            query = query.Where(x => x.Match.SetNumber == activeSet.Value);
-
-        var normalizedRegion = NormalizeRegion(region);
-        if (normalizedRegion != "ALL")
-            query = query.Where(x => x.Match.PlatformRegion == normalizedRegion);
-
-        var normalizedRankTier = NormalizeRankTier(rankTier);
         if (normalizedRankTier != "all")
-            query = query.Where(x => x.Summoner.Ranks.Any(r => MatchesRankTier(r.Tier, normalizedRankTier)));
+        {
+            if (normalizedRankTier == "EMERALD_PLUS")
+            {
+                query = query.Where(x => x.Summoner.Ranks.Any(r =>
+                    r.Tier == "EMERALD"
+                    || r.Tier == "DIAMOND"
+                    || r.Tier == "MASTER"
+                    || r.Tier == "GRANDMASTER"
+                    || r.Tier == "CHALLENGER"));
+            }
+            else
+            {
+                query = query.Where(x => x.Summoner.Ranks.Any(r => r.Tier == normalizedRankTier));
+            }
+        }
 
-        return query;
+        return query.Select(x => new ParticipantRow(
+            x.Id,
+            x.MatchId,
+            x.Placement,
+            x.Augments,
+            x.Match.SetNumber,
+            x.Match.SetCoreName,
+            x.Match.Patch,
+            x.Match.PlatformRegion));
     }
 
-    private static string BuildCompKey(TftMatchParticipant participant)
+    private static string BuildCompKey(IReadOnlyList<UnitRow> units, IReadOnlyList<TraitRow> traits)
     {
-        var traits = participant.Traits
+        var compTraits = traits
             .Where(x => (x.Style ?? 0) > 0)
             .OrderByDescending(x => x.Style ?? 0)
             .ThenByDescending(x => x.NumUnits)
             .Take(2)
             .Select(x => NormalizeToken(x.Name));
-        var units = participant.Units
+        var compUnits = units
             .OrderByDescending(x => x.Tier)
             .ThenByDescending(x => x.Rarity)
             .Take(2)
             .Select(x => NormalizeToken(x.Name ?? x.CharacterId));
-        return string.Join("-", traits.Concat(units));
+        return string.Join("-", compTraits.Concat(compUnits));
     }
 
-    private static string BuildCompName(TftMatchParticipant participant)
+    private static string BuildCompName(IReadOnlyList<UnitRow> units, IReadOnlyList<TraitRow> traits)
     {
-        var traits = participant.Traits
+        var compTraits = traits
             .Where(x => (x.Style ?? 0) > 0)
             .OrderByDescending(x => x.Style ?? 0)
             .ThenByDescending(x => x.NumUnits)
             .Take(2)
             .Select(x => x.Name);
-        var units = participant.Units
+        var compUnits = units
             .OrderByDescending(x => x.Tier)
             .ThenByDescending(x => x.Rarity)
             .Take(2)
             .Select(x => x.Name ?? x.CharacterId);
-        return string.Join(" / ", traits.Concat(units));
+        return string.Join(" / ", compTraits.Concat(compUnits));
     }
 
-    private static TftUnitSummaryDto MapUnit(TftMatchParticipantUnit unit)
+    private static TftUnitSummaryDto MapUnit(UnitRow unit)
     {
         return new TftUnitSummaryDto(unit.CharacterId, unit.Name, unit.Rarity, unit.Tier, unit.Items);
     }
 
-    private static TftTraitSummaryDto MapTrait(TftMatchParticipantTrait trait)
+    private static TftTraitSummaryDto MapTrait(TraitRow trait)
     {
         return new TftTraitSummaryDto(trait.Name, trait.NumUnits, trait.TierCurrent, trait.Style);
     }
@@ -170,19 +243,41 @@ public class TftAnalyticsComputeService(TranscendenceContext context) : ITftAnal
 
     private static string NormalizeRankTier(string? rankTier)
     {
-        return string.IsNullOrWhiteSpace(rankTier) ? "EMERALD_PLUS" : rankTier.Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(rankTier))
+            return "EMERALD_PLUS";
+
+        var normalized = rankTier.Trim().ToUpperInvariant();
+        return normalized == "ALL" ? "all" : normalized;
     }
 
-    private static bool MatchesRankTier(string tier, string requestedTier)
-    {
-        if (requestedTier == "all")
-            return true;
+    private static string ToRankTierDisplay(string normalizedRankTier) =>
+        normalizedRankTier == "all" ? "ALL" : normalizedRankTier;
 
-        if (requestedTier == "EMERALD_PLUS")
-        {
-            return tier is "EMERALD" or "DIAMOND" or "MASTER" or "GRANDMASTER" or "CHALLENGER";
-        }
+    private sealed record ParticipantRow(
+        Guid Id,
+        Guid MatchId,
+        int Placement,
+        string[] Augments,
+        int? SetNumber,
+        string? SetCoreName,
+        string? Patch,
+        string PlatformRegion
+    );
 
-        return string.Equals(tier, requestedTier, StringComparison.OrdinalIgnoreCase);
-    }
+    private sealed record UnitRow(
+        Guid ParticipantId,
+        string CharacterId,
+        string? Name,
+        int Rarity,
+        int Tier,
+        int[] Items
+    );
+
+    private sealed record TraitRow(
+        Guid ParticipantId,
+        string Name,
+        int NumUnits,
+        int TierCurrent,
+        int? Style
+    );
 }

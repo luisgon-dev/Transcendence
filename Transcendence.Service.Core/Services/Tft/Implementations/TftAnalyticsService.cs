@@ -27,7 +27,7 @@ public class TftAnalyticsService(
     public async Task<IReadOnlyList<TftCompListItemDto>> GetCompListAsync(string? rankTier, string? region, CancellationToken ct = default)
     {
         return await cache.GetOrCreateAsync(
-            $"tft:analytics:comps:{Normalize(rankTier)}:{Normalize(region)}",
+            $"tft:analytics:comps:{NormalizeRankTier(rankTier)}:{NormalizeRegion(region)}",
             async cancel => await computeService.ComputeCompListAsync(rankTier, region, cancel),
             CacheOptions,
             tags: ["tft-analytics", "tft-comps"],
@@ -37,7 +37,7 @@ public class TftAnalyticsService(
     public async Task<TftCompDetailDto?> GetCompDetailAsync(string compSlug, string? rankTier, string? region, CancellationToken ct = default)
     {
         return await cache.GetOrCreateAsync(
-            $"tft:analytics:comp:{compSlug}:{Normalize(rankTier)}:{Normalize(region)}",
+            $"tft:analytics:comp:{compSlug}:{NormalizeRankTier(rankTier)}:{NormalizeRegion(region)}",
             async cancel => await computeService.ComputeCompDetailAsync(compSlug, rankTier, region, cancel),
             CacheOptions,
             tags: ["tft-analytics", "tft-comps"],
@@ -45,21 +45,30 @@ public class TftAnalyticsService(
     }
 
     public Task<IReadOnlyList<TftStaticEntityDto>> GetChampionsAsync(CancellationToken ct = default) => staticDataService.GetChampionCatalogAsync(ct);
-    public async Task<TftStaticEntityDto?> GetChampionAsync(string championId, CancellationToken ct = default) => (await staticDataService.GetChampionCatalogAsync(ct)).FirstOrDefault(x => x.ApiName == championId);
+    public Task<TftStaticEntityDto?> GetChampionAsync(string championId, CancellationToken ct = default) => staticDataService.GetChampionByApiNameAsync(championId, ct);
     public Task<IReadOnlyList<TftStaticEntityDto>> GetItemsAsync(CancellationToken ct = default) => staticDataService.GetItemCatalogAsync(ct);
-    public async Task<TftStaticEntityDto?> GetItemAsync(string itemId, CancellationToken ct = default) => (await staticDataService.GetItemCatalogAsync(ct)).FirstOrDefault(x => x.ApiName == itemId);
+    public Task<TftStaticEntityDto?> GetItemAsync(string itemId, CancellationToken ct = default) => staticDataService.GetItemByApiNameAsync(itemId, ct);
     public Task<IReadOnlyList<TftStaticEntityDto>> GetTraitsAsync(CancellationToken ct = default) => staticDataService.GetTraitCatalogAsync(ct);
-    public async Task<TftStaticEntityDto?> GetTraitAsync(string traitId, CancellationToken ct = default) => (await staticDataService.GetTraitCatalogAsync(ct)).FirstOrDefault(x => x.ApiName == traitId);
+    public Task<TftStaticEntityDto?> GetTraitAsync(string traitId, CancellationToken ct = default) => staticDataService.GetTraitByApiNameAsync(traitId, ct);
     public Task<IReadOnlyList<TftStaticEntityDto>> GetAugmentsAsync(CancellationToken ct = default) => staticDataService.GetAugmentCatalogAsync(ct);
-    public async Task<TftStaticEntityDto?> GetAugmentAsync(string augmentId, CancellationToken ct = default) => (await staticDataService.GetAugmentCatalogAsync(ct)).FirstOrDefault(x => x.ApiName == augmentId);
+    public Task<TftStaticEntityDto?> GetAugmentAsync(string augmentId, CancellationToken ct = default) => staticDataService.GetAugmentByApiNameAsync(augmentId, ct);
 
     public async Task InvalidateCacheAsync(CancellationToken ct = default)
     {
         await cache.RemoveByTagAsync("tft-analytics", ct);
     }
 
-    private static string Normalize(string? value)
+    private static string NormalizeRegion(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? "ALL" : value.Trim().ToUpperInvariant();
+    }
+
+    private static string NormalizeRankTier(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "EMERALD_PLUS";
+
+        var normalized = value.Trim().ToUpperInvariant();
+        return normalized == "ALL" ? "all" : normalized;
     }
 }

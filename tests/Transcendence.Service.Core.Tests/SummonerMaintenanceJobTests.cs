@@ -17,6 +17,7 @@ using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.Jobs.Priority;
+using Transcendence.Service.Core.Tests.Support;
 
 namespace Transcendence.Service.Core.Tests;
 
@@ -237,7 +238,7 @@ public class SummonerMaintenanceJobTests
 
         private Harness(
             SqliteConnection connection,
-            TestSqliteTranscendenceContext db,
+            SqliteCompatibleTranscendenceContext db,
             SummonerMaintenanceJob job,
             Mock<IBackgroundJobClient> backgroundJobClient,
             Mock<IRefreshLockRepository> refreshLockRepository)
@@ -249,7 +250,7 @@ public class SummonerMaintenanceJobTests
             RefreshLockRepository = refreshLockRepository;
         }
 
-        public TestSqliteTranscendenceContext Db { get; }
+        public SqliteCompatibleTranscendenceContext Db { get; }
         public SummonerMaintenanceJob Job { get; }
         public Mock<IBackgroundJobClient> BackgroundJobClient { get; }
         public Mock<IRefreshLockRepository> RefreshLockRepository { get; }
@@ -265,7 +266,7 @@ public class SummonerMaintenanceJobTests
                 .UseSqlite(connection)
                 .Options;
 
-            var db = new TestSqliteTranscendenceContext(options);
+            var db = new SqliteCompatibleTranscendenceContext(options);
             await db.Database.EnsureCreatedAsync();
 
             var refreshLocks = new Mock<IRefreshLockRepository>();
@@ -368,19 +369,4 @@ public class SummonerMaintenanceJobTests
         public AdaptiveThroughputBudgetDecision ComputeBudget(AdaptiveThroughputBudgetInput input) => decision;
     }
 
-    private sealed class TestSqliteTranscendenceContext(DbContextOptions<TranscendenceContext> options)
-        : TranscendenceContext(options)
-    {
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
-        {
-            base.OnModelCreating(modelBuilder);
-
-            modelBuilder.Entity<ItemVersion>()
-                .Property(x => x.BuildsFrom)
-                .HasDefaultValueSql("'[]'");
-            modelBuilder.Entity<ItemVersion>()
-                .Property(x => x.BuildsInto)
-                .HasDefaultValueSql("'[]'");
-        }
-    }
 }

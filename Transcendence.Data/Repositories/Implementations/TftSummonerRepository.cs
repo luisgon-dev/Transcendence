@@ -28,7 +28,7 @@ public class TftSummonerRepository(TranscendenceContext context, ITftRankReposit
         var query = context.TftSummoners
             .AsNoTracking()
             .Where(s =>
-                s.PlatformRegion == platformRegion.Trim().ToUpperInvariant() &&
+                s.PlatformRegion == normalizedPlatformRegion &&
                 s.GameName != null &&
                 s.TagLine != null &&
                 s.GameNameNormalized != null &&
@@ -39,10 +39,25 @@ public class TftSummonerRepository(TranscendenceContext context, ITftRankReposit
         if (tagLike != null)
             query = query.Where(s => EF.Functions.Like(s.TagLineNormalized!, tagLike));
 
-        return await query
-            .OrderBy(s => s.GameNameNormalized == normalizedGameNamePrefix ? 0 : 1)
-            .ThenBy(s => s.GameName)
-            .ThenBy(s => s.TagLine)
+        IQueryable<TftSummoner> orderedQuery;
+
+        if (normalizedTagLinePrefix != null)
+        {
+            orderedQuery = query
+                .OrderBy(s => s.GameNameNormalized == normalizedGameNamePrefix ? 0 : 1)
+                .ThenBy(s => s.TagLineNormalized == normalizedTagLinePrefix ? 0 : 1)
+                .ThenBy(s => s.GameName)
+                .ThenBy(s => s.TagLine);
+        }
+        else
+        {
+            orderedQuery = query
+                .OrderBy(s => s.GameNameNormalized == normalizedGameNamePrefix ? 0 : 1)
+                .ThenBy(s => s.GameName)
+                .ThenBy(s => s.TagLine);
+        }
+
+        return await orderedQuery
             .Take(safeLimit)
             .Select(s => new TftSummonerSearchCandidate(
                 s.PlatformRegion,
@@ -98,32 +113,37 @@ public class TftSummonerRepository(TranscendenceContext context, ITftRankReposit
         summoner.PlatformRegion = summoner.PlatformRegion.Trim().ToUpperInvariant();
         summoner.UpdatedAt = DateTime.UtcNow;
 
-        var existing = await context.TftSummoners
-            .Include(x => x.Ranks)
-            .FirstOrDefaultAsync(x => x.Puuid == summoner.Puuid, cancellationToken);
+        var existing = await FindExistingForUpsertAsync(summoner, cancellationToken);
 
         if (existing == null)
         {
             if (summoner.Id == Guid.Empty)
                 summoner.Id = Guid.NewGuid();
+
             context.TftSummoners.Add(summoner);
-            await context.SaveChangesAsync(cancellationToken);
-            existing = await context.TftSummoners.Include(x => x.Ranks).SingleAsync(x => x.Id == summoner.Id, cancellationToken);
+
+            try
+            {
+                await context.SaveChangesAsync(cancellationToken);
+                existing = summoner;
+            }
+            catch (DbUpdateException)
+            {
+                var resolved = await TryResolveConcurrentInsertAsync(summoner, cancellationToken);
+                if (!resolved)
+                    throw;
+
+                existing = await FindExistingForUpsertAsync(summoner, cancellationToken);
+                if (existing == null)
+                    throw;
+
+                ApplyUpdates(existing, summoner);
+                await context.SaveChangesAsync(cancellationToken);
+            }
         }
         else
         {
-            existing.RiotSummonerId = summoner.RiotSummonerId;
-            existing.ProfileIconId = summoner.ProfileIconId;
-            existing.SummonerLevel = summoner.SummonerLevel;
-            existing.RevisionDate = summoner.RevisionDate;
-            existing.GameName = summoner.GameName;
-            existing.TagLine = summoner.TagLine;
-            existing.GameNameNormalized = summoner.GameNameNormalized;
-            existing.TagLineNormalized = summoner.TagLineNormalized;
-            existing.AccountId = summoner.AccountId;
-            existing.PlatformRegion = summoner.PlatformRegion;
-            existing.Region = summoner.Region;
-            existing.UpdatedAt = DateTime.UtcNow;
+            ApplyUpdates(existing, summoner);
             await context.SaveChangesAsync(cancellationToken);
         }
 
@@ -134,6 +154,45 @@ public class TftSummonerRepository(TranscendenceContext context, ITftRankReposit
         }
 
         return existing;
+    }
+
+    private async Task<TftSummoner?> FindExistingForUpsertAsync(TftSummoner summoner, CancellationToken cancellationToken)
+    {
+        return await context.TftSummoners
+            .Include(x => x.Ranks)
+            .FirstOrDefaultAsync(x =>
+                    x.Puuid == summoner.Puuid
+                    || (x.PlatformRegion == summoner.PlatformRegion
+                        && x.GameNameNormalized == summoner.GameNameNormalized
+                        && x.TagLineNormalized == summoner.TagLineNormalized),
+                cancellationToken);
+    }
+
+    private async Task<bool> TryResolveConcurrentInsertAsync(TftSummoner summoner, CancellationToken cancellationToken)
+    {
+        context.Entry(summoner).State = EntityState.Detached;
+        foreach (var rank in summoner.Ranks)
+            context.Entry(rank).State = EntityState.Detached;
+
+        var existing = await FindExistingForUpsertAsync(summoner, cancellationToken);
+        return existing != null;
+    }
+
+    private static void ApplyUpdates(TftSummoner existing, TftSummoner summoner)
+    {
+        existing.Puuid = summoner.Puuid;
+        existing.RiotSummonerId = summoner.RiotSummonerId;
+        existing.ProfileIconId = summoner.ProfileIconId;
+        existing.SummonerLevel = summoner.SummonerLevel;
+        existing.RevisionDate = summoner.RevisionDate;
+        existing.GameName = summoner.GameName;
+        existing.TagLine = summoner.TagLine;
+        existing.GameNameNormalized = summoner.GameNameNormalized;
+        existing.TagLineNormalized = summoner.TagLineNormalized;
+        existing.AccountId = summoner.AccountId;
+        existing.PlatformRegion = summoner.PlatformRegion;
+        existing.Region = summoner.Region;
+        existing.UpdatedAt = DateTime.UtcNow;
     }
 
     private static string? NormalizeValue(string? value)

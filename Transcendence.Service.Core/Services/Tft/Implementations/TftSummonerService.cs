@@ -11,6 +11,9 @@ public class TftSummonerService(TftRiotApiContext riotApiContext, ITftRankServic
     public async Task<TftSummoner> GetSummonerByPuuidAsync(string puuid, PlatformRoute platformRoute, CancellationToken ct = default)
     {
         var summoner = await riotApiContext.Api.TftSummonerV1().GetByPUUIDAsync(platformRoute, puuid, ct);
+        if (summoner == null || string.IsNullOrWhiteSpace(summoner.Puuid))
+            throw new InvalidOperationException($"Riot TFT Summoner API returned no summoner for PUUID {puuid} on {platformRoute}.");
+
         return await CreateAsync(summoner, platformRoute, ct);
     }
 
@@ -22,6 +25,12 @@ public class TftSummonerService(TftRiotApiContext riotApiContext, ITftRankServic
             throw new InvalidOperationException($"Riot Account API returned no PUUID for {gameName}#{tagLine}.");
 
         var summoner = await riotApiContext.Api.TftSummonerV1().GetByPUUIDAsync(platformRoute, account.Puuid, ct);
+        if (summoner == null || string.IsNullOrWhiteSpace(summoner.Puuid))
+        {
+            throw new InvalidOperationException(
+                $"Riot TFT Summoner API returned no summoner for {gameName}#{tagLine} on {platformRoute}.");
+        }
+
         return await CreateAsync(summoner, platformRoute, ct);
     }
 

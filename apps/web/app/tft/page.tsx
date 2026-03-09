@@ -73,7 +73,7 @@ export default async function TftHomePage() {
       <section className="grid gap-4">
         <div>
           <h2 className="font-[var(--font-sora)] text-2xl font-semibold">Top Comps</h2>
-          <p className="text-sm text-fg/75">Default filters use the current set, current patch, and Emerald+.</p>
+          <p className="text-sm text-fg/75">Default filters use the active set and Emerald+.</p>
         </div>
 
         <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">

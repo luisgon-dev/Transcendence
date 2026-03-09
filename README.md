@@ -74,6 +74,12 @@ Local URLs:
 - Admin UI: `http://localhost:3000/admin`
 - pgAdmin: `http://localhost:5050` with `docker compose --profile local-tools up`
 
+Notes:
+
+- Shared backend defaults live in [`config/backend.shared.json`](./config/backend.shared.json).
+- The WebAPI host is keyless; Riot API keys are only required for the worker and TFT/LoL refresh flows.
+- TFT catalog pages (`/tft/champions`, `/tft/items`, `/tft/traits`, `/tft/augments`) reflect the active set only.
+
 ## What You Get
 
 - LoL summoner profiles, champion analytics, matchups, builds, and pro builds

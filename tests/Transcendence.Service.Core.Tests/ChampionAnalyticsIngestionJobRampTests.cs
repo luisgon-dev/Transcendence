@@ -18,6 +18,7 @@ using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.Jobs.Priority;
+using Transcendence.Service.Core.Tests.Support;
 
 namespace Transcendence.Service.Core.Tests;
 
@@ -349,7 +350,7 @@ public class ChampionAnalyticsIngestionJobRampTests
 
         private Harness(
             SqliteConnection connection,
-            TestSqliteTranscendenceContext db,
+            SqliteCompatibleTranscendenceContext db,
             ChampionAnalyticsIngestionJob job,
             Mock<ISummonerBootstrapService> bootstrapService,
             Mock<IBackgroundJobClient> backgroundJobClient,
@@ -363,7 +364,7 @@ public class ChampionAnalyticsIngestionJobRampTests
             RefreshLockRepository = refreshLockRepository;
         }
 
-        public TestSqliteTranscendenceContext Db { get; }
+        public SqliteCompatibleTranscendenceContext Db { get; }
         public ChampionAnalyticsIngestionJob Job { get; }
         public Mock<ISummonerBootstrapService> BootstrapService { get; }
         public Mock<IBackgroundJobClient> BackgroundJobClient { get; }
@@ -380,7 +381,7 @@ public class ChampionAnalyticsIngestionJobRampTests
                 .UseSqlite(connection)
                 .Options;
 
-            var db = new TestSqliteTranscendenceContext(options);
+            var db = new SqliteCompatibleTranscendenceContext(options);
             await db.Database.EnsureCreatedAsync();
 
             var bootstrap = new Mock<ISummonerBootstrapService>();
@@ -521,19 +522,4 @@ public class ChampionAnalyticsIngestionJobRampTests
         public AdaptiveThroughputBudgetDecision ComputeBudget(AdaptiveThroughputBudgetInput input) => decision;
     }
 
-    private sealed class TestSqliteTranscendenceContext(DbContextOptions<TranscendenceContext> options)
-        : TranscendenceContext(options)
-    {
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
-        {
-            base.OnModelCreating(modelBuilder);
-
-            modelBuilder.Entity<ItemVersion>()
-                .Property(x => x.BuildsFrom)
-                .HasDefaultValueSql("'[]'");
-            modelBuilder.Entity<ItemVersion>()
-                .Property(x => x.BuildsInto)
-                .HasDefaultValueSql("'[]'");
-        }
-    }
 }

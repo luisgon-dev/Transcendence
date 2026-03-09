@@ -9,7 +9,8 @@ namespace Transcendence.Service.Core.Services.Tft.Implementations;
 
 public class TftStaticDataService(
     TranscendenceContext context,
-    IHttpClientFactory httpClientFactory) : ITftStaticDataService
+    IHttpClientFactory httpClientFactory,
+    ILogger<TftStaticDataService> logger) : ITftStaticDataService
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -18,51 +19,58 @@ public class TftStaticDataService(
 
     public async Task UpdateStaticDataAsync(CancellationToken ct = default)
     {
-        var client = httpClientFactory.CreateClient();
-        await using var stream = await client.GetStreamAsync("https://raw.communitydragon.org/latest/cdragon/tft/en_us.json", ct);
-        var root = await JsonSerializer.DeserializeAsync<TftRoot>(stream, JsonOptions, ct);
-        if (root == null || root.SetData.Count == 0)
-            return;
+        var hadStoredData = await HasStaticDataAsync(ct);
 
-        var activeSet = root.SetData[0];
-        var activeSetNumber = activeSet.Number;
-
-        foreach (var existingSet in await context.TftSets.ToListAsync(ct))
-            existingSet.IsActive = existingSet.Number == activeSetNumber;
-
-        var setEntity = await context.TftSets.FirstOrDefaultAsync(x => x.Number == activeSetNumber, ct);
-        if (setEntity == null)
+        try
         {
-            setEntity = new TftSet { Number = activeSetNumber };
-            context.TftSets.Add(setEntity);
+            var client = httpClientFactory.CreateClient();
+            await using var stream = await client.GetStreamAsync("https://raw.communitydragon.org/latest/cdragon/tft/en_us.json", ct);
+            var root = await JsonSerializer.DeserializeAsync<TftRoot>(stream, JsonOptions, ct);
+            if (root == null || root.SetData.Count == 0)
+                return;
+
+            var activeSet = root.SetData
+                .OrderByDescending(setData => setData.Number)
+                .First();
+            var activeSetNumber = activeSet.Number;
+
+            foreach (var existingSet in await context.TftSets.ToListAsync(ct))
+                existingSet.IsActive = existingSet.Number == activeSetNumber;
+
+            var setEntity = await context.TftSets.FirstOrDefaultAsync(x => x.Number == activeSetNumber, ct);
+            if (setEntity == null)
+            {
+                setEntity = new TftSet { Number = activeSetNumber };
+                context.TftSets.Add(setEntity);
+            }
+
+            setEntity.Name = activeSet.Name ?? $"Set {activeSetNumber}";
+            setEntity.Mutator = activeSet.Mutator;
+            setEntity.IsActive = true;
+            setEntity.UpdatedAtUtc = DateTime.UtcNow;
+
+            var patch = await context.TftPatches.FirstOrDefaultAsync(x => x.IsActive, ct)
+                        ?? new TftPatch { Version = "latest", IsActive = true };
+            patch.ActiveSetNumber = activeSetNumber;
+            patch.ActiveSetCoreName = activeSet.Name;
+            patch.DetectedAtUtc = DateTime.UtcNow;
+            if (context.Entry(patch).State == EntityState.Detached)
+                context.TftPatches.Add(patch);
+
+            await UpsertChampionsAsync(activeSetNumber, activeSet.Champions, ct);
+            await UpsertTraitsAsync(activeSetNumber, activeSet.Traits, ct);
+            await UpsertItemsAsync(activeSetNumber, activeSet.Items, activeSet.Augments, root.Items, ct);
+            await context.SaveChangesAsync(ct);
         }
-
-        setEntity.Name = activeSet.Name ?? $"Set {activeSetNumber}";
-        setEntity.Mutator = activeSet.Mutator;
-        setEntity.IsActive = true;
-        setEntity.UpdatedAtUtc = DateTime.UtcNow;
-
-        var patch = await context.TftPatches.FirstOrDefaultAsync(x => x.IsActive, ct)
-                    ?? new TftPatch { Version = "latest", IsActive = true };
-        patch.ActiveSetNumber = activeSetNumber;
-        patch.ActiveSetCoreName = activeSet.Name;
-        patch.DetectedAtUtc = DateTime.UtcNow;
-        if (context.Entry(patch).State == EntityState.Detached)
-            context.TftPatches.Add(patch);
-
-        await UpsertChampionsAsync(activeSetNumber, activeSet.Champions, ct);
-        await UpsertTraitsAsync(activeSetNumber, activeSet.Traits, ct);
-        await UpsertItemsAsync(activeSetNumber, activeSet.Items, activeSet.Augments, root.Items, ct);
-        await context.SaveChangesAsync(ct);
+        catch (Exception ex) when (hadStoredData)
+        {
+            logger.LogWarning(ex, "Failed to refresh TFT static data; serving stored static data.");
+        }
     }
 
     public async Task EnsureStaticDataAsync(CancellationToken ct = default)
     {
-        var hasAnyData = await context.TftSets.AsNoTracking().AnyAsync(ct)
-                         && await context.TftUnitVersions.AsNoTracking().AnyAsync(ct)
-                         && await context.TftItemVersions.AsNoTracking().AnyAsync(ct)
-                         && await context.TftTraitVersions.AsNoTracking().AnyAsync(ct)
-                         && await context.TftAugmentVersions.AsNoTracking().AnyAsync(ct);
+        var hasAnyData = await HasStaticDataAsync(ct);
 
         if (hasAnyData)
             return;
@@ -78,29 +86,155 @@ public class TftStaticDataService(
 
     public Task<IReadOnlyList<TftStaticEntityDto>> GetChampionCatalogAsync(CancellationToken ct = default)
     {
-        return GetCatalogWithWarmupAsync(context.TftUnitVersions.Select(x => new TftStaticEntityDto(x.ApiName, x.Name, null, x.Icon)), ct);
+        return GetCatalogWithWarmupAsync(
+            setNumber => context.TftUnitVersions
+                .Where(x => x.SetNumber == setNumber)
+                .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, null, x.Icon)),
+            ct);
     }
+
+    public Task<TftStaticEntityDto?> GetChampionByApiNameAsync(string apiName, CancellationToken ct = default) =>
+        GetChampionByApiNameInternalAsync(apiName, ct);
 
     public Task<IReadOnlyList<TftStaticEntityDto>> GetItemCatalogAsync(CancellationToken ct = default)
     {
-        return GetCatalogWithWarmupAsync(context.TftItemVersions.Select(x => new TftStaticEntityDto(x.ApiName, x.Name, x.Description, x.Icon)), ct);
+        return GetCatalogWithWarmupAsync(
+            setNumber => context.TftItemVersions
+                .Where(x => x.SetNumber == setNumber)
+                .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, x.Description, x.Icon)),
+            ct);
     }
+
+    public Task<TftStaticEntityDto?> GetItemByApiNameAsync(string apiName, CancellationToken ct = default) =>
+        GetItemByApiNameInternalAsync(apiName, ct);
 
     public Task<IReadOnlyList<TftStaticEntityDto>> GetTraitCatalogAsync(CancellationToken ct = default)
     {
-        return GetCatalogWithWarmupAsync(context.TftTraitVersions.Select(x => new TftStaticEntityDto(x.ApiName, x.Name, x.Description, x.Icon)), ct);
+        return GetCatalogWithWarmupAsync(
+            setNumber => context.TftTraitVersions
+                .Where(x => x.SetNumber == setNumber)
+                .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, x.Description, x.Icon)),
+            ct);
     }
+
+    public Task<TftStaticEntityDto?> GetTraitByApiNameAsync(string apiName, CancellationToken ct = default) =>
+        GetTraitByApiNameInternalAsync(apiName, ct);
 
     public Task<IReadOnlyList<TftStaticEntityDto>> GetAugmentCatalogAsync(CancellationToken ct = default)
     {
-        return GetCatalogWithWarmupAsync(context.TftAugmentVersions.Select(x => new TftStaticEntityDto(x.ApiName, x.Name, x.Description, x.Icon)), ct);
+        return GetCatalogWithWarmupAsync(
+            setNumber => context.TftAugmentVersions
+                .Where(x => x.SetNumber == setNumber)
+                .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, x.Description, x.Icon)),
+            ct);
     }
 
-    private async Task<IReadOnlyList<TftStaticEntityDto>> GetCatalogWithWarmupAsync(IQueryable<TftStaticEntityDto> query, CancellationToken ct)
+    public Task<TftStaticEntityDto?> GetAugmentByApiNameAsync(string apiName, CancellationToken ct = default) =>
+        GetAugmentByApiNameInternalAsync(apiName, ct);
+
+    private async Task<IReadOnlyList<TftStaticEntityDto>> GetCatalogWithWarmupAsync(
+        Func<int, IQueryable<TftStaticEntityDto>> queryFactory,
+        CancellationToken ct)
     {
         await EnsureStaticDataAsync(ct);
-        return await query.AsNoTracking().OrderBy(x => x.Name).ToListAsync(ct);
+        var activeSet = await context.TftSets
+            .AsNoTracking()
+            .Where(x => x.IsActive)
+            .Select(x => (int?)x.Number)
+            .FirstOrDefaultAsync(ct);
+        if (!activeSet.HasValue)
+            return [];
+
+        return (await queryFactory(activeSet.Value)
+                .AsNoTracking()
+                .ToListAsync(ct))
+            .OrderBy(x => x.Name)
+            .ToList();
     }
+
+    private async Task<TftStaticEntityDto?> GetChampionByApiNameInternalAsync(string apiName, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(apiName))
+            return null;
+
+        await EnsureStaticDataAsync(ct);
+        var activeSet = await GetActiveSetNumberInternalAsync(ct);
+        if (!activeSet.HasValue)
+            return null;
+
+        return await context.TftUnitVersions
+            .AsNoTracking()
+            .Where(x => x.SetNumber == activeSet.Value && x.ApiName == apiName)
+            .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, null, x.Icon))
+            .FirstOrDefaultAsync(ct);
+    }
+
+    private async Task<TftStaticEntityDto?> GetItemByApiNameInternalAsync(string apiName, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(apiName))
+            return null;
+
+        await EnsureStaticDataAsync(ct);
+        var activeSet = await GetActiveSetNumberInternalAsync(ct);
+        if (!activeSet.HasValue)
+            return null;
+
+        return await context.TftItemVersions
+            .AsNoTracking()
+            .Where(x => x.SetNumber == activeSet.Value && x.ApiName == apiName)
+            .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, x.Description, x.Icon))
+            .FirstOrDefaultAsync(ct);
+    }
+
+    private async Task<TftStaticEntityDto?> GetTraitByApiNameInternalAsync(string apiName, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(apiName))
+            return null;
+
+        await EnsureStaticDataAsync(ct);
+        var activeSet = await GetActiveSetNumberInternalAsync(ct);
+        if (!activeSet.HasValue)
+            return null;
+
+        return await context.TftTraitVersions
+            .AsNoTracking()
+            .Where(x => x.SetNumber == activeSet.Value && x.ApiName == apiName)
+            .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, x.Description, x.Icon))
+            .FirstOrDefaultAsync(ct);
+    }
+
+    private async Task<TftStaticEntityDto?> GetAugmentByApiNameInternalAsync(string apiName, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(apiName))
+            return null;
+
+        await EnsureStaticDataAsync(ct);
+        var activeSet = await GetActiveSetNumberInternalAsync(ct);
+        if (!activeSet.HasValue)
+            return null;
+
+        return await context.TftAugmentVersions
+            .AsNoTracking()
+            .Where(x => x.SetNumber == activeSet.Value && x.ApiName == apiName)
+            .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, x.Description, x.Icon))
+            .FirstOrDefaultAsync(ct);
+    }
+
+    private async Task<bool> HasStaticDataAsync(CancellationToken ct)
+    {
+        return await context.TftSets.AsNoTracking().AnyAsync(ct)
+               && await context.TftUnitVersions.AsNoTracking().AnyAsync(ct)
+               && await context.TftItemVersions.AsNoTracking().AnyAsync(ct)
+               && await context.TftTraitVersions.AsNoTracking().AnyAsync(ct)
+               && await context.TftAugmentVersions.AsNoTracking().AnyAsync(ct);
+    }
+
+    private Task<int?> GetActiveSetNumberInternalAsync(CancellationToken ct) =>
+        context.TftSets
+            .AsNoTracking()
+            .Where(x => x.IsActive)
+            .Select(x => (int?)x.Number)
+            .FirstOrDefaultAsync(ct);
 
     private async Task UpsertChampionsAsync(int setNumber, IReadOnlyList<TftChampion> champions, CancellationToken ct)
     {

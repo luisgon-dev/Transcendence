@@ -200,6 +200,8 @@ TFT behavior notes:
 - `GET /api/tft/summoners/{region}/{name}/{tag}` returns `200` with stored profile/matches or `202 Accepted` when the profile is missing or already refreshing.
 - `POST /api/tft/summoners/{region}/{name}/{tag}/refresh` queues a background refresh behind `tft:summoner-refresh:*` locks.
 - TFT analytics are isolated from LoL analytics. The comps endpoint is a separate surface and does not share the LoL tier-list route or payload.
+- TFT catalog/detail analytics endpoints (`champions`, `items`, `traits`, `augments`) serve the active set only.
+- `GET /api/tft/analytics/comps` defaults `rankTier` to `EMERALD_PLUS`; `rankTier=ALL` is treated case-insensitively as an all-ranks query.
 
 ### Operational Health
 

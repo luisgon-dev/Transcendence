@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { Card } from "@/components/ui/Card";
+import { TFT_FRONTEND_ENABLED } from "@/lib/featureFlags";
 
 const games = [
   {
@@ -14,22 +15,25 @@ const games = [
       { label: "Champions", href: "/lol/champions" },
       { label: "Summoners", href: "/lol/summoners/na/Faker-KR1" }
     ]
-  },
-  {
-    href: "/tft",
-    eyebrow: "Teamfight Tactics",
-    title: "Comps, units, items, augments, traits, and stored summoner match history.",
-    description:
-      "Use the TFT surface for active-set catalogs, comp summaries, and persisted TFT profile reads.",
-    links: [
-      { label: "Comps", href: "/tft/comps" },
-      { label: "Champions", href: "/tft/champions" },
-      { label: "Summoners", href: "/tft/summoners/na/Faker-KR1" }
-    ]
   }
 ] as const;
 
+const tftGame = {
+  href: "/tft",
+  eyebrow: "Teamfight Tactics",
+  title: "Comps, units, items, augments, traits, and stored summoner match history.",
+  description:
+    "Use the TFT surface for active-set catalogs, comp summaries, and persisted TFT profile reads.",
+  links: [
+    { label: "Comps", href: "/tft/comps" },
+    { label: "Champions", href: "/tft/champions" },
+    { label: "Summoners", href: "/tft/summoners/na/Faker-KR1" }
+  ]
+} as const;
+
 export default function LandingPage() {
+  const visibleGames = TFT_FRONTEND_ENABLED ? [...games, tftGame] : games;
+
   return (
     <div className="grid gap-6">
       <section className="glass-card mesh-highlight rounded-[2rem] p-6 sm:p-8">
@@ -38,13 +42,13 @@ export default function LandingPage() {
           Separate Riot game surfaces, one shared stack.
         </h1>
         <p className="mt-3 max-w-2xl text-sm text-fg/75 sm:text-base">
-          League of Legends and Teamfight Tactics now live behind separate routes, APIs, and data
-          pipelines, while sharing the same backend, worker, and web app.
+          League of Legends is currently available in the web app, with the broader shared backend
+          and worker stack ready for additional Riot game surfaces when they are complete.
         </p>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
-        {games.map((game) => (
+        {visibleGames.map((game) => (
           <Card key={game.href} className="grid gap-5 p-6">
             <div>
               <p className="text-xs font-medium uppercase tracking-[0.24em] text-primary">

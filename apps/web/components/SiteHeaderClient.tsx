@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { BrandMark } from "@/components/BrandMark";
 import { GlobalSearchLauncher } from "@/components/GlobalSearchLauncher";
 import { cn } from "@/lib/cn";
+import { TFT_FRONTEND_ENABLED } from "@/lib/featureFlags";
 
 const COMPACT_HEADER_PATHS = new Set(["/account/login", "/account/register"]);
 const GITHUB_REPO_URL = "https://github.com/luisgon-dev/Transcendence";
@@ -45,9 +46,11 @@ export function SiteHeaderClient({
             <Link href="/lol" className={navLinkClass(pathname, "/lol")}>
               LoL
             </Link>
-            <Link href="/tft" className={navLinkClass(pathname, "/tft")}>
-              TFT
-            </Link>
+            {TFT_FRONTEND_ENABLED ? (
+              <Link href="/tft" className={navLinkClass(pathname, "/tft")}>
+                TFT
+              </Link>
+            ) : null}
             <Link href="/lol/tierlist" className={navLinkClass(pathname, "/lol/tierlist")}>
               Tier List
             </Link>
@@ -60,9 +63,11 @@ export function SiteHeaderClient({
             <Link href="/lol/pro-builds" className={navLinkClass(pathname, "/lol/pro-builds")}>
               Pro Builds
             </Link>
-            <Link href="/tft/comps" className={navLinkClass(pathname, "/tft/comps")}>
-              Comps
-            </Link>
+            {TFT_FRONTEND_ENABLED ? (
+              <Link href="/tft/comps" className={navLinkClass(pathname, "/tft/comps")}>
+                Comps
+              </Link>
+            ) : null}
             {patch ? (
               <span className="rounded-full border border-primary/35 bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary">
                 Patch {patch}
@@ -96,9 +101,11 @@ export function SiteHeaderClient({
           <Link href="/lol" className={navLinkClass(pathname, "/lol")}>
             LoL
           </Link>
-          <Link href="/tft" className={navLinkClass(pathname, "/tft")}>
-            TFT
-          </Link>
+          {TFT_FRONTEND_ENABLED ? (
+            <Link href="/tft" className={navLinkClass(pathname, "/tft")}>
+              TFT
+            </Link>
+          ) : null}
           <Link href="/lol/tierlist" className={navLinkClass(pathname, "/lol/tierlist")}>
             Tier List
           </Link>
@@ -111,9 +118,11 @@ export function SiteHeaderClient({
           <Link href="/lol/pro-builds" className={navLinkClass(pathname, "/lol/pro-builds")}>
             Pro
           </Link>
-          <Link href="/tft/comps" className={navLinkClass(pathname, "/tft/comps")}>
-            Comps
-          </Link>
+          {TFT_FRONTEND_ENABLED ? (
+            <Link href="/tft/comps" className={navLinkClass(pathname, "/tft/comps")}>
+              Comps
+            </Link>
+          ) : null}
           {patch ? (
             <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
               Patch {patch}

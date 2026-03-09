@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { GLOBAL_SEARCH_OPEN_EVENT } from "@/lib/globalSearch";
+import { TFT_FRONTEND_ENABLED } from "@/lib/featureFlags";
 import { DEFAULT_TIERLIST_RANK_TIER, rankTierDisplayLabel } from "@/lib/ranks";
 import { encodeRiotIdPath, parseRiotIdInput } from "@/lib/riotid";
 
@@ -45,7 +46,7 @@ const REGIONS = [
   { value: "ru", label: "RU" }
 ] as const;
 
-const TIER_LINKS = [
+const LOL_TIER_LINKS = [
   {
     label: `Tier List · All Roles (${rankTierDisplayLabel(DEFAULT_TIERLIST_RANK_TIER)})`,
     href: "/lol/tierlist"
@@ -73,13 +74,20 @@ const TIER_LINKS = [
   { label: "Tier List · All Ranks", href: "/lol/tierlist?rankTier=all" },
   { label: "Tier List · Challenger", href: "/lol/tierlist?rankTier=CHALLENGER" },
   { label: "Matchup Analysis", href: "/lol/matchups" },
-  { label: "Pro Builds Preview", href: "/lol/pro-builds" },
+  { label: "Pro Builds Preview", href: "/lol/pro-builds" }
+] as const;
+
+const TFT_TIER_LINKS = [
   { label: "TFT Comps", href: "/tft/comps" },
   { label: "TFT Champions", href: "/tft/champions" },
   { label: "TFT Items", href: "/tft/items" },
   { label: "TFT Traits", href: "/tft/traits" },
   { label: "TFT Augments", href: "/tft/augments" }
 ] as const;
+
+const TIER_LINKS = TFT_FRONTEND_ENABLED
+  ? [...LOL_TIER_LINKS, ...TFT_TIER_LINKS]
+  : LOL_TIER_LINKS;
 
 function isEditableTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;

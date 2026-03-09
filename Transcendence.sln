@@ -2,7 +2,8 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{A829922D-4E5D-4995-8F2D-C8C952C93A7C}"
 	ProjectSection(SolutionItems) = preProject
-		docker-compose.yml = docker-compose.yml
+		compose.yml = compose.yml
+		.env.example = .env.example
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Transcendence.Data", "Transcendence.Data\Transcendence.Data.csproj", "{C35CFBA4-4E00-418B-9661-15B6B9F2F559}"

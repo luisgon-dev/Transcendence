@@ -1,6 +1,3 @@
-using Camille.Enums;
-using Camille.RiotGames;
-using Camille.RiotGames.Util;
 using Transcendence.Data.Models.Auth;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Interfaces;
@@ -11,8 +8,7 @@ namespace Transcendence.Service.Core.Services.Auth.Implementations;
 
 public class UserPreferencesService(
     IUserPreferencesRepository userPreferencesRepository,
-    ISummonerRepository summonerRepository,
-    RiotGamesApi riotApi) : IUserPreferencesService
+    ISummonerRepository summonerRepository) : IUserPreferencesService
 {
     public async Task<IReadOnlyList<FavoriteSummonerDto>> GetFavoritesAsync(Guid userId, CancellationToken ct = default)
     {
@@ -37,22 +33,10 @@ public class UserPreferencesService(
 
         var existingSummoner = await summonerRepository.FindByRiotIdAsync(region, gameName, tagLine, cancellationToken: ct);
         var puuid = existingSummoner?.Puuid;
-        if (string.IsNullOrWhiteSpace(puuid))
-        {
-            try
-            {
-                var account = await riotApi.AccountV1().GetByRiotIdAsync(platform.ToRegional(), gameName, tagLine, ct);
-                puuid = account?.Puuid;
-            }
-            catch (RiotResponseException ex) when (ex.GetResponse()?.StatusCode == System.Net.HttpStatusCode.NotFound)
-            {
-                throw new ArgumentException("Summoner not found for the provided Riot ID.", nameof(request));
-            }
-        }
 
         if (string.IsNullOrWhiteSpace(puuid))
         {
-            throw new ArgumentException("Summoner not found for the provided Riot ID.", nameof(request));
+            throw new ArgumentException("Summoner not found in store for the provided Riot ID. Refresh the profile first.", nameof(request));
         }
 
         var duplicate = await userPreferencesRepository.GetFavoriteByPuuidAsync(userId, puuid!, region, ct);

@@ -17,6 +17,10 @@ public class WorkerJobScheduleOptions
     public string RuneSelectionIntegrityBackfillCron { get; set; } = "*/15 * * * *";
     public string LiveGamePollingCron { get; set; } = "*/2 * * * *";
     public string RefreshLockLifecycleCleanupCron { get; set; } = "*/5 * * * *";
+    public string TftStaticDataCron { get; set; } = "15 */6 * * *";
+    public string TftAnalyticsRefreshCron { get; set; } = "15 */2 * * *";
+    public string TftAnalyticsIngestionCron { get; set; } = "*/30 * * * *";
+    public string TftSummonerMaintenanceCron { get; set; } = "*/45 * * * *";
     public bool EnableAdaptiveAnalyticsRefresh { get; set; } = true;
     public bool EnableNewPatchRamp { get; set; } = true;
     public bool EnableChampionAnalyticsIngestion { get; set; } = true;
@@ -26,6 +30,10 @@ public class WorkerJobScheduleOptions
     public bool EnableHighEloProfileRefresh { get; set; } = true;
     public string HighEloProfileRefreshCron { get; set; } = "0 */12 * * *";
     public bool EnableRefreshLockLifecycleCleanup { get; set; } = true;
+    public bool EnableTftStaticDataRefresh { get; set; } = true;
+    public bool EnableTftAnalyticsRefresh { get; set; } = true;
+    public bool EnableTftAnalyticsIngestion { get; set; } = true;
+    public bool EnableTftSummonerMaintenance { get; set; } = true;
     public int RefreshLockLifecycleForensicsWindowMinutes { get; set; } = 30;
     public int RefreshLockLifecycleCleanupBatchSize { get; set; } = 250;
     public int RefreshLockLifecycleCleanupMaxBatchesPerRun { get; set; } = 8;

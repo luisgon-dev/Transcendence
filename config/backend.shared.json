@@ -1,0 +1,21 @@
+{
+  "ConnectionStrings": {
+    "MainDatabase": "Host=localhost;Port=5432;Database=transcendence;Username=postgres;Password=postgres",
+    "Redis": "localhost:6379"
+  },
+  "RiotApi": {
+    "League": {
+      "ApiKey": "RGAPI-00000000-0000-0000-0000-000000000000"
+    },
+    "Tft": {
+      "ApiKey": "RGAPI-00000000-0000-0000-0000-000000000000"
+    }
+  },
+  "Analytics": {
+    "Compute": {
+      "MinimumGamesRequired": 100,
+      "EarlyPatchMinimumGamesRequired": 40,
+      "EarlyPatchWindowHours": 72
+    }
+  }
+}

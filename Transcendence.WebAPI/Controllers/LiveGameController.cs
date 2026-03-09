@@ -8,7 +8,7 @@ using Transcendence.WebAPI.Security;
 namespace Transcendence.WebAPI.Controllers;
 
 [ApiController]
-[Route("api/summoners")]
+[Route("api/lol/summoners")]
 [Authorize(Policy = AuthPolicies.AppOnly)]
 [EnableRateLimiting("expensive-read")]
 [ProducesResponseType(StatusCodes.Status429TooManyRequests)]

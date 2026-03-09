@@ -19,6 +19,7 @@ using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.Jobs.Priority;
 using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
+using Transcendence.Service.Core.Tests.Support;
 
 namespace Transcendence.Service.Core.Tests;
 
@@ -84,7 +85,7 @@ public class CancellationPropagationTests
         var options = new DbContextOptionsBuilder<TranscendenceContext>()
             .UseSqlite(connection)
             .Options;
-        await using var db = new TestSqliteTranscendenceContext(options);
+        await using var db = new SqliteCompatibleTranscendenceContext(options);
         await db.Database.EnsureCreatedAsync();
 
         db.Patches.Add(new Patch
@@ -135,19 +136,4 @@ public class CancellationPropagationTests
         backgroundJobs.Verify(x => x.Create(It.IsAny<Job>(), It.IsAny<Hangfire.States.IState>()), Times.Never);
     }
 
-    private sealed class TestSqliteTranscendenceContext(DbContextOptions<TranscendenceContext> options)
-        : TranscendenceContext(options)
-    {
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
-        {
-            base.OnModelCreating(modelBuilder);
-
-            modelBuilder.Entity<ItemVersion>()
-                .Property(x => x.BuildsFrom)
-                .HasDefaultValueSql("'[]'");
-            modelBuilder.Entity<ItemVersion>()
-                .Property(x => x.BuildsInto)
-                .HasDefaultValueSql("'[]'");
-        }
-    }
 }

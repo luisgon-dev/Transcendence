@@ -10,12 +10,12 @@ using Transcendence.Service.Core.Services.RiotApi;
 
 namespace Transcendence.Service.Core.Services.LiveGame.Implementations;
 
-public class LiveGameService(
-    RiotGamesApi riotApi,
+public class RiotLiveGamePollingService(
+    LeagueRiotApiContext riotApiContext,
     ISummonerRepository summonerRepository,
     HybridCache cache,
     ILiveGameAnalysisService liveGameAnalysisService,
-    ILogger<LiveGameService> logger) : ILiveGameService
+    ILogger<RiotLiveGamePollingService> logger) : ILiveGamePollingService
 {
     private static readonly HybridCacheEntryOptions LiveGameCacheOptions = new()
     {
@@ -23,7 +23,7 @@ public class LiveGameService(
         LocalCacheExpiration = TimeSpan.FromSeconds(30)
     };
 
-    public async Task<LiveGameResponseDto> GetCurrentGameAsync(
+    public async Task<LiveGameResponseDto> FetchCurrentGameAsync(
         string platformRegion,
         string gameName,
         string tagLine,
@@ -51,7 +51,7 @@ public class LiveGameService(
 
                 try
                 {
-                    var gameInfo = await riotApi.SpectatorV5()
+                    var gameInfo = await riotApiContext.Api.SpectatorV5()
                         .GetCurrentGameInfoByPuuidAsync(platform, puuid, cancel);
 
                     if (gameInfo == null)
@@ -136,7 +136,7 @@ public class LiveGameService(
 
         try
         {
-            var account = await riotApi.AccountV1().GetByRiotIdAsync(platform.ToRegional(), gameName, tagLine, ct);
+            var account = await riotApiContext.Api.AccountV1().GetByRiotIdAsync(platform.ToRegional(), gameName, tagLine, ct);
             return account?.Puuid;
         }
         catch (RiotResponseException ex) when (ex.GetResponse()?.StatusCode == System.Net.HttpStatusCode.NotFound)

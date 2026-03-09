@@ -55,7 +55,7 @@ export function SearchBar({ className }: { className?: string }) {
     }
 
     const riotIdPath = encodeRiotIdPath(riotId);
-    router.push(`/summoners/${region}/${riotIdPath}`);
+    router.push(`/lol/summoners/${region}/${riotIdPath}`);
   }
 
   return (

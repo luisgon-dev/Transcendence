@@ -32,17 +32,16 @@ fi
 
 "$DOTNET_BIN" build -c Release -m:1 "$WEBAPI_PROJECT"
 
-# The WebAPI program requires these values at startup (even for Swagger generation).
+# The WebAPI export path still needs infrastructure and auth settings, but it no longer
+# requires Riot API keys because Riot-backed services are worker-only.
 export ConnectionStrings__MainDatabase="${ConnectionStrings__MainDatabase:-Host=localhost;Port=5432;Database=transcendence;Username=postgres;Password=postgres}"
 export ConnectionStrings__Redis="${ConnectionStrings__Redis:-localhost:6379}"
-export ConnectionStrings__RiotApi="${ConnectionStrings__RiotApi:-RGAPI-00000000-0000-0000-0000-000000000000}"
 export Auth__Jwt__Key="${Auth__Jwt__Key:-OPENAPI_EXPORT_ONLY_CHANGE_THIS_32_PLUS_CHARS}"
 export ASPNETCORE_ENVIRONMENT="${ASPNETCORE_ENVIRONMENT:-Production}"
 export Swagger__Enable="${Swagger__Enable:-true}"
 APP_ARGS=(
   "--ConnectionStrings:MainDatabase=$ConnectionStrings__MainDatabase"
   "--ConnectionStrings:Redis=$ConnectionStrings__Redis"
-  "--ConnectionStrings:RiotApi=$ConnectionStrings__RiotApi"
   "--Auth:Jwt:Key=$Auth__Jwt__Key"
   "--Swagger:Enable=$Swagger__Enable"
 )

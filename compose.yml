@@ -1,0 +1,159 @@
+name: transcendence
+
+x-app-env: &app-env
+  ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+  ConnectionStrings__Redis: ${REDIS_CONNECTION}
+  RiotApi__League__ApiKey: ${RIOT_API_KEY_LOL}
+  RiotApi__Tft__ApiKey: ${RIOT_API_KEY_TFT}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: transcendence-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - transcendence-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: transcendence-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - transcendence-net
+
+  web:
+    image: ${WEB_IMAGE:-ghcr.io/luisgon-dev/transcendence-web:main}
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: transcendence-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      TRN_BACKEND_BASE_URL: http://webapi:8080
+      TRN_BACKEND_API_KEY: ${WEB_TRN_BACKEND_API_KEY}
+      TRN_ERROR_VERBOSITY: verbose
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      webapi:
+        condition: service_started
+    networks:
+      - transcendence-net
+
+  webapi:
+    image: ${WEBAPI_IMAGE:-ghcr.io/luisgon-dev/transcendence-webapi:main}
+    build:
+      context: .
+      dockerfile: Transcendence.WebAPI/Dockerfile
+    container_name: transcendence-webapi
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      Auth__Jwt__Issuer: ${JWT_ISSUER}
+      Auth__Jwt__Audience: ${JWT_AUDIENCE}
+      Auth__Jwt__Key: ${JWT_SIGNING_KEY}
+      Auth__Jwt__AccessTokenMinutes: ${JWT_ACCESS_TOKEN_MINUTES}
+      Auth__AdminBootstrap__Emails__0: ${ADMIN_BOOTSTRAP_EMAIL_0:-}
+      Auth__BootstrapApiKey: ${AUTH_BOOTSTRAP_API_KEY}
+      OperationalLogs__DirectoryPath: /var/log/transcendence
+      <<: *app-env
+    ports:
+      - "${WEBAPI_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - operational_logs:/var/log/transcendence
+    networks:
+      - transcendence-net
+
+  service:
+    image: ${SERVICE_IMAGE:-ghcr.io/luisgon-dev/transcendence-service:main}
+    build:
+      context: .
+      dockerfile: Transcendence.Service/Dockerfile
+    container_name: transcendence-service
+    restart: unless-stopped
+    environment:
+      DOTNET_ENVIRONMENT: Production
+      OperationalLogs__DirectoryPath: /var/log/transcendence
+      <<: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - operational_logs:/var/log/transcendence
+    networks:
+      - transcendence-net
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: transcendence-pgadmin
+    restart: unless-stopped
+    profiles: ["local-tools"]
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - transcendence-net
+
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: transcendence-dozzle
+    restart: unless-stopped
+    profiles: ["ops-tools"]
+    environment:
+      DOZZLE_TAILSIZE: "300"
+      DOZZLE_LEVEL: info
+    ports:
+      - "${DOZZLE_PORT:-9999}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - transcendence-net
+
+volumes:
+  postgres_data:
+  redis_data:
+  pgadmin_data:
+  operational_logs:
+
+networks:
+  transcendence-net:
+    driver: bridge

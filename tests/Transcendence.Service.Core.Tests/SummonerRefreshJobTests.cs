@@ -19,6 +19,7 @@ using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
+using Transcendence.Service.Core.Tests.Support;
 using MatchEntity = Transcendence.Data.Models.LoL.Match.Match;
 
 namespace Transcendence.Service.Core.Tests;
@@ -634,7 +635,7 @@ public class SummonerRefreshJobTests
 
         private SummonerRefreshJobHarness(
             SqliteConnection connection,
-            TestSqliteTranscendenceContext db,
+            SqliteCompatibleTranscendenceContext db,
             ServiceProvider services,
             SummonerRefreshJob job,
             Mock<ISummonerService> summonerService,
@@ -660,7 +661,7 @@ public class SummonerRefreshJobTests
             LockTelemetry = lockTelemetry;
         }
 
-        public TestSqliteTranscendenceContext Db { get; }
+        public SqliteCompatibleTranscendenceContext Db { get; }
         public SummonerRefreshJob Job { get; }
 
         public Mock<ISummonerService> SummonerService { get; }
@@ -681,7 +682,7 @@ public class SummonerRefreshJobTests
                 .UseSqlite(connection)
                 .Options;
 
-            var db = new TestSqliteTranscendenceContext(options);
+            var db = new SqliteCompatibleTranscendenceContext(options);
             await db.Database.EnsureCreatedAsync();
 
             var serviceCollection = new ServiceCollection();
@@ -803,19 +804,4 @@ public class SummonerRefreshJobTests
         }
     }
 
-    private sealed class TestSqliteTranscendenceContext(DbContextOptions<TranscendenceContext> options)
-        : TranscendenceContext(options)
-    {
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
-        {
-            base.OnModelCreating(modelBuilder);
-
-            modelBuilder.Entity<ItemVersion>()
-                .Property(x => x.BuildsFrom)
-                .HasDefaultValueSql("'[]'");
-            modelBuilder.Entity<ItemVersion>()
-                .Property(x => x.BuildsInto)
-                .HasDefaultValueSql("'[]'");
-        }
-    }
 }

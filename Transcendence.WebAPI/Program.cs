@@ -1,10 +1,10 @@
-using Camille.RiotGames;
 using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration.Json;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using System.Threading.RateLimiting;
@@ -18,12 +18,13 @@ using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Extensions;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
-using Transcendence.Service.Core.Services.RiotApi.Implementations;
-using Transcendence.Service.Core.Services.RiotApi.Interfaces;
+using Transcendence.Service.Core.Services.Jobs.Priority;
+using Transcendence.Service.Core.Services.Tft.Configuration;
 using Transcendence.WebAPI.Errors;
 using Transcendence.WebAPI.Security;
 
 var builder = WebApplication.CreateBuilder(args);
+ConfigureSharedBackendConfiguration(builder.Configuration, builder.Environment);
 builder.Logging.AddOperationalFileLogger(builder.Configuration, defaultServiceName: "webapi");
 var requireJwtKeyInDevelopment = ParseBool(builder.Configuration["Auth:Jwt:RequireKeyInDevelopment"], false);
 var bootstrapApiKey = builder.Configuration["Auth:BootstrapApiKey"];
@@ -156,10 +157,11 @@ builder.Services.AddHybridCache(options =>
     };
 });
 
-// Register only core, API remains keyless
+// Register keyless application services used by the WebAPI host.
 builder.Services.AddTranscendenceCore();
 builder.Services.AddProjectSyndraRepositories();
 builder.Services.Configure<ChampionAnalyticsComputeOptions>(builder.Configuration.GetSection("Analytics:Compute"));
+builder.Services.Configure<TftAnalyticsComputeOptions>(builder.Configuration.GetSection("Analytics:TftCompute"));
 builder.Services.Configure<ChampionAnalyticsIngestionJobOptions>(
     builder.Configuration.GetSection("Jobs:ChampionAnalyticsIngestion"));
 builder.Services.Configure<MultiRegionIngestionOptions>(builder.Configuration.GetSection("Jobs:MultiRegionIngestion"));
@@ -167,17 +169,8 @@ builder.Services.Configure<WorkerJobScheduleOptions>(builder.Configuration.GetSe
 builder.Services.Configure<WorkerSchedulingProfileOptions>(builder.Configuration.GetSection("Jobs:SchedulingProfiles"));
 builder.Services.Configure<AdminBootstrapOptions>(builder.Configuration.GetSection("Auth:AdminBootstrap"));
 builder.Services.AddSingleton<IWorkerRecurringJobPolicy, WorkerRecurringJobPolicy>();
-
-var riotApiKey = builder.Configuration.GetConnectionString("RiotApi")
-                 ?? builder.Configuration["RiotApi:ApiKey"];
-if (string.IsNullOrWhiteSpace(riotApiKey))
-{
-    throw new InvalidOperationException(
-        "Missing Riot API key configuration. Set 'ConnectionStrings:RiotApi' (or 'RiotApi:ApiKey').");
-}
-
-builder.Services.AddSingleton(_ => RiotGamesApi.NewInstance(riotApiKey));
-builder.Services.AddScoped<IRiotAccountService, RiotAccountService>();
+builder.Services.AddSingleton<IAdaptiveThroughputBudgetPolicy, AdaptiveThroughputBudgetPolicy>();
+builder.Services.AddSingleton<IStarvationGuardrailPolicy, StarvationGuardrailPolicy>();
 
 var jwtIssuer = builder.Configuration["Auth:Jwt:Issuer"] ?? "Transcendence";
 var jwtAudience = builder.Configuration["Auth:Jwt:Audience"] ?? "TranscendenceClients";
@@ -284,6 +277,39 @@ app.Run();
 static bool ParseBool(string? raw, bool fallback)
 {
     return bool.TryParse(raw, out var parsed) ? parsed : fallback;
+}
+
+static void ConfigureSharedBackendConfiguration(ConfigurationManager configuration, IHostEnvironment environment)
+{
+    var retainedSources = configuration.Sources
+        .Where(source => source is not JsonConfigurationSource jsonSource || !IsHostAppsettingsSource(jsonSource, environment))
+        .ToList();
+
+    configuration.Sources.Clear();
+    configuration.AddJsonFile(GetSharedConfigPath(environment), optional: false, reloadOnChange: environment.IsDevelopment());
+    configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: environment.IsDevelopment());
+
+    foreach (var source in retainedSources)
+        configuration.Sources.Add(source);
+}
+
+static bool IsHostAppsettingsSource(JsonConfigurationSource jsonSource, IHostEnvironment environment)
+{
+    if (string.IsNullOrWhiteSpace(jsonSource.Path))
+        return false;
+
+    var normalizedPath = jsonSource.Path.Replace('\\', '/');
+    return normalizedPath.Equals("appsettings.json", StringComparison.OrdinalIgnoreCase)
+           || normalizedPath.Equals($"appsettings.{environment.EnvironmentName}.json", StringComparison.OrdinalIgnoreCase);
+}
+
+static string GetSharedConfigPath(IHostEnvironment environment)
+{
+    var outputPath = Path.Combine(environment.ContentRootPath, "config", "backend.shared.json");
+    if (File.Exists(outputPath))
+        return outputPath;
+
+    return Path.GetFullPath(Path.Combine(environment.ContentRootPath, "..", "config", "backend.shared.json"));
 }
 
 static string BuildAuthRateLimitPartitionKey(HttpContext context)

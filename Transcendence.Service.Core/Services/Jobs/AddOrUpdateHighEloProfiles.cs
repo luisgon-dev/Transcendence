@@ -12,7 +12,7 @@ namespace Transcendence.Service.Core.Services.Jobs;
 
 // ReSharper disable once ClassNeverInstantiated.Global
 public class AddOrUpdateHighEloProfiles(
-    RiotGamesApi riotGamesApi,
+    LeagueRiotApiContext riotApiContext,
     TranscendenceContext context,
     ILogger<AddOrUpdateHighEloProfiles> logger,
     ISummonerService summonerService,
@@ -78,11 +78,11 @@ public class AddOrUpdateHighEloProfiles(
             const int saveBatchSize = 50;
             var pendingChanges = 0;
 
-            var challengerLeague = await riotGamesApi.LeagueV4()
+            var challengerLeague = await riotApiContext.Api.LeagueV4()
                 .GetChallengerLeagueAsync(platform, QueueType.RANKED_SOLO_5x5, stoppingToken);
-            var grandmasterLeague = await riotGamesApi.LeagueV4()
+            var grandmasterLeague = await riotApiContext.Api.LeagueV4()
                 .GetGrandmasterLeagueAsync(platform, QueueType.RANKED_SOLO_5x5, stoppingToken);
-            var masterLeague = await riotGamesApi.LeagueV4()
+            var masterLeague = await riotApiContext.Api.LeagueV4()
                 .GetMasterLeagueAsync(platform, QueueType.RANKED_SOLO_5x5, stoppingToken);
 
             var summonerPuuids = challengerLeague.Entries.Select(x => x.Puuid)

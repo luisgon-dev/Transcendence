@@ -1,10 +1,11 @@
 using Camille.Enums;
 using Camille.RiotGames;
+using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
 
 namespace Transcendence.Service.Core.Services.Jobs;
 
-public sealed class RiotMatchIdsClient(RiotGamesApi riotGamesApi) : IRiotMatchIdsClient
+public sealed class RiotMatchIdsClient(LeagueRiotApiContext riotApiContext) : IRiotMatchIdsClient
 {
     public async Task<IReadOnlyList<string>> GetMatchIdsByPuuidAsync(
         RegionalRoute regionalRoute,
@@ -17,7 +18,7 @@ public sealed class RiotMatchIdsClient(RiotGamesApi riotGamesApi) : IRiotMatchId
         string? type,
         CancellationToken ct = default)
     {
-        return await riotGamesApi.MatchV5()
+        return await riotApiContext.Api.MatchV5()
             .GetMatchIdsByPUUIDAsync(
                 regionalRoute,
                 puuid,

@@ -125,7 +125,7 @@ export default function FavoritesPage() {
                   {f.displayName && parseRiotIdInput(f.displayName) ? (
                     <Link
                       className="text-sm font-semibold text-fg hover:underline"
-                      href={`/summoners/${encodeURIComponent(
+                      href={`/lol/summoners/${encodeURIComponent(
                         f.platformRegion
                       )}/${encodeRiotIdPath(parseRiotIdInput(f.displayName)!)}`}
                     >

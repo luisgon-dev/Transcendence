@@ -1,6 +1,7 @@
 using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration.Json;
 using Transcendence.Data;
 using Transcendence.Data.Extensions;
 using Transcendence.Service.Core.Services.Analytics.Models;
@@ -8,10 +9,12 @@ using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Extensions;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Priority;
+using Transcendence.Service.Core.Services.Tft.Configuration;
 using Transcendence.Service.Workers;
 using Transcendence.Service.Workers.Startup;
 
 var builder = Host.CreateApplicationBuilder(args);
+ConfigureSharedBackendConfiguration(builder.Configuration, builder.Environment);
 builder.Logging.AddOperationalFileLogger(builder.Configuration, defaultServiceName: "service");
 
 // Add services to the container.
@@ -33,7 +36,7 @@ builder.Services.AddHangfire(config =>
             options.UseNpgsqlConnection(builder.Configuration.GetConnectionString("MainDatabase"))));
 builder.Services.AddHangfireServer(options =>
 {
-    options.Queues = ["refresh-high", "default", "refresh-low"];
+    options.Queues = ["refresh-high", "default", "refresh-low", "tft-refresh-high", "tft-default", "tft-refresh-low"];
 });
 
 builder.Services.AddHttpClient();
@@ -92,10 +95,46 @@ else
 
 // Register services
 builder.Services.AddTranscendenceCore();
-builder.Services.AddTranscendenceRiot(builder.Configuration);
+builder.Services.AddTranscendenceWorkerCore();
+builder.Services.AddTranscendenceLeagueRiot(builder.Configuration);
+builder.Services.AddTranscendenceTftRiot(builder.Configuration);
+builder.Services.Configure<TftAnalyticsComputeOptions>(builder.Configuration.GetSection("Analytics:TftCompute"));
 
 // add data repositories
 builder.Services.AddProjectSyndraRepositories();
 
 var host = builder.Build();
 host.Run();
+
+static void ConfigureSharedBackendConfiguration(ConfigurationManager configuration, IHostEnvironment environment)
+{
+    var retainedSources = configuration.Sources
+        .Where(source => source is not JsonConfigurationSource jsonSource || !IsHostAppsettingsSource(jsonSource, environment))
+        .ToList();
+
+    configuration.Sources.Clear();
+    configuration.AddJsonFile(GetSharedConfigPath(environment), optional: false, reloadOnChange: environment.IsDevelopment());
+    configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: environment.IsDevelopment());
+
+    foreach (var source in retainedSources)
+        configuration.Sources.Add(source);
+}
+
+static bool IsHostAppsettingsSource(JsonConfigurationSource jsonSource, IHostEnvironment environment)
+{
+    if (string.IsNullOrWhiteSpace(jsonSource.Path))
+        return false;
+
+    var normalizedPath = jsonSource.Path.Replace('\\', '/');
+    return normalizedPath.Equals("appsettings.json", StringComparison.OrdinalIgnoreCase)
+           || normalizedPath.Equals($"appsettings.{environment.EnvironmentName}.json", StringComparison.OrdinalIgnoreCase);
+}
+
+static string GetSharedConfigPath(IHostEnvironment environment)
+{
+    var outputPath = Path.Combine(environment.ContentRootPath, "config", "backend.shared.json");
+    if (File.Exists(outputPath))
+        return outputPath;
+
+    return Path.GetFullPath(Path.Combine(environment.ContentRootPath, "..", "config", "backend.shared.json"));
+}

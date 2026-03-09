@@ -16,8 +16,14 @@ This repo contains a .NET backend (API + background worker) and a Next.js web fr
 1. Start infrastructure + backend:
 
 ```bash
+cp .env.example .env
 docker compose up --build
 ```
+
+Compose reads local backend credentials from the repo-root [`.env.example`](../.env.example). Copy it to an untracked `.env` before first run. The current Riot key variables are:
+
+- `RIOT_API_KEY_LOL`
+- `RIOT_API_KEY_TFT`
 
 2. Install JS dependencies:
 
@@ -68,10 +74,11 @@ API health:
 
 `Transcendence.WebAPI`:
 
+The WebAPI host is keyless. It does not need Riot API keys to start, serve reads, or export Swagger.
+
 ```bash
 dotnet user-secrets set "ConnectionStrings:MainDatabase" "Host=localhost;Port=5432;Database=transcendence;Username=postgres;Password=postgres" --project Transcendence.WebAPI
 dotnet user-secrets set "ConnectionStrings:Redis" "localhost:6379" --project Transcendence.WebAPI
-dotnet user-secrets set "ConnectionStrings:RiotApi" "RGAPI-your-key" --project Transcendence.WebAPI
 dotnet user-secrets set "Auth:Jwt:Key" "CHANGE_THIS_TO_A_REAL_32+_CHAR_SECRET" --project Transcendence.WebAPI
 dotnet user-secrets set "Auth:Jwt:RequireKeyInDevelopment" "false" --project Transcendence.WebAPI
 dotnet user-secrets set "Auth:AdminBootstrap:Emails:0" "admin@example.com" --project Transcendence.WebAPI
@@ -88,8 +95,20 @@ Security notes:
 ```bash
 dotnet user-secrets set "ConnectionStrings:MainDatabase" "Host=localhost;Port=5432;Database=transcendence;Username=postgres;Password=postgres" --project Transcendence.Service
 dotnet user-secrets set "ConnectionStrings:Redis" "localhost:6379" --project Transcendence.Service
-dotnet user-secrets set "ConnectionStrings:RiotApi" "RGAPI-your-key" --project Transcendence.Service
+dotnet user-secrets set "RiotApi:League:ApiKey" "RGAPI-your-lol-key" --project Transcendence.Service
+dotnet user-secrets set "RiotApi:Tft:ApiKey" "RGAPI-your-tft-key" --project Transcendence.Service
 ```
+
+Local defaults:
+- Shared backend defaults live in [`config/backend.shared.json`](../config/backend.shared.json) and use PostgreSQL/Npgsql `Host=...` connection strings with Redis on `localhost:6379`.
+- `Transcendence.WebAPI/appsettings.json` and `Transcendence.Service/appsettings.json` contain host-only settings layered on top of the shared config.
+- User-secrets remain the recommended override for local credentials and Riot keys.
+
+Riot API key model:
+- Only `Transcendence.Service` resolves Riot keys from the canonical nested settings:
+  - `RiotApi:League:ApiKey`
+  - `RiotApi:Tft:ApiKey`
+- The legacy `ConnectionStrings:RiotApi` setting is no longer used.
 
 ### Database migrations
 
@@ -107,6 +126,38 @@ Migration policy:
 dotnet run --project Transcendence.WebAPI
 dotnet run --project Transcendence.Service
 ```
+
+### TFT Local Smoke Test
+
+After the migration is applied and both hosts are running:
+
+1. Verify static-data warmup:
+
+```bash
+curl http://localhost:8080/api/tft/analytics/champions
+```
+
+2. Queue a TFT refresh for a known Riot ID:
+
+```bash
+curl -X POST http://localhost:8080/api/tft/summoners/na1/<gameName>/<tagLine>/refresh
+```
+
+3. Poll until the stored profile becomes available:
+
+```bash
+curl http://localhost:8080/api/tft/summoners/na1/<gameName>/<tagLine>
+```
+
+4. Verify the web surfaces:
+- `/tft`
+- `/tft/comps`
+- `/tft/summoners/na/<gameName>-<tagLine>`
+
+Notes:
+- TFT analytics catalog/detail endpoints serve the active set only.
+- The worker must have a valid `RiotApi:Tft:ApiKey` for TFT refresh/bootstrap to succeed.
+- Static-data refresh pulls from CommunityDragon, so the local machine must have outbound access to `raw.communitydragon.org`.
 
 Admin web UI runs in `apps/web` under `/admin` and requires an authenticated user with `admin` role.
 Admin diagnostics include:
@@ -132,6 +183,12 @@ WebAPI now defaults `Microsoft.EntityFrameworkCore.Database.Command` to `Warning
 In Docker Compose (`docker-compose.yml` and `docker-compose.production.yml`), both services mount a shared `operational_logs` volume at `/var/log/transcendence` so admin APIs can read both log streams.
 The admin logs API scans the live file plus rotated `*.log.N` archives and reports whether the selected source is currently available. In non-compose or split-host setups, configure the `AdminLogs:Sources:*:DirectoryPath` overrides in the Web API so `/api/admin/logs/services` can find worker logs outside the Web API's own content root.
 The logger provider now pre-creates the target `*.log` file and writes a one-time stderr warning if the process cannot create or append the file. In container deployments, that warning appears in the container's stdout/stderr stream and is the first place to check when `service.log` is missing.
+
+Compose env contract:
+- [`compose.yml`](../compose.yml) injects Riot keys with `RiotApi__League__ApiKey` and `RiotApi__Tft__ApiKey`.
+- The repo-root [`.env.example`](../.env.example) uses matching variables:
+  - `RIOT_API_KEY_LOL`
+  - `RIOT_API_KEY_TFT`
 
 ## Web Commands
 
@@ -178,8 +235,8 @@ If hooks are installed (`corepack pnpm hooks:install`), pre-commit runs path-awa
 
 ## Background Job Tuning
 
-Key worker settings live under `Jobs:*` in `Transcendence.Service/appsettings*.json`.
-The public Web API also consumes `Jobs:MultiRegionIngestion` from `Transcendence.WebAPI/appsettings*.json` so `/api/analytics/regions` and region-filter normalization stay aligned with the ingestion regions exposed to the frontend.
+Key worker settings live under `Jobs:*` in `Transcendence.Service/appsettings.json`.
+The public Web API also consumes `Jobs:MultiRegionIngestion` from `Transcendence.WebAPI/appsettings.json` so `/api/analytics/regions` and region-filter normalization stay aligned with the ingestion regions exposed to the frontend.
 
 ### Development Worker Scope
 
@@ -189,6 +246,10 @@ When `Transcendence.Service` runs in the `Development` environment, the `Develop
 - `refresh-champion-analytics-adaptive` (when enabled)
 - `champion-analytics-ingestion` (when enabled)
 - `summoner-maintenance` (when enabled)
+- `tft-static-data-refresh` (when enabled)
+- `tft-analytics-refresh` (when enabled)
+- `tft-analytics-ingestion` (when enabled)
+- `tft-summoner-maintenance` (when enabled)
 - `match-timeline-backfill` (when enabled)
 
 It explicitly removes non-analytics recurring jobs (`detect-patch`, `retry-failed-matches`, `poll-live-games`) from the scheduler to keep local runs focused on analytics behavior.
@@ -288,6 +349,28 @@ Non-ranked backfill ordering is tracked per summoner with `SummonerIngestionCurs
 - `RampDataStaleAfterMinutes`
 
 This recurring job refreshes stale summoners in low-priority mode when no active high-priority API refresh lock exists.
+
+### TFT Worker Jobs
+
+`Jobs:Schedule` now also supports dedicated TFT recurring jobs:
+
+- `TftStaticDataCron`
+- `TftAnalyticsRefreshCron`
+- `TftAnalyticsIngestionCron`
+- `TftSummonerMaintenanceCron`
+- `EnableTftStaticDataRefresh`
+- `EnableTftAnalyticsRefresh`
+- `EnableTftAnalyticsIngestion`
+- `EnableTftSummonerMaintenance`
+
+Queue model:
+- TFT profile refresh: `tft-refresh-high`
+- TFT analytics/static-data work: `tft-default`
+- TFT maintenance/bootstrap work: `tft-refresh-low`
+
+Static-data behavior:
+- TFT champion/item/trait/augment catalog endpoints read only the currently active set.
+- If a TFT static-data refresh fails while previously stored static data exists, the worker logs the failure and continues serving the stored active-set catalog.
 
 ### Refresh Lock Lifecycle Cleanup and Telemetry
 

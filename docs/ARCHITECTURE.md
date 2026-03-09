@@ -5,6 +5,7 @@ Transcendence is a backend + web monorepo:
 - A .NET Web API that serves reads and queues refresh jobs
 - A .NET background worker that executes Hangfire jobs (refresh, ingestion, analytics, etc.)
 - A Next.js web frontend that renders pages (SSR) and proxies to the backend via route handlers (BFF)
+- Game surfaces are modularized by route namespace: `/lol/*` + `/api/lol/*` and `/tft/*` + `/api/tft/*`
 
 ## Components
 
@@ -12,16 +13,19 @@ Transcendence is a backend + web monorepo:
 - Public/authenticated REST API
 - Enqueues background work (Hangfire) for expensive refresh operations
 - Exposes OpenAPI/Swagger (spec is exported and committed under `openapi/`)
+- Does not hold Riot API keys and does not call Camille directly
 
 ### `Transcendence.Service`
 - Background host that runs Hangfire server and recurring jobs
 - Executes ingestion/refresh/analytics workflows
+- Owns Riot/Camille integration for both LoL and TFT
 - In `Development`, the worker narrows recurring schedules to analytics-oriented jobs only (analytics refresh/ingestion, summoner maintenance, timeline backfill)
 - In `Production`, startup can bootstrap analytics immediately by running patch detection first, then queuing ingestion + adaptive analytics refresh (controlled by `Jobs:Schedule:RunPatchDetectionOnStartup`)
 
 ### `Transcendence.Service.Core`
 - Domain/application services (analysis, analytics compute, auth, live game, Riot API integration, jobs)
 - Called from WebAPI controllers and the worker host
+- LoL and TFT live in separate bounded contexts with separate entities, repositories, services, caches, and jobs
 
 ### `Transcendence.Data`
 - EF Core DbContext + entities + repositories
@@ -34,12 +38,19 @@ Transcendence is a backend + web monorepo:
 - Tailwind styling, SSR-first pages where possible
 - Admin dashboard routes under `/admin/*` for ops controls/reports (JWT `admin` role required)
 - Frontend analysis routes:
-  - `/tierlist`
-  - `/champions/*`
-  - `/matchups/*`
-  - `/pro-builds/*`
-  - `/summoners/[region]/[riotId]` is the unified profile + match history surface
+  - `/lol/tierlist`
+  - `/lol/champions/*`
+  - `/lol/matchups/*`
+  - `/lol/pro-builds/*`
+  - `/lol/summoners/[region]/[riotId]` is the unified LoL profile + match history surface
     - Legacy `/summoners/[region]/[riotId]/matches*` routes redirect into this unified view using query state (`page`, `queue`, `expandMatchId`)
+  - `/tft`
+  - `/tft/comps/*`
+  - `/tft/champions/*`
+  - `/tft/items/*`
+  - `/tft/traits/*`
+  - `/tft/augments/*`
+  - `/tft/summoners/[region]/[riotId]`
 
 ### `packages/api-client`
 - Generated OpenAPI TypeScript client artifacts built from the committed spec
@@ -65,7 +76,7 @@ Transcendence is a backend + web monorepo:
 ### Summoner Read Failure Semantics
 
 - Summoner profile and stats reads fail closed on backend errors.
-- `GET /api/summoners/{region}/{name}/{tag}` and `GET /api/summoners/{summonerId}/stats*` do not return synthetic empty success payloads when compute fails.
+- `GET /api/lol/summoners/{region}/{name}/{tag}` and `GET /api/lol/summoners/{summonerId}/stats*` do not return synthetic empty success payloads when compute fails.
 - API-wide exception handling maps known summoner stats compute failures to `500` ProblemDetails with a request trace id.
 - The web BFF/UI consumes ProblemDetails `title`/`detail` fields so user-visible errors still degrade gracefully.
 
@@ -81,7 +92,11 @@ Transcendence is a backend + web monorepo:
   - `refresh-high`
   - `default`
   - `refresh-low`
+  - `tft-refresh-high`
+  - `tft-default`
+  - `tft-refresh-low`
 - API refresh jobs run on `refresh-high`; ingestion-driven refresh jobs run on `refresh-low`.
+- TFT refresh jobs use their own lock and queue namespace (`tft:summoner-refresh:*`, `tft:refresh-priority:api:*`) so TFT demand does not block LoL refresh throughput.
 - Refresh locks use DB-backed lease semantics (atomic acquire/renew + explicit lease expiry on release) so concurrent lock races do not require lock-row deletion.
 
 ### Refresh Lock Lifecycle Telemetry and Retention
@@ -252,9 +267,23 @@ The web app never exposes backend tokens to browser JS:
 ## Analytics Region UX
 
 - Public analytics now treat region as explicit UI state instead of an implicit backend assumption.
-- `GET /api/analytics/regions` exposes the enabled ingestion regions plus `ALL`/global for the web app.
+- `GET /api/lol/analytics/regions` exposes the enabled ingestion regions plus `ALL`/global for the web app.
 - Tier list, builds, matchup, and winrate queries accept the same platform-region tokens and use `PlatformRegion` filtering so region-scoped pages match the ingestion model.
 - The web app persists the last selected analytics region in client storage/cookie and best-effort syncs it to `UserPreferences.PreferredRegion`.
+
+## TFT Architecture
+
+- TFT persistence is parallel to LoL, not shared with it:
+  - `TftSummoners`, `TftRanks`, `TftHistoricalRanks`
+  - `TftMatches` plus participant/unit/trait/augment child rows
+  - TFT static-data tables for sets, patches, units, items, augments, and traits
+- TFT summoner refresh flow mirrors LoL semantics but remains isolated:
+  - WebAPI checks the store and returns `200` or `202`
+  - refresh requests enqueue `ITftSummonerRefreshJob`
+  - worker resolves Riot account + TFT summoner + TFT ranks + TFT matches, then persists them
+- TFT static data is refreshed independently from LoL patch/static-data flows through `UpdateTftStaticDataJob`.
+- TFT static-data rows remain set-versioned in storage, but read endpoints project only the active set so set transitions do not surface duplicate units/items/traits/augments.
+- TFT analytics cache and comp aggregation are isolated behind `ITftAnalyticsService` and `/api/tft/analytics/*`.
 
 ### Operational Logging
 

@@ -18,7 +18,7 @@ using Transcendence.WebAPI.Security;
 namespace Transcendence.WebAPI.Controllers;
 
 [ApiController]
-[Route("api/summoners")]
+[Route("api/lol/summoners")]
 [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
 public class SummonersController(
     ISummonerRepository summonerRepository,

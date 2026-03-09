@@ -123,6 +123,26 @@ public class WorkerSchedulingPolicyTests
         descriptor.IsEnabled.Should().BeFalse();
     }
 
+    [Fact]
+    public void BuildDescriptors_DefaultProfile_RegistersTftRecurringJobs()
+    {
+        var policy = CreatePolicyWithDevelopmentOverrides(new WorkerSchedulingProfileDefinition());
+        var schedule = new WorkerJobScheduleOptions
+        {
+            EnableTftStaticDataRefresh = true,
+            EnableTftAnalyticsRefresh = true,
+            EnableTftAnalyticsIngestion = true,
+            EnableTftSummonerMaintenance = true
+        };
+
+        var descriptors = policy.BuildDescriptors(schedule);
+
+        descriptors.Should().Contain(descriptor => descriptor.JobId == WorkerRecurringJobPolicy.TftStaticDataJobId && descriptor.IsEnabled);
+        descriptors.Should().Contain(descriptor => descriptor.JobId == WorkerRecurringJobPolicy.TftAnalyticsRefreshJobId && descriptor.IsEnabled);
+        descriptors.Should().Contain(descriptor => descriptor.JobId == WorkerRecurringJobPolicy.TftAnalyticsIngestionJobId && descriptor.IsEnabled);
+        descriptors.Should().Contain(descriptor => descriptor.JobId == WorkerRecurringJobPolicy.TftSummonerMaintenanceJobId && descriptor.IsEnabled);
+    }
+
     private static WorkerRecurringJobPolicy CreatePolicyWithDevelopmentOverrides(
         WorkerSchedulingProfileDefinition developmentProfile) =>
         new(Options.Create(new WorkerSchedulingProfileOptions

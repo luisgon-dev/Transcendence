@@ -307,6 +307,7 @@ packages/**/dist/
 packages/api-client/src/schema.ts
 
 # Next.js env overrides (local only)
+.env
 .env.local
 .env.*.local
 apps/**/.env.local
@@ -388,6 +389,11 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/
 
 # MAC OS Junk Files
 .DS_Store

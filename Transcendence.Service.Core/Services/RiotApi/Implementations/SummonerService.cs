@@ -1,18 +1,19 @@
 using Camille.Enums;
 using Camille.RiotGames;
 using Transcendence.Data.Models.LoL.Account;
+using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
 
 namespace Transcendence.Service.Core.Services.RiotApi.Implementations;
 
 // SummonerService.cs
-public class SummonerService(RiotGamesApi riotApi, IRankService rankService)
+public class SummonerService(LeagueRiotApiContext riotApiContext, IRankService rankService)
     : ISummonerService
 {
     public async Task<Summoner> GetSummonerByPuuidAsync(string puuid, PlatformRoute platformRoute,
         CancellationToken cancellationToken = default)
     {
-        var summoner = await riotApi.SummonerV4().GetByPUUIDAsync(platformRoute, puuid, cancellationToken);
+        var summoner = await riotApiContext.Api.SummonerV4().GetByPUUIDAsync(platformRoute, puuid, cancellationToken);
         return await CreateSummonerAsync(summoner, platformRoute, cancellationToken);
     }
 
@@ -20,13 +21,13 @@ public class SummonerService(RiotGamesApi riotApi, IRankService rankService)
         CancellationToken cancellationToken = default)
     {
         var regional = platformRoute.ToRegional();
-        var account = await riotApi.AccountV1()
+        var account = await riotApiContext.Api.AccountV1()
             .GetByRiotIdAsync(regional, gameName, tagLine, cancellationToken);
         if (account == null || string.IsNullOrWhiteSpace(account.Puuid))
             throw new InvalidOperationException(
                 $"Riot Account API returned no PUUID for {gameName}#{tagLine} on {regional}.");
 
-        var summoner = await riotApi.SummonerV4()
+        var summoner = await riotApiContext.Api.SummonerV4()
             .GetByPUUIDAsync(platformRoute, account.Puuid, cancellationToken);
 
         return await CreateSummonerAsync(summoner, platformRoute, cancellationToken);
@@ -47,7 +48,7 @@ public class SummonerService(RiotGamesApi riotApi, IRankService rankService)
             Region = platformRoute.ToRegional().ToString()
         };
 
-        var account = await riotApi.AccountV1()
+        var account = await riotApiContext.Api.AccountV1()
             .GetByPuuidAsync(platformRoute.ToRegional(), summoner.Puuid, cancellationToken);
         if (account == null)
             throw new InvalidOperationException(

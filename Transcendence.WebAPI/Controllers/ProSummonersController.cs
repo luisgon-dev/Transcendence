@@ -15,7 +15,6 @@ using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.DTOs;
-using Transcendence.Service.Core.Services.RiotApi.Interfaces;
 using Transcendence.WebAPI.Security;
 
 namespace Transcendence.WebAPI.Controllers;
@@ -27,8 +26,7 @@ public class ProSummonersController(
     TranscendenceContext db,
     IAdminAuditService adminAuditService,
     IBackgroundJobClient backgroundJobClient,
-    IRefreshLockRepository refreshLockRepository,
-    IRiotAccountService riotAccountService) : ControllerBase
+    IRefreshLockRepository refreshLockRepository) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(List<TrackedProSummonerDto>), StatusCodes.Status200OK)]
@@ -85,9 +83,19 @@ public class ProSummonersController(
         }
         else
         {
-            var resolved = await riotAccountService.ResolvePuuidAsync(gameName, tagLine, platform, ct);
+            var normalizedGameName = gameName.Trim().ToUpperInvariant();
+            var normalizedTagLine = tagLine.Trim().ToUpperInvariant();
+            var resolved = await db.Summoners
+                .AsNoTracking()
+                .Where(x => x.PlatformRegion == normalizedPlatform
+                            && x.GameNameNormalized == normalizedGameName
+                            && x.TagLineNormalized == normalizedTagLine
+                            && x.Puuid != null)
+                .Select(x => x.Puuid)
+                .FirstOrDefaultAsync(ct);
             if (resolved == null)
-                return BadRequest($"Could not resolve Riot ID '{gameName}#{tagLine}' on {normalizedPlatform}.");
+                return BadRequest(
+                    $"Could not resolve Riot ID '{gameName}#{tagLine}' from stored data on {normalizedPlatform}. Provide puuid or refresh/store the summoner first.");
             normalizedPuuid = resolved;
         }
 

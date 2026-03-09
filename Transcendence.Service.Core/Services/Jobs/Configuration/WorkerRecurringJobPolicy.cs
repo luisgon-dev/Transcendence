@@ -40,6 +40,10 @@ public sealed class WorkerRecurringJobPolicy(
     public const string PollLiveGamesJobId = "poll-live-games";
     public const string HighEloProfileRefreshJobId = "high-elo-profile-refresh";
     public const string RefreshLockLifecycleCleanupJobId = "refresh-lock-lifecycle-cleanup";
+    public const string TftStaticDataJobId = "tft-static-data-refresh";
+    public const string TftAnalyticsRefreshJobId = "tft-analytics-refresh";
+    public const string TftAnalyticsIngestionJobId = "tft-analytics-ingestion";
+    public const string TftSummonerMaintenanceJobId = "tft-summoner-maintenance";
 
     private static readonly HashSet<string> MandatoryBaselineJobIds = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -48,7 +52,9 @@ public sealed class WorkerRecurringJobPolicy(
         RefreshChampionAnalyticsJobId,
         ChampionAnalyticsIngestionJobId,
         SummonerMaintenanceJobId,
-        RefreshLockLifecycleCleanupJobId
+        RefreshLockLifecycleCleanupJobId,
+        TftStaticDataJobId,
+        TftAnalyticsRefreshJobId
     };
 
     private static readonly string[] KnownJobIdValues =
@@ -66,7 +72,11 @@ public sealed class WorkerRecurringJobPolicy(
         RuneSelectionIntegrityBackfillJobId,
         PollLiveGamesJobId,
         HighEloProfileRefreshJobId,
-        RefreshLockLifecycleCleanupJobId
+        RefreshLockLifecycleCleanupJobId,
+        TftStaticDataJobId,
+        TftAnalyticsRefreshJobId,
+        TftAnalyticsIngestionJobId,
+        TftSummonerMaintenanceJobId
     ];
 
     private readonly WorkerSchedulingProfileOptions profileOptions = profileOptionsAccessor.Value;
@@ -171,7 +181,31 @@ public sealed class WorkerRecurringJobPolicy(
                 "Jobs:Schedule:RefreshLockLifecycleCleanupCron",
                 schedule.RefreshLockLifecycleCleanupCron,
                 schedule.EnableRefreshLockLifecycleCleanup,
-                ConfigureRefreshLockLifecycleCleanup)
+                ConfigureRefreshLockLifecycleCleanup),
+            CreateDescriptor(
+                TftStaticDataJobId,
+                "Jobs:Schedule:TftStaticDataCron",
+                schedule.TftStaticDataCron,
+                schedule.EnableTftStaticDataRefresh,
+                ConfigureTftStaticDataRefresh),
+            CreateDescriptor(
+                TftAnalyticsRefreshJobId,
+                "Jobs:Schedule:TftAnalyticsRefreshCron",
+                schedule.TftAnalyticsRefreshCron,
+                schedule.EnableTftAnalyticsRefresh,
+                ConfigureTftAnalyticsRefresh),
+            CreateDescriptor(
+                TftAnalyticsIngestionJobId,
+                "Jobs:Schedule:TftAnalyticsIngestionCron",
+                schedule.TftAnalyticsIngestionCron,
+                schedule.EnableTftAnalyticsIngestion,
+                ConfigureTftAnalyticsIngestion),
+            CreateDescriptor(
+                TftSummonerMaintenanceJobId,
+                "Jobs:Schedule:TftSummonerMaintenanceCron",
+                schedule.TftSummonerMaintenanceCron,
+                schedule.EnableTftSummonerMaintenance,
+                ConfigureTftSummonerMaintenance)
         };
 
         var profileName = ResolveProfile(schedule);
@@ -335,6 +369,42 @@ public sealed class WorkerRecurringJobPolicy(
         string cronExpression) =>
         recurringJobManager.AddOrUpdate<RefreshLockLifecycleJob>(
             RefreshLockLifecycleCleanupJobId,
+            job => job.ExecuteAsync(CancellationToken.None),
+            cronExpression,
+            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
+    private static void ConfigureTftStaticDataRefresh(
+        IRecurringJobManager recurringJobManager,
+        string cronExpression) =>
+        recurringJobManager.AddOrUpdate<UpdateTftStaticDataJob>(
+            TftStaticDataJobId,
+            job => job.ExecuteAsync(CancellationToken.None),
+            cronExpression,
+            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
+    private static void ConfigureTftAnalyticsRefresh(
+        IRecurringJobManager recurringJobManager,
+        string cronExpression) =>
+        recurringJobManager.AddOrUpdate<RefreshTftAnalyticsJob>(
+            TftAnalyticsRefreshJobId,
+            job => job.ExecuteAsync(CancellationToken.None),
+            cronExpression,
+            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
+    private static void ConfigureTftAnalyticsIngestion(
+        IRecurringJobManager recurringJobManager,
+        string cronExpression) =>
+        recurringJobManager.AddOrUpdate<TftAnalyticsIngestionJob>(
+            TftAnalyticsIngestionJobId,
+            job => job.ExecuteAsync(CancellationToken.None),
+            cronExpression,
+            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
+    private static void ConfigureTftSummonerMaintenance(
+        IRecurringJobManager recurringJobManager,
+        string cronExpression) =>
+        recurringJobManager.AddOrUpdate<TftSummonerMaintenanceJob>(
+            TftSummonerMaintenanceJobId,
             job => job.ExecuteAsync(CancellationToken.None),
             cronExpression,
             new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });

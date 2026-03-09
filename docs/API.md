@@ -36,65 +36,65 @@ Auth endpoints (`/api/auth/register`, `/api/auth/login`, `/api/auth/refresh`, `/
 
 This is a navigational summary; the OpenAPI spec is the source of truth.
 
-### Summoners and Stats
+### LoL Summoners and Stats
 
-- `GET /api/summoners/{region}/{name}/{tag}`
-- `GET /api/summoners/search`
-- `POST /api/summoners/multi-search` (`AppOnly`)
-- `POST /api/summoners/{region}/{name}/{tag}/refresh`
-- `GET /api/summoners/{summonerId}/stats/overview`
-- `GET /api/summoners/{summonerId}/stats/champions`
-- `GET /api/summoners/{summonerId}/stats/roles`
-- `GET /api/summoners/{summonerId}/matches/recent`
-- `GET /api/summoners/{summonerId}/matches/{matchId}`
+- `GET /api/lol/summoners/{region}/{name}/{tag}`
+- `GET /api/lol/summoners/search`
+- `POST /api/lol/summoners/multi-search` (`AppOnly`)
+- `POST /api/lol/summoners/{region}/{name}/{tag}/refresh`
+- `GET /api/lol/summoners/{summonerId}/stats/overview`
+- `GET /api/lol/summoners/{summonerId}/stats/champions`
+- `GET /api/lol/summoners/{summonerId}/stats/roles`
+- `GET /api/lol/summoners/{summonerId}/matches/recent`
+- `GET /api/lol/summoners/{summonerId}/matches/{matchId}`
 
 Default stats scope:
 - `stats/overview`, `stats/champions`, and `stats/roles` are computed from ranked solo/duo sample data.
 - `matches/recent` defaults to full stored history and can be filtered by queue metadata.
 
-`GET /api/summoners/{summonerId}/matches/recent` supports:
+`GET /api/lol/summoners/{summonerId}/matches/recent` supports:
 - `page` / `pageSize`
 - `queueFamily` (optional; e.g. `ALL`, `RANKED_SOLO_DUO`, `RANKED_FLEX`, `NORMAL_SR`, `ARAM`, `CLASH`, `ARENA`, `ROTATING`, `BOT`, `CUSTOM`, `OTHER`)
 - `queueIds` (optional repeated query param for explicit queue IDs)
 
-`GET /api/summoners/search` supports:
+`GET /api/lol/summoners/search` supports:
 - `region` (required; platform route or alias such as `NA1` or `na`)
 - `q` (required; min length 2, supports `gameName` or `gameName#tag` prefix forms)
 - `limit` (optional; default `8`, max `10`)
 - Autosuggest only returns summoners with at least one stored match participant (to avoid low-signal entries)
 
-`POST /api/summoners/multi-search` supports:
+`POST /api/lol/summoners/multi-search` supports:
 - `region` (required; platform route or alias such as `NA1` or `na`)
 - `summoners` (required array; min `1`, max `5`)
 - Each `summoners[]` entry requires `gameName` and `tagLine`
 - Returns only already-stored data (no refresh side effects); includes per-summoner stats plus team insights in a single response
 
 Stats and profile read surfaces now fail closed on backend errors:
-- `GET /api/summoners/{summonerId}/stats/*` and `GET /api/summoners/{summonerId}/matches/*` return `500` ProblemDetails on internal failures.
-- `GET /api/summoners/{region}/{name}/{tag}` also returns `500` ProblemDetails when dependent stats aggregation fails.
+- `GET /api/lol/summoners/{summonerId}/stats/*` and `GET /api/lol/summoners/{summonerId}/matches/*` return `500` ProblemDetails on internal failures.
+- `GET /api/lol/summoners/{region}/{name}/{tag}` also returns `500` ProblemDetails when dependent stats aggregation fails.
 
 #### Rune Payloads
 
-- `GET /api/summoners/{summonerId}/matches/recent`
+- `GET /api/lol/summoners/{summonerId}/matches/recent`
   - `runes` remains a compact summary (`primaryStyleId`, `subStyleId`, `keystoneId`)
   - `runesDetail` now includes full selections:
     - `primarySelections` (4)
     - `subSelections` (2)
     - `statShards` (3)
   - `queueId` is included alongside `queueType`
-- `GET /api/summoners/{summonerId}/matches/{matchId}`
+- `GET /api/lol/summoners/{summonerId}/matches/{matchId}`
   - Participant runes continue to return full selections (`primarySelections`, `subSelections`, `statShards`)
   - Match payload includes `queueId` and `queueType`
 
 #### Refresh Priority Behavior
 
-- `POST /api/summoners/{region}/{name}/{tag}/refresh` is implicitly treated as a high-priority refresh request.
+- `POST /api/lol/summoners/{region}/{name}/{tag}/refresh` is implicitly treated as a high-priority refresh request.
 - The request/response contract is unchanged (no priority request parameter).
 - When high-priority refresh demand is active, lower-priority Riot-calling background jobs are temporarily paused.
 
 #### Refresh Contention Contract (LOCK-01)
 
-`POST /api/summoners/{region}/{name}/{tag}/refresh` and `POST /api/admin/pro-summoners/{id}/refresh` share deterministic `202 Accepted` semantics:
+`POST /api/lol/summoners/{region}/{name}/{tag}/refresh` and `POST /api/admin/pro-summoners/{id}/refresh` share deterministic `202 Accepted` semantics:
 
 - **Queued (lock acquired):**
   - `message`: `"Refresh queued"`
@@ -110,20 +110,20 @@ Example (`SummonerAcceptedResponse`):
 ```json
 {
   "message": "Refresh in process",
-  "poll": "https://localhost/api/summoners/na1/name/tag",
+  "poll": "https://localhost/api/lol/summoners/na1/name/tag",
   "retryAfterSeconds": 42
 }
 ```
 
-### Analytics
+### LoL Analytics
 
-- `GET /api/analytics/tierlist`
-- `GET /api/analytics/regions`
-- `GET /api/analytics/champions/{championId}/winrates`
-- `GET /api/analytics/champions/{championId}/builds`
-- `GET /api/analytics/champions/{championId}/pro-builds`
-- `GET /api/analytics/champions/{championId}/matchups`
-- `POST /api/analytics/cache/invalidate` (`AppOnly`)
+- `GET /api/lol/analytics/tierlist`
+- `GET /api/lol/analytics/regions`
+- `GET /api/lol/analytics/champions/{championId}/winrates`
+- `GET /api/lol/analytics/champions/{championId}/builds`
+- `GET /api/lol/analytics/champions/{championId}/pro-builds`
+- `GET /api/lol/analytics/champions/{championId}/matchups`
+- `POST /api/lol/analytics/cache/invalidate` (`AppOnly`)
 
 Early-patch semantics:
 - Analytics endpoints return **current active patch data only** (no previous-patch fallback payloads).
@@ -143,10 +143,10 @@ Early-patch semantics:
 `region` query semantics across tier list, win rates, builds, and matchups:
 - `ALL` (or omitted): global aggregate across enabled ingestion regions
 - Concrete platform region token: for example `NA1|EUW1|EUN1|KR`
-- Supported public region tokens are discoverable via `GET /api/analytics/regions`
+- Supported public region tokens are discoverable via `GET /api/lol/analytics/regions`
 - Tier list, builds, and matchup responses now echo the resolved `region` field so the UI can badge active scope without guessing
 
-`GET /api/analytics/champions/{championId}/builds` includes full rune setup per build:
+`GET /api/lol/analytics/champions/{championId}/builds` includes full rune setup per build:
 - `primaryStyleId`, `subStyleId`
 - `primaryRunes` (4), `subRunes` (2), `statShards` (3)
 - Build item lists include only completed, build-impact items (no components, trinkets, wards, or consumables).
@@ -161,7 +161,7 @@ Additional analytics fields:
   - `timelineSampleSize`
   - `timelineDataFreshnessUtc`
 
-`GET /api/analytics/champions/{championId}/pro-builds` supports optional filters:
+`GET /api/lol/analytics/champions/{championId}/pro-builds` supports optional filters:
 - `region` (`ALL` or supported platform-region token such as `NA1|EUW1|EUN1|KR`)
 - `role`
 - `patch`
@@ -173,7 +173,36 @@ Response includes:
 
 ### Live Game (`AppOnly`)
 
-- `GET /api/summoners/{region}/{gameName}/{tagLine}/live-game`
+- `GET /api/lol/summoners/{region}/{gameName}/{tagLine}/live-game`
+
+### TFT
+
+- `GET /api/tft/summoners/{region}/{name}/{tag}`
+- `POST /api/tft/summoners/{region}/{name}/{tag}/refresh`
+- `GET /api/tft/summoners/search`
+- `GET /api/tft/summoners/{summonerId}/matches/recent`
+- `GET /api/tft/summoners/{summonerId}/matches/{matchId}`
+- `GET /api/tft/analytics/regions`
+- `GET /api/tft/analytics/comps`
+- `GET /api/tft/analytics/comps/{compSlug}`
+- `GET /api/tft/analytics/champions`
+- `GET /api/tft/analytics/champions/{championId}`
+- `GET /api/tft/analytics/items`
+- `GET /api/tft/analytics/items/{itemId}`
+- `GET /api/tft/analytics/traits`
+- `GET /api/tft/analytics/traits/{traitId}`
+- `GET /api/tft/analytics/augments`
+- `GET /api/tft/analytics/augments/{augmentId}`
+- `POST /api/tft/analytics/cache/invalidate` (`AppOnly`)
+
+TFT behavior notes:
+- TFT controllers are read-only against persisted data and never call Camille directly.
+- `GET /api/tft/summoners/{region}/{name}/{tag}` returns `200` with stored profile/matches or `202 Accepted` when the profile is missing or already refreshing.
+- `POST /api/tft/summoners/{region}/{name}/{tag}/refresh` queues a background refresh behind `tft:summoner-refresh:*` locks.
+- TFT analytics are isolated from LoL analytics. The comps endpoint is a separate surface and does not share the LoL tier-list route or payload.
+- TFT catalog/detail analytics endpoints (`champions`, `items`, `traits`, `augments`) serve the active set only.
+- TFT static data remains set-versioned in storage; active-set reads preserve response shapes across set rollovers without returning duplicate cross-set rows.
+- `GET /api/tft/analytics/comps` defaults `rankTier` to `EMERALD_PLUS`; `rankTier=ALL` is treated case-insensitively as an all-ranks query.
 
 ### Operational Health
 

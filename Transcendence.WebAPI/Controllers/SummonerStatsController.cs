@@ -7,7 +7,7 @@ using Transcendence.WebAPI.Models.Stats;
 namespace Transcendence.WebAPI.Controllers;
 
 [ApiController]
-[Route("api/summoners/{summonerId:guid}")]
+[Route("api/lol/summoners/{summonerId:guid}")]
 [EnableRateLimiting("expensive-read")]
 [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
 public class SummonerStatsController(ISummonerStatsService statsService) : ControllerBase

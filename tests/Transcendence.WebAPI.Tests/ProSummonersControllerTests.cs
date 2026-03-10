@@ -165,7 +165,8 @@ public class ProSummonersControllerTests
             db,
             adminAuditService ?? Mock.Of<IAdminAuditService>(),
             backgroundJobClient,
-            refreshLockRepository)
+            refreshLockRepository,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<ProSummonersController>.Instance)
         {
             ControllerContext = new ControllerContext
             {

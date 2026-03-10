@@ -173,10 +173,10 @@ export default async function ProBuildsIndexPage({
         title="Pro Builds"
         message={
           tierListRes.errorKind === "timeout"
-            ? "Timed out reaching the backend."
+            ? "This page is taking too long to load."
             : tierListRes.errorKind === "unreachable"
-              ? "We are having trouble reaching the backend."
-              : "Failed to load pro builds index data."
+              ? "We couldn't load pro-build data right now."
+              : "We couldn't load pro-build data."
         }
         requestId={tierListRes.requestId}
         detail={
@@ -195,13 +195,13 @@ export default async function ProBuildsIndexPage({
           Pro Builds
         </h1>
         <p className="text-sm text-fg/75">
-          Live feed of recent matches from tracked pro and high-ELO players, with quick champion search.
+          Recent builds from tracked pro and high-MMR matches, with quick champion search.
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <Badge className="border-primary/45 bg-primary/10 text-primary">
             {recentMatchesFeed.length} matches loaded
           </Badge>
-          <Badge>{feedChampionIds.length} champions sampled</Badge>
+          <Badge>{feedChampionIds.length} champions featured</Badge>
           <Badge>{activeRegionLabel}</Badge>
           {championQuery ? <Badge>Search: {championQuery}</Badge> : null}
         </div>
@@ -271,19 +271,19 @@ export default async function ProBuildsIndexPage({
           <div>
             <h2 className="font-[var(--font-sora)] text-lg font-semibold">Recent Pro Matches</h2>
             <p className="text-xs text-muted">
-              Combined feed from champion pro endpoints. Click any row to open champion-specific pro analytics.
+              Click any row to open champion-specific pro builds and recent match details.
             </p>
           </div>
           {failedFeedCount > 0 ? (
             <p className="text-xs text-muted">
-              {failedFeedCount} champion feed{failedFeedCount === 1 ? "" : "s"} unavailable.
+              {failedFeedCount} champion feed{failedFeedCount === 1 ? "" : "s"} unavailable right now.
             </p>
           ) : null}
         </div>
 
         {recentMatchesFeed.length === 0 ? (
           <p className="px-4 py-4 text-sm text-muted">
-            No pro matches available for the current selection.
+            No pro matches are available for the current selection.
           </p>
         ) : (
           <ul className="grid gap-0">

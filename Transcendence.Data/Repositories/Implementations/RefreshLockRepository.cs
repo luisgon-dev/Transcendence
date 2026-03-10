@@ -134,7 +134,7 @@ public class RefreshLockRepository(TranscendenceContext db, ILogger<RefreshLockR
 
         try
         {
-            logger?.LogInformation(
+            logger?.LogDebug(
                 "event=refresh_lock.growth_snapshot lock_class={LockClass} platform_region={PlatformRegion} outcome={Outcome} active_count={ActiveCount} expired_count={ExpiredCount}",
                 "refresh-lock-lifecycle",
                 "GLOBAL",
@@ -154,7 +154,7 @@ public class RefreshLockRepository(TranscendenceContext db, ILogger<RefreshLockR
     {
         try
         {
-            logger?.LogInformation(
+            logger?.LogDebug(
                 "event=refresh_lock.cleanup lock_class={LockClass} platform_region={PlatformRegion} outcome={Outcome} deleted={DeletedCount} batch_size={BatchSize} cutoff_utc={CutoffUtc:o} cleanup_duration_ms={CleanupDurationMilliseconds}",
                 "refresh-lock-lifecycle",
                 "GLOBAL",
@@ -175,7 +175,7 @@ public class RefreshLockRepository(TranscendenceContext db, ILogger<RefreshLockR
         try
         {
             var dimensions = ResolveDimensions(lockKey);
-            logger?.LogInformation(
+            logger?.LogDebug(
                 "event={EventName} lock_class={LockClass} platform_region={PlatformRegion} outcome={Outcome} lock_key={LockKey} ttl_seconds={TtlSeconds}",
                 eventName,
                 dimensions.LockClass,

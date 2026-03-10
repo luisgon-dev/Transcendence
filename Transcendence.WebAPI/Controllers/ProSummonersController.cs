@@ -26,7 +26,8 @@ public class ProSummonersController(
     TranscendenceContext db,
     IAdminAuditService adminAuditService,
     IBackgroundJobClient backgroundJobClient,
-    IRefreshLockRepository refreshLockRepository) : ControllerBase
+    IRefreshLockRepository refreshLockRepository,
+    ILogger<ProSummonersController> logger) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(List<TrackedProSummonerDto>), StatusCodes.Status200OK)]
@@ -237,6 +238,15 @@ public class ProSummonersController(
                 lockTelemetry?.RecordContentionWaitHint(key, Math.Max(1, seconds), "pro-summoners-controller");
             });
 
+            logger.LogInformation(
+                "[RefreshApi] Admin pro-summoner refresh already in progress for {GameName}#{Tag} on {Platform}. trackedId={TrackedId}, retryAfterSeconds={RetryAfterSeconds}, traceId={TraceId}.",
+                entity.GameName,
+                entity.TagLine,
+                platform,
+                entity.Id,
+                seconds,
+                HttpContext.TraceIdentifier);
+
             return Accepted(new SummonerAcceptedResponse(
                 "Refresh in process",
                 pollUrl,
@@ -264,13 +274,33 @@ public class ProSummonersController(
                 job.RefreshByRiotId(entity.GameName, entity.TagLine, platform, key,
                     priorityAcquired ? priorityKey : null, CancellationToken.None));
         }
-        catch
+        catch (Exception ex)
         {
             await refreshLockRepository.ReleaseAsync(key, ct);
             if (priorityAcquired)
                 await refreshLockRepository.ReleaseAsync(priorityKey, ct);
+
+            logger.LogError(
+                ex,
+                "[RefreshApi] Failed to queue admin pro-summoner refresh for {GameName}#{Tag} on {Platform}. trackedId={TrackedId}, priorityLockAcquired={PriorityLockAcquired}, traceId={TraceId}.",
+                entity.GameName,
+                entity.TagLine,
+                platform,
+                entity.Id,
+                priorityAcquired,
+                HttpContext.TraceIdentifier);
+
             throw;
         }
+
+        logger.LogInformation(
+            "[RefreshApi] Queued admin pro-summoner refresh for {GameName}#{Tag} on {Platform}. trackedId={TrackedId}, priorityLockAcquired={PriorityLockAcquired}, traceId={TraceId}.",
+            entity.GameName,
+            entity.TagLine,
+            platform,
+            entity.Id,
+            priorityAcquired,
+            HttpContext.TraceIdentifier);
 
         await WriteAuditAsync("pro-summoners.refresh", entity.Id.ToString(), new
         {

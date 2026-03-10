@@ -38,14 +38,14 @@ export default async function TftHomePage() {
       <section className="glass-card mesh-highlight rounded-[2rem] p-6 sm:p-8">
         <p className="text-sm font-medium uppercase tracking-[0.24em] text-primary">Teamfight Tactics</p>
         <h1 className="mt-3 max-w-3xl font-[var(--font-sora)] text-4xl font-semibold tracking-tight sm:text-5xl">
-          Separate TFT pages, separate TFT data.
+          TFT comps, unit lookups, and player pages built for the live set.
         </h1>
         <p className="mt-3 max-w-2xl text-sm text-fg/75 sm:text-base">
-          Comp stats, catalog pages, and TFT summoner history now come from the dedicated `/api/tft/*` surface.
+          Find the best-performing comps, browse units and items, and check how players are finishing their recent games.
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
           <Link href="/tft/comps" className="rounded-full border border-primary/45 bg-primary/12 px-4 py-2 text-sm font-medium text-primary">
-            Open Comps
+            Explore Comps
           </Link>
           <Link href="/tft/champions" className="rounded-full border border-border/60 px-4 py-2 text-sm text-fg/80 transition hover:bg-white/8 hover:text-fg">
             Units
@@ -54,7 +54,7 @@ export default async function TftHomePage() {
             Items
           </Link>
           <Link href="/tft/summoners/na/Faker-KR1" className="rounded-full border border-border/60 px-4 py-2 text-sm text-fg/80 transition hover:bg-white/8 hover:text-fg">
-            Profile Flow
+            Player Search
           </Link>
         </div>
       </section>
@@ -73,7 +73,7 @@ export default async function TftHomePage() {
       <section className="grid gap-4">
         <div>
           <h2 className="font-[var(--font-sora)] text-2xl font-semibold">Top Comps</h2>
-          <p className="text-sm text-fg/75">Default filters use the active set and Emerald+.</p>
+          <p className="text-sm text-fg/75">The default view starts on the live set at Emerald+.</p>
         </div>
 
         <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
@@ -96,7 +96,7 @@ export default async function TftHomePage() {
                   <p>Avg Place {comp.avgPlacement.toFixed(2)}</p>
                   <p>Top 4 {formatTftPercent(comp.top4Rate)}</p>
                   <p>Win {formatTftPercent(comp.winRate)}</p>
-                  <p>Sample {comp.sampleSize.toLocaleString()}</p>
+                  <p>Games {comp.sampleSize.toLocaleString()}</p>
                 </div>
 
                 <p className="text-xs text-fg/75">

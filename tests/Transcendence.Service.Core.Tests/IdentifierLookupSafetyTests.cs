@@ -54,6 +54,81 @@ public class IdentifierLookupSafetyTests
     }
 
     [Fact]
+    public async Task SummonerRepository_FindByRiotIdAsync_SupportsCollectionIncludes()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<TranscendenceContext>()
+            .UseSqlite(connection)
+            .Options;
+        await using var db = new SqliteCompatibleTranscendenceContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var summonerId = Guid.NewGuid();
+        var summoner = new Summoner
+        {
+            Id = summonerId,
+            Puuid = "duplicate-newer",
+            GameName = "Soju",
+            TagLine = "Milk",
+            GameNameNormalized = "SOJU",
+            TagLineNormalized = "MILK",
+            PlatformRegion = "NA1",
+            Region = "AMERICAS",
+            UpdatedAt = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+            Ranks =
+            [
+                new Rank
+                {
+                    SummonerId = summonerId,
+                    QueueType = "RANKED_SOLO_5x5",
+                    Tier = "CHALLENGER",
+                    RankNumber = "I",
+                    LeaguePoints = 1000,
+                    Wins = 10,
+                    Losses = 2
+                }
+            ],
+            HistoricalRanks =
+            [
+                new HistoricalRank
+                {
+                    QueueType = "RANKED_SOLO_5x5",
+                    Tier = "GRANDMASTER",
+                    RankNumber = "I",
+                    LeaguePoints = 800,
+                    Wins = 20,
+                    Losses = 10,
+                    DateRecorded = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc)
+                }
+            ]
+        };
+
+        foreach (var rank in summoner.Ranks)
+            rank.Summoner = summoner;
+        foreach (var historicalRank in summoner.HistoricalRanks)
+            historicalRank.Summoner = summoner;
+
+        db.Summoners.Add(summoner);
+        await db.SaveChangesAsync();
+
+        var repository = new SummonerRepository(db, Mock.Of<IRankRepository>());
+
+        var result = await repository.FindByRiotIdAsync(
+            "NA1",
+            "soju",
+            "milk",
+            q => q.Include(x => x.Ranks).Include(x => x.HistoricalRanks),
+            CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result!.Puuid.Should().Be("duplicate-newer");
+        result.Ranks.Should().ContainSingle();
+        result.HistoricalRanks.Should().ContainSingle();
+    }
+
+    [Fact]
     public async Task SummonerRepository_SearchByPrefixAsync_DoesNotRequireEncryptedIdentifiers()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");

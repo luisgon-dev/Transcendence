@@ -17,6 +17,7 @@ public sealed class OperationalFileLoggerProvider : ILoggerProvider
     private readonly object gate = new();
     private readonly string logFilePath;
     private readonly LogLevel minLevel;
+    private readonly IReadOnlyList<OperationalLogLevelRule> categoryRules;
     private readonly string serviceName;
     private readonly long maxFileSizeBytes;
     private readonly int retainedFileCount;
@@ -35,6 +36,7 @@ public sealed class OperationalFileLoggerProvider : ILoggerProvider
         Directory.CreateDirectory(directory);
         logFilePath = Path.Combine(directory, $"{serviceName}.log");
         minLevel = options.MinLevel;
+        categoryRules = options.CategoryRules;
         maxFileSizeBytes = Math.Max(MinimumFileSizeBytes, options.MaxFileSizeBytes);
         retainedFileCount = Math.Clamp(options.RetainedFileCount, 1, MaxRetainedFiles);
 
@@ -46,6 +48,7 @@ public sealed class OperationalFileLoggerProvider : ILoggerProvider
         return loggers.GetOrAdd(categoryName, category => new OperationalFileLogger(
             category,
             minLevel,
+            categoryRules,
             serviceName,
             WriteLine));
     }
@@ -126,6 +129,7 @@ public sealed class OperationalFileLoggerProvider : ILoggerProvider
 internal sealed class OperationalFileLogger(
     string categoryName,
     LogLevel minLevel,
+    IReadOnlyList<OperationalLogLevelRule> categoryRules,
     string serviceName,
     Action<string> writeLine) : ILogger
 {
@@ -137,7 +141,11 @@ internal sealed class OperationalFileLogger(
 
     public bool IsEnabled(LogLevel logLevel)
     {
-        return logLevel != LogLevel.None && logLevel >= minLevel;
+        if (logLevel == LogLevel.None)
+            return false;
+
+        var effectiveMinLevel = ResolveMinimumLevel(categoryName, minLevel, categoryRules);
+        return logLevel >= effectiveMinLevel;
     }
 
     public void Log<TState>(
@@ -166,6 +174,51 @@ internal sealed class OperationalFileLogger(
         var payload = JsonSerializer.Serialize(entry, OperationalLogJsonContext.Default.OperationalLogEntry);
         writeLine(payload);
     }
+
+    private static LogLevel ResolveMinimumLevel(
+        string categoryName,
+        LogLevel fallbackMinLevel,
+        IReadOnlyList<OperationalLogLevelRule> categoryRules)
+    {
+        LogLevel? matchedLevel = null;
+        var matchedRuleLength = -1;
+
+        foreach (var rule in categoryRules)
+        {
+            if (string.IsNullOrWhiteSpace(rule.CategoryName))
+                continue;
+
+            if (rule.CategoryName.Equals("Default", StringComparison.OrdinalIgnoreCase))
+            {
+                if (matchedRuleLength < 0)
+                {
+                    matchedLevel = rule.MinLevel;
+                    matchedRuleLength = 0;
+                }
+
+                continue;
+            }
+
+            if (!CategoryMatches(categoryName, rule.CategoryName))
+                continue;
+
+            if (rule.CategoryName.Length <= matchedRuleLength)
+                continue;
+
+            matchedLevel = rule.MinLevel;
+            matchedRuleLength = rule.CategoryName.Length;
+        }
+
+        return matchedLevel ?? fallbackMinLevel;
+    }
+
+    private static bool CategoryMatches(string categoryName, string ruleCategory)
+    {
+        if (categoryName.Equals(ruleCategory, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return categoryName.StartsWith(ruleCategory + ".", StringComparison.OrdinalIgnoreCase);
+    }
 }
 
 public sealed record OperationalFileLoggerOptions
@@ -173,9 +226,12 @@ public sealed record OperationalFileLoggerOptions
     public string DirectoryPath { get; init; } = Path.Combine(AppContext.BaseDirectory, "logs");
     public string ServiceName { get; init; } = "service";
     public LogLevel MinLevel { get; init; } = LogLevel.Information;
+    public IReadOnlyList<OperationalLogLevelRule> CategoryRules { get; init; } = [];
     public long MaxFileSizeBytes { get; init; } = 10 * 1024 * 1024;
     public int RetainedFileCount { get; init; } = 5;
 }
+
+public sealed record OperationalLogLevelRule(string CategoryName, LogLevel MinLevel);
 
 public sealed record OperationalLogEntry(
     DateTime TimestampUtc,

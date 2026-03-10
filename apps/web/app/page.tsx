@@ -7,13 +7,13 @@ const games = [
   {
     href: "/lol",
     eyebrow: "League of Legends",
-    title: "Champion analytics, summoner profiles, matchups, and pro builds.",
+    title: "Tier lists, builds, matchup tools, pro builds, and player profiles.",
     description:
-      "Use the LoL surface when you want patch reads, role-specific champion pages, or stored summoner history.",
+      "Jump into patch winners, champion pages by role, and saved player match history.",
     links: [
       { label: "Tier List", href: "/lol/tierlist" },
       { label: "Champions", href: "/lol/champions" },
-      { label: "Summoners", href: "/lol/summoners/na/Faker-KR1" }
+      { label: "Player Search", href: "/lol/summoners/na/Faker-KR1" }
     ]
   }
 ] as const;
@@ -21,13 +21,13 @@ const games = [
 const tftGame = {
   href: "/tft",
   eyebrow: "Teamfight Tactics",
-  title: "Comps, units, items, augments, traits, and stored summoner match history.",
+  title: "Meta comps, unit and item lookups, augments, traits, and player history.",
   description:
-    "Use the TFT surface for active-set catalogs, comp summaries, and persisted TFT profile reads.",
+    "Track the live set, compare top comps, and check how players are performing match by match.",
   links: [
     { label: "Comps", href: "/tft/comps" },
-    { label: "Champions", href: "/tft/champions" },
-    { label: "Summoners", href: "/tft/summoners/na/Faker-KR1" }
+    { label: "Units", href: "/tft/champions" },
+    { label: "Player Search", href: "/tft/summoners/na/Faker-KR1" }
   ]
 } as const;
 
@@ -38,13 +38,28 @@ export default function LandingPage() {
     <div className="grid gap-6">
       <section className="glass-card mesh-highlight rounded-[2rem] p-6 sm:p-8">
         <p className="text-sm font-medium uppercase tracking-[0.24em] text-primary">Transcendence</p>
-        <h1 className="mt-3 max-w-3xl font-[var(--font-sora)] text-4xl font-semibold tracking-tight sm:text-5xl">
-          Separate Riot game surfaces, one shared stack.
+        <h1 className="mt-3 max-w-4xl font-[var(--font-sora)] text-4xl font-semibold tracking-tight sm:text-5xl">
+          Patch-ready League and TFT tools built for players first.
         </h1>
         <p className="mt-3 max-w-2xl text-sm text-fg/75 sm:text-base">
-          League of Legends is currently available in the web app, with the broader shared backend
-          and worker stack ready for additional Riot game surfaces when they are complete.
+          Check what is winning, compare builds and comps, and pull up player pages without digging through menus.
         </p>
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Link
+            href="/lol"
+            className="rounded-full border border-primary/45 bg-primary/12 px-4 py-2 text-sm font-medium text-primary"
+          >
+            Explore LoL
+          </Link>
+          {TFT_FRONTEND_ENABLED ? (
+            <Link
+              href="/tft"
+              className="rounded-full border border-border/60 px-4 py-2 text-sm text-fg/80 transition hover:bg-white/8 hover:text-fg"
+            >
+              Explore TFT
+            </Link>
+          ) : null}
+        </div>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
@@ -62,7 +77,7 @@ export default function LandingPage() {
                 href={game.href}
                 className="rounded-full border border-primary/45 bg-primary/12 px-4 py-2 text-sm font-medium text-primary"
               >
-                Open
+                Open {game.eyebrow === "League of Legends" ? "LoL" : "TFT"}
               </Link>
               {game.links.map((link) => (
                 <Link

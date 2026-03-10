@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { GLOBAL_SEARCH_OPEN_EVENT } from "@/lib/globalSearch";
 import { TFT_FRONTEND_ENABLED } from "@/lib/featureFlags";
+import { buildLolPublicSummonerSearchPath } from "@/lib/lolPublicApi";
 import { DEFAULT_TIERLIST_RANK_TIER, rankTierDisplayLabel } from "@/lib/ranks";
 import { encodeRiotIdPath, parseRiotIdInput } from "@/lib/riotid";
 
@@ -74,7 +75,7 @@ const LOL_TIER_LINKS = [
   { label: "Tier List · All Ranks", href: "/lol/tierlist?rankTier=all" },
   { label: "Tier List · Challenger", href: "/lol/tierlist?rankTier=CHALLENGER" },
   { label: "Matchup Analysis", href: "/lol/matchups" },
-  { label: "Pro Builds Preview", href: "/lol/pro-builds" }
+  { label: "Pro Builds", href: "/lol/pro-builds" }
 ] as const;
 
 const TFT_TIER_LINKS = [
@@ -216,7 +217,7 @@ export function GlobalCommandPalette() {
     setSummonerLoading(true);
 
     void fetch(
-      `/api/trn/public/summoners/search?region=${encodeURIComponent(region)}&q=${encodeURIComponent(trimmedQuery)}&limit=8`,
+      buildLolPublicSummonerSearchPath(region, trimmedQuery, 8),
       { cache: "no-store", signal: abortController.signal }
     )
       .then(async (res) => {

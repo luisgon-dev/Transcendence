@@ -2,6 +2,62 @@
 
 Instructions for coding agents working in this repository.
 
+## Quick Reference Commands
+
+```bash
+# Frontend (Next.js)
+corepack pnpm web:dev          # dev server
+corepack pnpm web:build        # production build
+corepack pnpm web:test         # Vitest
+corepack pnpm web:lint         # ESLint
+
+# Backend (.NET)
+corepack pnpm backend:test     # run all .NET test projects
+dotnet test tests/Transcendence.Service.Core.Tests   # single project
+dotnet test tests/Transcendence.WebAPI.Tests          # single project
+
+# API client generation
+corepack pnpm api:gen          # generate TS client from OpenAPI spec
+corepack pnpm api:check        # verify spec is in sync
+
+# Docker
+docker compose up --build      # full stack (API + worker + web + Postgres + Redis)
+
+# E2E
+corepack pnpm e2e:stack        # start stack for E2E tests
+corepack pnpm e2e:local        # run Playwright E2E tests locally
+
+# Git hooks
+corepack pnpm hooks:install    # install Husky hooks
+
+# EF Migrations (run from repo root)
+dotnet ef migrations add <Name> -p src/Transcendence.Data -s src/Transcendence.WebAPI
+dotnet ef migrations remove    -p src/Transcendence.Data -s src/Transcendence.WebAPI
+dotnet ef database update      -p src/Transcendence.Data -s src/Transcendence.WebAPI
+```
+
+## Architecture Overview
+
+Monorepo with a **.NET backend** (WebAPI + Hangfire Worker) and a **Next.js frontend** (`apps/web`), plus a generated TypeScript API client (`packages/api-client`).
+
+**Key projects:**
+
+| Project | Role |
+|---|---|
+| `Transcendence.WebAPI` | HTTP API — serves reads, enqueues background jobs |
+| `Transcendence.Service` | Hangfire worker — calls Riot API, writes data |
+| `Transcendence.Service.Core` | Shared domain logic, DTOs, interfaces |
+| `Transcendence.Data` | EF Core DbContext, entities, migrations |
+
+**Patterns:**
+
+- **Game surface isolation** — each game (`/lol/*`, `/tft/*`) has its own entities, services, caches, and Hangfire job queues under separate namespaces.
+- **BFF proxy** — Next.js proxies API requests to the backend; auth tokens live in HttpOnly cookies.
+- **Summoner refresh flow** — client gets `202 Accepted` → backend enqueues refresh job → worker fetches from Riot API → client polls until `200 OK`.
+- **Tech stack** — PostgreSQL 16, Redis 7, Hangfire (job processing), HybridCache (L1 in-memory + L2 Redis).
+
+For deeper context see `docs/ARCHITECTURE.md`, `docs/DEVELOPMENT.md`, and `docs/API.md`.
+
 ## Canonical Docs (Keep These Correct)
 
 - `README.md`

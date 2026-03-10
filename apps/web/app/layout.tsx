@@ -20,7 +20,7 @@ const bodyFont = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: "Transcendence",
-  description: "LoL analytics: summoners, matches, and champion insights.",
+  description: "League of Legends and TFT stats, builds, comps, and player profiles.",
   icons: {
     icon: "/icon.svg",
     shortcut: "/icon.svg"

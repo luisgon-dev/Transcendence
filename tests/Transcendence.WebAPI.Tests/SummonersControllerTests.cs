@@ -251,7 +251,8 @@ public class SummonersControllerTests
             refreshLockRepository ?? Mock.Of<IRefreshLockRepository>(),
             backgroundJobClient ?? Mock.Of<IBackgroundJobClient>(),
             statsService ?? Mock.Of<ISummonerStatsService>(),
-            multiSearchService ?? Mock.Of<IMultiSearchService>())
+            multiSearchService ?? Mock.Of<IMultiSearchService>(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<SummonersController>.Instance)
         {
             ControllerContext = new ControllerContext
             {

@@ -76,7 +76,10 @@ public class SummonerRepository(TranscendenceContext context, IRankRepository ra
         CancellationToken cancellationToken = default)
     {
         IQueryable<Summoner> query = context.Summoners;
-        if (includes != null) query = includes(query);
+        if (includes != null)
+        {
+            query = includes(query).AsSplitQuery();
+        }
 
         var normalizedPlatformRegion = string.IsNullOrWhiteSpace(platformRegion) ? null : platformRegion.Trim();
         var normalizedGameName = NormalizeValue(gameName);
@@ -90,6 +93,10 @@ public class SummonerRepository(TranscendenceContext context, IRankRepository ra
             normalizedGameNameKey == null ||
             normalizedTagLineKey == null)
             return null;
+
+        query = query
+            .OrderByDescending(x => x.UpdatedAt)
+            .ThenByDescending(x => x.Id);
 
         // Fast path: normalized match can leverage the composite index.
         var normalizedMatch = await query.FirstOrDefaultAsync(x =>

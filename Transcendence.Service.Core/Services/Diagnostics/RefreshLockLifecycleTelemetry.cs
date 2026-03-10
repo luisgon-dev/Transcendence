@@ -98,7 +98,7 @@ public sealed class RefreshLockLifecycleTelemetry : IRefreshLockLifecycleTelemet
             var tags = BuildTags(dimensions.LockClass, dimensions.PlatformRegion, normalizedOutcome, normalizedSource);
 
             lifecycleEventsCounter.Add(1, tags);
-            logger.LogInformation(
+            logger.LogDebug(
                 "event=refresh_lock.lifecycle lock_class={LockClass} platform_region={PlatformRegion} outcome={Outcome} source={Source} lock_key={LockKey}",
                 dimensions.LockClass,
                 dimensions.PlatformRegion,
@@ -118,7 +118,7 @@ public sealed class RefreshLockLifecycleTelemetry : IRefreshLockLifecycleTelemet
             var tags = BuildTags(dimensions.LockClass, dimensions.PlatformRegion, "contention", normalizedSource);
 
             contentionWaitHintSeconds.Record(normalizedWait, tags);
-            logger.LogInformation(
+            logger.LogDebug(
                 "event=refresh_lock.contention_wait_hint lock_class={LockClass} platform_region={PlatformRegion} outcome=contention source={Source} wait_hint_seconds={WaitHintSeconds} lock_key={LockKey}",
                 dimensions.LockClass,
                 dimensions.PlatformRegion,
@@ -154,7 +154,7 @@ public sealed class RefreshLockLifecycleTelemetry : IRefreshLockLifecycleTelemet
             if (normalizedDeletedCount > 0)
                 cleanupDeletedCounter.Add(normalizedDeletedCount, tags);
 
-            logger.LogInformation(
+            logger.LogDebug(
                 "event=refresh_lock.cleanup lock_class={LockClass} platform_region={PlatformRegion} outcome={Outcome} source={Source} deleted={DeletedCount} batches={BatchesProcessed} stopped_by_batch_cap={StoppedByBatchCap} duration_ms={DurationMilliseconds}",
                 normalizedLockClass,
                 normalizedPlatformRegion,
@@ -195,7 +195,7 @@ public sealed class RefreshLockLifecycleTelemetry : IRefreshLockLifecycleTelemet
             snapshotLockClass = normalizedLockClass;
             snapshotPlatformRegion = normalizedPlatformRegion;
 
-            logger.LogInformation(
+            logger.LogDebug(
                 "event=refresh_lock.growth_snapshot lock_class={LockClass} platform_region={PlatformRegion} outcome=snapshot source={Source} active_count={ActiveCount} expired_count={ExpiredCount} deleted_count={DeletedCount}",
                 normalizedLockClass,
                 normalizedPlatformRegion,

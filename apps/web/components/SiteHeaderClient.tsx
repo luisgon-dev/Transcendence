@@ -7,17 +7,71 @@ import { BrandMark } from "@/components/BrandMark";
 import { GlobalSearchLauncher } from "@/components/GlobalSearchLauncher";
 import { cn } from "@/lib/cn";
 import { TFT_FRONTEND_ENABLED } from "@/lib/featureFlags";
+import { getGameSwitcherItems } from "@/lib/siteHeader";
 
 const COMPACT_HEADER_PATHS = new Set(["/account/login", "/account/register"]);
 const GITHUB_REPO_URL = "https://github.com/luisgon-dev/Transcendence";
+
+type NavLink = { href: string; label: string; mobileLabel?: string };
+
+const LOL_LINKS: NavLink[] = [
+  { href: "/lol/tierlist", label: "Tier List" },
+  { href: "/lol/champions", label: "Champions" },
+  { href: "/lol/matchups", label: "Matchups" },
+  { href: "/lol/pro-builds", label: "Pro Builds", mobileLabel: "Pro" }
+];
+
+const TFT_LINKS: NavLink[] = [
+  { href: "/tft/comps", label: "Comps" },
+  { href: "/tft/champions", label: "Units" },
+  { href: "/tft/items", label: "Items" },
+  { href: "/tft/traits", label: "Traits" },
+  { href: "/tft/augments", label: "Augments" }
+];
+
+function GameSwitcher({ pathname }: { pathname: string | null }) {
+  const items = getGameSwitcherItems(pathname, TFT_FRONTEND_ENABLED);
+
+  return (
+    <div className="flex items-center rounded-lg border border-border/50 bg-surface/30 p-0.5">
+      {items.map((item) =>
+        item.href ? (
+          <Link
+            key={item.label}
+            href={item.href}
+            className={cn(
+              "rounded-md px-2.5 py-1 text-xs font-semibold transition",
+              item.isActive
+                ? "bg-primary/15 text-primary shadow-sm"
+                : "text-fg/55 hover:text-fg"
+            )}
+          >
+            {item.label}
+          </Link>
+        ) : (
+          <span
+            key={item.label}
+            aria-disabled="true"
+            className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-md border border-border/50 bg-surface/60 px-2.5 py-1 text-xs font-semibold text-fg/40"
+          >
+            <span>{item.label}</span>
+            {item.comingSoon ? (
+              <span className="rounded-full border border-border/45 bg-white/5 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-fg/35">
+                Coming soon
+              </span>
+            ) : null}
+          </span>
+        )
+      )}
+    </div>
+  );
+}
 
 function navLinkClass(pathname: string | null, prefix: string): string {
   const isActive = pathname?.startsWith(prefix) ?? false;
   return cn(
     "text-sm transition",
-    isActive
-      ? "text-fg font-semibold"
-      : "text-fg/70 hover:text-fg"
+    isActive ? "text-fg font-semibold" : "text-fg/70 hover:text-fg"
   );
 }
 
@@ -30,6 +84,8 @@ export function SiteHeaderClient({
 }) {
   const pathname = usePathname();
   const compact = pathname ? COMPACT_HEADER_PATHS.has(pathname) : false;
+  const isTft = pathname?.startsWith("/tft") ?? false;
+  const contextLinks = isTft && TFT_FRONTEND_ENABLED ? TFT_LINKS : LOL_LINKS;
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-bg/75 backdrop-blur-xl">
@@ -42,37 +98,23 @@ export function SiteHeaderClient({
             </span>
           </Link>
 
-          <nav className="ml-3 hidden items-center gap-5 md:flex">
-            <Link href="/lol" className={navLinkClass(pathname, "/lol")}>
-              LoL
-            </Link>
-            {TFT_FRONTEND_ENABLED ? (
-              <Link href="/tft" className={navLinkClass(pathname, "/tft")}>
-                TFT
+          {/* Desktop nav */}
+          <nav className="ml-3 hidden items-center gap-4 md:flex">
+            <GameSwitcher pathname={pathname} />
+
+            <div className="h-4 w-px bg-border/50" />
+
+            {contextLinks.map((link) => (
+              <Link key={link.href} href={link.href} className={navLinkClass(pathname, link.href)}>
+                {link.label}
               </Link>
-            ) : null}
-            <Link href="/lol/tierlist" className={navLinkClass(pathname, "/lol/tierlist")}>
-              Tier List
-            </Link>
-            <Link href="/lol/champions" className={navLinkClass(pathname, "/lol/champions")}>
-              Champions
-            </Link>
-            <Link href="/lol/matchups" className={navLinkClass(pathname, "/lol/matchups")}>
-              Matchups
-            </Link>
-            <Link href="/lol/pro-builds" className={navLinkClass(pathname, "/lol/pro-builds")}>
-              Pro Builds
-            </Link>
-            {TFT_FRONTEND_ENABLED ? (
-              <Link href="/tft/comps" className={navLinkClass(pathname, "/tft/comps")}>
-                Comps
-              </Link>
-            ) : null}
-            {patch ? (
+            ))}
+
+            {patch && (
               <span className="rounded-full border border-primary/35 bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary">
                 Patch {patch}
               </span>
-            ) : null}
+            )}
             <Link
               href={GITHUB_REPO_URL}
               target="_blank"
@@ -97,37 +139,21 @@ export function SiteHeaderClient({
           </div>
         </div>
 
+        {/* Mobile nav */}
         <nav className="flex flex-wrap items-center gap-3 border-t border-border/40 pt-2 md:hidden">
-          <Link href="/lol" className={navLinkClass(pathname, "/lol")}>
-            LoL
-          </Link>
-          {TFT_FRONTEND_ENABLED ? (
-            <Link href="/tft" className={navLinkClass(pathname, "/tft")}>
-              TFT
+          <GameSwitcher pathname={pathname} />
+
+          {contextLinks.map((link) => (
+            <Link key={link.href} href={link.href} className={navLinkClass(pathname, link.href)}>
+              {link.mobileLabel ?? link.label}
             </Link>
-          ) : null}
-          <Link href="/lol/tierlist" className={navLinkClass(pathname, "/lol/tierlist")}>
-            Tier List
-          </Link>
-          <Link href="/lol/champions" className={navLinkClass(pathname, "/lol/champions")}>
-            Champions
-          </Link>
-          <Link href="/lol/matchups" className={navLinkClass(pathname, "/lol/matchups")}>
-            Matchups
-          </Link>
-          <Link href="/lol/pro-builds" className={navLinkClass(pathname, "/lol/pro-builds")}>
-            Pro
-          </Link>
-          {TFT_FRONTEND_ENABLED ? (
-            <Link href="/tft/comps" className={navLinkClass(pathname, "/tft/comps")}>
-              Comps
-            </Link>
-          ) : null}
-          {patch ? (
+          ))}
+
+          {patch && (
             <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
               Patch {patch}
             </span>
-          ) : null}
+          )}
           <Link
             href={GITHUB_REPO_URL}
             target="_blank"

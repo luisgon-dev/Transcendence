@@ -1,9 +1,17 @@
+import Image from "next/image";
 import Link from "next/link";
 
+import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl } from "@/lib/env";
-import { formatTftPercent, type TftCompDetail } from "@/lib/tft";
+import {
+  compTierColorClass,
+  compTierLabel,
+  formatTftPercent,
+  tftIconUrl,
+  type TftCompDetail
+} from "@/lib/tft";
 
 export default async function TftCompDetailPage({
   params,
@@ -35,6 +43,8 @@ export default async function TftCompDetailPage({
   }
 
   const comp = result.body;
+  const tier = compTierLabel(comp.summary.avgPlacement);
+  const tierColor = compTierColorClass(tier);
 
   return (
     <div className="grid gap-6">
@@ -42,9 +52,14 @@ export default async function TftCompDetailPage({
         <Link href="/tft/comps" className="text-sm text-primary hover:underline">
           Back to comps
         </Link>
-        <h1 className="mt-3 font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
-          {comp.summary.name}
-        </h1>
+        <div className="mt-3 flex items-center gap-3">
+          <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
+            {comp.summary.name}
+          </h1>
+          <Badge className={`rounded-md px-2.5 py-1 text-sm font-bold ${tierColor}`}>
+            {tier} Tier
+          </Badge>
+        </div>
         <p className="mt-2 text-sm text-fg/75">
           {comp.summary.setCoreName ?? `Set ${comp.summary.setNumber ?? "?"}`} · {comp.summary.patch ?? "Unknown patch"} · {comp.summary.region}
         </p>
@@ -53,7 +68,7 @@ export default async function TftCompDetailPage({
           <Card className="p-4"><p className="text-xs text-muted">Avg Placement</p><p className="mt-1 text-xl font-semibold">{comp.summary.avgPlacement.toFixed(2)}</p></Card>
           <Card className="p-4"><p className="text-xs text-muted">Top 4 Rate</p><p className="mt-1 text-xl font-semibold">{formatTftPercent(comp.summary.top4Rate)}</p></Card>
           <Card className="p-4"><p className="text-xs text-muted">Win Rate</p><p className="mt-1 text-xl font-semibold">{formatTftPercent(comp.summary.winRate)}</p></Card>
-          <Card className="p-4"><p className="text-xs text-muted">Sample</p><p className="mt-1 text-xl font-semibold">{comp.summary.sampleSize.toLocaleString()}</p></Card>
+          <Card className="p-4"><p className="text-xs text-muted">Games</p><p className="mt-1 text-xl font-semibold">{comp.summary.sampleSize.toLocaleString()}</p></Card>
         </div>
       </section>
 
@@ -62,33 +77,67 @@ export default async function TftCompDetailPage({
           <h2 className="font-[var(--font-sora)] text-xl font-semibold">Core Board</h2>
           <div className="mt-3 flex flex-wrap gap-2">
             {comp.summary.units.map((unit) => (
-              <span key={unit.characterId} className="rounded-full border border-primary/35 bg-primary/10 px-3 py-1.5 text-sm text-primary">
-                {unit.name ?? unit.characterId} {unit.tier > 1 ? `★${unit.tier}` : ""}
+              <span key={unit.characterId} className="rounded border border-primary/35 bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary">
+                {unit.name ?? unit.characterId} {unit.tier > 1 ? `${"★".repeat(unit.tier)}` : ""}
               </span>
             ))}
           </div>
-          <p className="mt-4 text-sm text-fg/75">
-            Traits: {comp.summary.traits.map((trait) => `${trait.name} ${trait.numUnits}`).join(" · ")}
-          </p>
-          <p className="mt-3 text-sm text-fg/75">
-            Augments: {comp.summary.augments.length > 0 ? comp.summary.augments.join(", ") : "No augment summary yet."}
-          </p>
+          <div className="mt-3 flex flex-wrap gap-1">
+            {comp.summary.traits.map((trait) => (
+              <span key={trait.name} className="rounded-full border border-border/50 bg-surface/40 px-2 py-0.5 text-xs text-fg/70">
+                {trait.name} {trait.numUnits}
+              </span>
+            ))}
+          </div>
+          {comp.summary.augments.length > 0 && (
+            <p className="mt-3 text-sm text-fg/75">
+              Augments: {comp.summary.augments.map((a) => a.replace(/^TFT\d+_/i, "").replace(/_/g, " ")).join(", ")}
+            </p>
+          )}
         </Card>
 
         <Card className="p-5">
-          <h2 className="font-[var(--font-sora)] text-xl font-semibold">Supporting Data</h2>
+          <h2 className="font-[var(--font-sora)] text-xl font-semibold">Recommended Extras</h2>
           <div className="mt-4 grid gap-4">
             <div>
               <p className="text-sm font-medium text-fg">Core Items</p>
-              <p className="mt-2 text-sm text-fg/75">
-                {comp.coreItems.length > 0 ? comp.coreItems.map((item) => item.name).join(", ") : "No item rollup yet."}
-              </p>
+              {comp.coreItems.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {comp.coreItems.map((item) => {
+                    const iconSrc = tftIconUrl(item.icon);
+                    return (
+                      <div key={item.apiName} className="flex items-center gap-1.5 rounded border border-border/50 bg-surface/40 px-2 py-1">
+                        {iconSrc && (
+                          <Image src={iconSrc} alt={item.name} width={20} height={20} className="rounded" unoptimized />
+                        )}
+                        <span className="text-xs text-fg/80">{item.name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-fg/60">Item recommendations are not available for this comp yet.</p>
+              )}
             </div>
             <div>
               <p className="text-sm font-medium text-fg">Core Augments</p>
-              <p className="mt-2 text-sm text-fg/75">
-                {comp.coreAugments.length > 0 ? comp.coreAugments.map((augment) => augment.name).join(", ") : "No augment rollup yet."}
-              </p>
+              {comp.coreAugments.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {comp.coreAugments.map((augment) => {
+                    const iconSrc = tftIconUrl(augment.icon);
+                    return (
+                      <div key={augment.apiName} className="flex items-center gap-1.5 rounded border border-border/50 bg-surface/40 px-2 py-1">
+                        {iconSrc && (
+                          <Image src={iconSrc} alt={augment.name} width={20} height={20} className="rounded" unoptimized />
+                        )}
+                        <span className="text-xs text-fg/80">{augment.name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-fg/60">Augment recommendations are not available for this comp yet.</p>
+              )}
             </div>
           </div>
         </Card>

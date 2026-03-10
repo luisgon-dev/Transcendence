@@ -18,10 +18,10 @@ export default function LoginPage() {
     <div className="grid place-items-center py-8">
       <Card className="w-full max-w-md rounded-3xl p-6">
         <h1 className="font-[var(--font-sora)] text-2xl font-semibold">
-          Login
+          Sign in
         </h1>
         <p className="mt-2 text-sm text-fg/75">
-          Access your favorites and preferences.
+          Pick up where you left off and keep your saved players close.
         </p>
 
         <form action={formAction} className="mt-6 grid gap-3">
@@ -54,7 +54,7 @@ export default function LoginPage() {
         <p className="mt-4 text-sm text-muted">
           No account?{" "}
           <Link className="text-primary hover:underline" href="/account/register">
-            Register
+            Create one
           </Link>
         </p>
       </Card>

@@ -48,10 +48,10 @@ export default async function ChampionsPage({
         title="Champions"
         message={
           tierListRes.errorKind === "timeout"
-            ? "Timed out reaching the backend."
+            ? "This page is taking too long to load."
             : tierListRes.errorKind === "unreachable"
-              ? "We are having trouble reaching the backend."
-              : "Failed to load champions analytics."
+              ? "We couldn't load champion data right now."
+              : "We couldn't load champion stats."
         }
         requestId={tierListRes.requestId}
         detail={
@@ -106,7 +106,7 @@ export default async function ChampionsPage({
           Champions
         </h1>
         <p className="text-sm text-fg/75">
-          Builds, matchups, and win rates per role.
+          Browse every champion and jump straight into builds, win rates, and matchup pages.
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <AnalyticsSampleBanner

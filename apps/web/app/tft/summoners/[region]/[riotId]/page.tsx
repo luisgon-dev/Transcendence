@@ -6,19 +6,22 @@ import { decodeRiotIdPath } from "@/lib/riotid";
 import { type TftAcceptedResponse, type TftSummonerProfile } from "@/lib/tft";
 
 export default async function TftSummonerPage({
-  params
+  params,
+  searchParams
 }: {
   params: Promise<{ region: string; riotId: string }>;
+  searchParams?: Promise<{ page?: string; sort?: string }>;
 }) {
   const { region, riotId } = await params;
+  const resolved = searchParams ? await searchParams : undefined;
   const decoded = decodeRiotIdPath(riotId);
 
   if (!decoded) {
     return (
       <Card className="p-6">
-        <p className="text-lg font-semibold text-fg">Invalid TFT summoner URL.</p>
+        <p className="text-lg font-semibold text-fg">Invalid TFT player link.</p>
         <p className="mt-2 text-sm text-fg/75">
-          {"Expected /tft/summoners/{region}/{gameName}-{tagLine}."}
+          {"Use /tft/summoners/{region}/{gameName}-{tagLine}."}
         </p>
       </Card>
     );
@@ -33,12 +36,15 @@ export default async function TftSummonerPage({
     result.status === 202
       ? {
           kind: "accepted" as const,
-          accepted: (result.body as TftAcceptedResponse | null) ?? { message: "TFT profile not found in store yet." }
+          accepted: (result.body as TftAcceptedResponse | null) ?? { message: "We are pulling this player's latest TFT matches now." }
         }
       : {
           kind: "profile" as const,
           profile: result.body as TftSummonerProfile
         };
+
+  const initialPage = Math.max(1, Number(resolved?.page) || 1);
+  const initialSort = resolved?.sort ?? "DATE_DESC";
 
   return (
     <TftSummonerProfileClient
@@ -46,6 +52,8 @@ export default async function TftSummonerPage({
       gameName={decoded.gameName}
       tagLine={decoded.tagLine}
       initialPayload={initialPayload}
+      initialPage={initialPage}
+      initialSort={initialSort}
     />
   );
 }

@@ -28,37 +28,37 @@ export function AnalyticsSampleBanner({ sample }: AnalyticsSampleBannerProps) {
           card: "border-emerald-400/35 bg-emerald-500/10",
           badge: "border-emerald-400/35 bg-emerald-500/20 text-emerald-50",
           meter: "bg-emerald-300",
-          kicker: "Stable Sample",
-          title: "Confidence is driven by a healthy current-patch sample.",
+          kicker: "Strong Sample",
+          title: "There are plenty of recent games behind this view.",
           detail:
-            "Current filters have enough exposure for the patch to treat this read as broadly stable.",
+            "This page has enough current-patch data to trust the overall trend.",
           footnote:
-            "Primary drivers: current-patch game count, selected region, and how old the patch is."
+            "Sample strength depends on patch age, selected region, and how many recent matches fit these filters."
         }
       : normalized.status === "low_sample"
         ? {
             card: "border-amber-400/40 bg-amber-500/10",
             badge: "border-amber-400/40 bg-amber-500/20 text-amber-50",
             meter: "bg-amber-300",
-            kicker: "Low Exposure",
-            title: "The shape of the data is visible, but the sample is still filling in.",
+            kicker: "Limited Sample",
+            title: "The trend is useful, but the sample size is still light.",
             detail:
               shortfall > 0
-                ? `${shortfall} more current-patch games would bring this view to the recommended confidence floor.`
-                : "Exposure is close to the recommended confidence floor.",
+                ? `${shortfall} more recent games would make this read more dependable.`
+                : "This view is close to a stronger sample size.",
             footnote:
-              "Treat edge cases cautiously while ingestion catches up during the patch window."
+              "Early patch trends can swing quickly while more matches are still being added."
           }
         : {
             card: "border-rose-400/40 bg-rose-500/10",
             badge: "border-rose-400/40 bg-rose-500/20 text-rose-50",
             meter: "bg-rose-300",
-            kicker: "No Current Data",
-            title: "This view is waiting on current-patch match ingestion.",
+            kicker: "Very Early Data",
+            title: "New-patch data is still too thin to call this reliably.",
             detail:
-              "There are not enough current-patch games yet for this slice, so the page is mostly showing structure instead of a reliable read.",
+              "There are not enough recent games for this filter yet, so treat the numbers as early direction only.",
             footnote:
-              "Check again after more matches are collected for this region and filter set."
+              "Check back after more matches have been played for this region and filter set."
           };
 
   return (
@@ -77,26 +77,17 @@ export function AnalyticsSampleBanner({ sample }: AnalyticsSampleBannerProps) {
         </div>
 
         <div className="min-w-[144px] rounded-2xl border border-white/10 bg-black/15 px-4 py-3 text-right">
-          <p className="text-[11px] uppercase tracking-[0.24em] text-fg/55">Confidence</p>
+          <p className="text-[11px] uppercase tracking-[0.24em] text-fg/55">Sample Strength</p>
           <p className="mt-1 text-3xl font-semibold text-fg">{coverage}%</p>
-          <p className="text-xs text-fg/65">of target sample reached</p>
+          <p className="text-xs text-fg/65">of the recommended sample size</p>
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
         <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-3">
-          <p className="text-[11px] uppercase tracking-[0.24em] text-fg/55">Current Sample</p>
+          <p className="text-[11px] uppercase tracking-[0.24em] text-fg/55">Sample Size</p>
           <p className="mt-1 text-2xl font-semibold text-fg">{normalized.sampleSize}</p>
-          <p className="text-xs text-fg/65">current-patch matches in this slice</p>
-        </div>
-        <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-3">
-          <p className="text-[11px] uppercase tracking-[0.24em] text-fg/55">Confidence Floor</p>
-          <p className="mt-1 text-2xl font-semibold text-fg">
-            {normalized.minimumRecommendedSampleSize}
-          </p>
-          <p className="text-xs text-fg/65">
-            {shortfall > 0 ? `${shortfall} matches short of target` : "recommended sample met"}
-          </p>
+          <p className="text-xs text-fg/65">recent matches in this view</p>
         </div>
         <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-3">
           <p className="text-[11px] uppercase tracking-[0.24em] text-fg/55">Patch Age</p>
@@ -111,7 +102,7 @@ export function AnalyticsSampleBanner({ sample }: AnalyticsSampleBannerProps) {
 
       <div className="mt-4">
         <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.24em] text-fg/55">
-          <span>Exposure</span>
+          <span>Sample Progress</span>
           <span>
             {normalized.sampleSize} / {normalized.minimumRecommendedSampleSize}
           </span>

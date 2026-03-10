@@ -16,7 +16,12 @@
     ]
   },
   "scripts": {
-    "backend:test": "dotnet test Transcendence.sln -v minimal",
+    "backend:test": "dotnet test tests/Transcendence.Service.Core.Tests/Transcendence.Service.Core.Tests.csproj -v minimal && dotnet test tests/Transcendence.WebAPI.Tests/Transcendence.WebAPI.Tests.csproj -v minimal",
+    "data:slice:sync": "dotnet run --project tools/Transcendence.Tools.DataOps/Transcendence.Tools.DataOps.csproj -- slice-sync",
+    "data:validate-identifiers": "dotnet run --project tools/Transcendence.Tools.DataOps/Transcendence.Tools.DataOps.csproj -- validate-identifiers",
+    "data:rehydrate-riot-ids": "dotnet run --project tools/Transcendence.Tools.DataOps/Transcendence.Tools.DataOps.csproj -- rehydrate-riot-ids",
+    "dev:stack:up": "docker compose up --build -d",
+    "dev:stack:down": "docker compose down",
     "hooks:install": "git config core.hooksPath .githooks",
     "precommit:api-sync": "pnpm api:gen && git add -- openapi/transcendence.v1.json",
     "precommit:check": "git diff --cached --check",
@@ -29,7 +34,8 @@
     "web:lint": "pnpm --filter web lint",
     "web:test": "pnpm --filter web test",
     "e2e": "npx playwright test",
-    "e2e:local": "BASE_URL=http://localhost:3000 npx playwright test"
+    "e2e:local": "BASE_URL=http://localhost:3000 npx playwright test",
+    "e2e:stack": "bash scripts/e2e/run-compose-stack.sh"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2"

@@ -52,10 +52,10 @@ export default async function TierListPage({
         title="Tier List"
         message={
           res.errorKind === "timeout"
-            ? "Timed out reaching the backend."
+            ? "This page is taking too long to load."
             : res.errorKind === "unreachable"
-              ? "We are having trouble reaching the backend."
-              : "Failed to load tier list from the backend."
+              ? "We couldn't load the tier list right now."
+              : "We couldn't load the tier list."
         }
         requestId={res.requestId}
         detail={
@@ -82,6 +82,9 @@ export default async function TierListPage({
         <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
           Tier List
         </h1>
+        <p className="text-sm text-fg/75">
+          See which champions are winning most often for this role, rank, and region.
+        </p>
 
         <div className="flex flex-wrap items-center gap-2">
           <Badge className="border-primary/40 bg-primary/10 text-primary">

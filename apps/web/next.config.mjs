@@ -22,6 +22,11 @@ const nextConfig = {
         protocol: "https",
         hostname: "raw.communitydragon.org",
         pathname: "/latest/plugins/rcp-fe-lol-static-assets/global/default/**"
+      },
+      {
+        protocol: "https",
+        hostname: "raw.communitydragon.org",
+        pathname: "/latest/game/assets/**"
       }
     ]
   }

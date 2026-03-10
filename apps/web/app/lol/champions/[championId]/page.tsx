@@ -162,10 +162,10 @@ export default async function ChampionDetailPage({
         title={champName}
         message={
           kind === "timeout"
-            ? "Timed out reaching the backend."
+            ? "This page is taking too long to load."
             : kind === "unreachable"
-              ? "We are having trouble reaching the backend."
-              : "Failed to load champion data from the backend."
+              ? "We couldn't load champion data right now."
+              : "We couldn't load champion data."
         }
         requestId={requestId}
         detail={
@@ -236,11 +236,11 @@ export default async function ChampionDetailPage({
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
               <span className="rounded-full border border-border/60 bg-white/[0.03] px-2 py-1 text-fg/80">
-                Rank # — (coming soon)
+                Rankings coming soon
               </span>
               <span
                 className="rounded-full border border-border/60 bg-white/[0.03] px-2 py-1 text-muted"
-                title="Ban rate is not exposed by the current analytics API."
+                title="Ban rate is not available yet."
               >
                 Ban Rate —
               </span>
@@ -254,7 +254,7 @@ export default async function ChampionDetailPage({
                 href={`/lol/pro-builds/${championId}${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
                 className="rounded-full border border-primary/40 bg-primary/10 px-2 py-1 text-primary hover:bg-primary/20"
               >
-                Pro Builds Preview
+                Pro Builds
               </Link>
             </div>
           </div>
@@ -288,9 +288,9 @@ export default async function ChampionDetailPage({
           Win Rates
         </h2>
         {!winrates ? (
-          <p className="mt-2 text-sm text-fg/75">No win rate data available.</p>
+          <p className="mt-2 text-sm text-fg/75">Win-rate data is unavailable right now.</p>
         ) : winrateRows.length === 0 ? (
-          <p className="mt-2 text-sm text-fg/75">No samples for this patch.</p>
+          <p className="mt-2 text-sm text-fg/75">No games have been added for this patch yet.</p>
         ) : (
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -343,9 +343,9 @@ export default async function ChampionDetailPage({
             Builds
           </h2>
           {!builds ? (
-            <p className="mt-2 text-sm text-fg/75">No build data available.</p>
+            <p className="mt-2 text-sm text-fg/75">Build data is unavailable right now.</p>
           ) : buildRows.length === 0 ? (
-            <p className="mt-2 text-sm text-fg/75">No samples for this role.</p>
+            <p className="mt-2 text-sm text-fg/75">There are not enough games for this role yet.</p>
           ) : (
             <div className="mt-4 grid gap-4">
               {/* Global Core Items */}
@@ -414,7 +414,7 @@ export default async function ChampionDetailPage({
           </h2>
           {!matchups ? (
             <p className="mt-2 text-sm text-fg/75">
-              No matchup data available.
+              Matchup data is unavailable right now.
             </p>
           ) : (
             <div className="mt-4 grid gap-5">

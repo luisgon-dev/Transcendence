@@ -35,9 +35,9 @@ type ChampionWinRateSummary = components["schemas"]["ChampionWinRateSummary"];
 type ChampionProBuildsResponse = components["schemas"]["ChampionProBuildsResponse"];
 
 function proFeedErrorMessage(result: BackendJsonResult<ChampionProBuildsResponse>) {
-  if (result.errorKind === "timeout") return "Timed out reaching the pro feed endpoint.";
-  if (result.errorKind === "unreachable") return "We are having trouble reaching the backend.";
-  return "Failed to load pro build data for the selected filters.";
+  if (result.errorKind === "timeout") return "This page is taking too long to load.";
+  if (result.errorKind === "unreachable") return "We couldn't load pro-build data right now.";
+  return "We couldn't load pro-build data.";
 }
 
 function ProItemsRow({
@@ -129,10 +129,10 @@ export default async function ProBuildsChampionPage({
         title="Pro Builds"
         message={
           proBuildsRes.errorKind === "timeout"
-            ? "Timed out reaching the backend."
+            ? "This page is taking too long to load."
             : proBuildsRes.errorKind === "unreachable"
-              ? "We are having trouble reaching the backend."
-              : "Failed to load champion data."
+              ? "We couldn't load pro-build data right now."
+              : "We couldn't load pro-build data."
         }
         requestId={winratesRes.requestId || proBuildsRes.requestId}
         detail={
@@ -188,7 +188,7 @@ export default async function ProBuildsChampionPage({
             <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
               Pro Builds
             </h1>
-            <p className="text-sm text-fg/75">{championName}</p>
+            <p className="text-sm text-fg/75">Recent pro and high-MMR builds for {championName}</p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -251,7 +251,7 @@ export default async function ProBuildsChampionPage({
 
       {!proBuildsRes.ok ? (
         <Card className="border-border/70 bg-white/[0.03] p-5">
-          <h2 className="font-[var(--font-sora)] text-lg font-semibold">Pro Feed Unavailable</h2>
+          <h2 className="font-[var(--font-sora)] text-lg font-semibold">Pro-Build Data Unavailable</h2>
           <p className="mt-2 text-sm text-fg/80">{proFeedErrorMessage(proBuildsRes)}</p>
           <p className="mt-1 text-xs text-muted">Request ID: {proBuildsRes.requestId}</p>
         </Card>
@@ -262,7 +262,7 @@ export default async function ProBuildsChampionPage({
           <h2 className="font-[var(--font-sora)] text-lg font-semibold">Top Players</h2>
           {topPlayers.length === 0 ? (
             <p className="mt-3 text-sm text-muted">
-              No pro player samples for these filters.
+              No pro-player matches are available for these filters yet.
             </p>
           ) : (
             <ul className="mt-3 grid gap-2">
@@ -292,7 +292,7 @@ export default async function ProBuildsChampionPage({
           <h2 className="font-[var(--font-sora)] text-lg font-semibold">Common Builds</h2>
           {commonBuilds.length === 0 ? (
             <p className="mt-3 text-sm text-muted">
-              No common build clusters for these filters.
+              No repeat build patterns are available for these filters yet.
             </p>
           ) : (
             <div className="mt-3 grid gap-3">
@@ -323,7 +323,7 @@ export default async function ProBuildsChampionPage({
         <h2 className="font-[var(--font-sora)] text-lg font-semibold">Recent Pro Matches</h2>
         {recentMatches.length === 0 ? (
           <p className="mt-3 text-sm text-muted">
-            No recent pro matches were found for this champion and filter set.
+            No recent pro matches were found for this champion with these filters.
           </p>
         ) : (
           <ul className="mt-4 grid gap-3">
@@ -392,10 +392,10 @@ export default async function ProBuildsChampionPage({
 
       <Card className="border-primary/40 bg-primary/10 p-5">
         <h2 className="font-[var(--font-sora)] text-lg font-semibold text-primary">
-          Additional Analytics
+          More Ways to Explore
         </h2>
         <p className="mt-2 text-sm text-fg/90">
-          Continue into champion analytics and matchup views for broader non-pro sample context.
+          Open the main champion page or matchup view to compare pro builds with the broader player base.
         </p>
         <div className="mt-4 flex flex-wrap gap-2 text-sm">
           <Link

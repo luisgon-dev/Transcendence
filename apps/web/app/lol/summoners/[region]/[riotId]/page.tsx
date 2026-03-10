@@ -80,7 +80,7 @@ export default async function SummonerProfilePage({
     return (
       <BackendErrorCard
         title="Summoner"
-        message="Invalid summoner URL. Expected /summoners/{region}/{gameName}-{tagLine}."
+        message="Invalid player link. Use /summoners/{region}/{gameName}-{tagLine}."
         requestId={pageRequestId}
         detail={
           verbosity === "verbose"
@@ -122,10 +122,10 @@ export default async function SummonerProfilePage({
     const message =
       messageFromBackend ??
       (result.errorKind === "timeout"
-        ? "Timed out reaching the backend."
+        ? "This page is taking too long to load."
         : result.errorKind === "unreachable"
-          ? "We are having trouble reaching the backend."
-          : "Backend request failed.");
+          ? "We couldn't load this player right now."
+          : "We couldn't load this player.");
 
     logEvent("warn", "summoner profile fetch failed", {
       requestId: result.requestId,

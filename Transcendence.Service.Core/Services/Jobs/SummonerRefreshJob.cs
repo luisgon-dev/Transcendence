@@ -301,6 +301,10 @@ public class SummonerRefreshJob(
 
         var persistedCount = 0;
         var seenIds = new HashSet<string>(StringComparer.Ordinal);
+        var nullFetchCount = 0;
+        var fetchExceptionCount = 0;
+        Exception? firstFetchException = null;
+        var fetchFailureSamples = new List<string>(5);
 
         for (var page = 0; page < maxPages; page++)
         {
@@ -360,7 +364,9 @@ public class SummonerRefreshJob(
 
                     if (match == null)
                     {
-                        logger.LogInformation("[Refresh] Match {MatchId} failed to fetch for {GameName}#{Tag}",
+                        nullFetchCount++;
+                        AddSample(fetchFailureSamples, matchId);
+                        logger.LogDebug("[Refresh] Match {MatchId} failed to fetch for {GameName}#{Tag}",
                             matchId,
                             gameName,
                             tagLine);
@@ -384,7 +390,10 @@ public class SummonerRefreshJob(
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "[Refresh] Error fetching match {MatchId} for {GameName}#{Tag}",
+                    fetchExceptionCount++;
+                    firstFetchException ??= ex;
+                    AddSample(fetchFailureSamples, matchId);
+                    logger.LogDebug(ex, "[Refresh] Error fetching match {MatchId} for {GameName}#{Tag}",
                         matchId,
                         gameName,
                         tagLine);
@@ -400,6 +409,34 @@ public class SummonerRefreshJob(
 
             if (pageIds.Count < pageSize)
                 break;
+        }
+
+        if (nullFetchCount > 0 || fetchExceptionCount > 0)
+        {
+            if (firstFetchException != null)
+            {
+                logger.LogError(
+                    firstFetchException,
+                    "[Refresh] Match window fetch completed with issues for {GameName}#{Tag} on {Platform}. persisted={PersistedCount}, nullFetches={NullFetchCount}, exceptionFetches={ExceptionFetchCount}, sampleMatchIds={SampleMatchIds}.",
+                    gameName,
+                    tagLine,
+                    platformRoute,
+                    persistedCount,
+                    nullFetchCount,
+                    fetchExceptionCount,
+                    fetchFailureSamples.ToArray());
+            }
+            else
+            {
+                logger.LogWarning(
+                    "[Refresh] Match window fetch completed with null responses for {GameName}#{Tag} on {Platform}. persisted={PersistedCount}, nullFetches={NullFetchCount}, sampleMatchIds={SampleMatchIds}.",
+                    gameName,
+                    tagLine,
+                    platformRoute,
+                    persistedCount,
+                    nullFetchCount,
+                    fetchFailureSamples.ToArray());
+            }
         }
 
         return persistedCount;
@@ -432,6 +469,10 @@ public class SummonerRefreshJob(
         var oldestSeenEpochSeconds = long.MaxValue;
         var stoppedEarly = false;
         var hadFetchFailure = false;
+        var nullFetchCount = 0;
+        var fetchExceptionCount = 0;
+        Exception? firstFetchException = null;
+        var fetchFailureSamples = new List<string>(5);
 
         for (var page = 0; page < maxPages; page++)
         {
@@ -508,7 +549,9 @@ public class SummonerRefreshJob(
                     if (match == null)
                     {
                         hadFetchFailure = true;
-                        logger.LogInformation("[Refresh] Match {MatchId} failed to fetch for {GameName}#{Tag}",
+                        nullFetchCount++;
+                        AddSample(fetchFailureSamples, matchId);
+                        logger.LogDebug("[Refresh] Match {MatchId} failed to fetch for {GameName}#{Tag}",
                             matchId,
                             gameName,
                             tagLine);
@@ -535,7 +578,10 @@ public class SummonerRefreshJob(
                 catch (Exception ex)
                 {
                     hadFetchFailure = true;
-                    logger.LogError(ex, "[Refresh] Error fetching non-ranked backfill match {MatchId} for {GameName}#{Tag}",
+                    fetchExceptionCount++;
+                    firstFetchException ??= ex;
+                    AddSample(fetchFailureSamples, matchId);
+                    logger.LogDebug(ex, "[Refresh] Error fetching non-ranked backfill match {MatchId} for {GameName}#{Tag}",
                         matchId, gameName, tagLine);
                 }
             }
@@ -568,6 +614,36 @@ public class SummonerRefreshJob(
             persistedCount,
             existingCursor?.ConsecutiveNoopRuns ?? 0,
             ct);
+
+        if (nullFetchCount > 0 || fetchExceptionCount > 0)
+        {
+            if (firstFetchException != null)
+            {
+                logger.LogError(
+                    firstFetchException,
+                    "[Refresh] Non-ranked backfill completed with issues for {GameName}#{Tag} on {Platform}. persisted={PersistedCount}, stoppedEarly={StoppedEarly}, nullFetches={NullFetchCount}, exceptionFetches={ExceptionFetchCount}, sampleMatchIds={SampleMatchIds}.",
+                    gameName,
+                    tagLine,
+                    platformRoute,
+                    persistedCount,
+                    stoppedEarly,
+                    nullFetchCount,
+                    fetchExceptionCount,
+                    fetchFailureSamples.ToArray());
+            }
+            else
+            {
+                logger.LogWarning(
+                    "[Refresh] Non-ranked backfill completed with null responses for {GameName}#{Tag} on {Platform}. persisted={PersistedCount}, stoppedEarly={StoppedEarly}, nullFetches={NullFetchCount}, sampleMatchIds={SampleMatchIds}.",
+                    gameName,
+                    tagLine,
+                    platformRoute,
+                    persistedCount,
+                    stoppedEarly,
+                    nullFetchCount,
+                    fetchFailureSamples.ToArray());
+            }
+        }
 
         return new BackfillSyncResult(persistedCount, stoppedEarly, hadFetchFailure);
     }
@@ -716,6 +792,12 @@ public class SummonerRefreshJob(
                 tagLine);
         }
 
+        var duplicatePersistCount = 0;
+        var fallbackFailureCount = 0;
+        Exception? firstFallbackError = null;
+        var duplicateSamples = new List<string>(5);
+        var failureSamples = new List<string>(5);
+
         foreach (var match in matches)
         {
             ct.ThrowIfCancellationRequested();
@@ -732,7 +814,9 @@ public class SummonerRefreshJob(
             catch (DbUpdateException ex) when (MatchPersistenceErrorClassifier.IsDuplicateMatchIdViolation(ex))
             {
                 db.ChangeTracker.Clear();
-                logger.LogInformation(
+                duplicatePersistCount++;
+                AddSample(duplicateSamples, match.MatchId);
+                logger.LogDebug(
                     "[Refresh] Match {MatchId} already exists. Skipping duplicate insert for {GameName}#{Tag}.",
                     match.MatchId,
                     gameName,
@@ -741,9 +825,33 @@ public class SummonerRefreshJob(
             catch (Exception ex)
             {
                 db.ChangeTracker.Clear();
-                logger.LogError(ex, "[Refresh] Error persisting match {MatchId} for {GameName}#{Tag}", match.MatchId,
+                fallbackFailureCount++;
+                firstFallbackError ??= ex;
+                AddSample(failureSamples, match.MatchId);
+                logger.LogDebug(ex, "[Refresh] Error persisting match {MatchId} for {GameName}#{Tag}", match.MatchId,
                     gameName, tagLine);
             }
+        }
+
+        if (duplicatePersistCount > 0)
+        {
+            logger.LogInformation(
+                "[Refresh] Skipped {DuplicateCount} duplicate matches during per-match persistence fallback for {GameName}#{Tag}. sampleMatchIds={SampleMatchIds}.",
+                duplicatePersistCount,
+                gameName,
+                tagLine,
+                duplicateSamples.ToArray());
+        }
+
+        if (fallbackFailureCount > 0 && firstFallbackError != null)
+        {
+            logger.LogError(
+                firstFallbackError,
+                "[Refresh] Failed to persist {FailureCount} matches during per-match fallback for {GameName}#{Tag}. sampleMatchIds={SampleMatchIds}.",
+                fallbackFailureCount,
+                gameName,
+                tagLine,
+                failureSamples.ToArray());
         }
 
         return persisted;
@@ -752,5 +860,13 @@ public class SummonerRefreshJob(
     private async Task InvalidateStatsCacheAsync(Guid summonerId, CancellationToken ct)
     {
         await cache.RemoveByTagAsync($"summoner-stats:{summonerId}", ct);
+    }
+
+    private static void AddSample(List<string> samples, string? matchId)
+    {
+        if (samples.Count >= 5 || string.IsNullOrWhiteSpace(matchId))
+            return;
+
+        samples.Add(matchId);
     }
 }

@@ -40,10 +40,10 @@ export default async function MatchupsIndexPage({
         title="Matchup Analysis"
         message={
           tierListRes.errorKind === "timeout"
-            ? "Timed out reaching the backend."
+            ? "This page is taking too long to load."
             : tierListRes.errorKind === "unreachable"
-              ? "We are having trouble reaching the backend."
-              : "Failed to load matchup index data."
+              ? "We couldn't load matchup data right now."
+              : "We couldn't load matchup data."
         }
         requestId={tierListRes.requestId}
         detail={
@@ -83,7 +83,7 @@ export default async function MatchupsIndexPage({
           Matchup Analysis
         </h1>
         <p className="text-sm text-fg/75">
-          Search champions, filter by role, and jump directly to detailed counter pages.
+          Search for a champion, pick a role, and jump straight to counters and favorable lanes.
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <Badge>{activeRegionLabel}</Badge>

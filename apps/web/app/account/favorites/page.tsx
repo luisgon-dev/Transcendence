@@ -29,7 +29,7 @@ export default function FavoritesPage() {
 
       if (res.status === 401) {
         setItems([]);
-        setError("Login required to view favorites.");
+        setError("Sign in to view saved players.");
         return;
       }
 
@@ -84,7 +84,7 @@ export default function FavoritesPage() {
           Favorites
         </h1>
         <p className="text-sm text-fg/75">
-          Your saved summoners. Add favorites from a summoner profile.
+          Your saved players from League and TFT profile pages.
         </p>
       </header>
 
@@ -96,7 +96,7 @@ export default function FavoritesPage() {
               className="text-sm text-primary hover:underline"
               href="/account/login"
             >
-              Login
+              Sign in
             </Link>
           </div>
         </Card>
@@ -112,7 +112,7 @@ export default function FavoritesPage() {
       ) : items.length === 0 ? (
         <Card className="p-5">
           <p className="text-sm text-muted">
-            No favorites yet. Search a summoner and click{" "}
+            No favorites yet. Open a player profile and click{" "}
             <span className="font-medium text-fg">Add Favorite</span>.
           </p>
         </Card>

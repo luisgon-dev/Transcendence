@@ -17,7 +17,8 @@ namespace Transcendence.WebAPI.Controllers;
 public class TftSummonersController(
     ITftSummonerReadService readService,
     IRefreshLockRepository refreshLockRepository,
-    IBackgroundJobClient backgroundJobClient) : ControllerBase
+    IBackgroundJobClient backgroundJobClient,
+    ILogger<TftSummonersController> logger) : ControllerBase
 {
     [HttpGet("search")]
     [EnableRateLimiting("search-read")]
@@ -88,12 +89,50 @@ public class TftSummonersController(
             var seconds = existing == null
                 ? (int)ttl.TotalSeconds
                 : Math.Max(1, (int)(existing.LockedUntilUtc - DateTime.UtcNow).TotalSeconds);
+
+            logger.LogInformation(
+                "[RefreshApi] TFT summoner refresh already in progress for {GameName}#{Tag} on {Platform}. retryAfterSeconds={RetryAfterSeconds}, traceId={TraceId}.",
+                name,
+                tag,
+                platform,
+                seconds,
+                HttpContext.TraceIdentifier);
+
             return Accepted(new SummonerAcceptedResponse("Refresh in process", pollUrl, seconds));
         }
 
         var priorityAcquired = await refreshLockRepository.TryAcquireAsync(priorityKey, ttl, ct);
-        backgroundJobClient.Enqueue<ITftSummonerRefreshJob>(job =>
-            job.RefreshByRiotId(name, tag, platform, key, priorityAcquired ? priorityKey : null, CancellationToken.None));
+        try
+        {
+            backgroundJobClient.Enqueue<ITftSummonerRefreshJob>(job =>
+                job.RefreshByRiotId(name, tag, platform, key, priorityAcquired ? priorityKey : null,
+                    CancellationToken.None));
+        }
+        catch (Exception ex)
+        {
+            await refreshLockRepository.ReleaseAsync(key, ct);
+            if (priorityAcquired)
+                await refreshLockRepository.ReleaseAsync(priorityKey, ct);
+
+            logger.LogError(
+                ex,
+                "[RefreshApi] Failed to queue TFT summoner refresh for {GameName}#{Tag} on {Platform}. priorityLockAcquired={PriorityLockAcquired}, traceId={TraceId}.",
+                name,
+                tag,
+                platform,
+                priorityAcquired,
+                HttpContext.TraceIdentifier);
+
+            throw;
+        }
+
+        logger.LogInformation(
+            "[RefreshApi] Queued TFT summoner refresh for {GameName}#{Tag} on {Platform}. priorityLockAcquired={PriorityLockAcquired}, traceId={TraceId}.",
+            name,
+            tag,
+            platform,
+            priorityAcquired,
+            HttpContext.TraceIdentifier);
 
         return Accepted(new SummonerAcceptedResponse("Refresh queued", pollUrl, null));
     }

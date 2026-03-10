@@ -1,9 +1,7 @@
-import Link from "next/link";
-
-import { Card } from "@/components/ui/Card";
+import { TftCompList } from "@/components/TftCompList";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl } from "@/lib/env";
-import { formatTftPercent, TFT_RANK_OPTIONS, TFT_REGION_OPTIONS, type TftCompListItem } from "@/lib/tft";
+import { TFT_RANK_OPTIONS, TFT_REGION_OPTIONS, type TftCompListItem } from "@/lib/tft";
 
 export default async function TftCompsPage({
   searchParams
@@ -27,9 +25,9 @@ export default async function TftCompsPage({
   return (
     <div className="grid gap-6">
       <section className="glass-card rounded-[2rem] p-6">
-        <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">TFT Comp Tier List</h1>
+        <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">TFT Meta Comps</h1>
         <p className="mt-2 text-sm text-fg/75">
-          Fully separate from the LoL tier list surface. This page reads only `/api/tft/analytics/comps`.
+          Compare the strongest boards for the live set and sort by the stat that matters most to you.
         </p>
         <form className="mt-4 flex flex-wrap gap-2" action="/tft/comps" method="get">
           <select name="rankTier" defaultValue={rankTier} className="h-11 rounded-md border border-border/70 bg-surface/35 px-3 text-sm text-fg">
@@ -52,39 +50,7 @@ export default async function TftCompsPage({
         </form>
       </section>
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        {comps.map((comp) => (
-          <Link key={comp.compSlug} href={`/tft/comps/${comp.compSlug}${qs.toString() ? `?${qs.toString()}` : ""}`}>
-            <Card className="grid gap-3 p-5 transition hover:bg-white/8">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-lg font-semibold text-fg">{comp.name}</p>
-                  <p className="text-xs text-muted">
-                    {comp.setCoreName ?? `Set ${comp.setNumber ?? "?"}`} · {comp.patch ?? "Unknown patch"}
-                  </p>
-                </div>
-                <span className="rounded-full border border-border/60 px-2.5 py-1 text-xs text-fg/80">
-                  {comp.rankTier}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-sm text-fg/80">
-                <p>Avg Place {comp.avgPlacement.toFixed(2)}</p>
-                <p>Top 4 {formatTftPercent(comp.top4Rate)}</p>
-                <p>Win {formatTftPercent(comp.winRate)}</p>
-                <p>Pick {formatTftPercent(comp.pickRate)}</p>
-              </div>
-
-              <p className="text-xs text-fg/75">
-                Units: {comp.units.map((unit) => unit.name ?? unit.characterId).join(" · ")}
-              </p>
-              <p className="text-xs text-fg/75">
-                Traits: {comp.traits.map((trait) => `${trait.name} ${trait.numUnits}`).join(" · ")}
-              </p>
-            </Card>
-          </Link>
-        ))}
-      </div>
+      <TftCompList comps={comps} qs={qs.toString()} />
     </div>
   );
 }

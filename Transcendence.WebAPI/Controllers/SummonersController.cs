@@ -25,7 +25,8 @@ public class SummonersController(
     IRefreshLockRepository refreshLockRepository,
     IBackgroundJobClient backgroundJobClient,
     ISummonerStatsService statsService,
-    IMultiSearchService multiSearchService
+    IMultiSearchService multiSearchService,
+    ILogger<SummonersController> logger
 ) : ControllerBase
 {
     /// <summary>
@@ -98,7 +99,7 @@ public class SummonersController(
 
         var platformRegion = platform.ToString();
         var summoner = await summonerRepository.FindByRiotIdAsync(platformRegion, name, tag,
-            q => q.Include(s => s.Ranks).Include(s => s.HistoricalRanks), ct);
+            q => q.Include(s => s.Ranks).Include(s => s.HistoricalRanks).AsSplitQuery(), ct);
         if (summoner != null)
         {
             // Map to response DTO with data age metadata
@@ -282,6 +283,14 @@ public class SummonersController(
                 lockTelemetry?.RecordContentionWaitHint(key, Math.Max(1, seconds), "summoners-controller");
             });
 
+            logger.LogInformation(
+                "[RefreshApi] LoL summoner refresh already in progress for {GameName}#{Tag} on {Platform}. retryAfterSeconds={RetryAfterSeconds}, traceId={TraceId}.",
+                name,
+                tag,
+                platform,
+                seconds,
+                HttpContext.TraceIdentifier);
+
             return Accepted(new SummonerAcceptedResponse(
                 "Refresh in process",
                 pollUrl,
@@ -310,13 +319,31 @@ public class SummonersController(
                 job.RefreshByRiotId(name, tag, platform, key, priorityAcquired ? priorityKey : null,
                     CancellationToken.None));
         }
-        catch
+        catch (Exception ex)
         {
             await refreshLockRepository.ReleaseAsync(key, ct);
             if (priorityAcquired)
                 await refreshLockRepository.ReleaseAsync(priorityKey, ct);
+
+            logger.LogError(
+                ex,
+                "[RefreshApi] Failed to queue LoL summoner refresh for {GameName}#{Tag} on {Platform}. priorityLockAcquired={PriorityLockAcquired}, traceId={TraceId}.",
+                name,
+                tag,
+                platform,
+                priorityAcquired,
+                HttpContext.TraceIdentifier);
+
             throw;
         }
+
+        logger.LogInformation(
+            "[RefreshApi] Queued LoL summoner refresh for {GameName}#{Tag} on {Platform}. priorityLockAcquired={PriorityLockAcquired}, traceId={TraceId}.",
+            name,
+            tag,
+            platform,
+            priorityAcquired,
+            HttpContext.TraceIdentifier);
 
         return Accepted(new SummonerAcceptedResponse(
             "Refresh queued",

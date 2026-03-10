@@ -80,6 +80,68 @@ Notes:
 - The WebAPI host is keyless; Riot API keys are only required for the worker and TFT/LoL refresh flows.
 - TFT catalog pages (`/tft/champions`, `/tft/items`, `/tft/traits`, `/tft/augments`) reflect the active set only.
 
+### Local E2E
+
+Use full Compose when you want the closest local match to production, including the worker:
+
+```bash
+cp .env.example .env
+corepack pnpm e2e:stack
+```
+
+That command starts the full stack in Docker, waits for the API and web app to come up, then runs the Playwright suite against `http://localhost:3000`.
+
+For faster frontend iteration, keep the backend in Compose and run the web app locally:
+
+```bash
+docker compose up --build -d postgres redis webapi service
+cp apps/web/.env.example apps/web/.env.local
+corepack pnpm web:dev
+corepack pnpm e2e:local
+```
+
+### Local Data Slice
+
+For realistic local LoL/TFT testing, you can copy a game-only slice from another Postgres database into a disposable local database.
+
+Set connection strings in your shell, keeping the source credentials out of repo files:
+
+```bash
+export TRN_SOURCE_DB='Host=192.168.0.221;Port=5432;Database=transcendence;Username=postgres;Password=testpassword123!'
+export TRN_TARGET_DB='Host=localhost;Port=5432;Database=transcendence_slice;Username=postgres;Password=changme'
+```
+
+Run a sized import:
+
+```bash
+corepack pnpm data:slice:sync -- \
+  --regions NA1,EUW1,KR \
+  --patch-depth 2 \
+  --lol-max-matches-per-region 2000 \
+  --lol-sample-percent 20 \
+  --tft-max-matches-per-region 1000 \
+  --tft-sample-percent 15
+```
+
+That workflow:
+
+- verifies source and target schema versions match
+- truncates only the game-slice tables in the target database
+- copies LoL/TFT data needed for local profiles, search, matches, analytics, and static catalogs
+- lets you size the import by per-region row caps and sample percentages
+
+Validate identifier safety after import:
+
+```bash
+corepack pnpm data:validate-identifiers -- --sample-size 10
+```
+
+If Riot API keys were rotated and you want fresh encrypted identifiers with the current keys:
+
+```bash
+corepack pnpm data:rehydrate-riot-ids -- --games all --limit 250 --only-missing
+```
+
 ## What You Get
 
 - LoL summoner profiles, champion analytics, matchups, builds, and pro builds
@@ -96,6 +158,9 @@ corepack pnpm web:test
 corepack pnpm backend:test
 corepack pnpm api:gen
 corepack pnpm api:check
+corepack pnpm data:slice:sync -- --help
+corepack pnpm data:validate-identifiers -- --skip-live
+corepack pnpm data:rehydrate-riot-ids -- --games tft --limit 100
 dotnet test tests/Transcendence.Service.Core.Tests
 dotnet test tests/Transcendence.WebAPI.Tests
 ```

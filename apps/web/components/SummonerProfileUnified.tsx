@@ -27,6 +27,10 @@ import { rankEmblemUrl, rankTierDisplayLabel } from "@/lib/ranks";
 import { roleDisplayLabel } from "@/lib/roles";
 import { encodeRiotIdPath } from "@/lib/riotid";
 import {
+  buildLolPublicSummonerByIdPath,
+  buildLolPublicSummonerByRiotIdPath
+} from "@/lib/lolPublicApi";
+import {
   championIconUrl,
   itemIconUrl,
   profileIconUrl,
@@ -223,8 +227,8 @@ function pickApiError(status: number, json: unknown): ApiErrorResponse {
 
 function friendlyAcceptedMessage(msg?: string) {
   const m = (msg ?? "").toLowerCase();
-  if (m.includes("refresh queued")) return "Update started and data is being refreshed.";
-  if (m.includes("refresh in process")) return "Refresh in progress. This page will update automatically.";
+  if (m.includes("refresh queued")) return "Update started. This page will refresh automatically.";
+  if (m.includes("refresh in process")) return "Update in progress. This page will refresh automatically.";
   return msg ?? null;
 }
 
@@ -559,12 +563,9 @@ export function SummonerProfileClient({
   }, []);
 
   const fetchProfileOnce = useCallback(async () => {
-    const res = await fetch(
-      `/api/trn/public/summoners/${encodeURIComponent(region)}/${encodeURIComponent(
-        gameName
-      )}/${encodeURIComponent(tagLine)}`,
-      { cache: "no-store" }
-    );
+    const res = await fetch(buildLolPublicSummonerByRiotIdPath(region, gameName, tagLine), {
+      cache: "no-store"
+    });
     const json = (await res.json().catch(() => null)) as unknown;
     if (res.status === 200) {
       setProfile(json as SummonerProfileResponse);
@@ -601,7 +602,7 @@ export function SummonerProfileClient({
       setHistoryError(null);
       try {
         const res = await fetch(
-          `/api/trn/public/summoners/${encodeURIComponent(summonerId)}/matches/recent?page=${page}&pageSize=20`,
+          `${buildLolPublicSummonerByIdPath(summonerId)}/matches/recent?page=${page}&pageSize=20`,
           { cache: "no-store" }
         );
         const json = (await res.json().catch(() => null)) as PagedResultDto<MatchSummary> | { message?: string } | null;
@@ -627,9 +628,7 @@ export function SummonerProfileClient({
     setError(null);
     try {
       const res = await fetch(
-        `/api/trn/public/summoners/${encodeURIComponent(region)}/${encodeURIComponent(
-          gameName
-        )}/${encodeURIComponent(tagLine)}/refresh`,
+        `${buildLolPublicSummonerByRiotIdPath(region, gameName, tagLine)}/refresh`,
         { method: "POST" }
       );
       const json = (await res.json().catch(() => null)) as AcceptedResponse | null;
@@ -638,7 +637,7 @@ export function SummonerProfileClient({
         setError(pickApiError(res.status, json));
         return;
       }
-      setAccepted(json ?? { message: "Refresh queued." });
+      setAccepted(json ?? { message: "Update started." });
       setPolling(true);
       setPollDelayMs(computeNextPollDelayMs(2000, json?.retryAfterSeconds));
     } catch (e) {
@@ -660,7 +659,7 @@ export function SummonerProfileClient({
     setDetailBusy((s) => ({ ...s, [next]: true }));
     try {
       const res = await fetch(
-        `/api/trn/public/summoners/${encodeURIComponent(profile.summonerId)}/matches/${encodeURIComponent(next)}`,
+        `${buildLolPublicSummonerByIdPath(profile.summonerId)}/matches/${encodeURIComponent(next)}`,
         { cache: "no-store" }
       );
       const json = (await res.json().catch(() => null)) as MatchDetail | null;
@@ -753,7 +752,7 @@ export function SummonerProfileClient({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" onClick={queueRefresh} disabled={busy}>{busy ? "Starting..." : "Update"}</Button>
+            <Button variant="outline" onClick={queueRefresh} disabled={busy}>{busy ? "Starting..." : "Update Now"}</Button>
             <FavoriteButton region={region} gameName={gameName} tagLine={tagLine} />
           </div>
         </div>
@@ -772,7 +771,7 @@ export function SummonerProfileClient({
                 <Badge>{profile.rankAge?.ageDescription ?? "updated recently"}</Badge>
               </div>
               {rankedEntries.length === 0 ? (
-                <p className="mt-3 text-sm text-fg/80">No ranked data available. Solo/Duo and Flex are currently unranked.</p>
+                <p className="mt-3 text-sm text-fg/80">No ranked results yet. This player is currently unranked in Solo/Duo and Flex.</p>
               ) : (
                 <div className="mt-3 grid gap-2 text-sm">
                   {rankedEntries.map(({ label, rank }) => {

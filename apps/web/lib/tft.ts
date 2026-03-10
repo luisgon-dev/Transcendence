@@ -117,6 +117,113 @@ export const TFT_REGION_OPTIONS = [
   "KR"
 ] as const;
 
+// ---------------------------------------------------------------------------
+// Match detail types
+// ---------------------------------------------------------------------------
+
+export type TftMatchParticipant = {
+  puuid: string;
+  gameName?: string | null;
+  tagLine?: string | null;
+  placement: number;
+  level: number;
+  lastRound: number;
+  playersEliminated: number;
+  goldLeft: number;
+  totalDamageToPlayers: number;
+  timeEliminatedSeconds: number;
+  win: boolean;
+  augments: string[];
+  units: TftUnitSummary[];
+  traits: TftTraitSummary[];
+};
+
+export type TftMatchDetail = {
+  matchId: string;
+  matchDate: number;
+  durationSeconds: number;
+  patch?: string | null;
+  setNumber?: number | null;
+  setCoreName?: string | null;
+  platformRegion?: string | null;
+  participants: TftMatchParticipant[];
+};
+
+// ---------------------------------------------------------------------------
+// Icon helpers
+// ---------------------------------------------------------------------------
+
+const CDRAGON_TFT_BASE = "https://raw.communitydragon.org/latest/game/assets/";
+
+/** Convert a CommunityDragon icon path to a full URL. */
+export function tftIconUrl(iconPath: string | null | undefined): string | null {
+  if (!iconPath) return null;
+  const trimmed = iconPath.trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+
+  const withoutPrefix = trimmed
+    .replace(/^ASSETS\//i, "")
+    .replace(/\.tex$/i, ".png");
+  return `${CDRAGON_TFT_BASE}${withoutPrefix.toLowerCase()}`;
+}
+
+// ---------------------------------------------------------------------------
+// Placement helpers
+// ---------------------------------------------------------------------------
+
+export function placementColorClass(placement: number): string {
+  if (placement === 1) return "text-yellow-400";
+  if (placement <= 4) return "text-emerald-400";
+  return "text-red-400";
+}
+
+export function placementBgClass(placement: number): string {
+  if (placement === 1) return "border-yellow-400/50 bg-yellow-400/10";
+  if (placement <= 4) return "border-emerald-400/40 bg-emerald-400/8";
+  return "border-red-400/40 bg-red-400/8";
+}
+
+export function placementBarClass(placement: number): string {
+  if (placement === 1) return "bg-yellow-400";
+  if (placement <= 4) return "bg-emerald-400";
+  return "bg-red-400";
+}
+
+export function formatPlacement(placement: number): string {
+  if (placement === 1) return "1st";
+  if (placement === 2) return "2nd";
+  if (placement === 3) return "3rd";
+  return `${placement}th`;
+}
+
+// ---------------------------------------------------------------------------
+// Comp tier helpers
+// ---------------------------------------------------------------------------
+
+export function compTierLabel(avgPlacement: number): string {
+  if (avgPlacement <= 3.5) return "S";
+  if (avgPlacement <= 4.0) return "A";
+  if (avgPlacement <= 4.5) return "B";
+  if (avgPlacement <= 5.0) return "C";
+  return "D";
+}
+
+export function compTierColorClass(tier: string): string {
+  const map: Record<string, string> = {
+    S: "border-yellow-400/60 bg-yellow-400/15 text-yellow-400",
+    A: "border-emerald-400/60 bg-emerald-400/15 text-emerald-400",
+    B: "border-sky-400/60 bg-sky-400/15 text-sky-400",
+    C: "border-orange-400/60 bg-orange-400/15 text-orange-400",
+    D: "border-red-400/60 bg-red-400/15 text-red-400"
+  };
+  return map[tier] ?? "border-border/60 bg-surface/50 text-fg/70";
+}
+
+// ---------------------------------------------------------------------------
+// Formatting helpers
+// ---------------------------------------------------------------------------
+
 export function formatTftPercent(value: number, decimals = 1) {
   return `${(value * 100).toFixed(decimals)}%`;
 }

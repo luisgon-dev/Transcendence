@@ -99,7 +99,7 @@ public sealed class IngestionThroughputTelemetry : IIngestionThroughputTelemetry
             decisionEventsCounter.Add(1, tags);
             queueTargetHistogram.Record(Math.Max(0, decision.QueueTarget), tags);
 
-            logger.LogInformation(
+            logger.LogDebug(
                 "event=ingestion_throughput.budget_decision producer={Producer} queue_tier={QueueTier} mode={Mode} outcome={Outcome} source={Source} queue_target={QueueTarget} max_candidates={MaxCandidates} include_all_modes={IncludeAllModes} coverage_ratio={CoverageRatio:F2} backlog_age_minutes={BacklogAgeMinutes:F1} velocity_per_hour={VelocityPerHour:F2} pressure_ratio={PressureRatio:F2}",
                 normalizedProducer,
                 DefaultQueueTier,
@@ -139,7 +139,7 @@ public sealed class IngestionThroughputTelemetry : IIngestionThroughputTelemetry
                 deferAgeBreachCounter.Add(1, breachTags);
             }
 
-            logger.LogInformation(
+            logger.LogDebug(
                 "event=ingestion_throughput.guardrail_decision producer={Producer} queue_tier={QueueTier} mode=guardrail outcome={Outcome} source={Source} force_catch_up={ForceCatchUp} start_window={StartWindow} queue_target={QueueTarget} max_candidates={MaxCandidates} defer_age_minutes={DeferAgeMinutes:F1} defer_threshold_minutes={DeferThresholdMinutes:F1}",
                 normalizedProducer,
                 DefaultQueueTier,
@@ -173,7 +173,7 @@ public sealed class IngestionThroughputTelemetry : IIngestionThroughputTelemetry
             catchUpLifecycleCounter.Add(1, tags);
             catchUpWindowMinutesHistogram.Record(normalizedWindowMinutes, tags);
 
-            logger.LogInformation(
+            logger.LogDebug(
                 "event=ingestion_throughput.catch_up_window producer={Producer} queue_tier={QueueTier} mode=catch_up outcome={Outcome} source={Source} catch_up_window_minutes={CatchUpWindowMinutes:F1} catch_up_cooldown_minutes={CatchUpCooldownMinutes:F1}",
                 normalizedProducer,
                 DefaultQueueTier,
@@ -210,7 +210,7 @@ public sealed class IngestionThroughputTelemetry : IIngestionThroughputTelemetry
             queueTargetHistogram.Record(normalizedQueueTarget, tags);
             queuedCountHistogram.Record(normalizedQueuedCount, tags);
 
-            logger.LogInformation(
+            logger.LogDebug(
                 "event=ingestion_throughput.queue_output producer={Producer} queue_tier={QueueTier} mode={Mode} outcome={Outcome} source={Source} guardrail_outcome={GuardrailOutcome} force_catch_up={ForceCatchUp} queue_target={QueueTarget} queued={QueuedCount} max_candidates={MaxCandidates}",
                 normalizedProducer,
                 DefaultQueueTier,

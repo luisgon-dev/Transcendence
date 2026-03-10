@@ -14,13 +14,13 @@ export async function AccountNav() {
           className="rounded-full px-3 py-1.5 text-sm text-fg/75 transition hover:bg-white/10 hover:text-fg"
           href="/account/login"
         >
-          Login
+          Sign in
         </Link>
         <Link
           className="rounded-full px-3 py-1.5 text-sm text-fg/75 transition hover:bg-white/10 hover:text-fg"
           href="/account/register"
         >
-          Register
+          Create account
         </Link>
       </div>
     );
@@ -49,7 +49,7 @@ export async function AccountNav() {
           type="submit"
           className="h-8 rounded-full px-3 text-sm text-fg/75 hover:text-fg"
         >
-          Logout
+          Log out
         </Button>
       </form>
     </div>

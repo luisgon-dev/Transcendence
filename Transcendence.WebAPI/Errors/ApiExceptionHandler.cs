@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Transcendence.Service.Core.Services.Analysis.Exceptions;
@@ -17,12 +18,23 @@ public sealed class ApiExceptionHandler(
             _ => (StatusCodes.Status500InternalServerError, "An unexpected server error occurred.")
         };
 
+        var routeValues = httpContext.Request.RouteValues
+            .Where(pair => pair.Value != null)
+            .ToDictionary(pair => pair.Key, pair => pair.Value?.ToString(), StringComparer.OrdinalIgnoreCase);
+        var requestIdHeader = httpContext.Request.Headers["x-trn-request-id"].ToString();
+        var actorId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var actorName = httpContext.User.Identity?.Name;
+
         logger.LogError(
             exception,
-            "Request {RequestId} failed with unhandled exception for {Method} {Path}.",
+            "Request {TraceId} failed with unhandled exception for {Method} {Path}. routeValues={RouteValues}, requestIdHeader={RequestIdHeader}, actorId={ActorId}, actorName={ActorName}.",
             httpContext.TraceIdentifier,
             httpContext.Request.Method,
-            httpContext.Request.Path);
+            httpContext.Request.Path,
+            routeValues,
+            string.IsNullOrWhiteSpace(requestIdHeader) ? null : requestIdHeader,
+            actorId,
+            actorName);
 
         var problemDetails = new ProblemDetails
         {

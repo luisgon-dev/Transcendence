@@ -1,6 +1,6 @@
 {
   "ConnectionStrings": {
-    "MainDatabase": "Host=localhost;Port=5432;Database=transcendence;Username=postgres;Password=postgres",
+    "MainDatabase": "Host=localhost;Port=5432;Database=transcendence;Username=postgres;Password=changme",
     "Redis": "localhost:6379"
   },
   "RiotApi": {

@@ -31,7 +31,7 @@ export function GlobalSearchLauncher({
         <span className="text-sm" aria-hidden="true">
           /
         </span>
-        <span>{isHeader ? "Search" : "Search champions, summoners, or tier list"}</span>
+        <span>{isHeader ? "Search" : "Search champions, players, or pages"}</span>
       </span>
       <span className="relative z-10 rounded-md border border-border/70 bg-surface/80 px-2 py-0.5 text-xs text-muted">
         Ctrl/Cmd+K

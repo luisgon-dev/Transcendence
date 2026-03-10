@@ -18,10 +18,10 @@ export default function RegisterPage() {
     <div className="grid place-items-center py-8">
       <Card className="w-full max-w-md rounded-3xl p-6">
         <h1 className="font-[var(--font-sora)] text-2xl font-semibold">
-          Register
+          Create account
         </h1>
         <p className="mt-2 text-sm text-fg/75">
-          Create an account to save favorites.
+          Save favorite players and jump back into the pages you check most.
         </p>
 
         <form action={formAction} className="mt-6 grid gap-3">
@@ -55,7 +55,7 @@ export default function RegisterPage() {
         <p className="mt-4 text-sm text-muted">
           Already have an account?{" "}
           <Link className="text-primary hover:underline" href="/account/login">
-            Login
+            Sign in
           </Link>
         </p>
       </Card>

@@ -3,6 +3,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Models.LoL.Match;
@@ -349,7 +350,8 @@ public class SummonerStatsServiceTests
 
             var service = new SummonerStatsService(
                 db,
-                services.GetRequiredService<HybridCache>());
+                services.GetRequiredService<HybridCache>(),
+                services.GetRequiredService<ILogger<SummonerStatsService>>());
 
             return new SummonerStatsHarness(connection, db, services, service);
         }

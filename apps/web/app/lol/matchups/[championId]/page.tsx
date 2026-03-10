@@ -81,7 +81,7 @@ export default async function MatchupAnalysisPage({
   );
   const championId = Number(resolvedParams.championId);
   if (!Number.isFinite(championId) || championId <= 0) {
-    return <BackendErrorCard title="Matchup Analysis" message="Invalid champion id." />;
+    return <BackendErrorCard title="Matchup Analysis" message="Invalid champion link." />;
   }
 
   const explicitRole = normalizeRole(resolvedSearchParams?.role);
@@ -118,10 +118,10 @@ export default async function MatchupAnalysisPage({
         title="Matchup Analysis"
         message={
           matchupRes.errorKind === "timeout"
-            ? "Timed out reaching the backend."
+            ? "This page is taking too long to load."
             : matchupRes.errorKind === "unreachable"
-              ? "We are having trouble reaching the backend."
-              : "Failed to load matchup analysis."
+              ? "We couldn't load matchup data right now."
+              : "We couldn't load matchup data."
         }
         requestId={matchupRes.requestId || winRes.requestId}
         detail={
@@ -179,7 +179,7 @@ export default async function MatchupAnalysisPage({
             <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
               Matchup Analysis
             </h1>
-            <p className="text-sm text-fg/75">{championName}</p>
+            <p className="text-sm text-fg/75">How {championName} performs into the current field.</p>
           </div>
         </div>
 
@@ -208,9 +208,9 @@ export default async function MatchupAnalysisPage({
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="p-5">
           <h2 className="font-[var(--font-sora)] text-lg font-semibold">Weak Against</h2>
-          <p className="mt-1 text-xs text-muted">Champions that consistently counter {championName}</p>
+          <p className="mt-1 text-xs text-muted">Champions that give {championName} the most trouble</p>
           {counters.length === 0 ? (
-            <p className="mt-3 text-sm text-muted">No counter data available for this filter.</p>
+            <p className="mt-3 text-sm text-muted">No counter data is available for these filters.</p>
           ) : (
             <ul className="mt-3 grid gap-2">
               {counters.map((entry, idx) => {
@@ -238,9 +238,9 @@ export default async function MatchupAnalysisPage({
 
         <Card className="p-5">
           <h2 className="font-[var(--font-sora)] text-lg font-semibold">Strong Against</h2>
-          <p className="mt-1 text-xs text-muted">{championName} tends to perform well into these champions</p>
+          <p className="mt-1 text-xs text-muted">Champions {championName} usually handles well</p>
           {favorable.length === 0 ? (
-            <p className="mt-3 text-sm text-muted">No favorable matchup data available for this filter.</p>
+            <p className="mt-3 text-sm text-muted">No favorable matchup data is available for these filters.</p>
           ) : (
             <ul className="mt-3 grid gap-2">
               {favorable.map((entry, idx) => {
@@ -320,7 +320,7 @@ export default async function MatchupAnalysisPage({
               {allMatchups.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="py-4 text-sm text-muted">
-                    No matchup samples available for the selected filters.
+                    No matchup data is available for the selected filters yet.
                   </td>
                 </tr>
               ) : (
@@ -348,7 +348,7 @@ export default async function MatchupAnalysisPage({
                       <td className="py-2.5 pr-4 text-right text-fg/75">{verdict}</td>
                       <td
                         className="py-2.5 pr-4 text-right text-muted"
-                        title="Gold diff at 15 minutes is not yet provided by the backend."
+                        title="Gold difference at 15 minutes is not available yet."
                       >
                         —
                       </td>

@@ -119,7 +119,8 @@ public class TftSummonersControllerTests
         return new TftSummonersController(
             readService ?? Mock.Of<ITftSummonerReadService>(),
             refreshLockRepository ?? Mock.Of<IRefreshLockRepository>(),
-            backgroundJobClient ?? Mock.Of<IBackgroundJobClient>())
+            backgroundJobClient ?? Mock.Of<IBackgroundJobClient>(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<TftSummonersController>.Instance)
         {
             ControllerContext = new ControllerContext
             {

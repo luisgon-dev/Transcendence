@@ -87,6 +87,10 @@ public class MatchService(
                 $"Unable to resolve all participants for match {matchId}. MissingPuuidParticipants={missingPuuidParticipants}, UnresolvedPuuids={unresolvedPuuids.Count}.");
         }
 
+        var skippedDuplicateParticipants = 0;
+        var seenSummonerIds = new HashSet<Guid>();
+        var seenParticipantIds = new HashSet<int>();
+
         // Ensure Summoners exist, build participants and relationships
         foreach (var p in info.Participants)
         {
@@ -94,6 +98,18 @@ public class MatchService(
 
             // Link summoner to this match (many-to-many)
             if (match.Summoners.All(s => s.Id != summoner.Id)) match.Summoners.Add(summoner);
+
+            if (!seenSummonerIds.Add(summoner.Id) || !seenParticipantIds.Add(p.ParticipantId))
+            {
+                skippedDuplicateParticipants++;
+                logger.LogWarning(
+                    "Skipping duplicate participant while preparing match {MatchId}. ParticipantId={ParticipantId}, Puuid={Puuid}, SummonerId={SummonerId}",
+                    matchId,
+                    p.ParticipantId,
+                    p.Puuid,
+                    summoner.Id);
+                continue;
+            }
 
             // Create participant
             var participant = new MatchParticipant
@@ -125,14 +141,24 @@ public class MatchService(
             match.Participants.Add(participant);
         }
 
-        var expectedParticipants = info.Participants.Count();
+        var expectedParticipants = seenSummonerIds.Count;
         if (match.Participants.Count != expectedParticipants)
         {
             throw new InvalidOperationException(
                 $"Participant integrity check failed for match {matchId}. Expected {expectedParticipants} participants, resolved {match.Participants.Count}.");
         }
 
-        logger.LogInformation("Prepared match {MatchId} with {Count} participants for persistence.", matchId,
+        if (skippedDuplicateParticipants > 0)
+        {
+            logger.LogWarning(
+                "Prepared match {MatchId} after skipping {SkippedCount} duplicate participant rows.",
+                matchId,
+                skippedDuplicateParticipants);
+        }
+
+        logger.LogDebug(
+            "Prepared match {MatchId} with {Count} participants for persistence.",
+            matchId,
             match.Participants.Count);
         return match;
     }
@@ -205,6 +231,10 @@ public class MatchService(
                     .First(),
                 StringComparer.Ordinal);
 
+        var skippedLightweightDuplicates = 0;
+        var seenLightweightSummonerIds = new HashSet<Guid>();
+        var seenLightweightParticipantIds = new HashSet<int>();
+
         foreach (var p in info.Participants)
         {
             if (string.IsNullOrWhiteSpace(p.Puuid))
@@ -241,6 +271,18 @@ public class MatchService(
 
             if (match.Summoners.All(s => s.Id != summoner.Id)) match.Summoners.Add(summoner);
 
+            if (!seenLightweightSummonerIds.Add(summoner.Id) || !seenLightweightParticipantIds.Add(p.ParticipantId))
+            {
+                skippedLightweightDuplicates++;
+                logger.LogWarning(
+                    "[Lightweight] Skipping duplicate participant while preparing match {MatchId}. ParticipantId={ParticipantId}, Puuid={Puuid}, SummonerId={SummonerId}",
+                    matchId,
+                    p.ParticipantId,
+                    p.Puuid,
+                    summoner.Id);
+                continue;
+            }
+
             var participant = new MatchParticipant
             {
                 Match = match,
@@ -270,8 +312,18 @@ public class MatchService(
             match.Participants.Add(participant);
         }
 
-        logger.LogInformation("[Lightweight] Prepared match {MatchId} with {Count} participants for persistence.",
-            matchId, match.Participants.Count);
+        if (skippedLightweightDuplicates > 0)
+        {
+            logger.LogWarning(
+                "[Lightweight] Prepared match {MatchId} after skipping {SkippedCount} duplicate participant rows.",
+                matchId,
+                skippedLightweightDuplicates);
+        }
+
+        logger.LogDebug(
+            "[Lightweight] Prepared match {MatchId} with {Count} participants for persistence.",
+            matchId,
+            match.Participants.Count);
         return match;
     }
 
@@ -359,12 +411,28 @@ public class MatchService(
                     $"Unable to resolve all participants for retry match fetch {matchId}. MissingPuuidParticipants={missingPuuidParticipants}, UnresolvedPuuids={unresolvedPuuids.Count}.");
             }
 
+            var skippedRetryDuplicates = 0;
+            var seenRetrySummonerIds = new HashSet<Guid>();
+            var seenRetryParticipantIds = new HashSet<int>();
+
             // Ensure Summoners exist, build participants and relationships
             foreach (var p in info.Participants)
             {
                 var summoner = summonersByPuuid[p.Puuid!];
 
                 if (match.Summoners.All(s => s.Id != summoner.Id)) match.Summoners.Add(summoner);
+
+                if (!seenRetrySummonerIds.Add(summoner.Id) || !seenRetryParticipantIds.Add(p.ParticipantId))
+                {
+                    skippedRetryDuplicates++;
+                    logger.LogWarning(
+                        "Skipping duplicate participant while retry-fetching match {MatchId}. ParticipantId={ParticipantId}, Puuid={Puuid}, SummonerId={SummonerId}",
+                        matchId,
+                        p.ParticipantId,
+                        p.Puuid,
+                        summoner.Id);
+                    continue;
+                }
 
                 var participant = new MatchParticipant
                 {
@@ -395,11 +463,19 @@ public class MatchService(
                 match.Participants.Add(participant);
             }
 
-            var expectedParticipants = info.Participants.Count();
+            var expectedParticipants = seenRetrySummonerIds.Count;
             if (match.Participants.Count != expectedParticipants)
             {
                 throw new InvalidOperationException(
                     $"Participant integrity check failed for retry match fetch {matchId}. Expected {expectedParticipants} participants, resolved {match.Participants.Count}.");
+            }
+
+            if (skippedRetryDuplicates > 0)
+            {
+                logger.LogWarning(
+                    "Retry fetch prepared match {MatchId} after skipping {SkippedCount} duplicate participant rows.",
+                    matchId,
+                    skippedRetryDuplicates);
             }
 
             match.Status = FetchStatus.Success;
@@ -413,7 +489,7 @@ public class MatchService(
 
             await context.SaveChangesAsync(cancellationToken);
 
-            logger.LogInformation("Successfully fetched match {MatchId}", matchId);
+            logger.LogDebug("Successfully fetched match {MatchId}", matchId);
             return true;
         }
         catch (OperationCanceledException)
@@ -443,7 +519,7 @@ public class MatchService(
                     service => service.FetchMatchWithRetryAsync(matchId, region, CancellationToken.None),
                     delay);
 
-                logger.LogInformation("Match {MatchId} retry scheduled in {Delay}s (attempt {RetryCount})",
+                logger.LogDebug("Match {MatchId} retry scheduled in {Delay}s (attempt {RetryCount})",
                     matchId, delay.TotalSeconds, match.RetryCount);
             }
 

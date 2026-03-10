@@ -73,6 +73,40 @@ Transcendence is a backend + web monorepo:
      - non-ranked backfill pagination (bounded by safety caps)
 4. Client polls GET endpoint until data is ready (200 OK)
 
+## Riot Identifier Policy
+
+- `Puuid` is the canonical durable Riot identifier in storage for both LoL and TFT.
+- User-facing lookup uses normalized Riot ID fields: `gameName` + `tagLine` + `platformRegion`.
+- Internal joins and downstream reads pivot from Riot ID to local summoner GUIDs or directly to `Puuid`.
+- `RiotSummonerId` and `AccountId` are non-canonical refresh artifacts. They must not be required for search, profile lookup, favorites, live-game resolution, or analytics joins.
+
+Current app usage follows that policy:
+- LoL search/autosuggest uses stored normalized Riot ID fields plus match participation presence.
+- LoL profile GET resolves by Riot ID first, then uses the local summoner GUID for stats and matches.
+- TFT search/profile resolves by Riot ID first, then uses the local summoner GUID for match history.
+- Favorites, pro-roster rows, and live-game snapshots key on `Puuid` or local IDs rather than encrypted Riot identifiers.
+
+Operational implication:
+- Riot API key swaps should not invalidate stored gameplay data as long as `Puuid` and Riot ID fields remain intact.
+- Encrypted identifiers may drift after a key change and should be treated as rehydratable, not as durable foreign keys.
+
+## Local Data Slice Tooling
+
+- Prod-to-local gameplay seeding is implemented as a developer CLI workflow in `tools/Transcendence.Tools.DataOps`, not as an application API.
+- The slice tool copies a game-only subset from a source Postgres database into a disposable local target Postgres database.
+- Import scope is sized from root match sets and their dependents, then expanded to the summoner, participant, rank, cursor, static-data, and analytics-supporting rows needed for realistic local testing.
+- Import size is operator-controlled through per-game region caps and sample percentages, so local databases can be small, medium, or near-production in shape without editing code.
+- The tool requires source and target schema versions to match before writing the target.
+
+## Riot Key Rotation / Swap Workflow
+
+1. Update Riot API keys for the worker and any local validation shells.
+2. Run identifier validation against stored data.
+3. If encrypted identifiers need refreshing, run the rehydrate job keyed by stored `Puuid`.
+4. Resume normal ingestion and refresh traffic.
+
+The rehydrate step updates non-canonical `RiotSummonerId` / `AccountId` and Riot ID display fields from Riot APIs using `Puuid` as the stable pivot.
+
 ### Summoner Read Failure Semantics
 
 - Summoner profile and stats reads fail closed on backend errors.

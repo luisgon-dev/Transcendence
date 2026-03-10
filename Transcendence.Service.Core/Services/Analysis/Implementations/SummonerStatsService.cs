@@ -10,7 +10,10 @@ using RuneSelectionTree = Transcendence.Data.Models.LoL.Match.RuneSelectionTree;
 
 namespace Transcendence.Service.Core.Services.Analysis.Implementations;
 
-public class SummonerStatsService(TranscendenceContext db, HybridCache cache)
+public class SummonerStatsService(
+    TranscendenceContext db,
+    HybridCache cache,
+    ILogger<SummonerStatsService> logger)
     : ISummonerStatsService
 {
     // Cache key prefixes
@@ -87,7 +90,7 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache)
                 AvgCsPerMin = g.Average(x => x.DurationSeconds > 0 ? x.Cs / (x.DurationSeconds / 60d) : 0d),
                 AvgDurationMin = g.Average(x => x.DurationSeconds / 60.0)
             })
-            .FirstOrDefaultAsync(ct);
+            .SingleOrDefaultAsync(ct);
 
         var total = aggregate?.Total ?? 0;
         var wins = aggregate?.Wins ?? 0;
@@ -303,39 +306,49 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache)
 
         var total = await query.CountAsync(ct);
 
-        // First, get participant IDs with match data
-        var participantData = await query
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(mp => new
-            {
-                mp.Id,
-                mp.Match.MatchId,
-                mp.Match.MatchDate,
-                mp.Match.Duration,
-                mp.Match.QueueId,
-                mp.Match.QueueType,
-                mp.Match.Patch,
-                mp.Win,
-                mp.ChampionId,
-                mp.TeamPosition,
-                mp.Kills,
-                mp.Deaths,
-                mp.Assists,
-                mp.VisionScore,
-                mp.TotalDamageDealtToChampions,
-                mp.TotalMinionsKilled,
-                mp.NeutralMinionsKilled,
-                mp.SummonerSpell1Id,
-                mp.SummonerSpell2Id
-            })
-            .ToListAsync(ct);
+        List<RecentMatchProjection> participantData;
+        try
+        {
+            participantData = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(mp => new RecentMatchProjection(
+                    mp.Id,
+                    mp.MatchId,
+                    mp.Match.MatchId,
+                    mp.Match.MatchDate,
+                    mp.Match.Duration,
+                    mp.Match.QueueId,
+                    mp.Match.QueueType,
+                    mp.Match.Patch,
+                    mp.Win,
+                    mp.ChampionId,
+                    mp.TeamPosition,
+                    mp.Kills,
+                    mp.Deaths,
+                    mp.Assists,
+                    mp.VisionScore,
+                    mp.TotalDamageDealtToChampions,
+                    mp.TotalMinionsKilled,
+                    mp.NeutralMinionsKilled,
+                    mp.SummonerSpell1Id,
+                    mp.SummonerSpell2Id))
+                .ToListAsync(ct);
+        }
+        catch (Exception ex) when (ShouldUseConservativeRecentMatchRead(ex))
+        {
+            logger.LogWarning(
+                ex,
+                "Bulk recent-match projection failed for summoner {SummonerId}. Retrying with conservative per-row loading.",
+                summonerId);
+            participantData = await LoadRecentMatchPageConservativelyAsync(query, page, pageSize, ct);
+        }
 
         if (participantData.Count == 0)
             return new PagedResult<RecentMatchSummary>([], page, pageSize, total);
 
         // Get items and runes for these participants
-        var participantIds = participantData.Select(p => p.Id).Distinct().ToList();
+        var participantIds = participantData.Select(p => p.ParticipantId).Distinct().ToList();
 
         var itemsByParticipant = await db.Set<Data.Models.LoL.Match.MatchParticipantItem>()
             .AsNoTracking()
@@ -417,13 +430,13 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache)
         // Map to final DTOs
         var items = participantData.Select(p =>
         {
-            var itemList = itemsByParticipant.GetValueOrDefault(p.Id) ?? new List<int>();
+            var itemList = itemsByParticipant.GetValueOrDefault(p.ParticipantId) ?? new List<int>();
             if (itemList.Count > 7)
                 itemList = itemList.Take(7).ToList();
             // Ensure 7 slots (pad with 0s if needed)
             while (itemList.Count < 7) itemList.Add(0);
 
-            var runeSelections = runesByParticipant.GetValueOrDefault(p.Id) ?? [];
+            var runeSelections = runesByParticipant.GetValueOrDefault(p.ParticipantId) ?? [];
             var runeSummary = BuildRuneSummary(
                 runeSelections,
                 p.Patch,
@@ -459,6 +472,107 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache)
         }).ToList();
 
         return new PagedResult<RecentMatchSummary>(items, page, pageSize, total);
+    }
+
+    private async Task<List<RecentMatchProjection>> LoadRecentMatchPageConservativelyAsync(
+        IQueryable<Data.Models.LoL.Match.MatchParticipant> query,
+        int page,
+        int pageSize,
+        CancellationToken ct)
+    {
+        var pageRows = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(mp => new { mp.Id, mp.MatchId })
+            .ToListAsync(ct);
+
+        var projections = new List<RecentMatchProjection>(pageRows.Count);
+        var matchCache = new Dictionary<Guid, RecentMatchMatchProjection>();
+
+        foreach (var row in pageRows)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            try
+            {
+                var participant = await db.MatchParticipants
+                    .AsNoTracking()
+                    .Where(mp => mp.Id == row.Id)
+                    .Select(mp => new
+                    {
+                        mp.Id,
+                        mp.MatchId,
+                        mp.Win,
+                        mp.ChampionId,
+                        mp.TeamPosition,
+                        mp.Kills,
+                        mp.Deaths,
+                        mp.Assists,
+                        mp.VisionScore,
+                        mp.TotalDamageDealtToChampions,
+                        mp.TotalMinionsKilled,
+                        mp.NeutralMinionsKilled,
+                        mp.SummonerSpell1Id,
+                        mp.SummonerSpell2Id
+                    })
+                    .SingleOrDefaultAsync(ct);
+
+                if (participant == null)
+                    continue;
+
+                if (!matchCache.TryGetValue(participant.MatchId, out var match))
+                {
+                    match = await db.Matches
+                        .AsNoTracking()
+                        .Where(m => m.Id == participant.MatchId)
+                        .Select(m => new RecentMatchMatchProjection(
+                            m.Id,
+                            m.MatchId,
+                            m.MatchDate,
+                            m.Duration,
+                            m.QueueId,
+                            m.QueueType,
+                            m.Patch))
+                        .SingleOrDefaultAsync(ct);
+
+                    if (match == null)
+                        continue;
+
+                    matchCache[participant.MatchId] = match;
+                }
+
+                projections.Add(new RecentMatchProjection(
+                    participant.Id,
+                    participant.MatchId,
+                    match.MatchId,
+                    match.MatchDate,
+                    match.Duration,
+                    match.QueueId,
+                    match.QueueType,
+                    match.Patch,
+                    participant.Win,
+                    participant.ChampionId,
+                    participant.TeamPosition,
+                    participant.Kills,
+                    participant.Deaths,
+                    participant.Assists,
+                    participant.VisionScore,
+                    participant.TotalDamageDealtToChampions,
+                    participant.TotalMinionsKilled,
+                    participant.NeutralMinionsKilled,
+                    participant.SummonerSpell1Id,
+                    participant.SummonerSpell2Id));
+            }
+            catch (Exception ex) when (ShouldUseConservativeRecentMatchRead(ex))
+            {
+                logger.LogWarning(
+                    ex,
+                    "Skipping unreadable match participant {ParticipantId} while assembling recent matches.",
+                    row.Id);
+            }
+        }
+
+        return projections;
     }
 
     public async Task<MatchDetailDto?> GetMatchDetailAsync(string matchId, CancellationToken ct)
@@ -885,6 +999,46 @@ public class SummonerStatsService(TranscendenceContext db, HybridCache cache)
         int StyleId);
 
     private readonly record struct RuneMetadata(int PathId, int Slot);
+    private sealed record RecentMatchMatchProjection(
+        Guid Id,
+        string? MatchId,
+        long MatchDate,
+        int Duration,
+        int QueueId,
+        string? QueueType,
+        string? Patch);
+    private sealed record RecentMatchProjection(
+        Guid ParticipantId,
+        Guid MatchEntityId,
+        string? MatchId,
+        long MatchDate,
+        int Duration,
+        int QueueId,
+        string? QueueType,
+        string? Patch,
+        bool Win,
+        int ChampionId,
+        string? TeamPosition,
+        int Kills,
+        int Deaths,
+        int Assists,
+        int VisionScore,
+        int TotalDamageDealtToChampions,
+        int TotalMinionsKilled,
+        int NeutralMinionsKilled,
+        int SummonerSpell1Id,
+        int SummonerSpell2Id);
+
+    private static bool ShouldUseConservativeRecentMatchRead(Exception ex)
+    {
+        for (Exception? current = ex; current != null; current = current.InnerException)
+        {
+            if (current is ArgumentOutOfRangeException)
+                return true;
+        }
+
+        return false;
+    }
 
     private static async Task<T> ExecuteStatsRequestAsync<T>(
         string failureMessage,

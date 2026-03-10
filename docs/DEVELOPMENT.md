@@ -68,6 +68,109 @@ API health:
 - `http://localhost:8080/health/live`
 - `http://localhost:8080/health/ready`
 
+## Local E2E Workflows
+
+Use full Compose when you want the simplest end-to-end path and you need the worker running for LoL/TFT refresh flows:
+
+```bash
+cp .env.example .env
+corepack pnpm e2e:stack
+```
+
+That script:
+- creates `.env` from `.env.example` if needed
+- starts the full Docker Compose stack in detached mode
+- waits for `http://localhost:8080/health/ready`
+- waits for `http://localhost:3000`
+- runs Playwright against `http://localhost:3000`
+
+For a faster frontend loop, keep backend services in Compose and run Next locally:
+
+```bash
+docker compose up --build -d postgres redis webapi service
+cp apps/web/.env.example apps/web/.env.local
+corepack pnpm web:dev
+corepack pnpm e2e:local
+```
+
+Rule of thumb:
+- Use `corepack pnpm e2e:stack` for true local E2E and TFT/worker verification.
+- Use the hybrid mode for day-to-day UI changes when you want faster frontend rebuilds.
+
+## Local Data Slice and Riot Identifier Tools
+
+For local gameplay testing, prefer importing a disposable game-only slice over trying to hand-seed a tiny database.
+
+Package scripts:
+
+```bash
+corepack pnpm data:slice:sync -- --help
+corepack pnpm data:validate-identifiers -- --help
+corepack pnpm data:rehydrate-riot-ids -- --help
+```
+
+Recommended shell env:
+
+```bash
+export TRN_SOURCE_DB='Host=192.168.0.221;Port=5432;Database=transcendence;Username=postgres;Password=testpassword123!'
+export TRN_TARGET_DB='Host=localhost;Port=5432;Database=transcendence_slice;Username=postgres;Password=changme'
+export TRN_RIOT_API_KEY_LOL='RGAPI-your-lol-key'
+export TRN_RIOT_API_KEY_TFT='RGAPI-your-tft-key'
+```
+
+Use a disposable target database. The slice sync truncates and reloads slice-owned tables before import.
+
+Example import with explicit sizing:
+
+```bash
+corepack pnpm data:slice:sync -- \
+  --regions NA1,EUW1,KR \
+  --patch-depth 2 \
+  --lol-max-matches-per-region 2500 \
+  --lol-sample-percent 25 \
+  --tft-max-matches-per-region 1500 \
+  --tft-sample-percent 20
+```
+
+Sizing controls:
+- `--regions <csv>` limits source platform regions.
+- `--patch-depth <n>` limits the patch/set windows considered.
+- `--lol-max-matches-per-region <n>` and `--tft-max-matches-per-region <n>` hard-cap imported matches per region.
+- `--lol-sample-percent <0-100>` and `--tft-sample-percent <0-100>` sample a percentage of the eligible match pool before the hard cap is applied.
+- `--skip-lol` and `--skip-tft` let you import a single game surface.
+
+What gets copied:
+- LoL/TFT summoners, ranks, match data, match dependents, ingestion cursors, live/pro rows, and static data needed for analytics pages.
+- Auth/admin/API-key tables are intentionally excluded.
+
+Safety checks:
+- Source and target must have the same latest EF migration.
+- The tool prints per-table row counts when the import finishes.
+
+Post-import validation:
+
+```bash
+corepack pnpm data:validate-identifiers -- --sample-size 10
+```
+
+This reports:
+- the app’s identifier policy
+- DB counts for canonical vs non-canonical Riot identifiers
+- optional live Riot checks showing whether `Puuid` + Riot ID are still canonical and whether encrypted IDs drifted under the current key
+
+Key rotation / key swap workflow:
+
+```bash
+corepack pnpm data:validate-identifiers -- --sample-size 10
+corepack pnpm data:rehydrate-riot-ids -- --games all --limit 250 --only-missing
+```
+
+`data:rehydrate-riot-ids` refreshes non-canonical `RiotSummonerId` / `AccountId` plus Riot ID display fields from stored `Puuid` rows using the current Riot API keys. It is safe to rerun and supports:
+- `--games all|lol|tft`
+- `--limit <n>`
+- `--delay-ms <n>`
+- `--only-missing`
+
 ## Run Without Docker (Backend)
 
 ### Secrets
@@ -77,7 +180,7 @@ API health:
 The WebAPI host is keyless. It does not need Riot API keys to start, serve reads, or export Swagger.
 
 ```bash
-dotnet user-secrets set "ConnectionStrings:MainDatabase" "Host=localhost;Port=5432;Database=transcendence;Username=postgres;Password=postgres" --project Transcendence.WebAPI
+dotnet user-secrets set "ConnectionStrings:MainDatabase" "Host=localhost;Port=5432;Database=transcendence;Username=postgres;Password=changme" --project Transcendence.WebAPI
 dotnet user-secrets set "ConnectionStrings:Redis" "localhost:6379" --project Transcendence.WebAPI
 dotnet user-secrets set "Auth:Jwt:Key" "CHANGE_THIS_TO_A_REAL_32+_CHAR_SECRET" --project Transcendence.WebAPI
 dotnet user-secrets set "Auth:Jwt:RequireKeyInDevelopment" "false" --project Transcendence.WebAPI
@@ -93,14 +196,14 @@ Security notes:
 `Transcendence.Service`:
 
 ```bash
-dotnet user-secrets set "ConnectionStrings:MainDatabase" "Host=localhost;Port=5432;Database=transcendence;Username=postgres;Password=postgres" --project Transcendence.Service
+dotnet user-secrets set "ConnectionStrings:MainDatabase" "Host=localhost;Port=5432;Database=transcendence;Username=postgres;Password=changme" --project Transcendence.Service
 dotnet user-secrets set "ConnectionStrings:Redis" "localhost:6379" --project Transcendence.Service
 dotnet user-secrets set "RiotApi:League:ApiKey" "RGAPI-your-lol-key" --project Transcendence.Service
 dotnet user-secrets set "RiotApi:Tft:ApiKey" "RGAPI-your-tft-key" --project Transcendence.Service
 ```
 
 Local defaults:
-- Shared backend defaults live in [`config/backend.shared.json`](../config/backend.shared.json) and use PostgreSQL/Npgsql `Host=...` connection strings with Redis on `localhost:6379`.
+- Shared backend defaults live in [`config/backend.shared.json`](../config/backend.shared.json) and use PostgreSQL/Npgsql on `localhost:5432` with `postgres/changme`, plus Redis on `localhost:6379`.
 - `Transcendence.WebAPI/appsettings.json` and `Transcendence.Service/appsettings.json` contain host-only settings layered on top of the shared config.
 - User-secrets remain the recommended override for local credentials and Riot keys.
 

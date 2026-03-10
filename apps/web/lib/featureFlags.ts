@@ -1,1 +1,1 @@
-export const TFT_FRONTEND_ENABLED = false;
+export const TFT_FRONTEND_ENABLED = true;

@@ -170,6 +170,7 @@ dotnet test tests/Transcendence.WebAPI.Tests
 - [`docs/DEVELOPMENT.md`](./docs/DEVELOPMENT.md) for setup, secrets, and local run modes
 - [`docs/API.md`](./docs/API.md) for routes, auth, and OpenAPI expectations
 - [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for component boundaries and background flows
+- [`docs/TFT_META_ANALYSIS.md`](./docs/TFT_META_ANALYSIS.md) for TFT meta analysis methodology and scoring best practices
 - [`AGENTS.md`](./AGENTS.md) for repository-specific agent guidance
 
 ## License

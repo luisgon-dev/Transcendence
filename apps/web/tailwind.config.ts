@@ -28,12 +28,12 @@ export default {
         loss: "hsl(var(--loss))"
       },
       boxShadow: {
-        glass: "0 1px 0 hsl(0 0% 100% / 0.05) inset, 0 0 0 1px hsl(var(--border) / 0.65), 0 14px 40px hsl(230 42% 5% / 0.65)",
-        glow: "0 0 0 1px hsl(var(--primary) / 0.35), 0 0 24px hsl(var(--primary) / 0.28)"
+        glass: "0 1px 0 hsl(35 20% 100% / 0.04) inset, 0 0 0 1px hsl(var(--border) / 0.5), 0 10px 28px hsl(20 25% 5% / 0.45)",
+        glow: "0 0 0 1px hsl(var(--primary) / 0.25), 0 0 16px hsl(var(--primary) / 0.18)"
       },
       backgroundImage: {
         "aurora":
-          "radial-gradient(1200px 600px at 20% -10%, hsl(var(--primary) / 0.35), transparent 60%), radial-gradient(900px 500px at 80% 0%, hsl(var(--primary-2) / 0.22), transparent 55%), radial-gradient(1000px 700px at 40% 110%, hsl(220 100% 60% / 0.12), transparent 60%)"
+          "radial-gradient(1200px 600px at 20% -10%, hsl(var(--primary) / 0.14), transparent 60%), radial-gradient(900px 500px at 80% 0%, hsl(var(--primary-2) / 0.10), transparent 55%), radial-gradient(1000px 700px at 40% 110%, hsl(20 50% 35% / 0.06), transparent 60%)"
       },
       keyframes: {
         shimmer: {

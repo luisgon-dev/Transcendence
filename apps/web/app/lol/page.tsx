@@ -54,41 +54,40 @@ export default async function HomePage({
     .slice(0, 3);
 
   return (
-    <div className="grid gap-6">
-      <section className="glass-card mesh-highlight relative overflow-hidden rounded-[2rem] p-6 sm:p-8">
-        <div className="pointer-events-none absolute -left-24 top-0 h-56 w-56 rounded-full bg-primary/20 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-24 right-0 h-56 w-56 rounded-full bg-primary-2/20 blur-3xl" />
+    <div className="grid gap-10">
+      <section className="glass-card mesh-highlight rounded-[2rem] p-6 sm:p-8 md:p-10">
+        {/* Identity zone */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge className="border-primary/40 bg-primary/10 text-primary">Patch {patch}</Badge>
+          <Badge className="border-success/40 bg-success/10 text-success">Live Patch Data</Badge>
+          <Badge>{activeRegionLabel}</Badge>
+        </div>
 
-        <div className="relative">
+        <h1 className="mt-4 max-w-2xl font-[var(--font-sora)] text-3xl font-semibold tracking-tight sm:text-4xl">
+          League of Legends picks, builds, and matchup tools for the current patch.
+        </h1>
+        <p className="mt-2 max-w-2xl text-sm text-fg/75 sm:text-base">
+          Start with the tier list, drill into champion pages by role, or pull up player history in a few clicks.
+        </p>
+
+        {/* Action zone */}
+        <GlobalSearchLauncher variant="hero" className="mt-8 h-14 w-full max-w-2xl px-4 text-left" />
+
+        {/* Navigation zone */}
+        <div className="mt-8 space-y-3">
+          <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} className="flex flex-wrap gap-2" />
+
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className="border-primary/40 bg-primary/10 text-primary">Patch {patch}</Badge>
-            <Badge className="border-success/40 bg-success/10 text-success">Live Patch Data</Badge>
-            <Badge>{activeRegionLabel}</Badge>
-          </div>
-
-          <h1 className="mt-4 max-w-2xl font-[var(--font-sora)] text-3xl font-semibold tracking-tight sm:text-4xl">
-            League of Legends picks, builds, and matchup tools for the current patch.
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm text-fg/75 sm:text-base">
-            Start with the tier list, drill into champion pages by role, or pull up player history in a few clicks.
-          </p>
-
-          <GlobalSearchLauncher variant="hero" className="mt-6 h-14 w-full max-w-2xl px-4 text-left" />
-
-          <div className="mt-5 flex flex-wrap gap-2">
-            <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} className="flex flex-wrap gap-2" />
-          </div>
-
-          <div className="mt-3 flex flex-wrap gap-2">
             {QUICK_LINKS.map((link) => (
               <Link
                 key={link.href}
                 href={`${link.href}${activeRegion !== "ALL" ? `${link.href.includes("?") ? "&" : "?"}region=${encodeURIComponent(activeRegion)}` : ""}`}
-                className="rounded-full border border-border/65 bg-white/[0.03] px-3 py-1.5 text-sm text-fg/80 transition hover:bg-white/[0.08] hover:text-fg"
+                className="rounded-full border border-border/65 bg-white/[0.03] px-3 py-2 text-sm text-fg/80 transition hover:bg-white/[0.08] hover:text-fg active:bg-white/[0.10]"
               >
                 {link.label}
               </Link>
             ))}
+            <span className="mx-1 h-4 w-px bg-border/50" aria-hidden="true" />
             <Link
               href={`/lol/matchups${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
               className="rounded-full border border-border/65 bg-white/[0.03] px-3 py-1.5 text-sm text-fg/80 transition hover:bg-white/[0.08] hover:text-fg"
@@ -111,12 +110,12 @@ export default async function HomePage({
         </div>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
+      <section className="grid gap-5 lg:grid-cols-[1.6fr_1fr]">
         <Card className="p-0">
-          <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
+          <div className="flex items-center justify-between border-b border-border/50 px-5 py-3.5">
             <div>
               <h2 className="font-[var(--font-sora)] text-lg font-semibold">Top Champions · Platinum+</h2>
-              <p className="text-xs text-muted">Best-performing picks for this patch</p>
+              <p className="mt-0.5 text-xs text-muted">Best-performing picks for this patch</p>
             </div>
             <Link href={`/lol/tierlist${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`} className="text-xs text-primary hover:underline">
               View full tier list
@@ -126,7 +125,7 @@ export default async function HomePage({
             <p className="px-4 py-4 text-sm text-muted">Tier list data is unavailable right now.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[560px] text-left text-sm">
+              <table className="w-full min-w-[420px] text-left text-sm">
                 <thead className="text-[11px] uppercase tracking-wider text-muted">
                   <tr className="border-b border-border/30">
                     <th className="px-4 py-2">Champion</th>
@@ -171,10 +170,10 @@ export default async function HomePage({
           )}
         </Card>
 
-        <div className="grid gap-4">
+        <div className="grid content-start gap-5">
           <Card className="p-5">
             <h2 className="font-[var(--font-sora)] text-lg font-semibold">Hot Right Now</h2>
-            <div className="mt-3 grid gap-2.5">
+            <div className="mt-4 grid gap-2">
               {trendingRows.length === 0 ? (
                 <p className="text-sm text-muted">No featured champions to show right now.</p>
               ) : (
@@ -185,12 +184,21 @@ export default async function HomePage({
                     <Link
                       key={`${entry.championId}-trend`}
                       href={`/lol/champions/${entry.championId}?role=${entry.role}${activeRegion !== "ALL" ? `&region=${encodeURIComponent(activeRegion)}` : ""}`}
-                      className="rounded-lg border border-border/60 bg-white/[0.03] p-3 transition hover:bg-white/[0.08]"
+                      className="flex items-center gap-3 rounded-lg border border-border/60 bg-white/[0.03] px-3 py-2.5 transition hover:bg-white/[0.08]"
                     >
-                      <p className="text-sm font-medium text-fg">{name}</p>
-                      <p className="mt-1 text-xs text-muted">
-                        {roleDisplayLabel(entry.role)} • {formatPercent(entry.winRate, { decimals: 1 })} WR
-                      </p>
+                      <Image
+                        src={championIconUrl(version, champ?.id ?? "Unknown")}
+                        alt={name}
+                        width={32}
+                        height={32}
+                        className="rounded-md"
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-fg">{name}</p>
+                        <p className="text-xs text-muted">
+                          {roleDisplayLabel(entry.role)} · {formatPercent(entry.winRate, { decimals: 1 })} WR
+                        </p>
+                      </div>
                     </Link>
                   );
                 })
@@ -198,29 +206,29 @@ export default async function HomePage({
             </div>
           </Card>
 
-          <Card className="border-primary/45 bg-gradient-to-br from-primary/15 to-primary-2/10 p-5">
-            <h2 className="font-[var(--font-sora)] text-lg font-semibold text-primary">Player Tools</h2>
-            <p className="mt-2 text-sm text-fg/85">
-              Move from broad patch reads into player pages, matchup breakdowns, and pro builds.
+          <Card className="border-primary/30 bg-gradient-to-br from-primary/8 to-primary-2/5 p-5">
+            <h2 className="font-[var(--font-sora)] text-base font-semibold text-primary">Player Tools</h2>
+            <p className="mt-1.5 text-sm text-fg/80">
+              Matchup breakdowns, pro builds, and player profiles.
             </p>
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-3.5 flex flex-wrap gap-2">
               <Link
                 href={`/lol/matchups${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
                 className="inline-flex rounded-md border border-primary/40 bg-primary/15 px-3 py-1.5 text-sm font-medium text-primary transition hover:bg-primary/25"
               >
-                Explore Matchups
+                Matchups
               </Link>
               <Link
                 href={`/lol/pro-builds${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
                 className="inline-flex rounded-md border border-border/70 bg-white/[0.05] px-3 py-1.5 text-sm text-fg/85 transition hover:bg-white/[0.10]"
               >
-                Open Pro Builds
+                Pro Builds
               </Link>
               <Link
                 href="/lol/summoners/na/Faker-KR1"
                 className="inline-flex rounded-md border border-border/70 bg-white/[0.05] px-3 py-1.5 text-sm text-fg/85 transition hover:bg-white/[0.10]"
               >
-                Open Player Page
+                Player Page
               </Link>
             </div>
           </Card>

@@ -35,16 +35,16 @@ export default function LandingPage() {
   const visibleGames = TFT_FRONTEND_ENABLED ? [...games, tftGame] : games;
 
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-10">
       <section className="glass-card mesh-highlight rounded-[2rem] p-6 sm:p-8">
         <p className="text-sm font-medium uppercase tracking-[0.24em] text-primary">Transcendence</p>
-        <h1 className="mt-3 max-w-4xl font-[var(--font-sora)] text-4xl font-semibold tracking-tight sm:text-5xl">
+        <h1 className="mt-4 max-w-4xl font-[var(--font-sora)] text-4xl font-semibold tracking-tight sm:text-5xl">
           Patch-ready League and TFT tools built for players first.
         </h1>
         <p className="mt-3 max-w-2xl text-sm text-fg/75 sm:text-base">
           Check what is winning, compare builds and comps, and pull up player pages without digging through menus.
         </p>
-        <div className="mt-5 flex flex-wrap gap-2">
+        <div className="mt-6 flex flex-wrap gap-2">
           <Link
             href="/lol"
             className="rounded-full border border-primary/45 bg-primary/12 px-4 py-2 text-sm font-medium text-primary"
@@ -62,7 +62,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-2">
+      <section className="grid gap-5 lg:grid-cols-2">
         {visibleGames.map((game) => (
           <Card key={game.href} className="grid gap-5 p-6">
             <div>

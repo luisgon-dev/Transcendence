@@ -36,7 +36,7 @@ export default function RootLayout({
     <html lang="en" className={`${headingFont.variable} ${bodyFont.variable}`}>
       <body className="bg-aurora font-[var(--font-manrope)] antialiased">
         <SiteHeader />
-        <main className="mx-auto w-full max-w-[1440px] px-4 py-8 md:px-6 md:py-10">
+        <main className="mx-auto w-full max-w-[1440px] px-4 py-8 md:px-6 lg:px-8 md:py-12">
           {children}
         </main>
         <SiteFooter />

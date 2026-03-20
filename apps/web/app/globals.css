@@ -70,17 +70,17 @@ body::before {
   background:
     radial-gradient(
       900px 480px at 10% -5%,
-      hsl(var(--primary) / 0.10),
+      hsl(var(--primary) / 0.06),
       transparent 65%
     ),
     radial-gradient(
       900px 540px at 90% -5%,
-      hsl(var(--primary-2) / 0.08),
+      hsl(var(--primary-2) / 0.05),
       transparent 70%
     ),
     radial-gradient(
       800px 500px at 50% 110%,
-      hsl(20 50% 35% / 0.05),
+      hsl(20 50% 35% / 0.03),
       transparent 70%
     );
 }
@@ -118,11 +118,12 @@ body::before {
 
   .type-display {
     font-family: var(--font-heading), var(--font-body), sans-serif;
-    font-size: clamp(2.75rem, 6vw, 4.75rem);
-    line-height: 0.96;
+    font-size: clamp(2.2rem, 7vw, 4.75rem);
+    line-height: 0.98;
     letter-spacing: var(--text-display-tracking);
     font-weight: 600;
-    text-wrap: balance;
+    overflow-wrap: anywhere;
+    text-wrap: pretty;
   }
 
   .type-title {
@@ -312,15 +313,15 @@ body::before {
     position: relative;
     overflow: hidden;
     border-radius: 2rem;
-    border: 1px solid hsl(var(--border) / 0.52);
+    border: 1px solid hsl(var(--border) / 0.46);
     background:
-      radial-gradient(900px 360px at -5% -10%, hsl(var(--primary) / 0.14), transparent 55%),
-      radial-gradient(760px 320px at 110% 0%, hsl(var(--primary-2) / 0.12), transparent 52%),
-      linear-gradient(180deg, hsl(var(--surface) / 0.88), hsl(var(--surface-2) / 0.66));
+      radial-gradient(900px 360px at -5% -10%, hsl(var(--primary) / 0.08), transparent 55%),
+      radial-gradient(760px 320px at 110% 0%, hsl(var(--primary-2) / 0.06), transparent 52%),
+      linear-gradient(180deg, hsl(var(--surface) / 0.9), hsl(var(--surface-2) / 0.78));
     box-shadow:
-      0 0 0 1px hsl(var(--border) / 0.45),
-      0 20px 38px hsl(20 30% 5% / 0.3),
-      inset 0 1px 0 hsl(35 20% 100% / 0.04);
+      0 0 0 1px hsl(var(--border) / 0.36),
+      0 14px 28px hsl(20 30% 5% / 0.18),
+      inset 0 1px 0 hsl(35 20% 100% / 0.025);
   }
 
   .page-hero::before {
@@ -330,8 +331,8 @@ body::before {
     border-radius: inherit;
     pointer-events: none;
     background:
-      linear-gradient(135deg, hsl(0 0% 100% / 0.05), transparent 24%, transparent 70%, hsl(var(--primary) / 0.08)),
-      linear-gradient(180deg, transparent, hsl(0 0% 0% / 0.12));
+      linear-gradient(135deg, hsl(0 0% 100% / 0.025), transparent 24%, transparent 70%, hsl(var(--primary) / 0.04)),
+      linear-gradient(180deg, transparent, hsl(0 0% 0% / 0.09));
   }
 
   .page-panel {
@@ -367,8 +368,10 @@ body::before {
     position: relative;
     overflow: hidden;
     border: 1px solid hsl(var(--border) / 0.38);
-    background: linear-gradient(180deg, hsl(var(--surface) / 0.42), hsl(var(--surface) / 0.3));
-    box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.03);
+    background: linear-gradient(180deg, hsl(var(--surface) / 0.5), hsl(var(--surface) / 0.38));
+    box-shadow:
+      0 10px 24px hsl(20 30% 5% / 0.12),
+      inset 0 1px 0 hsl(0 0% 100% / 0.02);
   }
 
   .control-chip {
@@ -432,6 +435,27 @@ body::before {
     box-shadow:
       0 0 0 2px hsl(var(--primary) / 0.12),
       inset 0 1px 0 hsl(0 0% 100% / 0.03);
+  }
+}
+
+@media (min-width: 40rem) {
+  @layer components {
+    .type-display {
+      text-wrap: balance;
+    }
+  }
+}
+
+@media (max-width: 39.9375rem) {
+  @layer base {
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+      text-wrap: pretty;
+    }
   }
 }
 

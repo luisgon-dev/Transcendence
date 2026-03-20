@@ -36,25 +36,25 @@ export default function LandingPage() {
 
   return (
     <div className="grid gap-10">
-      <section className="page-hero p-6 sm:p-8">
+      <section className="page-hero p-6 sm:p-8 md:p-10">
         <p className="type-kicker text-primary">Transcendence</p>
-        <h1 className="type-display mt-4 max-w-5xl">
+        <h1 className="type-display mt-4 max-w-4xl">
           Patch-ready League and TFT tools built for players first.
         </h1>
-        <p className="type-lead mt-4">
-          Check what is winning, compare builds and comps, and pull up player pages without digging through menus.
+        <p className="type-lead mt-4 max-w-2xl">
+          Start with the live League surface, then branch into TFT and deeper player research once you know where you are headed.
         </p>
-        <div className="mt-6 flex flex-wrap gap-2">
+        <div className="mt-7 flex flex-wrap items-center gap-3">
           <Link
-            href="/lol"
-            className="type-ui rounded-full border border-primary/45 bg-primary/12 px-4 py-2.5 font-semibold text-primary"
+            href="/lol/tierlist"
+            className="type-ui inline-flex min-h-12 items-center justify-center rounded-full bg-primary px-5 py-3 font-semibold text-bg transition hover:bg-primary/92"
           >
-            Explore LoL
+            Browse LoL tier list
           </Link>
           {TFT_FRONTEND_ENABLED ? (
             <Link
               href="/tft"
-              className="type-ui inline-flex items-center border-b border-border/55 px-1 py-2 text-fg/80 transition hover:border-primary/35 hover:text-fg"
+              className="type-ui inline-flex items-center border-b border-border/45 px-1 py-2 text-fg/72 transition hover:border-border/70 hover:text-fg"
             >
               Explore TFT
             </Link>

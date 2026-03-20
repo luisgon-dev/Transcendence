@@ -8,13 +8,13 @@ import { SiteHeader } from "@/components/SiteHeader";
 
 const headingFont = Space_Grotesk({
   subsets: ["latin"],
-  variable: "--font-sora",
+  variable: "--font-heading",
   display: "swap"
 });
 
 const bodyFont = Plus_Jakarta_Sans({
   subsets: ["latin"],
-  variable: "--font-manrope",
+  variable: "--font-body",
   display: "swap"
 });
 
@@ -34,7 +34,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${headingFont.variable} ${bodyFont.variable}`}>
-      <body className="bg-aurora font-[var(--font-manrope)] antialiased">
+      <body className="bg-aurora antialiased">
         <SiteHeader />
         <main className="mx-auto w-full max-w-[1440px] px-4 py-8 md:px-6 lg:px-8 md:py-12">
           {children}

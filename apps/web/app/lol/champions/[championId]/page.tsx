@@ -225,7 +225,7 @@ export default async function ChampionDetailPage({
           />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="font-[var(--font-sora)] text-2xl font-semibold tracking-tight sm:text-3xl">
+              <h1 className="type-title sm:text-[2.35rem]">
                 {champName}
               </h1>
               <TierBadge tier={heroTier} size="md" />
@@ -284,7 +284,7 @@ export default async function ChampionDetailPage({
 
       {/* ── Win Rates Table ── */}
       <Card className="p-5">
-        <h2 className="font-[var(--font-sora)] text-lg font-semibold">
+        <h2 className="type-section">
           Win Rates
         </h2>
         {!winrates ? (
@@ -339,7 +339,7 @@ export default async function ChampionDetailPage({
       <div className="grid gap-6 md:grid-cols-2">
         {/* ── Builds ── */}
         <Card className="p-5" id="builds">
-          <h2 className="font-[var(--font-sora)] text-lg font-semibold">
+          <h2 className="type-section">
             Builds
           </h2>
           {!builds ? (
@@ -409,7 +409,7 @@ export default async function ChampionDetailPage({
 
         {/* ── Matchups ── */}
         <Card className="p-5">
-          <h2 className="font-[var(--font-sora)] text-lg font-semibold">
+          <h2 className="type-section">
             Matchups
           </h2>
           {!matchups ? (

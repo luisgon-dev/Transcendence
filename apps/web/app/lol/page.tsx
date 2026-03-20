@@ -55,7 +55,7 @@ export default async function HomePage({
 
   return (
     <div className="grid gap-10">
-      <section className="glass-card mesh-highlight rounded-[2rem] p-6 sm:p-8 md:p-10">
+      <section className="page-hero p-6 sm:p-8 md:p-10">
         {/* Identity zone */}
         <div className="flex flex-wrap items-center gap-2">
           <Badge className="border-primary/40 bg-primary/10 text-primary">Patch {patch}</Badge>
@@ -63,10 +63,10 @@ export default async function HomePage({
           <Badge>{activeRegionLabel}</Badge>
         </div>
 
-        <h1 className="mt-4 max-w-2xl font-[var(--font-sora)] text-3xl font-semibold tracking-tight sm:text-4xl">
+        <h1 className="type-display mt-4 max-w-4xl">
           League of Legends picks, builds, and matchup tools for the current patch.
         </h1>
-        <p className="mt-2 max-w-2xl text-sm text-fg/75 sm:text-base">
+        <p className="type-lead mt-4 max-w-3xl">
           Start with the tier list, drill into champion pages by role, or pull up player history in a few clicks.
         </p>
 
@@ -77,12 +77,12 @@ export default async function HomePage({
         <div className="mt-8 space-y-3">
           <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} className="flex flex-wrap gap-2" />
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             {QUICK_LINKS.map((link) => (
               <Link
                 key={link.href}
                 href={`${link.href}${activeRegion !== "ALL" ? `${link.href.includes("?") ? "&" : "?"}region=${encodeURIComponent(activeRegion)}` : ""}`}
-                className="rounded-full border border-border/65 bg-white/[0.03] px-3 py-2 text-sm text-fg/80 transition hover:bg-white/[0.08] hover:text-fg active:bg-white/[0.10]"
+                className="control-chip type-ui"
               >
                 {link.label}
               </Link>
@@ -90,19 +90,20 @@ export default async function HomePage({
             <span className="mx-1 h-4 w-px bg-border/50" aria-hidden="true" />
             <Link
               href={`/lol/matchups${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
-              className="rounded-full border border-border/65 bg-white/[0.03] px-3 py-1.5 text-sm text-fg/80 transition hover:bg-white/[0.08] hover:text-fg"
+              className="control-chip type-ui"
             >
               Matchups
             </Link>
             <Link
               href={`/lol/pro-builds${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
-              className="rounded-full border border-primary/50 bg-primary/10 px-3 py-1.5 text-sm text-primary transition hover:bg-primary/20"
+              className="control-chip type-ui font-semibold"
+              data-active="true"
             >
               Pro Builds
             </Link>
             <Link
               href="/lol/summoners/na/Faker-KR1"
-              className="rounded-full border border-border/65 bg-white/[0.03] px-3 py-1.5 text-sm text-fg/80 transition hover:bg-white/[0.08] hover:text-fg"
+              className="control-chip type-ui"
             >
               Player Search
             </Link>
@@ -114,10 +115,10 @@ export default async function HomePage({
         <Card className="p-0">
           <div className="flex items-center justify-between border-b border-border/50 px-5 py-3.5">
             <div>
-              <h2 className="font-[var(--font-sora)] text-lg font-semibold">Top Champions · Platinum+</h2>
-              <p className="mt-0.5 text-xs text-muted">Best-performing picks for this patch</p>
+              <h2 className="type-section">Top Champions · Platinum+</h2>
+              <p className="type-ui mt-1 text-muted">Best-performing picks for this patch</p>
             </div>
-            <Link href={`/lol/tierlist${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`} className="text-xs text-primary hover:underline">
+            <Link href={`/lol/tierlist${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`} className="type-ui font-semibold text-primary hover:underline">
               View full tier list
             </Link>
           </div>
@@ -172,7 +173,7 @@ export default async function HomePage({
 
         <div className="grid content-start gap-5">
           <Card className="p-5">
-            <h2 className="font-[var(--font-sora)] text-lg font-semibold">Hot Right Now</h2>
+            <h2 className="type-section">Hot Right Now</h2>
             <div className="mt-4 grid gap-2">
               {trendingRows.length === 0 ? (
                 <p className="text-sm text-muted">No featured champions to show right now.</p>
@@ -184,7 +185,7 @@ export default async function HomePage({
                     <Link
                       key={`${entry.championId}-trend`}
                       href={`/lol/champions/${entry.championId}?role=${entry.role}${activeRegion !== "ALL" ? `&region=${encodeURIComponent(activeRegion)}` : ""}`}
-                      className="flex items-center gap-3 rounded-lg border border-border/60 bg-white/[0.03] px-3 py-2.5 transition hover:bg-white/[0.08]"
+                      className="flex items-center gap-3 border-b border-border/20 py-2.5 transition hover:border-border/45"
                     >
                       <Image
                         src={championIconUrl(version, champ?.id ?? "Unknown")}
@@ -206,29 +207,33 @@ export default async function HomePage({
             </div>
           </Card>
 
-          <Card className="border-primary/30 bg-gradient-to-br from-primary/8 to-primary-2/5 p-5">
-            <h2 className="font-[var(--font-sora)] text-base font-semibold text-primary">Player Tools</h2>
-            <p className="mt-1.5 text-sm text-fg/80">
+          <Card className="p-5">
+            <p className="type-kicker text-primary">Player Tools</p>
+            <h2 className="type-section mt-2 text-primary">Builds, matchups, and player routes</h2>
+            <p className="type-ui mt-2 text-fg/80">
               Matchup breakdowns, pro builds, and player profiles.
             </p>
-            <div className="mt-3.5 flex flex-wrap gap-2">
+            <div className="mt-4 grid gap-3 border-t border-border/25 pt-4">
               <Link
                 href={`/lol/matchups${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
-                className="inline-flex rounded-md border border-primary/40 bg-primary/15 px-3 py-1.5 text-sm font-medium text-primary transition hover:bg-primary/25"
+                className="type-ui inline-flex items-center justify-between gap-3 text-fg/84 transition hover:text-fg"
               >
-                Matchups
+                <span>Matchups</span>
+                <span className="text-primary" aria-hidden="true">/</span>
               </Link>
               <Link
                 href={`/lol/pro-builds${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
-                className="inline-flex rounded-md border border-border/70 bg-white/[0.05] px-3 py-1.5 text-sm text-fg/85 transition hover:bg-white/[0.10]"
+                className="type-ui inline-flex items-center justify-between gap-3 border-t border-border/20 pt-3 text-fg/84 transition hover:text-fg"
               >
-                Pro Builds
+                <span>Pro Builds</span>
+                <span className="text-primary" aria-hidden="true">/</span>
               </Link>
               <Link
                 href="/lol/summoners/na/Faker-KR1"
-                className="inline-flex rounded-md border border-border/70 bg-white/[0.05] px-3 py-1.5 text-sm text-fg/85 transition hover:bg-white/[0.10]"
+                className="type-ui inline-flex items-center justify-between gap-3 border-t border-border/20 pt-3 text-fg/84 transition hover:text-fg"
               >
-                Player Page
+                <span>Player Page</span>
+                <span className="text-primary" aria-hidden="true">/</span>
               </Link>
             </div>
           </Card>

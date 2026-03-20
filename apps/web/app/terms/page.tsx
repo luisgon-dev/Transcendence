@@ -10,16 +10,17 @@ const GITHUB_REPO_URL = "https://github.com/luisgon-dev/Transcendence";
 export default function TermsPage() {
   return (
     <article className="mx-auto max-w-3xl space-y-10">
-      <header>
-        <h1 className="font-[var(--font-sora)] text-2xl font-bold text-fg md:text-3xl">
+      <header className="page-hero p-6 md:p-8">
+        <p className="type-kicker text-primary">Legal</p>
+        <h1 className="type-title mt-3 md:text-[2.3rem]">
           Terms &amp; Conditions
         </h1>
-        <p className="mt-2 text-sm text-muted">Last updated: March 2026</p>
+        <p className="type-ui mt-3 text-muted">Last updated: March 2026</p>
       </header>
 
       {/* ── Section 1: Riot Games Disclaimer ── */}
       <section className="space-y-3">
-        <h2 className="font-[var(--font-sora)] text-lg font-semibold text-fg">
+        <h2 className="type-section text-fg">
           Riot Games Disclaimer
         </h2>
         <div className="rounded-lg border border-border/60 bg-surface/50 p-4">
@@ -58,7 +59,7 @@ export default function TermsPage() {
 
       {/* ── Section 2: Terms of Service ── */}
       <section className="space-y-3">
-        <h2 className="font-[var(--font-sora)] text-lg font-semibold text-fg">
+        <h2 className="type-section text-fg">
           Terms of Service
         </h2>
         <div className="space-y-3 text-sm leading-relaxed text-muted">
@@ -124,7 +125,7 @@ export default function TermsPage() {
 
       {/* ── Section 3: Privacy Policy ── */}
       <section className="space-y-3">
-        <h2 className="font-[var(--font-sora)] text-lg font-semibold text-fg">
+        <h2 className="type-section text-fg">
           Privacy Policy
         </h2>
         <div className="space-y-3 text-sm leading-relaxed text-muted">
@@ -201,7 +202,7 @@ export default function TermsPage() {
 
       {/* ── Section 4: Open Source License ── */}
       <section className="space-y-3">
-        <h2 className="font-[var(--font-sora)] text-lg font-semibold text-fg">
+        <h2 className="type-section text-fg">
           Open Source License
         </h2>
         <p className="text-sm leading-relaxed text-muted">

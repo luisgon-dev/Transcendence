@@ -25,8 +25,8 @@ export default async function TftItemDetailPage({
   const iconSrc = tftIconUrl(entity.icon);
 
   return (
-    <Card className="grid gap-4 p-6">
-      <Link href="/tft/items" className="text-sm text-primary hover:underline">Back to items</Link>
+    <Card className="page-panel grid gap-4 p-6">
+      <Link href="/tft/items" className="type-ui font-semibold text-primary hover:underline">Back to items</Link>
       <div className="flex items-center gap-4">
         {iconSrc ? (
           <Image src={iconSrc} alt={entity.name} width={64} height={64} className="rounded-xl" unoptimized />
@@ -36,11 +36,12 @@ export default async function TftItemDetailPage({
           </div>
         )}
         <div>
-          <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">{entity.name}</h1>
-          <p className="text-sm text-muted">Item details</p>
+          <p className="type-kicker text-primary">TFT Item</p>
+          <h1 className="type-title mt-2 sm:text-[2.2rem]">{entity.name}</h1>
+          <p className="type-ui mt-2 text-muted">Item details</p>
         </div>
       </div>
-      {entity.description && <p className="text-sm text-fg/80">{entity.description}</p>}
+      {entity.description && <p className="type-ui text-fg/80">{entity.description}</p>}
     </Card>
   );
 }

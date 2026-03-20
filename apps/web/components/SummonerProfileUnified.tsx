@@ -503,6 +503,25 @@ export function SummonerProfileClient({
     return (history?.items ?? []).slice(0, 10).map((match) => match.win);
   }, [history?.items]);
 
+  const quickStats = useMemo(() => {
+    const matches = history?.items ?? [];
+    if (matches.length === 0) return null;
+
+    const total = matches.length;
+    const wins = matches.filter((match) => match.win).length;
+    const avgKda =
+      matches.reduce((sum, match) => sum + matchKdaRatio(match), 0) / total;
+    const avgDamage =
+      matches.reduce((sum, match) => sum + match.damageToChamps, 0) / total;
+
+    return {
+      total,
+      winRate: wins / total,
+      avgKda,
+      avgDamage
+    };
+  }, [history?.items]);
+
   useEffect(() => {
     if (!history || !expandedMatchId) return;
     if (visibleMatches.some((match) => match.matchId === expandedMatchId)) return;
@@ -709,6 +728,10 @@ export function SummonerProfileClient({
   }, [profile?.flexRank, profile?.soloRank]);
 
   const dataAge = profile?.profileAge?.ageDescription ?? "updated recently";
+  const featuredChampion = (profile?.topChampions ?? [])[0];
+  const featuredChampionName = featuredChampion
+    ? championStatic?.champions[String(featuredChampion.championId)]?.name ?? featuredChampion.championName
+    : null;
   const sortOptions: Array<{ value: MatchSortOption; label: string }> = [
     { value: "DATE_DESC", label: "Most Recent" },
     { value: "KDA_DESC", label: "Best KDA" },
@@ -717,63 +740,165 @@ export function SummonerProfileClient({
 
   return (
     <div className="grid gap-8">
-      <Card className="rounded-3xl p-5 md:p-8">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-4">
-            {profile && championStatic ? (
-              <Image
-                src={profileIconUrl(championStatic.version, profile.profileIconId)}
-                alt={`${title} icon`}
-                width={72}
-                height={72}
-                className="rounded-2xl border border-border/80"
-              />
-            ) : (
-              <div className="h-[72px] w-[72px] rounded-2xl border border-border/70 bg-surface/70" />
-            )}
-            <div className="min-w-0">
-              <h1 className="truncate font-[var(--font-sora)] text-3xl font-semibold">{title}</h1>
-              <p className="text-sm text-fg/80">{profile ? `Level ${profile.summonerLevel} · ${dataAge}` : region.toUpperCase()}</p>
-              {recentForm.length > 0 ? (
-                <div className="mt-2">
-                  <p className="text-[11px] uppercase tracking-wide text-fg/70">Recent Form</p>
-                  <div className="mt-1 flex flex-wrap items-center gap-1" aria-label="Recent match outcomes (latest first)">
-                    {recentForm.map((win, idx) => (
-                      <span
-                        key={`${win ? "w" : "l"}-${idx}`}
-                        className={`h-2.5 w-6 rounded-full ${win ? "bg-success/70" : "bg-danger/70"}`}
-                        aria-label={win ? "Win" : "Loss"}
-                        title={win ? "Win" : "Loss"}
-                      />
-                    ))}
-                  </div>
+      <Card className="profile-hero-card rounded-[2rem] p-5 md:p-8">
+        <div className="relative grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.78fr)] xl:items-end">
+          <div className="grid gap-5">
+            <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-center">
+              {profile && championStatic ? (
+                <Image
+                  src={profileIconUrl(championStatic.version, profile.profileIconId)}
+                  alt={`${title} icon`}
+                  width={88}
+                  height={88}
+                  className="rounded-[1.6rem] border border-border/80 shadow-[0_18px_26px_hsl(20_30%_5%_/_0.28)]"
+                />
+              ) : (
+                <div className="h-[88px] w-[88px] rounded-[1.6rem] border border-border/70 bg-surface/70" />
+              )}
+              <div className="min-w-0">
+                <p className="type-kicker text-primary/90">League profile</p>
+                <h1 className="mt-2 truncate font-heading text-[clamp(2.2rem,5vw,3.7rem)] font-semibold leading-[0.98] tracking-[-0.05em]">
+                  {title}
+                </h1>
+                <p className="mt-2 type-ui text-fg/78">
+                  {profile ? `Level ${profile.summonerLevel} · ${dataAge}` : region.toUpperCase()}
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <span className="profile-stat-pill">
+                    <span className="type-kicker text-primary/80">Region</span>
+                    <span className="type-ui text-fg">{region.toUpperCase()}</span>
+                  </span>
+                  <span className="profile-stat-pill">
+                    <span className="type-kicker text-primary/80">Ranked</span>
+                    <span className={`type-ui ${rankColorClass(rankedEntries[0]?.rank?.tier)}`}>
+                      {rankedEntries[0]
+                        ? `${rankTierDisplayLabel(rankedEntries[0].rank.tier)} ${rankedEntries[0].rank.division}`
+                        : "Unranked"}
+                    </span>
+                  </span>
+                  {quickStats ? (
+                    <span className="profile-stat-pill">
+                      <span className="type-kicker text-primary/80">Recent WR</span>
+                      <span className="type-ui text-fg">{formatPercent(quickStats.winRate)}</span>
+                    </span>
+                  ) : null}
                 </div>
-              ) : null}
+              </div>
+            </div>
+
+            {recentForm.length > 0 ? (
+              <div className="grid gap-2">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="type-kicker text-fg/68">Recent Form</p>
+                  <p className="text-xs text-fg/55">Latest {recentForm.length} games</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5" aria-label="Recent match outcomes (latest first)">
+                  {recentForm.map((win, idx) => (
+                    <span
+                      key={`${win ? "w" : "l"}-${idx}`}
+                      className={`h-3 w-9 rounded-full transition-transform duration-200 ${
+                        win ? "bg-success/75 shadow-[0_0_18px_hsl(var(--success)_/_0.15)]" : "bg-danger/70"
+                      }`}
+                      aria-label={win ? "Win" : "Loss"}
+                      title={win ? "Win" : "Loss"}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {accepted?.message ? (
+              <p className="rounded-2xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm text-fg/84">
+                {friendlyAcceptedMessage(accepted.message)}
+              </p>
+            ) : null}
+            {error?.message ? (
+              <p className="rounded-2xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+                {error.message}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="surface-card grid gap-3 rounded-[1.5rem] p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="type-kicker text-primary/85">Snapshot</p>
+                <p className="mt-1 text-sm text-fg/66">Fast read on current ranked form.</p>
+              </div>
+              <Badge className="bg-black/15 text-fg/72">
+                {history ? `${history.totalCount.toLocaleString()} tracked` : "Awaiting history"}
+              </Badge>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+              <div className="profile-metric-tile">
+                <p className="type-kicker text-primary/78">Ranked</p>
+                <p className={`mt-2 text-xl font-semibold ${rankColorClass(rankedEntries[0]?.rank?.tier)}`}>
+                  {rankedEntries[0]
+                    ? `${rankTierDisplayLabel(rankedEntries[0].rank.tier)} ${rankedEntries[0].rank.division}`
+                    : "Unranked"}
+                </p>
+                <p className="mt-1 text-sm text-fg/66">
+                  {rankedEntries[0]
+                    ? `${rankedEntries[0].rank.leaguePoints} LP`
+                    : "No ranked ladder games yet"}
+                </p>
+              </div>
+              <div className="profile-metric-tile">
+                <p className="type-kicker text-primary/78">Recent sample</p>
+                <p className="mt-2 text-xl font-semibold text-fg">
+                  {quickStats ? formatPercent(quickStats.winRate) : "Pending"}
+                </p>
+                <p className="mt-1 text-sm text-fg/66">
+                  {quickStats
+                    ? `${quickStats.total} games · ${quickStats.avgKda.toFixed(2)} avg KDA`
+                    : "Waiting for recent matches"}
+                </p>
+              </div>
+              <div className="profile-metric-tile">
+                <p className="type-kicker text-primary/78">Champion focus</p>
+                <p className="mt-2 text-xl font-semibold text-fg">
+                  {featuredChampionName ?? "Loading"}
+                </p>
+                <p className="mt-1 text-sm text-fg/66">
+                  {featuredChampion
+                    ? `${featuredChampion.games} games · ${formatPercent(featuredChampion.winRate)} win rate`
+                    : "Top champion pool updating"}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <Button variant="outline" onClick={queueRefresh} disabled={busy}>
+                {busy ? "Starting..." : "Update Now"}
+              </Button>
+              <FavoriteButton region={region} gameName={gameName} tagLine={tagLine} />
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" onClick={queueRefresh} disabled={busy}>{busy ? "Starting..." : "Update Now"}</Button>
-            <FavoriteButton region={region} gameName={gameName} tagLine={tagLine} />
-          </div>
         </div>
-        {accepted?.message ? <p className="mt-3 text-sm text-fg/85">{friendlyAcceptedMessage(accepted.message)}</p> : null}
-        {error?.message ? <p className="mt-3 text-sm text-danger">{error.message}</p> : null}
       </Card>
 
       {!profile ? (
-        <Card className="p-5"><Skeleton className="h-16 w-full" /></Card>
+        <Card className="profile-section-card p-5">
+          <Skeleton className="h-16 w-full" />
+        </Card>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-12 lg:items-start">
-          <aside className="grid content-start gap-5 lg:col-span-3 xl:col-span-3 lg:self-start">
-            <Card className="p-4">
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="font-[var(--font-sora)] text-lg font-semibold">Ranked</h2>
-                <Badge>{profile.rankAge?.ageDescription ?? "updated recently"}</Badge>
+        <div className="grid gap-6 xl:grid-cols-[minmax(280px,0.32fr)_minmax(0,1fr)] xl:items-start">
+          <aside className="grid content-start gap-5 xl:sticky xl:top-24">
+            <Card className="profile-section-card p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="type-kicker text-primary/82">Ranked snapshot</p>
+                  <h2 className="mt-2 type-section">Queues and ladder movement</h2>
+                </div>
+                <Badge className="bg-black/10 text-fg/72">
+                  {profile.rankAge?.ageDescription ?? "updated recently"}
+                </Badge>
               </div>
               {rankedEntries.length === 0 ? (
-                <p className="mt-3 text-sm text-fg/80">No ranked results yet. This player is currently unranked in Solo/Duo and Flex.</p>
+                <p className="mt-4 text-sm text-fg/80">
+                  No ranked results yet. This player is currently unranked in Solo/Duo and Flex.
+                </p>
               ) : (
-                <div className="mt-3 grid gap-2 text-sm">
+                <div className="mt-4 grid gap-4">
                   {rankedEntries.map(({ label, rank }) => {
                     const emblem = rankEmblemUrl(rank.tier);
                     const totalGames = rank.wins + rank.losses;
@@ -781,32 +906,37 @@ export function SummonerProfileClient({
                     return (
                       <div
                         key={label}
-                        className="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-2.5 rounded-xl border border-border/60 bg-surface/50 px-2.5 py-2"
+                        className="grid gap-3 rounded-[1.15rem] border border-border/35 bg-transparent px-3 py-3 sm:grid-cols-[68px_minmax(0,1fr)] sm:items-center"
                       >
                         {emblem ? (
-                          <div className="flex h-[72px] w-[72px] items-center justify-center rounded-lg border border-border/50 bg-surface/70 p-1">
+                          <div className="flex h-[68px] w-[68px] items-center justify-center rounded-[1rem] border border-border/45 bg-surface/65 p-1">
                             <Image
                               src={emblem}
                               alt={`${rankTierDisplayLabel(rank.tier)} emblem`}
-                              width={72}
-                              height={72}
+                              width={68}
+                              height={68}
                               unoptimized
-                              sizes="72px"
+                              sizes="68px"
                               className="h-full w-full select-none object-contain"
                             />
                           </div>
                         ) : (
-                          <div className="h-[72px] w-[72px] rounded-lg border border-border/60 bg-surface/70" />
+                          <div className="h-[68px] w-[68px] rounded-[1rem] border border-border/60 bg-surface/70" />
                         )}
                         <div className="min-w-0">
-                          <p className="text-[11px] uppercase tracking-wide text-fg/70">{label}</p>
-                          <p className={`truncate font-semibold ${rankColorClass(rank?.tier)}`}>
-                            {rankTierDisplayLabel(rank.tier)} {rank.division} · {rank.leaguePoints} LP
+                          <p className="type-kicker text-fg/62">{label}</p>
+                          <p className={`mt-2 truncate text-lg font-semibold ${rankColorClass(rank?.tier)}`}>
+                            {rankTierDisplayLabel(rank.tier)} {rank.division}
                           </p>
-                          <p className="text-xs text-fg/80">
-                            {rank.wins}W {rank.losses}L
-                            {wr != null ? ` · ${formatPercent(wr, { input: "percent", decimals: 1 })}` : ""}
-                          </p>
+                          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-fg/72">
+                            <span>{rank.leaguePoints} LP</span>
+                            <span>{rank.wins}W {rank.losses}L</span>
+                            {wr != null ? (
+                              <span className={winRateColorClass(wr)}>
+                                {formatPercent(wr, { input: "percent", decimals: 1 })}
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
                     );
@@ -814,57 +944,86 @@ export function SummonerProfileClient({
                 </div>
               )}
               {unrankedQueues.length > 0 ? (
-                <div className="mt-2 grid gap-1">
+                <div className="mt-3 grid gap-1">
                   {unrankedQueues.map((label) => (
-                    <p key={label} className="text-xs text-fg/75">
+                    <p key={label} className="text-xs text-fg/72">
                       {label}
                     </p>
                   ))}
                 </div>
               ) : null}
             </Card>
-            <Card className="p-4">
-              <h2 className="font-[var(--font-sora)] text-lg font-semibold">Top Champions</h2>
-              <div className="mt-3 grid gap-2">
-                {(profile.topChampions ?? []).slice(0, 6).map((c) => {
+
+            <Card className="profile-section-card p-5">
+              <div>
+                <p className="type-kicker text-primary/82">Champion pool</p>
+                <h2 className="mt-2 type-section">Top picks in recent tracked games</h2>
+              </div>
+              <div className="mt-4 grid gap-3">
+                {(profile.topChampions ?? []).slice(0, 6).map((c, index) => {
                   const champ = championStatic?.champions[String(c.championId)];
                   return (
-                    <Link key={c.championId} href={`/lol/champions/${c.championId}`} className="rounded-lg border border-border/60 bg-surface/50 px-2.5 py-2 text-sm hover:bg-surface/70">
-                      {champ?.name ?? c.championName} · {c.games} games · <span className={winRateColorClass(c.winRate)}>{formatPercent(c.winRate)}</span>
+                    <Link
+                      key={c.championId}
+                      href={`/lol/champions/${c.championId}`}
+                      className="group grid gap-2 rounded-[1.05rem] border border-border/30 bg-transparent px-3 py-3 transition hover:border-primary/24 hover:bg-primary/6"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="type-kicker text-fg/55">#{index + 1}</p>
+                          <p className="mt-1 text-sm font-semibold text-fg group-hover:text-primary">
+                            {champ?.name ?? c.championName}
+                          </p>
+                        </div>
+                        <span className={`text-sm font-semibold ${winRateColorClass(c.winRate)}`}>
+                          {formatPercent(c.winRate)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 text-xs text-fg/64">
+                        <span>{c.games} games tracked</span>
+                        <span>{c.kdaRatio.toFixed(2)} KDA</span>
+                      </div>
                     </Link>
                   );
                 })}
               </div>
             </Card>
+
             <LiveGameCard region={region} gameName={gameName} tagLine={tagLine} />
           </aside>
 
-          <section className="grid gap-5 lg:col-span-9 xl:col-span-9">
-            <Card className="p-5">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h2 className="font-[var(--font-sora)] text-xl font-semibold">Match History</h2>
-                  <div className="mt-2 flex flex-wrap gap-2">
+          <section className="grid gap-5">
+            <Card className="profile-section-card rounded-[1.75rem] p-5 md:p-6">
+              <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(310px,auto)] xl:items-start">
+                <div className="grid gap-4">
+                  <div>
+                    <p className="type-kicker text-primary/82">Match history</p>
+                    <h2 className="mt-2 font-heading text-[clamp(1.75rem,3vw,2.35rem)] font-semibold leading-[1.02] tracking-[-0.04em]">
+                      Recent results with clearer scan paths
+                    </h2>
+                    <p className="mt-2 max-w-2xl text-sm text-fg/70">
+                      Filter by queue or champion, then open any game for side-by-side lane and team detail.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-2">
                     {queueOptions.map((option) => (
                       <button
                         key={option.value}
-                        className={`rounded-full border px-3 py-1 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 ${
-                          option.value === queue
-                            ? "border-primary/45 bg-primary/15 text-primary"
-                            : "border-border/70 bg-surface/50 text-fg/90"
-                        }`}
+                        className="control-chip type-ui focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45"
                         onClick={() => {
                           setQueue(option.value);
                           setPage(1);
                         }}
                         aria-pressed={option.value === queue}
+                        data-active={option.value === queue}
                       >
                         {option.label}
                       </button>
                     ))}
                   </div>
                 </div>
-                <div className="grid gap-2 sm:grid-cols-[minmax(200px,1fr)_auto]">
+
+                <div className="surface-card grid gap-3 rounded-[1.25rem] p-4">
                   <div>
                     <label htmlFor="match-champion-filter" className="sr-only">
                       Filter matches by champion
@@ -878,7 +1037,7 @@ export function SummonerProfileClient({
                         setChampionFilter(event.currentTarget.value);
                         setPage(1);
                       }}
-                      className="h-9 min-w-[220px] text-xs"
+                      className="h-10 min-w-[220px] bg-black/10 text-sm"
                       spellCheck={false}
                     />
                     <datalist id="match-champion-options">
@@ -898,7 +1057,7 @@ export function SummonerProfileClient({
                         setSort(normalizeInitialSort(event.currentTarget.value));
                         setPage(1);
                       }}
-                      className="h-9 rounded-xl border border-border/70 bg-surface/50 px-3 text-xs text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45"
+                      className="h-10 w-full rounded-xl border border-border/70 bg-black/10 px-3 text-sm text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45"
                     >
                       {sortOptions.map((option) => (
                         <option key={option.value} value={option.value}>
@@ -907,19 +1066,22 @@ export function SummonerProfileClient({
                       ))}
                     </select>
                   </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge className="bg-black/15 text-fg/72">
+                      Page {history?.page ?? page}/{history?.totalPages ?? 1}
+                    </Badge>
+                    <Badge className="bg-black/15 text-fg/72">
+                      {(history?.totalCount ?? 0).toLocaleString()} total
+                    </Badge>
+                    <Badge className="bg-black/15 text-fg/72">{visibleMatches.length} shown</Badge>
+                  </div>
                 </div>
               </div>
 
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <Badge>Page {history?.page ?? page}/{history?.totalPages ?? 1}</Badge>
-                <Badge>{history?.totalCount?.toLocaleString() ?? 0} total</Badge>
-                <Badge>{visibleMatches.length} shown</Badge>
-              </div>
+              {historyError ? <p className="mt-4 text-sm text-danger">{historyError}</p> : null}
+              {historyBusy && !history ? <Skeleton className="mt-4 h-16 w-full" /> : null}
 
-              {historyError ? <p className="mt-3 text-sm text-danger">{historyError}</p> : null}
-              {historyBusy && !history ? <Skeleton className="mt-3 h-16 w-full" /> : null}
-
-              <div className="mt-4 grid gap-3">
+              <div className="mt-5 grid gap-4">
                 {visibleMatches.map((m) => {
                   const expanded = expandedMatchId === m.matchId;
                   const d = details[m.matchId];
@@ -943,156 +1105,179 @@ export function SummonerProfileClient({
                     <motion.div
                       key={m.matchId}
                       layout={!prefersReducedMotion}
-                      className={`group relative overflow-hidden rounded-2xl border p-3 ${
-                        m.win ? "border-success/40 bg-success/10" : "border-danger/40 bg-danger/10"
-                      }`}
+                      className={`match-card-shell ${
+                        m.win
+                          ? "match-card-shell--win border-success/28"
+                          : "match-card-shell--loss border-danger/28"
+                      } rounded-[1.55rem] border`}
                     >
                       <span
-                        className={`absolute inset-y-0 left-0 w-1 ${m.win ? "bg-success/75" : "bg-danger/75"}`}
-                        aria-hidden="true"
-                      />
-                      <div
-                        className={`pointer-events-none absolute inset-0 ${
-                          m.win ? "bg-gradient-to-r from-success/10 to-transparent" : "bg-gradient-to-r from-danger/10 to-transparent"
-                        }`}
+                        className={`absolute inset-y-0 left-0 w-1.5 ${m.win ? "bg-success/75" : "bg-danger/75"}`}
                         aria-hidden="true"
                       />
                       <button
-                        className="relative z-10 w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45"
+                        className="relative z-10 w-full px-4 py-4 text-left focus-visible:outline-none md:px-5 md:py-5"
                         onClick={() => void toggleExpanded(m.matchId)}
                         aria-expanded={expanded}
                         aria-controls={matchPanelId}
                         aria-describedby={matchMetaId}
                         aria-label={`${m.win ? "Victory" : "Defeat"} on ${championName}. KDA ${m.kills}/${m.deaths}/${m.assists}. ${formatDurationSeconds(m.durationSeconds)}.`}
                       >
-                        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-                          <div className="grid gap-2">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <span className={`text-xs font-semibold ${m.win ? "text-success" : "text-danger"}`}>
+                        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.95fr)_auto] xl:items-center">
+                          <div className="grid gap-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span
+                                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-[0.16em] ${
+                                  m.win
+                                    ? "bg-success/15 text-success"
+                                    : "bg-danger/15 text-danger"
+                                }`}
+                              >
                                 {m.win ? "VICTORY" : "DEFEAT"}
                               </span>
-                              <span className="rounded-full border border-border/60 bg-surface/50 px-2 py-0.5 text-[11px] font-medium text-fg/95">
+                              <span className="rounded-full border border-border/60 bg-black/12 px-2.5 py-1 text-[11px] font-medium text-fg/92">
                                 {queueLabel}
                               </span>
-                              <span className="rounded-full border border-border/60 bg-surface/50 px-2 py-0.5 text-[11px] font-medium text-fg/95">
+                              <span className="rounded-full border border-border/60 bg-black/12 px-2.5 py-1 text-[11px] font-medium text-fg/92">
                                 {roleLabel}
                               </span>
-                              <span className="rounded-full border border-border/60 bg-surface/50 px-2 py-0.5 text-[11px] font-medium text-fg/95">
+                              <span className="rounded-full border border-border/60 bg-black/12 px-2.5 py-1 text-[11px] font-medium text-fg/92">
                                 {formatDurationSeconds(m.durationSeconds)}
                               </span>
                             </div>
-                            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                              <div className="flex min-w-0 items-center gap-2">
+                            <div className="grid gap-3 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
+                              <div className="flex min-w-0 items-center gap-3">
                                 {champion && championStatic ? (
                                   <Image
                                     src={championIconUrl(championStatic.version, champion.id)}
                                     alt={championName}
-                                    width={42}
-                                    height={42}
-                                    className="rounded-lg border border-border/60"
+                                    width={52}
+                                    height={52}
+                                    className="rounded-[1rem] border border-border/60 shadow-[0_10px_18px_hsl(20_30%_5%_/_0.22)]"
                                   />
                                 ) : (
-                                  <div className="h-[42px] w-[42px] rounded-lg border border-border/60 bg-surface/60" />
+                                  <div className="h-[52px] w-[52px] rounded-[1rem] border border-border/60 bg-surface/60" />
                                 )}
                                 <div className="min-w-0">
-                                  <p className="truncate text-sm font-semibold">{championName}</p>
-                                  <p id={matchMetaId} className="text-xs text-fg/80">
-                                    {formatRelativeTime(m.matchDate)} · {formatDateTimeMs(m.matchDate)}
+                                  <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
+                                    <p className="truncate text-lg font-semibold">{championName}</p>
+                                    <p className="text-xs text-fg/55">{formatRelativeTime(m.matchDate)}</p>
+                                  </div>
+                                  <p id={matchMetaId} className="mt-1 text-sm text-fg/72">
+                                    {formatDateTimeMs(m.matchDate)}
                                   </p>
                                 </div>
                               </div>
-                              <div className="rounded-lg border border-border/55 bg-surface/65 px-3 py-1.5 text-right shadow-[inset_0_1px_0_hsl(0_0%_100%_/_0.04)]">
-                                <p className="text-lg font-semibold leading-tight tracking-tight text-fg">
-                                  <span>{m.kills}</span>/<span className="text-danger/90">{m.deaths}</span>/<span>{m.assists}</span>
-                                </p>
-                                <p className="text-xs font-medium text-fg/85">
-                                  {matchKdaRatio(m).toFixed(2)} KDA · {m.csPerMin.toFixed(1)} CS/min
-                                </p>
-                              </div>
                             </div>
                           </div>
-                          <div className="grid gap-2">
-                            <div className="flex items-center justify-end gap-2">
-                              <div className="flex items-center gap-1" aria-label="Summoner spells">
-                                {spellIds.map((spellId, spellIdx) => {
-                                  const spellMeta = spellStatic?.spells[String(spellId)];
-                                  return spellMeta && spellStatic ? (
+                          <div className="grid gap-3">
+                            <div className="grid gap-3 rounded-[1.15rem] border border-white/7 bg-black/12 p-3 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
+                              <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-1.5" aria-label="Summoner spells">
+                                  {spellIds.map((spellId, spellIdx) => {
+                                    const spellMeta = spellStatic?.spells[String(spellId)];
+                                    return spellMeta && spellStatic ? (
+                                      <Image
+                                        key={`${m.matchId}-spell-${spellIdx}-${spellId}`}
+                                        src={summonerSpellIconUrl(spellStatic.version, spellMeta.id)}
+                                        alt={spellMeta.name}
+                                        title={spellMeta.name}
+                                        width={24}
+                                        height={24}
+                                        className="rounded-md border border-border/50"
+                                      />
+                                    ) : (
+                                      <div
+                                        key={`${m.matchId}-spell-empty-${spellIdx}-${spellId}`}
+                                        className="h-6 w-6 rounded-md border border-border/40 bg-surface/60"
+                                        aria-hidden="true"
+                                      />
+                                    );
+                                  })}
+                                </div>
+                                <div className="flex items-center gap-1.5" aria-label="Rune preview">
+                                  {primaryRuneMeta ? (
                                     <Image
-                                      key={`${m.matchId}-spell-${spellIdx}-${spellId}`}
-                                      src={summonerSpellIconUrl(spellStatic.version, spellMeta.id)}
-                                      alt={spellMeta.name}
-                                      title={spellMeta.name}
-                                      width={20}
-                                      height={20}
-                                      className="rounded-md border border-border/50"
+                                      src={runeIconUrl(primaryRuneMeta.icon)}
+                                      alt={primaryRuneMeta.name}
+                                      title={primaryRuneMeta.name}
+                                      width={24}
+                                      height={24}
+                                      className="rounded-full border border-border/40 bg-black/20 p-0.5"
+                                    />
+                                  ) : (
+                                    <span className="h-6 w-6 rounded-full border border-border/40 bg-black/20" aria-hidden="true" />
+                                  )}
+                                  {subStyleMeta ? (
+                                    <Image
+                                      src={runeIconUrl(subStyleMeta.icon)}
+                                      alt={subStyleMeta.name}
+                                      title={subStyleMeta.name}
+                                      width={24}
+                                      height={24}
+                                      className="rounded-full border border-border/40 bg-black/20 p-0.5"
+                                    />
+                                  ) : (
+                                    <span className="h-6 w-6 rounded-full border border-border/40 bg-black/20" aria-hidden="true" />
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-1.5 sm:justify-end" aria-label="Item build preview">
+                                {itemSlots.map((itemId, itemIdx) => {
+                                  if (!itemId) {
+                                    return (
+                                      <div
+                                        key={`${m.matchId}-item-empty-${itemIdx}`}
+                                        className="h-6 w-6 rounded-md border border-border/35 bg-surface/60"
+                                        aria-hidden="true"
+                                      />
+                                    );
+                                  }
+                                  const itemMeta = itemStatic?.items[String(itemId)];
+                                  return itemStatic ? (
+                                    <Image
+                                      key={`${m.matchId}-item-${itemIdx}-${itemId}`}
+                                      src={itemIconUrl(itemStatic.version, itemId)}
+                                      alt={itemMeta?.name ?? `Item ${itemId}`}
+                                      title={itemMeta?.name ?? `Item ${itemId}`}
+                                      width={24}
+                                      height={24}
+                                      className="rounded-md border border-border/35"
                                     />
                                   ) : (
                                     <div
-                                      key={`${m.matchId}-spell-empty-${spellIdx}-${spellId}`}
-                                      className="h-5 w-5 rounded-md border border-border/40 bg-surface/60"
+                                      key={`${m.matchId}-item-loading-${itemIdx}-${itemId}`}
+                                      className="h-6 w-6 rounded-md border border-border/35 bg-surface/60"
                                       aria-hidden="true"
                                     />
                                   );
                                 })}
                               </div>
-                              <div className="flex items-center gap-1" aria-label="Rune preview">
-                                {primaryRuneMeta ? (
-                                  <Image
-                                    src={runeIconUrl(primaryRuneMeta.icon)}
-                                    alt={primaryRuneMeta.name}
-                                    title={primaryRuneMeta.name}
-                                    width={20}
-                                    height={20}
-                                    className="rounded-full border border-border/40 bg-black/20 p-0.5"
-                                  />
-                                ) : (
-                                  <span className="h-5 w-5 rounded-full border border-border/40 bg-black/20" aria-hidden="true" />
-                                )}
-                                {subStyleMeta ? (
-                                  <Image
-                                    src={runeIconUrl(subStyleMeta.icon)}
-                                    alt={subStyleMeta.name}
-                                    title={subStyleMeta.name}
-                                    width={20}
-                                    height={20}
-                                    className="rounded-full border border-border/40 bg-black/20 p-0.5"
-                                  />
-                                ) : (
-                                  <span className="h-5 w-5 rounded-full border border-border/40 bg-black/20" aria-hidden="true" />
-                                )}
-                              </div>
                             </div>
-                            <div className="flex flex-wrap items-center justify-end gap-1" aria-label="Item build preview">
-                              {itemSlots.map((itemId, itemIdx) => {
-                                if (!itemId) {
-                                  return (
-                                    <div
-                                      key={`${m.matchId}-item-empty-${itemIdx}`}
-                                      className="h-5 w-5 rounded-md border border-border/35 bg-surface/60"
-                                      aria-hidden="true"
-                                    />
-                                  );
-                                }
-                                const itemMeta = itemStatic?.items[String(itemId)];
-                                return itemStatic ? (
-                                  <Image
-                                    key={`${m.matchId}-item-${itemIdx}-${itemId}`}
-                                    src={itemIconUrl(itemStatic.version, itemId)}
-                                    alt={itemMeta?.name ?? `Item ${itemId}`}
-                                    title={itemMeta?.name ?? `Item ${itemId}`}
-                                    width={20}
-                                    height={20}
-                                    className="rounded-md border border-border/35"
-                                  />
-                                ) : (
-                                  <div
-                                    key={`${m.matchId}-item-loading-${itemIdx}-${itemId}`}
-                                    className="h-5 w-5 rounded-md border border-border/35 bg-surface/60"
-                                    aria-hidden="true"
-                                  />
-                                );
-                              })}
+                            <div className="flex flex-wrap gap-2 text-xs text-fg/70">
+                              <span className="rounded-full border border-border/55 bg-black/12 px-2.5 py-1">
+                                {m.damageToChamps.toLocaleString()} damage
+                              </span>
+                              <span className="rounded-full border border-border/55 bg-black/12 px-2.5 py-1">
+                                {m.visionScore} vision
+                              </span>
+                              <span className="rounded-full border border-border/55 bg-black/12 px-2.5 py-1">
+                                {m.csPerMin.toFixed(1)} CS/min
+                              </span>
                             </div>
+                          </div>
+                          <div className="grid gap-2 xl:justify-items-end">
+                            <div className="rounded-[1.15rem] border border-white/8 bg-black/14 px-4 py-3 text-right shadow-[inset_0_1px_0_hsl(0_0%_100%_/_0.04)]">
+                              <p className="text-xl font-semibold leading-tight tracking-tight text-fg">
+                                <span>{m.kills}</span>/<span className="text-danger/90">{m.deaths}</span>/<span>{m.assists}</span>
+                              </p>
+                              <p className="mt-1 text-xs font-medium text-fg/82">
+                                {matchKdaRatio(m).toFixed(2)} KDA
+                              </p>
+                            </div>
+                            <span className="text-[11px] uppercase tracking-[0.16em] text-fg/48">
+                              {expanded ? "Collapse details" : "Expand details"}
+                            </span>
                           </div>
                         </div>
                       </button>
@@ -1106,7 +1291,7 @@ export function SummonerProfileClient({
                             className="overflow-hidden"
                             style={prefersReducedMotion ? { height: "auto", opacity: 1 } : undefined}
                           >
-                            <div className="mt-3 border-t border-border/35 pt-3">
+                            <div className="mt-4 border-t border-white/8 pt-4">
                               {detailBusy[m.matchId] ? <Skeleton className="h-12 w-full" /> : null}
                               {!detailBusy[m.matchId] && !d ? <p className="text-sm text-fg/75">Detailed rows are unavailable for this match.</p> : null}
                               {d
@@ -1134,7 +1319,7 @@ export function SummonerProfileClient({
                                     ) => {
                                       if (!participant) {
                                         return (
-                                          <div className="rounded-lg border border-dashed border-border/35 bg-surface/20 px-2 py-2 text-xs text-muted">
+                                          <div className="rounded-[1rem] border border-dashed border-border/35 bg-black/10 px-3 py-3 text-xs text-muted">
                                             {roleDisplayLabel(roleKey)} unavailable
                                           </div>
                                         );
@@ -1162,30 +1347,30 @@ export function SummonerProfileClient({
 
                                       return (
                                         <div
-                                          className={`rounded-lg border px-2 py-1.5 ${
+                                          className={`rounded-[1rem] border px-3 py-3 ${
                                             isCurrent
-                                              ? "border-primary/50 bg-primary/10"
-                                              : "border-border/25 bg-surface/30"
+                                              ? "border-primary/45 bg-primary/10 shadow-[0_0_20px_hsl(var(--primary)_/_0.08)]"
+                                              : "border-border/25 bg-black/10"
                                           }`}
                                         >
-                                          <div className="grid items-center gap-1.5 sm:grid-cols-[minmax(0,1fr)_auto]">
-                                            <div className="flex items-center gap-2">
+                                          <div className="grid items-center gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                                            <div className="flex items-center gap-3">
                                               {champMeta && championStatic ? (
                                                 <Image
                                                   src={championIconUrl(championStatic.version, champMeta.id)}
                                                   alt={champMeta.name}
-                                                  width={28}
-                                                  height={28}
-                                                  className="rounded-md border border-border/50"
+                                                  width={34}
+                                                  height={34}
+                                                  className="rounded-lg border border-border/50"
                                                 />
                                               ) : (
-                                                <div className="h-7 w-7 rounded-md border border-border/50 bg-surface/70" />
+                                                <div className="h-[34px] w-[34px] rounded-lg border border-border/50 bg-surface/70" />
                                               )}
                                               <div className="min-w-0 flex-1">
-                                                <p className="truncate text-xs font-medium text-fg/95">
+                                                <p className="truncate text-sm font-medium text-fg/95">
                                                   {participantDisplayName(participant.gameName, participant.tagLine)}
                                                 </p>
-                                                <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
+                                                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted">
                                                   <span>{participant.kills}/{participant.deaths}/{participant.assists}</span>
                                                   <span>{cs} CS</span>
                                                   <span>{participant.goldEarned.toLocaleString()}g</span>
@@ -1217,7 +1402,7 @@ export function SummonerProfileClient({
                                             </div>
                                           </div>
 
-                                          <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
+                                          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                                             <div className="flex flex-wrap items-center gap-1">
                                               {itemIds.length > 0
                                                 ? itemIds.map((itemId, itemIdx) => {
@@ -1255,10 +1440,10 @@ export function SummonerProfileClient({
                                               type="button"
                                               onClick={() => toggleRuneRow(runeRowKey)}
                                               disabled={!canExpandRunes}
-                                              className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                                              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                                                 canExpandRunes
-                                                  ? "border-border/50 bg-surface/40 text-fg/85 hover:bg-surface/60"
-                                                  : "border-border/25 bg-surface/25 text-muted"
+                                                  ? "border-border/50 bg-black/10 text-fg/85 hover:bg-white/6"
+                                                  : "border-border/25 bg-black/5 text-muted"
                                               }`}
                                               aria-expanded={runesExpanded}
                                               aria-label={runesExpanded ? "Hide runes" : "Show runes"}
@@ -1290,7 +1475,7 @@ export function SummonerProfileClient({
                                               runeSortById={runeStatic.runeSortById}
                                               iconSize={20}
                                               density="compact"
-                                              className="mt-1.5"
+                                              className="mt-3"
                                             />
                                           ) : null}
                                         </div>
@@ -1298,32 +1483,41 @@ export function SummonerProfileClient({
                                     };
 
                                     return (
-                                      <div className="rounded-xl border border-border/50 bg-surface/40 p-2">
-                                        <div className="mb-2 flex items-center justify-between gap-2">
-                                          <p className="text-[11px] uppercase tracking-wide text-fg/70">Matchup Details</p>
+                                      <div className="match-detail-shell p-3 md:p-4">
+                                        <div className="mb-4 flex items-center justify-between gap-2">
+                                          <div>
+                                            <p className="type-kicker text-primary/82">Matchup details</p>
+                                            <p className="mt-1 text-xs text-fg/62">
+                                              Compare both teams with runes, spells, and item paths side by side.
+                                            </p>
+                                          </div>
                                           <button
                                             type="button"
                                             onClick={() =>
                                               toggleAllRunesForMatch(m.matchId, d.participants ?? [], !allRunesExpanded)
                                             }
                                             disabled={!canToggleAllRunes}
-                                            className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                                            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                                               canToggleAllRunes
-                                                ? "border-border/55 bg-surface/40 text-fg/85 hover:bg-surface/55"
-                                                : "border-border/25 bg-surface/25 text-muted"
+                                                ? "border-border/55 bg-black/10 text-fg/85 hover:bg-white/6"
+                                                : "border-border/25 bg-black/5 text-muted"
                                             }`}
                                           >
                                             {allRunesExpanded ? "Collapse all runes" : "Expand all runes"}
                                           </button>
                                         </div>
-                                        <div className="mb-2 grid grid-cols-2 gap-2">
-                                          <p className="text-xs font-semibold text-sky-300">Blue Team</p>
-                                          <p className="text-xs font-semibold text-rose-300">Red Team</p>
+                                        <div className="mb-3 grid grid-cols-2 gap-2">
+                                          <p className="rounded-full border border-sky-400/18 bg-sky-400/10 px-3 py-1 text-xs font-semibold text-sky-300">
+                                            Blue Team
+                                          </p>
+                                          <p className="rounded-full border border-rose-400/18 bg-rose-400/10 px-3 py-1 text-xs font-semibold text-rose-300">
+                                            Red Team
+                                          </p>
                                         </div>
-                                        <div className="grid gap-1.5">
+                                        <div className="grid gap-3">
                                           {alignedRows.map((row, rowIndex) => (
-                                            <div key={`${m.matchId}-${row.roleKey}-${rowIndex}`} className="grid gap-1">
-                                              <p className="px-1 text-[10px] uppercase tracking-wide text-muted">
+                                            <div key={`${m.matchId}-${row.roleKey}-${rowIndex}`} className="grid gap-2">
+                                              <p className="px-1 text-[10px] uppercase tracking-[0.18em] text-muted">
                                                 {roleDisplayLabel(row.roleKey)}
                                               </p>
                                               <div className="grid gap-2 sm:grid-cols-2">
@@ -1345,19 +1539,39 @@ export function SummonerProfileClient({
                   );
                 })}
                 {!historyBusy && visibleMatches.length === 0 ? (
-                  <p className="rounded-xl border border-border/40 bg-surface/30 px-3 py-3 text-sm text-fg/80">
+                  <p className="rounded-[1.25rem] border border-border/40 bg-black/10 px-4 py-4 text-sm text-fg/80">
                     No matches found for the current queue/champion filters.
                   </p>
                 ) : null}
               </div>
 
-              <div className="mt-4 flex items-center justify-between">
-                <Button size="sm" variant="outline" disabled={page <= 1 || historyBusy} onClick={() => setPage((p) => Math.max(1, p - 1))}>Previous</Button>
-                <Button size="sm" variant="outline" disabled={historyBusy || (history ? history.page >= history.totalPages : false)} onClick={() => setPage((p) => p + 1)}>Next</Button>
+              <div className="mt-5 flex items-center justify-between">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page <= 1 || historyBusy}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  Previous
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={historyBusy || (history ? history.page >= history.totalPages : false)}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                </Button>
               </div>
 
               <p className="mt-3 text-xs text-muted">
-                Match history: <Link href={`/lol/summoners/${region}/${encodeRiotIdPath({ gameName, tagLine })}/matches`} className="text-primary hover:underline">/lol/summoners/.../matches</Link>
+                Match history:{" "}
+                <Link
+                  href={`/lol/summoners/${region}/${encodeRiotIdPath({ gameName, tagLine })}/matches`}
+                  className="text-primary hover:underline"
+                >
+                  /lol/summoners/.../matches
+                </Link>
               </p>
             </Card>
           </section>

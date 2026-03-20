@@ -9,7 +9,7 @@ export function Card({
   return (
     <div
       className={cn(
-        "glass-card mesh-highlight rounded-2xl",
+        "surface-card rounded-2xl",
         className
       )}
       {...props}

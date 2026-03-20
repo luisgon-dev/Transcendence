@@ -78,11 +78,12 @@ export default async function TierListPage({
 
   return (
     <div className="grid gap-8">
-      <header className="glass-card mesh-highlight rounded-3xl p-5 md:p-8">
-        <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
+      <header className="page-hero p-5 md:p-8">
+        <p className="type-kicker text-primary">League Analytics</p>
+        <h1 className="type-title mt-3 sm:text-[2.4rem]">
           Tier List
         </h1>
-        <p className="mt-2 text-sm text-fg/75">
+        <p className="type-ui mt-3 text-fg/75">
           See which champions are winning most often for this role, rank, and region.
         </p>
 

@@ -18,8 +18,8 @@ function stat(label: string, value: number | string, tone?: "primary" | "danger"
         : "text-fg";
 
   return (
-    <div className="rounded-[1.5rem] border border-border/70 bg-surface/50 p-4">
-      <p className="text-xs uppercase tracking-[0.24em] text-fg/55">{label}</p>
+    <div className="page-stat-card">
+      <p className="type-kicker text-fg/55">{label}</p>
       <p className={`mt-2 text-2xl font-semibold ${toneClass}`}>{value}</p>
     </div>
   );

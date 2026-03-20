@@ -7,10 +7,11 @@ export default function NotFound() {
   return (
     <div className="grid place-items-center">
       <Card className="w-full max-w-lg p-6">
-        <h1 className="font-[var(--font-sora)] text-2xl font-semibold">
+        <p className="type-kicker text-primary">Navigation</p>
+        <h1 className="type-title mt-3">
           Not found
         </h1>
-        <p className="mt-2 text-sm text-fg/75">
+        <p className="type-ui mt-3 text-fg/75">
           That page doesn&apos;t exist.
         </p>
         <div className="mt-5">

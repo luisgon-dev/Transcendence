@@ -70,29 +70,29 @@ export function AnalyticsSampleBanner({ sample }: AnalyticsSampleBannerProps) {
             <Badge>{normalized.isEarlyPatchWindow ? "Early Patch Window" : "Current Patch"}</Badge>
             <Badge>{patchAgeLabel}</Badge>
           </div>
-          <h2 className="mt-3 font-[var(--font-sora)] text-lg font-semibold tracking-tight text-fg">
+          <h2 className="mt-3 type-section text-fg">
             {tone.title}
           </h2>
-          <p className="mt-1 text-sm text-fg/80">{tone.detail}</p>
+          <p className="type-ui mt-2 text-fg/80">{tone.detail}</p>
         </div>
 
         <div className="min-w-[144px] rounded-2xl border border-white/10 bg-black/15 px-4 py-3 text-right">
-          <p className="text-[11px] uppercase tracking-[0.24em] text-fg/55">Sample Strength</p>
+          <p className="type-kicker text-fg/55">Sample Strength</p>
           <p className="mt-1 text-3xl font-semibold text-fg">{coverage}%</p>
-          <p className="text-xs text-fg/65">of the recommended sample size</p>
+          <p className="type-ui mt-1 text-fg/65">of the recommended sample size</p>
         </div>
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-3">
-          <p className="text-[11px] uppercase tracking-[0.24em] text-fg/55">Sample Size</p>
+          <p className="type-kicker text-fg/55">Sample Size</p>
           <p className="mt-1 text-2xl font-semibold text-fg">{normalized.sampleSize}</p>
-          <p className="text-xs text-fg/65">recent matches in this view</p>
+          <p className="type-ui mt-1 text-fg/65">recent matches in this view</p>
         </div>
         <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-3">
-          <p className="text-[11px] uppercase tracking-[0.24em] text-fg/55">Patch Age</p>
+          <p className="type-kicker text-fg/55">Patch Age</p>
           <p className="mt-1 text-2xl font-semibold text-fg">{patchAgeLabel}</p>
-          <p className="text-xs text-fg/65">
+          <p className="type-ui mt-1 text-fg/65">
             {normalized.isEarlyPatchWindow
               ? "early-patch volatility still applies"
               : "beyond the early-patch window"}
@@ -101,7 +101,7 @@ export function AnalyticsSampleBanner({ sample }: AnalyticsSampleBannerProps) {
       </div>
 
       <div className="mt-4">
-        <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.24em] text-fg/55">
+        <div className="type-kicker flex items-center justify-between text-fg/55">
           <span>Sample Progress</span>
           <span>
             {normalized.sampleSize} / {normalized.minimumRecommendedSampleSize}
@@ -113,7 +113,7 @@ export function AnalyticsSampleBanner({ sample }: AnalyticsSampleBannerProps) {
             style={{ width: `${coverage}%` }}
           />
         </div>
-        <p className="mt-3 text-xs text-fg/70">{tone.footnote}</p>
+        <p className="type-ui mt-3 text-fg/70">{tone.footnote}</p>
       </div>
     </Card>
   );

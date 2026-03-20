@@ -59,10 +59,10 @@ export function LiveGameCard({
     <Card className="p-5">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="font-[var(--font-sora)] text-lg font-semibold">
+          <h3 className="type-section">
             Live Game
           </h3>
-          <p className="mt-1 text-sm text-fg/75">
+          <p className="type-ui mt-2 text-fg/75">
             Check whether this player is currently in a game.
           </p>
         </div>
@@ -71,14 +71,14 @@ export function LiveGameCard({
         </Button>
       </div>
 
-      {error ? <p className="mt-3 text-sm text-red-300">{error}</p> : null}
+      {error ? <p className="type-ui mt-3 text-danger">{error}</p> : null}
 
       {data ? (
         <pre className="mt-4 max-h-[360px] overflow-auto rounded-lg border border-border/60 bg-black/30 p-3 text-xs text-fg/85">
           {JSON.stringify(data, null, 2)}
         </pre>
       ) : (
-        <p className="mt-4 text-sm text-muted">
+        <p className="type-ui mt-4 text-muted">
           No live game data loaded yet.
         </p>
       )}

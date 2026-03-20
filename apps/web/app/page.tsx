@@ -36,25 +36,25 @@ export default function LandingPage() {
 
   return (
     <div className="grid gap-10">
-      <section className="glass-card mesh-highlight rounded-[2rem] p-6 sm:p-8">
-        <p className="text-sm font-medium uppercase tracking-[0.24em] text-primary">Transcendence</p>
-        <h1 className="mt-4 max-w-4xl font-[var(--font-sora)] text-4xl font-semibold tracking-tight sm:text-5xl">
+      <section className="page-hero p-6 sm:p-8 md:p-10">
+        <p className="type-kicker text-primary">Transcendence</p>
+        <h1 className="type-display mt-4 max-w-4xl">
           Patch-ready League and TFT tools built for players first.
         </h1>
-        <p className="mt-3 max-w-2xl text-sm text-fg/75 sm:text-base">
-          Check what is winning, compare builds and comps, and pull up player pages without digging through menus.
+        <p className="type-lead mt-4 max-w-2xl">
+          Start with the live League surface, then branch into TFT and deeper player research once you know where you are headed.
         </p>
-        <div className="mt-6 flex flex-wrap gap-2">
+        <div className="mt-7 flex flex-wrap items-center gap-3">
           <Link
-            href="/lol"
-            className="rounded-full border border-primary/45 bg-primary/12 px-4 py-2 text-sm font-medium text-primary"
+            href="/lol/tierlist"
+            className="type-ui inline-flex min-h-12 items-center justify-center rounded-full bg-primary px-5 py-3 font-semibold text-bg transition hover:bg-primary/92"
           >
-            Explore LoL
+            Browse LoL tier list
           </Link>
           {TFT_FRONTEND_ENABLED ? (
             <Link
               href="/tft"
-              className="rounded-full border border-border/60 px-4 py-2 text-sm text-fg/80 transition hover:bg-white/8 hover:text-fg"
+              className="type-ui inline-flex items-center border-b border-border/45 px-1 py-2 text-fg/72 transition hover:border-border/70 hover:text-fg"
             >
               Explore TFT
             </Link>
@@ -66,28 +66,31 @@ export default function LandingPage() {
         {visibleGames.map((game) => (
           <Card key={game.href} className="grid gap-5 p-6">
             <div>
-              <p className="text-xs font-medium uppercase tracking-[0.24em] text-primary">
+              <p className="type-kicker text-primary">
                 {game.eyebrow}
               </p>
-              <p className="mt-2 text-lg font-semibold text-fg">{game.title}</p>
-              <p className="mt-2 text-sm text-fg/75">{game.description}</p>
+              <p className="type-title mt-3 text-fg">{game.title}</p>
+              <p className="type-ui measure mt-3 text-fg/75">{game.description}</p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid gap-3 border-t border-border/25 pt-4">
               <Link
                 href={game.href}
-                className="rounded-full border border-primary/45 bg-primary/12 px-4 py-2 text-sm font-medium text-primary"
+                className="type-ui inline-flex w-fit items-center gap-2 font-semibold text-primary transition hover:text-primary/80"
               >
                 Open {game.eyebrow === "League of Legends" ? "LoL" : "TFT"}
+                <span aria-hidden="true">/</span>
               </Link>
-              {game.links.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="rounded-full border border-border/60 px-4 py-2 text-sm text-fg/80 transition hover:bg-white/8 hover:text-fg"
-                >
-                  {link.label}
-                </Link>
-              ))}
+              <div className="flex flex-wrap gap-x-4 gap-y-2">
+                {game.links.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className="type-ui inline-flex items-center border-b border-border/45 px-0.5 pb-1 text-fg/76 transition hover:border-primary/35 hover:text-fg"
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
             </div>
           </Card>
         ))}

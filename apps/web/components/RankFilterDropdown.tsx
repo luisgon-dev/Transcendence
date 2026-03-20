@@ -38,7 +38,7 @@ export function RankFilterDropdown({
       value={activeRank || "all"}
       onChange={handleChange}
       className={cn(
-        "h-9 min-w-[140px] rounded-md border border-border/70 bg-surface/35 px-3 text-sm text-fg shadow-glass outline-none focus:border-primary/70 focus:ring-2 focus:ring-primary/25",
+        "control-select min-w-[156px]",
         className
       )}
     >

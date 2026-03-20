@@ -32,7 +32,7 @@ export function RoleFilterTabs({
   }
 
   return (
-    <nav className={cn("flex flex-wrap gap-1.5", className)}>
+    <nav className={cn("flex flex-wrap gap-x-4 gap-y-2", className)}>
       {roles.map((role) => {
         const active = role.toUpperCase() === activeRole.toUpperCase();
         return (
@@ -40,16 +40,15 @@ export function RoleFilterTabs({
             key={role}
             href={buildHref(role)}
             className={cn(
-              "relative rounded-md border px-3 py-1.5 text-sm transition overflow-hidden",
-              active
-                ? "border-primary/50 text-primary font-medium"
-                : "border-border/70 bg-white/5 text-fg/80 hover:bg-white/10 hover:text-fg"
+              "control-chip type-ui relative overflow-hidden px-3 py-2",
+              active && "font-semibold"
             )}
+            data-active={active}
           >
             {active && (
               <motion.div
                 layoutId="activeRoleTab"
-                className="absolute inset-0 bg-primary/15"
+                className="absolute inset-x-0 bottom-0 h-0.5 bg-primary/80"
                 initial={false}
                 transition={{ type: "spring", stiffness: 400, damping: 30 }}
               />

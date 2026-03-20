@@ -17,16 +17,17 @@ export default function LoginPage() {
   return (
     <div className="grid place-items-center py-8">
       <Card className="w-full max-w-md rounded-3xl p-6">
-        <h1 className="font-[var(--font-sora)] text-2xl font-semibold">
+        <p className="type-kicker text-primary">Account</p>
+        <h1 className="type-title mt-3">
           Sign in
         </h1>
-        <p className="mt-2 text-sm text-fg/75">
+        <p className="type-ui mt-3 text-fg/75">
           Pick up where you left off and keep your saved players close.
         </p>
 
         <form action={formAction} className="mt-6 grid gap-3">
-          <label className="grid gap-1 text-sm">
-            <span className="text-fg/85">Email</span>
+          <label className="grid gap-1.5">
+            <span className="type-meta text-fg/78">Email</span>
             <Input
               name="email"
               type="email"
@@ -34,8 +35,8 @@ export default function LoginPage() {
               required
             />
           </label>
-          <label className="grid gap-1 text-sm">
-            <span className="text-fg/85">Password</span>
+          <label className="grid gap-1.5">
+            <span className="type-meta text-fg/78">Password</span>
             <Input
               name="password"
               type="password"
@@ -44,16 +45,16 @@ export default function LoginPage() {
             />
           </label>
 
-          {state.error ? <p className="text-sm text-danger">{state.error}</p> : null}
+          {state.error ? <p className="type-ui text-danger">{state.error}</p> : null}
 
           <Button type="submit" disabled={pending}>
             {pending ? "Signing in..." : "Sign in"}
           </Button>
         </form>
 
-        <p className="mt-4 text-sm text-muted">
+        <p className="type-ui mt-4 text-muted">
           No account?{" "}
-          <Link className="text-primary hover:underline" href="/account/register">
+          <Link className="font-semibold text-primary hover:underline" href="/account/register">
             Create one
           </Link>
         </p>

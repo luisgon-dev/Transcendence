@@ -11,9 +11,10 @@ export default async function TftTraitsPage() {
 
   return (
     <div className="grid gap-6">
-      <section className="glass-card rounded-[2rem] p-6">
-        <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">TFT Traits</h1>
-        <p className="mt-2 text-sm text-fg/75">Browse all traits in the live set and review their breakpoints.</p>
+      <section className="page-hero p-6">
+        <p className="type-kicker text-primary">TFT Catalog</p>
+        <h1 className="type-title mt-3 sm:text-[2.4rem]">TFT Traits</h1>
+        <p className="type-ui mt-3 text-fg/75">Browse all traits in the live set and review their breakpoints.</p>
       </section>
       <TftCatalogGrid items={traits} basePath="/tft/traits" />
     </div>

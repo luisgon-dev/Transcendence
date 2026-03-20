@@ -6,9 +6,14 @@ import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { MatchupsExplorerClient } from "@/components/MatchupsExplorerClient";
+import {
+  fetchWithGlobalAnalyticsRegionFallback,
+  resolveAnalyticsRegionPresentation
+} from "@/lib/analyticsRegionFallback";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { type AnalyticsSampleLike } from "@/lib/analyticsSample";
+import { GLOBAL_ANALYTICS_REGION } from "@/lib/analyticsRegionShared";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { fetchChampionMap } from "@/lib/staticData";
 import { normalizeTierListEntries } from "@/lib/tierlist";
@@ -24,15 +29,28 @@ export default async function MatchupsIndexPage({
   const { activeRegion, activeRegionLabel, options: regionOptions } = await resolveAnalyticsRegion(
     resolvedSearchParams?.region
   );
-  const tierListQuery = new URLSearchParams();
-  if (activeRegion !== "ALL") tierListQuery.set("region", activeRegion);
   const verbosity = getErrorVerbosity();
-  const [{ version, champions }, tierListRes] = await Promise.all([
+  const fetchTierList = async (region: string) => {
+    const requestQuery = new URLSearchParams();
+    if (region !== GLOBAL_ANALYTICS_REGION) requestQuery.set("region", region);
+
+    return fetchBackendJson<TierListResponse>(
+      `${getBackendBaseUrl()}/api/lol/analytics/tierlist?${requestQuery.toString()}`,
+      {
+        next: { revalidate: 60 * 60 }
+      }
+    );
+  };
+  const [{ version, champions }, tierListFetch] = await Promise.all([
     fetchChampionMap(),
-    fetchBackendJson<TierListResponse>(`${getBackendBaseUrl()}/api/lol/analytics/tierlist?${tierListQuery.toString()}`, {
-      next: { revalidate: 60 * 60 }
-    })
+    fetchWithGlobalAnalyticsRegionFallback(activeRegion, fetchTierList)
   ]);
+  const { result: tierListRes, usedGlobalFallback } = tierListFetch;
+  const {
+    effectiveRegion,
+    effectiveRegionLabel,
+    fallbackMessage
+  } = resolveAnalyticsRegionPresentation(activeRegion, activeRegionLabel, regionOptions, usedGlobalFallback);
 
   if (!tierListRes.ok) {
     return (
@@ -51,7 +69,14 @@ export default async function MatchupsIndexPage({
             ? JSON.stringify({ status: tierListRes.status, errorKind: tierListRes.errorKind }, null, 2)
             : null
         }
-      />
+      >
+        <div className="grid gap-4">
+          <p className="type-ui text-fg/70">
+            Try switching back to Global or another region.
+          </p>
+          <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />
+        </div>
+      </BackendErrorCard>
     );
   }
 
@@ -72,22 +97,25 @@ export default async function MatchupsIndexPage({
 
   return (
     <div className="grid gap-8">
-      <header className="glass-card mesh-highlight rounded-3xl p-5 md:p-8">
+      <header className="page-hero p-5 md:p-8">
         <div className="flex flex-wrap items-center gap-2">
           <Badge className="border-primary/40 bg-primary/10 text-primary">
             Matchup Tool
           </Badge>
           <Badge>{popular.length} role pages</Badge>
         </div>
-        <h1 className="mt-4 font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
+        <h1 className="type-title mt-4 sm:text-[2.4rem]">
           Matchup Analysis
         </h1>
-        <p className="mt-2 text-sm text-fg/75">
+        <p className="type-ui mt-3 text-fg/75">
           Search for a champion, pick a role, and jump straight to counters and favorable lanes.
         </p>
+        {fallbackMessage ? (
+          <p className="type-ui mt-3 text-fg/68">{fallbackMessage}</p>
+        ) : null}
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          <Badge>{activeRegionLabel}</Badge>
-          <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />
+          <Badge>{effectiveRegionLabel}</Badge>
+          <AnalyticsRegionFilter options={regionOptions} activeRegion={effectiveRegion} />
         </div>
         <div className="mt-3">
           <AnalyticsSampleBanner
@@ -96,12 +124,12 @@ export default async function MatchupsIndexPage({
         </div>
       </header>
 
-      <Card className="p-4 md:p-5">
+      <Card className="page-panel p-4 md:p-5">
         <MatchupsExplorerClient
           entries={popular}
           champions={champions}
           version={version}
-          activeRegion={activeRegion}
+          activeRegion={effectiveRegion}
         />
       </Card>
     </div>

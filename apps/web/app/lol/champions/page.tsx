@@ -101,11 +101,12 @@ export default async function ChampionsPage({
 
   return (
     <div className="grid gap-8">
-      <header className="glass-card mesh-highlight rounded-3xl p-5 md:p-8">
-        <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
+      <header className="page-hero p-5 md:p-8">
+        <p className="type-kicker text-primary">League Directory</p>
+        <h1 className="type-title mt-3 sm:text-[2.4rem]">
           Champions
         </h1>
-        <p className="mt-2 text-sm text-fg/75">
+        <p className="type-ui mt-3 text-fg/75">
           Browse every champion and jump straight into builds, win rates, and matchup pages.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -114,7 +115,7 @@ export default async function ChampionsPage({
           />
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="rounded-full border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+          <span className="control-chip type-ui font-semibold" data-active="true">
             {activeRegionLabel}
           </span>
           <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />

@@ -74,7 +74,7 @@ export function SearchBar({ className }: { className?: string }) {
     >
       <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-[auto_minmax(0,1fr)_120px]">
         <select
-          className="h-11 min-w-[92px] rounded-md border border-border/70 bg-surface/35 px-3 text-sm text-fg shadow-glass outline-none focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
+          className="control-select min-w-[92px]"
           value={region}
           onChange={(e) => setRegion(e.target.value)}
           aria-label="Region"
@@ -113,7 +113,7 @@ export function SearchBar({ className }: { className?: string }) {
         <Button type="button" onClick={submitSearch}>
           Search
         </Button>
-        {error ? <p className="text-sm text-red-300">{error}</p> : null}
+        {error ? <p className="type-ui text-danger">{error}</p> : null}
       </div>
     </div>
   );

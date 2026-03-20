@@ -190,11 +190,12 @@ export default async function ProBuildsIndexPage({
 
   return (
     <div className="grid gap-8">
-      <header className="glass-card mesh-highlight rounded-3xl p-5 md:p-8">
-        <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
+      <header className="page-hero p-5 md:p-8">
+        <p className="type-kicker text-primary">Tracked Matches</p>
+        <h1 className="type-title mt-3 sm:text-[2.4rem]">
           Pro Builds
         </h1>
-        <p className="mt-2 text-sm text-fg/75">
+        <p className="type-ui mt-3 text-fg/75">
           Recent builds from tracked pro and high-MMR matches, with quick champion search.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -215,8 +216,8 @@ export default async function ProBuildsIndexPage({
         </div>
       </header>
 
-      <Card className="p-5">
-        <h2 className="font-[var(--font-sora)] text-lg font-semibold">Search Champions</h2>
+      <Card className="page-panel p-5">
+        <h2 className="type-section">Search Champions</h2>
         <form action="/lol/pro-builds" method="get" className="mt-3 flex flex-wrap items-center gap-2">
           {activeRegion !== "ALL" ? <input type="hidden" name="region" value={activeRegion} /> : null}
           <input
@@ -224,18 +225,18 @@ export default async function ProBuildsIndexPage({
             name="q"
             defaultValue={championQuery ?? ""}
             placeholder="Search champion name or id (e.g., Ahri or 103)"
-            className="h-11 min-w-[220px] flex-1 rounded-xl border border-border/80 bg-surface/50 px-3 text-sm text-fg shadow-glass outline-none placeholder:text-muted/80 focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
+            className="control-input min-w-[220px] flex-1"
           />
           <button
             type="submit"
-            className="h-11 rounded-xl border border-primary/40 bg-primary/12 px-4 text-sm font-medium text-primary transition hover:bg-primary/20"
+            className="h-11 rounded-xl border border-primary/40 bg-primary/12 px-4 text-[0.9375rem] font-semibold text-primary transition hover:bg-primary/20"
           >
             Search
           </button>
           {championQuery ? (
             <Link
               href={`/lol/pro-builds${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
-              className="h-11 rounded-xl border border-border/70 bg-white/[0.03] px-4 text-sm leading-[44px] text-fg/85 transition hover:bg-white/[0.08]"
+              className="control-chip type-ui h-11 px-4"
             >
               Clear
             </Link>
@@ -273,8 +274,8 @@ export default async function ProBuildsIndexPage({
       <Card className="p-0">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-4 py-3">
           <div>
-            <h2 className="font-[var(--font-sora)] text-lg font-semibold">Recent Pro Matches</h2>
-            <p className="text-xs text-muted">
+            <h2 className="type-section">Recent Pro Matches</h2>
+            <p className="type-ui mt-1 text-muted">
               Click any row to open champion-specific pro builds and recent match details.
             </p>
           </div>

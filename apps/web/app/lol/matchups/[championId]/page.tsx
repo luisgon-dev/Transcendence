@@ -166,7 +166,7 @@ export default async function MatchupAnalysisPage({
 
   return (
     <div className="grid gap-6">
-      <header className="glass-card mesh-highlight grid gap-3 rounded-3xl p-5 md:p-6">
+      <header className="page-hero grid gap-3 p-5 md:p-6">
         <div className="flex flex-wrap items-center gap-3">
           <Image
             src={championIconUrl(version, champion?.id ?? "Unknown")}
@@ -176,10 +176,10 @@ export default async function MatchupAnalysisPage({
             className="rounded-xl border border-border/60"
           />
           <div>
-            <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
+            <h1 className="type-title sm:text-[2.4rem]">
               Matchup Analysis
             </h1>
-            <p className="text-sm text-fg/75">How {championName} performs into the current field.</p>
+            <p className="type-ui mt-2 text-fg/75">How {championName} performs into the current field.</p>
           </div>
         </div>
 
@@ -207,7 +207,7 @@ export default async function MatchupAnalysisPage({
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="p-5">
-          <h2 className="font-[var(--font-sora)] text-lg font-semibold">Weak Against</h2>
+          <h2 className="type-section">Weak Against</h2>
           <p className="mt-1 text-xs text-muted">Champions that give {championName} the most trouble</p>
           {counters.length === 0 ? (
             <p className="mt-3 text-sm text-muted">No counter data is available for these filters.</p>
@@ -237,7 +237,7 @@ export default async function MatchupAnalysisPage({
         </Card>
 
         <Card className="p-5">
-          <h2 className="font-[var(--font-sora)] text-lg font-semibold">Strong Against</h2>
+          <h2 className="type-section">Strong Against</h2>
           <p className="mt-1 text-xs text-muted">Champions {championName} usually handles well</p>
           {favorable.length === 0 ? (
             <p className="mt-3 text-sm text-muted">No favorable matchup data is available for these filters.</p>
@@ -269,7 +269,7 @@ export default async function MatchupAnalysisPage({
 
       <Card className="p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-[var(--font-sora)] text-lg font-semibold">All Matchups</h2>
+          <h2 className="type-section">All Matchups</h2>
           <div className="flex items-center gap-2 text-xs">
             <Link
               href={buildSortHref({
@@ -279,11 +279,12 @@ export default async function MatchupAnalysisPage({
                 region: activeRegion,
                 sort: "winRate"
               })}
-              className={`rounded-full border px-2.5 py-1 ${
+              className={`control-chip type-ui px-3 py-2 ${
                 sortKey === "winRate"
-                  ? "border-primary/45 bg-primary/10 text-primary"
-                  : "border-border/60 bg-white/[0.03] text-fg/75"
+                  ? "font-semibold"
+                  : ""
               }`}
+              data-active={sortKey === "winRate"}
             >
               Sort by Win Rate
             </Link>
@@ -295,11 +296,12 @@ export default async function MatchupAnalysisPage({
                 region: activeRegion,
                 sort: "games"
               })}
-              className={`rounded-full border px-2.5 py-1 ${
+              className={`control-chip type-ui px-3 py-2 ${
                 sortKey === "games"
-                  ? "border-primary/45 bg-primary/10 text-primary"
-                  : "border-border/60 bg-white/[0.03] text-fg/75"
+                  ? "font-semibold"
+                  : ""
               }`}
+              data-active={sortKey === "games"}
             >
               Sort by Games
             </Link>

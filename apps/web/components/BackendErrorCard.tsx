@@ -18,11 +18,12 @@ export function BackendErrorCard({
   children
 }: BackendErrorCardProps) {
   return (
-    <Card className="p-6">
-      <h1 className="font-[var(--font-sora)] text-2xl font-semibold">{title}</h1>
-      <p className="mt-2 text-sm text-fg/75">{message}</p>
+    <Card className="page-panel p-6">
+      <p className="type-kicker text-primary">Status</p>
+      <h1 className="type-title mt-3">{title}</h1>
+      <p className="type-ui mt-3 text-fg/75">{message}</p>
       {requestId ? (
-        <p className="mt-3 text-xs text-muted">
+        <p className="type-ui mt-4 text-muted">
           Request ID: <code>{requestId}</code>
         </p>
       ) : null}

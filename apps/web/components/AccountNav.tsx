@@ -7,37 +7,32 @@ import { getSessionMe } from "@/lib/session";
 
 export async function AccountNav() {
   const me = await getSessionMe();
+
   if (!me.authenticated) {
     return (
-      <div className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-surface/40 p-1">
+      <div className="inline-flex items-center">
         <Link
-          className="rounded-full px-3 py-1.5 text-sm text-fg/75 transition hover:bg-white/10 hover:text-fg"
+          className="type-ui rounded-full px-3 py-2 font-semibold text-fg/74 transition hover:bg-white/[0.05] hover:text-fg"
           href="/account/login"
         >
           Sign in
-        </Link>
-        <Link
-          className="rounded-full px-3 py-1.5 text-sm text-fg/75 transition hover:bg-white/10 hover:text-fg"
-          href="/account/register"
-        >
-          Create account
         </Link>
       </div>
     );
   }
 
   return (
-    <div className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-surface/40 p-1">
+    <div className="inline-flex items-center gap-1 sm:gap-2">
       {hasAdminRole(me.roles) ? (
         <Link
-          className="rounded-full px-3 py-1.5 text-sm text-fg/75 transition hover:bg-white/10 hover:text-fg"
+          className="type-ui rounded-full px-3 py-2 font-medium text-fg/70 transition hover:bg-white/[0.05] hover:text-fg"
           href="/admin"
         >
           Admin
         </Link>
       ) : null}
       <Link
-        className="rounded-full px-3 py-1.5 text-sm text-fg/75 transition hover:bg-white/10 hover:text-fg"
+        className="type-ui rounded-full px-3 py-2 font-medium text-fg/70 transition hover:bg-white/[0.05] hover:text-fg"
         href="/account/favorites"
       >
         Favorites
@@ -47,7 +42,7 @@ export async function AccountNav() {
           variant="ghost"
           size="sm"
           type="submit"
-          className="h-8 rounded-full px-3 text-sm text-fg/75 hover:text-fg"
+          className="h-9 rounded-full px-3.5 text-[0.875rem] text-fg/74 hover:bg-white/[0.05] hover:text-fg"
         >
           Log out
         </Button>

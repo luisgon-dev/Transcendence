@@ -5,9 +5,14 @@ import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { FilterBar } from "@/components/FilterBar";
 import { TierListTable } from "@/components/TierListTable";
 import { Badge } from "@/components/ui/Badge";
+import {
+  fetchWithGlobalAnalyticsRegionFallback,
+  resolveAnalyticsRegionPresentation
+} from "@/lib/analyticsRegionFallback";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { type AnalyticsSampleLike } from "@/lib/analyticsSample";
+import { GLOBAL_ANALYTICS_REGION } from "@/lib/analyticsRegionShared";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import {
   DEFAULT_TIERLIST_RANK_TIER,
@@ -29,22 +34,33 @@ export default async function TierListPage({
   const { activeRegion, activeRegionLabel, options: regionOptions } = await resolveAnalyticsRegion(
     resolvedSearchParams?.region
   );
-  const qs = new URLSearchParams();
   const roleParam = (resolvedSearchParams?.role ?? "").toUpperCase();
   const rawRankParam = resolvedSearchParams?.rankTier ?? null;
   const normalizedRankParam = normalizeRankTierParam(rawRankParam);
   const useDefaultRank = rawRankParam == null || rawRankParam.trim().length === 0;
   const effectiveRankParam = useDefaultRank ? DEFAULT_TIERLIST_RANK_TIER : normalizedRankParam;
 
-  if (roleParam && roleParam !== "ALL") qs.set("role", roleParam);
-  if (effectiveRankParam) qs.set("rankTier", effectiveRankParam);
-  if (activeRegion !== "ALL") qs.set("region", activeRegion);
-
   const verbosity = getErrorVerbosity();
-  const res = await fetchBackendJson<TierListResponse>(
-    `${getBackendBaseUrl()}/api/lol/analytics/tierlist?${qs.toString()}`,
-    { next: { revalidate: 60 * 60 } }
+  const fetchTierList = async (region: string) => {
+    const requestQuery = new URLSearchParams();
+    if (roleParam && roleParam !== "ALL") requestQuery.set("role", roleParam);
+    if (effectiveRankParam) requestQuery.set("rankTier", effectiveRankParam);
+    if (region !== GLOBAL_ANALYTICS_REGION) requestQuery.set("region", region);
+
+    return fetchBackendJson<TierListResponse>(
+      `${getBackendBaseUrl()}/api/lol/analytics/tierlist?${requestQuery.toString()}`,
+      { next: { revalidate: 60 * 60 } }
+    );
+  };
+  const { result: res, usedGlobalFallback } = await fetchWithGlobalAnalyticsRegionFallback(
+    activeRegion,
+    fetchTierList
   );
+  const {
+    effectiveRegion,
+    effectiveRegionLabel,
+    fallbackMessage
+  } = resolveAnalyticsRegionPresentation(activeRegion, activeRegionLabel, regionOptions, usedGlobalFallback);
 
   if (!res.ok) {
     return (
@@ -63,7 +79,21 @@ export default async function TierListPage({
             ? JSON.stringify({ status: res.status, errorKind: res.errorKind }, null, 2)
             : null
         }
-      />
+      >
+        <div className="grid gap-4">
+          <p className="type-ui text-fg/70">
+            Try switching back to Global or another region.
+          </p>
+          <FilterBar
+            activeRole={roleParam || "ALL"}
+            activeRank={effectiveRankParam ?? "all"}
+            regionOptions={regionOptions}
+            activeRegion={activeRegion}
+            baseHref="/lol/tierlist"
+            className="mt-0"
+          />
+        </div>
+      </BackendErrorCard>
     );
   }
 
@@ -78,11 +108,12 @@ export default async function TierListPage({
 
   return (
     <div className="grid gap-8">
-      <header className="glass-card mesh-highlight rounded-3xl p-5 md:p-8">
-        <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
+      <header className="page-hero p-5 md:p-8">
+        <p className="type-kicker text-primary">League Analytics</p>
+        <h1 className="type-title mt-3 sm:text-[2.4rem]">
           Tier List
         </h1>
-        <p className="mt-2 text-sm text-fg/75">
+        <p className="type-ui mt-3 text-fg/75">
           See which champions are winning most often for this role, rank, and region.
         </p>
 
@@ -90,11 +121,14 @@ export default async function TierListPage({
           <Badge className="border-primary/40 bg-primary/10 text-primary">
             Patch {tierlist.patch ?? "Unknown"}
           </Badge>
-          <Badge>{activeRegionLabel}</Badge>
+          <Badge>{effectiveRegionLabel}</Badge>
           <Badge>{roleDisplayLabel(tierlist.role ?? "ALL")}</Badge>
           <Badge>{rankTierDisplayLabel(rankTierValue ?? "all")}</Badge>
           <Badge>{normalizedEntries.length} champions</Badge>
         </div>
+        {fallbackMessage ? (
+          <p className="type-ui mt-3 text-fg/68">{fallbackMessage}</p>
+        ) : null}
 
         <div className="mt-3">
           <AnalyticsSampleBanner
@@ -106,7 +140,7 @@ export default async function TierListPage({
           activeRole={roleParam || "ALL"}
           activeRank={effectiveRankParam ?? "all"}
           regionOptions={regionOptions}
-          activeRegion={activeRegion}
+          activeRegion={effectiveRegion}
           baseHref="/lol/tierlist"
           patch={tierlist.patch}
           className="mt-4"
@@ -118,7 +152,7 @@ export default async function TierListPage({
         champions={champions}
         version={version}
         rankTierValue={rankTierValue}
-        activeRegion={activeRegion}
+        activeRegion={effectiveRegion}
       />
     </div>
   );

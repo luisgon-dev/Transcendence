@@ -185,10 +185,10 @@ export default async function ProBuildsChampionPage({
             className="rounded-xl border border-border/60"
           />
           <div>
-            <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
+            <h1 className="type-title sm:text-[2.4rem]">
               Pro Builds
             </h1>
-            <p className="text-sm text-fg/75">Recent pro and high-MMR builds for {championName}</p>
+            <p className="type-ui mt-2 text-fg/75">Recent pro and high-MMR builds for {championName}</p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -203,7 +203,7 @@ export default async function ProBuildsChampionPage({
       </header>
 
       <Card className="p-5">
-        <h2 className="font-[var(--font-sora)] text-lg font-semibold">Filters</h2>
+        <h2 className="type-section">Filters</h2>
         <div className="mt-3 grid gap-3">
           <RoleFilterTabs
             roles={PRO_BUILD_ROLES}
@@ -225,11 +225,11 @@ export default async function ProBuildsChampionPage({
               name="patch"
               defaultValue={patchFilter ?? ""}
               placeholder="14.5"
-              className="h-9 w-28 rounded-md border border-border/70 bg-white/[0.03] px-2 text-sm text-fg"
+              className="control-input h-9 w-28 rounded-xl px-3 text-sm"
             />
             <button
               type="submit"
-              className="h-9 rounded-md border border-primary/40 bg-primary/10 px-3 text-sm text-primary hover:bg-primary/20"
+              className="h-9 rounded-xl border border-primary/40 bg-primary/10 px-3 text-sm font-semibold text-primary hover:bg-primary/20"
             >
               Apply
             </button>
@@ -240,7 +240,7 @@ export default async function ProBuildsChampionPage({
                   region: regionFilter,
                   patch: null
                 })}
-                className="h-9 rounded-md border border-border/70 bg-white/[0.03] px-3 text-sm leading-9 text-fg/85 hover:bg-white/[0.10]"
+                className="control-chip type-ui h-9 px-3"
               >
                 Clear
               </Link>
@@ -251,7 +251,7 @@ export default async function ProBuildsChampionPage({
 
       {!proBuildsRes.ok ? (
         <Card className="border-border/70 bg-white/[0.03] p-5">
-          <h2 className="font-[var(--font-sora)] text-lg font-semibold">Pro-Build Data Unavailable</h2>
+          <h2 className="type-section">Pro-Build Data Unavailable</h2>
           <p className="mt-2 text-sm text-fg/80">{proFeedErrorMessage(proBuildsRes)}</p>
           <p className="mt-1 text-xs text-muted">Request ID: {proBuildsRes.requestId}</p>
         </Card>
@@ -259,7 +259,7 @@ export default async function ProBuildsChampionPage({
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="p-5">
-          <h2 className="font-[var(--font-sora)] text-lg font-semibold">Top Players</h2>
+          <h2 className="type-section">Top Players</h2>
           {topPlayers.length === 0 ? (
             <p className="mt-3 text-sm text-muted">
               No pro-player matches are available for these filters yet.
@@ -289,7 +289,7 @@ export default async function ProBuildsChampionPage({
         </Card>
 
         <Card className="p-5">
-          <h2 className="font-[var(--font-sora)] text-lg font-semibold">Common Builds</h2>
+          <h2 className="type-section">Common Builds</h2>
           {commonBuilds.length === 0 ? (
             <p className="mt-3 text-sm text-muted">
               No repeat build patterns are available for these filters yet.
@@ -320,7 +320,7 @@ export default async function ProBuildsChampionPage({
       </div>
 
       <Card className="p-5">
-        <h2 className="font-[var(--font-sora)] text-lg font-semibold">Recent Pro Matches</h2>
+        <h2 className="type-section">Recent Pro Matches</h2>
         {recentMatches.length === 0 ? (
           <p className="mt-3 text-sm text-muted">
             No recent pro matches were found for this champion with these filters.
@@ -391,7 +391,7 @@ export default async function ProBuildsChampionPage({
       </Card>
 
       <Card className="border-primary/40 bg-primary/10 p-5">
-        <h2 className="font-[var(--font-sora)] text-lg font-semibold text-primary">
+        <h2 className="type-section text-primary">
           More Ways to Explore
         </h2>
         <p className="mt-2 text-sm text-fg/90">
@@ -400,13 +400,14 @@ export default async function ProBuildsChampionPage({
         <div className="mt-4 flex flex-wrap gap-2 text-sm">
           <Link
             href={`/lol/champions/${championId}`}
-            className="rounded-md border border-primary/40 bg-primary/15 px-3 py-1.5 text-primary hover:bg-primary/25"
+            className="control-chip type-ui font-semibold"
+            data-active="true"
           >
             Open Champion Details
           </Link>
           <Link
             href={`/lol/matchups/${championId}`}
-            className="rounded-md border border-border/70 bg-white/[0.05] px-3 py-1.5 text-fg/85 hover:bg-white/[0.10]"
+            className="control-chip type-ui"
           >
             Open Matchup Analysis
           </Link>

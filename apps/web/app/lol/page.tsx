@@ -16,13 +16,10 @@ import { normalizeTierListEntries } from "@/lib/tierlist";
 
 type TierListResponse = components["schemas"]["TierListResponse"];
 
-const QUICK_LINKS = [
-  { label: "All Tier List", href: "/lol/tierlist" },
-  { label: "Top Lane", href: "/lol/tierlist?role=TOP" },
-  { label: "Jungle", href: "/lol/tierlist?role=JUNGLE" },
-  { label: "Mid Lane", href: "/lol/tierlist?role=MIDDLE" },
-  { label: "Bot Lane", href: "/lol/tierlist?role=BOTTOM" },
-  { label: "Support", href: "/lol/tierlist?role=UTILITY" }
+const SECONDARY_LINKS = [
+  { label: "Champions", href: "/lol/champions" },
+  { label: "Matchups", href: "/lol/matchups" },
+  { label: "Pro Builds", href: "/lol/pro-builds" }
 ] as const;
 
 export default async function HomePage({
@@ -52,60 +49,66 @@ export default async function HomePage({
     .slice()
     .sort((a, b) => b.winRate - a.winRate || b.games - a.games)
     .slice(0, 3);
+  const hrefWithRegion = (href: string) =>
+    activeRegion !== "ALL"
+      ? `${href}${href.includes("?") ? "&" : "?"}region=${encodeURIComponent(activeRegion)}`
+      : href;
 
   return (
     <div className="grid gap-10">
-      <section className="glass-card mesh-highlight rounded-[2rem] p-6 sm:p-8 md:p-10">
+      <section className="page-hero p-6 sm:p-8 md:p-10">
         {/* Identity zone */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
           <Badge className="border-primary/40 bg-primary/10 text-primary">Patch {patch}</Badge>
           <Badge className="border-success/40 bg-success/10 text-success">Live Patch Data</Badge>
           <Badge>{activeRegionLabel}</Badge>
         </div>
 
-        <h1 className="mt-4 max-w-2xl font-[var(--font-sora)] text-3xl font-semibold tracking-tight sm:text-4xl">
-          League of Legends picks, builds, and matchup tools for the current patch.
+        <h1 className="type-display mt-4 max-w-3xl">
+          League of Legends tier lists, builds, and matchup tools for the current patch.
         </h1>
-        <p className="mt-2 max-w-2xl text-sm text-fg/75 sm:text-base">
-          Start with the tier list, drill into champion pages by role, or pull up player history in a few clicks.
+        <p className="type-lead mt-4 max-w-2xl">
+          Start with the live tier list. Search is there when you already know the champion or player you want.
         </p>
 
         {/* Action zone */}
-        <GlobalSearchLauncher variant="hero" className="mt-8 h-14 w-full max-w-2xl px-4 text-left" />
+        <div className="mt-8 grid gap-3 lg:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] lg:items-center">
+          <Link
+            href={hrefWithRegion("/lol/tierlist")}
+            className="type-ui inline-flex h-14 items-center justify-center rounded-full bg-primary px-5 text-center font-semibold text-bg transition hover:bg-primary/92"
+          >
+            Browse tier list
+          </Link>
+          <GlobalSearchLauncher
+            variant="hero"
+            className="h-14 w-full px-4 text-left lg:max-w-none"
+          />
+        </div>
+        <p className="type-ui mt-3 text-fg/60">
+          Use search for direct lookups. Use the tier list to get oriented fast.
+        </p>
 
         {/* Navigation zone */}
-        <div className="mt-8 space-y-3">
-          <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} className="flex flex-wrap gap-2" />
+        <div className="mt-8 grid gap-4 border-t border-border/25 pt-4">
+          <div className="grid gap-2 sm:grid-cols-[auto_1fr] sm:items-center sm:gap-4">
+            <p className="type-kicker text-fg/54">Region</p>
+            <AnalyticsRegionFilter
+              options={regionOptions}
+              activeRegion={activeRegion}
+              className="flex flex-wrap gap-x-4 gap-y-1.5"
+            />
+          </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {QUICK_LINKS.map((link) => (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            {SECONDARY_LINKS.map((link) => (
               <Link
                 key={link.href}
-                href={`${link.href}${activeRegion !== "ALL" ? `${link.href.includes("?") ? "&" : "?"}region=${encodeURIComponent(activeRegion)}` : ""}`}
-                className="rounded-full border border-border/65 bg-white/[0.03] px-3 py-2 text-sm text-fg/80 transition hover:bg-white/[0.08] hover:text-fg active:bg-white/[0.10]"
+                href={hrefWithRegion(link.href)}
+                className="type-ui inline-flex items-center border-b border-border/40 px-0.5 pb-1 text-fg/68 transition hover:border-border/68 hover:text-fg"
               >
                 {link.label}
               </Link>
             ))}
-            <span className="mx-1 h-4 w-px bg-border/50" aria-hidden="true" />
-            <Link
-              href={`/lol/matchups${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
-              className="rounded-full border border-border/65 bg-white/[0.03] px-3 py-1.5 text-sm text-fg/80 transition hover:bg-white/[0.08] hover:text-fg"
-            >
-              Matchups
-            </Link>
-            <Link
-              href={`/lol/pro-builds${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
-              className="rounded-full border border-primary/50 bg-primary/10 px-3 py-1.5 text-sm text-primary transition hover:bg-primary/20"
-            >
-              Pro Builds
-            </Link>
-            <Link
-              href="/lol/summoners/na/Faker-KR1"
-              className="rounded-full border border-border/65 bg-white/[0.03] px-3 py-1.5 text-sm text-fg/80 transition hover:bg-white/[0.08] hover:text-fg"
-            >
-              Player Search
-            </Link>
           </div>
         </div>
       </section>
@@ -114,10 +117,10 @@ export default async function HomePage({
         <Card className="p-0">
           <div className="flex items-center justify-between border-b border-border/50 px-5 py-3.5">
             <div>
-              <h2 className="font-[var(--font-sora)] text-lg font-semibold">Top Champions · Platinum+</h2>
-              <p className="mt-0.5 text-xs text-muted">Best-performing picks for this patch</p>
+              <h2 className="type-section">Top Champions · Platinum+</h2>
+              <p className="type-ui mt-1 text-muted">Best-performing picks for this patch</p>
             </div>
-            <Link href={`/lol/tierlist${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`} className="text-xs text-primary hover:underline">
+            <Link href={hrefWithRegion("/lol/tierlist")} className="type-ui font-semibold text-primary hover:underline">
               View full tier list
             </Link>
           </div>
@@ -142,7 +145,7 @@ export default async function HomePage({
                     return (
                       <tr key={`${entry.championId}-${entry.role}`} className="border-b border-border/20">
                         <td className="px-4 py-2.5">
-                          <Link href={`/lol/champions/${entry.championId}?role=${entry.role}${activeRegion !== "ALL" ? `&region=${encodeURIComponent(activeRegion)}` : ""}`} className="flex min-w-0 items-center gap-2.5 hover:underline">
+                          <Link href={hrefWithRegion(`/lol/champions/${entry.championId}?role=${entry.role}`)} className="flex min-w-0 items-center gap-2.5 hover:underline">
                             <Image
                               src={championIconUrl(version, champ?.id ?? "Unknown")}
                               alt={name}
@@ -172,7 +175,7 @@ export default async function HomePage({
 
         <div className="grid content-start gap-5">
           <Card className="p-5">
-            <h2 className="font-[var(--font-sora)] text-lg font-semibold">Hot Right Now</h2>
+            <h2 className="type-section">Hot Right Now</h2>
             <div className="mt-4 grid gap-2">
               {trendingRows.length === 0 ? (
                 <p className="text-sm text-muted">No featured champions to show right now.</p>
@@ -183,8 +186,8 @@ export default async function HomePage({
                   return (
                     <Link
                       key={`${entry.championId}-trend`}
-                      href={`/lol/champions/${entry.championId}?role=${entry.role}${activeRegion !== "ALL" ? `&region=${encodeURIComponent(activeRegion)}` : ""}`}
-                      className="flex items-center gap-3 rounded-lg border border-border/60 bg-white/[0.03] px-3 py-2.5 transition hover:bg-white/[0.08]"
+                      href={hrefWithRegion(`/lol/champions/${entry.championId}?role=${entry.role}`)}
+                      className="flex items-center gap-3 border-b border-border/20 py-2.5 transition hover:border-border/45"
                     >
                       <Image
                         src={championIconUrl(version, champ?.id ?? "Unknown")}
@@ -206,29 +209,33 @@ export default async function HomePage({
             </div>
           </Card>
 
-          <Card className="border-primary/30 bg-gradient-to-br from-primary/8 to-primary-2/5 p-5">
-            <h2 className="font-[var(--font-sora)] text-base font-semibold text-primary">Player Tools</h2>
-            <p className="mt-1.5 text-sm text-fg/80">
+          <Card className="p-5">
+            <p className="type-kicker text-fg/56">Player Tools</p>
+            <h2 className="type-section mt-2 text-fg">Builds, matchups, and player routes</h2>
+            <p className="type-ui mt-2 text-fg/80">
               Matchup breakdowns, pro builds, and player profiles.
             </p>
-            <div className="mt-3.5 flex flex-wrap gap-2">
+            <div className="mt-4 grid gap-3 border-t border-border/25 pt-4">
               <Link
-                href={`/lol/matchups${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
-                className="inline-flex rounded-md border border-primary/40 bg-primary/15 px-3 py-1.5 text-sm font-medium text-primary transition hover:bg-primary/25"
+                href={hrefWithRegion("/lol/matchups")}
+                className="type-ui inline-flex items-center justify-between gap-3 text-fg/84 transition hover:text-fg"
               >
-                Matchups
+                <span>Matchups</span>
+                <span className="text-primary" aria-hidden="true">/</span>
               </Link>
               <Link
-                href={`/lol/pro-builds${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
-                className="inline-flex rounded-md border border-border/70 bg-white/[0.05] px-3 py-1.5 text-sm text-fg/85 transition hover:bg-white/[0.10]"
+                href={hrefWithRegion("/lol/pro-builds")}
+                className="type-ui inline-flex items-center justify-between gap-3 border-t border-border/20 pt-3 text-fg/84 transition hover:text-fg"
               >
-                Pro Builds
+                <span>Pro Builds</span>
+                <span className="text-primary" aria-hidden="true">/</span>
               </Link>
               <Link
                 href="/lol/summoners/na/Faker-KR1"
-                className="inline-flex rounded-md border border-border/70 bg-white/[0.05] px-3 py-1.5 text-sm text-fg/85 transition hover:bg-white/[0.10]"
+                className="type-ui inline-flex items-center justify-between gap-3 border-t border-border/20 pt-3 text-fg/84 transition hover:text-fg"
               >
-                Player Page
+                <span>Player Page</span>
+                <span className="text-primary" aria-hidden="true">/</span>
               </Link>
             </div>
           </Card>

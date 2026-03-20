@@ -96,13 +96,15 @@ Agents can use `playwright-cli` to take screenshots and interact with the live s
 - Use `playwright-cli snapshot` to get a DOM snapshot with element refs
 
 When working on **frontend-only changes** (no backend modifications), use the live API:
-- Live site: `https://kronic.one`
+- Live site: `https://transcend.kronic.one`
 - Live API: `https://api.kronic.one`
+- Local dev server: `http://localhost:3000` (reflects local changes, use this for testing)
+- The live site updates once changes are merged into `main` and pushed to GitHub
 - This avoids needing a local backend running
 
 Test summoner for verification: `Kronic#NA1` (region: NA)
-- LoL profile: `https://kronic.one/lol/summoners/na/Kronic-NA1`
-- TFT profile: `https://kronic.one/tft/summoners/na/Kronic-NA1`
+- LoL profile: `https://transcend.kronic.one/lol/summoners/na/Kronic-NA1`
+- TFT profile: `https://transcend.kronic.one/tft/summoners/na/Kronic-NA1`
 
 ## EF Migration Policy (Required)
 

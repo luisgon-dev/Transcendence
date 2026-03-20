@@ -17,7 +17,7 @@ const base =
 
 const variants: Record<Variant, string> = {
   primary:
-    "bg-gradient-to-r from-primary to-primary-2 text-slate-950 shadow-glow hover:scale-[1.01] hover:brightness-110 active:scale-[0.99]",
+    "bg-gradient-to-r from-primary to-primary-2 text-slate-950 shadow-glow hover:brightness-105 active:brightness-95",
   outline:
     "border border-border/80 bg-surface/45 text-fg shadow-glass hover:border-border-strong hover:bg-surface/70 active:bg-surface/45",
   ghost: "text-fg/90 hover:bg-white/10 active:bg-white/5"

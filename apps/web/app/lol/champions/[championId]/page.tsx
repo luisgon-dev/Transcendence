@@ -202,9 +202,9 @@ export default async function ChampionDetailPage({
   );
 
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-8">
       {/* ── Champion Header ── */}
-      <header className="glass-card mesh-highlight relative overflow-hidden rounded-[2rem] p-5 md:p-6">
+      <header className="glass-card mesh-highlight relative overflow-hidden rounded-[2rem] p-5 md:p-8">
         <div
           className="pointer-events-none absolute inset-0 opacity-30"
           style={{
@@ -214,18 +214,18 @@ export default async function ChampionDetailPage({
           }}
         />
 
-        <div className="relative flex flex-col gap-4">
-        <div className="flex items-center gap-4">
+        <div className="relative flex flex-col gap-5">
+        <div className="flex items-start gap-3 sm:items-center sm:gap-4">
           <Image
             src={championIconUrl(version, champSlug)}
             alt={champName}
             width={64}
             height={64}
-            className="rounded-xl border border-border/60"
+            className="h-12 w-12 rounded-xl border border-border/60 sm:h-16 sm:w-16"
           />
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="font-[var(--font-sora)] text-2xl font-semibold tracking-tight sm:text-3xl">
                 {champName}
               </h1>
               <TierBadge tier={heroTier} size="md" />

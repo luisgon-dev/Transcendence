@@ -131,7 +131,7 @@ export function SiteHeaderClient({
               variant="header"
               size="sm"
               className={cn(
-                "h-9 min-w-[148px]",
+                "h-9 min-w-0 sm:min-w-[148px]",
                 compact ? "max-w-[230px]" : "max-w-[220px]"
               )}
             />
@@ -140,18 +140,28 @@ export function SiteHeaderClient({
         </div>
 
         {/* Mobile nav */}
-        <nav className="flex flex-wrap items-center gap-3 border-t border-border/40 pt-2 md:hidden">
+        <nav className="flex flex-wrap items-center gap-1.5 border-t border-border/40 pt-2 md:hidden">
           <GameSwitcher pathname={pathname} />
 
-          {contextLinks.map((link) => (
-            <Link key={link.href} href={link.href} className={navLinkClass(pathname, link.href)}>
-              {link.mobileLabel ?? link.label}
-            </Link>
-          ))}
+          {contextLinks.map((link) => {
+            const isActive = pathname?.startsWith(link.href) ?? false;
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={cn(
+                  "inline-flex min-h-[36px] items-center rounded-lg px-2.5 text-sm transition",
+                  isActive ? "bg-white/[0.06] font-semibold text-fg" : "text-fg/70 active:bg-white/[0.04]"
+                )}
+              >
+                {link.mobileLabel ?? link.label}
+              </Link>
+            );
+          })}
 
           {patch && (
             <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-              Patch {patch}
+              {patch}
             </span>
           )}
           <Link
@@ -159,7 +169,7 @@ export function SiteHeaderClient({
             target="_blank"
             rel="noreferrer"
             aria-label="Open Transcendence GitHub repository"
-            className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-full border border-border/70 bg-surface/40 text-fg/75 transition hover:bg-white/10 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+            className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-full border border-border/70 bg-surface/40 text-fg/75 transition active:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
           >
             <GitHubIcon className="h-4 w-4" />
           </Link>

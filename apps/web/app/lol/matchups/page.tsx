@@ -71,27 +71,29 @@ export default async function MatchupsIndexPage({
     }));
 
   return (
-    <div className="grid gap-6">
-      <header className="grid gap-3">
+    <div className="grid gap-8">
+      <header className="glass-card mesh-highlight rounded-3xl p-5 md:p-8">
         <div className="flex flex-wrap items-center gap-2">
           <Badge className="border-primary/40 bg-primary/10 text-primary">
             Matchup Tool
           </Badge>
           <Badge>{popular.length} role pages</Badge>
         </div>
-        <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
+        <h1 className="mt-4 font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
           Matchup Analysis
         </h1>
-        <p className="text-sm text-fg/75">
+        <p className="mt-2 text-sm text-fg/75">
           Search for a champion, pick a role, and jump straight to counters and favorable lanes.
         </p>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="mt-4 flex flex-wrap items-center gap-2">
           <Badge>{activeRegionLabel}</Badge>
           <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />
         </div>
-        <AnalyticsSampleBanner
-          sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
-        />
+        <div className="mt-3">
+          <AnalyticsSampleBanner
+            sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
+          />
+        </div>
       </header>
 
       <Card className="p-4 md:p-5">

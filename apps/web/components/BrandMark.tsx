@@ -9,8 +9,8 @@ export function BrandMark({ className }: { className?: string }) {
     >
       <defs>
         <linearGradient id="trn-mark-gradient" x1="10" y1="8" x2="54" y2="56">
-          <stop offset="0%" stopColor="#b374ff" />
-          <stop offset="100%" stopColor="#4a9eff" />
+          <stop offset="0%" stopColor="#f0a030" />
+          <stop offset="100%" stopColor="#e06545" />
         </linearGradient>
       </defs>
 

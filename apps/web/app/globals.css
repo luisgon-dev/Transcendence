@@ -3,27 +3,27 @@
 @tailwind utilities;
 
 :root {
-  --bg: 222 56% 6%;
-  --surface: 223 41% 11%;
-  --surface-2: 224 40% 14%;
-  --border: 219 29% 24%;
-  --border-strong: 220 34% 34%;
-  --fg: 210 40% 98%;
-  --muted: 218 20% 70%;
-  --primary: 188 92% 57%;
-  --primary-2: 258 86% 70%;
-  --success: 154 72% 44%;
-  --danger: 348 90% 61%;
-  --warning: 45 97% 56%;
-  --tier-s: 45 97% 56%;
-  --tier-a: 188 92% 57%;
-  --tier-b: 154 72% 44%;
-  --tier-c: 258 86% 70%;
-  --tier-d: 215 15% 58%;
-  --wr-high: 154 72% 44%;
-  --wr-low: 348 90% 61%;
-  --win: 154 72% 44%;
-  --loss: 348 90% 61%;
+  --bg: 20 14% 7%;
+  --surface: 22 10% 12%;
+  --surface-2: 22 8% 16%;
+  --border: 22 8% 22%;
+  --border-strong: 22 10% 32%;
+  --fg: 35 20% 95%;
+  --muted: 25 8% 58%;
+  --primary: 38 78% 54%;
+  --primary-2: 16 62% 55%;
+  --success: 154 55% 42%;
+  --danger: 348 68% 58%;
+  --warning: 45 78% 54%;
+  --tier-s: 45 78% 54%;
+  --tier-a: 160 48% 44%;
+  --tier-b: 154 55% 42%;
+  --tier-c: 25 48% 52%;
+  --tier-d: 20 8% 50%;
+  --wr-high: 154 55% 42%;
+  --wr-low: 348 68% 58%;
+  --win: 154 55% 42%;
+  --loss: 348 68% 58%;
 }
 
 html,
@@ -48,66 +48,41 @@ body::before {
   background:
     radial-gradient(
       900px 480px at 10% -5%,
-      hsl(var(--primary) / 0.22),
+      hsl(var(--primary) / 0.10),
       transparent 65%
     ),
     radial-gradient(
       900px 540px at 90% -5%,
-      hsl(var(--primary-2) / 0.2),
+      hsl(var(--primary-2) / 0.08),
       transparent 70%
     ),
     radial-gradient(
       800px 500px at 50% 110%,
-      hsl(210 100% 50% / 0.12),
+      hsl(20 50% 35% / 0.05),
       transparent 70%
     );
 }
 
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: -1;
-  opacity: 0.045;
-  background-image:
-    repeating-linear-gradient(
-      0deg,
-      rgba(255, 255, 255, 0.1),
-      rgba(255, 255, 255, 0.1) 1px,
-      transparent 1px,
-      transparent 2px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      rgba(255, 255, 255, 0.08),
-      rgba(255, 255, 255, 0.08) 1px,
-      transparent 1px,
-      transparent 3px
-    );
-  mix-blend-mode: overlay;
-}
-
 .glass-card {
-  border: 1px solid hsl(var(--border) / 0.6);
+  border: 1px solid hsl(var(--border) / 0.5);
   background: linear-gradient(
     to bottom right,
-    hsl(var(--surface) / 0.76),
-    hsl(var(--surface-2) / 0.6)
+    hsl(var(--surface) / 0.7),
+    hsl(var(--surface-2) / 0.55)
   );
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(10px);
 }
 
 .glass-panel {
-  border: 1px solid hsl(var(--border) / 0.6);
-  background: hsl(var(--surface) / 0.58);
-  backdrop-filter: blur(10px);
+  border: 1px solid hsl(var(--border) / 0.5);
+  background: hsl(var(--surface) / 0.5);
+  backdrop-filter: blur(8px);
 }
 
 .mesh-highlight {
   box-shadow:
-    0 0 0 1px hsl(var(--border) / 0.55),
-    0 20px 40px hsl(230 45% 5% / 0.6),
-    inset 0 1px 0 hsl(0 0% 100% / 0.05);
+    0 0 0 1px hsl(var(--border) / 0.45),
+    0 12px 24px hsl(20 30% 5% / 0.4),
+    inset 0 1px 0 hsl(35 20% 100% / 0.04);
 }
 

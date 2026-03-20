@@ -77,16 +77,16 @@ export default async function TierListPage({
       : null;
 
   return (
-    <div className="grid gap-6">
-      <header className="glass-card mesh-highlight flex flex-col gap-3 rounded-3xl p-5 md:p-6">
+    <div className="grid gap-8">
+      <header className="glass-card mesh-highlight rounded-3xl p-5 md:p-8">
         <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
           Tier List
         </h1>
-        <p className="text-sm text-fg/75">
+        <p className="mt-2 text-sm text-fg/75">
           See which champions are winning most often for this role, rank, and region.
         </p>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <Badge className="border-primary/40 bg-primary/10 text-primary">
             Patch {tierlist.patch ?? "Unknown"}
           </Badge>
@@ -96,9 +96,11 @@ export default async function TierListPage({
           <Badge>{normalizedEntries.length} champions</Badge>
         </div>
 
-        <AnalyticsSampleBanner
-          sample={(tierlist as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
-        />
+        <div className="mt-3">
+          <AnalyticsSampleBanner
+            sample={(tierlist as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
+          />
+        </div>
 
         <FilterBar
           activeRole={roleParam || "ALL"}
@@ -107,6 +109,7 @@ export default async function TierListPage({
           activeRegion={activeRegion}
           baseHref="/lol/tierlist"
           patch={tierlist.patch}
+          className="mt-4"
         />
       </header>
 

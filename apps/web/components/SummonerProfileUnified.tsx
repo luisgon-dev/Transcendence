@@ -716,8 +716,8 @@ export function SummonerProfileClient({
   ];
 
   return (
-    <div className="grid gap-6">
-      <Card className="rounded-3xl p-5 md:p-6">
+    <div className="grid gap-8">
+      <Card className="rounded-3xl p-5 md:p-8">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-4">
             {profile && championStatic ? (
@@ -764,7 +764,7 @@ export function SummonerProfileClient({
         <Card className="p-5"><Skeleton className="h-16 w-full" /></Card>
       ) : (
         <div className="grid gap-6 lg:grid-cols-12 lg:items-start">
-          <aside className="grid content-start gap-4 lg:col-span-3 xl:col-span-3 lg:self-start">
+          <aside className="grid content-start gap-5 lg:col-span-3 xl:col-span-3 lg:self-start">
             <Card className="p-4">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="font-[var(--font-sora)] text-lg font-semibold">Ranked</h2>
@@ -839,7 +839,7 @@ export function SummonerProfileClient({
             <LiveGameCard region={region} gameName={gameName} tagLine={tagLine} />
           </aside>
 
-          <section className="grid gap-4 lg:col-span-9 xl:col-span-9">
+          <section className="grid gap-5 lg:col-span-9 xl:col-span-9">
             <Card className="p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -1326,7 +1326,7 @@ export function SummonerProfileClient({
                                               <p className="px-1 text-[10px] uppercase tracking-wide text-muted">
                                                 {roleDisplayLabel(row.roleKey)}
                                               </p>
-                                              <div className="grid gap-2 xl:grid-cols-2">
+                                              <div className="grid gap-2 sm:grid-cols-2">
                                                 {renderParticipantCard(row.blue, 100, row.roleKey, rowIndex)}
                                                 {renderParticipantCard(row.red, 200, row.roleKey, rowIndex)}
                                               </div>

@@ -100,20 +100,20 @@ export default async function ChampionsPage({
     .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <div className="grid gap-6">
-      <header className="grid gap-2">
+    <div className="grid gap-8">
+      <header className="glass-card mesh-highlight rounded-3xl p-5 md:p-8">
         <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
           Champions
         </h1>
-        <p className="text-sm text-fg/75">
+        <p className="mt-2 text-sm text-fg/75">
           Browse every champion and jump straight into builds, win rates, and matchup pages.
         </p>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="mt-4 flex flex-wrap items-center gap-2">
           <AnalyticsSampleBanner
             sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
           />
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="rounded-full border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
             {activeRegionLabel}
           </span>

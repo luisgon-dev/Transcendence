@@ -21,6 +21,7 @@ Transcendence is a backend + web monorepo:
 - Owns Riot/Camille integration for both LoL and TFT
 - In `Development`, the worker narrows recurring schedules to analytics-oriented jobs only (analytics refresh/ingestion, summoner maintenance, timeline backfill)
 - In `Production`, startup can bootstrap analytics immediately by running patch detection first, then queuing ingestion + adaptive analytics refresh (controlled by `Jobs:Schedule:RunPatchDetectionOnStartup`)
+- On startup patch rollover, the worker can purge enqueued/scheduled Hangfire backlog before bootstrapping new-patch analytics so stale backlog does not block the new patch
 
 ### `Transcendence.Service.Core`
 - Domain/application services (analysis, analytics compute, auth, live game, Riot API integration, jobs)
@@ -51,6 +52,7 @@ Transcendence is a backend + web monorepo:
   - `/tft/traits/*`
   - `/tft/augments/*`
   - `/tft/summoners/[region]/[riotId]`
+- Public LoL patch badges now read backend analytics patch status instead of raw Data Dragon latest so web patch labels match the active analytics dataset
 
 ### `packages/api-client`
 - Generated OpenAPI TypeScript client artifacts built from the committed spec
@@ -200,6 +202,7 @@ Operational implication:
 
 - Analytics APIs intentionally do not fall back to previous patch payloads.
 - Responses include sample metadata (`sampleStatus`, `sampleSize`, `minimumRecommendedSampleSize`, `patchAgeHours`, `isEarlyPatchWindow`) so web surfaces can show early-patch low-sample/no-data states explicitly.
+- `GET /api/lol/analytics/status` is the lightweight source of truth for the active LoL analytics patch used by public web chrome and landing surfaces.
 
 ### Match Queue Scope and History
 

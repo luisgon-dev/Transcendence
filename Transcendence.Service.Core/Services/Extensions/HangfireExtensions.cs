@@ -5,6 +5,8 @@ namespace Transcendence.Service.Core.Services.Extensions;
 
 public static class HangfireExtensions
 {
+    public sealed record HangfireBacklogPurgeSummary(int EnqueuedJobs, int ScheduledJobs);
+
     public static void PurgeJobs(this IMonitoringApi monitor)
     {
         var toDelete = new List<string>();
@@ -15,6 +17,41 @@ public static class HangfireExtensions
                     .ForEach(x => toDelete.Add(x.Key));
 
         foreach (var jobId in toDelete) BackgroundJob.Delete(jobId);
+    }
+
+    public static HangfireBacklogPurgeSummary PurgeEnqueuedAndScheduledJobs(this IMonitoringApi monitor)
+    {
+        ArgumentNullException.ThrowIfNull(monitor);
+
+        var enqueuedJobs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var scheduledJobs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var queue in monitor.Queues())
+        {
+            for (var offset = 0; offset < Math.Ceiling(queue.Length / 1000d) * 1000; offset += 1000)
+            {
+                foreach (var job in monitor.EnqueuedJobs(queue.Name, offset, 1000))
+                    enqueuedJobs.Add(job.Key);
+            }
+        }
+
+        for (var offset = 0; ; offset += 1000)
+        {
+            var page = monitor.ScheduledJobs(offset, 1000);
+            if (page.Count == 0)
+                break;
+
+            foreach (var job in page)
+                scheduledJobs.Add(job.Key);
+
+            if (page.Count < 1000)
+                break;
+        }
+
+        foreach (var jobId in enqueuedJobs.Concat(scheduledJobs))
+            BackgroundJob.Delete(jobId);
+
+        return new HangfireBacklogPurgeSummary(enqueuedJobs.Count, scheduledJobs.Count);
     }
 
     public static int RemoveInvalidRecurringJobs(

@@ -23,9 +23,12 @@ public class StaticDataService(
         PropertyNameCaseInsensitive = true
     };
 
+    public Task<string?> GetLatestPatchVersionAsync(CancellationToken cancellationToken = default) =>
+        FetchLatestPatchVersionAsync(cancellationToken);
+
     public async Task UpdateStaticDataAsync(CancellationToken cancellationToken = default)
     {
-        var latestPatch = await GetLatestPatchVersionAsync(cancellationToken);
+        var latestPatch = await FetchLatestPatchVersionAsync(cancellationToken);
         if (latestPatch == null)
             return;
 
@@ -34,7 +37,7 @@ public class StaticDataService(
 
     public async Task DetectAndRefreshAsync(CancellationToken cancellationToken = default)
     {
-        var latestPatch = await GetLatestPatchVersionAsync(cancellationToken);
+        var latestPatch = await FetchLatestPatchVersionAsync(cancellationToken);
         if (latestPatch == null)
             return;
 
@@ -132,7 +135,7 @@ public class StaticDataService(
         return true;
     }
 
-    private async Task<string?> GetLatestPatchVersionAsync(CancellationToken cancellationToken)
+    private async Task<string?> FetchLatestPatchVersionAsync(CancellationToken cancellationToken)
     {
         var client = httpClientFactory.CreateClient();
         var patches = await FetchPatchesAsync(client, cancellationToken);

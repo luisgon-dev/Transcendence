@@ -288,6 +288,7 @@ It explicitly removes non-analytics recurring jobs (`detect-patch`, `retry-faile
 When `Transcendence.Service` runs in non-development environments, the `ProductionWorker` can queue startup bootstrap jobs so analytics is available sooner after deploy:
 
 - `Jobs:Schedule:RunPatchDetectionOnStartup=true` runs patch detection immediately on startup.
+- `Jobs:Schedule:PurgeBacklogOnPatchRolloverOnStartup=true` clears enqueued and scheduled Hangfire backlog when startup detects a new LoL patch so fresh analytics jobs start at the front of the line.
 - After startup patch detection, the worker queues analytics ingestion (when enabled) and adaptive analytics refresh.
 
 ### Champion Analytics Ingestion

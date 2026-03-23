@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { AnalyticsRegionFilter } from "@/components/AnalyticsRegionFilter";
 import { GlobalSearchLauncher } from "@/components/GlobalSearchLauncher";
 import { fetchBackendJson } from "@/lib/backendCall";
+import { fetchLolAnalyticsStatus } from "@/lib/lolAnalyticsStatus";
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { getBackendBaseUrl } from "@/lib/env";
 import { formatGames, formatPercent } from "@/lib/format";
@@ -33,14 +34,15 @@ export default async function HomePage({
   );
   const tierListQuery = new URLSearchParams();
   if (activeRegion !== "ALL") tierListQuery.set("region", activeRegion);
-  const [{ version, champions }, tierListRes] = await Promise.all([
+  const [{ version, champions }, analyticsStatus, tierListRes] = await Promise.all([
     fetchChampionMap(),
+    fetchLolAnalyticsStatus(),
     fetchBackendJson<TierListResponse>(`${getBackendBaseUrl()}/api/lol/analytics/tierlist?${tierListQuery.toString()}`, {
       next: { revalidate: 60 * 60 }
     })
   ]);
 
-  const patch = version.split(".").slice(0, 2).join(".");
+  const patch = analyticsStatus?.patch ?? tierListRes.body?.patch ?? null;
   const entries = tierListRes.ok
     ? normalizeTierListEntries(tierListRes.body?.entries ?? [])
     : [];
@@ -59,8 +61,10 @@ export default async function HomePage({
       <section className="page-hero p-6 sm:p-8 md:p-10">
         {/* Identity zone */}
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-          <Badge className="border-primary/40 bg-primary/10 text-primary">Patch {patch}</Badge>
-          <Badge className="border-success/40 bg-success/10 text-success">Live Patch Data</Badge>
+          {patch ? (
+            <Badge className="border-primary/40 bg-primary/10 text-primary">Patch {patch}</Badge>
+          ) : null}
+          <Badge className="border-success/40 bg-success/10 text-success">Current Analytics Data</Badge>
           <Badge>{activeRegionLabel}</Badge>
         </div>
 

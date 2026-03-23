@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Transcendence.Data;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
@@ -15,6 +17,7 @@ namespace Transcendence.WebAPI.Controllers;
 [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
 public class AnalyticsController(
     IChampionAnalyticsService analyticsService,
+    TranscendenceContext db,
     IOptions<MultiRegionIngestionOptions> multiRegionOptions) : ControllerBase
 {
     /// <summary>
@@ -43,6 +46,22 @@ public class AnalyticsController(
     public IActionResult GetRegions()
     {
         return Ok(AnalyticsRegionCatalog.BuildAvailableRegions(multiRegionOptions.Value));
+    }
+
+    [HttpGet("status")]
+    [ProducesResponseType(typeof(AnalyticsPatchStatusDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetStatus(CancellationToken ct)
+    {
+        var activePatch = await db.Patches
+            .AsNoTracking()
+            .Where(p => p.IsActive)
+            .Select(p => new AnalyticsPatchStatusDto(
+                p.Version,
+                p.ReleaseDate,
+                p.DetectedAt))
+            .FirstOrDefaultAsync(ct);
+
+        return Ok(activePatch ?? new AnalyticsPatchStatusDto(null, null, null));
     }
 
     /// <summary>

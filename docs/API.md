@@ -119,6 +119,7 @@ Example (`SummonerAcceptedResponse`):
 
 - `GET /api/lol/analytics/tierlist`
 - `GET /api/lol/analytics/regions`
+- `GET /api/lol/analytics/status`
 - `GET /api/lol/analytics/champions/{championId}/winrates`
 - `GET /api/lol/analytics/champions/{championId}/builds`
 - `GET /api/lol/analytics/champions/{championId}/pro-builds`
@@ -145,6 +146,11 @@ Early-patch semantics:
 - Concrete platform region token: for example `NA1|EUW1|EUN1|KR`
 - Supported public region tokens are discoverable via `GET /api/lol/analytics/regions`
 - Tier list, builds, and matchup responses now echo the resolved `region` field so the UI can badge active scope without guessing
+
+`GET /api/lol/analytics/status` returns the backend-owned active LoL analytics patch metadata:
+- `patch`
+- `activePatchReleasedAtUtc`
+- `activePatchDetectedAtUtc`
 
 `GET /api/lol/analytics/champions/{championId}/builds` includes full rune setup per build:
 - `primaryStyleId`, `subStyleId`

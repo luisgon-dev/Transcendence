@@ -13,7 +13,8 @@ public class ProductionWorker(
     JobStorage jobStorage,
     IOptions<WorkerJobScheduleOptions> options,
     IWorkerRecurringJobPolicy recurringJobPolicy,
-    IWorkerStartupIntegrityService startupIntegrityService) : BackgroundService
+    IWorkerStartupIntegrityService startupIntegrityService,
+    IStartupPatchRolloverService startupPatchRolloverService) : BackgroundService
 {
     public override async Task StartAsync(CancellationToken cancellationToken)
     {
@@ -36,6 +37,18 @@ public class ProductionWorker(
                 $"Failures: {string.Join("; ", startupResult.MandatoryFailures)}");
         }
 
+        var patchRolloverResult = await startupPatchRolloverService.PrepareAsync(cancellationToken);
+        if (patchRolloverResult.PatchRolloverDetected)
+        {
+            logger.LogWarning(
+                "Startup patch rollover state: previous={PreviousPatch}, latest={LatestPatch}, completed={Completed}, purgedEnqueued={PurgedEnqueued}, purgedScheduled={PurgedScheduled}.",
+                patchRolloverResult.PreviousPatch ?? "none",
+                patchRolloverResult.LatestPatch ?? "unknown",
+                patchRolloverResult.PatchDetectionCompleted,
+                patchRolloverResult.PurgedEnqueuedJobs,
+                patchRolloverResult.PurgedScheduledJobs);
+        }
+
         var descriptorsById = descriptors.ToDictionary(
             descriptor => descriptor.JobId,
             StringComparer.OrdinalIgnoreCase);
@@ -50,7 +63,10 @@ public class ProductionWorker(
             profileName,
             configuredJobs);
 
-        EnqueueStartupAnalyticsBootstrap(schedule, descriptorsById);
+        EnqueueStartupAnalyticsBootstrap(
+            schedule,
+            descriptorsById,
+            skipStartupPatchDetectionJob: patchRolloverResult.PatchDetectionCompleted);
 
         // One-time backfill: fix matches ingested before the FetchStatus bug was fixed
         TryEnqueueStartupJob(
@@ -73,10 +89,12 @@ public class ProductionWorker(
 
     private void EnqueueStartupAnalyticsBootstrap(
         WorkerJobScheduleOptions schedule,
-        IReadOnlyDictionary<string, WorkerRecurringJobDescriptor> descriptorsById)
+        IReadOnlyDictionary<string, WorkerRecurringJobDescriptor> descriptorsById,
+        bool skipStartupPatchDetectionJob)
     {
         string? patchJobId = null;
-        if (schedule.RunPatchDetectionOnStartup &&
+        if (!skipStartupPatchDetectionJob &&
+            schedule.RunPatchDetectionOnStartup &&
             IsRecurringJobEnabled(descriptorsById, WorkerRecurringJobPolicy.DetectPatchJobId))
         {
             patchJobId = TryEnqueueStartupJob(

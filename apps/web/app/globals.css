@@ -65,6 +65,8 @@
   --radius-card: 1.25rem;
   --radius-panel: 1.5rem;
   --radius-hero: 2rem;
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --elevation-soft: 0 6px 14px hsl(222 30% 4% / 0.2);
   --elevation-card: 0 10px 24px hsl(222 30% 4% / 0.12);
   --elevation-media: 0 18px 26px hsl(222 30% 4% / 0.28);
@@ -451,20 +453,21 @@ body::before {
     align-items: center;
     justify-content: center;
     gap: 0.35rem;
-    min-height: 2.25rem;
+    min-height: 2.5rem;
     border-radius: 0;
     border: none;
     background: transparent;
-    padding: 0.5rem 0.1rem 0.7rem;
+    padding: 0.625rem 0.35rem 0.75rem;
     font-size: 0.875rem;
     line-height: 1;
     letter-spacing: 0.01em;
     color: hsl(var(--fg) / 0.72);
     box-shadow: inset 0 -1px 0 hsl(var(--border) / 0.42);
+    touch-action: manipulation;
     transition:
-      box-shadow 160ms ease,
-      color 160ms ease,
-      transform 160ms ease;
+      box-shadow 180ms var(--ease-out-quart),
+      color 180ms var(--ease-out-quart),
+      transform 180ms var(--ease-out-quart);
   }
 
   .control-tab:hover {
@@ -531,6 +534,15 @@ body::before {
   }
 }
 
+@media (pointer: coarse) {
+  @layer components {
+    .control-tab {
+      min-height: 2.75rem;
+      padding-inline: 0.45rem;
+    }
+  }
+}
+
 @keyframes command-overlay-in {
   from {
     opacity: 0;
@@ -553,7 +565,10 @@ body::before {
 
 @media (prefers-reduced-motion: reduce) {
   .command-palette-overlay,
-  .command-palette-panel {
+  .command-palette-panel,
+  .control-tab,
+  .control-tab::after {
     animation: none;
+    transition-duration: 0.01ms !important;
   }
 }

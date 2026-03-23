@@ -66,7 +66,7 @@ export function MatchupsExplorerClient({
                 type="button"
                 onClick={() => setRole(roleOption)}
                 aria-pressed={role === roleOption}
-                className={`min-h-9 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                className={`min-h-11 rounded-full border px-3 py-2 text-sm font-medium transition ${
                   role === roleOption
                     ? "border-primary/45 bg-primary/15 text-primary"
                     : "border-border/70 bg-surface/70 text-fg/80 hover:bg-surface/90"

@@ -30,7 +30,7 @@ const TFT_LINKS: NavLink[] = [
 function navLinkClass(pathname: string | null, prefix: string): string {
   const isActive = pathname?.startsWith(prefix) ?? false;
   return cn(
-    "type-ui relative whitespace-nowrap rounded-full px-2 py-2 transition",
+    "type-ui relative inline-flex min-h-11 items-center whitespace-nowrap rounded-full px-3 py-2 transition-colors duration-150 ease-[cubic-bezier(0.25,1,0.5,1)]",
     isActive ? "font-semibold text-fg" : "text-fg/70 hover:text-fg",
     isActive &&
       "after:absolute after:inset-x-2 after:bottom-0 after:h-px after:rounded-full after:bg-primary/85"
@@ -54,7 +54,10 @@ export function SiteHeaderClient({
     <header className="sticky top-0 z-40 border-b border-border/60 bg-bg/90 backdrop-blur-sm">
       <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-3 px-4 py-3 md:px-6">
         <div className="flex items-center gap-3">
-          <Link href="/" className="group inline-flex min-w-0 shrink-0 items-center gap-3">
+          <Link
+            href="/"
+            className="group -ml-1 inline-flex min-h-11 min-w-0 shrink-0 items-center gap-3 rounded-full px-1 py-1 touch-manipulation"
+          >
             <BrandMark className="h-9 w-9 shrink-0 transition group-hover:scale-105" />
             <div className="grid min-w-0 gap-0.5">
               <span className="type-wordmark truncate text-fg">
@@ -72,7 +75,7 @@ export function SiteHeaderClient({
             <GlobalSearchLauncher
               variant="header"
               size="sm"
-              className="w-10 px-0 lg:w-auto lg:px-3"
+              className="w-11 px-0 lg:w-auto lg:px-3"
             />
             <div className="shrink-0">{children}</div>
           </div>

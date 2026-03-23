@@ -86,8 +86,9 @@ export function AnalyticsRegionFilter({
             key={option.code}
             type="button"
             onClick={() => applyRegion(option.code)}
-            className="control-chip type-ui px-3 py-2"
+            className="control-tab type-ui min-h-11 px-3 py-2"
             data-active={active}
+            aria-pressed={active}
           >
             {option.label}
           </button>

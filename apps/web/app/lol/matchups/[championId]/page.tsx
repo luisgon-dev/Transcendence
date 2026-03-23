@@ -217,7 +217,7 @@ export default async function MatchupAnalysisPage({
                 const opponentId = entry.opponentChampionId ?? 0;
                 const opponent = champions[String(opponentId)];
                 return (
-                  <li key={`${opponentId}-${idx}`} className="flex items-center justify-between rounded-lg border border-border/50 bg-white/[0.03] px-3 py-2">
+                  <li key={`${opponentId}-${idx}`} className="surface-subtle flex items-center justify-between rounded-card px-3 py-2">
                     <Link href={`/lol/champions/${opponentId}${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`} className="min-w-0 hover:underline">
                       <ChampionPortrait
                         championSlug={opponent?.id ?? "Unknown"}
@@ -247,7 +247,7 @@ export default async function MatchupAnalysisPage({
                 const opponentId = entry.opponentChampionId ?? 0;
                 const opponent = champions[String(opponentId)];
                 return (
-                  <li key={`${opponentId}-${idx}`} className="flex items-center justify-between rounded-lg border border-border/50 bg-white/[0.03] px-3 py-2">
+                  <li key={`${opponentId}-${idx}`} className="surface-subtle flex items-center justify-between rounded-card px-3 py-2">
                     <Link href={`/lol/champions/${opponentId}${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`} className="min-w-0 hover:underline">
                       <ChampionPortrait
                         championSlug={opponent?.id ?? "Unknown"}
@@ -279,7 +279,7 @@ export default async function MatchupAnalysisPage({
                 region: activeRegion,
                 sort: "winRate"
               })}
-              className={`control-chip type-ui px-3 py-2 ${
+              className={`control-tab type-ui px-3 py-2 ${
                 sortKey === "winRate"
                   ? "font-semibold"
                   : ""
@@ -296,7 +296,7 @@ export default async function MatchupAnalysisPage({
                 region: activeRegion,
                 sort: "games"
               })}
-              className={`control-chip type-ui px-3 py-2 ${
+              className={`control-tab type-ui px-3 py-2 ${
                 sortKey === "games"
                   ? "font-semibold"
                   : ""

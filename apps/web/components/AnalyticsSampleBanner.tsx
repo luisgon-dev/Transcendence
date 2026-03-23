@@ -25,9 +25,9 @@ export function AnalyticsSampleBanner({ sample }: AnalyticsSampleBannerProps) {
   const tone =
     normalized.status === "sufficient"
       ? {
-          card: "border-emerald-400/35 bg-emerald-500/10",
-          badge: "border-emerald-400/35 bg-emerald-500/20 text-emerald-50",
-          meter: "bg-emerald-300",
+          card: "border-success/35 bg-success/10",
+          badge: "border-success/35 bg-success/20 text-fg",
+          meter: "bg-success",
           kicker: "Strong Sample",
           title: "There are plenty of recent games behind this view.",
           detail:
@@ -37,9 +37,9 @@ export function AnalyticsSampleBanner({ sample }: AnalyticsSampleBannerProps) {
         }
       : normalized.status === "low_sample"
         ? {
-            card: "border-amber-400/40 bg-amber-500/10",
-            badge: "border-amber-400/40 bg-amber-500/20 text-amber-50",
-            meter: "bg-amber-300",
+            card: "border-warning/40 bg-warning/10",
+            badge: "border-warning/40 bg-warning/20 text-fg",
+            meter: "bg-warning",
             kicker: "Limited Sample",
             title: "The trend is useful, but the sample size is still light.",
             detail:
@@ -50,9 +50,9 @@ export function AnalyticsSampleBanner({ sample }: AnalyticsSampleBannerProps) {
               "Early patch trends can swing quickly while more matches are still being added."
           }
         : {
-            card: "border-rose-400/40 bg-rose-500/10",
-            badge: "border-rose-400/40 bg-rose-500/20 text-rose-50",
-            meter: "bg-rose-300",
+            card: "border-danger/40 bg-danger/10",
+            badge: "border-danger/40 bg-danger/20 text-fg",
+            meter: "bg-danger",
             kicker: "Very Early Data",
             title: "New-patch data is still too thin to call this reliably.",
             detail:
@@ -76,21 +76,21 @@ export function AnalyticsSampleBanner({ sample }: AnalyticsSampleBannerProps) {
           <p className="type-ui mt-2 text-fg/80">{tone.detail}</p>
         </div>
 
-        <div className="min-w-[144px] rounded-2xl border border-white/10 bg-black/15 px-4 py-3 text-right">
-          <p className="type-kicker text-fg/55">Sample Strength</p>
+        <div className="surface-subtle min-w-[144px] rounded-card px-4 py-3 text-right">
+          <p className="type-kicker text-fg/65">Sample Strength</p>
           <p className="mt-1 text-3xl font-semibold text-fg">{coverage}%</p>
           <p className="type-ui mt-1 text-fg/65">of the recommended sample size</p>
         </div>
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
-        <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-3">
-          <p className="type-kicker text-fg/55">Sample Size</p>
+        <div className="surface-subtle rounded-card px-4 py-3">
+          <p className="type-kicker text-fg/65">Sample Size</p>
           <p className="mt-1 text-2xl font-semibold text-fg">{normalized.sampleSize}</p>
           <p className="type-ui mt-1 text-fg/65">recent matches in this view</p>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-3">
-          <p className="type-kicker text-fg/55">Patch Age</p>
+        <div className="surface-subtle rounded-card px-4 py-3">
+          <p className="type-kicker text-fg/65">Patch Age</p>
           <p className="mt-1 text-2xl font-semibold text-fg">{patchAgeLabel}</p>
           <p className="type-ui mt-1 text-fg/65">
             {normalized.isEarlyPatchWindow
@@ -101,13 +101,13 @@ export function AnalyticsSampleBanner({ sample }: AnalyticsSampleBannerProps) {
       </div>
 
       <div className="mt-4">
-        <div className="type-kicker flex items-center justify-between text-fg/55">
+        <div className="type-kicker flex items-center justify-between text-fg/65">
           <span>Sample Progress</span>
           <span>
             {normalized.sampleSize} / {normalized.minimumRecommendedSampleSize}
           </span>
         </div>
-        <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-black/20">
+        <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-surface-2/70">
           <div
             className={`h-full rounded-full transition-all ${tone.meter}`}
             style={{ width: `${coverage}%` }}

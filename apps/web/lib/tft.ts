@@ -173,21 +173,21 @@ export function tftIconUrl(iconPath: string | null | undefined): string | null {
 // ---------------------------------------------------------------------------
 
 export function placementColorClass(placement: number): string {
-  if (placement === 1) return "text-yellow-400";
-  if (placement <= 4) return "text-emerald-400";
-  return "text-red-400";
+  if (placement === 1) return "text-tier-s";
+  if (placement <= 4) return "text-success";
+  return "text-danger";
 }
 
 export function placementBgClass(placement: number): string {
-  if (placement === 1) return "border-yellow-400/50 bg-yellow-400/10";
-  if (placement <= 4) return "border-emerald-400/40 bg-emerald-400/8";
-  return "border-red-400/40 bg-red-400/8";
+  if (placement === 1) return "border-tier-s/50 bg-tier-s/10";
+  if (placement <= 4) return "border-success/40 bg-success/8";
+  return "border-danger/40 bg-danger/8";
 }
 
 export function placementBarClass(placement: number): string {
-  if (placement === 1) return "bg-yellow-400";
-  if (placement <= 4) return "bg-emerald-400";
-  return "bg-red-400";
+  if (placement === 1) return "bg-tier-s";
+  if (placement <= 4) return "bg-success";
+  return "bg-danger";
 }
 
 export function formatPlacement(placement: number): string {
@@ -211,11 +211,11 @@ export function compTierLabel(avgPlacement: number): string {
 
 export function compTierColorClass(tier: string): string {
   const map: Record<string, string> = {
-    S: "border-yellow-400/60 bg-yellow-400/15 text-yellow-400",
-    A: "border-emerald-400/60 bg-emerald-400/15 text-emerald-400",
-    B: "border-sky-400/60 bg-sky-400/15 text-sky-400",
-    C: "border-orange-400/60 bg-orange-400/15 text-orange-400",
-    D: "border-red-400/60 bg-red-400/15 text-red-400"
+    S: "border-tier-s/60 bg-tier-s/15 text-tier-s",
+    A: "border-tier-a/60 bg-tier-a/15 text-tier-a",
+    B: "border-tier-b/60 bg-tier-b/15 text-tier-b",
+    C: "border-tier-c/60 bg-tier-c/15 text-tier-c",
+    D: "border-danger/60 bg-danger/15 text-danger"
   };
   return map[tier] ?? "border-border/60 bg-surface/50 text-fg/70";
 }

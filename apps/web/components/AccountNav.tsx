@@ -12,7 +12,7 @@ export async function AccountNav() {
     return (
       <div className="inline-flex items-center">
         <Link
-          className="type-ui rounded-full px-3 py-2 font-semibold text-fg/74 transition hover:bg-white/[0.05] hover:text-fg"
+          className="type-ui rounded-full px-3 py-2 font-semibold text-fg/74 transition hover:bg-surface-2/55 hover:text-fg"
           href="/account/login"
         >
           Sign in
@@ -25,14 +25,14 @@ export async function AccountNav() {
     <div className="inline-flex items-center gap-1 sm:gap-2">
       {hasAdminRole(me.roles) ? (
         <Link
-          className="type-ui rounded-full px-3 py-2 font-medium text-fg/70 transition hover:bg-white/[0.05] hover:text-fg"
+          className="type-ui rounded-full px-3 py-2 font-medium text-fg/70 transition hover:bg-surface-2/55 hover:text-fg"
           href="/admin"
         >
           Admin
         </Link>
       ) : null}
       <Link
-        className="type-ui rounded-full px-3 py-2 font-medium text-fg/70 transition hover:bg-white/[0.05] hover:text-fg"
+        className="type-ui rounded-full px-3 py-2 font-medium text-fg/70 transition hover:bg-surface-2/55 hover:text-fg"
         href="/account/favorites"
       >
         Favorites
@@ -42,7 +42,7 @@ export async function AccountNav() {
           variant="ghost"
           size="sm"
           type="submit"
-          className="h-9 rounded-full px-3.5 text-[0.875rem] text-fg/74 hover:bg-white/[0.05] hover:text-fg"
+          className="h-9 rounded-full px-3.5 text-[0.875rem] text-fg/74 hover:bg-surface-2/55 hover:text-fg"
         >
           Log out
         </Button>

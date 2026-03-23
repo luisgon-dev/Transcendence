@@ -52,7 +52,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
 
   return (
     <div className="grid gap-6">
-      <section className="rounded-[1.75rem] border border-border/70 bg-surface/50 p-5">
+      <section className="page-panel p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">Recurring Producers</h2>
@@ -65,7 +65,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
         <AdminRecurringJobsTable jobs={recurring} />
       </section>
 
-      <section className="rounded-[1.75rem] border border-border/70 bg-surface/50 p-5">
+      <section className="page-panel p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">Backlog Explorer</h2>
@@ -82,7 +82,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
                 className={`rounded-full border px-3 py-1 text-xs uppercase tracking-wide transition ${
                   state === entry
                     ? "border-primary/40 bg-primary/10 text-primary"
-                    : "border-border/70 text-fg/70 hover:bg-white/10 hover:text-fg"
+                    : "surface-chip text-fg/70 hover:bg-surface-2/72 hover:text-fg"
                 }`}
               >
                 {entry}
@@ -99,7 +99,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
               type="text"
               name="queue"
               defaultValue={queue}
-              className="h-10 w-32 rounded-xl border border-border/70 bg-surface/80 px-3 text-fg"
+              className="control-input h-10 w-32 bg-surface/80 px-3 text-fg"
             />
           </label>
           <label className="grid gap-1">
@@ -108,7 +108,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
               type="text"
               name="region"
               defaultValue={region}
-              className="h-10 w-28 rounded-xl border border-border/70 bg-surface/80 px-3 text-fg"
+              className="control-input h-10 w-28 bg-surface/80 px-3 text-fg"
             />
           </label>
           <label className="grid gap-1">
@@ -117,7 +117,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
               type="text"
               name="type"
               defaultValue={type}
-              className="h-10 w-44 rounded-xl border border-border/70 bg-surface/80 px-3 text-fg"
+              className="control-input h-10 w-44 bg-surface/80 px-3 text-fg"
             />
           </label>
           <label className="grid gap-1">
@@ -126,7 +126,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
               type="text"
               name="q"
               defaultValue={query}
-              className="h-10 w-44 rounded-xl border border-border/70 bg-surface/80 px-3 text-fg"
+              className="control-input h-10 w-44 bg-surface/80 px-3 text-fg"
             />
           </label>
           <label className="grid gap-1">
@@ -135,7 +135,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
               type="number"
               name="olderThanMinutes"
               defaultValue={olderThanMinutes}
-              className="h-10 w-28 rounded-xl border border-border/70 bg-surface/80 px-3 text-fg"
+              className="control-input h-10 w-28 bg-surface/80 px-3 text-fg"
             />
           </label>
           <label className="grid gap-1">
@@ -144,7 +144,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
               type="number"
               name="from"
               defaultValue={from}
-              className="h-10 w-24 rounded-xl border border-border/70 bg-surface/80 px-3 text-fg"
+              className="control-input h-10 w-24 bg-surface/80 px-3 text-fg"
             />
           </label>
           <label className="grid gap-1">
@@ -153,7 +153,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
               type="number"
               name="count"
               defaultValue={count}
-              className="h-10 w-24 rounded-xl border border-border/70 bg-surface/80 px-3 text-fg"
+              className="control-input h-10 w-24 bg-surface/80 px-3 text-fg"
             />
           </label>
           <label className="grid gap-1">
@@ -162,23 +162,23 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
               type="number"
               name="scanLimit"
               defaultValue={scanLimit}
-              className="h-10 w-28 rounded-xl border border-border/70 bg-surface/80 px-3 text-fg"
+              className="control-input h-10 w-28 bg-surface/80 px-3 text-fg"
             />
           </label>
           <button
             type="submit"
-            className="h-10 rounded-xl border border-primary/40 bg-primary/10 px-4 text-xs font-medium text-primary transition hover:bg-primary/20"
+            className="h-10 rounded-control border border-primary/40 bg-primary/10 px-4 text-xs font-medium text-primary transition hover:bg-primary/20"
           >
             Apply
           </button>
         </form>
 
         {state !== "processing" ? (
-          <div className="mt-4 rounded-2xl border border-amber-400/20 bg-amber-500/10 p-4">
+          <div className="mt-4 rounded-2xl border border-warning/20 bg-warning/10 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-medium text-amber-100">Bulk clear current filtered backlog</p>
-                <p className="mt-1 text-xs text-amber-100/75">
+                <p className="text-sm font-medium text-warning">Bulk clear current filtered backlog</p>
+                <p className="mt-1 text-xs text-warning/75">
                   This targets the currently filtered {state} jobs only. Preview count: {jobs.totalMatched.toLocaleString()}.
                   {" "}Each run deletes up to {bulkDeleteLimit.toLocaleString()} jobs.
                 </p>
@@ -199,7 +199,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
             </div>
           </div>
         ) : (
-          <div className="mt-4 rounded-2xl border border-rose-400/20 bg-rose-500/10 p-4 text-sm text-rose-100/85">
+          <div className="mt-4 rounded-2xl border border-danger/20 bg-danger/10 p-4 text-sm text-danger/85">
             Processing jobs can only be deleted one-by-one from the table or detail page. That operation changes Hangfire state but may not stop already-started side effects immediately.
           </div>
         )}
@@ -208,7 +208,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
           {queueSummary.topGroups.slice(0, 6).map((group) => (
             <div
               key={`${group.state}-${group.queue}-${group.jobType}-${group.region}`}
-              className="rounded-2xl border border-border/60 bg-black/15 p-4"
+              className="surface-subtle rounded-card p-4"
             >
               <p className="text-sm font-medium text-fg">{group.jobType?.split(".").pop() ?? "Unknown Job"}</p>
               <p className="mt-1 text-xs text-fg/55">

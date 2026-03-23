@@ -11,7 +11,7 @@ import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { formatDurationSeconds, formatPercent, formatRelativeTime } from "@/lib/format";
 import { computeNextPollDelayMs } from "@/lib/polling";
-import { rankEmblemUrl, rankTierDisplayLabel } from "@/lib/ranks";
+import { rankEmblemUrl, rankTierColorClass, rankTierDisplayLabel } from "@/lib/ranks";
 import { encodeRiotIdPath } from "@/lib/riotid";
 import { profileIconUrl } from "@/lib/staticData";
 import {
@@ -44,19 +44,7 @@ type TftSortOption = "DATE_DESC" | "PLACEMENT_ASC" | "DMG_DESC";
 
 function rankColorClass(tier?: string): string {
   if (!tier) return "text-fg/80";
-  const map: Record<string, string> = {
-    IRON: "text-zinc-400",
-    BRONZE: "text-amber-600",
-    SILVER: "text-zinc-300",
-    GOLD: "text-yellow-400",
-    PLATINUM: "text-cyan-400",
-    EMERALD: "text-emerald-400",
-    DIAMOND: "text-sky-300",
-    MASTER: "text-purple-400",
-    GRANDMASTER: "text-red-400",
-    CHALLENGER: "text-amber-300"
-  };
-  return map[tier.toUpperCase()] ?? "text-fg/80";
+  return rankTierColorClass(tier) === "text-muted" ? "text-fg/80" : rankTierColorClass(tier);
 }
 
 function friendlyQueueLabel(queueType: string): string {
@@ -303,9 +291,9 @@ export function TftSummonerProfileClient({
   // ---------------------------------------------------------------------------
   if (payload.kind === "accepted") {
     return (
-      <Card className="profile-hero-card grid gap-4 rounded-[2rem] p-6">
+      <Card className="profile-hero-card grid gap-4 rounded-hero p-6">
         <div>
-          <p className="type-kicker text-primary/85">TFT profile</p>
+          <p className="type-kicker text-muted">TFT profile</p>
           <h1 className="mt-2 font-heading text-[clamp(2rem,5vw,3.3rem)] font-semibold tracking-[-0.05em]">
             {title}
           </h1>
@@ -343,7 +331,7 @@ export function TftSummonerProfileClient({
   // ---------------------------------------------------------------------------
   return (
     <div className="grid gap-8">
-      <Card className="profile-hero-card rounded-[2rem] p-5 md:p-8">
+      <Card className="profile-hero-card rounded-hero p-5 md:p-8">
         <div className="relative grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(300px,0.8fr)] xl:items-end">
           <div className="grid gap-5">
             <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-center">
@@ -353,13 +341,13 @@ export function TftSummonerProfileClient({
                 alt={`${title} icon`}
                 width={88}
                 height={88}
-                className="rounded-[1.6rem] border border-border/80 shadow-[0_18px_26px_hsl(20_30%_5%_/_0.28)]"
+                className="rounded-panel border border-border/80 shadow-media"
               />
             ) : (
-              <div className="h-[88px] w-[88px] rounded-[1.6rem] border border-border/70 bg-surface/70" />
+              <div className="h-[88px] w-[88px] rounded-panel border border-border/70 bg-surface/70" />
             )}
             <div className="min-w-0">
-              <p className="type-kicker text-primary/90">TFT profile</p>
+              <p className="type-kicker text-muted">TFT profile</p>
               <h1 className="mt-2 truncate font-heading text-[clamp(2.2rem,5vw,3.5rem)] font-semibold leading-[0.98] tracking-[-0.05em]">
                 {title}
               </h1>
@@ -377,7 +365,7 @@ export function TftSummonerProfileClient({
                     {recentForm.map((placement, idx) => (
                       <span
                         key={`p-${idx}`}
-                        className={`flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold shadow-[0_6px_14px_hsl(20_30%_5%_/_0.2)] ${placementBgClass(placement)} ${placementColorClass(placement)}`}
+                        className={`flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold shadow-soft ${placementBgClass(placement)} ${placementColorClass(placement)}`}
                         title={formatPlacement(placement)}
                       >
                         {placement}
@@ -394,19 +382,19 @@ export function TftSummonerProfileClient({
               </p>
             ) : null}
           </div>
-          <div className="surface-card grid gap-3 rounded-[1.5rem] p-4">
+          <div className="surface-card grid gap-3 rounded-panel p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="type-kicker text-primary/85">Snapshot</p>
+                <p className="type-kicker text-muted">Snapshot</p>
                 <p className="mt-1 text-sm text-fg/66">Recent ladder health and placements.</p>
               </div>
-              <Badge className="bg-black/15 text-fg/72">
+              <Badge className="surface-chip text-fg/72">
                 {history ? `${history.totalCount.toLocaleString()} tracked` : "Awaiting history"}
               </Badge>
             </div>
             <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
               <div className="profile-metric-tile">
-                <p className="type-kicker text-primary/78">Ranked</p>
+                <p className="type-kicker text-muted">Ranked</p>
                 <p className={`mt-2 text-xl font-semibold ${rankColorClass(profile.ranks[0]?.tier)}`}>
                   {profile.ranks[0]
                     ? `${rankTierDisplayLabel(profile.ranks[0].tier)} ${profile.ranks[0].rankNumber}`
@@ -419,8 +407,8 @@ export function TftSummonerProfileClient({
                 </p>
               </div>
               <div className="profile-metric-tile">
-                <p className="type-kicker text-primary/78">Top 4 rate</p>
-                <p className="mt-2 text-xl font-semibold text-emerald-300">
+                <p className="type-kicker text-muted">Top 4 rate</p>
+                <p className="mt-2 text-xl font-semibold text-success">
                   {quickStats ? formatTftPercent(quickStats.top4) : "Pending"}
                 </p>
                 <p className="mt-1 text-sm text-fg/66">
@@ -430,8 +418,8 @@ export function TftSummonerProfileClient({
                 </p>
               </div>
               <div className="profile-metric-tile">
-                <p className="type-kicker text-primary/78">Wins</p>
-                <p className="mt-2 text-xl font-semibold text-yellow-300">
+                <p className="type-kicker text-muted">Wins</p>
+                <p className="mt-2 text-xl font-semibold text-warning">
                   {quickStats ? formatTftPercent(quickStats.wins) : "Pending"}
                 </p>
                 <p className="mt-1 text-sm text-fg/66">
@@ -454,7 +442,7 @@ export function TftSummonerProfileClient({
         <aside className="grid content-start gap-5 xl:sticky xl:top-24">
           <Card className="profile-section-card p-5">
             <div>
-              <p className="type-kicker text-primary/82">Ranked snapshot</p>
+              <p className="type-kicker text-muted">Ranked snapshot</p>
               <h2 className="mt-2 type-section">Queue breakdown and LP position</h2>
             </div>
             {profile.ranks.length === 0 ? (
@@ -468,20 +456,20 @@ export function TftSummonerProfileClient({
                   return (
                     <div
                       key={`${rank.queueType}-${rank.tier}`}
-                      className="grid gap-3 rounded-[1.15rem] border border-border/35 bg-transparent px-3 py-3 sm:grid-cols-[68px_minmax(0,1fr)] sm:items-center"
+                      className="surface-subtle grid gap-3 rounded-card px-3 py-3 sm:grid-cols-[68px_minmax(0,1fr)] sm:items-center"
                     >
                       {emblem ? (
-                        <div className="flex h-[68px] w-[68px] items-center justify-center rounded-[1rem] border border-border/50 bg-surface/70 p-1">
+                        <div className="flex h-[68px] w-[68px] items-center justify-center rounded-control border border-border/50 bg-surface/70 p-1">
                           <Image
                             src={emblem}
                             alt={`${rankTierDisplayLabel(rank.tier)} emblem`}
                             width={68}
                             height={68}
-                            unoptimized
+                            sizes="68px"
                           />
                         </div>
                       ) : (
-                        <div className="h-[68px] w-[68px] rounded-[1rem] border border-border/50 bg-surface/70" />
+                        <div className="h-[68px] w-[68px] rounded-control border border-border/50 bg-surface/70" />
                       )}
                       <div className="min-w-0">
                         <p className="type-kicker text-fg/62">{friendlyQueueLabel(rank.queueType)}</p>
@@ -504,24 +492,24 @@ export function TftSummonerProfileClient({
           {quickStats && (
             <Card className="profile-section-card p-5">
               <div>
-                <p className="type-kicker text-primary/82">Quick stats</p>
+                <p className="type-kicker text-muted">Quick stats</p>
                 <h2 className="mt-2 type-section">Recent TFT tempo at a glance</h2>
               </div>
               <div className="mt-4 grid gap-3">
                 <div className="profile-metric-tile">
-                  <p className="type-kicker text-primary/78">Average placement</p>
+                  <p className="type-kicker text-muted">Average placement</p>
                   <p className="mt-2 text-2xl font-semibold text-fg">{quickStats.avgPlacement.toFixed(1)}</p>
                   <p className="mt-1 text-sm text-fg/66">Across {quickStats.total} recent games</p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="profile-metric-tile">
-                    <p className="type-kicker text-primary/78">Top 4</p>
-                    <p className="mt-2 text-xl font-semibold text-emerald-300">{formatTftPercent(quickStats.top4)}</p>
+                    <p className="type-kicker text-muted">Top 4</p>
+                    <p className="mt-2 text-xl font-semibold text-success">{formatTftPercent(quickStats.top4)}</p>
                     <p className="mt-1 text-sm text-fg/66">High-floor finishes</p>
                   </div>
                   <div className="profile-metric-tile">
-                    <p className="type-kicker text-primary/78">Wins</p>
-                    <p className="mt-2 text-xl font-semibold text-yellow-300">{formatTftPercent(quickStats.wins)}</p>
+                    <p className="type-kicker text-muted">Wins</p>
+                    <p className="mt-2 text-xl font-semibold text-warning">{formatTftPercent(quickStats.wins)}</p>
                     <p className="mt-1 text-sm text-fg/66">First place rate</p>
                   </div>
                 </div>
@@ -531,10 +519,10 @@ export function TftSummonerProfileClient({
         </aside>
 
         <section className="grid gap-5">
-          <Card className="profile-section-card rounded-[1.75rem] p-5 md:p-6">
+          <Card className="profile-section-card rounded-panel p-5 md:p-6">
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(250px,auto)] xl:items-start">
               <div>
-                <p className="type-kicker text-primary/82">Match history</p>
+                <p className="type-kicker text-muted">Match history</p>
                 <h2 className="mt-2 font-heading text-[clamp(1.75rem,3vw,2.35rem)] font-semibold leading-[1.02] tracking-[-0.04em]">
                   Comps, traits, and placement trends
                 </h2>
@@ -547,21 +535,21 @@ export function TftSummonerProfileClient({
                   </p>
                 )}
               </div>
-              <div className="surface-card grid gap-3 rounded-[1.25rem] p-4">
+              <div className="surface-card grid gap-3 rounded-card p-4">
                 <select
                   value={sort}
                   onChange={(e) => setSort(e.target.value as TftSortOption)}
-                  className="h-10 rounded-xl border border-border/70 bg-black/10 px-3 text-sm text-fg"
+                  className="h-10 rounded-control border border-border/70 bg-surface-2/55 px-3 text-sm text-fg shadow-inset"
                 >
                   {sortOptions.map((opt) => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge className="bg-black/15 text-fg/72">
+                  <Badge className="surface-chip text-fg/72">
                     {history?.items.length ?? 0} shown
                   </Badge>
-                  <Badge className="bg-black/15 text-fg/72">
+                  <Badge className="surface-chip text-fg/72">
                     {quickStats ? `${formatTftPercent(quickStats.top4)} top 4` : "No sample yet"}
                   </Badge>
                 </div>
@@ -646,7 +634,7 @@ function TftMatchCard({
   region: string;
 }) {
   return (
-    <div className={`match-card-shell overflow-hidden rounded-[1.55rem] border ${placementBgClass(match.placement)}`}>
+    <div className={`match-card-shell overflow-hidden rounded-panel border ${placementBgClass(match.placement)}`}>
       <button
         type="button"
         onClick={onToggle}
@@ -661,13 +649,13 @@ function TftMatchCard({
 
         <div className="flex min-w-0 flex-1 flex-col gap-3 px-4 py-4 md:px-5 md:py-5">
           <div className="flex flex-wrap items-center gap-2">
-            <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${placementColorClass(match.placement)} bg-black/10`}>
+            <span className={`surface-chip rounded-full px-2.5 py-1 text-[11px] font-semibold ${placementColorClass(match.placement)}`}>
               {formatPlacement(match.placement)}
             </span>
-            <span className="rounded-full border border-border/55 bg-black/10 px-2.5 py-1 text-[11px] text-fg/72">
+            <span className="surface-chip rounded-full px-2.5 py-1 text-[11px] text-fg/72">
               Level {match.level}
             </span>
-            <span className="rounded-full border border-border/55 bg-black/10 px-2.5 py-1 text-[11px] text-fg/72">
+            <span className="surface-chip rounded-full px-2.5 py-1 text-[11px] text-fg/72">
               {formatRelativeTime(match.matchDate)}
             </span>
           </div>
@@ -679,7 +667,7 @@ function TftMatchCard({
                 className="rounded-full border border-primary/22 bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary"
               >
                 {unit.name ?? unit.characterId}
-                {unit.tier > 1 && <span className="ml-0.5 text-yellow-400">{starString(unit.tier)}</span>}
+                {unit.tier > 1 && <span className="ml-0.5 text-rank-gold">{starString(unit.tier)}</span>}
               </span>
             ))}
           </div>
@@ -690,7 +678,7 @@ function TftMatchCard({
               .map((trait) => (
                 <span
                   key={trait.name}
-                  className="rounded-full border border-border/50 bg-black/10 px-2 py-1 text-[10px] text-fg/70"
+                  className="surface-chip rounded-full px-2 py-1 text-[10px] text-fg/70"
                 >
                   {trait.name} {trait.numUnits}
                 </span>
@@ -705,11 +693,11 @@ function TftMatchCard({
         </div>
 
         <div className="flex shrink-0 flex-col items-end justify-center gap-2 px-4 py-4 text-right text-xs text-fg/70">
-          <div className="rounded-[1.05rem] border border-white/7 bg-black/12 px-3 py-2">
+          <div className="surface-subtle rounded-control px-3 py-2">
             <p className="text-sm font-semibold text-fg">{match.totalDamageToPlayers.toLocaleString()} dmg</p>
             <p className="mt-1 text-[11px] text-fg/62">{match.playersEliminated} elim</p>
           </div>
-          <span className="text-[11px] uppercase tracking-[0.16em] text-fg/48">
+          <span className="text-[11px] uppercase tracking-[0.16em] text-fg/65">
             {expanded ? "Collapse" : "Expand"}
           </span>
         </div>
@@ -763,7 +751,7 @@ function TftMatchDetailTable({
     <div className="match-detail-shell grid gap-3 p-3 md:p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="type-kicker text-primary/82">Lobby table</p>
+          <p className="type-kicker text-muted">Lobby table</p>
           <p className="mt-1 text-xs text-fg/62">
             Duration: {formatDurationSeconds(durationSeconds)}
           </p>
@@ -778,10 +766,10 @@ function TftMatchDetailTable({
         return (
           <div
             key={p.puuid}
-            className={`flex items-center gap-3 rounded-[1rem] border px-3 py-3 text-xs ${
+            className={`flex items-center gap-3 rounded-control border px-3 py-3 text-xs ${
               isMe
-                ? "border-primary/45 bg-primary/10 shadow-[0_0_20px_hsl(var(--primary)_/_0.08)]"
-                : "border-border/40 bg-black/10"
+                ? "border-primary/45 bg-primary/10 shadow-card"
+                : "surface-subtle"
             }`}
           >
             <span className={`w-10 shrink-0 text-center text-sm font-bold ${placementColorClass(p.placement)}`}>
@@ -807,7 +795,7 @@ function TftMatchDetailTable({
                     className="rounded-full border border-primary/18 bg-primary/8 px-2 py-0.5 text-[10px] text-fg/68"
                   >
                     {u.name ?? u.characterId}
-                    {u.tier > 1 && <span className="text-yellow-400">{starString(u.tier)}</span>}
+                    {u.tier > 1 && <span className="text-rank-gold">{starString(u.tier)}</span>}
                   </span>
                 ))}
               </div>
@@ -816,14 +804,14 @@ function TftMatchDetailTable({
                 {p.traits
                   .filter((t) => t.tierCurrent > 0)
                   .map((t) => (
-                    <span key={t.name} className="rounded-full border border-border/45 bg-black/10 px-2 py-0.5 text-[10px] text-fg/54">
+                    <span key={t.name} className="surface-chip rounded-full px-2 py-0.5 text-[10px] text-fg/60">
                       {t.name}
                     </span>
                   ))}
               </div>
             </div>
 
-            <div className="shrink-0 rounded-[0.95rem] border border-white/7 bg-black/12 px-3 py-2 text-right text-[11px] text-fg/65">
+            <div className="surface-subtle shrink-0 rounded-control px-3 py-2 text-right text-[11px] text-fg/65">
               <p>Lvl {p.level}</p>
               <p>{p.goldLeft}g left</p>
               <p>{p.totalDamageToPlayers.toLocaleString()} dmg</p>

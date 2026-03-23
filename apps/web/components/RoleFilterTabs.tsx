@@ -40,10 +40,11 @@ export function RoleFilterTabs({
             key={role}
             href={buildHref(role)}
             className={cn(
-              "control-chip type-ui relative overflow-hidden px-3 py-2",
+              "control-tab type-ui relative min-h-11 overflow-hidden px-3 py-2",
               active && "font-semibold"
             )}
             data-active={active}
+            aria-current={active ? "page" : undefined}
           >
             {active && (
               <motion.div

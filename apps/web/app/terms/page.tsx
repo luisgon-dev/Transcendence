@@ -11,7 +11,7 @@ export default function TermsPage() {
   return (
     <article className="mx-auto max-w-3xl space-y-10">
       <header className="page-hero p-6 md:p-8">
-        <p className="type-kicker text-primary">Legal</p>
+        <p className="type-kicker text-muted">Legal</p>
         <h1 className="type-title mt-3 md:text-[2.3rem]">
           Terms &amp; Conditions
         </h1>

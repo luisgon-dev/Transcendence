@@ -5,27 +5,40 @@
 :root {
   --font-sora: var(--font-heading);
   --font-manrope: var(--font-body);
-  --bg: 20 14% 7%;
-  --surface: 22 10% 12%;
-  --surface-2: 22 8% 16%;
-  --border: 22 8% 22%;
-  --border-strong: 22 10% 32%;
-  --fg: 35 20% 95%;
-  --muted: 25 8% 58%;
-  --primary: 38 78% 54%;
-  --primary-2: 16 62% 55%;
-  --success: 154 55% 42%;
-  --danger: 348 68% 58%;
-  --warning: 45 78% 54%;
-  --tier-s: 45 78% 54%;
-  --tier-a: 160 48% 44%;
-  --tier-b: 154 55% 42%;
-  --tier-c: 25 48% 52%;
-  --tier-d: 20 8% 50%;
-  --wr-high: 154 55% 42%;
-  --wr-low: 348 68% 58%;
-  --win: 154 55% 42%;
-  --loss: 348 68% 58%;
+  --bg: 222 30% 7%;
+  --surface: 220 24% 11%;
+  --surface-2: 218 20% 15%;
+  --border: 218 16% 21%;
+  --border-strong: 218 14% 30%;
+  --fg: 210 20% 96%;
+  --muted: 215 12% 55%;
+  --primary: 42 82% 56%;
+  --primary-2: 18 65% 55%;
+  --success: 158 50% 45%;
+  --danger: 350 65% 58%;
+  --warning: 30 75% 52%;
+  --tier-s: 48 88% 60%;
+  --tier-a: 162 52% 46%;
+  --tier-b: 200 50% 50%;
+  --tier-c: 28 50% 52%;
+  --tier-d: 218 8% 48%;
+  --wr-high: 158 50% 45%;
+  --wr-low: 350 65% 58%;
+  --win: 158 50% 45%;
+  --loss: 350 65% 58%;
+  --info: 200 65% 55%;
+  --rank-iron: 240 5% 65%;
+  --rank-bronze: 30 60% 42%;
+  --rank-silver: 220 10% 78%;
+  --rank-gold: 48 95% 53%;
+  --rank-platinum: 185 85% 55%;
+  --rank-emerald: 158 60% 49%;
+  --rank-diamond: 200 90% 72%;
+  --rank-master: 275 60% 65%;
+  --rank-grandmaster: 0 72% 63%;
+  --rank-challenger: 40 90% 67%;
+  --team-blue: 200 90% 72%;
+  --team-red: 350 70% 72%;
   --text-body-size: 1rem;
   --text-body-leading: 1.65;
   --text-body-tracking: -0.008em;
@@ -39,6 +52,15 @@
   --text-meta-tracking: 0.08em;
   --text-title-tracking: -0.03em;
   --text-display-tracking: -0.05em;
+  --radius-control: 1rem;
+  --radius-card: 1.25rem;
+  --radius-panel: 1.5rem;
+  --radius-hero: 2rem;
+  --elevation-soft: 0 6px 14px hsl(222 30% 4% / 0.2);
+  --elevation-card: 0 10px 24px hsl(222 30% 4% / 0.12);
+  --elevation-media: 0 18px 26px hsl(222 30% 4% / 0.28);
+  --elevation-overlay: 0 24px 80px hsl(222 30% 3% / 0.6);
+  --hairline-inset: inset 0 1px 0 hsl(0 0% 100% / 0.03);
 }
 
 html,
@@ -70,18 +92,8 @@ body::before {
   background:
     radial-gradient(
       900px 480px at 10% -5%,
-      hsl(var(--primary) / 0.06),
-      transparent 65%
-    ),
-    radial-gradient(
-      900px 540px at 90% -5%,
-      hsl(var(--primary-2) / 0.05),
-      transparent 70%
-    ),
-    radial-gradient(
-      800px 500px at 50% 110%,
-      hsl(20 50% 35% / 0.03),
-      transparent 70%
+      hsl(var(--primary) / 0.03),
+      transparent 60%
     );
 }
 
@@ -194,20 +206,8 @@ body::before {
     overflow: hidden;
     border-color: hsl(var(--border-strong) / 0.42);
     background:
-      radial-gradient(900px 360px at -10% -5%, hsl(var(--primary) / 0.14), transparent 58%),
-      radial-gradient(820px 360px at 110% 0%, hsl(var(--primary-2) / 0.12), transparent 54%),
-      linear-gradient(180deg, hsl(var(--surface) / 0.94), hsl(var(--surface-2) / 0.78));
-  }
-
-  .profile-hero-card::before {
-    content: "";
-    position: absolute;
-    inset: 1px;
-    border-radius: inherit;
-    pointer-events: none;
-    background:
-      linear-gradient(130deg, hsl(0 0% 100% / 0.05), transparent 24%, transparent 72%, hsl(var(--primary) / 0.08)),
-      linear-gradient(180deg, transparent, hsl(0 0% 0% / 0.12));
+      radial-gradient(700px 300px at 0% 0%, hsl(var(--primary) / 0.08), transparent 55%),
+      hsl(var(--surface) / 0.92);
   }
 
   .profile-section-card {
@@ -243,11 +243,11 @@ body::before {
   .profile-metric-tile {
     position: relative;
     overflow: hidden;
-    border-radius: 1.25rem;
+    border-radius: var(--radius-card);
     border: 1px solid hsl(var(--border) / 0.42);
     background: hsl(var(--surface) / 0.34);
     padding: 0.95rem 1rem;
-    box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.03);
+    box-shadow: var(--hairline-inset);
   }
 
   .match-card-shell {
@@ -274,7 +274,7 @@ body::before {
     transform: translateY(-1px);
     border-color: hsl(var(--border-strong) / 0.74);
     box-shadow:
-      0 18px 30px hsl(20 30% 5% / 0.24),
+      0 18px 30px hsl(222 30% 4% / 0.24),
       inset 0 1px 0 hsl(0 0% 100% / 0.04);
   }
 
@@ -286,25 +286,25 @@ body::before {
     border-color: hsl(var(--primary) / 0.55);
     box-shadow:
       0 0 0 1px hsl(var(--primary) / 0.25),
-      0 18px 30px hsl(20 30% 5% / 0.24);
+      0 18px 30px hsl(222 30% 4% / 0.24);
   }
 
   .match-card-shell--win {
     background:
       radial-gradient(420px 220px at 0% 0%, hsl(var(--win) / 0.14), transparent 58%),
-      linear-gradient(180deg, hsl(var(--surface) / 0.92), hsl(154 26% 13% / 0.88));
+      linear-gradient(180deg, hsl(var(--surface) / 0.92), hsl(158 24% 12% / 0.88));
   }
 
   .match-card-shell--loss {
     background:
       radial-gradient(420px 220px at 0% 0%, hsl(var(--loss) / 0.14), transparent 58%),
-      linear-gradient(180deg, hsl(var(--surface) / 0.92), hsl(350 24% 13% / 0.88));
+      linear-gradient(180deg, hsl(var(--surface) / 0.92), hsl(350 22% 12% / 0.88));
   }
 
   .match-detail-shell {
     position: relative;
     overflow: hidden;
-    border-radius: 1.25rem;
+    border-radius: var(--radius-card);
     border: 1px solid hsl(var(--border) / 0.42);
     background: linear-gradient(180deg, hsl(var(--surface) / 0.42), hsl(var(--surface) / 0.3));
   }
@@ -312,36 +312,21 @@ body::before {
   .page-hero {
     position: relative;
     overflow: hidden;
-    border-radius: 2rem;
+    border-radius: var(--radius-hero);
     border: 1px solid hsl(var(--border) / 0.46);
     background:
-      radial-gradient(900px 360px at -5% -10%, hsl(var(--primary) / 0.08), transparent 55%),
-      radial-gradient(760px 320px at 110% 0%, hsl(var(--primary-2) / 0.06), transparent 52%),
-      linear-gradient(180deg, hsl(var(--surface) / 0.9), hsl(var(--surface-2) / 0.78));
-    box-shadow:
-      0 0 0 1px hsl(var(--border) / 0.36),
-      0 14px 28px hsl(20 30% 5% / 0.18),
-      inset 0 1px 0 hsl(35 20% 100% / 0.025);
-  }
-
-  .page-hero::before {
-    content: "";
-    position: absolute;
-    inset: 1px;
-    border-radius: inherit;
-    pointer-events: none;
-    background:
-      linear-gradient(135deg, hsl(0 0% 100% / 0.025), transparent 24%, transparent 70%, hsl(var(--primary) / 0.04)),
-      linear-gradient(180deg, transparent, hsl(0 0% 0% / 0.09));
+      radial-gradient(700px 300px at 0% 0%, hsl(var(--primary) / 0.06), transparent 55%),
+      hsl(var(--surface) / 0.9);
+    box-shadow: var(--elevation-card);
   }
 
   .page-panel {
     position: relative;
     overflow: hidden;
-    border-radius: 1.75rem;
+    border-radius: var(--radius-panel);
     border: 1px solid hsl(var(--border) / 0.42);
     background: linear-gradient(180deg, hsl(var(--surface) / 0.46), hsl(var(--surface) / 0.32));
-    box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.03);
+    box-shadow: var(--hairline-inset);
   }
 
   .page-panel::after {
@@ -357,11 +342,11 @@ body::before {
   .page-stat-card {
     position: relative;
     overflow: hidden;
-    border-radius: 1.35rem;
+    border-radius: var(--radius-card);
     border: 1px solid hsl(var(--border) / 0.4);
     background: linear-gradient(180deg, hsl(var(--surface) / 0.42), hsl(var(--surface) / 0.3));
     padding: 1rem;
-    box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.03);
+    box-shadow: var(--hairline-inset);
   }
 
   .surface-card {
@@ -370,11 +355,33 @@ body::before {
     border: 1px solid hsl(var(--border) / 0.38);
     background: linear-gradient(180deg, hsl(var(--surface) / 0.5), hsl(var(--surface) / 0.38));
     box-shadow:
-      0 10px 24px hsl(20 30% 5% / 0.12),
+      var(--elevation-card),
       inset 0 1px 0 hsl(0 0% 100% / 0.02);
   }
 
-  .control-chip {
+  .surface-subtle {
+    border: 1px solid hsl(var(--border) / 0.5);
+    background: hsl(var(--surface-2) / 0.42);
+    box-shadow: var(--hairline-inset);
+  }
+
+  .surface-subtle-strong {
+    border: 1px solid hsl(var(--border) / 0.58);
+    background: hsl(var(--surface-2) / 0.55);
+    box-shadow: var(--hairline-inset);
+  }
+
+  .surface-chip {
+    border: 1px solid hsl(var(--border) / 0.55);
+    background: hsl(var(--surface-2) / 0.42);
+  }
+
+  .surface-chip-accent {
+    border: 1px solid hsl(var(--primary) / 0.22);
+    background: hsl(var(--primary) / 0.1);
+  }
+
+  .control-tab {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -395,12 +402,12 @@ body::before {
       transform 160ms ease;
   }
 
-  .control-chip:hover {
+  .control-tab:hover {
     color: hsl(var(--fg));
     box-shadow: inset 0 -1px 0 hsl(var(--border) / 0.74);
   }
 
-  .control-chip[data-active="true"] {
+  .control-tab[data-active="true"] {
     color: hsl(var(--primary));
     box-shadow: inset 0 -2px 0 hsl(var(--primary) / 0.74);
   }
@@ -409,7 +416,7 @@ body::before {
   .control-select {
     height: 2.75rem;
     width: 100%;
-    border-radius: 0.95rem;
+    border-radius: var(--radius-control);
     border: 1px solid hsl(var(--border) / 0.55);
     background: hsl(var(--surface) / 0.42);
     padding-inline: 0.9rem;
@@ -417,7 +424,7 @@ body::before {
     line-height: 1;
     letter-spacing: 0.01em;
     color: hsl(var(--fg));
-    box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.03);
+    box-shadow: var(--hairline-inset);
     outline: none;
     transition:
       border-color 160ms ease,
@@ -484,28 +491,5 @@ body::before {
   .command-palette-panel {
     animation: none;
   }
-}
-
-.glass-card {
-  border: 1px solid hsl(var(--border) / 0.5);
-  background: linear-gradient(
-    to bottom right,
-    hsl(var(--surface) / 0.7),
-    hsl(var(--surface-2) / 0.55)
-  );
-  backdrop-filter: blur(10px);
-}
-
-.glass-panel {
-  border: 1px solid hsl(var(--border) / 0.5);
-  background: hsl(var(--surface) / 0.5);
-  backdrop-filter: blur(8px);
-}
-
-.mesh-highlight {
-  box-shadow:
-    0 0 0 1px hsl(var(--border) / 0.45),
-    0 12px 24px hsl(20 30% 5% / 0.4),
-    inset 0 1px 0 hsl(35 20% 100% / 0.04);
 }
 

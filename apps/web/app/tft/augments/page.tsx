@@ -12,7 +12,7 @@ export default async function TftAugmentsPage() {
   return (
     <div className="grid gap-6">
       <section className="page-hero p-6">
-        <p className="type-kicker text-primary">TFT Catalog</p>
+        <p className="type-kicker text-muted">TFT Catalog</p>
         <h1 className="type-title mt-3 sm:text-[2.4rem]">TFT Augments</h1>
         <p className="type-ui mt-3 text-fg/75">Browse the full augment pool and open details for any option you are considering.</p>
       </section>

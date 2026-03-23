@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { ArrowCornerIcon, SearchIcon, SparkIcon } from "@/components/ui/icons";
 import { GLOBAL_SEARCH_OPEN_EVENT } from "@/lib/globalSearch";
 import { TFT_FRONTEND_ENABLED } from "@/lib/featureFlags";
 import { buildLolPublicSummonerSearchPath } from "@/lib/lolPublicApi";
@@ -91,7 +92,7 @@ const TIER_LINKS = TFT_FRONTEND_ENABLED
   : LOL_TIER_LINKS;
 
 const RESULT_ITEM_CLASS =
-  "group flex min-h-[52px] cursor-pointer items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left text-fg/90 transition duration-150 data-[selected=true]:translate-x-1 data-[selected=true]:border-primary/25 data-[selected=true]:bg-primary/10 data-[selected=true]:shadow-[0_0_0_1px_hsl(var(--primary)/0.08),0_10px_30px_hsl(20_25%_4%/0.18)]";
+  "group flex min-h-[52px] cursor-pointer items-center gap-3 rounded-card border border-transparent px-3 py-2.5 text-left text-fg/90 transition duration-150 data-[selected=true]:translate-x-1 data-[selected=true]:border-primary/25 data-[selected=true]:bg-primary/10 data-[selected=true]:shadow-card";
 
 function isEditableTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;
@@ -138,11 +139,11 @@ function SearchSection({
 }) {
   return (
     <section
-      className={`rounded-[1.35rem] border border-border/55 bg-surface/70 p-2.5 shadow-[inset_0_1px_0_hsl(35_20%_100%/0.03)] sm:p-3 ${className ?? ""}`}
+      className={`surface-subtle rounded-card p-2.5 sm:p-3 ${className ?? ""}`}
     >
       <div className="mb-2 flex items-center justify-between gap-3 px-1">
         <p className="type-kicker text-primary/88">{title}</p>
-        <p className="type-ui type-tabular text-fg/42">{countLabel}</p>
+        <p className="type-ui type-tabular text-fg/65">{countLabel}</p>
       </div>
       <div className="grid gap-1">{children}</div>
     </section>
@@ -161,7 +162,7 @@ function SearchHint({
       className={`rounded-xl border px-3 py-3 text-sm leading-6 ${
         tone === "accent"
           ? "border-primary/24 bg-primary/11 text-fg/92"
-          : "border-border/45 bg-surface-2/45 text-fg/62"
+          : "surface-subtle text-fg/72"
       }`}
     >
       {children}
@@ -390,10 +391,7 @@ export function GlobalCommandPalette() {
         onClick={() => setOpen(false)}
       />
 
-      <div className="command-palette-panel absolute left-1/2 top-[9vh] w-[min(880px,calc(100vw-24px))] -translate-x-1/2 overflow-hidden rounded-[1.65rem] border border-border/70 bg-surface shadow-[0_24px_80px_hsl(20_28%_3%/0.6),0_0_0_1px_hsl(var(--border)/0.3)]">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[radial-gradient(circle_at_top,hsla(38,78%,54%,0.16),transparent_68%)]" />
-        <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-primary/55 to-transparent" />
-
+      <div className="command-palette-panel absolute left-1/2 top-[9vh] w-[min(880px,calc(100vw-24px))] -translate-x-1/2 overflow-hidden rounded-panel border border-border/70 bg-surface shadow-overlay">
         <Command shouldFilter={false} className="relative w-full">
           <div className="border-b border-border/50 px-4 pb-4 pt-4 sm:px-5 sm:pb-5 sm:pt-5">
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
@@ -404,10 +402,10 @@ export function GlobalCommandPalette() {
                 </p>
               </div>
               <div className="hidden items-center gap-2 self-start lg:flex">
-                <span className="type-kicker rounded-full border border-border/45 bg-white/[0.03] px-2.5 py-1 text-fg/50">
+                <span className="type-kicker surface-chip rounded-full px-2.5 py-1 text-fg/68">
                   Enter to open
                 </span>
-                <span className="type-kicker rounded-full border border-border/45 bg-white/[0.03] px-2.5 py-1 text-fg/42">
+                <span className="type-kicker surface-chip rounded-full px-2.5 py-1 text-fg/68">
                   Esc to close
                 </span>
               </div>
@@ -422,15 +420,15 @@ export function GlobalCommandPalette() {
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={handleQueryKeyDown}
                   placeholder="Search champions, tier list, or summoner"
-                  className="h-12 w-full rounded-xl border border-border/65 bg-surface-2/55 pl-11 pr-4 text-[0.98rem] text-fg shadow-[inset_0_1px_0_hsl(35_20%_100%/0.03)] outline-none transition placeholder:text-muted/70 focus:border-primary/65 focus:bg-surface-2/70 focus:ring-2 focus:ring-primary/18"
+                  className="type-ui h-12 w-full rounded-control border border-border/65 bg-surface-2/55 pl-11 pr-4 text-fg shadow-inset outline-none transition placeholder:text-muted/70 focus:border-primary/65 focus:bg-surface-2/70 focus:ring-2 focus:ring-primary/18"
                   aria-label="Global search input"
                 />
               </div>
 
               <div className="sm:w-[124px]">
-                <label className="type-kicker mb-2 block text-fg/42">Region</label>
+                <label className="type-kicker mb-2 block text-fg/65">Region</label>
                 <select
-                  className="h-12 w-full rounded-xl border border-border/65 bg-surface-2/55 px-3 text-[0.95rem] text-fg outline-none transition focus:border-primary/65 focus:bg-surface-2/70 focus:ring-2 focus:ring-primary/18"
+                  className="type-ui h-12 w-full rounded-control border border-border/65 bg-surface-2/55 px-3 text-fg shadow-inset outline-none transition focus:border-primary/65 focus:bg-surface-2/70 focus:ring-2 focus:ring-primary/18"
                   value={region}
                   onChange={(e) => setRegion(e.target.value)}
                   aria-label="Summoner region"
@@ -448,7 +446,7 @@ export function GlobalCommandPalette() {
               <button
                 type="button"
                 onClick={() => navigate(directOpenPath)}
-                className="mt-3 flex w-full items-center justify-between gap-3 rounded-[1.1rem] border border-primary/22 bg-primary/10 px-4 py-3 text-left transition hover:border-primary/38 hover:bg-primary/13"
+                className="surface-chip-accent mt-3 flex w-full items-center justify-between gap-3 rounded-control px-4 py-3 text-left transition hover:border-primary/38 hover:bg-primary/13"
               >
                 <div className="grid gap-1">
                   <span className="type-kicker text-primary/92">Direct Open</span>
@@ -465,7 +463,7 @@ export function GlobalCommandPalette() {
 
           <Command.List className="max-h-[min(68vh,640px)] overflow-y-auto px-3 pb-4 pt-4 sm:px-4 sm:pb-5">
             {showEmpty ? (
-              <Command.Empty className="rounded-[1.35rem] border border-border/55 bg-surface/70 px-4 py-8 text-left">
+              <Command.Empty className="surface-subtle rounded-card px-4 py-8 text-left">
                 <p className="type-kicker text-primary/88">No Match Yet</p>
                 <p className="mt-3 text-base text-fg/88">
                   Nothing lines up with that search.
@@ -502,7 +500,7 @@ export function GlobalCommandPalette() {
                             width={36}
                             height={36}
                             className="h-9 w-9 rounded-lg border border-border/55 object-cover"
-                            unoptimized
+                            sizes="36px"
                           />
                         ) : (
                           <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border/55 bg-surface/60 text-[11px] text-muted">
@@ -514,11 +512,11 @@ export function GlobalCommandPalette() {
                             {item.gameName}
                             <span className="text-fg/58">#{item.tagLine}</span>
                           </p>
-                          <p className="type-ui truncate text-fg/48">
+                          <p className="type-ui truncate text-fg/65">
                             Live profile lookup
                           </p>
                         </div>
-                        <span className="type-kicker rounded-full border border-border/35 px-2 py-1 text-fg/50">
+                        <span className="type-kicker surface-chip rounded-full px-2 py-1 text-fg/68">
                           {item.platformRegion}
                         </span>
                       </Command.Item>
@@ -545,7 +543,7 @@ export function GlobalCommandPalette() {
                         <p className="truncate text-[0.97rem] font-medium text-fg">
                           Open {parsedRiotId.gameName}#{parsedRiotId.tagLine}
                         </p>
-                        <p className="type-ui text-fg/48">{regionLabel} direct profile route</p>
+                        <p className="type-ui text-fg/65">{regionLabel} direct profile route</p>
                       </div>
                     </Command.Item>
                   ) : null}
@@ -581,12 +579,12 @@ export function GlobalCommandPalette() {
                         onSelect={() => navigate(`/lol/champions/${champion.championId}`)}
                         className={RESULT_ITEM_CLASS}
                       >
-                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border/40 bg-white/[0.02] text-primary/88">
+                        <span className="surface-subtle inline-flex h-9 w-9 items-center justify-center rounded-lg text-primary/88">
                           <SparkIcon className="h-4 w-4" />
                         </span>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-[0.97rem] font-medium text-fg">{champion.name}</p>
-                          <p className="type-ui text-fg/48">Champion profile and matchup data</p>
+                          <p className="type-ui text-fg/65">Champion profile and matchup data</p>
                         </div>
                       </Command.Item>
                     ))
@@ -609,12 +607,12 @@ export function GlobalCommandPalette() {
                           onSelect={() => navigate(item.href)}
                           className={RESULT_ITEM_CLASS}
                         >
-                          <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border/40 bg-white/[0.02] text-primary/84">
+                          <span className="surface-subtle inline-flex h-9 w-9 items-center justify-center rounded-lg text-primary/84">
                             <ArrowCornerIcon className="h-4 w-4" />
                           </span>
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-[0.97rem] font-medium text-fg">{parts.title}</p>
-                            <p className="type-ui truncate text-fg/48">
+                            <p className="type-ui truncate text-fg/65">
                               {parts.detail ?? "Quick route into the meta surface"}
                             </p>
                           </div>
@@ -631,66 +629,5 @@ export function GlobalCommandPalette() {
         </Command>
       </div>
     </div>
-  );
-}
-
-function SearchIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      aria-hidden="true"
-      className={className}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="7" cy="7" r="4.5" />
-      <path d="m10.5 10.5 3 3" />
-    </svg>
-  );
-}
-
-function SparkIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      aria-hidden="true"
-      className={className}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M8 1.75v2.5" />
-      <path d="m12.42 3.58-1.77 1.77" />
-      <path d="M14.25 8h-2.5" />
-      <path d="m12.42 12.42-1.77-1.77" />
-      <path d="M8 14.25v-2.5" />
-      <path d="m3.58 12.42 1.77-1.77" />
-      <path d="M1.75 8h2.5" />
-      <path d="m3.58 3.58 1.77 1.77" />
-      <circle cx="8" cy="8" r="1.75" />
-    </svg>
-  );
-}
-
-function ArrowCornerIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      aria-hidden="true"
-      className={className}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M4.25 11.75 11.75 4.25" />
-      <path d="M5.5 4.25h6.25V10.5" />
-    </svg>
   );
 }

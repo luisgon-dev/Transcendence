@@ -12,7 +12,7 @@ export default async function TftTraitsPage() {
   return (
     <div className="grid gap-6">
       <section className="page-hero p-6">
-        <p className="type-kicker text-primary">TFT Catalog</p>
+        <p className="type-kicker text-muted">TFT Catalog</p>
         <h1 className="type-title mt-3 sm:text-[2.4rem]">TFT Traits</h1>
         <p className="type-ui mt-3 text-fg/75">Browse all traits in the live set and review their breakpoints.</p>
       </section>

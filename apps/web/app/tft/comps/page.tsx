@@ -25,7 +25,7 @@ export default async function TftCompsPage({
   return (
     <div className="grid gap-6">
       <section className="page-hero p-6">
-        <p className="type-kicker text-primary">TFT Analytics</p>
+        <p className="type-kicker text-muted">TFT Analytics</p>
         <h1 className="type-title mt-3 sm:text-[2.4rem]">TFT Meta Comps</h1>
         <p className="type-ui mt-3 text-fg/75">
           Compare the strongest boards for the live set and sort by the stat that matters most to you.

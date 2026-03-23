@@ -105,17 +105,26 @@ export function TierListTable({
             return (
               <th
                 key={col.label}
-                className={`${col.className} ${col.hiddenMobile ? "hidden lg:table-cell" : ""} ${sortable ? "cursor-pointer select-none hover:text-fg/80" : "cursor-default"}`}
-                onClick={sortable ? () => handleSort(col.sortKey!) : undefined}
+                className={`${col.className} ${col.hiddenMobile ? "hidden lg:table-cell" : ""} cursor-default`}
+                aria-sort={sortable && active ? (sortDir === "asc" ? "ascending" : "descending") : undefined}
               >
-                <span className="inline-flex items-center gap-1">
-                  {col.label}
-                  {sortable && active && (
-                    <span data-sort-indicator className="text-primary text-[10px]">
-                      {sortDir === "asc" ? "\u25B2" : "\u25BC"}
-                    </span>
-                  )}
-                </span>
+                {sortable ? (
+                  <button
+                    type="button"
+                    onClick={() => handleSort(col.sortKey!)}
+                    className="inline-flex items-center gap-1 select-none hover:text-fg/80"
+                    aria-label={`Sort by ${col.label}${active ? `, currently ${sortDir === "asc" ? "ascending" : "descending"}` : ""}`}
+                  >
+                    {col.label}
+                    {active && (
+                      <span aria-hidden="true" className="text-primary text-[10px]">
+                        {sortDir === "asc" ? "\u25B2" : "\u25BC"}
+                      </span>
+                    )}
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center gap-1">{col.label}</span>
+                )}
               </th>
             );
           })}
@@ -167,7 +176,7 @@ export function TierListTable({
           {formatPercent(e.pickRate, { decimals: 1 })}
         </td>
         <td
-          className="hidden px-3 py-2.5 text-right text-fg/30 lg:table-cell"
+          className="hidden px-3 py-2.5 text-right text-muted lg:table-cell"
           title="Ban rate is not exposed by the current analytics API yet."
         >
           N/A

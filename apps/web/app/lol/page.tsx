@@ -95,7 +95,7 @@ export default async function HomePage({
         {/* Navigation zone */}
         <div className="mt-8 grid gap-4 border-t border-border/25 pt-4">
           <div className="grid gap-2 sm:grid-cols-[auto_1fr] sm:items-center sm:gap-4">
-            <p className="type-kicker text-fg/54">Region</p>
+            <p className="type-kicker text-fg/65">Region</p>
             <AnalyticsRegionFilter
               options={regionOptions}
               activeRegion={activeRegion}
@@ -129,7 +129,10 @@ export default async function HomePage({
             </Link>
           </div>
           {topRows.length === 0 ? (
-            <p className="px-4 py-4 text-sm text-muted">Tier list data is unavailable right now.</p>
+            <div className="px-4 py-4">
+              <p className="text-sm text-fg/75">Tier list data is unavailable right now.</p>
+              <p className="mt-1 text-xs text-muted">This usually means data for the current patch is still being processed. Try selecting a different region above or check back soon.</p>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[420px] text-left text-sm">
@@ -142,7 +145,7 @@ export default async function HomePage({
                   </tr>
                 </thead>
                 <tbody>
-                  {topRows.map((entry) => {
+                  {topRows.map((entry, index) => {
                     const champ = champions[String(entry.championId)];
                     const name = champ?.name ?? `Champion ${entry.championId}`;
                     const title = champ?.title ?? "";
@@ -155,6 +158,8 @@ export default async function HomePage({
                               alt={name}
                               width={30}
                               height={30}
+                              sizes="30px"
+                              priority={index === 0}
                               className="rounded-md"
                             />
                             <span className="min-w-0">
@@ -184,7 +189,7 @@ export default async function HomePage({
               {trendingRows.length === 0 ? (
                 <p className="text-sm text-muted">No featured champions to show right now.</p>
               ) : (
-                trendingRows.map((entry) => {
+                trendingRows.map((entry, index) => {
                   const champ = champions[String(entry.championId)];
                   const name = champ?.name ?? `Champion ${entry.championId}`;
                   return (
@@ -198,6 +203,8 @@ export default async function HomePage({
                         alt={name}
                         width={32}
                         height={32}
+                        sizes="32px"
+                        priority={index === 0}
                         className="rounded-md"
                       />
                       <div className="min-w-0">
@@ -225,21 +232,21 @@ export default async function HomePage({
                 className="type-ui inline-flex items-center justify-between gap-3 text-fg/84 transition hover:text-fg"
               >
                 <span>Matchups</span>
-                <span className="text-primary" aria-hidden="true">/</span>
+                <span className="text-fg/40" aria-hidden="true">/</span>
               </Link>
               <Link
                 href={hrefWithRegion("/lol/pro-builds")}
                 className="type-ui inline-flex items-center justify-between gap-3 border-t border-border/20 pt-3 text-fg/84 transition hover:text-fg"
               >
                 <span>Pro Builds</span>
-                <span className="text-primary" aria-hidden="true">/</span>
+                <span className="text-fg/40" aria-hidden="true">/</span>
               </Link>
               <Link
                 href="/lol/summoners/na/Faker-KR1"
                 className="type-ui inline-flex items-center justify-between gap-3 border-t border-border/20 pt-3 text-fg/84 transition hover:text-fg"
               >
                 <span>Player Page</span>
-                <span className="text-primary" aria-hidden="true">/</span>
+                <span className="text-fg/40" aria-hidden="true">/</span>
               </Link>
             </div>
           </Card>

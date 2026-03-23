@@ -23,7 +23,7 @@ import {
 } from "@/lib/format";
 import { computeNextPollDelayMs } from "@/lib/polling";
 import { formatQueueLabel } from "@/lib/queues";
-import { rankEmblemUrl, rankTierDisplayLabel } from "@/lib/ranks";
+import { rankEmblemUrl, rankTierColorClass, rankTierDisplayLabel } from "@/lib/ranks";
 import { roleDisplayLabel } from "@/lib/roles";
 import { encodeRiotIdPath } from "@/lib/riotid";
 import {
@@ -234,19 +234,7 @@ function friendlyAcceptedMessage(msg?: string) {
 
 function rankColorClass(tier?: string): string {
   if (!tier) return "text-fg/80";
-  const map: Record<string, string> = {
-    IRON: "text-zinc-400",
-    BRONZE: "text-amber-600",
-    SILVER: "text-zinc-300",
-    GOLD: "text-yellow-400",
-    PLATINUM: "text-cyan-400",
-    EMERALD: "text-emerald-400",
-    DIAMOND: "text-sky-300",
-    MASTER: "text-purple-400",
-    GRANDMASTER: "text-red-400",
-    CHALLENGER: "text-amber-300"
-  };
-  return map[tier.toUpperCase()] ?? "text-fg/80";
+  return rankTierColorClass(tier) === "text-muted" ? "text-fg/80" : rankTierColorClass(tier);
 }
 
 function queueValueForMatch(match: Pick<MatchSummary, "queueId" | "queueType">): string {
@@ -740,7 +728,7 @@ export function SummonerProfileClient({
 
   return (
     <div className="grid gap-8">
-      <Card className="profile-hero-card rounded-[2rem] p-5 md:p-8">
+      <Card className="profile-hero-card rounded-hero p-5 md:p-8">
         <div className="relative grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.78fr)] xl:items-end">
           <div className="grid gap-5">
             <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-center">
@@ -750,13 +738,13 @@ export function SummonerProfileClient({
                   alt={`${title} icon`}
                   width={88}
                   height={88}
-                  className="rounded-[1.6rem] border border-border/80 shadow-[0_18px_26px_hsl(20_30%_5%_/_0.28)]"
+                  className="rounded-panel border border-border/80 shadow-media"
                 />
               ) : (
-                <div className="h-[88px] w-[88px] rounded-[1.6rem] border border-border/70 bg-surface/70" />
+                <div className="h-[88px] w-[88px] rounded-panel border border-border/70 bg-surface/70" />
               )}
               <div className="min-w-0">
-                <p className="type-kicker text-primary/90">League profile</p>
+                <p className="type-kicker text-muted">League profile</p>
                 <h1 className="mt-2 truncate font-heading text-[clamp(2.2rem,5vw,3.7rem)] font-semibold leading-[0.98] tracking-[-0.05em]">
                   {title}
                 </h1>
@@ -765,11 +753,11 @@ export function SummonerProfileClient({
                 </p>
                 <div className="mt-4 flex flex-wrap gap-2">
                   <span className="profile-stat-pill">
-                    <span className="type-kicker text-primary/80">Region</span>
+                    <span className="type-kicker text-muted">Region</span>
                     <span className="type-ui text-fg">{region.toUpperCase()}</span>
                   </span>
                   <span className="profile-stat-pill">
-                    <span className="type-kicker text-primary/80">Ranked</span>
+                    <span className="type-kicker text-muted">Ranked</span>
                     <span className={`type-ui ${rankColorClass(rankedEntries[0]?.rank?.tier)}`}>
                       {rankedEntries[0]
                         ? `${rankTierDisplayLabel(rankedEntries[0].rank.tier)} ${rankedEntries[0].rank.division}`
@@ -778,7 +766,7 @@ export function SummonerProfileClient({
                   </span>
                   {quickStats ? (
                     <span className="profile-stat-pill">
-                      <span className="type-kicker text-primary/80">Recent WR</span>
+                      <span className="type-kicker text-muted">Recent WR</span>
                       <span className="type-ui text-fg">{formatPercent(quickStats.winRate)}</span>
                     </span>
                   ) : null}
@@ -797,7 +785,7 @@ export function SummonerProfileClient({
                     <span
                       key={`${win ? "w" : "l"}-${idx}`}
                       className={`h-3 w-9 rounded-full transition-transform duration-200 ${
-                        win ? "bg-success/75 shadow-[0_0_18px_hsl(var(--success)_/_0.15)]" : "bg-danger/70"
+                        win ? "bg-success/75" : "bg-danger/70"
                       }`}
                       aria-label={win ? "Win" : "Loss"}
                       title={win ? "Win" : "Loss"}
@@ -819,19 +807,19 @@ export function SummonerProfileClient({
             ) : null}
           </div>
 
-          <div className="surface-card grid gap-3 rounded-[1.5rem] p-4">
+          <div className="surface-card grid gap-3 rounded-panel p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="type-kicker text-primary/85">Snapshot</p>
+                <p className="type-kicker text-muted">Snapshot</p>
                 <p className="mt-1 text-sm text-fg/66">Fast read on current ranked form.</p>
               </div>
-              <Badge className="bg-black/15 text-fg/72">
+              <Badge className="surface-chip text-fg/72">
                 {history ? `${history.totalCount.toLocaleString()} tracked` : "Awaiting history"}
               </Badge>
             </div>
             <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
               <div className="profile-metric-tile">
-                <p className="type-kicker text-primary/78">Ranked</p>
+                <p className="type-kicker text-muted">Ranked</p>
                 <p className={`mt-2 text-xl font-semibold ${rankColorClass(rankedEntries[0]?.rank?.tier)}`}>
                   {rankedEntries[0]
                     ? `${rankTierDisplayLabel(rankedEntries[0].rank.tier)} ${rankedEntries[0].rank.division}`
@@ -844,7 +832,7 @@ export function SummonerProfileClient({
                 </p>
               </div>
               <div className="profile-metric-tile">
-                <p className="type-kicker text-primary/78">Recent sample</p>
+                <p className="type-kicker text-muted">Recent sample</p>
                 <p className="mt-2 text-xl font-semibold text-fg">
                   {quickStats ? formatPercent(quickStats.winRate) : "Pending"}
                 </p>
@@ -855,7 +843,7 @@ export function SummonerProfileClient({
                 </p>
               </div>
               <div className="profile-metric-tile">
-                <p className="type-kicker text-primary/78">Champion focus</p>
+                <p className="type-kicker text-muted">Champion focus</p>
                 <p className="mt-2 text-xl font-semibold text-fg">
                   {featuredChampionName ?? "Loading"}
                 </p>
@@ -886,10 +874,10 @@ export function SummonerProfileClient({
             <Card className="profile-section-card p-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="type-kicker text-primary/82">Ranked snapshot</p>
+                  <p className="type-kicker text-muted">Ranked snapshot</p>
                   <h2 className="mt-2 type-section">Queues and ladder movement</h2>
                 </div>
-                <Badge className="bg-black/10 text-fg/72">
+                <Badge className="surface-chip text-fg/72">
                   {profile.rankAge?.ageDescription ?? "updated recently"}
                 </Badge>
               </div>
@@ -906,22 +894,21 @@ export function SummonerProfileClient({
                     return (
                       <div
                         key={label}
-                        className="grid gap-3 rounded-[1.15rem] border border-border/35 bg-transparent px-3 py-3 sm:grid-cols-[68px_minmax(0,1fr)] sm:items-center"
+                        className="surface-subtle grid gap-3 rounded-card px-3 py-3 sm:grid-cols-[68px_minmax(0,1fr)] sm:items-center"
                       >
                         {emblem ? (
-                          <div className="flex h-[68px] w-[68px] items-center justify-center rounded-[1rem] border border-border/45 bg-surface/65 p-1">
+                          <div className="flex h-[68px] w-[68px] items-center justify-center rounded-control border border-border/45 bg-surface/65 p-1">
                             <Image
                               src={emblem}
                               alt={`${rankTierDisplayLabel(rank.tier)} emblem`}
                               width={68}
                               height={68}
-                              unoptimized
                               sizes="68px"
                               className="h-full w-full select-none object-contain"
                             />
                           </div>
                         ) : (
-                          <div className="h-[68px] w-[68px] rounded-[1rem] border border-border/60 bg-surface/70" />
+                          <div className="h-[68px] w-[68px] rounded-control border border-border/60 bg-surface/70" />
                         )}
                         <div className="min-w-0">
                           <p className="type-kicker text-fg/62">{label}</p>
@@ -956,7 +943,7 @@ export function SummonerProfileClient({
 
             <Card className="profile-section-card p-5">
               <div>
-                <p className="type-kicker text-primary/82">Champion pool</p>
+                <p className="type-kicker text-muted">Champion pool</p>
                 <h2 className="mt-2 type-section">Top picks in recent tracked games</h2>
               </div>
               <div className="mt-4 grid gap-3">
@@ -966,7 +953,7 @@ export function SummonerProfileClient({
                     <Link
                       key={c.championId}
                       href={`/lol/champions/${c.championId}`}
-                      className="group grid gap-2 rounded-[1.05rem] border border-border/30 bg-transparent px-3 py-3 transition hover:border-primary/24 hover:bg-primary/6"
+                      className="surface-subtle group grid gap-2 rounded-control px-3 py-3 transition hover:border-primary/24 hover:bg-primary/6"
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div>
@@ -993,11 +980,11 @@ export function SummonerProfileClient({
           </aside>
 
           <section className="grid gap-5">
-            <Card className="profile-section-card rounded-[1.75rem] p-5 md:p-6">
+            <Card className="profile-section-card rounded-panel p-5 md:p-6">
               <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(310px,auto)] xl:items-start">
                 <div className="grid gap-4">
                   <div>
-                    <p className="type-kicker text-primary/82">Match history</p>
+                    <p className="type-kicker text-muted">Match history</p>
                     <h2 className="mt-2 font-heading text-[clamp(1.75rem,3vw,2.35rem)] font-semibold leading-[1.02] tracking-[-0.04em]">
                       Recent results with clearer scan paths
                     </h2>
@@ -1009,7 +996,7 @@ export function SummonerProfileClient({
                     {queueOptions.map((option) => (
                       <button
                         key={option.value}
-                        className="control-chip type-ui focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45"
+                        className="control-tab type-ui focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45"
                         onClick={() => {
                           setQueue(option.value);
                           setPage(1);
@@ -1023,7 +1010,7 @@ export function SummonerProfileClient({
                   </div>
                 </div>
 
-                <div className="surface-card grid gap-3 rounded-[1.25rem] p-4">
+                <div className="surface-card grid gap-3 rounded-card p-4">
                   <div>
                     <label htmlFor="match-champion-filter" className="sr-only">
                       Filter matches by champion
@@ -1037,7 +1024,7 @@ export function SummonerProfileClient({
                         setChampionFilter(event.currentTarget.value);
                         setPage(1);
                       }}
-                      className="h-10 min-w-[220px] bg-black/10 text-sm"
+                      className="h-10 min-w-[220px] bg-surface-2/55 text-sm shadow-inset"
                       spellCheck={false}
                     />
                     <datalist id="match-champion-options">
@@ -1057,7 +1044,7 @@ export function SummonerProfileClient({
                         setSort(normalizeInitialSort(event.currentTarget.value));
                         setPage(1);
                       }}
-                      className="h-10 w-full rounded-xl border border-border/70 bg-black/10 px-3 text-sm text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45"
+                      className="h-10 w-full rounded-control border border-border/70 bg-surface-2/55 px-3 text-sm text-fg shadow-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45"
                     >
                       {sortOptions.map((option) => (
                         <option key={option.value} value={option.value}>
@@ -1067,13 +1054,13 @@ export function SummonerProfileClient({
                     </select>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge className="bg-black/15 text-fg/72">
+                    <Badge className="surface-chip text-fg/72">
                       Page {history?.page ?? page}/{history?.totalPages ?? 1}
                     </Badge>
-                    <Badge className="bg-black/15 text-fg/72">
+                    <Badge className="surface-chip text-fg/72">
                       {(history?.totalCount ?? 0).toLocaleString()} total
                     </Badge>
-                    <Badge className="bg-black/15 text-fg/72">{visibleMatches.length} shown</Badge>
+                    <Badge className="surface-chip text-fg/72">{visibleMatches.length} shown</Badge>
                   </div>
                 </div>
               </div>
@@ -1109,7 +1096,7 @@ export function SummonerProfileClient({
                         m.win
                           ? "match-card-shell--win border-success/28"
                           : "match-card-shell--loss border-danger/28"
-                      } rounded-[1.55rem] border`}
+                      } rounded-panel border`}
                     >
                       <span
                         className={`absolute inset-y-0 left-0 w-1.5 ${m.win ? "bg-success/75" : "bg-danger/75"}`}
@@ -1135,13 +1122,13 @@ export function SummonerProfileClient({
                               >
                                 {m.win ? "VICTORY" : "DEFEAT"}
                               </span>
-                              <span className="rounded-full border border-border/60 bg-black/12 px-2.5 py-1 text-[11px] font-medium text-fg/92">
+                              <span className="surface-chip rounded-full px-2.5 py-1 text-[11px] font-medium text-fg/92">
                                 {queueLabel}
                               </span>
-                              <span className="rounded-full border border-border/60 bg-black/12 px-2.5 py-1 text-[11px] font-medium text-fg/92">
+                              <span className="surface-chip rounded-full px-2.5 py-1 text-[11px] font-medium text-fg/92">
                                 {roleLabel}
                               </span>
-                              <span className="rounded-full border border-border/60 bg-black/12 px-2.5 py-1 text-[11px] font-medium text-fg/92">
+                              <span className="surface-chip rounded-full px-2.5 py-1 text-[11px] font-medium text-fg/92">
                                 {formatDurationSeconds(m.durationSeconds)}
                               </span>
                             </div>
@@ -1153,10 +1140,10 @@ export function SummonerProfileClient({
                                     alt={championName}
                                     width={52}
                                     height={52}
-                                    className="rounded-[1rem] border border-border/60 shadow-[0_10px_18px_hsl(20_30%_5%_/_0.22)]"
+                                    className="rounded-control border border-border/60 shadow-soft"
                                   />
                                 ) : (
-                                  <div className="h-[52px] w-[52px] rounded-[1rem] border border-border/60 bg-surface/60" />
+                                  <div className="h-[52px] w-[52px] rounded-control border border-border/60 bg-surface/60" />
                                 )}
                                 <div className="min-w-0">
                                   <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
@@ -1171,7 +1158,7 @@ export function SummonerProfileClient({
                             </div>
                           </div>
                           <div className="grid gap-3">
-                            <div className="grid gap-3 rounded-[1.15rem] border border-white/7 bg-black/12 p-3 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
+                            <div className="surface-subtle grid gap-3 rounded-card p-3 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
                               <div className="flex items-center gap-3">
                                 <div className="flex items-center gap-1.5" aria-label="Summoner spells">
                                   {spellIds.map((spellId, spellIdx) => {
@@ -1203,10 +1190,10 @@ export function SummonerProfileClient({
                                       title={primaryRuneMeta.name}
                                       width={24}
                                       height={24}
-                                      className="rounded-full border border-border/40 bg-black/20 p-0.5"
+                                      className="rounded-full border border-border/40 bg-surface-2/70 p-0.5"
                                     />
                                   ) : (
-                                    <span className="h-6 w-6 rounded-full border border-border/40 bg-black/20" aria-hidden="true" />
+                                    <span className="h-6 w-6 rounded-full border border-border/40 bg-surface-2/70" aria-hidden="true" />
                                   )}
                                   {subStyleMeta ? (
                                     <Image
@@ -1215,10 +1202,10 @@ export function SummonerProfileClient({
                                       title={subStyleMeta.name}
                                       width={24}
                                       height={24}
-                                      className="rounded-full border border-border/40 bg-black/20 p-0.5"
+                                      className="rounded-full border border-border/40 bg-surface-2/70 p-0.5"
                                     />
                                   ) : (
-                                    <span className="h-6 w-6 rounded-full border border-border/40 bg-black/20" aria-hidden="true" />
+                                    <span className="h-6 w-6 rounded-full border border-border/40 bg-surface-2/70" aria-hidden="true" />
                                   )}
                                 </div>
                               </div>
@@ -1255,19 +1242,19 @@ export function SummonerProfileClient({
                               </div>
                             </div>
                             <div className="flex flex-wrap gap-2 text-xs text-fg/70">
-                              <span className="rounded-full border border-border/55 bg-black/12 px-2.5 py-1">
+                              <span className="surface-chip rounded-full px-2.5 py-1">
                                 {m.damageToChamps.toLocaleString()} damage
                               </span>
-                              <span className="rounded-full border border-border/55 bg-black/12 px-2.5 py-1">
+                              <span className="surface-chip rounded-full px-2.5 py-1">
                                 {m.visionScore} vision
                               </span>
-                              <span className="rounded-full border border-border/55 bg-black/12 px-2.5 py-1">
+                              <span className="surface-chip rounded-full px-2.5 py-1">
                                 {m.csPerMin.toFixed(1)} CS/min
                               </span>
                             </div>
                           </div>
                           <div className="grid gap-2 xl:justify-items-end">
-                            <div className="rounded-[1.15rem] border border-white/8 bg-black/14 px-4 py-3 text-right shadow-[inset_0_1px_0_hsl(0_0%_100%_/_0.04)]">
+                            <div className="surface-subtle rounded-card px-4 py-3 text-right">
                               <p className="text-xl font-semibold leading-tight tracking-tight text-fg">
                                 <span>{m.kills}</span>/<span className="text-danger/90">{m.deaths}</span>/<span>{m.assists}</span>
                               </p>
@@ -1275,7 +1262,7 @@ export function SummonerProfileClient({
                                 {matchKdaRatio(m).toFixed(2)} KDA
                               </p>
                             </div>
-                            <span className="text-[11px] uppercase tracking-[0.16em] text-fg/48">
+                            <span className="text-[11px] uppercase tracking-[0.16em] text-fg/65">
                               {expanded ? "Collapse details" : "Expand details"}
                             </span>
                           </div>
@@ -1319,7 +1306,7 @@ export function SummonerProfileClient({
                                     ) => {
                                       if (!participant) {
                                         return (
-                                          <div className="rounded-[1rem] border border-dashed border-border/35 bg-black/10 px-3 py-3 text-xs text-muted">
+                                          <div className="rounded-control border border-dashed border-border/35 bg-surface/35 px-3 py-3 text-xs text-muted">
                                             {roleDisplayLabel(roleKey)} unavailable
                                           </div>
                                         );
@@ -1347,10 +1334,10 @@ export function SummonerProfileClient({
 
                                       return (
                                         <div
-                                          className={`rounded-[1rem] border px-3 py-3 ${
+                                          className={`rounded-control border px-3 py-3 ${
                                             isCurrent
-                                              ? "border-primary/45 bg-primary/10 shadow-[0_0_20px_hsl(var(--primary)_/_0.08)]"
-                                              : "border-border/25 bg-black/10"
+                                              ? "border-primary/45 bg-primary/10 shadow-card"
+                                              : "surface-subtle"
                                           }`}
                                         >
                                           <div className="grid items-center gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
@@ -1442,8 +1429,8 @@ export function SummonerProfileClient({
                                               disabled={!canExpandRunes}
                                               className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                                                 canExpandRunes
-                                                  ? "border-border/50 bg-black/10 text-fg/85 hover:bg-white/6"
-                                                  : "border-border/25 bg-black/5 text-muted"
+                                                  ? "border-border/50 bg-surface-2/55 text-fg/85 hover:bg-surface-2/72"
+                                                  : "border-border/25 bg-surface/25 text-muted"
                                               }`}
                                               aria-expanded={runesExpanded}
                                               aria-label={runesExpanded ? "Hide runes" : "Show runes"}
@@ -1455,10 +1442,10 @@ export function SummonerProfileClient({
                                                   title={primaryRuneMeta.name}
                                                   width={20}
                                                   height={20}
-                                                  className="rounded-full border border-border/35 bg-black/20 p-0.5"
+                                                  className="rounded-full border border-border/35 bg-surface-2/70 p-0.5"
                                                 />
                                               ) : (
-                                                <span className="h-5 w-5 rounded-full border border-border/35 bg-black/20" />
+                                                <span className="h-5 w-5 rounded-full border border-border/35 bg-surface-2/70" />
                                               )}
                                               <span>{canExpandRunes ? (runesExpanded ? "Hide Runes" : "Show Runes") : "Runes Unavailable"}</span>
                                             </button>
@@ -1486,7 +1473,7 @@ export function SummonerProfileClient({
                                       <div className="match-detail-shell p-3 md:p-4">
                                         <div className="mb-4 flex items-center justify-between gap-2">
                                           <div>
-                                            <p className="type-kicker text-primary/82">Matchup details</p>
+                                            <p className="type-kicker text-muted">Matchup details</p>
                                             <p className="mt-1 text-xs text-fg/62">
                                               Compare both teams with runes, spells, and item paths side by side.
                                             </p>
@@ -1499,18 +1486,18 @@ export function SummonerProfileClient({
                                             disabled={!canToggleAllRunes}
                                             className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                                               canToggleAllRunes
-                                                ? "border-border/55 bg-black/10 text-fg/85 hover:bg-white/6"
-                                                : "border-border/25 bg-black/5 text-muted"
+                                                ? "border-border/55 bg-surface-2/55 text-fg/85 hover:bg-surface-2/72"
+                                                : "border-border/25 bg-surface/25 text-muted"
                                             }`}
                                           >
                                             {allRunesExpanded ? "Collapse all runes" : "Expand all runes"}
                                           </button>
                                         </div>
                                         <div className="mb-3 grid grid-cols-2 gap-2">
-                                          <p className="rounded-full border border-sky-400/18 bg-sky-400/10 px-3 py-1 text-xs font-semibold text-sky-300">
+                                          <p className="rounded-full border border-team-blue/18 bg-team-blue/10 px-3 py-1 text-xs font-semibold text-team-blue">
                                             Blue Team
                                           </p>
-                                          <p className="rounded-full border border-rose-400/18 bg-rose-400/10 px-3 py-1 text-xs font-semibold text-rose-300">
+                                          <p className="rounded-full border border-team-red/18 bg-team-red/10 px-3 py-1 text-xs font-semibold text-team-red">
                                             Red Team
                                           </p>
                                         </div>
@@ -1539,7 +1526,7 @@ export function SummonerProfileClient({
                   );
                 })}
                 {!historyBusy && visibleMatches.length === 0 ? (
-                  <p className="rounded-[1.25rem] border border-border/40 bg-black/10 px-4 py-4 text-sm text-fg/80">
+                  <p className="surface-subtle rounded-card px-4 py-4 text-sm text-fg/80">
                     No matches found for the current queue/champion filters.
                   </p>
                 ) : null}

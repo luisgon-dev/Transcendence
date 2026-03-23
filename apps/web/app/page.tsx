@@ -37,7 +37,7 @@ export default function LandingPage() {
   return (
     <div className="grid gap-10">
       <section className="page-hero p-6 sm:p-8 md:p-10">
-        <p className="type-kicker text-primary">Transcendence</p>
+        <p className="type-kicker text-muted">Transcendence</p>
         <h1 className="type-display mt-4 max-w-4xl">
           Patch-ready League and TFT tools built for players first.
         </h1>
@@ -66,7 +66,7 @@ export default function LandingPage() {
         {visibleGames.map((game) => (
           <Card key={game.href} className="grid gap-5 p-6">
             <div>
-              <p className="type-kicker text-primary">
+              <p className="type-kicker text-muted">
                 {game.eyebrow}
               </p>
               <p className="type-title mt-3 text-fg">{game.title}</p>

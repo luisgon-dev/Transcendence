@@ -63,6 +63,7 @@ function ItemRow({
               title={title}
               width={iconSize}
               height={iconSize}
+              sizes={`${iconSize}px`}
               className="rounded-md"
             />
           );

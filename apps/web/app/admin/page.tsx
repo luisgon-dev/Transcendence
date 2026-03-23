@@ -12,7 +12,7 @@ import type {
 function stat(label: string, value: number | string, tone?: "primary" | "danger") {
   const toneClass =
     tone === "danger"
-      ? "text-rose-300"
+      ? "text-danger"
       : tone === "primary"
         ? "text-primary"
         : "text-fg";
@@ -28,13 +28,13 @@ function stat(label: string, value: number | string, tone?: "primary" | "danger"
 function healthTone(health: string) {
   switch (health) {
     case "healthy":
-      return "bg-emerald-500/15 text-emerald-200";
+      return "bg-success/15 text-success";
     case "catching_up":
-      return "bg-sky-500/15 text-sky-200";
+      return "bg-info/15 text-info";
     case "blocked":
-      return "bg-amber-500/15 text-amber-200";
+      return "bg-warning/15 text-warning";
     default:
-      return "bg-rose-500/15 text-rose-200";
+      return "bg-danger/15 text-danger";
   }
 }
 
@@ -56,7 +56,7 @@ export default async function AdminOverviewPage() {
         {stat("Failed", overview.failed, overview.failed > 0 ? "danger" : undefined)}
       </section>
 
-      <section className="rounded-[1.75rem] border border-border/70 bg-surface/50 p-5">
+      <section className="page-panel p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">Pipeline Controls</h2>
@@ -68,7 +68,7 @@ export default async function AdminOverviewPage() {
             <AdminRefreshButton label="Refresh Snapshot" />
             <Link
               href="/admin/jobs?state=enqueued"
-              className="rounded-full border border-border/80 px-4 py-2 text-sm text-fg/85 transition hover:bg-white/10"
+              className="surface-chip rounded-full px-4 py-2 text-sm text-fg/85 transition hover:bg-surface-2/72"
             >
               Inspect Backlog
             </Link>
@@ -85,7 +85,7 @@ export default async function AdminOverviewPage() {
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.3fr_0.9fr]">
-        <div className="rounded-[1.75rem] border border-border/70 bg-surface/50 p-5">
+        <div className="page-panel p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold">Analysis Health</h2>
@@ -98,7 +98,7 @@ export default async function AdminOverviewPage() {
             </div>
             <Link
               href="/admin/jobs?state=processing"
-              className="rounded-full border border-border/80 px-3 py-1 text-xs text-fg/85 transition hover:bg-white/10"
+              className="surface-chip rounded-full px-3 py-1 text-xs text-fg/85 transition hover:bg-surface-2/72"
             >
               View Processing Jobs
             </Link>
@@ -128,7 +128,7 @@ export default async function AdminOverviewPage() {
                   <tr key={region.region} className="border-t border-border/40">
                     <td className="py-2 font-medium">
                       {region.region}
-                      {!region.enabled ? <span className="ml-2 text-xs text-fg/45">inactive</span> : null}
+                      {!region.enabled ? <span className="ml-2 text-xs text-fg/65">inactive</span> : null}
                     </td>
                     <td className="py-2">
                       <span className={`rounded-full px-2.5 py-1 text-xs uppercase tracking-wide ${healthTone(region.health)}`}>
@@ -157,14 +157,14 @@ export default async function AdminOverviewPage() {
           </div>
         </div>
 
-        <div className="rounded-[1.75rem] border border-border/70 bg-surface/50 p-5">
+        <div className="page-panel p-5">
           <h2 className="text-lg font-semibold">Top Backlog Groups</h2>
           <p className="mt-1 text-sm text-fg/65">
             Derived from the first {queues.scanLimit.toLocaleString()} jobs scanned.
           </p>
           <div className="mt-4 grid gap-3">
             {queues.topGroups.slice(0, 8).map((group) => (
-              <div key={`${group.state}-${group.queue}-${group.jobType}-${group.region}`} className="rounded-2xl border border-border/60 bg-black/15 p-4">
+              <div key={`${group.state}-${group.queue}-${group.jobType}-${group.region}`} className="surface-subtle rounded-card p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium text-fg">
@@ -187,7 +187,7 @@ export default async function AdminOverviewPage() {
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
-        <div className="rounded-[1.75rem] border border-border/70 bg-surface/50 p-5">
+        <div className="page-panel p-5">
           <h2 className="text-lg font-semibold">Worker Servers</h2>
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -215,7 +215,7 @@ export default async function AdminOverviewPage() {
           </div>
         </div>
 
-        <div className="rounded-[1.75rem] border border-border/70 bg-surface/50 p-5">
+        <div className="page-panel p-5">
           <h2 className="text-lg font-semibold">Queue Pressure</h2>
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-left text-sm">

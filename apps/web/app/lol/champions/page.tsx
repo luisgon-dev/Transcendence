@@ -102,7 +102,7 @@ export default async function ChampionsPage({
   return (
     <div className="grid gap-8">
       <header className="page-hero p-5 md:p-8">
-        <p className="type-kicker text-primary">League Directory</p>
+        <p className="type-kicker text-muted">League Directory</p>
         <h1 className="type-title mt-3 sm:text-[2.4rem]">
           Champions
         </h1>
@@ -115,7 +115,7 @@ export default async function ChampionsPage({
           />
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="control-chip type-ui font-semibold" data-active="true">
+          <span className="control-tab type-ui font-semibold" data-active="true">
             {activeRegionLabel}
           </span>
           <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />

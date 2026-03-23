@@ -12,7 +12,7 @@ export default async function TftItemsPage() {
   return (
     <div className="grid gap-6">
       <section className="page-hero p-6">
-        <p className="type-kicker text-primary">TFT Catalog</p>
+        <p className="type-kicker text-muted">TFT Catalog</p>
         <h1 className="type-title mt-3 sm:text-[2.4rem]">TFT Items</h1>
         <p className="type-ui mt-3 text-fg/75">Browse completed items and quickly check what each one does.</p>
       </section>

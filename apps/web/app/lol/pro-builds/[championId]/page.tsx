@@ -225,11 +225,11 @@ export default async function ProBuildsChampionPage({
               name="patch"
               defaultValue={patchFilter ?? ""}
               placeholder="14.5"
-              className="control-input h-9 w-28 rounded-xl px-3 text-sm"
+              className="control-input h-9 w-28 rounded-control px-3 text-sm"
             />
             <button
               type="submit"
-              className="h-9 rounded-xl border border-primary/40 bg-primary/10 px-3 text-sm font-semibold text-primary hover:bg-primary/20"
+              className="h-9 rounded-control border border-primary/40 bg-primary/10 px-3 text-sm font-semibold text-primary hover:bg-primary/20"
             >
               Apply
             </button>
@@ -240,7 +240,7 @@ export default async function ProBuildsChampionPage({
                   region: regionFilter,
                   patch: null
                 })}
-                className="control-chip type-ui h-9 px-3"
+                className="control-tab type-ui h-9 px-3"
               >
                 Clear
               </Link>
@@ -250,10 +250,16 @@ export default async function ProBuildsChampionPage({
       </Card>
 
       {!proBuildsRes.ok ? (
-        <Card className="border-border/70 bg-white/[0.03] p-5">
+        <Card className="surface-subtle p-5">
           <h2 className="type-section">Pro-Build Data Unavailable</h2>
           <p className="mt-2 text-sm text-fg/80">{proFeedErrorMessage(proBuildsRes)}</p>
-          <p className="mt-1 text-xs text-muted">Request ID: {proBuildsRes.requestId}</p>
+          <p className="mt-1 text-xs text-muted">Try adjusting your filters or check back soon.</p>
+          {proBuildsRes.requestId ? (
+            <details className="mt-3 text-xs text-muted">
+              <summary className="cursor-pointer select-none rounded hover:text-fg/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">Technical details</summary>
+              <p className="mt-1">Request ID: <code className="text-fg/65">{proBuildsRes.requestId}</code></p>
+            </details>
+          ) : null}
         </Card>
       ) : null}
 
@@ -269,7 +275,7 @@ export default async function ProBuildsChampionPage({
               {topPlayers.map((player, idx) => (
                 <li
                   key={`${player.playerName ?? "player"}-${idx}`}
-                  className="flex items-center justify-between rounded-lg border border-border/50 bg-white/[0.03] px-3 py-2"
+                  className="surface-subtle flex items-center justify-between rounded-card px-3 py-2"
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-fg">
@@ -299,7 +305,7 @@ export default async function ProBuildsChampionPage({
               {commonBuilds.map((build, idx) => (
                 <div
                   key={`common-build-${idx}`}
-                  className="rounded-lg border border-border/50 bg-white/[0.03] p-3"
+                  className="surface-subtle rounded-card p-3"
                 >
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <p className="text-xs text-muted">Build #{idx + 1}</p>
@@ -334,7 +340,7 @@ export default async function ProBuildsChampionPage({
               return (
                 <li
                   key={`${match.matchId ?? "match"}-${idx}`}
-                  className="rounded-lg border border-border/50 bg-white/[0.03] p-3"
+                  className="surface-subtle rounded-card p-3"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
@@ -400,14 +406,14 @@ export default async function ProBuildsChampionPage({
         <div className="mt-4 flex flex-wrap gap-2 text-sm">
           <Link
             href={`/lol/champions/${championId}`}
-            className="control-chip type-ui font-semibold"
+            className="control-tab type-ui font-semibold"
             data-active="true"
           >
             Open Champion Details
           </Link>
           <Link
             href={`/lol/matchups/${championId}`}
-            className="control-chip type-ui"
+            className="control-tab type-ui"
           >
             Open Matchup Analysis
           </Link>

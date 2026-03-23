@@ -37,11 +37,11 @@ type BulkDeleteRequest = {
 function statusClassName(tone: NonNullable<MutationStatus>["tone"]) {
   switch (tone) {
     case "success":
-      return "border-emerald-400/20 bg-emerald-500/10 text-emerald-100";
+      return "border-success/20 bg-success/10 text-success";
     case "error":
-      return "border-rose-400/20 bg-rose-500/10 text-rose-100";
+      return "border-danger/20 bg-danger/10 text-danger";
     default:
-      return "border-border/60 bg-black/15 text-fg/80";
+      return "surface-subtle text-fg/80";
   }
 }
 
@@ -217,15 +217,15 @@ function RecurringJobRow({
       <td className="py-2">{job.queue || "default"}</td>
       <td className="py-2">
         {job.isPaused ? (
-          <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-xs uppercase tracking-wide text-amber-200">
+          <span className="rounded-full bg-warning/15 px-2.5 py-1 text-xs uppercase tracking-wide text-warning">
             paused
           </span>
         ) : job.isEnabledByConfiguration ? (
-          <span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs uppercase tracking-wide text-emerald-200">
+          <span className="rounded-full bg-success/15 px-2.5 py-1 text-xs uppercase tracking-wide text-success">
             active
           </span>
         ) : (
-          <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs uppercase tracking-wide text-fg/60">
+          <span className="surface-chip rounded-full px-2.5 py-1 text-xs uppercase tracking-wide text-fg/65">
             disabled
           </span>
         )}
@@ -248,7 +248,7 @@ function RecurringJobRow({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="bg-emerald-500/15 text-emerald-100 shadow-none hover:brightness-100"
+                className="bg-success/15 text-success shadow-none hover:brightness-100"
                 disabled={pending}
                 onClick={() => submit("resume")}
               >
@@ -259,7 +259,7 @@ function RecurringJobRow({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="bg-amber-500/15 text-amber-100 shadow-none hover:brightness-100"
+                className="bg-warning/15 text-warning shadow-none hover:brightness-100"
                 disabled={pending}
                 onClick={() => submit("pause")}
               >
@@ -294,7 +294,7 @@ export function AdminBulkDeleteButton({
         type="button"
         variant="ghost"
         size="sm"
-        className="rounded-full border border-amber-300/30 bg-amber-500/10 px-4 py-2 text-xs font-medium text-amber-100 transition hover:bg-amber-500/20"
+          className="rounded-full border border-warning/30 bg-warning/10 px-4 py-2 text-xs font-medium text-warning transition hover:bg-warning/20"
         disabled={disabled || pending}
         onClick={() => {
           if (
@@ -481,7 +481,7 @@ function JobRow({
       <td className="py-2">
         <Link
           href={`/admin/jobs/${encodeURIComponent(job.jobId)}`}
-          className="rounded-full border border-border/80 px-3 py-1 text-xs text-fg/85 transition hover:bg-white/10"
+          className="surface-chip rounded-full px-3 py-1 text-xs text-fg/85 transition hover:bg-surface-2/72"
         >
           Inspect
         </Link>
@@ -489,7 +489,7 @@ function JobRow({
       <td className="py-2">
         <Link
           href={buildLogsHref(job)}
-          className="rounded-full border border-border/80 px-3 py-1 text-xs text-fg/85 transition hover:bg-white/10"
+          className="surface-chip rounded-full px-3 py-1 text-xs text-fg/85 transition hover:bg-surface-2/72"
         >
           Nearby Logs
         </Link>
@@ -511,7 +511,7 @@ function JobRow({
             type="button"
             variant="ghost"
             size="sm"
-            className="bg-rose-500/15 text-rose-100 shadow-none hover:brightness-100"
+            className="bg-danger/15 text-danger shadow-none hover:brightness-100"
             disabled={pending}
             onClick={handleDelete}
           >
@@ -599,7 +599,7 @@ export function AdminJobDetailActionBar({ detail }: { detail: AdminJobDetail }) 
           type="button"
           variant="ghost"
           size="sm"
-          className="bg-rose-500/15 text-rose-100 shadow-none hover:brightness-100"
+          className="bg-danger/15 text-danger shadow-none hover:brightness-100"
           disabled={pending}
           onClick={handleDelete}
         >

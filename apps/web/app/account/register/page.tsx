@@ -16,8 +16,8 @@ export default function RegisterPage() {
 
   return (
     <div className="grid place-items-center py-8">
-      <Card className="w-full max-w-md rounded-3xl p-6">
-        <p className="type-kicker text-primary">Account</p>
+      <Card className="w-full max-w-md rounded-panel p-6">
+        <p className="type-kicker text-muted">Account</p>
         <h1 className="type-title mt-3">
           Create account
         </h1>

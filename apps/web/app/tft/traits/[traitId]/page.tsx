@@ -43,7 +43,7 @@ export default async function TftTraitDetailPage({
         )}
         <div>
           <p className="type-kicker text-muted">TFT Trait</p>
-          <h1 className="type-title mt-2 sm:text-[2.2rem]">{entity.name}</h1>
+          <h1 className="type-page-title mt-2">{entity.name}</h1>
           <p className="type-ui mt-2 text-muted">Trait details</p>
         </div>
       </div>

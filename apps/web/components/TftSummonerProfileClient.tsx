@@ -294,7 +294,7 @@ export function TftSummonerProfileClient({
       <Card className="profile-hero-card grid gap-4 rounded-hero p-6">
         <div>
           <p className="type-kicker text-muted">TFT profile</p>
-          <h1 className="mt-2 font-heading text-[clamp(2rem,5vw,3.3rem)] font-semibold tracking-[-0.05em]">
+          <h1 className="type-hero-title mt-2">
             {title}
           </h1>
           <p className="mt-3 text-sm text-fg/75">
@@ -348,7 +348,7 @@ export function TftSummonerProfileClient({
             )}
             <div className="min-w-0">
               <p className="type-kicker text-muted">TFT profile</p>
-              <h1 className="mt-2 truncate font-heading text-[clamp(2.2rem,5vw,3.5rem)] font-semibold leading-[0.98] tracking-[-0.05em]">
+              <h1 className="type-hero-title mt-2 truncate">
                 {title}
               </h1>
               <p className="mt-2 text-sm text-fg/80">
@@ -365,7 +365,7 @@ export function TftSummonerProfileClient({
                     {recentForm.map((placement, idx) => (
                       <span
                         key={`p-${idx}`}
-                        className={`flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold shadow-soft ${placementBgClass(placement)} ${placementColorClass(placement)}`}
+                        className={`type-overline flex h-7 w-7 items-center justify-center rounded-full font-bold tracking-normal shadow-soft ${placementBgClass(placement)} ${placementColorClass(placement)}`}
                         title={formatPlacement(placement)}
                       >
                         {placement}
@@ -523,7 +523,7 @@ export function TftSummonerProfileClient({
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(250px,auto)] xl:items-start">
               <div>
                 <p className="type-kicker text-muted">Match history</p>
-                <h2 className="mt-2 font-heading text-[clamp(1.75rem,3vw,2.35rem)] font-semibold leading-[1.02] tracking-[-0.04em]">
+                <h2 className="type-panel-title mt-2">
                   Comps, traits, and placement trends
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm text-fg/70">
@@ -642,20 +642,20 @@ function TftMatchCard({
       >
         <div className={`flex w-16 shrink-0 flex-col items-center justify-center ${placementBarClass(match.placement)}`}>
           <span className="text-2xl font-extrabold text-bg">{match.placement}</span>
-          <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-bg/70">
+          <span className="type-overline mt-1 text-bg/70">
             place
           </span>
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col gap-3 px-4 py-4 md:px-5 md:py-5">
           <div className="flex flex-wrap items-center gap-2">
-            <span className={`surface-chip rounded-full px-2.5 py-1 text-[11px] font-semibold ${placementColorClass(match.placement)}`}>
+            <span className={`type-caption surface-chip rounded-full px-2.5 py-1 font-semibold ${placementColorClass(match.placement)}`}>
               {formatPlacement(match.placement)}
             </span>
-            <span className="surface-chip rounded-full px-2.5 py-1 text-[11px] text-fg/72">
+            <span className="type-caption surface-chip rounded-full px-2.5 py-1 text-fg/72">
               Level {match.level}
             </span>
-            <span className="surface-chip rounded-full px-2.5 py-1 text-[11px] text-fg/72">
+            <span className="type-caption surface-chip rounded-full px-2.5 py-1 text-fg/72">
               {formatRelativeTime(match.matchDate)}
             </span>
           </div>
@@ -664,7 +664,7 @@ function TftMatchCard({
             {match.units.map((unit) => (
               <span
                 key={unit.characterId}
-                className="rounded-full border border-primary/22 bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary"
+                className="type-caption rounded-full border border-primary/22 bg-primary/10 px-2.5 py-1 font-medium text-primary"
               >
                 {unit.name ?? unit.characterId}
                 {unit.tier > 1 && <span className="ml-0.5 text-rank-gold">{starString(unit.tier)}</span>}
@@ -678,14 +678,14 @@ function TftMatchCard({
               .map((trait) => (
                 <span
                   key={trait.name}
-                  className="surface-chip rounded-full px-2 py-1 text-[10px] text-fg/70"
+                  className="type-caption surface-chip rounded-full px-2 py-1 text-fg/70"
                 >
                   {trait.name} {trait.numUnits}
                 </span>
               ))}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 text-[10px] text-fg/60">
+          <div className="type-caption flex flex-wrap items-center gap-2 text-fg/60">
             {match.augments.length > 0 && (
               <span>Augments: {match.augments.map((a) => a.replace(/^TFT\d+_/i, "").replace(/_/g, " ")).join(" · ")}</span>
             )}
@@ -695,9 +695,9 @@ function TftMatchCard({
         <div className="flex shrink-0 flex-col items-end justify-center gap-2 px-4 py-4 text-right text-xs text-fg/70">
           <div className="surface-subtle rounded-control px-3 py-2">
             <p className="text-sm font-semibold text-fg">{match.totalDamageToPlayers.toLocaleString()} dmg</p>
-            <p className="mt-1 text-[11px] text-fg/62">{match.playersEliminated} elim</p>
+            <p className="type-caption mt-1 text-fg/62">{match.playersEliminated} elim</p>
           </div>
-          <span className="text-[11px] uppercase tracking-[0.16em] text-fg/65">
+          <span className="type-overline text-fg/65">
             {expanded ? "Collapse" : "Expand"}
           </span>
         </div>
@@ -792,7 +792,7 @@ function TftMatchDetailTable({
                 {p.units.map((u) => (
                   <span
                     key={u.characterId}
-                    className="rounded-full border border-primary/18 bg-primary/8 px-2 py-0.5 text-[10px] text-fg/68"
+                    className="type-caption rounded-full border border-primary/18 bg-primary/8 px-2 py-0.5 text-fg/68"
                   >
                     {u.name ?? u.characterId}
                     {u.tier > 1 && <span className="text-rank-gold">{starString(u.tier)}</span>}
@@ -804,14 +804,14 @@ function TftMatchDetailTable({
                 {p.traits
                   .filter((t) => t.tierCurrent > 0)
                   .map((t) => (
-                    <span key={t.name} className="surface-chip rounded-full px-2 py-0.5 text-[10px] text-fg/60">
+                    <span key={t.name} className="type-caption surface-chip rounded-full px-2 py-0.5 text-fg/60">
                       {t.name}
                     </span>
                   ))}
               </div>
             </div>
 
-            <div className="surface-subtle shrink-0 rounded-control px-3 py-2 text-right text-[11px] text-fg/65">
+            <div className="type-caption surface-subtle shrink-0 rounded-control px-3 py-2 text-right text-fg/65">
               <p>Lvl {p.level}</p>
               <p>{p.goldLeft}g left</p>
               <p>{p.totalDamageToPlayers.toLocaleString()} dmg</p>

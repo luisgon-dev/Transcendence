@@ -503,16 +503,16 @@ export function GlobalCommandPalette() {
                             sizes="36px"
                           />
                         ) : (
-                          <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border/55 bg-surface/60 text-[11px] text-muted">
+                          <span className="type-caption inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border/55 bg-surface/60 text-muted">
                             ?
                           </span>
                         )}
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-[0.97rem] font-medium text-fg">
+                          <p className="type-ui truncate font-medium text-fg">
                             {item.gameName}
                             <span className="text-fg/58">#{item.tagLine}</span>
                           </p>
-                          <p className="type-ui truncate text-fg/65">
+                          <p className="type-caption truncate text-fg/65">
                             Live profile lookup
                           </p>
                         </div>
@@ -540,10 +540,10 @@ export function GlobalCommandPalette() {
                         <ArrowCornerIcon className="h-4 w-4" />
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[0.97rem] font-medium text-fg">
+                        <p className="type-ui truncate font-medium text-fg">
                           Open {parsedRiotId.gameName}#{parsedRiotId.tagLine}
                         </p>
-                        <p className="type-ui text-fg/65">{regionLabel} direct profile route</p>
+                        <p className="type-caption text-fg/65">{regionLabel} direct profile route</p>
                       </div>
                     </Command.Item>
                   ) : null}
@@ -583,8 +583,8 @@ export function GlobalCommandPalette() {
                           <SparkIcon className="h-4 w-4" />
                         </span>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-[0.97rem] font-medium text-fg">{champion.name}</p>
-                          <p className="type-ui text-fg/65">Champion profile and matchup data</p>
+                          <p className="type-ui truncate font-medium text-fg">{champion.name}</p>
+                          <p className="type-caption text-fg/65">Champion profile and matchup data</p>
                         </div>
                       </Command.Item>
                     ))
@@ -611,8 +611,8 @@ export function GlobalCommandPalette() {
                             <ArrowCornerIcon className="h-4 w-4" />
                           </span>
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-[0.97rem] font-medium text-fg">{parts.title}</p>
-                            <p className="type-ui truncate text-fg/65">
+                            <p className="type-ui truncate font-medium text-fg">{parts.title}</p>
+                            <p className="type-caption truncate text-fg/65">
                               {parts.detail ?? "Quick route into the meta surface"}
                             </p>
                           </div>

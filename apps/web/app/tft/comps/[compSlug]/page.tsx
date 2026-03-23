@@ -52,7 +52,7 @@ export default async function TftCompDetailPage({
           Back to comps
         </Link>
         <div className="mt-3 flex items-center gap-3">
-          <h1 className="type-title sm:text-[2.4rem]">
+          <h1 className="type-page-title">
             {comp.summary.name}
           </h1>
           <Badge className={`rounded-md px-2.5 py-1 text-sm font-bold ${tierColor}`}>

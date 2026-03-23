@@ -44,6 +44,15 @@
   --text-body-tracking: -0.008em;
   --text-ui-size: 0.9375rem;
   --text-ui-leading: 1.4;
+  --text-note-size: 0.8125rem;
+  --text-note-leading: 1.65;
+  --text-note-tracking: 0.01em;
+  --text-caption-size: 0.75rem;
+  --text-caption-leading: 1.35;
+  --text-caption-tracking: 0.01em;
+  --text-overline-size: 0.6875rem;
+  --text-overline-leading: 1.2;
+  --text-overline-tracking: 0.16em;
   --text-label-size: 0.75rem;
   --text-label-leading: 1.1rem;
   --text-label-tracking: 0.22em;
@@ -147,6 +156,34 @@ body::before {
     text-wrap: balance;
   }
 
+  .type-page-title {
+    font-family: var(--font-heading), var(--font-body), sans-serif;
+    font-size: clamp(1.75rem, 3.2vw, 2.4rem);
+    line-height: 1.05;
+    letter-spacing: -0.04em;
+    font-weight: 600;
+    text-wrap: balance;
+  }
+
+  .type-hero-title {
+    font-family: var(--font-heading), var(--font-body), sans-serif;
+    font-size: clamp(2rem, 5vw, 3.7rem);
+    line-height: 0.98;
+    letter-spacing: var(--text-display-tracking);
+    font-weight: 600;
+    overflow-wrap: anywhere;
+    text-wrap: pretty;
+  }
+
+  .type-panel-title {
+    font-family: var(--font-heading), var(--font-body), sans-serif;
+    font-size: clamp(1.75rem, 3vw, 2.35rem);
+    line-height: 1.02;
+    letter-spacing: -0.04em;
+    font-weight: 600;
+    text-wrap: balance;
+  }
+
   .type-section {
     font-family: var(--font-heading), var(--font-body), sans-serif;
     font-size: 1.125rem;
@@ -168,12 +205,40 @@ body::before {
     letter-spacing: 0.01em;
   }
 
+  .type-note {
+    font-size: var(--text-note-size);
+    line-height: var(--text-note-leading);
+    letter-spacing: var(--text-note-tracking);
+  }
+
+  .type-caption {
+    font-size: var(--text-caption-size);
+    line-height: var(--text-caption-leading);
+    letter-spacing: var(--text-caption-tracking);
+  }
+
   .type-meta {
     font-size: var(--text-meta-size);
     line-height: var(--text-meta-leading);
     letter-spacing: var(--text-meta-tracking);
     font-weight: 600;
     text-transform: uppercase;
+  }
+
+  .type-overline {
+    font-size: var(--text-overline-size);
+    line-height: var(--text-overline-leading);
+    letter-spacing: var(--text-overline-tracking);
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .type-wordmark {
+    font-family: var(--font-heading), var(--font-body), sans-serif;
+    font-size: 1rem;
+    line-height: 1.05;
+    letter-spacing: 0.035em;
+    font-weight: 600;
   }
 
   .type-kicker {
@@ -492,4 +557,3 @@ body::before {
     animation: none;
   }
 }
-

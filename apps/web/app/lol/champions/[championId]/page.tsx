@@ -225,7 +225,7 @@ export default async function ChampionDetailPage({
           />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="type-title sm:text-[2.35rem]">
+              <h1 className="type-page-title">
                 {champName}
               </h1>
               <TierBadge tier={heroTier} size="md" />
@@ -297,7 +297,7 @@ export default async function ChampionDetailPage({
         ) : (
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="text-[11px] uppercase tracking-wider text-muted">
+              <thead className="type-overline text-muted">
                 <tr className="border-b border-border/30">
                   <th className="py-2 pr-4">Role</th>
                   <th className="py-2 pr-4">Tier</th>

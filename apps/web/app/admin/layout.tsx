@@ -24,7 +24,7 @@ export default async function AdminLayout({
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="type-kicker text-muted">Operations Console</p>
-            <h1 className="type-title mt-3 sm:text-[2.35rem] text-fg">Admin Pipeline Dashboard</h1>
+            <h1 className="type-page-title mt-3 text-fg">Admin Pipeline Dashboard</h1>
             <p className="type-ui mt-3 max-w-2xl text-fg/70">
               Signed in as {session.name ?? "admin"}. Monitor queue pressure, ingestion health, and operator actions
               from one place.

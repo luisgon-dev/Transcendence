@@ -136,7 +136,7 @@ export default async function HomePage({
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[420px] text-left text-sm">
-                <thead className="text-[11px] uppercase tracking-wider text-muted">
+                <thead className="type-overline text-muted">
                   <tr className="border-b border-border/30">
                     <th className="px-4 py-2">Champion</th>
                     <th className="px-3 py-2">Role</th>

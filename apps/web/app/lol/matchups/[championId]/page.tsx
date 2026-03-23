@@ -176,7 +176,7 @@ export default async function MatchupAnalysisPage({
             className="rounded-xl border border-border/60"
           />
           <div>
-            <h1 className="type-title sm:text-[2.4rem]">
+            <h1 className="type-page-title">
               Matchup Analysis
             </h1>
             <p className="type-ui mt-2 text-fg/75">How {championName} performs into the current field.</p>
@@ -309,7 +309,7 @@ export default async function MatchupAnalysisPage({
         </div>
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
-            <thead className="text-[11px] uppercase tracking-wider text-muted">
+            <thead className="type-overline text-muted">
               <tr className="border-b border-border/30">
                 <th className="py-2 pr-4">Opponent</th>
                 <th className="py-2 pr-4 text-right">Win Rate</th>

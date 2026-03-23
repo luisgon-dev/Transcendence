@@ -81,7 +81,7 @@ export default function FavoritesPage() {
     <div className="grid gap-6">
       <header className="page-hero grid gap-2 p-5">
         <p className="type-kicker text-muted">Account</p>
-        <h1 className="type-title sm:text-[2.4rem]">
+        <h1 className="type-page-title">
           Favorites
         </h1>
         <p className="type-ui text-fg/75">

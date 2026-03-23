@@ -185,7 +185,7 @@ export default async function ProBuildsChampionPage({
             className="rounded-xl border border-border/60"
           />
           <div>
-            <h1 className="type-title sm:text-[2.4rem]">
+            <h1 className="type-page-title">
               Pro Builds
             </h1>
             <p className="type-ui mt-2 text-fg/75">Recent pro and high-MMR builds for {championName}</p>
@@ -360,7 +360,7 @@ export default async function ProBuildsChampionPage({
                       <p className={`text-sm font-semibold ${resultClass}`}>
                         {match.win ? "Win" : "Loss"}
                       </p>
-                      <p className="text-[11px] text-muted">{match.matchId ?? "Unknown match"}</p>
+                      <p className="type-caption text-muted">{match.matchId ?? "Unknown match"}</p>
                     </div>
                   </div>
 

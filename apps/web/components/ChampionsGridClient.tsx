@@ -64,8 +64,8 @@ export function ChampionsGridClient({
                     {c.name}
                   </p>
                   <div className="mt-0.5 flex min-h-[18px] items-center gap-1.5">
-                    {c.tier ? <TierBadge tier={c.tier} /> : <span className="text-[11px] text-muted">Tier -</span>}
-                    <span className="text-[11px] text-muted">
+                    {c.tier ? <TierBadge tier={c.tier} /> : <span className="type-caption text-muted">Tier -</span>}
+                    <span className="type-caption text-muted">
                       {c.primaryRole ? roleDisplayLabel(c.primaryRole) : "Role -"}
                     </span>
                   </div>

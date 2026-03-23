@@ -42,7 +42,7 @@ export async function AccountNav() {
           variant="ghost"
           size="sm"
           type="submit"
-          className="h-9 rounded-full px-3.5 text-[0.875rem] text-fg/74 hover:bg-surface-2/55 hover:text-fg"
+          className="h-9 rounded-full px-3.5 text-fg/74 hover:bg-surface-2/55 hover:text-fg"
         >
           Log out
         </Button>

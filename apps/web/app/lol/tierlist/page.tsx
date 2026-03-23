@@ -110,7 +110,7 @@ export default async function TierListPage({
     <div className="grid gap-8">
       <header className="page-hero p-5 md:p-8">
         <p className="type-kicker text-muted">League Analytics</p>
-        <h1 className="type-title mt-3 sm:text-[2.4rem]">
+        <h1 className="type-page-title mt-3">
           Tier List
         </h1>
         <p className="type-ui mt-3 text-fg/75">

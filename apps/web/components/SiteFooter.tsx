@@ -35,7 +35,7 @@ export function SiteFooter() {
             </Link>
           </nav>
         </div>
-        <p className="measure mt-4 text-[0.8125rem] leading-6 tracking-[0.01em] text-fg/78">
+        <p className="type-note measure mt-4 text-fg/78">
           Transcendence isn&apos;t endorsed by Riot Games and doesn&apos;t
           reflect the views or opinions of Riot Games or anyone officially
           involved in producing or managing Riot Games properties. Riot Games,

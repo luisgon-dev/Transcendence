@@ -124,7 +124,7 @@ export function RuneSetupDisplay({
               styleById={styleById}
               size={iconSize + (isCompact ? 1 : 2)}
             />
-            <span className={cn("uppercase tracking-wide text-muted", isCompact ? "text-[9px]" : "text-[10px]")}>
+            <span className="type-overline text-muted">
               Primary
             </span>
           </div>
@@ -147,7 +147,7 @@ export function RuneSetupDisplay({
               styleById={styleById}
               size={iconSize + (isCompact ? 1 : 2)}
             />
-            <span className={cn("uppercase tracking-wide text-muted", isCompact ? "text-[9px]" : "text-[10px]")}>
+            <span className="type-overline text-muted">
               Secondary
             </span>
           </div>
@@ -166,7 +166,7 @@ export function RuneSetupDisplay({
 
       <div className={cn("surface-subtle rounded-control", isCompact ? "p-1.5" : "p-2")}>
         <div className={cn("flex items-center gap-2", isCompact ? "mb-0.5" : "mb-1")}>
-          <span className={cn("uppercase tracking-wide text-muted", isCompact ? "text-[9px]" : "text-[10px]")}>
+          <span className="type-overline text-muted">
             Shards
           </span>
         </div>
@@ -182,7 +182,7 @@ export function RuneSetupDisplay({
         </div>
       </div>
       {primaryRunes.length === 0 && secondaryRunes.length === 0 && shards.length === 0 ? (
-        <p className="text-xs text-muted">Runes unavailable.</p>
+        <p className="type-caption text-muted">Runes unavailable.</p>
       ) : null}
       <div className="sr-only">
         Primary runes: {primaryRunes.join(", ")}. Secondary runes: {secondaryRunes.join(", ")}.

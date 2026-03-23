@@ -97,7 +97,7 @@ export function TierListTable({
 
   function renderHeader() {
     return (
-      <thead className="text-[11px] uppercase tracking-wider text-muted">
+      <thead className="type-overline text-muted">
         <tr className="border-b border-border/30">
           {columns.map((col) => {
             const sortable = !!col.sortKey;
@@ -117,7 +117,7 @@ export function TierListTable({
                   >
                     {col.label}
                     {active && (
-                      <span aria-hidden="true" className="text-primary text-[10px]">
+                      <span aria-hidden="true" className="type-overline text-primary">
                         {sortDir === "asc" ? "\u25B2" : "\u25BC"}
                       </span>
                     )}
@@ -163,7 +163,7 @@ export function TierListTable({
             <span className="min-w-0">
               <span className="block truncate font-medium text-fg">{champName}</span>
               {championSubtitle ? (
-                <span className="hidden truncate text-[11px] text-muted md:block">{championSubtitle}</span>
+                <span className="type-caption hidden truncate text-muted md:block">{championSubtitle}</span>
               ) : null}
             </span>
           </Link>

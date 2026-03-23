@@ -57,10 +57,10 @@ export function SiteHeaderClient({
           <Link href="/" className="group inline-flex min-w-0 shrink-0 items-center gap-3">
             <BrandMark className="h-9 w-9 shrink-0 transition group-hover:scale-105" />
             <div className="grid min-w-0 gap-0.5">
-              <span className="font-heading truncate text-[0.98rem] font-semibold tracking-[0.035em] text-fg">
+              <span className="type-wordmark truncate text-fg">
                 Transcendence
               </span>
-              <span className="hidden items-center gap-2 text-[0.72rem] font-medium uppercase tracking-[0.16em] text-fg/65 sm:inline-flex">
+              <span className="type-overline hidden items-center gap-2 text-fg/65 sm:inline-flex">
                 <span className="text-primary/88">{surfaceLabel}</span>
                 {patch ? <span className="type-tabular">Patch {patch}</span> : null}
                 {!TFT_FRONTEND_ENABLED ? <span>TFT soon</span> : null}

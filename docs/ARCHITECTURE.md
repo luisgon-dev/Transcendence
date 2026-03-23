@@ -90,23 +90,6 @@ Operational implication:
 - Riot API key swaps should not invalidate stored gameplay data as long as `Puuid` and Riot ID fields remain intact.
 - Encrypted identifiers may drift after a key change and should be treated as rehydratable, not as durable foreign keys.
 
-## Local Data Slice Tooling
-
-- Prod-to-local gameplay seeding is implemented as a developer CLI workflow in `tools/Transcendence.Tools.DataOps`, not as an application API.
-- The slice tool copies a game-only subset from a source Postgres database into a disposable local target Postgres database.
-- Import scope is sized from root match sets and their dependents, then expanded to the summoner, participant, rank, cursor, static-data, and analytics-supporting rows needed for realistic local testing.
-- Import size is operator-controlled through per-game region caps and sample percentages, so local databases can be small, medium, or near-production in shape without editing code.
-- The tool requires source and target schema versions to match before writing the target.
-
-## Riot Key Rotation / Swap Workflow
-
-1. Update Riot API keys for the worker and any local validation shells.
-2. Run identifier validation against stored data.
-3. If encrypted identifiers need refreshing, run the rehydrate job keyed by stored `Puuid`.
-4. Resume normal ingestion and refresh traffic.
-
-The rehydrate step updates non-canonical `RiotSummonerId` / `AccountId` and Riot ID display fields from Riot APIs using `Puuid` as the stable pivot.
-
 ### Summoner Read Failure Semantics
 
 - Summoner profile and stats reads fail closed on backend errors.
@@ -334,8 +317,6 @@ Backend uses a layered approach (see source and README):
 - Persistent storage (PostgreSQL) for canonical match/summoner data
 - Summoner stats cache entries are tagged per summoner (`summoner-stats:{summonerId}`) so refresh jobs can invalidate all related stats keys in one operation
 
-## Frontend Overhaul Follow-Ups
+## Change Tracking
 
-Backend work needed to fully unlock new frontend pages is tracked here:
-
-- `docs/BACKEND_TASKS_FRONTEND_OVERHAUL.md`
+Future implementation work should live in GitHub issues or pull requests rather than long-lived planning docs committed under `docs/`.

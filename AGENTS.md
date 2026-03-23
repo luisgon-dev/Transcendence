@@ -31,9 +31,9 @@ corepack pnpm e2e:local        # run Playwright E2E tests locally
 corepack pnpm hooks:install    # install Husky hooks
 
 # EF Migrations (run from repo root)
-dotnet ef migrations add <Name> -p src/Transcendence.Data -s src/Transcendence.WebAPI
-dotnet ef migrations remove    -p src/Transcendence.Data -s src/Transcendence.WebAPI
-dotnet ef database update      -p src/Transcendence.Data -s src/Transcendence.WebAPI
+dotnet ef migrations add <Name> --project Transcendence.Service --startup-project Transcendence.Service
+dotnet ef migrations remove    --project Transcendence.Service --startup-project Transcendence.Service
+dotnet ef database update      --project Transcendence.Service --startup-project Transcendence.Service
 ```
 
 ## Architecture Overview
@@ -64,7 +64,7 @@ For deeper context see `docs/ARCHITECTURE.md`, `docs/DEVELOPMENT.md`, and `docs/
 - `docs/DEVELOPMENT.md`
 - `docs/API.md`
 - `docs/ARCHITECTURE.md`
-- `CLAUDE.md`
+- `AGENTS.md`
 
 ## Required Documentation Hygiene
 
@@ -111,4 +111,3 @@ Test summoner for verification: `Kronic#NA1` (region: NA)
 - Never hand-author or hand-edit EF migration files.
 - Always create/remove migrations via EF CLI (`dotnet ef migrations add ...`, `dotnet ef migrations remove`).
 - Always apply schema changes by updating EF model code first, then generating migrations with EF tools.
-

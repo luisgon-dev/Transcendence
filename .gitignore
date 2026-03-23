@@ -404,7 +404,12 @@ tft-summoner.png
 # MAC OS Junk Files
 .DS_Store
 /CLAUDE.md
+/.impeccable.md
+/*.slnLaunch
 /.claude
+/.idea/
+/.planning/
+/.run/
 
 # Local deployment env files
 .env.production

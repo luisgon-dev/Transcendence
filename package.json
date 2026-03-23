@@ -17,9 +17,6 @@
   },
   "scripts": {
     "backend:test": "dotnet test tests/Transcendence.Service.Core.Tests/Transcendence.Service.Core.Tests.csproj -v minimal && dotnet test tests/Transcendence.WebAPI.Tests/Transcendence.WebAPI.Tests.csproj -v minimal",
-    "data:slice:sync": "dotnet run --project tools/Transcendence.Tools.DataOps/Transcendence.Tools.DataOps.csproj -- slice-sync",
-    "data:validate-identifiers": "dotnet run --project tools/Transcendence.Tools.DataOps/Transcendence.Tools.DataOps.csproj -- validate-identifiers",
-    "data:rehydrate-riot-ids": "dotnet run --project tools/Transcendence.Tools.DataOps/Transcendence.Tools.DataOps.csproj -- rehydrate-riot-ids",
     "dev:stack:up": "docker compose up --build -d",
     "dev:stack:down": "docker compose down",
     "hooks:install": "git config core.hooksPath .githooks",

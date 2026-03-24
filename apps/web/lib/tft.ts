@@ -215,7 +215,7 @@ export function compTierColorClass(tier: string): string {
     A: "border-tier-a/60 bg-tier-a/15 text-tier-a",
     B: "border-tier-b/60 bg-tier-b/15 text-tier-b",
     C: "border-tier-c/60 bg-tier-c/15 text-tier-c",
-    D: "border-danger/60 bg-danger/15 text-danger"
+    D: "border-tier-d/60 bg-tier-d/15 text-tier-d"
   };
   return map[tier] ?? "border-border/60 bg-surface/50 text-fg/70";
 }

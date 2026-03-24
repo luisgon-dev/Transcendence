@@ -20,7 +20,7 @@ export default async function AdminLayout({
 
   return (
     <section className="grid gap-6">
-      <header className="page-hero p-6">
+      <header className="page-hero ops-hero p-6">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="type-kicker text-muted">Operations Console</p>
@@ -30,8 +30,9 @@ export default async function AdminLayout({
               from one place.
             </p>
           </div>
-          <div className="page-stat-card type-ui text-fg/75">
-            Admin role active
+          <div className="ops-console-note rounded-card px-4 py-3">
+            <p className="type-kicker text-info/78">Session</p>
+            <p className="type-ui mt-2 text-fg/82">Admin role active</p>
           </div>
         </div>
         <nav className="mt-5 flex flex-wrap gap-x-4 gap-y-2 border-t border-border/20 pt-3">

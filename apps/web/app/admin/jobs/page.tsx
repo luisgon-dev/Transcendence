@@ -18,6 +18,8 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 const states = ["enqueued", "processing", "scheduled", "failed"] as const;
 const bulkDeleteMaxLimit = 5000;
 
+type Tone = "primary" | "success" | "info" | "warning" | "danger" | "neutral";
+
 function toScalar(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -27,6 +29,73 @@ function toInt(value: string | undefined, fallback: number, min: number, max: nu
   const parsed = Number.parseInt(value, 10);
   if (Number.isNaN(parsed)) return fallback;
   return Math.min(max, Math.max(min, parsed));
+}
+
+function stateTone(value: string): Tone {
+  switch (value) {
+    case "succeeded":
+    case "active":
+      return "success";
+    case "processing":
+      return "info";
+    case "enqueued":
+    case "scheduled":
+    case "paused":
+      return "warning";
+    case "failed":
+      return "danger";
+    default:
+      return "neutral";
+  }
+}
+
+function valueToneClass(tone: Tone) {
+  switch (tone) {
+    case "success":
+      return "text-success";
+    case "info":
+      return "text-info";
+    case "warning":
+      return "text-warning";
+    case "danger":
+      return "text-danger";
+    case "neutral":
+      return "text-fg";
+    default:
+      return "text-primary";
+  }
+}
+
+function stateFilterClass(value: string, active: boolean) {
+  const tone = stateTone(value);
+
+  if (active) {
+    switch (tone) {
+      case "info":
+        return "border-info/40 bg-info/12 text-info";
+      case "warning":
+        return "border-warning/40 bg-warning/12 text-warning";
+      case "danger":
+        return "border-danger/40 bg-danger/12 text-danger";
+      case "success":
+        return "border-success/40 bg-success/12 text-success";
+      default:
+        return "border-primary/40 bg-primary/10 text-primary";
+    }
+  }
+
+  switch (tone) {
+    case "info":
+      return "border-info/18 bg-info/7 text-info/85 hover:bg-info/12";
+    case "warning":
+      return "border-warning/18 bg-warning/7 text-warning/85 hover:bg-warning/12";
+    case "danger":
+      return "border-danger/18 bg-danger/7 text-danger/85 hover:bg-danger/12";
+    case "success":
+      return "border-success/18 bg-success/7 text-success/85 hover:bg-success/12";
+    default:
+      return "surface-chip text-fg/70 hover:bg-surface-2/72 hover:text-fg";
+  }
 }
 
 export default async function AdminJobsPage(props: { searchParams: SearchParams }) {
@@ -79,11 +148,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
               <Link
                 key={entry}
                 href={`/admin/jobs?state=${entry}&count=${count}&queue=${encodeURIComponent(queue)}&region=${encodeURIComponent(region)}&type=${encodeURIComponent(type)}&q=${encodeURIComponent(query)}&olderThanMinutes=${encodeURIComponent(olderThanMinutes)}&scanLimit=${scanLimit}`}
-                className={`rounded-full border px-3 py-1 text-xs uppercase tracking-wide transition ${
-                  state === entry
-                    ? "border-primary/40 bg-primary/10 text-primary"
-                    : "surface-chip text-fg/70 hover:bg-surface-2/72 hover:text-fg"
-                }`}
+                className={`rounded-full border px-3 py-1 text-xs uppercase tracking-wide transition ${stateFilterClass(entry, state === entry)}`}
               >
                 {entry}
               </Link>
@@ -208,14 +273,15 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
           {queueSummary.topGroups.slice(0, 6).map((group) => (
             <div
               key={`${group.state}-${group.queue}-${group.jobType}-${group.region}`}
-              className="surface-subtle rounded-card p-4"
+              className="ops-summary-card rounded-card p-4"
+              data-tone={stateTone(group.state)}
             >
               <p className="text-sm font-medium text-fg">{group.jobType?.split(".").pop() ?? "Unknown Job"}</p>
               <p className="mt-1 text-xs text-fg/55">
                 {group.state} · {group.queue}
                 {group.region ? ` · ${group.region}` : ""}
               </p>
-              <p className="mt-3 text-xl font-semibold text-primary">{group.count}</p>
+              <p className={`mt-3 text-xl font-semibold ${valueToneClass(stateTone(group.state))}`}>{group.count}</p>
             </div>
           ))}
         </div>

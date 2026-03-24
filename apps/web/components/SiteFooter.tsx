@@ -23,7 +23,7 @@ export function SiteFooter() {
               href="/terms"
               className="font-medium underline underline-offset-2 transition hover:text-fg"
             >
-              Terms &amp; Conditions
+              Terms
             </Link>
             <Link
               href={GITHUB_REPO_URL}
@@ -36,11 +36,9 @@ export function SiteFooter() {
           </nav>
         </div>
         <p className="type-note measure mt-4 text-fg/78">
-          Transcendence isn&apos;t endorsed by Riot Games and doesn&apos;t
-          reflect the views or opinions of Riot Games or anyone officially
-          involved in producing or managing Riot Games properties. Riot Games,
-          and all associated properties are trademarks or registered trademarks
-          of Riot Games, Inc.
+          Transcendence isn&apos;t endorsed by Riot Games. Riot Games and all
+          associated properties are trademarks or registered trademarks of Riot
+          Games, Inc.
         </p>
       </div>
     </footer>

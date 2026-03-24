@@ -30,7 +30,7 @@ export function BackendErrorCard({
       {hasTechnicalInfo ? (
         <details className="mt-5 text-xs text-muted">
           <summary className="cursor-pointer select-none rounded hover:text-fg/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
-            Technical details
+            Request details
           </summary>
           <div className="mt-2 space-y-2">
             {requestId ? (

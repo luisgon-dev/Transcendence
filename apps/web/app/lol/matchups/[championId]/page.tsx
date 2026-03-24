@@ -200,9 +200,10 @@ export default async function MatchupAnalysisPage({
           regionOptions={regionOptions}
           activeRegion={activeRegion}
           baseHref={`/lol/matchups/${championId}`}
-          patch={matchups?.patch ?? winrates?.patch}
         />
-        <AnalyticsSampleBanner sample={sampleNotice} />
+        <div className="mt-3">
+          <AnalyticsSampleBanner sample={sampleNotice} />
+        </div>
       </header>
 
       <div className="grid gap-6 md:grid-cols-2">

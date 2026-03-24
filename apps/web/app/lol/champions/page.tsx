@@ -109,15 +109,12 @@ export default async function ChampionsPage({
         <p className="type-ui mt-3 text-fg/75">
           Browse every champion and jump straight into builds, win rates, and matchup pages.
         </p>
-        <div className="mt-4 flex flex-wrap items-center gap-2">
+        <div className="mt-4">
           <AnalyticsSampleBanner
             sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
           />
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="control-tab type-ui font-semibold" data-active="true">
-            {activeRegionLabel}
-          </span>
           <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />
         </div>
       </header>

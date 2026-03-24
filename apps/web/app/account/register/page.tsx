@@ -22,7 +22,7 @@ export default function RegisterPage() {
           Create account
         </h1>
         <p className="type-ui mt-3 text-fg/75">
-          Save favorite players and jump back into the pages you check most.
+          Create an account to save favorite players and get back to them faster.
         </p>
 
         <form action={formAction} className="mt-6 grid gap-3">
@@ -33,6 +33,7 @@ export default function RegisterPage() {
               type="email"
               autoComplete="email"
               required
+              placeholder="name@example.com"
             />
           </label>
           <label className="grid gap-1.5">
@@ -42,14 +43,15 @@ export default function RegisterPage() {
               type="password"
               autoComplete="new-password"
               required
+              placeholder="At least 12 characters"
             />
-            <span className="type-ui text-muted">Minimum 12 characters.</span>
+            <span className="type-ui text-muted">Use at least 12 characters.</span>
           </label>
 
           {state.error ? <p className="type-ui text-danger">{state.error}</p> : null}
 
           <Button type="submit" disabled={pending}>
-            {pending ? "Creating..." : "Create account"}
+            {pending ? "Creating account..." : "Create account"}
           </Button>
         </form>
 

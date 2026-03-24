@@ -22,7 +22,7 @@ export default function LoginPage() {
           Sign in
         </h1>
         <p className="type-ui mt-3 text-fg/75">
-          Pick up where you left off and keep your saved players close.
+          Sign in to keep favorite players and saved pages close.
         </p>
 
         <form action={formAction} className="mt-6 grid gap-3">
@@ -33,6 +33,7 @@ export default function LoginPage() {
               type="email"
               autoComplete="email"
               required
+              placeholder="name@example.com"
             />
           </label>
           <label className="grid gap-1.5">
@@ -42,6 +43,7 @@ export default function LoginPage() {
               type="password"
               autoComplete="current-password"
               required
+              placeholder="Your password"
             />
           </label>
 
@@ -53,9 +55,9 @@ export default function LoginPage() {
         </form>
 
         <p className="type-ui mt-4 text-muted">
-          No account?{" "}
+          New here?{" "}
           <Link className="font-semibold text-primary hover:underline" href="/account/register">
-            Create one
+            Create an account
           </Link>
         </p>
       </Card>

@@ -9,11 +9,11 @@ const games = [
     eyebrow: "League of Legends",
     title: "Tier lists, builds, matchup tools, pro builds, and player profiles.",
     description:
-      "Jump into patch winners, champion pages by role, and saved player match history.",
+      "Open the current board, jump to a champion page, or pull up a player profile in a few clicks.",
     links: [
       { label: "Tier List", href: "/lol/tierlist" },
       { label: "Champions", href: "/lol/champions" },
-      { label: "Player Search", href: "/lol/summoners/na/Faker-KR1" }
+      { label: "Open Faker#KR1", href: "/lol/summoners/na/Faker-KR1" }
     ]
   }
 ] as const;
@@ -23,11 +23,11 @@ const tftGame = {
   eyebrow: "Teamfight Tactics",
   title: "Meta comps, unit and item lookups, augments, traits, and player history.",
   description:
-    "Track the live set, compare top comps, and check how players are performing match by match.",
+    "Check the live set, compare top comps, and review player results without digging through tabs.",
   links: [
     { label: "Comps", href: "/tft/comps" },
     { label: "Units", href: "/tft/champions" },
-    { label: "Player Search", href: "/tft/summoners/na/Faker-KR1" }
+    { label: "Open Faker#KR1", href: "/tft/summoners/na/Faker-KR1" }
   ]
 } as const;
 
@@ -39,17 +39,17 @@ export default function LandingPage() {
       <section className="page-hero p-6 sm:p-8 md:p-10">
         <p className="type-kicker text-muted">Transcendence</p>
         <h1 className="type-display mt-4 max-w-4xl">
-          Patch-ready League and TFT tools built for players first.
+          Fast League and TFT lookups for ranked players.
         </h1>
         <p className="type-lead mt-4 max-w-2xl">
-          Start with the live League surface, then branch into TFT and deeper player research once you know where you are headed.
+          Open the tier list, jump to a champion page, or pull up a player profile without losing time between games.
         </p>
         <div className="mt-7 flex flex-wrap items-center gap-3">
           <Link
             href="/lol/tierlist"
             className="type-ui inline-flex min-h-12 items-center justify-center rounded-full bg-primary px-5 py-3 font-semibold text-bg transition hover:bg-primary/92"
           >
-            Browse LoL tier list
+            Open League tier list
           </Link>
           {TFT_FRONTEND_ENABLED ? (
             <Link

@@ -142,7 +142,6 @@ export default async function TierListPage({
           regionOptions={regionOptions}
           activeRegion={effectiveRegion}
           baseHref="/lol/tierlist"
-          patch={tierlist.patch}
           className="mt-4"
         />
       </header>

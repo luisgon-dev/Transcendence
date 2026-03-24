@@ -16,7 +16,7 @@ const LOL_LINKS: NavLink[] = [
   { href: "/lol/tierlist", label: "Tier List" },
   { href: "/lol/champions", label: "Champions" },
   { href: "/lol/matchups", label: "Matchups" },
-  { href: "/lol/pro-builds", label: "Pro Builds", mobileLabel: "Pro Builds" }
+  { href: "/lol/pro-builds", label: "Pro Builds", mobileLabel: "Pro" }
 ];
 
 const TFT_LINKS: NavLink[] = [
@@ -30,7 +30,7 @@ const TFT_LINKS: NavLink[] = [
 function navLinkClass(pathname: string | null, prefix: string): string {
   const isActive = pathname?.startsWith(prefix) ?? false;
   return cn(
-    "type-ui relative inline-flex min-h-11 items-center whitespace-nowrap rounded-full px-3 py-2 transition-colors duration-150 ease-[cubic-bezier(0.25,1,0.5,1)]",
+    "type-ui relative inline-flex min-h-11 items-center whitespace-nowrap rounded-full px-2.5 py-2 transition-colors duration-150 ease-[cubic-bezier(0.25,1,0.5,1)] sm:px-3",
     isActive ? "font-semibold text-fg" : "text-fg/70 hover:text-fg",
     isActive &&
       "after:absolute after:inset-x-2 after:bottom-0 after:h-px after:rounded-full after:bg-primary/85"

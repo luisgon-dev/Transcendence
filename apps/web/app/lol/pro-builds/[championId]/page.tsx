@@ -199,7 +199,9 @@ export default async function ProBuildsChampionPage({
           <Badge>{activeRegionLabel}</Badge>
           <Badge>{recentMatches.length} matches</Badge>
         </div>
-        <AnalyticsSampleBanner sample={sampleNotice} />
+        <div className="mt-3">
+          <AnalyticsSampleBanner sample={sampleNotice} />
+        </div>
       </header>
 
       <Card className="p-5">

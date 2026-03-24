@@ -276,9 +276,10 @@ export default async function ChampionDetailPage({
           regionOptions={regionOptions}
           activeRegion={activeRegion}
           baseHref={`/lol/champions/${championId}`}
-          patch={winrates?.patch ?? builds?.patch}
         />
-        <AnalyticsSampleBanner sample={sampleNotice} />
+        <div className="mt-3">
+          <AnalyticsSampleBanner sample={sampleNotice} />
+        </div>
         </div>
       </header>
 

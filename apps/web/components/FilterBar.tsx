@@ -19,7 +19,6 @@ export function FilterBar({
   regionOptions,
   activeRegion,
   baseHref,
-  patch,
   className
 }: {
   roles?: readonly string[];
@@ -29,7 +28,6 @@ export function FilterBar({
   regionOptions?: readonly AnalyticsRegionOption[];
   activeRegion?: string;
   baseHref: string;
-  patch?: string | null;
   className?: string;
 }) {
   const roleExtraParams: Record<string, string> = {};
@@ -58,11 +56,6 @@ export function FilterBar({
       />
       {regionOptions && activeRegion ? (
         <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />
-      ) : null}
-      {patch ? (
-        <span className="rounded-full border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
-          Patch {patch}
-        </span>
       ) : null}
     </div>
   );

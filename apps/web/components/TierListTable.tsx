@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync, startTransition, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -61,7 +61,7 @@ function startVisualTransition(update: () => void) {
   const viewTransitionDocument = document as DocumentWithViewTransition;
   if (typeof viewTransitionDocument.startViewTransition === "function") {
     viewTransitionDocument.startViewTransition(() => {
-      startTransition(update);
+      flushSync(update);
     });
     return;
   }

@@ -13,14 +13,15 @@ export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const base =
-  "type-ui inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl font-semibold tracking-[0.01em] touch-manipulation transition-[color,background-color,border-color,box-shadow,transform] duration-150 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:pointer-events-none disabled:opacity-60";
+  "type-ui inline-flex min-h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl font-semibold tracking-[0.01em] touch-manipulation transition-[color,background-color,border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:pointer-events-none disabled:translate-y-0 disabled:opacity-55 active:translate-y-px";
 
 const variants: Record<Variant, string> = {
   primary:
-    "bg-primary text-bg hover:bg-primary/90 active:bg-primary/80",
+    "bg-primary text-bg shadow-soft hover:-translate-y-px hover:bg-primary/94 hover:shadow-card active:bg-primary/88",
   outline:
-    "border border-border/60 bg-surface/38 text-fg hover:border-border-strong hover:bg-surface/52 active:bg-surface/38",
-  ghost: "text-fg/90 hover:bg-surface-2/60 active:bg-surface/55"
+    "border border-border/60 bg-surface/58 text-fg/92 shadow-inset hover:-translate-y-px hover:border-border-strong hover:bg-surface/78 hover:text-fg active:bg-surface/66",
+  ghost:
+    "text-fg/84 hover:-translate-y-px hover:bg-surface-2/62 hover:text-fg active:bg-surface/62"
 };
 
 const sizes: Record<Size, string> = {

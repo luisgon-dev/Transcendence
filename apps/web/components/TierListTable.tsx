@@ -31,7 +31,7 @@ type SortDir = "asc" | "desc";
 type RowEntry = UITierListEntry & { rank: number };
 
 type DocumentWithViewTransition = Document & {
-  startViewTransition?: (update: () => void) => void;
+  startViewTransition?: typeof startTransition;
 };
 
 const COLUMNS: { label: string; sortKey?: SortColumn; className: string; hiddenMobile?: boolean }[] = [

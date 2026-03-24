@@ -26,7 +26,7 @@ export default async function ChampionsPage({
   searchParams?: Promise<{ region?: string }>;
 }) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
-  const { activeRegion, activeRegionLabel, options: regionOptions } = await resolveAnalyticsRegion(
+  const { activeRegion, options: regionOptions } = await resolveAnalyticsRegion(
     resolvedSearchParams?.region
   );
   const verbosity = getErrorVerbosity();

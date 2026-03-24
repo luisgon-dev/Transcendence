@@ -30,8 +30,10 @@ const TFT_LINKS: NavLink[] = [
 function navLinkClass(pathname: string | null, prefix: string): string {
   const isActive = pathname?.startsWith(prefix) ?? false;
   return cn(
-    "type-ui relative inline-flex min-h-11 items-center whitespace-nowrap rounded-full px-2.5 py-2 transition-colors duration-150 ease-[cubic-bezier(0.25,1,0.5,1)] sm:px-3",
-    isActive ? "font-semibold text-fg" : "text-fg/70 hover:text-fg",
+    "type-ui relative inline-flex min-h-11 items-center whitespace-nowrap rounded-full px-2.5 py-2 transition-[color,background-color,transform,box-shadow] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/26 focus-visible:ring-offset-2 focus-visible:ring-offset-bg sm:px-3",
+    isActive
+      ? "bg-surface/72 font-semibold text-fg shadow-inset"
+      : "text-fg/70 hover:-translate-y-px hover:bg-surface/42 hover:text-fg",
     isActive &&
       "after:absolute after:inset-x-2 after:bottom-0 after:h-px after:rounded-full after:bg-primary/85"
   );
@@ -51,12 +53,12 @@ export function SiteHeaderClient({
   const surfaceLabel = isTft && TFT_FRONTEND_ENABLED ? "TFT" : "League";
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/60 bg-bg/90 backdrop-blur-sm">
-      <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-3 px-4 py-3 md:px-6">
+    <header className="sticky top-0 z-40 border-b border-border/55 bg-bg/88 backdrop-blur-md">
+      <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-3 px-4 py-3.5 md:px-6">
         <div className="flex items-center gap-3">
           <Link
             href="/"
-            className="group -ml-1 inline-flex min-h-11 min-w-0 shrink-0 items-center gap-3 rounded-full px-1 py-1 touch-manipulation"
+            className="group -ml-1 inline-flex min-h-11 min-w-0 shrink-0 items-center gap-3 rounded-full px-1 py-1 touch-manipulation transition-transform duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/26 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
           >
             <BrandMark className="h-9 w-9 shrink-0 transition group-hover:scale-105" />
             <div className="grid min-w-0 gap-0.5">
@@ -82,7 +84,7 @@ export function SiteHeaderClient({
         </div>
 
         {!compact ? (
-          <div className="flex items-center border-t border-border/35 pt-2.5">
+          <div className="flex items-center border-t border-border/30 pt-2.5">
             <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
               {contextLinks.map((link) => (
                 <Link key={link.href} href={link.href} className={navLinkClass(pathname, link.href)}>

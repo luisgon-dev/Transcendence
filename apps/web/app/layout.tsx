@@ -45,7 +45,7 @@ export default function RootLayout({
     <html lang="en" className={`${headingFont.variable} ${bodyFont.variable}`}>
       <body className="antialiased">
         <SiteHeader />
-        <main className="mx-auto w-full max-w-[1440px] px-4 py-8 md:px-6 lg:px-8 md:py-12">
+        <main className="site-main mx-auto flex w-full max-w-[1440px] flex-1 flex-col px-4 py-8 md:px-6 md:py-12 lg:px-8">
           {children}
         </main>
         <SiteFooter />

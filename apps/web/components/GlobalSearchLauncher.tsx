@@ -24,7 +24,7 @@ export function GlobalSearchLauncher({
         size={size}
         aria-label="Open search"
         className={cn(
-          "h-11 min-w-11 rounded-full border border-border/55 bg-transparent px-3 text-fg/72 hover:border-border/75 hover:bg-white/[0.05] hover:text-fg",
+          "h-11 min-w-11 rounded-full border border-border/55 bg-surface/26 px-3 text-fg/72 shadow-inset hover:border-border/78 hover:bg-surface/54 hover:text-fg",
           className
         )}
         onClick={(event) => dispatchGlobalSearchOpen(event.currentTarget)}
@@ -41,7 +41,7 @@ export function GlobalSearchLauncher({
       variant="outline"
       size={size}
       className={cn(
-        "justify-between border-border/70 bg-surface/65 text-fg/85",
+        "justify-between gap-4 border-border/70 bg-surface/76 text-fg/88 shadow-soft hover:border-border-strong/78 hover:bg-surface/92",
         className
       )}
       onClick={(event) => dispatchGlobalSearchOpen(event.currentTarget)}
@@ -52,7 +52,7 @@ export function GlobalSearchLauncher({
         </span>
         <span className="type-ui">Search players, champions, or pages</span>
       </span>
-      <span className="type-kicker hidden rounded-md border border-border/70 bg-surface/80 px-2 py-1 text-muted sm:inline">
+      <span className="type-kicker hidden rounded-md border border-border/70 bg-surface/88 px-2 py-1 text-muted sm:inline">
         Ctrl/Cmd+K
       </span>
     </Button>

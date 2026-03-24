@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 :root {
+  color-scheme: dark;
   --font-sora: var(--font-heading);
   --font-manrope: var(--font-body);
   --bg: 222 30% 7%;
@@ -83,6 +84,9 @@ body {
 
 body {
   position: relative;
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
   background-color: hsl(var(--bg));
   color: hsl(var(--fg));
   font-family: var(--font-body), sans-serif;
@@ -102,13 +106,34 @@ body::before {
   z-index: -2;
   background:
     radial-gradient(
-      900px 480px at 10% -5%,
-      hsl(var(--primary) / 0.03),
+      960px 520px at 6% -4%,
+      hsl(var(--primary) / 0.045),
       transparent 60%
+    ),
+    radial-gradient(
+      840px 420px at 100% 0%,
+      hsl(var(--info) / 0.03),
+      transparent 58%
     );
 }
 
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background:
+    linear-gradient(180deg, transparent, hsl(222 30% 4% / 0.2) 78%, hsl(222 30% 4% / 0.34)),
+    radial-gradient(1100px 480px at 50% 100%, hsl(var(--primary) / 0.025), transparent 65%);
+}
+
 @layer base {
+  ::selection {
+    background: hsl(var(--primary) / 0.22);
+    color: hsl(var(--fg));
+  }
+
   h1,
   h2,
   h3,
@@ -132,9 +157,51 @@ body::before {
   textarea {
     font: inherit;
   }
+
+  a,
+  button,
+  input,
+  select,
+  textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color: hsl(var(--fg));
+    box-shadow:
+      0 0 0 1000px hsl(var(--surface)) inset,
+      var(--hairline-inset);
+    transition: background-color 9999s ease-in-out 0s;
+  }
 }
 
 @layer components {
+  .site-main {
+    width: 100%;
+  }
+
+  .site-footer-shell {
+    position: relative;
+  }
+
+  .site-footer-link {
+    color: hsl(var(--fg) / 0.7);
+    text-decoration: underline;
+    text-decoration-color: hsl(var(--border-strong) / 0.55);
+    text-underline-offset: 0.2em;
+    transition:
+      color 180ms var(--ease-out-quart),
+      text-decoration-color 180ms var(--ease-out-quart);
+  }
+
+  .site-footer-link:hover,
+  .site-footer-link:focus-visible {
+    color: hsl(var(--fg));
+    text-decoration-color: hsl(var(--primary) / 0.72);
+  }
+
   .font-heading {
     font-family: var(--font-heading), var(--font-body), sans-serif;
   }
@@ -415,7 +482,8 @@ body::before {
     border-radius: var(--radius-hero);
     border: 1px solid hsl(var(--border) / 0.46);
     background:
-      radial-gradient(700px 300px at 0% 0%, hsl(var(--primary) / 0.06), transparent 55%),
+      radial-gradient(760px 320px at 0% 0%, hsl(var(--primary) / 0.07), transparent 55%),
+      radial-gradient(420px 180px at 100% 0%, hsl(var(--info) / 0.04), transparent 64%),
       hsl(var(--surface) / 0.9);
     box-shadow: var(--elevation-card);
   }
@@ -425,7 +493,9 @@ body::before {
     overflow: hidden;
     border-radius: var(--radius-panel);
     border: 1px solid hsl(var(--border) / 0.42);
-    background: linear-gradient(180deg, hsl(var(--surface) / 0.46), hsl(var(--surface) / 0.32));
+    background:
+      linear-gradient(180deg, hsl(var(--surface) / 0.5), hsl(var(--surface) / 0.34)),
+      hsl(var(--surface));
     box-shadow: var(--hairline-inset);
   }
 
@@ -447,6 +517,66 @@ body::before {
     background: linear-gradient(180deg, hsl(var(--surface) / 0.42), hsl(var(--surface) / 0.3));
     padding: 1rem;
     box-shadow: var(--hairline-inset);
+  }
+
+  .auth-shell {
+    display: grid;
+    flex: 1;
+    align-items: center;
+    padding-block: clamp(1rem, 3vw, 2rem);
+  }
+
+  .auth-card {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid hsl(var(--border) / 0.46);
+    background:
+      radial-gradient(340px 180px at 0% 0%, hsl(var(--primary) / 0.06), transparent 68%),
+      linear-gradient(180deg, hsl(var(--surface) / 0.9), hsl(var(--surface) / 0.78));
+    box-shadow:
+      var(--elevation-card),
+      inset 0 1px 0 hsl(0 0% 100% / 0.03);
+  }
+
+  .auth-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow:
+      inset 0 1px 0 hsl(0 0% 100% / 0.03),
+      inset 0 0 0 1px hsl(var(--border) / 0.12);
+  }
+
+  .field-label {
+    font-size: var(--text-meta-size);
+    line-height: var(--text-meta-leading);
+    letter-spacing: var(--text-meta-tracking);
+    font-weight: 600;
+    text-transform: uppercase;
+    color: hsl(var(--fg) / 0.8);
+  }
+
+  .field-note {
+    font-size: var(--text-note-size);
+    line-height: var(--text-note-leading);
+    color: hsl(var(--fg) / 0.58);
+  }
+
+  .field-error {
+    border-radius: 1rem;
+    border: 1px solid hsl(var(--danger) / 0.28);
+    background: hsl(var(--danger) / 0.1);
+    padding: 0.8rem 0.95rem;
+    color: hsl(var(--danger));
+  }
+
+  .empty-state-shell {
+    display: grid;
+    flex: 1;
+    align-items: center;
+    padding-block: clamp(1rem, 3vw, 2rem);
   }
 
   .ops-hero {
@@ -565,7 +695,9 @@ body::before {
     position: relative;
     overflow: hidden;
     border: 1px solid hsl(var(--border) / 0.38);
-    background: linear-gradient(180deg, hsl(var(--surface) / 0.5), hsl(var(--surface) / 0.38));
+    background:
+      linear-gradient(180deg, hsl(var(--surface) / 0.54), hsl(var(--surface) / 0.4)),
+      hsl(var(--surface));
     box-shadow:
       var(--elevation-card),
       inset 0 1px 0 hsl(0 0% 100% / 0.02);
@@ -573,19 +705,19 @@ body::before {
 
   .surface-subtle {
     border: 1px solid hsl(var(--border) / 0.5);
-    background: hsl(var(--surface-2) / 0.42);
+    background: hsl(var(--surface-2) / 0.48);
     box-shadow: var(--hairline-inset);
   }
 
   .surface-subtle-strong {
     border: 1px solid hsl(var(--border) / 0.58);
-    background: hsl(var(--surface-2) / 0.55);
+    background: hsl(var(--surface-2) / 0.62);
     box-shadow: var(--hairline-inset);
   }
 
   .surface-chip {
     border: 1px solid hsl(var(--border) / 0.55);
-    background: hsl(var(--surface-2) / 0.42);
+    background: hsl(var(--surface-2) / 0.5);
   }
 
   .tierlist-toolbar {
@@ -750,7 +882,7 @@ body::before {
     width: 100%;
     border-radius: var(--radius-control);
     border: 1px solid hsl(var(--border) / 0.55);
-    background: hsl(var(--surface) / 0.42);
+    background: hsl(var(--surface) / 0.62);
     padding-inline: 0.9rem;
     font-size: 0.9375rem;
     line-height: 1;
@@ -773,6 +905,7 @@ body::before {
     border-color: hsl(var(--primary) / 0.72);
     box-shadow:
       0 0 0 2px hsl(var(--primary) / 0.12),
+      0 0 0 4px hsl(var(--bg) / 0.96),
       inset 0 1px 0 hsl(0 0% 100% / 0.03);
   }
 }

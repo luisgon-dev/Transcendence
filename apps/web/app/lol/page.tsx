@@ -16,6 +16,7 @@ import { championIconUrl, fetchChampionMap } from "@/lib/staticData";
 import { normalizeTierListEntries } from "@/lib/tierlist";
 
 type TierListResponse = components["schemas"]["TierListResponse"];
+const EXAMPLE_SUMMONER_HREF = "/lol/summoners/kr/Hide%20on%20bush-KR1";
 
 const SECONDARY_LINKS = [
   { label: "Champions", href: "/lol/champions" },
@@ -242,10 +243,10 @@ export default async function HomePage({
                 <span className="text-fg/40" aria-hidden="true">/</span>
               </Link>
               <Link
-                href="/lol/summoners/na/Faker-KR1"
+                href={EXAMPLE_SUMMONER_HREF}
                 className="type-ui inline-flex items-center justify-between gap-3 border-t border-border/20 pt-3 text-fg/84 transition hover:text-fg"
               >
-                <span>Player Page</span>
+                <span>Example Profile</span>
                 <span className="text-fg/40" aria-hidden="true">/</span>
               </Link>
             </div>

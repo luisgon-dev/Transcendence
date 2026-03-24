@@ -5,6 +5,8 @@ import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl } from "@/lib/env";
 import { formatTftPercent, type TftCompListItem, type TftStaticEntity } from "@/lib/tft";
 
+const EXAMPLE_SUMMONER_HREF = "/tft/summoners/kr/Hide%20on%20bush-KR1";
+
 export default async function TftHomePage() {
   const [compsResult, championsResult, itemsResult, traitsResult, augmentsResult] = await Promise.all([
     fetchBackendJson<TftCompListItem[]>(`${getBackendBaseUrl()}/api/tft/analytics/comps`, {
@@ -53,8 +55,8 @@ export default async function TftHomePage() {
           <Link href="/tft/items" className="control-tab type-ui">
             Items
           </Link>
-          <Link href="/tft/summoners/na/Faker-KR1" className="control-tab type-ui">
-            Player Search
+          <Link href={EXAMPLE_SUMMONER_HREF} className="control-tab type-ui">
+            Example Profile
           </Link>
         </div>
       </section>

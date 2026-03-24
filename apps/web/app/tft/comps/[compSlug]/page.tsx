@@ -34,10 +34,9 @@ export default async function TftCompDetailPage({
   if (!result.ok || !result.body) {
     return (
       <Card className="p-6">
-        <p className="text-lg font-semibold text-fg">Comp not found.</p>
-        <Link href="/tft/comps" className="mt-3 inline-block text-sm text-primary hover:underline">
-          Back to comps
-        </Link>
+        <p className="text-sm font-medium text-fg">Comp not found</p>
+        <p className="mt-1 text-xs text-muted">This comp may no longer be tracked or may have changed with a recent patch.</p>
+        <Link href="/tft/comps" className="mt-3 inline-block text-sm text-primary hover:underline">Browse all comps</Link>
       </Card>
     );
   }
@@ -53,7 +52,7 @@ export default async function TftCompDetailPage({
           Back to comps
         </Link>
         <div className="mt-3 flex items-center gap-3">
-          <h1 className="type-title sm:text-[2.4rem]">
+          <h1 className="type-page-title">
             {comp.summary.name}
           </h1>
           <Badge className={`rounded-md px-2.5 py-1 text-sm font-bold ${tierColor}`}>
@@ -108,7 +107,7 @@ export default async function TftCompDetailPage({
                     return (
                       <div key={item.apiName} className="flex items-center gap-1.5 rounded border border-border/50 bg-surface/40 px-2 py-1">
                         {iconSrc && (
-                          <Image src={iconSrc} alt={item.name} width={20} height={20} className="rounded" unoptimized />
+                          <Image src={iconSrc} alt={item.name} width={20} height={20} sizes="20px" className="rounded" />
                         )}
                         <span className="text-xs text-fg/80">{item.name}</span>
                       </div>
@@ -128,7 +127,7 @@ export default async function TftCompDetailPage({
                     return (
                       <div key={augment.apiName} className="flex items-center gap-1.5 rounded border border-border/50 bg-surface/40 px-2 py-1">
                         {iconSrc && (
-                          <Image src={iconSrc} alt={augment.name} width={20} height={20} className="rounded" unoptimized />
+                          <Image src={iconSrc} alt={augment.name} width={20} height={20} sizes="20px" className="rounded" />
                         )}
                         <span className="text-xs text-fg/80">{augment.name}</span>
                       </div>

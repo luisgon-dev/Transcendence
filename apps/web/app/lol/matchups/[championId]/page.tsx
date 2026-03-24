@@ -176,7 +176,7 @@ export default async function MatchupAnalysisPage({
             className="rounded-xl border border-border/60"
           />
           <div>
-            <h1 className="type-title sm:text-[2.4rem]">
+            <h1 className="type-page-title">
               Matchup Analysis
             </h1>
             <p className="type-ui mt-2 text-fg/75">How {championName} performs into the current field.</p>
@@ -200,9 +200,10 @@ export default async function MatchupAnalysisPage({
           regionOptions={regionOptions}
           activeRegion={activeRegion}
           baseHref={`/lol/matchups/${championId}`}
-          patch={matchups?.patch ?? winrates?.patch}
         />
-        <AnalyticsSampleBanner sample={sampleNotice} />
+        <div className="mt-3">
+          <AnalyticsSampleBanner sample={sampleNotice} />
+        </div>
       </header>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -217,7 +218,7 @@ export default async function MatchupAnalysisPage({
                 const opponentId = entry.opponentChampionId ?? 0;
                 const opponent = champions[String(opponentId)];
                 return (
-                  <li key={`${opponentId}-${idx}`} className="flex items-center justify-between rounded-lg border border-border/50 bg-white/[0.03] px-3 py-2">
+                  <li key={`${opponentId}-${idx}`} className="surface-subtle flex items-center justify-between rounded-card px-3 py-2">
                     <Link href={`/lol/champions/${opponentId}${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`} className="min-w-0 hover:underline">
                       <ChampionPortrait
                         championSlug={opponent?.id ?? "Unknown"}
@@ -247,7 +248,7 @@ export default async function MatchupAnalysisPage({
                 const opponentId = entry.opponentChampionId ?? 0;
                 const opponent = champions[String(opponentId)];
                 return (
-                  <li key={`${opponentId}-${idx}`} className="flex items-center justify-between rounded-lg border border-border/50 bg-white/[0.03] px-3 py-2">
+                  <li key={`${opponentId}-${idx}`} className="surface-subtle flex items-center justify-between rounded-card px-3 py-2">
                     <Link href={`/lol/champions/${opponentId}${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`} className="min-w-0 hover:underline">
                       <ChampionPortrait
                         championSlug={opponent?.id ?? "Unknown"}
@@ -279,7 +280,7 @@ export default async function MatchupAnalysisPage({
                 region: activeRegion,
                 sort: "winRate"
               })}
-              className={`control-chip type-ui px-3 py-2 ${
+              className={`control-tab type-ui px-3 py-2 ${
                 sortKey === "winRate"
                   ? "font-semibold"
                   : ""
@@ -296,7 +297,7 @@ export default async function MatchupAnalysisPage({
                 region: activeRegion,
                 sort: "games"
               })}
-              className={`control-chip type-ui px-3 py-2 ${
+              className={`control-tab type-ui px-3 py-2 ${
                 sortKey === "games"
                   ? "font-semibold"
                   : ""
@@ -309,7 +310,7 @@ export default async function MatchupAnalysisPage({
         </div>
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
-            <thead className="text-[11px] uppercase tracking-wider text-muted">
+            <thead className="type-overline text-muted">
               <tr className="border-b border-border/30">
                 <th className="py-2 pr-4">Opponent</th>
                 <th className="py-2 pr-4 text-right">Win Rate</th>

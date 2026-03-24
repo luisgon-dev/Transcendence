@@ -53,7 +53,7 @@ export function StatsBar({
     >
       {tier ? (
         <div className="grid gap-1 text-center">
-          <span className="text-[10px] uppercase tracking-wider text-muted">
+          <span className="type-overline text-muted">
             Tier
           </span>
           <TierBadge tier={tier} size="md" />
@@ -62,7 +62,7 @@ export function StatsBar({
 
       {validCells.map((cell) => (
         <div key={cell.label} className="grid gap-1 text-center">
-          <span className="text-[10px] uppercase tracking-wider text-muted">
+          <span className="type-overline text-muted">
             {cell.label}
           </span>
           <span className={cn("text-sm font-semibold", cell.colorClass)}>

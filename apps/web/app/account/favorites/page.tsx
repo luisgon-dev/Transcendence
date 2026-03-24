@@ -79,9 +79,9 @@ export default function FavoritesPage() {
 
   return (
     <div className="grid gap-6">
-      <header className="glass-card mesh-highlight grid gap-2 rounded-3xl p-5">
-        <p className="type-kicker text-primary">Account</p>
-        <h1 className="type-title sm:text-[2.4rem]">
+      <header className="page-hero grid gap-2 p-5">
+        <p className="type-kicker text-muted">Account</p>
+        <h1 className="type-page-title">
           Favorites
         </h1>
         <p className="type-ui text-fg/75">

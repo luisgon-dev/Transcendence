@@ -191,8 +191,8 @@ export default async function ProBuildsIndexPage({
   return (
     <div className="grid gap-8">
       <header className="page-hero p-5 md:p-8">
-        <p className="type-kicker text-primary">Tracked Matches</p>
-        <h1 className="type-title mt-3 sm:text-[2.4rem]">
+        <p className="type-kicker text-muted">Tracked Matches</p>
+        <h1 className="type-page-title mt-3">
           Pro Builds
         </h1>
         <p className="type-ui mt-3 text-fg/75">
@@ -229,14 +229,14 @@ export default async function ProBuildsIndexPage({
           />
           <button
             type="submit"
-            className="h-11 rounded-xl border border-primary/40 bg-primary/12 px-4 text-[0.9375rem] font-semibold text-primary transition hover:bg-primary/20"
+            className="type-ui h-11 rounded-control border border-primary/40 bg-primary/12 px-4 font-semibold text-primary transition hover:bg-primary/20"
           >
             Search
           </button>
           {championQuery ? (
             <Link
               href={`/lol/pro-builds${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
-              className="control-chip type-ui h-11 px-4"
+              className="control-tab type-ui h-11 px-4"
             >
               Clear
             </Link>
@@ -253,7 +253,7 @@ export default async function ProBuildsIndexPage({
               <Link
                 key={champion.championId}
                 href={`/lol/pro-builds/${champion.championId}${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
-                className="rounded-lg border border-border/60 bg-white/[0.03] p-3 transition hover:bg-white/[0.08]"
+                className="surface-subtle rounded-card p-3 transition hover:bg-surface-2/72"
               >
                 <div className="flex items-center gap-2.5">
                   <Image

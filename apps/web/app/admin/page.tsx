@@ -9,33 +9,79 @@ import type {
   AdminQueueSummaryResponse
 } from "@/lib/adminTypes";
 
-function stat(label: string, value: number | string, tone?: "primary" | "danger") {
-  const toneClass =
-    tone === "danger"
-      ? "text-rose-300"
-      : tone === "primary"
-        ? "text-primary"
-        : "text-fg";
+type Tone = "primary" | "success" | "info" | "warning" | "danger" | "neutral";
+
+function statValueClass(tone: Tone) {
+  switch (tone) {
+    case "success":
+      return "text-success";
+    case "info":
+      return "text-info";
+    case "warning":
+      return "text-warning";
+    case "danger":
+      return "text-danger";
+    case "neutral":
+      return "text-fg";
+    default:
+      return "text-primary";
+  }
+}
+
+function stat(label: string, value: number | string, tone: Tone = "neutral") {
+  const valueClass = statValueClass(tone);
 
   return (
-    <div className="page-stat-card">
+    <div className="ops-stat-card" data-tone={tone}>
       <p className="type-kicker text-fg/55">{label}</p>
-      <p className={`mt-2 text-2xl font-semibold ${toneClass}`}>{value}</p>
+      <p className={`mt-3 text-2xl font-semibold ${valueClass}`}>{value}</p>
     </div>
   );
 }
 
-function healthTone(health: string) {
-  switch (health) {
+function stateTone(state: string): Tone {
+  switch (state) {
+    case "succeeded":
     case "healthy":
-      return "bg-emerald-500/15 text-emerald-200";
+      return "success";
+    case "processing":
     case "catching_up":
-      return "bg-sky-500/15 text-sky-200";
+      return "info";
+    case "enqueued":
+    case "scheduled":
     case "blocked":
-      return "bg-amber-500/15 text-amber-200";
+      return "warning";
+    case "failed":
+    case "stalled":
+      return "danger";
     default:
-      return "bg-rose-500/15 text-rose-200";
+      return "neutral";
   }
+}
+
+function stateCountClass(state: string) {
+  return statValueClass(stateTone(state));
+}
+
+function chipToneClass(tone: Tone) {
+  const toneClass =
+    tone === "danger"
+      ? "bg-danger/15 text-danger"
+      : tone === "warning"
+        ? "bg-warning/15 text-warning"
+        : tone === "info"
+          ? "bg-info/15 text-info"
+          : tone === "success"
+            ? "bg-success/15 text-success"
+            : tone === "primary"
+              ? "bg-primary/15 text-primary"
+              : "surface-chip text-fg/70";
+
+  return `rounded-full px-2.5 py-1 text-xs uppercase tracking-wide ${toneClass}`;
+}
+
+function healthTone(health: string) {
+  return chipToneClass(stateTone(health));
 }
 
 export default async function AdminOverviewPage() {
@@ -48,15 +94,15 @@ export default async function AdminOverviewPage() {
   return (
     <div className="grid gap-6">
       <section className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-        {stat("Database", overview.databaseConnected ? "Connected" : "Unavailable")}
-        {stat("Workers", overview.effectiveConcurrency, "primary")}
-        {stat("Enqueued", overview.enqueued, overview.enqueued > 1000 ? "danger" : "primary")}
-        {stat("Processing", overview.processing)}
-        {stat("Scheduled", overview.scheduled)}
-        {stat("Failed", overview.failed, overview.failed > 0 ? "danger" : undefined)}
+        {stat("Database", overview.databaseConnected ? "Connected" : "Unavailable", overview.databaseConnected ? "success" : "danger")}
+        {stat("Workers", overview.effectiveConcurrency, "info")}
+        {stat("Enqueued", overview.enqueued, overview.enqueued > 1000 ? "danger" : "warning")}
+        {stat("Processing", overview.processing, "info")}
+        {stat("Scheduled", overview.scheduled, "warning")}
+        {stat("Failed", overview.failed, overview.failed > 0 ? "danger" : "success")}
       </section>
 
-      <section className="rounded-[1.75rem] border border-border/70 bg-surface/50 p-5">
+      <section className="page-panel p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">Pipeline Controls</h2>
@@ -64,11 +110,14 @@ export default async function AdminOverviewPage() {
               Snapshot generated at {new Date(overview.generatedAtUtc).toLocaleString()}.
             </p>
           </div>
+          <span className="ops-chip type-ui" data-tone="info">
+            Live snapshot
+          </span>
           <div className="flex flex-wrap gap-2">
             <AdminRefreshButton label="Refresh Snapshot" />
             <Link
               href="/admin/jobs?state=enqueued"
-              className="rounded-full border border-border/80 px-4 py-2 text-sm text-fg/85 transition hover:bg-white/10"
+              className="surface-chip rounded-full px-4 py-2 text-sm text-fg/85 transition hover:bg-surface-2/72"
             >
               Inspect Backlog
             </Link>
@@ -85,7 +134,7 @@ export default async function AdminOverviewPage() {
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.3fr_0.9fr]">
-        <div className="rounded-[1.75rem] border border-border/70 bg-surface/50 p-5">
+        <div className="page-panel p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold">Analysis Health</h2>
@@ -98,7 +147,7 @@ export default async function AdminOverviewPage() {
             </div>
             <Link
               href="/admin/jobs?state=processing"
-              className="rounded-full border border-border/80 px-3 py-1 text-xs text-fg/85 transition hover:bg-white/10"
+              className="surface-chip rounded-full px-3 py-1 text-xs text-fg/85 transition hover:bg-surface-2/72"
             >
               View Processing Jobs
             </Link>
@@ -128,7 +177,7 @@ export default async function AdminOverviewPage() {
                   <tr key={region.region} className="border-t border-border/40">
                     <td className="py-2 font-medium">
                       {region.region}
-                      {!region.enabled ? <span className="ml-2 text-xs text-fg/45">inactive</span> : null}
+                      {!region.enabled ? <span className="ml-2 text-xs text-fg/65">inactive</span> : null}
                     </td>
                     <td className="py-2">
                       <span className={`rounded-full px-2.5 py-1 text-xs uppercase tracking-wide ${healthTone(region.health)}`}>
@@ -136,14 +185,23 @@ export default async function AdminOverviewPage() {
                       </span>
                     </td>
                     <td className="py-2">
-                      {region.currentPatchSuccessfulMatches} / {region.currentPatchTotalMatches}
+                      <span className="text-success">{region.currentPatchSuccessfulMatches}</span>
+                      <span className="text-fg/46"> / </span>
+                      <span className="text-fg/72">{region.currentPatchTotalMatches}</span>
                     </td>
                     <td className="py-2">
-                      {region.timelineSuccessfulMatches} ok, {region.timelinePendingMatches} pending,{" "}
-                      {region.timelinePermanentFailures + region.timelineTemporaryFailures} failed
+                      <span className="text-success">{region.timelineSuccessfulMatches} ok</span>,{" "}
+                      <span className="text-warning">{region.timelinePendingMatches} pending</span>,{" "}
+                      <span className="text-danger">
+                        {region.timelinePermanentFailures + region.timelineTemporaryFailures} failed
+                      </span>
                     </td>
                     <td className="py-2">
-                      {region.enqueuedJobs} enq · {region.processingJobs} proc · {region.scheduledJobs} sched
+                      <span className="text-warning">{region.enqueuedJobs} enq</span>
+                      <span className="text-fg/40"> · </span>
+                      <span className="text-info">{region.processingJobs} proc</span>
+                      <span className="text-fg/40"> · </span>
+                      <span className="text-primary">{region.scheduledJobs} sched</span>
                     </td>
                     <td className="py-2">
                       {region.latestSuccessfulFetchUtc
@@ -157,14 +215,18 @@ export default async function AdminOverviewPage() {
           </div>
         </div>
 
-        <div className="rounded-[1.75rem] border border-border/70 bg-surface/50 p-5">
+        <div className="page-panel p-5">
           <h2 className="text-lg font-semibold">Top Backlog Groups</h2>
           <p className="mt-1 text-sm text-fg/65">
             Derived from the first {queues.scanLimit.toLocaleString()} jobs scanned.
           </p>
           <div className="mt-4 grid gap-3">
             {queues.topGroups.slice(0, 8).map((group) => (
-              <div key={`${group.state}-${group.queue}-${group.jobType}-${group.region}`} className="rounded-2xl border border-border/60 bg-black/15 p-4">
+              <div
+                key={`${group.state}-${group.queue}-${group.jobType}-${group.region}`}
+                className="ops-summary-card rounded-card p-4"
+                data-tone={stateTone(group.state)}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium text-fg">
@@ -175,7 +237,10 @@ export default async function AdminOverviewPage() {
                       {group.region ? ` · ${group.region}` : ""}
                     </p>
                   </div>
-                  <p className="text-xl font-semibold text-primary">{group.count}</p>
+                  <div className="text-right">
+                    <span className="type-kicker block text-fg/45">{group.state}</span>
+                    <p className={`mt-2 text-xl font-semibold ${stateCountClass(group.state)}`}>{group.count}</p>
+                  </div>
                 </div>
                 <p className="mt-2 text-xs text-fg/55">
                   {group.oldestSeenAtUtc ? `oldest ${new Date(group.oldestSeenAtUtc).toLocaleString()}` : "no timestamp"}
@@ -187,7 +252,7 @@ export default async function AdminOverviewPage() {
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
-        <div className="rounded-[1.75rem] border border-border/70 bg-surface/50 p-5">
+        <div className="page-panel p-5">
           <h2 className="text-lg font-semibold">Worker Servers</h2>
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -215,7 +280,7 @@ export default async function AdminOverviewPage() {
           </div>
         </div>
 
-        <div className="rounded-[1.75rem] border border-border/70 bg-surface/50 p-5">
+        <div className="page-panel p-5">
           <h2 className="text-lg font-semibold">Queue Pressure</h2>
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-left text-sm">

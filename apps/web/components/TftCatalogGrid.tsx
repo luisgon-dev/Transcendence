@@ -45,7 +45,7 @@ export function TftCatalogGrid({
                     width={40}
                     height={40}
                     className="rounded-lg"
-                    unoptimized
+                    sizes="40px"
                   />
                 ) : (
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-primary/10 text-sm font-bold text-primary">

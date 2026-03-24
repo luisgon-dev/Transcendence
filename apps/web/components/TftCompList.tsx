@@ -88,7 +88,7 @@ export function TftCompList({
 
                 <div className="flex flex-wrap gap-1">
                   {comp.units.map((unit) => (
-                    <span key={unit.characterId} className="rounded border border-primary/25 bg-primary/8 px-1.5 py-0.5 text-[11px] font-medium text-primary">
+                    <span key={unit.characterId} className="type-caption rounded border border-primary/25 bg-primary/8 px-1.5 py-0.5 font-medium text-primary">
                       {unit.name ?? unit.characterId}
                     </span>
                   ))}
@@ -96,7 +96,7 @@ export function TftCompList({
 
                 <div className="flex flex-wrap gap-1">
                   {comp.traits.map((trait) => (
-                    <span key={trait.name} className="rounded-full border border-border/50 bg-surface/40 px-1.5 py-0.5 text-[10px] text-fg/60">
+                    <span key={trait.name} className="type-caption rounded-full border border-border/50 bg-surface/40 px-1.5 py-0.5 text-fg/60">
                       {trait.name} {trait.numUnits}
                     </span>
                   ))}

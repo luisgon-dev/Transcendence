@@ -26,6 +26,7 @@ async function authenticate(
   endpoint: "/api/auth/login" | "/api/auth/register",
   formData: FormData
 ): Promise<AuthActionState> {
+  const actionLabel = endpoint === "/api/auth/register" ? "account setup" : "sign-in";
   const email = normalizeCredential(formData.get("email"));
   const password = normalizeCredential(formData.get("password"));
 
@@ -47,15 +48,17 @@ async function authenticate(
     response = result.response;
   } catch (caught: unknown) {
     logEvent("warn", "auth action backend request failed", { endpoint, error: caught });
-    return { error: "Authentication service unavailable." };
+    return { error: `We couldn't reach ${actionLabel} right now. Try again.` };
   }
 
   if (!data) {
     const message =
       (error as { detail?: string; title?: string } | undefined)?.detail ??
       (error as { detail?: string; title?: string } | undefined)?.title ??
-      (response.status >= 500 ? "Authentication service unavailable." : null) ??
-      "Authentication failed.";
+      (response.status >= 500 ? "We couldn't finish that request right now. Try again." : null) ??
+      (endpoint === "/api/auth/register"
+        ? "We couldn't create your account with those details."
+        : "We couldn't sign you in with those details.");
     return { error: message };
   }
 

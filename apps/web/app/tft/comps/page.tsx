@@ -25,8 +25,8 @@ export default async function TftCompsPage({
   return (
     <div className="grid gap-6">
       <section className="page-hero p-6">
-        <p className="type-kicker text-primary">TFT Analytics</p>
-        <h1 className="type-title mt-3 sm:text-[2.4rem]">TFT Meta Comps</h1>
+        <p className="type-kicker text-muted">TFT Analytics</p>
+        <h1 className="type-page-title mt-3">TFT Meta Comps</h1>
         <p className="type-ui mt-3 text-fg/75">
           Compare the strongest boards for the live set and sort by the stat that matters most to you.
         </p>
@@ -45,7 +45,7 @@ export default async function TftCompsPage({
               </option>
             ))}
           </select>
-          <button type="submit" className="h-11 rounded-xl border border-primary/45 bg-primary/12 px-4 text-[0.9375rem] font-semibold text-primary">
+          <button type="submit" className="type-ui h-11 rounded-xl border border-primary/45 bg-primary/12 px-4 font-semibold text-primary">
             Apply
           </button>
         </form>

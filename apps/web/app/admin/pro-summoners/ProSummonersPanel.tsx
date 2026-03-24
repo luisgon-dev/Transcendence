@@ -53,7 +53,7 @@ export function ProSummonersPanel({ rows }: { rows: ProSummoner[] }) {
       {showAddForm && <AddSummonerForm />}
       {showCsvImport && <CsvImportForm />}
 
-      <div className="rounded-2xl border border-border/70 bg-surface/40 p-4">
+      <div className="page-panel p-4">
         <h2 className="text-lg font-semibold">
           Tracked Pro Summoners ({rows.length})
         </h2>
@@ -98,7 +98,7 @@ function AddSummonerForm() {
   }
 
   return (
-    <div className="rounded-2xl border border-border/70 bg-surface/40 p-4">
+    <div className="page-panel p-4">
       <h3 className="mb-3 text-sm font-semibold">Add Pro Summoner</h3>
       <form ref={formRef} action={handleSubmit} className="space-y-3">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -107,7 +107,7 @@ function AddSummonerForm() {
           <select
             name="platformRegion"
             required
-            className="h-11 w-full rounded-xl border border-border/80 bg-surface/50 px-3 text-sm text-fg shadow-glass outline-none focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
+            className="control-select h-11 w-full bg-surface/50 px-3 text-sm text-fg focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
           >
             <option value="">Region *</option>
             {PLATFORM_REGIONS.map((r) => (
@@ -164,7 +164,7 @@ function CsvImportForm() {
   }
 
   return (
-    <div className="rounded-2xl border border-border/70 bg-surface/40 p-4">
+    <div className="page-panel p-4">
       <h3 className="mb-3 text-sm font-semibold">CSV Import</h3>
       <p className="mb-2 text-xs text-fg/60">
         Required columns: gameName, tagLine, platformRegion. Optional: proName,
@@ -211,7 +211,7 @@ function SummonerRow({ row }: { row: ProSummoner }) {
       <td className="py-2">
         {row.gameName && row.tagLine
           ? `${row.gameName}#${row.tagLine}`
-          : <span className="text-fg/50">{row.puuid.slice(0, 12)}...</span>}
+          : <span className="text-fg/65">{row.puuid.slice(0, 12)}...</span>}
       </td>
       <td className="py-2">{row.platformRegion}</td>
       <td className="py-2">

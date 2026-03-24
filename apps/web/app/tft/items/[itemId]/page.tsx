@@ -18,7 +18,13 @@ export default async function TftItemDetailPage({
   );
 
   if (!result.ok || !result.body) {
-    return <Card className="p-6">Item not found.</Card>;
+    return (
+      <Card className="p-6">
+        <p className="text-sm font-medium text-fg">Item not found</p>
+        <p className="mt-1 text-xs text-muted">This item may have been removed or renamed in a recent patch.</p>
+        <Link href="/tft/items" className="mt-3 inline-block text-sm text-primary hover:underline">Browse all items</Link>
+      </Card>
+    );
   }
 
   const entity = result.body;
@@ -29,15 +35,15 @@ export default async function TftItemDetailPage({
       <Link href="/tft/items" className="type-ui font-semibold text-primary hover:underline">Back to items</Link>
       <div className="flex items-center gap-4">
         {iconSrc ? (
-          <Image src={iconSrc} alt={entity.name} width={64} height={64} className="rounded-xl" unoptimized />
+          <Image src={iconSrc} alt={entity.name} width={64} height={64} sizes="64px" className="rounded-xl" />
         ) : (
           <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-border/50 bg-primary/10 text-xl font-bold text-primary">
             {entity.name.charAt(0)}
           </div>
         )}
         <div>
-          <p className="type-kicker text-primary">TFT Item</p>
-          <h1 className="type-title mt-2 sm:text-[2.2rem]">{entity.name}</h1>
+          <p className="type-kicker text-muted">TFT Item</p>
+          <h1 className="type-page-title mt-2">{entity.name}</h1>
           <p className="type-ui mt-2 text-muted">Item details</p>
         </div>
       </div>

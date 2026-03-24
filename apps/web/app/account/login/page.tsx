@@ -15,50 +15,103 @@ export default function LoginPage() {
   );
 
   return (
-    <div className="grid place-items-center py-8">
-      <Card className="w-full max-w-md rounded-3xl p-6">
-        <p className="type-kicker text-primary">Account</p>
-        <h1 className="type-title mt-3">
-          Sign in
-        </h1>
-        <p className="type-ui mt-3 text-fg/75">
-          Pick up where you left off and keep your saved players close.
-        </p>
+    <div className="auth-shell">
+      <section className="grid gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(22rem,0.82fr)] lg:items-stretch">
+        <div className="page-panel grid content-between gap-8 p-6 sm:p-8">
+          <div>
+            <p className="type-kicker text-muted">Account Access</p>
+            <h1 className="type-panel-title mt-3 max-w-xl">
+              Keep favorite players and repeat routes within reach.
+            </h1>
+            <p className="type-lead mt-4 max-w-2xl">
+              Sign in when you want faster returns to the profiles, champions, and pages you check most often.
+            </p>
+          </div>
 
-        <form action={formAction} className="mt-6 grid gap-3">
-          <label className="grid gap-1.5">
-            <span className="type-meta text-fg/78">Email</span>
-            <Input
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-            />
-          </label>
-          <label className="grid gap-1.5">
-            <span className="type-meta text-fg/78">Password</span>
-            <Input
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              required
-            />
-          </label>
+          <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
+            <div className="surface-subtle rounded-card p-4">
+              <p className="type-kicker text-fg/56">Favorites</p>
+              <p className="type-ui mt-2 text-fg/84">Pin summoner pages and keep your usual lookups out of the search loop.</p>
+            </div>
+            <div className="surface-subtle rounded-card p-4">
+              <p className="type-kicker text-fg/56">Faster return</p>
+              <p className="type-ui mt-2 text-fg/84">Jump back into current-patch research without rebuilding your path every visit.</p>
+            </div>
+            <div className="surface-subtle rounded-card p-4">
+              <p className="type-kicker text-fg/56">No Riot auth</p>
+              <p className="type-ui mt-2 text-fg/84">Your Transcendence account only manages saved site state and account actions.</p>
+            </div>
+          </div>
 
-          {state.error ? <p className="type-ui text-danger">{state.error}</p> : null}
+          <div className="surface-subtle rounded-panel p-4">
+            <p className="type-kicker text-primary/84">Good first move</p>
+            <p className="type-ui mt-2 text-fg/78">
+              If you only need immediate patch context, the tier list is still the fastest way in.
+            </p>
+            <Link
+              href="/lol/tierlist"
+              className="type-ui mt-4 inline-flex items-center border-b border-border/45 px-0.5 pb-1 font-semibold text-fg/80 transition hover:border-primary/38 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/24 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+            >
+              Open League tier list
+            </Link>
+          </div>
+        </div>
 
-          <Button type="submit" disabled={pending}>
-            {pending ? "Signing in..." : "Sign in"}
-          </Button>
-        </form>
+        <Card className="auth-card w-full rounded-panel p-6 sm:p-7">
+          <div className="relative z-[1]">
+            <p className="type-kicker text-muted">Account</p>
+            <h2 className="type-title mt-3">
+              Sign in
+            </h2>
+            <p className="type-ui mt-3 text-fg/75">
+              Sign in to keep favorite players and saved pages close.
+            </p>
 
-        <p className="type-ui mt-4 text-muted">
-          No account?{" "}
-          <Link className="font-semibold text-primary hover:underline" href="/account/register">
-            Create one
-          </Link>
-        </p>
-      </Card>
+            <form action={formAction} className="mt-6 grid gap-4">
+              <label className="grid gap-1.5">
+                <span className="field-label">Email</span>
+                <Input
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  placeholder="name@example.com"
+                />
+              </label>
+              <label className="grid gap-1.5">
+                <span className="field-label">Password</span>
+                <Input
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  placeholder="Your password"
+                />
+              </label>
+
+              {state.error ? (
+                <p className="field-error type-ui" aria-live="polite">
+                  {state.error}
+                </p>
+              ) : null}
+
+              <Button type="submit" disabled={pending} className="mt-1">
+                {pending ? "Signing in..." : "Sign in"}
+              </Button>
+            </form>
+
+            <p className="type-ui mt-5 text-fg/68">
+              New here?{" "}
+              <Link
+                className="font-semibold text-primary transition hover:text-primary/84 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/24 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+                href="/account/register"
+              >
+                Create an account
+              </Link>
+            </p>
+          </div>
+        </Card>
+      </section>
     </div>
   );
 }

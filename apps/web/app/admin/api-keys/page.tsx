@@ -6,7 +6,7 @@ export default async function AdminApiKeysPage() {
   const keys = await adminGet<ApiKeyListItem[]>("/api/auth/keys");
 
   return (
-    <section className="rounded-2xl border border-border/70 bg-surface/40 p-4">
+    <section className="page-panel p-4">
       <h2 className="text-lg font-semibold">API Keys</h2>
       <div className="mt-3 overflow-x-auto">
         <table className="w-full text-left text-sm">
@@ -34,7 +34,7 @@ export default async function AdminApiKeysPage() {
                       <input type="hidden" name="id" value={key.id} />
                       <button
                         type="submit"
-                        className="rounded-full border border-border/80 px-3 py-1 text-xs text-fg/85 transition hover:bg-white/10"
+                        className="surface-chip rounded-full px-3 py-1 text-xs text-fg/85 transition hover:bg-surface-2/72"
                       >
                         Rotate
                       </button>

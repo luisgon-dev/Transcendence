@@ -78,7 +78,7 @@ export function AnalyticsRegionFilter({
   }
 
   return (
-    <div className={className ?? "flex flex-wrap items-center gap-x-4 gap-y-2"}>
+    <div className={className ?? "flex flex-wrap items-center gap-x-3 gap-y-3 sm:gap-x-4 sm:gap-y-2"}>
       {options.map((option) => {
         const active = option.code === activeRegion;
         return (
@@ -86,8 +86,9 @@ export function AnalyticsRegionFilter({
             key={option.code}
             type="button"
             onClick={() => applyRegion(option.code)}
-            className="control-chip type-ui px-3 py-2"
+            className="control-tab type-ui min-h-11 px-3.5 py-2"
             data-active={active}
+            aria-pressed={active}
           >
             {option.label}
           </button>

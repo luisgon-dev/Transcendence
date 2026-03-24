@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
 
 import { cn } from "@/lib/cn";
 import { roleDisplayLabel } from "@/lib/roles";
@@ -32,7 +31,7 @@ export function RoleFilterTabs({
   }
 
   return (
-    <nav className={cn("flex flex-wrap gap-x-4 gap-y-2", className)}>
+    <nav className={cn("flex flex-wrap gap-x-3 gap-y-3 sm:gap-x-4 sm:gap-y-2", className)}>
       {roles.map((role) => {
         const active = role.toUpperCase() === activeRole.toUpperCase();
         return (
@@ -40,19 +39,13 @@ export function RoleFilterTabs({
             key={role}
             href={buildHref(role)}
             className={cn(
-              "control-chip type-ui relative overflow-hidden px-3 py-2",
+              "control-tab type-ui relative min-h-11 overflow-hidden px-3.5 py-2 after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:origin-center after:scale-x-0 after:bg-primary/80 after:transition-transform after:duration-200 after:[transition-timing-function:var(--ease-out-quart)] motion-reduce:after:transition-none",
+              active && "after:scale-x-100",
               active && "font-semibold"
             )}
             data-active={active}
+            aria-current={active ? "page" : undefined}
           >
-            {active && (
-              <motion.div
-                layoutId="activeRoleTab"
-                className="absolute inset-x-0 bottom-0 h-0.5 bg-primary/80"
-                initial={false}
-                transition={{ type: "spring", stiffness: 400, damping: 30 }}
-              />
-            )}
             <span className="relative z-10">{roleDisplayLabel(role)}</span>
           </Link>
         );

@@ -204,7 +204,7 @@ export default async function ChampionDetailPage({
   return (
     <div className="grid gap-8">
       {/* ── Champion Header ── */}
-      <header className="glass-card mesh-highlight relative overflow-hidden rounded-[2rem] p-5 md:p-8">
+      <header className="page-hero relative p-5 md:p-8">
         <div
           className="pointer-events-none absolute inset-0 opacity-30"
           style={{
@@ -225,7 +225,7 @@ export default async function ChampionDetailPage({
           />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="type-title sm:text-[2.35rem]">
+              <h1 className="type-page-title">
                 {champName}
               </h1>
               <TierBadge tier={heroTier} size="md" />
@@ -235,11 +235,11 @@ export default async function ChampionDetailPage({
               {roleDisplayLabel(effectiveRole)} &middot; {rankTierDisplayLabel(normalizedRankTier ?? "all")} &middot; {activeRegionLabel}
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-              <span className="rounded-full border border-border/60 bg-white/[0.03] px-2 py-1 text-fg/80">
+              <span className="surface-chip rounded-full px-2 py-1 text-fg/80">
                 Rankings coming soon
               </span>
               <span
-                className="rounded-full border border-border/60 bg-white/[0.03] px-2 py-1 text-muted"
+                className="surface-chip rounded-full px-2 py-1 text-muted"
                 title="Ban rate is not available yet."
               >
                 Ban Rate —
@@ -276,9 +276,10 @@ export default async function ChampionDetailPage({
           regionOptions={regionOptions}
           activeRegion={activeRegion}
           baseHref={`/lol/champions/${championId}`}
-          patch={winrates?.patch ?? builds?.patch}
         />
-        <AnalyticsSampleBanner sample={sampleNotice} />
+        <div className="mt-3">
+          <AnalyticsSampleBanner sample={sampleNotice} />
+        </div>
         </div>
       </header>
 
@@ -288,13 +289,16 @@ export default async function ChampionDetailPage({
           Win Rates
         </h2>
         {!winrates ? (
-          <p className="mt-2 text-sm text-fg/75">Win-rate data is unavailable right now.</p>
+          <div className="mt-2">
+            <p className="text-sm text-fg/75">Win-rate data is unavailable right now.</p>
+            <p className="mt-1 text-xs text-muted">Try selecting a different region or check back after patch data has been processed.</p>
+          </div>
         ) : winrateRows.length === 0 ? (
           <p className="mt-2 text-sm text-fg/75">No games have been added for this patch yet.</p>
         ) : (
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="text-[11px] uppercase tracking-wider text-muted">
+              <thead className="type-overline text-muted">
                 <tr className="border-b border-border/30">
                   <th className="py-2 pr-4">Role</th>
                   <th className="py-2 pr-4">Tier</th>
@@ -310,7 +314,7 @@ export default async function ChampionDetailPage({
                   .map((w) => (
                     <tr
                       key={`${w.role ?? "ALL"}-${w.rankTier ?? "all"}`}
-                      className="border-t border-border/30 transition hover:bg-white/[0.03]"
+                      className="border-t border-border/30 transition hover:bg-surface-2/28"
                     >
                       <td className="py-2.5 pr-4 font-medium">
                         {roleDisplayLabel(w.role ?? "ALL")}
@@ -343,7 +347,10 @@ export default async function ChampionDetailPage({
             Builds
           </h2>
           {!builds ? (
-            <p className="mt-2 text-sm text-fg/75">Build data is unavailable right now.</p>
+            <div className="mt-2">
+              <p className="text-sm text-fg/75">Build data is unavailable right now.</p>
+              <p className="mt-1 text-xs text-muted">Try selecting a different region or check back after patch data has been processed.</p>
+            </div>
           ) : buildRows.length === 0 ? (
             <p className="mt-2 text-sm text-fg/75">There are not enough games for this role yet.</p>
           ) : (
@@ -413,9 +420,10 @@ export default async function ChampionDetailPage({
             Matchups
           </h2>
           {!matchups ? (
-            <p className="mt-2 text-sm text-fg/75">
-              Matchup data is unavailable right now.
-            </p>
+            <div className="mt-2">
+              <p className="text-sm text-fg/75">Matchup data is unavailable right now.</p>
+              <p className="mt-1 text-xs text-muted">Try selecting a different region or check back after patch data has been processed.</p>
+            </div>
           ) : (
             <div className="mt-4 grid gap-5">
               {/* Toughest Matchups */}

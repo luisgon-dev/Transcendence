@@ -104,7 +104,7 @@ export default async function MatchupsIndexPage({
           </Badge>
           <Badge>{popular.length} role pages</Badge>
         </div>
-        <h1 className="type-title mt-4 sm:text-[2.4rem]">
+        <h1 className="type-page-title mt-4">
           Matchup Analysis
         </h1>
         <p className="type-ui mt-3 text-fg/75">

@@ -15,6 +15,16 @@ export type UITierListEntry = {
   previousTier: UITierGrade | null;
 };
 
+export type TierListChampionMap = Record<string, { name: string; id: string; title?: string }>;
+export type TierListFocusTier = "ALL" | UITierGrade;
+export type TierListSummary = {
+  visibleCount: number;
+  totalGames: number;
+  averageWinRate: number | null;
+  topWinRate: number | null;
+  tierCounts: Record<UITierGrade, number>;
+};
+
 type ApiTierListEntry = components["schemas"]["TierListEntry"];
 
 export const TIER_ORDER: UITierGrade[] = ["S", "A", "B", "C", "D"];
@@ -192,6 +202,75 @@ export function tierBorderClass(tier: UITierGrade): string {
     case "D":
       return "border-tier-d/40";
   }
+}
+
+export function filterTierListEntries<T extends UITierListEntry>(
+  entries: T[],
+  champions: TierListChampionMap,
+  options?: {
+    query?: string | null;
+    focusTier?: TierListFocusTier;
+  }
+): T[] {
+  const query = options?.query?.trim().toLowerCase() ?? "";
+  const focusTier = options?.focusTier ?? "ALL";
+
+  return entries.filter((entry) => {
+    if (focusTier !== "ALL" && entry.tier !== focusTier) return false;
+    if (!query) return true;
+
+    const champion = champions[String(entry.championId)];
+    const championName = champion?.name.toLowerCase() ?? "";
+    const championSlug = champion?.id.toLowerCase() ?? "";
+    const championTitle = champion?.title?.toLowerCase() ?? "";
+    const championId = String(entry.championId);
+
+    return (
+      championName.includes(query) ||
+      championSlug.includes(query) ||
+      championTitle.includes(query) ||
+      championId.includes(query)
+    );
+  });
+}
+
+export function summarizeTierListEntries(entries: UITierListEntry[]): TierListSummary {
+  const tierCounts: Record<UITierGrade, number> = {
+    S: 0,
+    A: 0,
+    B: 0,
+    C: 0,
+    D: 0
+  };
+
+  if (entries.length === 0) {
+    return {
+      visibleCount: 0,
+      totalGames: 0,
+      averageWinRate: null,
+      topWinRate: null,
+      tierCounts
+    };
+  }
+
+  let totalGames = 0;
+  let totalWinRate = 0;
+  let topWinRate = Number.NEGATIVE_INFINITY;
+
+  for (const entry of entries) {
+    tierCounts[entry.tier] += 1;
+    totalGames += entry.games;
+    totalWinRate += entry.winRate;
+    topWinRate = Math.max(topWinRate, entry.winRate);
+  }
+
+  return {
+    visibleCount: entries.length,
+    totalGames,
+    averageWinRate: totalWinRate / entries.length,
+    topWinRate,
+    tierCounts
+  };
 }
 
 export function deriveTier(winRate: number | null | undefined): UITierGrade {

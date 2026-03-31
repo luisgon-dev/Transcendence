@@ -270,7 +270,7 @@ public class ChampionAnalyticsIngestionJob(
         }
 
         var lockTtl = TimeSpan.FromMinutes(Math.Max(2, jobOptions.RefreshLockMinutes));
-        var includeAllModes = budget.IncludeAllModes;
+        var includeAllModes = false;
 
         var candidates = await GetCandidatesAsync(region, maxCandidates, jobOptions, releaseUtc, evaluationUtc, ct);
         if (candidates.Count == 0)

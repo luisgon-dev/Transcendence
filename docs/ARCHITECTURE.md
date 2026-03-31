@@ -20,7 +20,7 @@ Transcendence is a backend + web monorepo:
 - Executes ingestion/refresh/analytics workflows
 - Owns Riot/Camille integration for both LoL and TFT
 - In `Development`, the worker narrows recurring schedules to analytics-oriented jobs only (analytics refresh/ingestion, summoner maintenance, timeline backfill)
-- In `Production`, startup can bootstrap analytics immediately by running patch detection first, then queuing ingestion + adaptive analytics refresh (controlled by `Jobs:Schedule:RunPatchDetectionOnStartup`)
+- In `Production`, startup only bootstraps LoL analytics when startup patch detection confirms a patch rollover. Normal restarts do not re-enqueue repair or warmup jobs.
 - On startup patch rollover, the worker can purge enqueued/scheduled Hangfire backlog before bootstrapping new-patch analytics so stale backlog does not block the new patch
 
 ### `Transcendence.Service.Core`

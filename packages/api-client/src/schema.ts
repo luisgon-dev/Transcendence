@@ -4371,6 +4371,11 @@ export interface components {
             source?: components["schemas"]["AdminLogSourceDto"];
             items?: components["schemas"]["AdminServiceLogDto"][] | null;
         };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        AnalyticsPatchPhase: 0 | 1 | 2 | 3;
         AnalyticsPatchStatusDto: {
             patch?: string | null;
             /** Format: date-time */
@@ -4392,6 +4397,8 @@ export interface components {
             /** Format: double */
             patchAgeHours?: number;
             isEarlyPatchWindow?: boolean;
+            patchPhase?: components["schemas"]["AnalyticsPatchPhase"];
+            isProvisional?: boolean;
         };
         /**
          * Format: int32

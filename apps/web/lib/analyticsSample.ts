@@ -5,11 +5,14 @@ export type AnalyticsSampleLike =
       minimumRecommendedSampleSize?: unknown;
       patchAgeHours?: unknown;
       isEarlyPatchWindow?: unknown;
+      patchPhase?: unknown;
+      isProvisional?: unknown;
     }
   | null
   | undefined;
 
 export type AnalyticsSampleStatus = "sufficient" | "low_sample" | "no_data";
+export type AnalyticsPatchPhase = "bootstrap" | "provisional" | "maturing" | "steady";
 
 export type NormalizedAnalyticsSample = {
   status: AnalyticsSampleStatus;
@@ -17,6 +20,8 @@ export type NormalizedAnalyticsSample = {
   minimumRecommendedSampleSize: number;
   patchAgeHours: number;
   isEarlyPatchWindow: boolean;
+  patchPhase: AnalyticsPatchPhase;
+  isProvisional: boolean;
 };
 
 export function analyticsSampleCoveragePercent(
@@ -53,6 +58,28 @@ function asNumber(value: unknown, fallback = 0): number {
   return value;
 }
 
+function normalizePatchPhase(value: unknown): AnalyticsPatchPhase {
+  if (typeof value === "number") {
+    if (value === 0) return "bootstrap";
+    if (value === 1) return "provisional";
+    if (value === 2) return "maturing";
+    return "steady";
+  }
+
+  if (typeof value !== "string") return "steady";
+
+  switch (value.trim().toLowerCase()) {
+    case "bootstrap":
+      return "bootstrap";
+    case "provisional":
+      return "provisional";
+    case "maturing":
+      return "maturing";
+    default:
+      return "steady";
+  }
+}
+
 export function normalizeAnalyticsSample(
   sample: AnalyticsSampleLike
 ): NormalizedAnalyticsSample | null {
@@ -66,7 +93,9 @@ export function normalizeAnalyticsSample(
       Math.floor(asNumber(sample.minimumRecommendedSampleSize, 1))
     ),
     patchAgeHours: Math.max(0, asNumber(sample.patchAgeHours, 0)),
-    isEarlyPatchWindow: Boolean(sample.isEarlyPatchWindow)
+    isEarlyPatchWindow: Boolean(sample.isEarlyPatchWindow),
+    patchPhase: normalizePatchPhase(sample.patchPhase),
+    isProvisional: Boolean(sample.isProvisional)
   };
 }
 

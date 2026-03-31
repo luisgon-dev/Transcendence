@@ -298,17 +298,18 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             .FirstOrDefaultAsync(ct);
 
         if (activePatch == null || string.IsNullOrWhiteSpace(activePatch.Version))
-            return new ActivePatchContext(null, 0, false);
+            return new ActivePatchContext(null, 0, false, AnalyticsPatchPhase.Bootstrap);
 
         var releaseUtc = activePatch.ReleaseDate.Kind == DateTimeKind.Utc
             ? activePatch.ReleaseDate
             : DateTime.SpecifyKind(activePatch.ReleaseDate, DateTimeKind.Utc);
         var patchAgeHours = Math.Max(0, (DateTime.UtcNow - releaseUtc).TotalHours);
-        var earlyPatchWindowHours = Math.Max(1, _computeOptions.EarlyPatchWindowHours);
+        var patchPhase = AnalyticsPatchPhaseCalculator.Resolve(patchAgeHours, _computeOptions);
         return new ActivePatchContext(
             activePatch.Version,
             patchAgeHours,
-            patchAgeHours <= earlyPatchWindowHours);
+            patchPhase != AnalyticsPatchPhase.Steady,
+            patchPhase);
     }
 
     private static string BuildCacheKey(int championId, ChampionAnalyticsFilter filter, string patch)
@@ -354,9 +355,9 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 
     private AnalyticsSampleMetadata BuildSampleMetadata(int sampleSize, ActivePatchContext patchContext)
     {
-        var stableMinimum = Math.Max(1, _computeOptions.MinimumGamesRequired);
-        var earlyPatchMinimum = Math.Max(1, _computeOptions.EarlyPatchMinimumGamesRequired);
-        var minimumRecommended = patchContext.IsEarlyPatchWindow ? earlyPatchMinimum : stableMinimum;
+        var minimumRecommended = AnalyticsPatchPhaseCalculator.RecommendedSampleSize(
+            patchContext.PatchPhase,
+            _computeOptions);
         var status = sampleSize <= 0
             ? AnalyticsSampleStatus.NoData
             : sampleSize < minimumRecommended
@@ -368,11 +369,14 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             sampleSize,
             minimumRecommended,
             Math.Round(patchContext.PatchAgeHours, 1),
-            patchContext.IsEarlyPatchWindow);
+            patchContext.IsEarlyPatchWindow,
+            patchContext.PatchPhase,
+            patchContext.PatchPhase != AnalyticsPatchPhase.Steady);
     }
 
     private sealed record ActivePatchContext(
         string? Patch,
         double PatchAgeHours,
-        bool IsEarlyPatchWindow);
+        bool IsEarlyPatchWindow,
+        AnalyticsPatchPhase PatchPhase);
 }

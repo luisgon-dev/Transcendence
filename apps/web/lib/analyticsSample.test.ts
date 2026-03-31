@@ -19,11 +19,13 @@ describe("analyticsSample", () => {
 
   it("normalizes sample payload", () => {
     const normalized = normalizeAnalyticsSample({
-      sampleStatus: "low_sample",
+      sampleStatus: 1,
       sampleSize: 22.7,
       minimumRecommendedSampleSize: 40,
       patchAgeHours: 4.5,
-      isEarlyPatchWindow: true
+      isEarlyPatchWindow: true,
+      patchPhase: 0,
+      isProvisional: true
     });
 
     expect(normalized).toEqual({
@@ -31,7 +33,9 @@ describe("analyticsSample", () => {
       sampleSize: 22,
       minimumRecommendedSampleSize: 40,
       patchAgeHours: 4.5,
-      isEarlyPatchWindow: true
+      isEarlyPatchWindow: true,
+      patchPhase: "bootstrap",
+      isProvisional: true
     });
   });
 

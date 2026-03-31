@@ -134,7 +134,10 @@ Early-patch semantics:
   - `minimumRecommendedSampleSize`
   - `patchAgeHours`
   - `isEarlyPatchWindow`
+  - `patchPhase` (`bootstrap`, `provisional`, `maturing`, `steady`)
+  - `isProvisional`
 - `low_sample` and `no_data` are expected during early patch windows while ingestion ramps up.
+- Tier-list entries may omit `movement` / `previousTier` while previous-patch comparisons are unavailable; current-patch rankings remain the primary response.
 
 `rankTier` query semantics across tier list, win rates, builds, and matchups:
 - `all` (or omitted): no rank filter

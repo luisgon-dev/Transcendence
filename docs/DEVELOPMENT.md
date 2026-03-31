@@ -285,11 +285,11 @@ It explicitly removes non-analytics recurring jobs (`detect-patch`, `retry-faile
 
 ### Production Startup Bootstrap
 
-When `Transcendence.Service` runs in non-development environments, the `ProductionWorker` can queue startup bootstrap jobs so analytics is available sooner after deploy:
+When `Transcendence.Service` runs in non-development environments, the `ProductionWorker` only queues startup bootstrap jobs when startup patch detection confirms patch skew:
 
 - `Jobs:Schedule:RunPatchDetectionOnStartup=true` runs patch detection immediately on startup.
 - `Jobs:Schedule:PurgeBacklogOnPatchRolloverOnStartup=true` clears enqueued and scheduled Hangfire backlog when startup detects a new LoL patch so fresh analytics jobs start at the front of the line.
-- After startup patch detection, the worker queues analytics ingestion (when enabled) and adaptive analytics refresh.
+- After startup patch detection confirms a rollover, the worker queues a bounded analytics ingestion bootstrap.
 
 ### Champion Analytics Ingestion
 
@@ -513,12 +513,16 @@ Timeline ingestion persists ranked @15 snapshots and fetch status for matchup de
 Analytics sampling thresholds are configurable in both API and worker hosts:
 
 - `Analytics:Compute:MinimumGamesRequired`
+- `Analytics:Compute:MaturingPatchMinimumGamesRequired`
 - `Analytics:Compute:EarlyPatchMinimumGamesRequired`
-- `Analytics:Compute:EarlyPatchWindowHours`
+- `Analytics:Compute:BootstrapPatchMinimumGamesRequired`
+- `Analytics:Compute:BootstrapWindowHours`
+- `Analytics:Compute:ProvisionalWindowHours`
+- `Analytics:Compute:MaturingWindowHours`
 
 ### Analytics Response Sampling
 
-- Analytics APIs now expose sample metadata fields (`sampleStatus`, `sampleSize`, `minimumRecommendedSampleSize`, `patchAgeHours`, `isEarlyPatchWindow`).
+- Analytics APIs now expose sample metadata fields (`sampleStatus`, `sampleSize`, `minimumRecommendedSampleSize`, `patchAgeHours`, `isEarlyPatchWindow`, `patchPhase`, `isProvisional`).
 - Current behavior is current-patch only (no previous-patch fallback responses).
 
 ## Documentation Policy (Contributor Requirement)

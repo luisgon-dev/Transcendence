@@ -28,7 +28,8 @@ public enum TierGrade
 }
 
 /// <summary>
-/// Single champion entry in tier list with ranking and movement data.
+/// Single champion entry in tier list. Patch movement is optional and may be materialized
+/// separately from the hot tier-list compute path.
 /// </summary>
 public record TierListEntry(
     int ChampionId,
@@ -39,7 +40,7 @@ public record TierListEntry(
     double PickRate,          // 0.0 to 1.0
     double BanRate,           // 0.0 to 1.0
     int Games,                // Sample size
-    TierMovement Movement,    // Compared to previous patch
+    TierMovement? Movement,   // Compared to previous patch when materialized
     TierGrade? PreviousTier   // Null if NEW
 );
 

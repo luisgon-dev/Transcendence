@@ -416,3 +416,5 @@ tft-summoner.png
 .env.production.local
 apps/web/.env
 .worktrees/
+/.agents/skills/playwright-cli
+/.codex

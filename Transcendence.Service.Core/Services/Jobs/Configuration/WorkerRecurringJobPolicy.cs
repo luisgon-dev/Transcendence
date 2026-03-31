@@ -49,12 +49,9 @@ public sealed class WorkerRecurringJobPolicy(
     {
         DetectPatchJobId,
         RetryFailedMatchesJobId,
-        RefreshChampionAnalyticsJobId,
         ChampionAnalyticsIngestionJobId,
-        SummonerMaintenanceJobId,
         RefreshLockLifecycleCleanupJobId,
-        TftStaticDataJobId,
-        TftAnalyticsRefreshJobId
+        TftStaticDataJobId
     };
 
     private static readonly string[] KnownJobIdValues =
@@ -174,7 +171,7 @@ public sealed class WorkerRecurringJobPolicy(
                 PollLiveGamesJobId,
                 "Jobs:Schedule:LiveGamePollingCron",
                 schedule.LiveGamePollingCron,
-                isEnabled: true,
+                isEnabled: false,
                 ConfigureLiveGamePolling),
             CreateDescriptor(
                 RefreshLockLifecycleCleanupJobId,

@@ -46,6 +46,14 @@ export function AnalyticsSampleBanner({ sample }: AnalyticsSampleBannerProps) {
             kicker: "Early sample",
             summary: "Treat this as early direction until more current-patch games land."
           };
+  const phaseLabel =
+    normalized.patchPhase === "bootstrap"
+      ? "Patch launch"
+      : normalized.patchPhase === "provisional"
+        ? "Patch settling"
+        : normalized.patchPhase === "maturing"
+          ? "Patch maturing"
+          : "Patch stable";
 
   return (
     <Card className={`overflow-hidden px-4 py-3 md:px-4 md:py-3.5 ${tone.card}`}>
@@ -53,7 +61,7 @@ export function AnalyticsSampleBanner({ sample }: AnalyticsSampleBannerProps) {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <Badge className={tone.badge}>{tone.kicker}</Badge>
-            <Badge>{normalized.isEarlyPatchWindow ? "Early patch" : "Current patch"}</Badge>
+            <Badge>{phaseLabel}</Badge>
             <span className="type-ui text-fg/80">{tone.summary}</span>
           </div>
         </div>

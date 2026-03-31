@@ -12,5 +12,7 @@ public record AnalyticsSampleMetadata(
     int SampleSize,
     int MinimumRecommendedSampleSize,
     double PatchAgeHours,
-    bool IsEarlyPatchWindow
+    bool IsEarlyPatchWindow,
+    AnalyticsPatchPhase PatchPhase,
+    bool IsProvisional
 );

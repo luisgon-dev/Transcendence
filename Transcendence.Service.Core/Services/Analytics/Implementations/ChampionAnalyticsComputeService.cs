@@ -312,18 +312,9 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         .OrderByDescending(x => x.CompositeScore)
         .ToList();
 
-        // Step 5: Get previous patch tier list for movement comparison
-        var previousPatch = await GetPreviousPatchAsync(patch, ct);
-        var previousTiers = previousPatch != null
-            ? await GetPreviousPatchTiersAsync(
-                normalizedRole,
-                rankTierScope.HasFilter ? rankTierScope.CacheToken : null,
-                regionFilter,
-                previousPatch,
-                ct)
-            : new Dictionary<(int ChampionId, string Role), TierGrade>();
-
-        // Step 6: Assign percentile-based tiers
+        // Step 5: Assign percentile-based tiers.
+        // Previous-patch movement is intentionally omitted from the hot path so
+        // current-patch tier lists are not blocked by recursive recomputation.
         // Top 10% = S, 10-30% = A, 30-60% = B, 60-85% = C, 85%+ = D
         var total = withScores.Count;
         return withScores.Select((entry, index) =>
@@ -338,11 +329,6 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                 _ => TierGrade.D
             };
 
-            // Calculate movement from previous patch
-            var lookupKey = (entry.ChampionId, NormalizeRole(entry.TeamPosition));
-            var previousTier = previousTiers.GetValueOrDefault(lookupKey);
-            var movement = CalculateMovement(tier, previousTier);
-
             return new TierListEntry(
                 entry.ChampionId,
                 entry.TeamPosition,
@@ -352,56 +338,15 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                 entry.PickRate,
                 entry.BanRate,
                 entry.Games,
-                movement,
-                previousTier
+                null,
+                null
             );
         }).ToList();
-    }
-
-    /// <summary>
-    /// Gets the patch version immediately before the specified patch.
-    /// </summary>
-    private async Task<string?> GetPreviousPatchAsync(string currentPatch, CancellationToken ct)
-    {
-        // Get all patches ordered by release date, find the one before current
-        var patches = await _context.Patches
-            .AsNoTracking()
-            .OrderByDescending(p => p.ReleaseDate)
-            .Select(p => p.Version)
-            .Take(10)
-            .ToListAsync(ct);
-
-        var currentIndex = patches.IndexOf(currentPatch);
-        return currentIndex >= 0 && currentIndex + 1 < patches.Count
-            ? patches[currentIndex + 1]
-            : null;
-    }
-
-    /// <summary>
-    /// Gets tier assignments from previous patch for movement comparison.
-    /// </summary>
-    private async Task<Dictionary<(int ChampionId, string Role), TierGrade>> GetPreviousPatchTiersAsync(
-        string role,
-        string? rankTier,
-        string? region,
-        string patch,
-        CancellationToken ct)
-    {
-        // Simplified query - just need champion -> tier mapping
-        var previousList = await ComputeTierListAsync(role, rankTier, region, patch, ct);
-        return previousList
-            .GroupBy(e => (e.ChampionId, Role: NormalizeRole(e.Role)))
-            .ToDictionary(g => g.Key, g => g.First().Tier);
     }
 
     private async Task<int> GetAdaptiveMinimumGamesRequiredAsync(string patch, CancellationToken ct)
     {
         var steadyStateMinimum = Math.Max(1, _options.MinimumGamesRequired);
-        var earlyPatchMinimum = Math.Clamp(_options.EarlyPatchMinimumGamesRequired, 1, steadyStateMinimum);
-        var earlyPatchWindowHours = Math.Max(0, _options.EarlyPatchWindowHours);
-
-        if (earlyPatchWindowHours == 0)
-            return steadyStateMinimum;
 
         var releaseDate = await _context.Patches
             .AsNoTracking()
@@ -412,8 +357,12 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         if (!releaseDate.HasValue)
             return steadyStateMinimum;
 
-        var isEarlyPatchWindow = DateTime.UtcNow < releaseDate.Value.AddHours(earlyPatchWindowHours);
-        return isEarlyPatchWindow ? earlyPatchMinimum : steadyStateMinimum;
+        var releaseUtc = releaseDate.Value.Kind == DateTimeKind.Utc
+            ? releaseDate.Value
+            : DateTime.SpecifyKind(releaseDate.Value, DateTimeKind.Utc);
+        var patchAgeHours = Math.Max(0, (DateTime.UtcNow - releaseUtc).TotalHours);
+        var patchPhase = AnalyticsPatchPhaseCalculator.Resolve(patchAgeHours, _options);
+        return AnalyticsPatchPhaseCalculator.RecommendedSampleSize(patchPhase, _options);
     }
 
     private static RankTierScope ParseRankTierScope(string? rankTier)
@@ -456,9 +405,6 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             r.SummonerId == mp.SummonerId &&
             r.Tier == scope.ExactTier));
     }
-
-    private static string NormalizeRole(string? role) =>
-        string.IsNullOrWhiteSpace(role) ? "ALL" : role.ToUpperInvariant();
 
     private static HashSet<string> ResolvePlatformsForRegion(string region)
     {
@@ -533,38 +479,6 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         var boundedFloor = Math.Min(availableGames, Math.Max(safeFloor, proportionalMinimum));
         return Math.Max(1, Math.Min(safeConfiguredMinimum, boundedFloor));
     }
-
-    /// <summary>
-    /// Calculates movement indicator by comparing tier grades.
-    /// </summary>
-    private static TierMovement CalculateMovement(TierGrade currentTier, TierGrade? previousTier)
-    {
-        if (!previousTier.HasValue)
-            return TierMovement.NEW;
-
-        var currentValue = TierToValue(currentTier);
-        var previousValue = TierToValue(previousTier.Value);
-
-        return (currentValue - previousValue) switch
-        {
-            > 0 => TierMovement.UP,
-            < 0 => TierMovement.DOWN,
-            _ => TierMovement.SAME
-        };
-    }
-
-    /// <summary>
-    /// Converts tier grade to numeric value for comparison.
-    /// </summary>
-    private static int TierToValue(TierGrade tier) => tier switch
-    {
-        TierGrade.S => 5,
-        TierGrade.A => 4,
-        TierGrade.B => 3,
-        TierGrade.C => 2,
-        TierGrade.D => 1,
-        _ => 0
-    };
 
     private static double ComputeWilsonLowerBound(int wins, int games, double z = 1.96)
     {

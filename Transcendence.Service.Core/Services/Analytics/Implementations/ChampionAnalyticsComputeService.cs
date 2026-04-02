@@ -746,7 +746,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
 
         var proQuery = _context.TrackedProSummoners
             .AsNoTracking()
-            .Where(x => x.IsActive);
+            .Where(x => x.IsActive && x.IsPro);
 
         if (!string.Equals(normalizedRegion, "ALL", StringComparison.Ordinal))
         {

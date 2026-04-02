@@ -1,5 +1,3 @@
-using Hangfire;
-using Hangfire.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Transcendence.Data;
@@ -25,7 +23,6 @@ public sealed record StartupPatchRolloverResult(
 public sealed class StartupPatchRolloverService(
     ILogger<StartupPatchRolloverService> logger,
     IServiceScopeFactory scopeFactory,
-    JobStorage jobStorage,
     IOptions<WorkerJobScheduleOptions> optionsAccessor) : IStartupPatchRolloverService
 {
     public async Task<StartupPatchRolloverResult> PrepareAsync(CancellationToken cancellationToken)
@@ -103,25 +100,10 @@ public sealed class StartupPatchRolloverService(
 
     private HangfireExtensions.HangfireBacklogPurgeSummary TryPurgeBacklog(string previousPatch, string latestPatch)
     {
-        try
-        {
-            var summary = jobStorage.GetMonitoringApi().PurgeEnqueuedAndScheduledJobs();
-            logger.LogWarning(
-                "Purged Hangfire backlog during startup patch rollover. PreviousPatch={PreviousPatch}, LatestPatch={LatestPatch}, PurgedEnqueued={PurgedEnqueued}, PurgedScheduled={PurgedScheduled}.",
-                previousPatch,
-                latestPatch,
-                summary.EnqueuedJobs,
-                summary.ScheduledJobs);
-            return summary;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(
-                ex,
-                "Failed to purge Hangfire backlog during startup patch rollover. PreviousPatch={PreviousPatch}, LatestPatch={LatestPatch}.",
-                previousPatch,
-                latestPatch);
-            return new HangfireExtensions.HangfireBacklogPurgeSummary(0, 0);
-        }
+        logger.LogWarning(
+            "Skipping configured Hangfire backlog purge during startup patch rollover because blanket queue purges can discard current-patch catch-up work. PreviousPatch={PreviousPatch}, LatestPatch={LatestPatch}.",
+            previousPatch,
+            latestPatch);
+        return new HangfireExtensions.HangfireBacklogPurgeSummary(0, 0);
     }
 }

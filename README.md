@@ -32,6 +32,7 @@ At a high level, the user-facing refresh flow works like this:
 - Docker-based local development gives contributors a repeatable stack with PostgreSQL, Redis, Web API, worker, and optional tooling.
 - The committed OpenAPI spec and generated client reduce frontend/backend drift.
 - Admin routes and APIs provide queue visibility, cache controls, metrics, and operational logs for maintainers.
+- The production worker now prioritizes multi-region ranked solo coverage with high-value/high-elo roster seeding instead of relying on a single slow analytics ingestion loop.
 
 ## Repository Layout
 

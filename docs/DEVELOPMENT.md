@@ -267,6 +267,12 @@ If hooks are installed (`corepack pnpm hooks:install`), pre-commit runs path-awa
 Key worker settings live under `Jobs:*` in `Transcendence.Service/appsettings.json`.
 The public Web API also consumes `Jobs:MultiRegionIngestion` from `Transcendence.WebAPI/appsettings.json` so `/api/analytics/regions` and region-filter normalization stay aligned with the ingestion regions exposed to the frontend.
 
+Production defaults in `Transcendence.Service/appsettings.json` are coverage-first for LoL:
+- `stable` keeps adaptive refresh, ramp refresh, champion analytics ingestion, summoner maintenance, high-elo profile refresh, and low-frequency timeline backfill enabled.
+- `high-elo-profile-refresh` keeps the tracked high-value roster populated for analytics ingestion.
+- `match-timeline-backfill` is intentionally slower than ingestion because tier lists and core champion stats do not require timeline rows.
+- `Jobs:Schedule:PurgeBacklogOnPatchRolloverOnStartup` is disabled and startup rollover logic preserves queued current-patch catch-up work.
+
 ### Development Worker Scope
 
 When `Transcendence.Service` runs in the `Development` environment, the `DevelopmentWorker` schedules only analytics-oriented recurring jobs:
@@ -288,8 +294,8 @@ It explicitly removes non-analytics recurring jobs (`detect-patch`, `retry-faile
 When `Transcendence.Service` runs in non-development environments, the `ProductionWorker` only queues startup bootstrap jobs when startup patch detection confirms patch skew:
 
 - `Jobs:Schedule:RunPatchDetectionOnStartup=true` runs patch detection immediately on startup.
-- `Jobs:Schedule:PurgeBacklogOnPatchRolloverOnStartup=true` clears enqueued and scheduled Hangfire backlog when startup detects a new LoL patch so fresh analytics jobs start at the front of the line.
-- After startup patch detection confirms a rollover, the worker queues a bounded analytics ingestion bootstrap.
+- `Jobs:Schedule:PurgeBacklogOnPatchRolloverOnStartup=false` keeps current-patch catch-up work intact across restarts.
+- After startup patch detection confirms a rollover, the worker refreshes static data and queues a bounded analytics ingestion bootstrap without performing a blanket Hangfire purge.
 
 ### Champion Analytics Ingestion
 
@@ -303,6 +309,8 @@ When `Transcendence.Service` runs in non-development environments, the `Producti
 - `MaxRefreshJobsToQueuePerRun`
 - `RefreshLockMinutes`
 - `PrioritizeFavoriteSummoners`
+- `PrioritizeTrackedHighValueSummoners`
+- `PrioritizeRankedHighEloSummoners`
 - `FallbackToTrackedSummoners`
 - `PauseWhenApiPriorityRefreshActive`
 - `NewPatchRampHours`
@@ -310,8 +318,9 @@ When `Transcendence.Service` runs in non-development environments, the `Producti
 - `RampMaxCandidateSummonersPerRun`
 - `RampMinRefreshJobsToQueuePerRun`
 - `RampMaxRefreshJobsToQueuePerRun`
+- `HighEloTiers`
 
-This job determines when low-priority refresh can widen beyond ranked-only ingestion during early patch windows.
+This job now prefers tracked high-value roster entries and Emerald+ ranked candidates before it falls back to the broad stale summoner pool. Region coverage targets scale with `Jobs:MultiRegionIngestion:Regions[*]:Weight`.
 
 ### Adaptive Throughput Budget Policy
 

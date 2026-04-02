@@ -20,8 +20,14 @@ Transcendence is a backend + web monorepo:
 - Executes ingestion/refresh/analytics workflows
 - Owns Riot/Camille integration for both LoL and TFT
 - In `Development`, the worker narrows recurring schedules to analytics-oriented jobs only (analytics refresh/ingestion, summoner maintenance, timeline backfill)
-- In `Production`, startup only bootstraps LoL analytics when startup patch detection confirms a patch rollover. Normal restarts do not re-enqueue repair or warmup jobs.
-- On startup patch rollover, the worker can purge enqueued/scheduled Hangfire backlog before bootstrapping new-patch analytics so stale backlog does not block the new patch
+- In `Production`, the `stable` scheduling profile is coverage-first for LoL analytics:
+  - adaptive analytics refresh
+  - new-patch ramp refresh
+  - champion analytics ingestion
+  - summoner maintenance
+  - high-elo roster refresh
+  - low-frequency timeline backfill
+- On startup patch rollover, the worker refreshes static data synchronously but no longer performs a blanket Hangfire backlog purge. Current-patch catch-up work is preserved across restarts.
 
 ### `Transcendence.Service.Core`
 - Domain/application services (analysis, analytics compute, auth, live game, Riot API integration, jobs)
@@ -152,6 +158,11 @@ Operational implication:
 
 - Champion analytics ingestion now runs continuously in low-priority mode to keep growing current-patch data.
 - Summoner maintenance runs continuously in low-priority mode to refresh stale summoners when no high-priority API refresh demand is active.
+- The production ingestion strategy is region-aware and high-elo-first:
+  - enabled regions fan out independently
+  - per-region coverage targets scale with configured region weights
+  - tracked high-value roster candidates are considered before the generic stale summoner pool
+  - ranked Emerald+ candidates are preferred ahead of lower-value fallback rows
 - Ingestion scales queued refresh count based on:
   - current patch coverage vs target
   - staleness of recent successful fetches
@@ -215,6 +226,7 @@ Operational implication:
 ### Timeline-Derived @15 Metrics
 
 - Ranked solo/duo matches are eligible for timeline ingestion.
+- Timeline backfill is an enrichment path, not the main coverage path for tier lists or champion win-rate/build data.
 - Timeline ingestion persists:
   - fetch state (`MatchTimelineFetchStates`)
   - per-participant snapshots at minute mark 15 (`MatchParticipantTimelineSnapshots`)
@@ -227,6 +239,7 @@ Operational implication:
 ### Pro Roster and Pro Builds
 
 - Tracked pro/high-ELO roster entries are stored in `TrackedProSummoners` with optional pro/team metadata.
+- The same roster table is also used as a high-value analytics seed source. Automated high-elo refresh writes active roster rows with `IsPro=false`; pro-build analytics explicitly filter to `IsPro=true`.
 - Admin API (`/api/admin/pro-summoners`) allows manual curation and updates.
 - Champion pro-build analytics joins tracked roster participants against ranked solo/duo match data for:
   - recent pro matches

@@ -2,6 +2,7 @@ using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Transcendence.Data;
+using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Models.Service;
 using Transcendence.Data.Repositories.Interfaces;
@@ -36,7 +37,9 @@ public class ChampionAnalyticsIngestionJob(
         string GameName,
         string TagLine,
         DateTime UpdatedAt,
-        bool IsFavorite);
+        bool IsFavorite,
+        bool IsTrackedHighValue,
+        string? RankTier);
 
     public async Task ExecuteAsync(CancellationToken ct = default)
     {
@@ -143,8 +146,11 @@ public class ChampionAnalyticsIngestionJob(
 
         var patchStartEpoch = new DateTimeOffset(currentPatchInfo.ReleaseDate, TimeSpan.Zero).ToUnixTimeSeconds();
 
-        var minMatchesForPatch = Math.Max(1, jobOptions.MinimumSuccessfulMatchesForCurrentPatch);
-        var targetMatchesForPatch = Math.Max(minMatchesForPatch, jobOptions.TargetSuccessfulMatchesForCurrentPatch);
+        var regionWeight = ResolveRegionWeight(region);
+        var minMatchesForPatch = ScaleTargetForRegion(jobOptions.MinimumSuccessfulMatchesForCurrentPatch, regionWeight);
+        var targetMatchesForPatch = Math.Max(
+            minMatchesForPatch,
+            ScaleTargetForRegion(jobOptions.TargetSuccessfulMatchesForCurrentPatch, regionWeight));
         var staleAfterMinutes = Math.Max(5,
             isRampActive ? jobOptions.RampDataStaleAfterMinutes : jobOptions.DataStaleAfterMinutes);
         var staleCutoffUtc = evaluationUtc.AddMinutes(-staleAfterMinutes);
@@ -387,6 +393,26 @@ public class ChampionAnalyticsIngestionJob(
             guardrailDecision.DeferAgeThresholdMinutes);
     }
 
+    private double ResolveRegionWeight(string? region)
+    {
+        if (string.IsNullOrWhiteSpace(region))
+            return 1d;
+
+        var configuredWeight = multiRegionOptions.Value.Regions
+            .Where(r => r.Enabled && !string.IsNullOrWhiteSpace(r.Region))
+            .FirstOrDefault(r => string.Equals(r.Region.Trim(), region, StringComparison.OrdinalIgnoreCase))
+            ?.Weight;
+
+        return configuredWeight is > 0d ? configuredWeight.Value : 1d;
+    }
+
+    private static int ScaleTargetForRegion(int baselineTarget, double regionWeight)
+    {
+        var safeTarget = Math.Max(1, baselineTarget);
+        var safeWeight = regionWeight > 0d ? regionWeight : 1d;
+        return Math.Max(1, (int)Math.Ceiling(safeTarget * safeWeight));
+    }
+
     private List<string> GetConfiguredEnabledRegions(MultiRegionIngestionOptions multiRegion)
     {
         return multiRegion.Regions
@@ -427,6 +453,51 @@ public class ChampionAnalyticsIngestionJob(
         CancellationToken ct)
     {
         var combined = new List<CandidateSummoner>();
+        var highEloTiers = jobOptions.HighEloTiers
+            .Where(tier => !string.IsNullOrWhiteSpace(tier))
+            .Select(tier => tier.Trim().ToUpperInvariant())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (jobOptions.PrioritizeTrackedHighValueSummoners)
+        {
+            var trackedQuery =
+                from tracked in db.TrackedProSummoners.AsNoTracking()
+                where tracked.IsActive
+                      && tracked.GameName != null
+                      && tracked.TagLine != null
+                      && tracked.PlatformRegion != null
+                join summoner in db.Summoners.AsNoTracking()
+                    on new { tracked.Puuid, tracked.PlatformRegion }
+                    equals new { summoner.Puuid, summoner.PlatformRegion } into summonerGroup
+                from summoner in summonerGroup.DefaultIfEmpty()
+                join rank in db.Ranks.AsNoTracking().Where(r => r.QueueType == "RANKED_SOLO_5x5")
+                    on summoner.Id equals rank.SummonerId into rankGroup
+                from rank in rankGroup.DefaultIfEmpty()
+                select new
+                {
+                    tracked.PlatformRegion,
+                    tracked.GameName,
+                    tracked.TagLine,
+                    UpdatedAt = summoner != null ? summoner.UpdatedAt : tracked.UpdatedAtUtc,
+                    RankTier = rank != null ? rank.Tier : null
+                };
+
+            if (region != null)
+                trackedQuery = trackedQuery.Where(x => x.PlatformRegion == region);
+
+            var trackedCandidates = await trackedQuery
+                .ToListAsync(ct);
+
+            combined.AddRange(trackedCandidates.Select(x => new CandidateSummoner(
+                x.PlatformRegion!,
+                x.GameName!,
+                x.TagLine!,
+                x.UpdatedAt,
+                IsFavorite: false,
+                IsTrackedHighValue: true,
+                x.RankTier)));
+        }
 
         if (jobOptions.PrioritizeFavoriteSummoners)
         {
@@ -448,10 +519,55 @@ public class ChampionAnalyticsIngestionJob(
                     s.GameName!,
                     s.TagLine!,
                     s.UpdatedAt,
-                    true))
+                    IsFavorite: true,
+                    IsTrackedHighValue: false,
+                    RankTier: null))
                 .ToListAsync(ct);
 
             combined.AddRange(favoriteCandidates);
+        }
+
+        if (jobOptions.PrioritizeRankedHighEloSummoners && highEloTiers.Count > 0)
+        {
+            var highEloQuery =
+                from s in db.Summoners.AsNoTracking()
+                join r in db.Ranks.AsNoTracking().Where(r => r.QueueType == "RANKED_SOLO_5x5")
+                    on s.Id equals r.SummonerId
+                where s.GameName != null
+                      && s.TagLine != null
+                      && s.PlatformRegion != null
+                      && highEloTiers.Contains((r.Tier ?? string.Empty).ToUpper())
+                select new
+                {
+                    s.PlatformRegion,
+                    s.GameName,
+                    s.TagLine,
+                    s.UpdatedAt,
+                    RankTier = r.Tier
+                };
+
+            if (region != null)
+                highEloQuery = highEloQuery.Where(x => x.PlatformRegion == region);
+
+            var highEloCandidates = await highEloQuery
+                .Select(x => new
+                {
+                    x.PlatformRegion,
+                    x.GameName,
+                    x.TagLine,
+                    x.UpdatedAt,
+                    x.RankTier
+                })
+                .ToListAsync(ct);
+
+            combined.AddRange(highEloCandidates.Select(x => new CandidateSummoner(
+                x.PlatformRegion!,
+                x.GameName!,
+                x.TagLine!,
+                x.UpdatedAt,
+                IsFavorite: false,
+                IsTrackedHighValue: false,
+                x.RankTier)));
         }
 
         if (jobOptions.FallbackToTrackedSummoners)
@@ -471,22 +587,84 @@ public class ChampionAnalyticsIngestionJob(
                     s.GameName!,
                     s.TagLine!,
                     s.UpdatedAt,
-                    false))
+                    IsFavorite: false,
+                    IsTrackedHighValue: false,
+                    RankTier: null))
                 .ToListAsync(ct);
 
             combined.AddRange(fallbackCandidates);
         }
 
-        var rankedCandidates = scoringPolicy.RankCandidates(
-            combined,
-            candidate => new IngestionPriorityCandidate(
-                RefreshLockKeys.BuildCanonicalIdentity(candidate.PlatformRegion, candidate.GameName, candidate.TagLine),
-                candidate.UpdatedAt,
-                candidate.IsFavorite),
-            new IngestionPriorityContext(patchReleaseUtc, evaluationUtc),
-            maxCandidates);
+        var rankedCandidates = RankCandidates(combined, patchReleaseUtc, evaluationUtc, maxCandidates);
 
         return rankedCandidates.ToList();
+    }
+
+    private IReadOnlyList<CandidateSummoner> RankCandidates(
+        IEnumerable<CandidateSummoner> candidates,
+        DateTime patchReleaseUtc,
+        DateTime evaluationUtc,
+        int maxCandidates)
+    {
+        var boundedMax = Math.Max(1, maxCandidates);
+
+        return candidates
+            .Select(candidate => new
+            {
+                Candidate = candidate,
+                Identity = RefreshLockKeys.BuildCanonicalIdentity(
+                    candidate.PlatformRegion,
+                    candidate.GameName,
+                    candidate.TagLine),
+                Bucket = GetPriorityBucket(candidate),
+                TierPriority = GetTierPriority(candidate.RankTier),
+                Score = scoringPolicy.ComputeScore(
+                    new IngestionPriorityCandidate(
+                        RefreshLockKeys.BuildCanonicalIdentity(
+                            candidate.PlatformRegion,
+                            candidate.GameName,
+                            candidate.TagLine),
+                        candidate.UpdatedAt,
+                        candidate.IsFavorite),
+                    new IngestionPriorityContext(patchReleaseUtc, evaluationUtc))
+            })
+            .OrderBy(x => x.Bucket)
+            .ThenBy(x => x.TierPriority)
+            .ThenByDescending(x => x.Score)
+            .ThenBy(x => x.Candidate.UpdatedAt)
+            .ThenBy(x => x.Identity, StringComparer.Ordinal)
+            .DistinctBy(x => x.Identity, StringComparer.Ordinal)
+            .Take(boundedMax)
+            .Select(x => x.Candidate)
+            .ToList();
+    }
+
+    private static int GetPriorityBucket(CandidateSummoner candidate)
+    {
+        if (candidate.IsTrackedHighValue)
+            return 0;
+
+        if (GetTierPriority(candidate.RankTier) < 5)
+            return 1;
+
+        if (candidate.IsFavorite)
+            return 2;
+
+        return 3;
+    }
+
+    private static int GetTierPriority(string? rankTier)
+    {
+        var normalizedTier = rankTier?.Trim().ToUpperInvariant();
+        return normalizedTier switch
+        {
+            "CHALLENGER" => 0,
+            "GRANDMASTER" => 1,
+            "MASTER" => 2,
+            "DIAMOND" => 3,
+            "EMERALD" => 4,
+            _ => 5
+        };
     }
 
     private Task<int> EstimatePendingCandidateCountAsync(string? region, CancellationToken ct)

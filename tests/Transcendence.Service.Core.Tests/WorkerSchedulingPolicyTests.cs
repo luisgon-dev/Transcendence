@@ -144,7 +144,7 @@ public class WorkerSchedulingPolicyTests
     }
 
     [Fact]
-    public void BuildDescriptors_StableProfile_DisablesNonCoreJobsAndKeepsBoundedAnalyticsIngestion()
+    public void BuildDescriptors_StableProfile_EnablesCoverageFirstAnalyticsJobs()
     {
         var policy = new WorkerRecurringJobPolicy(Options.Create(new WorkerSchedulingProfileOptions
         {
@@ -155,16 +155,16 @@ public class WorkerSchedulingPolicyTests
                     JobOverrides = new Dictionary<string, WorkerSchedulingJobOverrideOptions>(StringComparer.OrdinalIgnoreCase)
                     {
                         [WorkerRecurringJobPolicy.RefreshChampionAnalyticsJobId] = new() { Enabled = false },
-                        [WorkerRecurringJobPolicy.RefreshChampionAnalyticsAdaptiveJobId] = new() { Enabled = false },
-                        [WorkerRecurringJobPolicy.RefreshChampionAnalyticsRampJobId] = new() { Enabled = false },
-                        [WorkerRecurringJobPolicy.ChampionAnalyticsIngestionJobId] = new() { Enabled = true, Cron = "0 */2 * * *" },
-                        [WorkerRecurringJobPolicy.ChampionAnalyticsIngestionRampJobId] = new() { Enabled = false },
-                        [WorkerRecurringJobPolicy.SummonerMaintenanceJobId] = new() { Enabled = false },
-                        [WorkerRecurringJobPolicy.SummonerMaintenanceRampJobId] = new() { Enabled = false },
-                        [WorkerRecurringJobPolicy.MatchTimelineBackfillJobId] = new() { Enabled = false },
+                        [WorkerRecurringJobPolicy.RefreshChampionAnalyticsAdaptiveJobId] = new() { Enabled = true, Cron = "*/15 * * * *" },
+                        [WorkerRecurringJobPolicy.RefreshChampionAnalyticsRampJobId] = new() { Enabled = true, Cron = "*/5 * * * *" },
+                        [WorkerRecurringJobPolicy.ChampionAnalyticsIngestionJobId] = new() { Enabled = true, Cron = "*/10 * * * *" },
+                        [WorkerRecurringJobPolicy.ChampionAnalyticsIngestionRampJobId] = new() { Enabled = true, Cron = "*/2 * * * *" },
+                        [WorkerRecurringJobPolicy.SummonerMaintenanceJobId] = new() { Enabled = true, Cron = "*/20 * * * *" },
+                        [WorkerRecurringJobPolicy.SummonerMaintenanceRampJobId] = new() { Enabled = true, Cron = "*/5 * * * *" },
+                        [WorkerRecurringJobPolicy.MatchTimelineBackfillJobId] = new() { Enabled = true, Cron = "0 * * * *" },
                         [WorkerRecurringJobPolicy.RuneSelectionIntegrityBackfillJobId] = new() { Enabled = false },
                         [WorkerRecurringJobPolicy.PollLiveGamesJobId] = new() { Enabled = false },
-                        [WorkerRecurringJobPolicy.HighEloProfileRefreshJobId] = new() { Enabled = false },
+                        [WorkerRecurringJobPolicy.HighEloProfileRefreshJobId] = new() { Enabled = true, Cron = "0 */2 * * *" },
                         [WorkerRecurringJobPolicy.TftAnalyticsRefreshJobId] = new() { Enabled = false },
                         [WorkerRecurringJobPolicy.TftAnalyticsIngestionJobId] = new() { Enabled = false },
                         [WorkerRecurringJobPolicy.TftSummonerMaintenanceJobId] = new() { Enabled = false }
@@ -188,8 +188,14 @@ public class WorkerSchedulingPolicyTests
         descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.TftStaticDataJobId && x.IsEnabled && x.IsMandatoryBaseline);
 
         descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.RefreshChampionAnalyticsJobId && !x.IsEnabled);
-        descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.SummonerMaintenanceJobId && !x.IsEnabled);
-        descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.MatchTimelineBackfillJobId && !x.IsEnabled);
+        descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.RefreshChampionAnalyticsAdaptiveJobId && x.IsEnabled && x.CronExpression == "*/15 * * * *");
+        descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.RefreshChampionAnalyticsRampJobId && x.IsEnabled && x.CronExpression == "*/5 * * * *");
+        descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.ChampionAnalyticsIngestionJobId && x.IsEnabled && x.CronExpression == "*/10 * * * *");
+        descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.ChampionAnalyticsIngestionRampJobId && x.IsEnabled && x.CronExpression == "*/2 * * * *");
+        descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.SummonerMaintenanceJobId && x.IsEnabled && x.CronExpression == "*/20 * * * *");
+        descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.SummonerMaintenanceRampJobId && x.IsEnabled && x.CronExpression == "*/5 * * * *");
+        descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.MatchTimelineBackfillJobId && x.IsEnabled && x.CronExpression == "0 * * * *");
+        descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.HighEloProfileRefreshJobId && x.IsEnabled && x.CronExpression == "0 */2 * * *");
         descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.PollLiveGamesJobId && !x.IsEnabled);
         descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.TftAnalyticsRefreshJobId && !x.IsEnabled);
     }

@@ -1,13 +1,9 @@
 using FluentAssertions;
-using Hangfire;
-using Hangfire.Storage;
-using Hangfire.Storage.Monitoring;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using Moq;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Static;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
@@ -45,6 +41,20 @@ public class StartupPatchRolloverServiceTests
         harness.StaticDataService.DetectAndRefreshCalls.Should().Be(0);
     }
 
+    [Fact]
+    public async Task PrepareAsync_WhenBacklogPurgeIsConfigured_DoesNotPurgeQueuedOrScheduledJobs()
+    {
+        await using var harness = await StartupPatchRolloverHarness.CreateAsync(
+            activePatch: "16.5",
+            latestPatch: "16.6",
+            purgeBacklogOnPatchRolloverOnStartup: true);
+
+        var result = await harness.Service.PrepareAsync(CancellationToken.None);
+
+        result.PurgedEnqueuedJobs.Should().Be(0);
+        result.PurgedScheduledJobs.Should().Be(0);
+    }
+
     private sealed class StartupPatchRolloverHarness : IAsyncDisposable
     {
         private StartupPatchRolloverHarness(
@@ -67,7 +77,10 @@ public class StartupPatchRolloverServiceTests
         public ServiceProvider Provider { get; }
         public StartupPatchRolloverService Service { get; }
 
-        public static async Task<StartupPatchRolloverHarness> CreateAsync(string activePatch, string latestPatch)
+        public static async Task<StartupPatchRolloverHarness> CreateAsync(
+            string activePatch,
+            string latestPatch,
+            bool purgeBacklogOnPatchRolloverOnStartup = false)
         {
             var connection = new SqliteConnection("Data Source=:memory:");
             await connection.OpenAsync();
@@ -92,22 +105,15 @@ public class StartupPatchRolloverServiceTests
             services.AddScoped<IStaticDataService>(_ => staticDataService);
             var provider = services.BuildServiceProvider();
 
-            var jobStorage = new Mock<JobStorage>();
-            var monitor = new Mock<IMonitoringApi>();
-            monitor.Setup(x => x.Queues()).Returns([]);
-            monitor.Setup(x => x.ScheduledJobs(0, 1000)).Returns(new JobList<ScheduledJobDto>(new Dictionary<string, ScheduledJobDto>()));
-            jobStorage.Setup(x => x.GetMonitoringApi()).Returns(monitor.Object);
-
             var schedule = Options.Create(new WorkerJobScheduleOptions
             {
                 RunPatchDetectionOnStartup = true,
-                PurgeBacklogOnPatchRolloverOnStartup = false
+                PurgeBacklogOnPatchRolloverOnStartup = purgeBacklogOnPatchRolloverOnStartup
             });
 
             var service = new StartupPatchRolloverService(
                 NullLogger<StartupPatchRolloverService>.Instance,
                 provider.GetRequiredService<IServiceScopeFactory>(),
-                jobStorage.Object,
                 schedule);
 
             return new StartupPatchRolloverHarness(connection, db, staticDataService, provider, service);

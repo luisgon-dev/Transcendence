@@ -344,6 +344,38 @@ public class ChampionAnalyticsIngestionJobRampTests
             x => x.EnsureSeededFromChallengerAsync(It.IsAny<CancellationToken>()),
             Times.Never);
     }
+
+    [Fact]
+    public async Task ExecuteRampAsync_PrioritizesTrackedHighValueRosterCandidates()
+    {
+        var fixedBudgetPolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
+            AdaptiveThroughputBudgetMode.Balanced,
+            MaxCandidates: 10,
+            QueueTarget: 1,
+            IncludeAllModes: false,
+            CoverageRatio: 0.2d,
+            BacklogAgeMinutes: 120d,
+            RecentVelocityPerHour: 2d,
+            CandidatePressureRatio: 2d));
+
+        await using var harness = await Harness.CreateAsync(fixedBudgetPolicy);
+        harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        harness.SeedSummoner("GenericFallback", "NA1", DateTime.UtcNow.AddHours(-24));
+        harness.SeedTrackedHighValueSummoner("TrackedPriority", "NA1", "NA1", DateTime.UtcNow.AddHours(-1));
+        await harness.Db.SaveChangesAsync();
+
+        var queuedJobs = new List<Job>();
+        harness.BackgroundJobClient
+            .Setup(x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()))
+            .Callback<Job, IState>((job, _) => queuedJobs.Add(job))
+            .Returns("job-1");
+
+        await harness.Job.ExecuteRampAsync(CancellationToken.None);
+
+        queuedJobs.Should().ContainSingle();
+        queuedJobs[0].Args[0].Should().Be("TrackedPriority");
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
@@ -504,6 +536,26 @@ public class ChampionAnalyticsIngestionJobRampTests
                 TagLineNormalized = tagLine.ToUpperInvariant(),
                 SummonerLevel = 100,
                 UpdatedAt = DateTime.UtcNow.AddHours(-10)
+            });
+        }
+
+        public void SeedTrackedHighValueSummoner(
+            string gameName,
+            string tagLine,
+            string platformRegion,
+            DateTime updatedAtUtc)
+        {
+            Db.TrackedProSummoners.Add(new TrackedProSummoner
+            {
+                Id = Guid.NewGuid(),
+                Puuid = $"tracked-{Guid.NewGuid():N}",
+                PlatformRegion = platformRegion,
+                GameName = gameName,
+                TagLine = tagLine,
+                IsPro = false,
+                IsActive = true,
+                UpdatedAtUtc = updatedAtUtc,
+                CreatedAtUtc = updatedAtUtc
             });
         }
 

@@ -44,13 +44,13 @@ export function ChampionsGridClient({
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search champions..."
-        className="h-10 w-full max-w-sm rounded-md border border-border/70 bg-surface/35 px-4 text-sm text-fg placeholder-muted outline-none focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
+        className="control-input max-w-sm"
       />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
         {filtered.map((c) => (
           <Link key={c.championId} href={`/lol/champions/${c.championId}${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}>
-            <Card className="group h-full p-3 transition hover:bg-white/10">
+            <Card className="group h-full p-3 transition hover:bg-surface-2/72">
               <div className="flex items-center gap-3">
                 <Image
                   src={championIconUrl(version, c.id)}
@@ -64,8 +64,8 @@ export function ChampionsGridClient({
                     {c.name}
                   </p>
                   <div className="mt-0.5 flex min-h-[18px] items-center gap-1.5">
-                    {c.tier ? <TierBadge tier={c.tier} /> : <span className="text-[11px] text-muted">Tier -</span>}
-                    <span className="text-[11px] text-muted">
+                    {c.tier ? <TierBadge tier={c.tier} /> : <span className="type-caption text-muted">Tier -</span>}
+                    <span className="type-caption text-muted">
                       {c.primaryRole ? roleDisplayLabel(c.primaryRole) : "Role -"}
                     </span>
                   </div>

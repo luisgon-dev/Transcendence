@@ -4,6 +4,12 @@ export default {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      borderRadius: {
+        control: "var(--radius-control)",
+        card: "var(--radius-card)",
+        panel: "var(--radius-panel)",
+        hero: "var(--radius-hero)"
+      },
       colors: {
         bg: "hsl(var(--bg))",
         surface: "hsl(var(--surface))",
@@ -25,29 +31,37 @@ export default {
         "wr-high": "hsl(var(--wr-high))",
         "wr-low": "hsl(var(--wr-low))",
         win: "hsl(var(--win))",
-        loss: "hsl(var(--loss))"
+        loss: "hsl(var(--loss))",
+        info: "hsl(var(--info))",
+        "rank-iron": "hsl(var(--rank-iron))",
+        "rank-bronze": "hsl(var(--rank-bronze))",
+        "rank-silver": "hsl(var(--rank-silver))",
+        "rank-gold": "hsl(var(--rank-gold))",
+        "rank-platinum": "hsl(var(--rank-platinum))",
+        "rank-emerald": "hsl(var(--rank-emerald))",
+        "rank-diamond": "hsl(var(--rank-diamond))",
+        "rank-master": "hsl(var(--rank-master))",
+        "rank-grandmaster": "hsl(var(--rank-grandmaster))",
+        "rank-challenger": "hsl(var(--rank-challenger))",
+        "team-blue": "hsl(var(--team-blue))",
+        "team-red": "hsl(var(--team-red))"
       },
       boxShadow: {
-        glass: "0 1px 0 hsl(0 0% 100% / 0.05) inset, 0 0 0 1px hsl(var(--border) / 0.65), 0 14px 40px hsl(230 42% 5% / 0.65)",
-        glow: "0 0 0 1px hsl(var(--primary) / 0.35), 0 0 24px hsl(var(--primary) / 0.28)"
-      },
-      backgroundImage: {
-        "aurora":
-          "radial-gradient(1200px 600px at 20% -10%, hsl(var(--primary) / 0.35), transparent 60%), radial-gradient(900px 500px at 80% 0%, hsl(var(--primary-2) / 0.22), transparent 55%), radial-gradient(1000px 700px at 40% 110%, hsl(220 100% 60% / 0.12), transparent 60%)"
+        glass: "0 1px 0 hsl(210 20% 100% / 0.04) inset, 0 0 0 1px hsl(var(--border) / 0.5), 0 10px 28px hsl(222 30% 4% / 0.45)",
+        soft: "var(--elevation-soft)",
+        card: "var(--elevation-card)",
+        media: "var(--elevation-media)",
+        overlay: "var(--elevation-overlay)",
+        inset: "var(--hairline-inset)"
       },
       keyframes: {
         shimmer: {
           "0%": { backgroundPosition: "200% 0" },
           "100%": { backgroundPosition: "-200% 0" }
-        },
-        floaty: {
-          "0%, 100%": { transform: "translateY(0)" },
-          "50%": { transform: "translateY(-5px)" }
         }
       },
       animation: {
-        shimmer: "shimmer 1.2s linear infinite",
-        floaty: "floaty 6s ease-in-out infinite"
+        shimmer: "shimmer 1.2s linear infinite"
       }
     }
   },

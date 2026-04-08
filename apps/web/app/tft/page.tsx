@@ -5,6 +5,8 @@ import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl } from "@/lib/env";
 import { formatTftPercent, type TftCompListItem, type TftStaticEntity } from "@/lib/tft";
 
+const EXAMPLE_SUMMONER_HREF = "/tft/summoners/kr/Hide%20on%20bush-KR1";
+
 export default async function TftHomePage() {
   const [compsResult, championsResult, itemsResult, traitsResult, augmentsResult] = await Promise.all([
     fetchBackendJson<TftCompListItem[]>(`${getBackendBaseUrl()}/api/tft/analytics/comps`, {
@@ -35,26 +37,26 @@ export default async function TftHomePage() {
 
   return (
     <div className="grid gap-6">
-      <section className="glass-card mesh-highlight rounded-[2rem] p-6 sm:p-8">
-        <p className="text-sm font-medium uppercase tracking-[0.24em] text-primary">Teamfight Tactics</p>
-        <h1 className="mt-3 max-w-3xl font-[var(--font-sora)] text-4xl font-semibold tracking-tight sm:text-5xl">
+      <section className="page-hero p-6 sm:p-8">
+        <p className="type-kicker text-muted">Teamfight Tactics</p>
+        <h1 className="type-display mt-4 max-w-4xl">
           TFT comps, unit lookups, and player pages built for the live set.
         </h1>
-        <p className="mt-3 max-w-2xl text-sm text-fg/75 sm:text-base">
+        <p className="type-lead mt-4 max-w-3xl">
           Find the best-performing comps, browse units and items, and check how players are finishing their recent games.
         </p>
-        <div className="mt-5 flex flex-wrap gap-2">
-          <Link href="/tft/comps" className="rounded-full border border-primary/45 bg-primary/12 px-4 py-2 text-sm font-medium text-primary">
+        <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2">
+          <Link href="/tft/comps" className="control-tab type-ui font-semibold" data-active="true">
             Explore Comps
           </Link>
-          <Link href="/tft/champions" className="rounded-full border border-border/60 px-4 py-2 text-sm text-fg/80 transition hover:bg-white/8 hover:text-fg">
+          <Link href="/tft/champions" className="control-tab type-ui">
             Units
           </Link>
-          <Link href="/tft/items" className="rounded-full border border-border/60 px-4 py-2 text-sm text-fg/80 transition hover:bg-white/8 hover:text-fg">
+          <Link href="/tft/items" className="control-tab type-ui">
             Items
           </Link>
-          <Link href="/tft/summoners/na/Faker-KR1" className="rounded-full border border-border/60 px-4 py-2 text-sm text-fg/80 transition hover:bg-white/8 hover:text-fg">
-            Player Search
+          <Link href={EXAMPLE_SUMMONER_HREF} className="control-tab type-ui">
+            Example Profile
           </Link>
         </div>
       </section>
@@ -62,8 +64,8 @@ export default async function TftHomePage() {
       <section className="grid gap-4 md:grid-cols-4">
         {counts.map((item) => (
           <Link key={item.label} href={item.href}>
-            <Card className="p-5 transition hover:bg-white/8">
-              <p className="text-xs uppercase tracking-[0.2em] text-primary">{item.label}</p>
+            <Card className="page-stat-card p-5">
+              <p className="type-kicker text-muted">{item.label}</p>
               <p className="mt-2 text-3xl font-semibold text-fg">{item.value.toLocaleString()}</p>
             </Card>
           </Link>
@@ -72,14 +74,14 @@ export default async function TftHomePage() {
 
       <section className="grid gap-4">
         <div>
-          <h2 className="font-[var(--font-sora)] text-2xl font-semibold">Top Comps</h2>
-          <p className="text-sm text-fg/75">The default view starts on the live set at Emerald+.</p>
+          <h2 className="type-title">Top Comps</h2>
+          <p className="type-ui mt-2 text-fg/75">The default view starts on the live set at Emerald+.</p>
         </div>
 
         <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
           {topComps.map((comp) => (
             <Link key={comp.compSlug} href={`/tft/comps/${comp.compSlug}`}>
-              <Card className="grid gap-3 p-5 transition hover:bg-white/8">
+              <Card className="grid gap-3 p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-lg font-semibold text-fg">{comp.name}</p>
@@ -87,7 +89,7 @@ export default async function TftHomePage() {
                       {comp.setCoreName ?? `Set ${comp.setNumber ?? "?"}`} · {comp.patch ?? "Unknown patch"}
                     </p>
                   </div>
-                  <span className="rounded-full border border-primary/35 bg-primary/10 px-2.5 py-1 text-xs text-primary">
+                  <span className="type-kicker text-muted">
                     {comp.trend}
                   </span>
                 </div>

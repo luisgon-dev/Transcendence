@@ -1,0 +1,126 @@
+using FluentAssertions;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using Transcendence.Data;
+using Transcendence.Data.Models.LoL.Account;
+using Transcendence.Data.Models.LoL.Match;
+using Transcendence.Data.Models.LoL.Static;
+using Transcendence.Service.Core.Services.Analytics.Implementations;
+using Transcendence.Service.Core.Services.Analytics.Models;
+using Transcendence.Service.Core.Tests.Support;
+
+namespace Transcendence.Service.Core.Tests;
+
+public class ChampionAnalyticsComputeServiceTests
+{
+    [Fact]
+    public async Task ComputeTierListAsync_DoesNotPopulatePatchMovementFromPreviousPatchHotPath()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<TranscendenceContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var db = new SqliteCompatibleTranscendenceContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        db.Patches.AddRange(
+            new Patch
+            {
+                Version = "15.1",
+                ReleaseDate = DateTime.UtcNow.AddDays(-21),
+                DetectedAt = DateTime.UtcNow.AddDays(-21),
+                IsActive = false
+            },
+            new Patch
+            {
+                Version = "15.2",
+                ReleaseDate = DateTime.UtcNow.AddDays(-2),
+                DetectedAt = DateTime.UtcNow.AddDays(-2),
+                IsActive = true
+            });
+
+        SeedMatch(db, "15.1", "NA1_1", summonerName: "PreviousPatch", championId: 266, role: "TOP", win: true);
+        SeedMatch(db, "15.2", "NA1_2", summonerName: "CurrentPatch", championId: 266, role: "TOP", win: true);
+        await db.SaveChangesAsync();
+
+        var service = new ChampionAnalyticsComputeService(
+            db,
+            Options.Create(new ChampionAnalyticsComputeOptions
+            {
+                MinimumGamesRequired = 1,
+                EarlyPatchMinimumGamesRequired = 1,
+                BootstrapPatchMinimumGamesRequired = 1,
+                BootstrapWindowHours = 24,
+                ProvisionalWindowHours = 96,
+                MaturingWindowHours = 240
+            }),
+            NullLogger<ChampionAnalyticsComputeService>.Instance);
+
+        var result = await service.ComputeTierListAsync("TOP", null, null, "15.2", CancellationToken.None);
+
+        result.Should().ContainSingle();
+        result[0].Movement.Should().BeNull();
+        result[0].PreviousTier.Should().BeNull();
+    }
+
+    private static void SeedMatch(
+        TranscendenceContext db,
+        string patch,
+        string matchId,
+        string summonerName,
+        int championId,
+        string role,
+        bool win)
+    {
+        var summoner = new Summoner
+        {
+            Id = Guid.NewGuid(),
+            PlatformRegion = "NA1",
+            Region = "americas",
+            GameName = summonerName,
+            TagLine = "NA1",
+            Puuid = Guid.NewGuid().ToString("N"),
+            SummonerName = summonerName,
+            RiotSummonerId = Guid.NewGuid().ToString("N")
+        };
+
+        var match = new Transcendence.Data.Models.LoL.Match.Match
+        {
+            Id = Guid.NewGuid(),
+            MatchId = matchId,
+            MatchDate = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            Duration = 1800,
+            Patch = patch,
+            QueueId = 420,
+            QueueFamily = "RANKED_SOLO_DUO",
+            QueueType = "420",
+            Status = FetchStatus.Success,
+            PlatformRegion = "NA1",
+            FetchedAt = DateTime.UtcNow
+        };
+
+        var participant = new MatchParticipant
+        {
+            Id = Guid.NewGuid(),
+            MatchId = match.Id,
+            Match = match,
+            SummonerId = summoner.Id,
+            Summoner = summoner,
+            Puuid = summoner.Puuid,
+            ParticipantId = 1,
+            TeamId = 100,
+            ChampionId = championId,
+            TeamPosition = role,
+            Win = win
+        };
+
+        db.Summoners.Add(summoner);
+        db.Matches.Add(match);
+        db.MatchParticipants.Add(participant);
+    }
+}

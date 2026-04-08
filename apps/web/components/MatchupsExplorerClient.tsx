@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
 
 import { roleDisplayLabel } from "@/lib/roles";
@@ -51,13 +50,14 @@ export function MatchupsExplorerClient({
 
   return (
     <div className="grid gap-4">
-      <div className="glass-panel rounded-2xl p-4">
+      <div className="surface-card rounded-2xl p-4">
         <div className="flex flex-wrap items-center gap-3">
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search champion..."
-            className="h-11 w-full rounded-xl border border-border/70 bg-surface/65 px-3 text-sm text-fg outline-none placeholder:text-muted sm:max-w-sm"
+            aria-label="Search champions by name"
+            className="h-11 w-full rounded-xl border border-border/70 bg-surface/65 px-3 text-sm text-fg outline-none placeholder:text-muted focus:border-primary/70 focus:ring-2 focus:ring-primary/20 sm:max-w-sm"
           />
           <div className="flex flex-wrap gap-2">
             {roles.map((roleOption) => (
@@ -65,7 +65,8 @@ export function MatchupsExplorerClient({
                 key={roleOption}
                 type="button"
                 onClick={() => setRole(roleOption)}
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                aria-pressed={role === roleOption}
+                className={`min-h-11 rounded-full border px-3 py-2 text-sm font-medium transition ${
                   role === roleOption
                     ? "border-primary/45 bg-primary/15 text-primary"
                     : "border-border/70 bg-surface/70 text-fg/80 hover:bg-surface/90"
@@ -83,10 +84,10 @@ export function MatchupsExplorerClient({
           const champion = champions[String(entry.championId)];
           const championName = champion?.name ?? `Champion ${entry.championId}`;
           return (
-            <motion.div key={`${entry.championId}-${entry.role}`} whileHover={{ y: -2 }}>
+            <div key={`${entry.championId}-${entry.role}`}>
               <Link
                 href={`/lol/matchups/${entry.championId}?role=${encodeURIComponent(entry.role)}${activeRegion !== "ALL" ? `&region=${encodeURIComponent(activeRegion)}` : ""}`}
-                className="block rounded-2xl border border-border/60 bg-surface/65 p-3 transition hover:border-border-strong hover:bg-surface/80"
+                className="block rounded-2xl border border-border/60 bg-surface/65 p-3 transition-transform duration-150 hover:-translate-y-0.5 hover:border-border-strong hover:bg-surface/80"
               >
                 <div className="flex items-center gap-3">
                   <Image
@@ -94,6 +95,7 @@ export function MatchupsExplorerClient({
                     alt={championName}
                     width={38}
                     height={38}
+                    sizes="38px"
                     className="rounded-lg border border-border/50"
                   />
                   <div className="min-w-0">
@@ -104,7 +106,7 @@ export function MatchupsExplorerClient({
                   </div>
                 </div>
               </Link>
-            </motion.div>
+            </div>
           );
         })}
       </div>

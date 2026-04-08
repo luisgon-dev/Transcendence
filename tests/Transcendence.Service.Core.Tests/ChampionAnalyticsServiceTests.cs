@@ -58,7 +58,7 @@ public class ChampionAnalyticsServiceTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(
             [
-                new ChampionWinRateDto(103, "MIDDLE", "EMERALD_PLUS", 30, 17, 0.566, 0.12, 0.03, 1, 40, "15.1")
+                new ChampionWinRateDto(103, "MIDDLE", "EMERALD_PLUS", 5, 3, 0.6, 0.12, 0.03, 1, 40, "15.1")
             ]);
         await harness.Db.SaveChangesAsync();
 
@@ -70,15 +70,17 @@ public class ChampionAnalyticsServiceTests
         result.Sample.Should().NotBeNull();
         result.Sample!.SampleStatus.Should().Be(AnalyticsSampleStatus.LowSample);
         result.Sample.IsEarlyPatchWindow.Should().BeTrue();
-        result.Sample.MinimumRecommendedSampleSize.Should().Be(40);
-        result.Sample.SampleSize.Should().Be(30);
+        result.Sample.PatchPhase.Should().Be(AnalyticsPatchPhase.Bootstrap);
+        result.Sample.IsProvisional.Should().BeTrue();
+        result.Sample.MinimumRecommendedSampleSize.Should().Be(10);
+        result.Sample.SampleSize.Should().Be(5);
     }
 
     [Fact]
     public async Task GetWinRatesAsync_MaturePatchThresholdMet_ReturnsSufficient()
     {
         await using var harness = await Harness.CreateAsync();
-        harness.SetActivePatch("15.1", DateTime.UtcNow.AddHours(-120));
+        harness.SetActivePatch("15.1", DateTime.UtcNow.AddHours(-300));
         harness.ComputeService
             .Setup(x => x.ComputeWinRatesAsync(
                 266,
@@ -99,7 +101,38 @@ public class ChampionAnalyticsServiceTests
         result.Sample.Should().NotBeNull();
         result.Sample!.SampleStatus.Should().Be(AnalyticsSampleStatus.Sufficient);
         result.Sample.IsEarlyPatchWindow.Should().BeFalse();
+        result.Sample.PatchPhase.Should().Be(AnalyticsPatchPhase.Steady);
+        result.Sample.IsProvisional.Should().BeFalse();
         result.Sample.MinimumRecommendedSampleSize.Should().Be(100);
+    }
+
+    [Fact]
+    public async Task GetWinRatesAsync_MaturingPatch_UsesIntermediatePatchPhase()
+    {
+        await using var harness = await Harness.CreateAsync();
+        harness.SetActivePatch("15.2", DateTime.UtcNow.AddHours(-180));
+        harness.ComputeService
+            .Setup(x => x.ComputeWinRatesAsync(
+                103,
+                It.IsAny<ChampionAnalyticsFilter>(),
+                "15.2",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new ChampionWinRateDto(103, "MIDDLE", "EMERALD_PLUS", 65, 36, 0.553, 0.11, 0.01, 1, 30, "15.2")
+            ]);
+        await harness.Db.SaveChangesAsync();
+
+        var result = await harness.Service.GetWinRatesAsync(
+            103,
+            new ChampionAnalyticsFilter(RankTier: "EMERALD_PLUS"),
+            CancellationToken.None);
+
+        result.Sample.Should().NotBeNull();
+        result.Sample!.PatchPhase.Should().Be(AnalyticsPatchPhase.Maturing);
+        result.Sample.IsProvisional.Should().BeTrue();
+        result.Sample.MinimumRecommendedSampleSize.Should().Be(70);
+        result.Sample.SampleStatus.Should().Be(AnalyticsSampleStatus.LowSample);
     }
 
     [Fact]
@@ -176,8 +209,12 @@ public class ChampionAnalyticsServiceTests
                 Options.Create(new ChampionAnalyticsComputeOptions
                 {
                     MinimumGamesRequired = 100,
+                    MaturingPatchMinimumGamesRequired = 70,
                     EarlyPatchMinimumGamesRequired = 40,
-                    EarlyPatchWindowHours = 72
+                    BootstrapPatchMinimumGamesRequired = 10,
+                    BootstrapWindowHours = 24,
+                    ProvisionalWindowHours = 96,
+                    MaturingWindowHours = 240
                 }),
                 Options.Create(new MultiRegionIngestionOptions
                 {

@@ -20,7 +20,14 @@ Transcendence is a backend + web monorepo:
 - Executes ingestion/refresh/analytics workflows
 - Owns Riot/Camille integration for both LoL and TFT
 - In `Development`, the worker narrows recurring schedules to analytics-oriented jobs only (analytics refresh/ingestion, summoner maintenance, timeline backfill)
-- In `Production`, startup can bootstrap analytics immediately by running patch detection first, then queuing ingestion + adaptive analytics refresh (controlled by `Jobs:Schedule:RunPatchDetectionOnStartup`)
+- In `Production`, the `stable` scheduling profile is coverage-first for LoL analytics:
+  - adaptive analytics refresh
+  - new-patch ramp refresh
+  - champion analytics ingestion
+  - summoner maintenance
+  - high-elo roster refresh
+  - low-frequency timeline backfill
+- On startup patch rollover, the worker refreshes static data synchronously but no longer performs a blanket Hangfire backlog purge. Current-patch catch-up work is preserved across restarts.
 
 ### `Transcendence.Service.Core`
 - Domain/application services (analysis, analytics compute, auth, live game, Riot API integration, jobs)
@@ -51,6 +58,7 @@ Transcendence is a backend + web monorepo:
   - `/tft/traits/*`
   - `/tft/augments/*`
   - `/tft/summoners/[region]/[riotId]`
+- Public LoL patch badges now read backend analytics patch status instead of raw Data Dragon latest so web patch labels match the active analytics dataset
 
 ### `packages/api-client`
 - Generated OpenAPI TypeScript client artifacts built from the committed spec
@@ -89,23 +97,6 @@ Current app usage follows that policy:
 Operational implication:
 - Riot API key swaps should not invalidate stored gameplay data as long as `Puuid` and Riot ID fields remain intact.
 - Encrypted identifiers may drift after a key change and should be treated as rehydratable, not as durable foreign keys.
-
-## Local Data Slice Tooling
-
-- Prod-to-local gameplay seeding is implemented as a developer CLI workflow in `tools/Transcendence.Tools.DataOps`, not as an application API.
-- The slice tool copies a game-only subset from a source Postgres database into a disposable local target Postgres database.
-- Import scope is sized from root match sets and their dependents, then expanded to the summoner, participant, rank, cursor, static-data, and analytics-supporting rows needed for realistic local testing.
-- Import size is operator-controlled through per-game region caps and sample percentages, so local databases can be small, medium, or near-production in shape without editing code.
-- The tool requires source and target schema versions to match before writing the target.
-
-## Riot Key Rotation / Swap Workflow
-
-1. Update Riot API keys for the worker and any local validation shells.
-2. Run identifier validation against stored data.
-3. If encrypted identifiers need refreshing, run the rehydrate job keyed by stored `Puuid`.
-4. Resume normal ingestion and refresh traffic.
-
-The rehydrate step updates non-canonical `RiotSummonerId` / `AccountId` and Riot ID display fields from Riot APIs using `Puuid` as the stable pivot.
 
 ### Summoner Read Failure Semantics
 
@@ -167,6 +158,11 @@ The rehydrate step updates non-canonical `RiotSummonerId` / `AccountId` and Riot
 
 - Champion analytics ingestion now runs continuously in low-priority mode to keep growing current-patch data.
 - Summoner maintenance runs continuously in low-priority mode to refresh stale summoners when no high-priority API refresh demand is active.
+- The production ingestion strategy is region-aware and high-elo-first:
+  - enabled regions fan out independently
+  - per-region coverage targets scale with configured region weights
+  - tracked high-value roster candidates are considered before the generic stale summoner pool
+  - ranked Emerald+ candidates are preferred ahead of lower-value fallback rows
 - Ingestion scales queued refresh count based on:
   - current patch coverage vs target
   - staleness of recent successful fetches
@@ -217,6 +213,7 @@ The rehydrate step updates non-canonical `RiotSummonerId` / `AccountId` and Riot
 
 - Analytics APIs intentionally do not fall back to previous patch payloads.
 - Responses include sample metadata (`sampleStatus`, `sampleSize`, `minimumRecommendedSampleSize`, `patchAgeHours`, `isEarlyPatchWindow`) so web surfaces can show early-patch low-sample/no-data states explicitly.
+- `GET /api/lol/analytics/status` is the lightweight source of truth for the active LoL analytics patch used by public web chrome and landing surfaces.
 
 ### Match Queue Scope and History
 
@@ -229,6 +226,7 @@ The rehydrate step updates non-canonical `RiotSummonerId` / `AccountId` and Riot
 ### Timeline-Derived @15 Metrics
 
 - Ranked solo/duo matches are eligible for timeline ingestion.
+- Timeline backfill is an enrichment path, not the main coverage path for tier lists or champion win-rate/build data.
 - Timeline ingestion persists:
   - fetch state (`MatchTimelineFetchStates`)
   - per-participant snapshots at minute mark 15 (`MatchParticipantTimelineSnapshots`)
@@ -241,6 +239,7 @@ The rehydrate step updates non-canonical `RiotSummonerId` / `AccountId` and Riot
 ### Pro Roster and Pro Builds
 
 - Tracked pro/high-ELO roster entries are stored in `TrackedProSummoners` with optional pro/team metadata.
+- The same roster table is also used as a high-value analytics seed source. Automated high-elo refresh writes active roster rows with `IsPro=false`; pro-build analytics explicitly filter to `IsPro=true`.
 - Admin API (`/api/admin/pro-summoners`) allows manual curation and updates.
 - Champion pro-build analytics joins tracked roster participants against ranked solo/duo match data for:
   - recent pro matches
@@ -334,8 +333,6 @@ Backend uses a layered approach (see source and README):
 - Persistent storage (PostgreSQL) for canonical match/summoner data
 - Summoner stats cache entries are tagged per summoner (`summoner-stats:{summonerId}`) so refresh jobs can invalidate all related stats keys in one operation
 
-## Frontend Overhaul Follow-Ups
+## Change Tracking
 
-Backend work needed to fully unlock new frontend pages is tracked here:
-
-- `docs/BACKEND_TASKS_FRONTEND_OVERHAUL.md`
+Future implementation work should live in GitHub issues or pull requests rather than long-lived planning docs committed under `docs/`.

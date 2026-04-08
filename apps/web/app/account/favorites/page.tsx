@@ -79,21 +79,22 @@ export default function FavoritesPage() {
 
   return (
     <div className="grid gap-6">
-      <header className="glass-card mesh-highlight grid gap-2 rounded-3xl p-5">
-        <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
+      <header className="page-hero grid gap-2 p-5">
+        <p className="type-kicker text-muted">Account</p>
+        <h1 className="type-page-title">
           Favorites
         </h1>
-        <p className="text-sm text-fg/75">
+        <p className="type-ui text-fg/75">
           Your saved players from League and TFT profile pages.
         </p>
       </header>
 
       {error ? (
         <Card className="p-5">
-          <p className="text-sm text-danger">{error}</p>
+          <p className="type-ui text-danger">{error}</p>
           <div className="mt-3 flex items-center gap-3">
             <Link
-              className="text-sm text-primary hover:underline"
+              className="type-ui font-semibold text-primary hover:underline"
               href="/account/login"
             >
               Sign in
@@ -111,7 +112,7 @@ export default function FavoritesPage() {
         </div>
       ) : items.length === 0 ? (
         <Card className="p-5">
-          <p className="text-sm text-muted">
+          <p className="type-ui text-muted">
             No favorites yet. Open a player profile and click{" "}
             <span className="font-medium text-fg">Add Favorite</span>.
           </p>
@@ -124,7 +125,7 @@ export default function FavoritesPage() {
                 <div>
                   {f.displayName && parseRiotIdInput(f.displayName) ? (
                     <Link
-                      className="text-sm font-semibold text-fg hover:underline"
+                      className="type-ui font-semibold text-fg hover:underline"
                       href={`/lol/summoners/${encodeURIComponent(
                         f.platformRegion
                       )}/${encodeRiotIdPath(parseRiotIdInput(f.displayName)!)}`}
@@ -132,11 +133,11 @@ export default function FavoritesPage() {
                       {f.displayName}
                     </Link>
                   ) : (
-                    <p className="text-sm font-semibold text-fg">
+                    <p className="type-ui font-semibold text-fg">
                       {f.displayName ?? f.summonerPuuid}
                     </p>
                   )}
-                  <p className="text-xs text-muted">
+                  <p className="type-ui type-tabular text-muted">
                     {f.platformRegion} · Added{" "}
                     {new Date(f.createdAtUtc).toLocaleString()}
                   </p>

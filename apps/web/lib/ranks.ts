@@ -47,6 +47,24 @@ export function rankTierDisplayLabel(value: string | null | undefined): string {
   return RANK_DISPLAY_LABELS[normalized] ?? normalized;
 }
 
+const RANK_COLOR_CLASS: Record<string, string> = {
+  IRON: "text-rank-iron",
+  BRONZE: "text-rank-bronze",
+  SILVER: "text-rank-silver",
+  GOLD: "text-rank-gold",
+  PLATINUM: "text-rank-platinum",
+  EMERALD: "text-rank-emerald",
+  DIAMOND: "text-rank-diamond",
+  MASTER: "text-rank-master",
+  GRANDMASTER: "text-rank-grandmaster",
+  CHALLENGER: "text-rank-challenger"
+};
+
+export function rankTierColorClass(tier: string | null | undefined): string {
+  if (!tier) return "text-muted";
+  return RANK_COLOR_CLASS[tier.toUpperCase()] ?? "text-muted";
+}
+
 export function rankEmblemUrl(tier: string | null | undefined): string | null {
   if (!tier) return null;
   const normalized = normalizeRankToken(tier);

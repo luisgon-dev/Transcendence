@@ -189,15 +189,16 @@ export default async function ProBuildsIndexPage({
   }
 
   return (
-    <div className="grid gap-6">
-      <header className="grid gap-2">
-        <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
+    <div className="grid gap-8">
+      <header className="page-hero p-5 md:p-8">
+        <p className="type-kicker text-muted">Tracked Matches</p>
+        <h1 className="type-page-title mt-3">
           Pro Builds
         </h1>
-        <p className="text-sm text-fg/75">
+        <p className="type-ui mt-3 text-fg/75">
           Recent builds from tracked pro and high-MMR matches, with quick champion search.
         </p>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <Badge className="border-primary/45 bg-primary/10 text-primary">
             {recentMatchesFeed.length} matches loaded
           </Badge>
@@ -205,14 +206,18 @@ export default async function ProBuildsIndexPage({
           <Badge>{activeRegionLabel}</Badge>
           {championQuery ? <Badge>Search: {championQuery}</Badge> : null}
         </div>
-        <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />
-        <AnalyticsSampleBanner
-          sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
-        />
+        <div className="mt-3">
+          <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />
+        </div>
+        <div className="mt-3">
+          <AnalyticsSampleBanner
+            sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
+          />
+        </div>
       </header>
 
-      <Card className="p-5">
-        <h2 className="font-[var(--font-sora)] text-lg font-semibold">Search Champions</h2>
+      <Card className="page-panel p-5">
+        <h2 className="type-section">Search Champions</h2>
         <form action="/lol/pro-builds" method="get" className="mt-3 flex flex-wrap items-center gap-2">
           {activeRegion !== "ALL" ? <input type="hidden" name="region" value={activeRegion} /> : null}
           <input
@@ -220,18 +225,18 @@ export default async function ProBuildsIndexPage({
             name="q"
             defaultValue={championQuery ?? ""}
             placeholder="Search champion name or id (e.g., Ahri or 103)"
-            className="h-11 min-w-[220px] flex-1 rounded-xl border border-border/80 bg-surface/50 px-3 text-sm text-fg shadow-glass outline-none placeholder:text-muted/80 focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
+            className="control-input min-w-[220px] flex-1"
           />
           <button
             type="submit"
-            className="h-11 rounded-xl border border-primary/40 bg-primary/12 px-4 text-sm font-medium text-primary transition hover:bg-primary/20"
+            className="type-ui h-11 rounded-control border border-primary/40 bg-primary/12 px-4 font-semibold text-primary transition hover:bg-primary/20"
           >
             Search
           </button>
           {championQuery ? (
             <Link
               href={`/lol/pro-builds${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
-              className="h-11 rounded-xl border border-border/70 bg-white/[0.03] px-4 text-sm leading-[44px] text-fg/85 transition hover:bg-white/[0.08]"
+              className="control-tab type-ui h-11 px-4"
             >
               Clear
             </Link>
@@ -248,7 +253,7 @@ export default async function ProBuildsIndexPage({
               <Link
                 key={champion.championId}
                 href={`/lol/pro-builds/${champion.championId}${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
-                className="rounded-lg border border-border/60 bg-white/[0.03] p-3 transition hover:bg-white/[0.08]"
+                className="surface-subtle rounded-card p-3 transition hover:bg-surface-2/72"
               >
                 <div className="flex items-center gap-2.5">
                   <Image
@@ -269,8 +274,8 @@ export default async function ProBuildsIndexPage({
       <Card className="p-0">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-4 py-3">
           <div>
-            <h2 className="font-[var(--font-sora)] text-lg font-semibold">Recent Pro Matches</h2>
-            <p className="text-xs text-muted">
+            <h2 className="type-section">Recent Pro Matches</h2>
+            <p className="type-ui mt-1 text-muted">
               Click any row to open champion-specific pro builds and recent match details.
             </p>
           </div>
@@ -302,7 +307,7 @@ export default async function ProBuildsIndexPage({
                     href={`/lol/pro-builds/${entry.championId}`}
                     className="block border-b border-border/20 px-4 py-3 transition hover:bg-white/[0.04]"
                   >
-                    <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
+                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
                       <div className="min-w-0">
                         <div className="flex items-center gap-3">
                           <Image
@@ -312,11 +317,17 @@ export default async function ProBuildsIndexPage({
                             height={34}
                             className="rounded-md border border-border/60"
                           />
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-fg">{championName}</p>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="truncate text-sm font-medium text-fg">{championName}</p>
+                              <span className={`shrink-0 text-xs font-semibold sm:hidden ${entry.match.win ? "text-wr-high" : "text-wr-low"}`}>
+                                {entry.match.win ? "Win" : "Loss"}
+                              </span>
+                            </div>
                             <p className="truncate text-xs text-muted">
                               {entry.match.playerName ?? "Unknown player"}
                               {entry.match.teamName ? ` (${entry.match.teamName})` : ""}
+                              {hasTimestamp ? ` · ${formatRelativeTime(playedAt)}` : ""}
                             </p>
                           </div>
                         </div>
@@ -339,7 +350,7 @@ export default async function ProBuildsIndexPage({
                         </div>
                       </div>
 
-                      <div>
+                      <div className="hidden sm:block">
                         <p className={`text-sm font-semibold ${entry.match.win ? "text-wr-high" : "text-wr-low"}`}>
                           {entry.match.win ? "Win" : "Loss"}
                         </p>
@@ -347,7 +358,7 @@ export default async function ProBuildsIndexPage({
                         <p className="mt-1 text-xs text-muted">Patch {entry.patch ?? "Unknown"}</p>
                       </div>
 
-                      <div className="text-left lg:text-right">
+                      <div className="hidden text-left lg:block lg:text-right">
                         <p className="text-xs text-muted">
                           {hasTimestamp ? formatRelativeTime(playedAt) : "Time unavailable"}
                         </p>

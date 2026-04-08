@@ -185,10 +185,10 @@ export default async function ProBuildsChampionPage({
             className="rounded-xl border border-border/60"
           />
           <div>
-            <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
+            <h1 className="type-page-title">
               Pro Builds
             </h1>
-            <p className="text-sm text-fg/75">Recent pro and high-MMR builds for {championName}</p>
+            <p className="type-ui mt-2 text-fg/75">Recent pro and high-MMR builds for {championName}</p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -199,11 +199,13 @@ export default async function ProBuildsChampionPage({
           <Badge>{activeRegionLabel}</Badge>
           <Badge>{recentMatches.length} matches</Badge>
         </div>
-        <AnalyticsSampleBanner sample={sampleNotice} />
+        <div className="mt-3">
+          <AnalyticsSampleBanner sample={sampleNotice} />
+        </div>
       </header>
 
       <Card className="p-5">
-        <h2 className="font-[var(--font-sora)] text-lg font-semibold">Filters</h2>
+        <h2 className="type-section">Filters</h2>
         <div className="mt-3 grid gap-3">
           <RoleFilterTabs
             roles={PRO_BUILD_ROLES}
@@ -225,11 +227,11 @@ export default async function ProBuildsChampionPage({
               name="patch"
               defaultValue={patchFilter ?? ""}
               placeholder="14.5"
-              className="h-9 w-28 rounded-md border border-border/70 bg-white/[0.03] px-2 text-sm text-fg"
+              className="control-input h-9 w-28 rounded-control px-3 text-sm"
             />
             <button
               type="submit"
-              className="h-9 rounded-md border border-primary/40 bg-primary/10 px-3 text-sm text-primary hover:bg-primary/20"
+              className="h-9 rounded-control border border-primary/40 bg-primary/10 px-3 text-sm font-semibold text-primary hover:bg-primary/20"
             >
               Apply
             </button>
@@ -240,7 +242,7 @@ export default async function ProBuildsChampionPage({
                   region: regionFilter,
                   patch: null
                 })}
-                className="h-9 rounded-md border border-border/70 bg-white/[0.03] px-3 text-sm leading-9 text-fg/85 hover:bg-white/[0.10]"
+                className="control-tab type-ui h-9 px-3"
               >
                 Clear
               </Link>
@@ -250,16 +252,22 @@ export default async function ProBuildsChampionPage({
       </Card>
 
       {!proBuildsRes.ok ? (
-        <Card className="border-border/70 bg-white/[0.03] p-5">
-          <h2 className="font-[var(--font-sora)] text-lg font-semibold">Pro-Build Data Unavailable</h2>
+        <Card className="surface-subtle p-5">
+          <h2 className="type-section">Pro-Build Data Unavailable</h2>
           <p className="mt-2 text-sm text-fg/80">{proFeedErrorMessage(proBuildsRes)}</p>
-          <p className="mt-1 text-xs text-muted">Request ID: {proBuildsRes.requestId}</p>
+          <p className="mt-1 text-xs text-muted">Try adjusting your filters or check back soon.</p>
+          {proBuildsRes.requestId ? (
+            <details className="mt-3 text-xs text-muted">
+              <summary className="cursor-pointer select-none rounded hover:text-fg/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">Technical details</summary>
+              <p className="mt-1">Request ID: <code className="text-fg/65">{proBuildsRes.requestId}</code></p>
+            </details>
+          ) : null}
         </Card>
       ) : null}
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="p-5">
-          <h2 className="font-[var(--font-sora)] text-lg font-semibold">Top Players</h2>
+          <h2 className="type-section">Top Players</h2>
           {topPlayers.length === 0 ? (
             <p className="mt-3 text-sm text-muted">
               No pro-player matches are available for these filters yet.
@@ -269,7 +277,7 @@ export default async function ProBuildsChampionPage({
               {topPlayers.map((player, idx) => (
                 <li
                   key={`${player.playerName ?? "player"}-${idx}`}
-                  className="flex items-center justify-between rounded-lg border border-border/50 bg-white/[0.03] px-3 py-2"
+                  className="surface-subtle flex items-center justify-between rounded-card px-3 py-2"
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-fg">
@@ -289,7 +297,7 @@ export default async function ProBuildsChampionPage({
         </Card>
 
         <Card className="p-5">
-          <h2 className="font-[var(--font-sora)] text-lg font-semibold">Common Builds</h2>
+          <h2 className="type-section">Common Builds</h2>
           {commonBuilds.length === 0 ? (
             <p className="mt-3 text-sm text-muted">
               No repeat build patterns are available for these filters yet.
@@ -299,7 +307,7 @@ export default async function ProBuildsChampionPage({
               {commonBuilds.map((build, idx) => (
                 <div
                   key={`common-build-${idx}`}
-                  className="rounded-lg border border-border/50 bg-white/[0.03] p-3"
+                  className="surface-subtle rounded-card p-3"
                 >
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <p className="text-xs text-muted">Build #{idx + 1}</p>
@@ -320,7 +328,7 @@ export default async function ProBuildsChampionPage({
       </div>
 
       <Card className="p-5">
-        <h2 className="font-[var(--font-sora)] text-lg font-semibold">Recent Pro Matches</h2>
+        <h2 className="type-section">Recent Pro Matches</h2>
         {recentMatches.length === 0 ? (
           <p className="mt-3 text-sm text-muted">
             No recent pro matches were found for this champion with these filters.
@@ -334,7 +342,7 @@ export default async function ProBuildsChampionPage({
               return (
                 <li
                   key={`${match.matchId ?? "match"}-${idx}`}
-                  className="rounded-lg border border-border/50 bg-white/[0.03] p-3"
+                  className="surface-subtle rounded-card p-3"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
@@ -354,7 +362,7 @@ export default async function ProBuildsChampionPage({
                       <p className={`text-sm font-semibold ${resultClass}`}>
                         {match.win ? "Win" : "Loss"}
                       </p>
-                      <p className="text-[11px] text-muted">{match.matchId ?? "Unknown match"}</p>
+                      <p className="type-caption text-muted">{match.matchId ?? "Unknown match"}</p>
                     </div>
                   </div>
 
@@ -391,7 +399,7 @@ export default async function ProBuildsChampionPage({
       </Card>
 
       <Card className="border-primary/40 bg-primary/10 p-5">
-        <h2 className="font-[var(--font-sora)] text-lg font-semibold text-primary">
+        <h2 className="type-section text-primary">
           More Ways to Explore
         </h2>
         <p className="mt-2 text-sm text-fg/90">
@@ -400,13 +408,14 @@ export default async function ProBuildsChampionPage({
         <div className="mt-4 flex flex-wrap gap-2 text-sm">
           <Link
             href={`/lol/champions/${championId}`}
-            className="rounded-md border border-primary/40 bg-primary/15 px-3 py-1.5 text-primary hover:bg-primary/25"
+            className="control-tab type-ui font-semibold"
+            data-active="true"
           >
             Open Champion Details
           </Link>
           <Link
             href={`/lol/matchups/${championId}`}
-            className="rounded-md border border-border/70 bg-white/[0.05] px-3 py-1.5 text-fg/85 hover:bg-white/[0.10]"
+            className="control-tab type-ui"
           >
             Open Matchup Analysis
           </Link>

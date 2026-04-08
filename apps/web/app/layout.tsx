@@ -8,13 +8,13 @@ import { SiteHeader } from "@/components/SiteHeader";
 
 const headingFont = Space_Grotesk({
   subsets: ["latin"],
-  variable: "--font-sora",
+  variable: "--font-heading",
   display: "swap"
 });
 
 const bodyFont = Plus_Jakarta_Sans({
   subsets: ["latin"],
-  variable: "--font-manrope",
+  variable: "--font-body",
   display: "swap"
 });
 
@@ -22,8 +22,17 @@ export const metadata: Metadata = {
   title: "Transcendence",
   description: "League of Legends and TFT stats, builds, comps, and player profiles.",
   icons: {
-    icon: "/icon.svg",
-    shortcut: "/icon.svg"
+    icon: [
+      { url: '/favicon.ico' },
+      { url: '/favicon-96x96.png', sizes: '96x96', type: 'image/png' },
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+    ],
+    shortcut: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
+  },
+  manifest: '/site.webmanifest',
+  appleWebApp: {
+    title: 'Transcendence',
   }
 };
 
@@ -34,9 +43,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${headingFont.variable} ${bodyFont.variable}`}>
-      <body className="bg-aurora font-[var(--font-manrope)] antialiased">
+      <body className="antialiased">
         <SiteHeader />
-        <main className="mx-auto w-full max-w-[1440px] px-4 py-8 md:px-6 md:py-10">
+        <main className="site-main mx-auto flex w-full max-w-[1440px] flex-1 flex-col px-4 py-8 md:px-6 md:py-12 lg:px-8">
           {children}
         </main>
         <SiteFooter />

@@ -4,7 +4,9 @@ import type { components } from "@transcendence/api-client";
 import {
   decodeTierGrade,
   decodeTierMovement,
-  normalizeTierListEntries
+  filterTierListEntries,
+  normalizeTierListEntries,
+  summarizeTierListEntries
 } from "@/lib/tierlist";
 
 describe("decodeTierGrade", () => {
@@ -134,5 +136,107 @@ describe("normalizeTierListEntries", () => {
   it("handles null or missing entries", () => {
     expect(normalizeTierListEntries(null)).toEqual([]);
     expect(normalizeTierListEntries(undefined)).toEqual([]);
+  });
+});
+
+describe("filterTierListEntries", () => {
+  const entries = [
+    {
+      championId: 266,
+      role: "TOP",
+      tier: "S",
+      compositeScore: 0.71,
+      winRate: 0.52,
+      pickRate: 0.13,
+      games: 1240,
+      movement: "UP",
+      previousTier: "A"
+    },
+    {
+      championId: 103,
+      role: "MIDDLE",
+      tier: "A",
+      compositeScore: 0.64,
+      winRate: 0.5,
+      pickRate: 0.08,
+      games: 987,
+      movement: "DOWN",
+      previousTier: "S"
+    }
+  ] as const;
+
+  const champions = {
+    "103": { id: "Ahri", name: "Ahri", title: "the Nine-Tailed Fox" },
+    "266": { id: "Aatrox", name: "Aatrox", title: "the Darkin Blade" }
+  };
+
+  it("filters by champion name, slug, title, or champion id", () => {
+    expect(filterTierListEntries(entries, champions, { query: "aatr" })).toEqual([entries[0]]);
+    expect(filterTierListEntries(entries, champions, { query: "nine-tailed" })).toEqual([entries[1]]);
+    expect(filterTierListEntries(entries, champions, { query: "103" })).toEqual([entries[1]]);
+  });
+
+  it("respects the focused tier when present", () => {
+    expect(filterTierListEntries(entries, champions, { focusTier: "S" })).toEqual([entries[0]]);
+    expect(filterTierListEntries(entries, champions, { focusTier: "D" })).toEqual([]);
+  });
+});
+
+describe("summarizeTierListEntries", () => {
+  it("returns aggregate table stats for the current view", () => {
+    expect(
+      summarizeTierListEntries([
+        {
+          championId: 266,
+          role: "TOP",
+          tier: "S",
+          compositeScore: 0.71,
+          winRate: 0.52,
+          pickRate: 0.13,
+          games: 1240,
+          movement: "UP",
+          previousTier: "A"
+        },
+        {
+          championId: 103,
+          role: "MIDDLE",
+          tier: "A",
+          compositeScore: 0.64,
+          winRate: 0.5,
+          pickRate: 0.08,
+          games: 987,
+          movement: "DOWN",
+          previousTier: "S"
+        }
+      ])
+    ).toEqual({
+      visibleCount: 2,
+      totalGames: 2227,
+      averageWinRate: 0.51,
+      topWinRate: 0.52,
+      tierCounts: {
+        S: 1,
+        A: 1,
+        B: 0,
+        C: 0,
+        D: 0
+      }
+    });
+  });
+
+  it("returns an empty summary shape for empty views", () => {
+    expect(summarizeTierListEntries([])).toEqual({
+      visibleCount: 0,
+      totalGames: 0,
+      averageWinRate: null,
+      topWinRate: null,
+      tierCounts: {
+        S: 0,
+        A: 0,
+        B: 0,
+        C: 0,
+        D: 0
+      }
+    });
   });
 });

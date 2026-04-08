@@ -1,8 +1,9 @@
 "use client";
 
 import { Button } from "@/components/ui/Button";
+import { SearchIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
-import { GLOBAL_SEARCH_OPEN_EVENT } from "@/lib/globalSearch";
+import { dispatchGlobalSearchOpen } from "@/lib/globalSearch";
 
 export function GlobalSearchLauncher({
   className,
@@ -15,25 +16,43 @@ export function GlobalSearchLauncher({
 }) {
   const isHeader = variant === "header";
 
+  if (isHeader) {
+    return (
+      <Button
+        type="button"
+        variant="ghost"
+        size={size}
+        aria-label="Open search"
+        className={cn(
+          "h-11 min-w-11 rounded-full border border-border/55 bg-surface/26 px-3 text-fg/72 shadow-inset hover:border-border/78 hover:bg-surface/54 hover:text-fg",
+          className
+        )}
+        onClick={(event) => dispatchGlobalSearchOpen(event.currentTarget)}
+      >
+        <SearchIcon className="h-4 w-4 shrink-0" />
+        <span className="type-ui hidden lg:inline">Search</span>
+      </Button>
+    );
+  }
+
   return (
     <Button
       type="button"
       variant="outline"
       size={size}
       className={cn(
-        "group relative justify-between overflow-hidden border-border/70 bg-surface/65 text-fg/85",
-        "before:absolute before:inset-0 before:bg-gradient-to-r before:from-primary/10 before:to-transparent before:opacity-0 before:transition before:duration-300 hover:before:opacity-100",
+        "justify-between gap-4 border-border/70 bg-surface/76 text-fg/88 shadow-soft hover:border-border-strong/78 hover:bg-surface/92",
         className
       )}
-      onClick={() => window.dispatchEvent(new Event(GLOBAL_SEARCH_OPEN_EVENT))}
+      onClick={(event) => dispatchGlobalSearchOpen(event.currentTarget)}
     >
-      <span className="relative z-10 inline-flex items-center gap-2">
-        <span className="text-sm" aria-hidden="true">
+      <span className="inline-flex items-center gap-2">
+        <span className="font-heading text-sm font-semibold text-muted" aria-hidden="true">
           /
         </span>
-        <span>{isHeader ? "Search" : "Search champions, players, or pages"}</span>
+        <span className="type-ui">Search players, champions, or pages</span>
       </span>
-      <span className="relative z-10 rounded-md border border-border/70 bg-surface/80 px-2 py-0.5 text-xs text-muted">
+      <span className="type-kicker hidden rounded-md border border-border/70 bg-surface/88 px-2 py-1 text-muted sm:inline">
         Ctrl/Cmd+K
       </span>
     </Button>

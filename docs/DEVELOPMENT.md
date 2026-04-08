@@ -97,80 +97,6 @@ Rule of thumb:
 - Use `corepack pnpm e2e:stack` for true local E2E and TFT/worker verification.
 - Use the hybrid mode for day-to-day UI changes when you want faster frontend rebuilds.
 
-## Local Data Slice and Riot Identifier Tools
-
-For local gameplay testing, prefer importing a disposable game-only slice over trying to hand-seed a tiny database.
-
-Package scripts:
-
-```bash
-corepack pnpm data:slice:sync -- --help
-corepack pnpm data:validate-identifiers -- --help
-corepack pnpm data:rehydrate-riot-ids -- --help
-```
-
-Recommended shell env:
-
-```bash
-export TRN_SOURCE_DB='Host=192.168.0.221;Port=5432;Database=transcendence;Username=postgres;Password=testpassword123!'
-export TRN_TARGET_DB='Host=localhost;Port=5432;Database=transcendence_slice;Username=postgres;Password=changme'
-export TRN_RIOT_API_KEY_LOL='RGAPI-your-lol-key'
-export TRN_RIOT_API_KEY_TFT='RGAPI-your-tft-key'
-```
-
-Use a disposable target database. The slice sync truncates and reloads slice-owned tables before import.
-
-Example import with explicit sizing:
-
-```bash
-corepack pnpm data:slice:sync -- \
-  --regions NA1,EUW1,KR \
-  --patch-depth 2 \
-  --lol-max-matches-per-region 2500 \
-  --lol-sample-percent 25 \
-  --tft-max-matches-per-region 1500 \
-  --tft-sample-percent 20
-```
-
-Sizing controls:
-- `--regions <csv>` limits source platform regions.
-- `--patch-depth <n>` limits the patch/set windows considered.
-- `--lol-max-matches-per-region <n>` and `--tft-max-matches-per-region <n>` hard-cap imported matches per region.
-- `--lol-sample-percent <0-100>` and `--tft-sample-percent <0-100>` sample a percentage of the eligible match pool before the hard cap is applied.
-- `--skip-lol` and `--skip-tft` let you import a single game surface.
-
-What gets copied:
-- LoL/TFT summoners, ranks, match data, match dependents, ingestion cursors, live/pro rows, and static data needed for analytics pages.
-- Auth/admin/API-key tables are intentionally excluded.
-
-Safety checks:
-- Source and target must have the same latest EF migration.
-- The tool prints per-table row counts when the import finishes.
-
-Post-import validation:
-
-```bash
-corepack pnpm data:validate-identifiers -- --sample-size 10
-```
-
-This reports:
-- the app’s identifier policy
-- DB counts for canonical vs non-canonical Riot identifiers
-- optional live Riot checks showing whether `Puuid` + Riot ID are still canonical and whether encrypted IDs drifted under the current key
-
-Key rotation / key swap workflow:
-
-```bash
-corepack pnpm data:validate-identifiers -- --sample-size 10
-corepack pnpm data:rehydrate-riot-ids -- --games all --limit 250 --only-missing
-```
-
-`data:rehydrate-riot-ids` refreshes non-canonical `RiotSummonerId` / `AccountId` plus Riot ID display fields from stored `Puuid` rows using the current Riot API keys. It is safe to rerun and supports:
-- `--games all|lol|tft`
-- `--limit <n>`
-- `--delay-ms <n>`
-- `--only-missing`
-
 ## Run Without Docker (Backend)
 
 ### Secrets
@@ -341,6 +267,12 @@ If hooks are installed (`corepack pnpm hooks:install`), pre-commit runs path-awa
 Key worker settings live under `Jobs:*` in `Transcendence.Service/appsettings.json`.
 The public Web API also consumes `Jobs:MultiRegionIngestion` from `Transcendence.WebAPI/appsettings.json` so `/api/analytics/regions` and region-filter normalization stay aligned with the ingestion regions exposed to the frontend.
 
+Production defaults in `Transcendence.Service/appsettings.json` are coverage-first for LoL:
+- `stable` keeps adaptive refresh, ramp refresh, champion analytics ingestion, summoner maintenance, high-elo profile refresh, and low-frequency timeline backfill enabled.
+- `high-elo-profile-refresh` keeps the tracked high-value roster populated for analytics ingestion.
+- `match-timeline-backfill` is intentionally slower than ingestion because tier lists and core champion stats do not require timeline rows.
+- `Jobs:Schedule:PurgeBacklogOnPatchRolloverOnStartup` is disabled and startup rollover logic preserves queued current-patch catch-up work.
+
 ### Development Worker Scope
 
 When `Transcendence.Service` runs in the `Development` environment, the `DevelopmentWorker` schedules only analytics-oriented recurring jobs:
@@ -359,10 +291,11 @@ It explicitly removes non-analytics recurring jobs (`detect-patch`, `retry-faile
 
 ### Production Startup Bootstrap
 
-When `Transcendence.Service` runs in non-development environments, the `ProductionWorker` can queue startup bootstrap jobs so analytics is available sooner after deploy:
+When `Transcendence.Service` runs in non-development environments, the `ProductionWorker` only queues startup bootstrap jobs when startup patch detection confirms patch skew:
 
 - `Jobs:Schedule:RunPatchDetectionOnStartup=true` runs patch detection immediately on startup.
-- After startup patch detection, the worker queues analytics ingestion (when enabled) and adaptive analytics refresh.
+- `Jobs:Schedule:PurgeBacklogOnPatchRolloverOnStartup=false` keeps current-patch catch-up work intact across restarts.
+- After startup patch detection confirms a rollover, the worker refreshes static data and queues a bounded analytics ingestion bootstrap without performing a blanket Hangfire purge.
 
 ### Champion Analytics Ingestion
 
@@ -376,6 +309,8 @@ When `Transcendence.Service` runs in non-development environments, the `Producti
 - `MaxRefreshJobsToQueuePerRun`
 - `RefreshLockMinutes`
 - `PrioritizeFavoriteSummoners`
+- `PrioritizeTrackedHighValueSummoners`
+- `PrioritizeRankedHighEloSummoners`
 - `FallbackToTrackedSummoners`
 - `PauseWhenApiPriorityRefreshActive`
 - `NewPatchRampHours`
@@ -383,8 +318,9 @@ When `Transcendence.Service` runs in non-development environments, the `Producti
 - `RampMaxCandidateSummonersPerRun`
 - `RampMinRefreshJobsToQueuePerRun`
 - `RampMaxRefreshJobsToQueuePerRun`
+- `HighEloTiers`
 
-This job determines when low-priority refresh can widen beyond ranked-only ingestion during early patch windows.
+This job now prefers tracked high-value roster entries and Emerald+ ranked candidates before it falls back to the broad stale summoner pool. Region coverage targets scale with `Jobs:MultiRegionIngestion:Regions[*]:Weight`.
 
 ### Adaptive Throughput Budget Policy
 
@@ -586,12 +522,16 @@ Timeline ingestion persists ranked @15 snapshots and fetch status for matchup de
 Analytics sampling thresholds are configurable in both API and worker hosts:
 
 - `Analytics:Compute:MinimumGamesRequired`
+- `Analytics:Compute:MaturingPatchMinimumGamesRequired`
 - `Analytics:Compute:EarlyPatchMinimumGamesRequired`
-- `Analytics:Compute:EarlyPatchWindowHours`
+- `Analytics:Compute:BootstrapPatchMinimumGamesRequired`
+- `Analytics:Compute:BootstrapWindowHours`
+- `Analytics:Compute:ProvisionalWindowHours`
+- `Analytics:Compute:MaturingWindowHours`
 
 ### Analytics Response Sampling
 
-- Analytics APIs now expose sample metadata fields (`sampleStatus`, `sampleSize`, `minimumRecommendedSampleSize`, `patchAgeHours`, `isEarlyPatchWindow`).
+- Analytics APIs now expose sample metadata fields (`sampleStatus`, `sampleSize`, `minimumRecommendedSampleSize`, `patchAgeHours`, `isEarlyPatchWindow`, `patchPhase`, `isProvisional`).
 - Current behavior is current-patch only (no previous-patch fallback responses).
 
 ## Documentation Policy (Contributor Requirement)

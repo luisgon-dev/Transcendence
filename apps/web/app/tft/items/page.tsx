@@ -11,9 +11,10 @@ export default async function TftItemsPage() {
 
   return (
     <div className="grid gap-6">
-      <section className="glass-card rounded-[2rem] p-6">
-        <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">TFT Items</h1>
-        <p className="mt-2 text-sm text-fg/75">Browse completed items and quickly check what each one does.</p>
+      <section className="page-hero p-6">
+        <p className="type-kicker text-muted">TFT Catalog</p>
+        <h1 className="type-page-title mt-3">TFT Items</h1>
+        <p className="type-ui mt-3 text-fg/75">Browse completed items and quickly check what each one does.</p>
       </section>
       <TftCatalogGrid items={items} basePath="/tft/items" />
     </div>

@@ -14,8 +14,12 @@
   "Analytics": {
     "Compute": {
       "MinimumGamesRequired": 100,
+      "MaturingPatchMinimumGamesRequired": 70,
       "EarlyPatchMinimumGamesRequired": 40,
-      "EarlyPatchWindowHours": 72
+      "BootstrapPatchMinimumGamesRequired": 10,
+      "BootstrapWindowHours": 24,
+      "ProvisionalWindowHours": 96,
+      "MaturingWindowHours": 240
     }
   }
 }

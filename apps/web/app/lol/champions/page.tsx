@@ -26,7 +26,7 @@ export default async function ChampionsPage({
   searchParams?: Promise<{ region?: string }>;
 }) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
-  const { activeRegion, activeRegionLabel, options: regionOptions } = await resolveAnalyticsRegion(
+  const { activeRegion, options: regionOptions } = await resolveAnalyticsRegion(
     resolvedSearchParams?.region
   );
   const verbosity = getErrorVerbosity();
@@ -100,23 +100,21 @@ export default async function ChampionsPage({
     .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <div className="grid gap-6">
-      <header className="grid gap-2">
-        <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">
+    <div className="grid gap-8">
+      <header className="page-hero p-5 md:p-8">
+        <p className="type-kicker text-muted">League Directory</p>
+        <h1 className="type-page-title mt-3">
           Champions
         </h1>
-        <p className="text-sm text-fg/75">
+        <p className="type-ui mt-3 text-fg/75">
           Browse every champion and jump straight into builds, win rates, and matchup pages.
         </p>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="mt-4">
           <AnalyticsSampleBanner
             sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
           />
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
-            {activeRegionLabel}
-          </span>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />
         </div>
       </header>

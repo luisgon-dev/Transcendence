@@ -33,7 +33,7 @@ function RuneIcon({
   if (!rune) {
     return (
       <div
-        className={cn("rounded-full border border-border/60 bg-black/20", className)}
+        className={cn("rounded-full border border-border/60 bg-surface-2/70", className)}
         style={{ width: size, height: size }}
       />
     );
@@ -46,7 +46,8 @@ function RuneIcon({
       title={rune.name}
       width={size}
       height={size}
-      className={cn("rounded-full border border-border/35 bg-black/20 p-0.5", className)}
+      sizes={`${size}px`}
+      className={cn("rounded-full border border-border/35 bg-surface-2/70 p-0.5", className)}
     />
   );
 }
@@ -64,7 +65,7 @@ function StyleIcon({
   if (!style) {
     return (
       <div
-        className="rounded-md border border-border/60 bg-black/20"
+        className="rounded-md border border-border/60 bg-surface-2/70"
         style={{ width: size, height: size }}
       />
     );
@@ -77,7 +78,8 @@ function StyleIcon({
       title={style.name}
       width={size}
       height={size}
-      className="rounded-md bg-black/20 p-0.5"
+      sizes={`${size}px`}
+      className="rounded-md bg-surface-2/70 p-0.5"
     />
   );
 }
@@ -115,14 +117,14 @@ export function RuneSetupDisplay({
   return (
     <div className={cn("grid gap-2", className)}>
       <div className={cn("grid grid-cols-2", isCompact ? "gap-2" : "gap-3")}>
-        <div className={cn("rounded-lg border border-border/45 bg-black/10", isCompact ? "p-1.5" : "p-2")}>
+        <div className={cn("surface-subtle rounded-control", isCompact ? "p-1.5" : "p-2")}>
           <div className={cn("flex items-center gap-2", isCompact ? "mb-1" : "mb-2")}>
             <StyleIcon
               styleId={primaryStyleId}
               styleById={styleById}
               size={iconSize + (isCompact ? 1 : 2)}
             />
-            <span className={cn("uppercase tracking-wide text-muted", isCompact ? "text-[9px]" : "text-[10px]")}>
+            <span className="type-overline text-muted">
               Primary
             </span>
           </div>
@@ -138,14 +140,14 @@ export function RuneSetupDisplay({
           </div>
         </div>
 
-        <div className={cn("rounded-lg border border-border/45 bg-black/10", isCompact ? "p-1.5" : "p-2")}>
+        <div className={cn("surface-subtle rounded-control", isCompact ? "p-1.5" : "p-2")}>
           <div className={cn("flex items-center gap-2", isCompact ? "mb-1" : "mb-2")}>
             <StyleIcon
               styleId={subStyleId}
               styleById={styleById}
               size={iconSize + (isCompact ? 1 : 2)}
             />
-            <span className={cn("uppercase tracking-wide text-muted", isCompact ? "text-[9px]" : "text-[10px]")}>
+            <span className="type-overline text-muted">
               Secondary
             </span>
           </div>
@@ -162,9 +164,9 @@ export function RuneSetupDisplay({
         </div>
       </div>
 
-      <div className={cn("rounded-lg border border-border/45 bg-black/10", isCompact ? "p-1.5" : "p-2")}>
+      <div className={cn("surface-subtle rounded-control", isCompact ? "p-1.5" : "p-2")}>
         <div className={cn("flex items-center gap-2", isCompact ? "mb-0.5" : "mb-1")}>
-          <span className={cn("uppercase tracking-wide text-muted", isCompact ? "text-[9px]" : "text-[10px]")}>
+          <span className="type-overline text-muted">
             Shards
           </span>
         </div>
@@ -180,7 +182,7 @@ export function RuneSetupDisplay({
         </div>
       </div>
       {primaryRunes.length === 0 && secondaryRunes.length === 0 && shards.length === 0 ? (
-        <p className="text-xs text-muted">Runes unavailable.</p>
+        <p className="type-caption text-muted">Runes unavailable.</p>
       ) : null}
       <div className="sr-only">
         Primary runes: {primaryRunes.join(", ")}. Secondary runes: {secondaryRunes.join(", ")}.

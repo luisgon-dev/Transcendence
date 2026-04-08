@@ -11,7 +11,7 @@ import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { formatDurationSeconds, formatPercent, formatRelativeTime } from "@/lib/format";
 import { computeNextPollDelayMs } from "@/lib/polling";
-import { rankEmblemUrl, rankTierDisplayLabel } from "@/lib/ranks";
+import { rankEmblemUrl, rankTierColorClass, rankTierDisplayLabel } from "@/lib/ranks";
 import { encodeRiotIdPath } from "@/lib/riotid";
 import { profileIconUrl } from "@/lib/staticData";
 import {
@@ -44,19 +44,7 @@ type TftSortOption = "DATE_DESC" | "PLACEMENT_ASC" | "DMG_DESC";
 
 function rankColorClass(tier?: string): string {
   if (!tier) return "text-fg/80";
-  const map: Record<string, string> = {
-    IRON: "text-zinc-400",
-    BRONZE: "text-amber-600",
-    SILVER: "text-zinc-300",
-    GOLD: "text-yellow-400",
-    PLATINUM: "text-cyan-400",
-    EMERALD: "text-emerald-400",
-    DIAMOND: "text-sky-300",
-    MASTER: "text-purple-400",
-    GRANDMASTER: "text-red-400",
-    CHALLENGER: "text-amber-300"
-  };
-  return map[tier.toUpperCase()] ?? "text-fg/80";
+  return rankTierColorClass(tier) === "text-muted" ? "text-fg/80" : rankTierColorClass(tier);
 }
 
 function friendlyQueueLabel(queueType: string): string {
@@ -303,10 +291,13 @@ export function TftSummonerProfileClient({
   // ---------------------------------------------------------------------------
   if (payload.kind === "accepted") {
     return (
-      <Card className="grid gap-4 p-6">
+      <Card className="profile-hero-card grid gap-4 rounded-hero p-6">
         <div>
-          <h1 className="font-[var(--font-sora)] text-3xl font-semibold tracking-tight">{title}</h1>
-          <p className="mt-2 text-sm text-fg/75">
+          <p className="type-kicker text-muted">TFT profile</p>
+          <h1 className="type-hero-title mt-2">
+            {title}
+          </h1>
+          <p className="mt-3 text-sm text-fg/75">
             {payload.accepted.message ?? "We are pulling this player's latest TFT matches now."}
           </p>
         </div>
@@ -339,36 +330,42 @@ export function TftSummonerProfileClient({
   // Render profile
   // ---------------------------------------------------------------------------
   return (
-    <div className="grid gap-6">
-      {/* Profile Header */}
-      <Card className="rounded-3xl p-5 md:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-4">
+    <div className="grid gap-8">
+      <Card className="profile-hero-card rounded-hero p-5 md:p-8">
+        <div className="relative grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(300px,0.8fr)] xl:items-end">
+          <div className="grid gap-5">
+            <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-center">
             {ddVersion ? (
               <Image
                 src={profileIconUrl(ddVersion, profile.profileIconId)}
                 alt={`${title} icon`}
-                width={72}
-                height={72}
-                className="rounded-2xl border border-border/80"
+                width={88}
+                height={88}
+                className="rounded-panel border border-border/80 shadow-media"
               />
             ) : (
-              <div className="h-[72px] w-[72px] rounded-2xl border border-border/70 bg-surface/70" />
+              <div className="h-[88px] w-[88px] rounded-panel border border-border/70 bg-surface/70" />
             )}
             <div className="min-w-0">
-              <h1 className="truncate font-[var(--font-sora)] text-3xl font-semibold">{title}</h1>
-              <p className="text-sm text-fg/80">
+              <p className="type-kicker text-muted">TFT profile</p>
+              <h1 className="type-hero-title mt-2 truncate">
+                {title}
+              </h1>
+              <p className="mt-2 text-sm text-fg/80">
                 {profile.platformRegion} · Level {profile.summonerLevel.toLocaleString()} · Updated{" "}
                 {new Date(profile.updatedAtUtc).toLocaleString()}
               </p>
               {recentForm.length > 0 && (
-                <div className="mt-2">
-                  <p className="text-[11px] uppercase tracking-wide text-fg/70">Recent Form</p>
-                  <div className="mt-1 flex flex-wrap items-center gap-1" aria-label="Recent placements (latest first)">
+                <div className="mt-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="type-kicker text-fg/68">Recent placements</p>
+                    <p className="text-xs text-fg/55">Latest {recentForm.length} games</p>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5" aria-label="Recent placements (latest first)">
                     {recentForm.map((placement, idx) => (
                       <span
                         key={`p-${idx}`}
-                        className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${placementBgClass(placement)} ${placementColorClass(placement)}`}
+                        className={`type-overline flex h-7 w-7 items-center justify-center rounded-full font-bold tracking-normal shadow-soft ${placementBgClass(placement)} ${placementColorClass(placement)}`}
                         title={formatPlacement(placement)}
                       >
                         {placement}
@@ -379,23 +376,79 @@ export function TftSummonerProfileClient({
               )}
             </div>
           </div>
-          <Button variant="outline" onClick={queueRefresh} disabled={refreshing}>
-            {refreshing ? "Updating..." : "Update Now"}
-          </Button>
+            {error ? (
+              <p className="rounded-2xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+                {error}
+              </p>
+            ) : null}
+          </div>
+          <div className="surface-card grid gap-3 rounded-panel p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="type-kicker text-muted">Snapshot</p>
+                <p className="mt-1 text-sm text-fg/66">Recent ladder health and placements.</p>
+              </div>
+              <Badge className="surface-chip text-fg/72">
+                {history ? `${history.totalCount.toLocaleString()} tracked` : "Awaiting history"}
+              </Badge>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+              <div className="profile-metric-tile">
+                <p className="type-kicker text-muted">Ranked</p>
+                <p className={`mt-2 text-xl font-semibold ${rankColorClass(profile.ranks[0]?.tier)}`}>
+                  {profile.ranks[0]
+                    ? `${rankTierDisplayLabel(profile.ranks[0].tier)} ${profile.ranks[0].rankNumber}`
+                    : "Unranked"}
+                </p>
+                <p className="mt-1 text-sm text-fg/66">
+                  {profile.ranks[0]
+                    ? `${profile.ranks[0].leaguePoints} LP · ${friendlyQueueLabel(profile.ranks[0].queueType)}`
+                    : "No ranked TFT queue data yet"}
+                </p>
+              </div>
+              <div className="profile-metric-tile">
+                <p className="type-kicker text-muted">Top 4 rate</p>
+                <p className="mt-2 text-xl font-semibold text-success">
+                  {quickStats ? formatTftPercent(quickStats.top4) : "Pending"}
+                </p>
+                <p className="mt-1 text-sm text-fg/66">
+                  {quickStats
+                    ? `${quickStats.total} games · ${quickStats.avgPlacement.toFixed(1)} avg place`
+                    : "Waiting for match sample"}
+                </p>
+              </div>
+              <div className="profile-metric-tile">
+                <p className="type-kicker text-muted">Wins</p>
+                <p className="mt-2 text-xl font-semibold text-warning">
+                  {quickStats ? formatTftPercent(quickStats.wins) : "Pending"}
+                </p>
+                <p className="mt-1 text-sm text-fg/66">
+                  {quickStats
+                    ? `${quickStats.total} recent games`
+                    : "First place rate will appear here"}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <Button variant="outline" onClick={queueRefresh} disabled={refreshing}>
+                {refreshing ? "Updating..." : "Update Now"}
+              </Button>
+            </div>
+          </div>
         </div>
-        {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
       </Card>
 
-      {/* Rank cards + Quick stats */}
-      <div className="grid gap-4 lg:grid-cols-12 lg:items-start">
-        {/* Ranks sidebar */}
-        <aside className="grid content-start gap-4 lg:col-span-3">
-          <Card className="p-4">
-            <h2 className="font-[var(--font-sora)] text-lg font-semibold">Ranked</h2>
+      <div className="grid gap-6 xl:grid-cols-[minmax(280px,0.32fr)_minmax(0,1fr)] xl:items-start">
+        <aside className="grid content-start gap-5 xl:sticky xl:top-24">
+          <Card className="profile-section-card p-5">
+            <div>
+              <p className="type-kicker text-muted">Ranked snapshot</p>
+              <h2 className="mt-2 type-section">Queue breakdown and LP position</h2>
+            </div>
             {profile.ranks.length === 0 ? (
-              <p className="mt-3 text-sm text-fg/80">No TFT ranked results yet.</p>
+              <p className="mt-4 text-sm text-fg/80">No TFT ranked results yet.</p>
             ) : (
-              <div className="mt-3 grid gap-2 text-sm">
+              <div className="mt-4 grid gap-4 text-sm">
                 {profile.ranks.map((rank) => {
                   const emblem = rankEmblemUrl(rank.tier);
                   const totalGames = rank.wins + rank.losses;
@@ -403,28 +456,28 @@ export function TftSummonerProfileClient({
                   return (
                     <div
                       key={`${rank.queueType}-${rank.tier}`}
-                      className="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-2.5 rounded-xl border border-border/60 bg-surface/50 px-2.5 py-2"
+                      className="surface-subtle grid gap-3 rounded-card px-3 py-3 sm:grid-cols-[68px_minmax(0,1fr)] sm:items-center"
                     >
                       {emblem ? (
-                        <div className="flex h-[72px] w-[72px] items-center justify-center rounded-lg border border-border/50 bg-surface/70 p-1">
+                        <div className="flex h-[68px] w-[68px] items-center justify-center rounded-control border border-border/50 bg-surface/70 p-1">
                           <Image
                             src={emblem}
                             alt={`${rankTierDisplayLabel(rank.tier)} emblem`}
-                            width={72}
-                            height={72}
-                            unoptimized
+                            width={68}
+                            height={68}
+                            sizes="68px"
                           />
                         </div>
                       ) : (
-                        <div className="h-[72px] w-[72px] rounded-lg border border-border/50 bg-surface/70" />
+                        <div className="h-[68px] w-[68px] rounded-control border border-border/50 bg-surface/70" />
                       )}
                       <div className="min-w-0">
-                        <p className="text-xs uppercase tracking-[0.15em] text-fg/65">{friendlyQueueLabel(rank.queueType)}</p>
+                        <p className="type-kicker text-fg/62">{friendlyQueueLabel(rank.queueType)}</p>
                         <p className={`mt-0.5 text-lg font-semibold leading-tight ${rankColorClass(rank.tier)}`}>
                           {rankTierDisplayLabel(rank.tier)} {rank.rankNumber}
                         </p>
-                        <p className="text-fg/80">{rank.leaguePoints} LP</p>
-                        <p className="text-xs text-fg/65">
+                        <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-fg/70">
+                          <span>{rank.leaguePoints} LP</span>
                           {rank.wins}W {rank.losses}L
                           {wr != null && <span className="ml-1">· {formatPercent(wr)}</span>}
                         </p>
@@ -436,60 +489,74 @@ export function TftSummonerProfileClient({
             )}
           </Card>
 
-          {/* Quick stats */}
           {quickStats && (
-            <Card className="p-4">
-              <h2 className="font-[var(--font-sora)] text-lg font-semibold">Quick Stats</h2>
-              <p className="mt-1 text-xs text-fg/65">From recent {quickStats.total} games</p>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <div className="rounded-lg border border-border/50 bg-surface/50 p-2.5 text-center">
-                  <p className="text-xl font-bold text-fg">{quickStats.avgPlacement.toFixed(1)}</p>
-                  <p className="text-[11px] text-fg/65">Avg Place</p>
+            <Card className="profile-section-card p-5">
+              <div>
+                <p className="type-kicker text-muted">Quick stats</p>
+                <h2 className="mt-2 type-section">Recent TFT tempo at a glance</h2>
+              </div>
+              <div className="mt-4 grid gap-3">
+                <div className="profile-metric-tile">
+                  <p className="type-kicker text-muted">Average placement</p>
+                  <p className="mt-2 text-2xl font-semibold text-fg">{quickStats.avgPlacement.toFixed(1)}</p>
+                  <p className="mt-1 text-sm text-fg/66">Across {quickStats.total} recent games</p>
                 </div>
-                <div className="rounded-lg border border-border/50 bg-surface/50 p-2.5 text-center">
-                  <p className="text-xl font-bold text-emerald-400">{formatTftPercent(quickStats.top4)}</p>
-                  <p className="text-[11px] text-fg/65">Top 4</p>
-                </div>
-                <div className="rounded-lg border border-border/50 bg-surface/50 p-2.5 text-center">
-                  <p className="text-xl font-bold text-yellow-400">{formatTftPercent(quickStats.wins)}</p>
-                  <p className="text-[11px] text-fg/65">Win Rate</p>
-                </div>
-                <div className="rounded-lg border border-border/50 bg-surface/50 p-2.5 text-center">
-                  <p className="text-xl font-bold text-fg">{quickStats.total}</p>
-                  <p className="text-[11px] text-fg/65">Games</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="profile-metric-tile">
+                    <p className="type-kicker text-muted">Top 4</p>
+                    <p className="mt-2 text-xl font-semibold text-success">{formatTftPercent(quickStats.top4)}</p>
+                    <p className="mt-1 text-sm text-fg/66">High-floor finishes</p>
+                  </div>
+                  <div className="profile-metric-tile">
+                    <p className="type-kicker text-muted">Wins</p>
+                    <p className="mt-2 text-xl font-semibold text-warning">{formatTftPercent(quickStats.wins)}</p>
+                    <p className="mt-1 text-sm text-fg/66">First place rate</p>
+                  </div>
                 </div>
               </div>
             </Card>
           )}
         </aside>
 
-        {/* Match history main area */}
-        <section className="lg:col-span-9">
-          <Card className="p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+        <section className="grid gap-5">
+          <Card className="profile-section-card rounded-panel p-5 md:p-6">
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(250px,auto)] xl:items-start">
               <div>
-                <h2 className="font-[var(--font-sora)] text-xl font-semibold">Match History</h2>
+                <p className="type-kicker text-muted">Match history</p>
+                <h2 className="type-panel-title mt-2">
+                  Comps, traits, and placement trends
+                </h2>
+                <p className="mt-2 max-w-2xl text-sm text-fg/70">
+                  Open any lobby to compare the whole table, then scan traits and units without digging through clutter.
+                </p>
                 {history && (
-                  <p className="text-xs text-fg/65">
+                  <p className="mt-3 text-xs text-fg/65">
                     {history.totalCount} total · Page {history.page} of {history.totalPages}
                   </p>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="surface-card grid gap-3 rounded-card p-4">
                 <select
                   value={sort}
                   onChange={(e) => setSort(e.target.value as TftSortOption)}
-                  className="h-9 rounded-lg border border-border/70 bg-surface/35 px-2.5 text-xs text-fg"
+                  className="h-10 rounded-control border border-border/70 bg-surface-2/55 px-3 text-sm text-fg shadow-inset"
                 >
                   {sortOptions.map((opt) => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className="surface-chip text-fg/72">
+                    {history?.items.length ?? 0} shown
+                  </Badge>
+                  <Badge className="surface-chip text-fg/72">
+                    {quickStats ? `${formatTftPercent(quickStats.top4)} top 4` : "No sample yet"}
+                  </Badge>
+                </div>
               </div>
             </div>
 
-            {/* Match cards */}
-            <div className="mt-4 grid gap-2">
+            <div className="mt-5 grid gap-4">
               {historyBusy && !history ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <Skeleton key={i} className="h-20 w-full rounded-xl" />
@@ -515,9 +582,8 @@ export function TftSummonerProfileClient({
               )}
             </div>
 
-            {/* Pagination */}
             {history && history.totalPages > 1 && (
-              <div className="mt-4 flex items-center justify-center gap-3">
+              <div className="mt-5 flex items-center justify-center gap-3">
                 <Button
                   variant="outline"
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -568,67 +634,77 @@ function TftMatchCard({
   region: string;
 }) {
   return (
-    <div className={`overflow-hidden rounded-xl border ${placementBgClass(match.placement)} transition`}>
-      {/* Compact match row */}
+    <div className={`match-card-shell overflow-hidden rounded-panel border ${placementBgClass(match.placement)}`}>
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-stretch gap-0 text-left"
+        className="flex w-full items-stretch gap-0 px-0 text-left"
       >
-        {/* Placement bar */}
-        <div className={`flex w-12 shrink-0 flex-col items-center justify-center ${placementBarClass(match.placement)}`}>
-          <span className="text-lg font-extrabold text-bg">{match.placement}</span>
+        <div className={`flex w-16 shrink-0 flex-col items-center justify-center ${placementBarClass(match.placement)}`}>
+          <span className="text-2xl font-extrabold text-bg">{match.placement}</span>
+          <span className="type-overline mt-1 text-bg/70">
+            place
+          </span>
         </div>
 
-        {/* Main content */}
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5 px-3 py-2.5">
-          {/* Units row */}
-          <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex min-w-0 flex-1 flex-col gap-3 px-4 py-4 md:px-5 md:py-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`type-caption surface-chip rounded-full px-2.5 py-1 font-semibold ${placementColorClass(match.placement)}`}>
+              {formatPlacement(match.placement)}
+            </span>
+            <span className="type-caption surface-chip rounded-full px-2.5 py-1 text-fg/72">
+              Level {match.level}
+            </span>
+            <span className="type-caption surface-chip rounded-full px-2.5 py-1 text-fg/72">
+              {formatRelativeTime(match.matchDate)}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
             {match.units.map((unit) => (
               <span
                 key={unit.characterId}
-                className="rounded border border-primary/25 bg-primary/8 px-1.5 py-0.5 text-[11px] font-medium text-primary"
+                className="type-caption rounded-full border border-primary/22 bg-primary/10 px-2.5 py-1 font-medium text-primary"
               >
                 {unit.name ?? unit.characterId}
-                {unit.tier > 1 && <span className="ml-0.5 text-yellow-400">{starString(unit.tier)}</span>}
+                {unit.tier > 1 && <span className="ml-0.5 text-rank-gold">{starString(unit.tier)}</span>}
               </span>
             ))}
           </div>
 
-          {/* Traits row */}
-          <div className="flex flex-wrap items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1.5">
             {match.traits
               .filter((t) => t.tierCurrent > 0)
               .map((trait) => (
                 <span
                   key={trait.name}
-                  className="rounded-full border border-border/50 bg-surface/40 px-1.5 py-0.5 text-[10px] text-fg/70"
+                  className="type-caption surface-chip rounded-full px-2 py-1 text-fg/70"
                 >
                   {trait.name} {trait.numUnits}
                 </span>
               ))}
           </div>
 
-          {/* Augments + time */}
-          <div className="flex flex-wrap items-center gap-2 text-[10px] text-fg/60">
+          <div className="type-caption flex flex-wrap items-center gap-2 text-fg/60">
             {match.augments.length > 0 && (
               <span>Augments: {match.augments.map((a) => a.replace(/^TFT\d+_/i, "").replace(/_/g, " ")).join(" · ")}</span>
             )}
-            <span className="ml-auto">{formatRelativeTime(match.matchDate)}</span>
           </div>
         </div>
 
-        {/* Right side stats */}
-        <div className="flex shrink-0 flex-col items-end justify-center px-3 py-2.5 text-right text-xs text-fg/70">
-          <p>Lvl {match.level}</p>
-          <p>{match.totalDamageToPlayers.toLocaleString()} dmg</p>
-          <p>{match.playersEliminated} elim</p>
+        <div className="flex shrink-0 flex-col items-end justify-center gap-2 px-4 py-4 text-right text-xs text-fg/70">
+          <div className="surface-subtle rounded-control px-3 py-2">
+            <p className="text-sm font-semibold text-fg">{match.totalDamageToPlayers.toLocaleString()} dmg</p>
+            <p className="type-caption mt-1 text-fg/62">{match.playersEliminated} elim</p>
+          </div>
+          <span className="type-overline text-fg/65">
+            {expanded ? "Collapse" : "Expand"}
+          </span>
         </div>
       </button>
 
-      {/* Expanded match detail */}
       {expanded && (
-        <div className="border-t border-border/40 bg-surface/30 p-3">
+        <div className="border-t border-white/8 p-3 md:p-4">
           {detailLoading ? (
             <div className="grid gap-2">
               {Array.from({ length: 8 }).map((_, i) => (
@@ -672,10 +748,15 @@ function TftMatchDetailTable({
   const sorted = [...participants].sort((a, b) => a.placement - b.placement);
 
   return (
-    <div className="grid gap-1.5">
-      <p className="mb-1 text-xs text-fg/60">
-        Duration: {formatDurationSeconds(durationSeconds)}
-      </p>
+    <div className="match-detail-shell grid gap-3 p-3 md:p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="type-kicker text-muted">Lobby table</p>
+          <p className="mt-1 text-xs text-fg/62">
+            Duration: {formatDurationSeconds(durationSeconds)}
+          </p>
+        </div>
+      </div>
       {sorted.map((p) => {
         const isMe =
           (p.gameName ?? "").toLowerCase() === currentGameName.toLowerCase() &&
@@ -685,54 +766,52 @@ function TftMatchDetailTable({
         return (
           <div
             key={p.puuid}
-            className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs ${
+            className={`flex items-center gap-3 rounded-control border px-3 py-3 text-xs ${
               isMe
-                ? "border-primary/50 bg-primary/10"
-                : "border-border/40 bg-surface/25"
+                ? "border-primary/45 bg-primary/10 shadow-card"
+                : "surface-subtle"
             }`}
           >
-            {/* Placement */}
-            <span className={`w-8 shrink-0 text-center text-sm font-bold ${placementColorClass(p.placement)}`}>
+            <span className={`w-10 shrink-0 text-center text-sm font-bold ${placementColorClass(p.placement)}`}>
               {formatPlacement(p.placement)}
             </span>
 
-            {/* Player name */}
             <div className="min-w-0 flex-1">
               {p.gameName && p.tagLine ? (
                 <Link
                   href={`/tft/summoners/${region}/${encodeRiotIdPath({ gameName: p.gameName, tagLine: p.tagLine })}`}
-                  className="truncate font-medium text-fg hover:text-primary"
+                  className="truncate text-sm font-medium text-fg hover:text-primary"
                 >
                   {displayName}
                 </Link>
               ) : (
-                <span className="truncate text-fg/80">{displayName}</span>
+                <span className="truncate text-sm text-fg/80">{displayName}</span>
               )}
 
-              {/* Units */}
-              <div className="mt-0.5 flex flex-wrap gap-1">
+              <div className="mt-1 flex flex-wrap gap-1.5">
                 {p.units.map((u) => (
-                  <span key={u.characterId} className="text-[10px] text-fg/60">
+                  <span
+                    key={u.characterId}
+                    className="type-caption rounded-full border border-primary/18 bg-primary/8 px-2 py-0.5 text-fg/68"
+                  >
                     {u.name ?? u.characterId}
-                    {u.tier > 1 && <span className="text-yellow-400">{starString(u.tier)}</span>}
+                    {u.tier > 1 && <span className="text-rank-gold">{starString(u.tier)}</span>}
                   </span>
                 ))}
               </div>
 
-              {/* Traits */}
-              <div className="mt-0.5 flex flex-wrap gap-1">
+              <div className="mt-1 flex flex-wrap gap-1.5">
                 {p.traits
                   .filter((t) => t.tierCurrent > 0)
                   .map((t) => (
-                    <span key={t.name} className="text-[10px] text-fg/50">
+                    <span key={t.name} className="type-caption surface-chip rounded-full px-2 py-0.5 text-fg/60">
                       {t.name}
                     </span>
                   ))}
               </div>
             </div>
 
-            {/* Stats */}
-            <div className="shrink-0 text-right text-[11px] text-fg/65">
+            <div className="type-caption surface-subtle shrink-0 rounded-control px-3 py-2 text-right text-fg/65">
               <p>Lvl {p.level}</p>
               <p>{p.goldLeft}g left</p>
               <p>{p.totalDamageToPlayers.toLocaleString()} dmg</p>

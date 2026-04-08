@@ -1,8 +1,10 @@
 using Camille.Enums;
 using Camille.RiotGames;
 using Hangfire;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Transcendence.Data;
+using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.RiotApi;
@@ -77,6 +79,7 @@ public class AddOrUpdateHighEloProfiles(
         {
             const int saveBatchSize = 50;
             var pendingChanges = 0;
+            var rosterUpdates = 0;
 
             var challengerLeague = await riotApiContext.Api.LeagueV4()
                 .GetChallengerLeagueAsync(platform, QueueType.RANKED_SOLO_5x5, stoppingToken);
@@ -88,6 +91,8 @@ public class AddOrUpdateHighEloProfiles(
             var summonerPuuids = challengerLeague.Entries.Select(x => x.Puuid)
                 .Concat(grandmasterLeague.Entries.Select(x => x.Puuid))
                 .Concat(masterLeague.Entries.Select(x => x.Puuid))
+                .Where(puuid => !string.IsNullOrWhiteSpace(puuid))
+                .Distinct(StringComparer.Ordinal)
                 .ToList();
 
             logger.LogInformation(
@@ -100,9 +105,9 @@ public class AddOrUpdateHighEloProfiles(
                 var summoner =
                     await summonerService.GetSummonerByPuuidAsync(summonerPuuid, platform, stoppingToken);
                 await summonerRepository.AddOrUpdateSummonerAsync(summoner, stoppingToken);
-                logger.LogInformation("Summoner {SummonerName} added or updated on {Platform}",
-                    summoner.SummonerName, platform);
+                await UpsertTrackedHighValueSummonerAsync(summoner, platform, stoppingToken);
                 pendingChanges++;
+                rosterUpdates++;
 
                 if (pendingChanges < saveBatchSize)
                     continue;
@@ -114,7 +119,11 @@ public class AddOrUpdateHighEloProfiles(
             if (pendingChanges > 0)
                 await context.SaveChangesAsync(stoppingToken);
 
-            logger.LogInformation("All summoners added or updated for {Platform}", platform);
+            logger.LogInformation(
+                "High-elo profile refresh completed for {Platform}. UpdatedSummoners={UpdatedSummoners}, TrackedRosterUpdates={TrackedRosterUpdates}.",
+                platform,
+                summonerPuuids.Count,
+                rosterUpdates);
         }
         finally
         {
@@ -127,5 +136,43 @@ public class AddOrUpdateHighEloProfiles(
                 logger.LogWarning(ex, "High-elo profile refresh failed to release lock {LockKey}.", lockKey);
             }
         }
+    }
+
+    private async Task UpsertTrackedHighValueSummonerAsync(
+        Data.Models.LoL.Account.Summoner summoner,
+        PlatformRoute platform,
+        CancellationToken stoppingToken)
+    {
+        if (string.IsNullOrWhiteSpace(summoner.Puuid))
+            return;
+
+        var nowUtc = DateTime.UtcNow;
+        var platformRegion = platform.ToString();
+        var existing = await context.TrackedProSummoners
+            .FirstOrDefaultAsync(
+                x => x.Puuid == summoner.Puuid && x.PlatformRegion == platformRegion,
+                stoppingToken);
+
+        if (existing == null)
+        {
+            context.TrackedProSummoners.Add(new TrackedProSummoner
+            {
+                Id = Guid.NewGuid(),
+                Puuid = summoner.Puuid,
+                PlatformRegion = platformRegion,
+                GameName = summoner.GameName,
+                TagLine = summoner.TagLine,
+                IsPro = false,
+                IsActive = true,
+                UpdatedAtUtc = nowUtc,
+                CreatedAtUtc = nowUtc
+            });
+            return;
+        }
+
+        existing.GameName = summoner.GameName;
+        existing.TagLine = summoner.TagLine;
+        existing.IsActive = true;
+        existing.UpdatedAtUtc = nowUtc;
     }
 }

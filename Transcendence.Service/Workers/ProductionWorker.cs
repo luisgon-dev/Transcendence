@@ -13,7 +13,8 @@ public class ProductionWorker(
     JobStorage jobStorage,
     IOptions<WorkerJobScheduleOptions> options,
     IWorkerRecurringJobPolicy recurringJobPolicy,
-    IWorkerStartupIntegrityService startupIntegrityService) : BackgroundService
+    IWorkerStartupIntegrityService startupIntegrityService,
+    IStartupPatchRolloverService startupPatchRolloverService) : BackgroundService
 {
     public override async Task StartAsync(CancellationToken cancellationToken)
     {
@@ -36,6 +37,18 @@ public class ProductionWorker(
                 $"Failures: {string.Join("; ", startupResult.MandatoryFailures)}");
         }
 
+        var patchRolloverResult = await startupPatchRolloverService.PrepareAsync(cancellationToken);
+        if (patchRolloverResult.PatchRolloverDetected)
+        {
+            logger.LogWarning(
+                "Startup patch rollover state: previous={PreviousPatch}, latest={LatestPatch}, completed={Completed}, purgedEnqueued={PurgedEnqueued}, purgedScheduled={PurgedScheduled}.",
+                patchRolloverResult.PreviousPatch ?? "none",
+                patchRolloverResult.LatestPatch ?? "unknown",
+                patchRolloverResult.PatchDetectionCompleted,
+                patchRolloverResult.PurgedEnqueuedJobs,
+                patchRolloverResult.PurgedScheduledJobs);
+        }
+
         var descriptorsById = descriptors.ToDictionary(
             descriptor => descriptor.JobId,
             StringComparer.OrdinalIgnoreCase);
@@ -50,103 +63,24 @@ public class ProductionWorker(
             profileName,
             configuredJobs);
 
-        EnqueueStartupAnalyticsBootstrap(schedule, descriptorsById);
-
-        // One-time backfill: fix matches ingested before the FetchStatus bug was fixed
-        TryEnqueueStartupJob(
-            "startup-backfill-match-status",
-            () => backgroundJobClient.Enqueue<BackfillMatchStatusJob>(job => job.ExecuteAsync(CancellationToken.None)));
-        TryEnqueueStartupJob(
-            "startup-backfill-match-platform-region",
-            () => backgroundJobClient.Enqueue<BackfillMatchPlatformRegionJob>(job => job.ExecuteAsync(CancellationToken.None)));
-        TryEnqueueStartupJob(
-            "startup-rune-selection-integrity-backfill",
-            () => backgroundJobClient.Enqueue<RuneSelectionIntegrityBackfillJob>(
-                job => job.ExecuteAsync(CancellationToken.None)));
-        if (IsRecurringJobEnabled(descriptorsById, WorkerRecurringJobPolicy.MatchTimelineBackfillJobId))
-            TryEnqueueStartupJob(
-                "startup-match-timeline-backfill",
-                () => backgroundJobClient.Enqueue<MatchTimelineBackfillJob>(job => job.ExecuteAsync(CancellationToken.None)));
+        EnqueueStartupAnalyticsBootstrap(descriptorsById, patchRolloverResult);
 
         await base.StartAsync(cancellationToken);
     }
 
     private void EnqueueStartupAnalyticsBootstrap(
-        WorkerJobScheduleOptions schedule,
-        IReadOnlyDictionary<string, WorkerRecurringJobDescriptor> descriptorsById)
+        IReadOnlyDictionary<string, WorkerRecurringJobDescriptor> descriptorsById,
+        StartupPatchRolloverResult patchRolloverResult)
     {
-        string? patchJobId = null;
-        if (schedule.RunPatchDetectionOnStartup &&
-            IsRecurringJobEnabled(descriptorsById, WorkerRecurringJobPolicy.DetectPatchJobId))
-        {
-            patchJobId = TryEnqueueStartupJob(
-                "startup-patch-detection",
-                () => backgroundJobClient.Enqueue<UpdateStaticDataJob>(job => job.Execute(CancellationToken.None)));
-        }
-
-        if (IsRecurringJobEnabled(descriptorsById, WorkerRecurringJobPolicy.ChampionAnalyticsIngestionJobId))
-        {
-            if (!string.IsNullOrWhiteSpace(patchJobId))
-            {
-                try
-                {
-                    backgroundJobClient.ContinueJobWith<ChampionAnalyticsIngestionJob>(
-                        patchJobId,
-                        job => job.ExecuteAsync(CancellationToken.None));
-                    logger.LogInformation("Queued startup champion analytics ingestion continuation after {PatchJobId}.",
-                        patchJobId);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex,
-                        "Failed to queue startup champion analytics ingestion continuation after {PatchJobId}. Falling back to immediate enqueue.",
-                        patchJobId);
-                    TryEnqueueStartupJob(
-                        "startup-champion-analytics-ingestion-fallback",
-                        () => backgroundJobClient.Enqueue<ChampionAnalyticsIngestionJob>(
-                            job => job.ExecuteAsync(CancellationToken.None)));
-                }
-            }
-            else
-            {
-                TryEnqueueStartupJob(
-                    "startup-champion-analytics-ingestion",
-                    () => backgroundJobClient.Enqueue<ChampionAnalyticsIngestionJob>(
-                        job => job.ExecuteAsync(CancellationToken.None)));
-            }
-        }
-
-        if (!IsRecurringJobEnabled(descriptorsById, WorkerRecurringJobPolicy.RefreshChampionAnalyticsAdaptiveJobId))
+        if (!patchRolloverResult.PatchRolloverDetected ||
+            !patchRolloverResult.PatchDetectionCompleted ||
+            !IsRecurringJobEnabled(descriptorsById, WorkerRecurringJobPolicy.ChampionAnalyticsIngestionJobId))
             return;
 
-        if (!string.IsNullOrWhiteSpace(patchJobId))
-        {
-            try
-            {
-                backgroundJobClient.ContinueJobWith<RefreshChampionAnalyticsJob>(
-                    patchJobId,
-                    job => job.ExecuteAdaptiveAsync(CancellationToken.None));
-                logger.LogInformation("Queued startup adaptive analytics refresh continuation after {PatchJobId}.",
-                    patchJobId);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex,
-                    "Failed to queue startup adaptive analytics refresh continuation after {PatchJobId}. Falling back to immediate enqueue.",
-                    patchJobId);
-                TryEnqueueStartupJob(
-                    "startup-adaptive-analytics-refresh-fallback",
-                    () => backgroundJobClient.Enqueue<RefreshChampionAnalyticsJob>(
-                        job => job.ExecuteAdaptiveAsync(CancellationToken.None)));
-            }
-        }
-        else
-        {
-            TryEnqueueStartupJob(
-                "startup-adaptive-analytics-refresh",
-                () => backgroundJobClient.Enqueue<RefreshChampionAnalyticsJob>(
-                    job => job.ExecuteAdaptiveAsync(CancellationToken.None)));
-        }
+        TryEnqueueStartupJob(
+            "startup-champion-analytics-bootstrap",
+            () => backgroundJobClient.Enqueue<ChampionAnalyticsIngestionJob>(
+                job => job.ExecuteAsync(CancellationToken.None)));
     }
 
     private void CleanupHangfireJobs()

@@ -42,7 +42,7 @@ function buildLogsHref({
 
 function stat(label: string, value: string) {
   return (
-    <div className="rounded-2xl border border-border/70 bg-surface/60 p-4">
+    <div className="page-stat-card">
       <p className="text-xs uppercase tracking-wide text-fg/60">{label}</p>
       <p className="mt-1 text-sm font-semibold text-fg">{value}</p>
     </div>
@@ -92,7 +92,7 @@ export default async function AdminLogsPage(props: { searchParams: SearchParams 
         )}
       </div>
 
-      <div className="rounded-[1.75rem] border border-border/70 bg-surface/50 p-5">
+      <div className="page-panel p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">Service Logs</h2>
@@ -103,7 +103,7 @@ export default async function AdminLogsPage(props: { searchParams: SearchParams 
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <a
               href={buildLogsHref({ service, limit })}
-              className="rounded-full border border-border/70 bg-surface/70 px-3 py-1.5 text-fg/80 transition hover:bg-white/10"
+              className="surface-chip rounded-full px-3 py-1.5 text-fg/80 transition hover:bg-surface-2/72"
             >
               Reset Filters
             </a>
@@ -129,7 +129,7 @@ export default async function AdminLogsPage(props: { searchParams: SearchParams 
             <select
               name="service"
               defaultValue={service}
-              className="h-11 rounded-xl border border-border/70 bg-surface/80 px-3 text-sm text-fg outline-none focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
+              className="control-select h-11 bg-surface/80 px-3 text-sm text-fg focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
             >
               <option value="service">Worker Service</option>
               <option value="webapi">Web API</option>
@@ -140,7 +140,7 @@ export default async function AdminLogsPage(props: { searchParams: SearchParams 
             <select
               name="level"
               defaultValue={level}
-              className="h-11 rounded-xl border border-border/70 bg-surface/80 px-3 text-sm text-fg outline-none focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
+              className="control-select h-11 bg-surface/80 px-3 text-sm text-fg focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
             >
               <option value="">All Levels</option>
               <option value="TRACE">TRACE</option>
@@ -158,7 +158,7 @@ export default async function AdminLogsPage(props: { searchParams: SearchParams 
               name="q"
               defaultValue={q}
               placeholder="Message, category, exception"
-              className="h-11 rounded-xl border border-border/70 bg-surface/80 px-3 text-sm text-fg outline-none placeholder:text-muted focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
+              className="control-input h-11 bg-surface/80 px-3 text-sm text-fg placeholder:text-muted focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
             />
           </label>
           <label className="grid gap-1 text-xs text-fg/70">
@@ -167,7 +167,7 @@ export default async function AdminLogsPage(props: { searchParams: SearchParams 
               type="datetime-local"
               name="sinceUtc"
               defaultValue={sinceUtc}
-              className="h-11 rounded-xl border border-border/70 bg-surface/80 px-3 text-sm text-fg outline-none focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
+              className="control-input h-11 bg-surface/80 px-3 text-sm text-fg focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
             />
           </label>
           <label className="grid gap-1 text-xs text-fg/70">
@@ -176,7 +176,7 @@ export default async function AdminLogsPage(props: { searchParams: SearchParams 
               type="datetime-local"
               name="untilUtc"
               defaultValue={untilUtc}
-              className="h-11 rounded-xl border border-border/70 bg-surface/80 px-3 text-sm text-fg outline-none focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
+              className="control-input h-11 bg-surface/80 px-3 text-sm text-fg focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
             />
           </label>
           <label className="grid gap-1 text-xs text-fg/70">
@@ -188,11 +188,11 @@ export default async function AdminLogsPage(props: { searchParams: SearchParams 
                 defaultValue={limit}
                 min={1}
                 max={500}
-                className="h-11 w-full rounded-xl border border-border/70 bg-surface/80 px-3 text-sm text-fg outline-none focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
+                className="control-input h-11 w-full bg-surface/80 px-3 text-sm text-fg focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
               />
               <button
                 type="submit"
-                className="h-11 rounded-xl border border-primary/40 bg-primary/10 px-4 text-sm font-medium text-primary transition hover:bg-primary/20"
+                className="h-11 rounded-control border border-primary/40 bg-primary/10 px-4 text-sm font-medium text-primary transition hover:bg-primary/20"
               >
                 Apply
               </button>
@@ -201,7 +201,7 @@ export default async function AdminLogsPage(props: { searchParams: SearchParams 
         </form>
       </div>
 
-      <div className="rounded-[1.75rem] border border-border/70 bg-surface/50 p-5">
+      <div className="page-panel p-5">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/40 pb-3">
           <div>
             <h3 className="text-base font-semibold">Results</h3>
@@ -213,7 +213,7 @@ export default async function AdminLogsPage(props: { searchParams: SearchParams 
         </div>
 
         {emptyMessage ? (
-          <div className="mt-4 rounded-2xl border border-border/60 bg-black/10 p-4 text-sm text-fg/75">
+          <div className="surface-subtle mt-4 rounded-card p-4 text-sm text-fg/75">
             {emptyMessage}
           </div>
         ) : (

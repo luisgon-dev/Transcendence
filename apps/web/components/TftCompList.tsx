@@ -42,11 +42,11 @@ export function TftCompList({
   return (
     <div className="grid gap-4">
       <div className="flex items-center gap-2">
-        <span className="text-xs text-fg/60">Sort by:</span>
+        <span className="type-meta text-fg/60">Sort by</span>
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as SortOption)}
-          className="h-9 rounded-lg border border-border/70 bg-surface/35 px-2.5 text-xs text-fg"
+          className="control-select h-10 max-w-[180px] text-sm"
         >
           {sortOptions.map((opt) => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -88,7 +88,7 @@ export function TftCompList({
 
                 <div className="flex flex-wrap gap-1">
                   {comp.units.map((unit) => (
-                    <span key={unit.characterId} className="rounded border border-primary/25 bg-primary/8 px-1.5 py-0.5 text-[11px] font-medium text-primary">
+                    <span key={unit.characterId} className="type-caption rounded border border-primary/25 bg-primary/8 px-1.5 py-0.5 font-medium text-primary">
                       {unit.name ?? unit.characterId}
                     </span>
                   ))}
@@ -96,7 +96,7 @@ export function TftCompList({
 
                 <div className="flex flex-wrap gap-1">
                   {comp.traits.map((trait) => (
-                    <span key={trait.name} className="rounded-full border border-border/50 bg-surface/40 px-1.5 py-0.5 text-[10px] text-fg/60">
+                    <span key={trait.name} className="type-caption rounded-full border border-border/50 bg-surface/40 px-1.5 py-0.5 text-fg/60">
                       {trait.name} {trait.numUnits}
                     </span>
                   ))}

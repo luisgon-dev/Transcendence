@@ -31,9 +31,9 @@ corepack pnpm e2e:local        # run Playwright E2E tests locally
 corepack pnpm hooks:install    # install Husky hooks
 
 # EF Migrations (run from repo root)
-dotnet ef migrations add <Name> -p src/Transcendence.Data -s src/Transcendence.WebAPI
-dotnet ef migrations remove    -p src/Transcendence.Data -s src/Transcendence.WebAPI
-dotnet ef database update      -p src/Transcendence.Data -s src/Transcendence.WebAPI
+dotnet ef migrations add <Name> --project Transcendence.Service --startup-project Transcendence.Service
+dotnet ef migrations remove    --project Transcendence.Service --startup-project Transcendence.Service
+dotnet ef database update      --project Transcendence.Service --startup-project Transcendence.Service
 ```
 
 ## Architecture Overview
@@ -64,7 +64,7 @@ For deeper context see `docs/ARCHITECTURE.md`, `docs/DEVELOPMENT.md`, and `docs/
 - `docs/DEVELOPMENT.md`
 - `docs/API.md`
 - `docs/ARCHITECTURE.md`
-- `CLAUDE.md`
+- `AGENTS.md`
 
 ## Required Documentation Hygiene
 
@@ -96,17 +96,18 @@ Agents can use `playwright-cli` to take screenshots and interact with the live s
 - Use `playwright-cli snapshot` to get a DOM snapshot with element refs
 
 When working on **frontend-only changes** (no backend modifications), use the live API:
-- Live site: `https://kronic.one`
+- Live site: `https://transcend.kronic.one`
 - Live API: `https://api.kronic.one`
+- Local dev server: `http://localhost:3000` (reflects local changes, use this for testing)
+- The live site updates once changes are merged into `main` and pushed to GitHub
 - This avoids needing a local backend running
 
 Test summoner for verification: `Kronic#NA1` (region: NA)
-- LoL profile: `https://kronic.one/lol/summoners/na/Kronic-NA1`
-- TFT profile: `https://kronic.one/tft/summoners/na/Kronic-NA1`
+- LoL profile: `https://transcend.kronic.one/lol/summoners/na/Kronic-NA1`
+- TFT profile: `https://transcend.kronic.one/tft/summoners/na/Kronic-NA1`
 
 ## EF Migration Policy (Required)
 
 - Never hand-author or hand-edit EF migration files.
 - Always create/remove migrations via EF CLI (`dotnet ef migrations add ...`, `dotnet ef migrations remove`).
 - Always apply schema changes by updating EF model code first, then generating migrations with EF tools.
-

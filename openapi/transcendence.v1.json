@@ -1176,6 +1176,55 @@
         }
       }
     },
+    "/api/lol/analytics/status": {
+      "get": {
+        "tags": [
+          "Analytics"
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsPatchStatusDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsPatchStatusDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsPatchStatusDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/lol/analytics/cache/invalidate": {
       "post": {
         "tags": [
@@ -5645,6 +5694,36 @@
         },
         "additionalProperties": false
       },
+      "AnalyticsPatchPhase": {
+        "enum": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "AnalyticsPatchStatusDto": {
+        "type": "object",
+        "properties": {
+          "patch": {
+            "type": "string",
+            "nullable": true
+          },
+          "activePatchReleasedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "activePatchDetectedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "AnalyticsRegionDto": {
         "type": "object",
         "properties": {
@@ -5681,6 +5760,12 @@
             "format": "double"
           },
           "isEarlyPatchWindow": {
+            "type": "boolean"
+          },
+          "patchPhase": {
+            "$ref": "#/components/schemas/AnalyticsPatchPhase"
+          },
+          "isProvisional": {
             "type": "boolean"
           }
         },

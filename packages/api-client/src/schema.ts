@@ -1100,6 +1100,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/lol/analytics/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AnalyticsPatchStatusDto"];
+                        "application/json": components["schemas"]["AnalyticsPatchStatusDto"];
+                        "text/json": components["schemas"]["AnalyticsPatchStatusDto"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/lol/analytics/cache/invalidate": {
         parameters: {
             query?: never;
@@ -4323,6 +4371,18 @@ export interface components {
             source?: components["schemas"]["AdminLogSourceDto"];
             items?: components["schemas"]["AdminServiceLogDto"][] | null;
         };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        AnalyticsPatchPhase: 0 | 1 | 2 | 3;
+        AnalyticsPatchStatusDto: {
+            patch?: string | null;
+            /** Format: date-time */
+            activePatchReleasedAtUtc?: string | null;
+            /** Format: date-time */
+            activePatchDetectedAtUtc?: string | null;
+        };
         AnalyticsRegionDto: {
             code?: string | null;
             label?: string | null;
@@ -4337,6 +4397,8 @@ export interface components {
             /** Format: double */
             patchAgeHours?: number;
             isEarlyPatchWindow?: boolean;
+            patchPhase?: components["schemas"]["AnalyticsPatchPhase"];
+            isProvisional?: boolean;
         };
         /**
          * Format: int32

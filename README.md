@@ -79,6 +79,9 @@ cp .env.example .env
 
 At minimum, review these variables before a real local run:
 
+- `WEBAPI_ASPNETCORE_ENVIRONMENT`
+- `SERVICE_DOTNET_ENVIRONMENT`
+- `NEXT_PUBLIC_TRN_TFT_RELEASE_STAGE`
 - `JWT_SIGNING_KEY`
 - `AUTH_BOOTSTRAP_API_KEY`
 - `WEB_TRN_BACKEND_API_KEY`
@@ -87,6 +90,8 @@ At minimum, review these variables before a real local run:
 
 Notes:
 
+- The default Compose-backed local workflow expects both backend environment variables above to stay on `Development`, so the local bootstrap auth path matches the documented dev setup.
+- The default local TFT frontend flow expects `NEXT_PUBLIC_TRN_TFT_RELEASE_STAGE=public` so the restored TFT routes and shell are built into the web app.
 - The Web API can start without Riot API keys for basic reads and Swagger export, but refresh and ingestion flows need valid Riot keys in the worker.
 - `WEB_TRN_BACKEND_API_KEY` must be a valid AppOnly key accepted by the backend. For local bootstrapping, contributors often use the bootstrap key until they create a dedicated key.
 

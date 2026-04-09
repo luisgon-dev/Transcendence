@@ -89,7 +89,7 @@ public class TftStaticDataService(
         return GetCatalogWithWarmupAsync(
             setNumber => context.TftUnitVersions
                 .Where(x => x.SetNumber == setNumber)
-                .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, null, x.Icon)),
+                .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, null, x.Icon, null)),
             ct);
     }
 
@@ -101,7 +101,7 @@ public class TftStaticDataService(
         return GetCatalogWithWarmupAsync(
             setNumber => context.TftItemVersions
                 .Where(x => x.SetNumber == setNumber)
-                .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, x.Description, x.Icon)),
+                .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, x.Description, x.Icon, x.Composition)),
             ct);
     }
 
@@ -113,7 +113,7 @@ public class TftStaticDataService(
         return GetCatalogWithWarmupAsync(
             setNumber => context.TftTraitVersions
                 .Where(x => x.SetNumber == setNumber)
-                .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, x.Description, x.Icon)),
+                .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, x.Description, x.Icon, null)),
             ct);
     }
 
@@ -125,7 +125,7 @@ public class TftStaticDataService(
         return GetCatalogWithWarmupAsync(
             setNumber => context.TftAugmentVersions
                 .Where(x => x.SetNumber == setNumber)
-                .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, x.Description, x.Icon)),
+                .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, x.Description, x.Icon, null)),
             ct);
     }
 
@@ -165,7 +165,7 @@ public class TftStaticDataService(
         return await context.TftUnitVersions
             .AsNoTracking()
             .Where(x => x.SetNumber == activeSet.Value && x.ApiName == apiName)
-            .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, null, x.Icon))
+            .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, null, x.Icon, null))
             .FirstOrDefaultAsync(ct);
     }
 
@@ -182,7 +182,7 @@ public class TftStaticDataService(
         return await context.TftItemVersions
             .AsNoTracking()
             .Where(x => x.SetNumber == activeSet.Value && x.ApiName == apiName)
-            .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, x.Description, x.Icon))
+            .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, x.Description, x.Icon, x.Composition))
             .FirstOrDefaultAsync(ct);
     }
 
@@ -199,7 +199,7 @@ public class TftStaticDataService(
         return await context.TftTraitVersions
             .AsNoTracking()
             .Where(x => x.SetNumber == activeSet.Value && x.ApiName == apiName)
-            .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, x.Description, x.Icon))
+            .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, x.Description, x.Icon, null))
             .FirstOrDefaultAsync(ct);
     }
 
@@ -216,7 +216,7 @@ public class TftStaticDataService(
         return await context.TftAugmentVersions
             .AsNoTracking()
             .Where(x => x.SetNumber == activeSet.Value && x.ApiName == apiName)
-            .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, x.Description, x.Icon))
+            .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, x.Description, x.Icon, null))
             .FirstOrDefaultAsync(ct);
     }
 

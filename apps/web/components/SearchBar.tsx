@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/cn";
 import { encodeRiotIdPath, parseRiotIdInput } from "@/lib/riotid";
 
+type SearchGame = "lol" | "tft";
+
 const REGIONS = [
   { value: "na", label: "NA" },
   { value: "euw", label: "EUW" },
@@ -22,7 +24,13 @@ const REGIONS = [
   { value: "ru", label: "RU" }
 ];
 
-export function SearchBar({ className }: { className?: string }) {
+export function SearchBar({
+  className,
+  game = "lol"
+}: {
+  className?: string;
+  game?: SearchGame;
+}) {
   const router = useRouter();
   const [region, setRegion] = useState("na");
   const [gameName, setGameName] = useState("");
@@ -55,7 +63,7 @@ export function SearchBar({ className }: { className?: string }) {
     }
 
     const riotIdPath = encodeRiotIdPath(riotId);
-    router.push(`/lol/summoners/${region}/${riotIdPath}`);
+    router.push(`/${game}/summoners/${region}/${riotIdPath}`);
   }
 
   return (

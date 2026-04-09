@@ -39,6 +39,33 @@ describe("analyticsSample", () => {
     });
   });
 
+  it("derives a low-sample state for legacy payloads without a minimum", () => {
+    const normalized = normalizeAnalyticsSample({
+      sampleStatus: "sufficient",
+      sampleSize: 1
+    });
+
+    expect(normalized).toEqual({
+      status: "low_sample",
+      sampleSize: 1,
+      minimumRecommendedSampleSize: 50,
+      patchAgeHours: 0,
+      isEarlyPatchWindow: false,
+      patchPhase: "steady",
+      isProvisional: false
+    });
+  });
+
+  it("treats zero-game payloads as no data even when status says sufficient", () => {
+    const normalized = normalizeAnalyticsSample({
+      sampleStatus: "sufficient",
+      sampleSize: 0
+    });
+
+    expect(normalized?.status).toBe("no_data");
+    expect(normalized?.minimumRecommendedSampleSize).toBe(50);
+  });
+
   it("picks the most severe sample state across responses", () => {
     const picked = pickMostSevereAnalyticsSample(
       { sampleStatus: "sufficient", sampleSize: 200, minimumRecommendedSampleSize: 100 },

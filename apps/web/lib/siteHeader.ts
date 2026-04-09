@@ -8,7 +8,7 @@ export type GameSwitcherItem = {
 
 export function getGameSwitcherItems(
   pathname: string | null,
-  tftFrontendEnabled: boolean
+  tftPublicEnabled: boolean
 ): [GameSwitcherItem, GameSwitcherItem] {
   const isTftPath = pathname?.startsWith("/tft") ?? false;
 
@@ -22,10 +22,10 @@ export function getGameSwitcherItems(
     },
     {
       label: "TFT",
-      href: tftFrontendEnabled ? "/tft" : undefined,
-      isActive: tftFrontendEnabled && isTftPath,
-      isDisabled: !tftFrontendEnabled,
-      comingSoon: !tftFrontendEnabled
+      href: tftPublicEnabled ? "/tft" : undefined,
+      isActive: tftPublicEnabled && isTftPath,
+      isDisabled: !tftPublicEnabled,
+      comingSoon: !tftPublicEnabled
     }
   ];
 }

@@ -24,6 +24,8 @@ export type NormalizedAnalyticsSample = {
   isProvisional: boolean;
 };
 
+const LEGACY_SAMPLE_MINIMUM = 50;
+
 export function analyticsSampleCoveragePercent(
   sample: Pick<NormalizedAnalyticsSample, "sampleSize" | "minimumRecommendedSampleSize">
 ): number {
@@ -85,13 +87,18 @@ export function normalizeAnalyticsSample(
 ): NormalizedAnalyticsSample | null {
   if (!sample) return null;
 
+  const sampleSize = Math.max(0, Math.floor(asNumber(sample.sampleSize, 0)));
+  const rawMinimum = Math.floor(asNumber(sample.minimumRecommendedSampleSize, 0));
+  const minimumRecommendedSampleSize = rawMinimum > 0 ? rawMinimum : LEGACY_SAMPLE_MINIMUM;
+
+  let status = normalizeAnalyticsSampleStatus(sample.sampleStatus);
+  if (sampleSize === 0) status = "no_data";
+  else if (status === "sufficient" && sampleSize < minimumRecommendedSampleSize) status = "low_sample";
+
   return {
-    status: normalizeAnalyticsSampleStatus(sample.sampleStatus),
-    sampleSize: Math.max(0, Math.floor(asNumber(sample.sampleSize, 0))),
-    minimumRecommendedSampleSize: Math.max(
-      1,
-      Math.floor(asNumber(sample.minimumRecommendedSampleSize, 1))
-    ),
+    status,
+    sampleSize,
+    minimumRecommendedSampleSize,
     patchAgeHours: Math.max(0, asNumber(sample.patchAgeHours, 0)),
     isEarlyPatchWindow: Boolean(sample.isEarlyPatchWindow),
     patchPhase: normalizePatchPhase(sample.patchPhase),

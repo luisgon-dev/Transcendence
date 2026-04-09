@@ -47,11 +47,14 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_TRN_TFT_RELEASE_STAGE: ${NEXT_PUBLIC_TRN_TFT_RELEASE_STAGE:-public}
     container_name: transcendence-web
     restart: unless-stopped
     environment:
       NODE_ENV: production
       PORT: 3000
+      NEXT_PUBLIC_TRN_TFT_RELEASE_STAGE: ${NEXT_PUBLIC_TRN_TFT_RELEASE_STAGE:-public}
       TRN_BACKEND_BASE_URL: http://webapi:8080
       TRN_BACKEND_API_KEY: ${WEB_TRN_BACKEND_API_KEY}
       TRN_ERROR_VERBOSITY: verbose
@@ -71,7 +74,7 @@ services:
     container_name: transcendence-webapi
     restart: unless-stopped
     environment:
-      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_ENVIRONMENT: ${WEBAPI_ASPNETCORE_ENVIRONMENT:-Production}
       ASPNETCORE_URLS: http://+:8080
       Auth__Jwt__Issuer: ${JWT_ISSUER}
       Auth__Jwt__Audience: ${JWT_AUDIENCE}
@@ -101,7 +104,7 @@ services:
     container_name: transcendence-service
     restart: unless-stopped
     environment:
-      DOTNET_ENVIRONMENT: Production
+      DOTNET_ENVIRONMENT: ${SERVICE_DOTNET_ENVIRONMENT:-Production}
       OperationalLogs__DirectoryPath: /var/log/transcendence
       <<: *app-env
     depends_on:

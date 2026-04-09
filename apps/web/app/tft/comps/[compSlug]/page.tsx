@@ -6,11 +6,16 @@ import { Card } from "@/components/ui/Card";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl } from "@/lib/env";
 import {
+  buildTftLabelMap,
   compTierColorClass,
   compTierLabel,
   formatTftPercent,
+  formatTftCompName,
+  formatTftLabel,
+  formatTftUnitLabel,
   tftIconUrl,
-  type TftCompDetail
+  type TftCompDetail,
+  type TftStaticEntity
 } from "@/lib/tft";
 
 export default async function TftCompDetailPage({
@@ -22,14 +27,36 @@ export default async function TftCompDetailPage({
 }) {
   const { compSlug } = await params;
   const resolved = searchParams ? await searchParams : undefined;
+  const rankTier = resolved?.rankTier?.trim().toUpperCase() || "EMERALD_PLUS";
+  const region = resolved?.region?.trim().toUpperCase() || "ALL";
   const qs = new URLSearchParams();
-  if (resolved?.rankTier) qs.set("rankTier", resolved.rankTier);
-  if (resolved?.region) qs.set("region", resolved.region);
+  if (rankTier !== "EMERALD_PLUS") qs.set("rankTier", rankTier);
+  if (region !== "ALL") qs.set("region", region);
 
-  const result = await fetchBackendJson<TftCompDetail>(
-    `${getBackendBaseUrl()}/api/tft/analytics/comps/${encodeURIComponent(compSlug)}${qs.toString() ? `?${qs.toString()}` : ""}`,
-    { next: { revalidate: 60 * 10 } }
-  );
+  let [result, championsResult, traitsResult] = await Promise.all([
+    fetchBackendJson<TftCompDetail>(
+      `${getBackendBaseUrl()}/api/tft/analytics/comps/${encodeURIComponent(compSlug)}${qs.toString() ? `?${qs.toString()}` : ""}`,
+      { next: { revalidate: 60 * 10 } }
+    ),
+    fetchBackendJson<TftStaticEntity[]>(`${getBackendBaseUrl()}/api/tft/analytics/champions`, {
+      next: { revalidate: 60 * 60 }
+    }),
+    fetchBackendJson<TftStaticEntity[]>(`${getBackendBaseUrl()}/api/tft/analytics/traits`, {
+      next: { revalidate: 60 * 60 }
+    })
+  ]);
+
+  let effectiveRankTier = rankTier;
+  if ((!result.ok || !result.body) && rankTier === "EMERALD_PLUS") {
+    const fallbackQs = new URLSearchParams();
+    fallbackQs.set("rankTier", "ALL");
+    if (region !== "ALL") fallbackQs.set("region", region);
+    result = await fetchBackendJson<TftCompDetail>(
+      `${getBackendBaseUrl()}/api/tft/analytics/comps/${encodeURIComponent(compSlug)}?${fallbackQs.toString()}`,
+      { next: { revalidate: 60 * 10 } }
+    );
+    if (result.ok && result.body) effectiveRankTier = "ALL";
+  }
 
   if (!result.ok || !result.body) {
     return (
@@ -42,6 +69,8 @@ export default async function TftCompDetailPage({
   }
 
   const comp = result.body;
+  const unitLabels = championsResult.ok ? buildTftLabelMap(championsResult.body ?? []) : undefined;
+  const traitLabels = traitsResult.ok ? buildTftLabelMap(traitsResult.body ?? []) : undefined;
   const tier = compTierLabel(comp.summary.avgPlacement);
   const tierColor = compTierColorClass(tier);
 
@@ -51,9 +80,14 @@ export default async function TftCompDetailPage({
         <Link href="/tft/comps" className="type-ui font-semibold text-primary hover:underline">
           Back to comps
         </Link>
+        {effectiveRankTier !== rankTier ? (
+          <p className="mt-3 text-sm text-warning">
+            This comp is being shown from all tracked ranks because Emerald+ local TFT data is not populated yet.
+          </p>
+        ) : null}
         <div className="mt-3 flex items-center gap-3">
           <h1 className="type-page-title">
-            {comp.summary.name}
+            {formatTftCompName(comp.summary.name, { traitLabels, unitLabels })}
           </h1>
           <Badge className={`rounded-md px-2.5 py-1 text-sm font-bold ${tierColor}`}>
             {tier} Tier
@@ -77,20 +111,20 @@ export default async function TftCompDetailPage({
           <div className="mt-3 flex flex-wrap gap-2">
             {comp.summary.units.map((unit) => (
               <span key={unit.characterId} className="rounded border border-primary/35 bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary">
-                {unit.name ?? unit.characterId} {unit.tier > 1 ? `${"★".repeat(unit.tier)}` : ""}
+                {formatTftUnitLabel(unit, unitLabels)} {unit.tier > 1 ? `${"★".repeat(unit.tier)}` : ""}
               </span>
             ))}
           </div>
           <div className="mt-3 flex flex-wrap gap-1">
             {comp.summary.traits.map((trait) => (
               <span key={trait.name} className="rounded-full border border-border/50 bg-surface/40 px-2 py-0.5 text-xs text-fg/70">
-                {trait.name} {trait.numUnits}
+                {formatTftLabel(trait.name, traitLabels)} {trait.numUnits}
               </span>
             ))}
           </div>
           {comp.summary.augments.length > 0 && (
             <p className="mt-3 text-sm text-fg/75">
-              Augments: {comp.summary.augments.map((a) => a.replace(/^TFT\d+_/i, "").replace(/_/g, " ")).join(", ")}
+              Augments: {comp.summary.augments.map((a) => formatTftLabel(a)).join(", ")}
             </p>
           )}
         </Card>

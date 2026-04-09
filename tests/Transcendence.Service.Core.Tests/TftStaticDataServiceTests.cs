@@ -20,7 +20,7 @@ public class TftStaticDataServiceTests
         await using var harness = await Harness.CreateAsync(CreateSuccessfulFactory("""
         {
           "items": [
-            { "apiName": "TFT13_Item_BlueBuff", "name": "Blue Buff", "desc": "Mana", "icon": "item.png", "id": 2, "associatedTraits": [], "incompatibleTraits": [], "composition": [], "tags": [], "unique": false },
+            { "apiName": "TFT13_Item_BlueBuff", "name": "Blue Buff", "desc": "Mana", "icon": "item.png", "id": 2, "associatedTraits": [], "incompatibleTraits": [], "composition": ["TFT_Item_TearOfTheGoddess", "TFT_Item_TearOfTheGoddess"], "tags": [], "unique": false },
             { "apiName": "TFT13_Augment_PandorasBench", "name": "Pandora's Bench", "desc": "Bench", "icon": "augment.png", "associatedTraits": [], "incompatibleTraits": [], "tags": [], "unique": false }
           ],
           "setData": [
@@ -58,6 +58,10 @@ public class TftStaticDataServiceTests
         var lookup = await harness.Service.GetChampionByApiNameAsync("TFT13_SharedHero", CancellationToken.None);
         lookup.Should().NotBeNull();
         lookup!.Name.Should().Be("Hero 13");
+
+        var itemCatalog = await harness.Service.GetItemCatalogAsync(CancellationToken.None);
+        itemCatalog.Should().ContainSingle();
+        itemCatalog[0].Composition.Should().Equal("TFT_Item_TearOfTheGoddess", "TFT_Item_TearOfTheGoddess");
     }
 
     [Fact]

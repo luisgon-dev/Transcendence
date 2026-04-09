@@ -15,8 +15,11 @@ import { rankEmblemUrl, rankTierColorClass, rankTierDisplayLabel } from "@/lib/r
 import { encodeRiotIdPath } from "@/lib/riotid";
 import { profileIconUrl } from "@/lib/staticData";
 import {
+  formatTftCompName,
+  formatTftLabel,
   formatPlacement,
   formatTftPercent,
+  formatTftUnitLabel,
   placementBarClass,
   placementBgClass,
   placementColorClass,
@@ -114,6 +117,7 @@ export function TftSummonerProfileClient({
   const [detailBusy, setDetailBusy] = useState<Record<string, boolean>>({});
 
   const profile = payload.kind === "profile" ? payload.profile : null;
+  const insights = profile?.insights ?? null;
 
   // ---------------------------------------------------------------------------
   // DDragon version for profile icon
@@ -227,6 +231,15 @@ export function TftSummonerProfileClient({
   // Quick stats computed from match history
   // ---------------------------------------------------------------------------
   const quickStats = useMemo(() => {
+    if (insights) {
+      return {
+        total: insights.recentGames,
+        avgPlacement: insights.avgPlacement,
+        top4: insights.top4Rate,
+        wins: insights.winRate
+      };
+    }
+
     const matches = history?.items ?? [];
     if (matches.length === 0) return null;
 
@@ -236,7 +249,7 @@ export function TftSummonerProfileClient({
     const wins = matches.filter((m) => m.placement === 1).length / total;
 
     return { total, avgPlacement, top4, wins };
-  }, [history?.items]);
+  }, [history?.items, insights]);
 
   const recentForm = useMemo(() => {
     return (history?.items ?? []).slice(0, 10).map((m) => m.placement);
@@ -516,6 +529,60 @@ export function TftSummonerProfileClient({
               </div>
             </Card>
           )}
+
+          {insights && (insights.mostPlayedComps.length > 0 || insights.bestComps.length > 0) ? (
+            <Card className="profile-section-card p-5">
+              <div>
+                <p className="type-kicker text-muted">Comp snapshot</p>
+                <h2 className="mt-2 type-section">Boards this player is actually converting</h2>
+              </div>
+              <div className="mt-4 grid gap-4">
+                {insights.mostPlayedComps.length > 0 ? (
+                  <div className="grid gap-2">
+                    <p className="type-kicker text-fg/60">Most played</p>
+                    {insights.mostPlayedComps.map((comp) => (
+                      <Link
+                        key={`most-${comp.compSlug}`}
+                        href={`/tft/comps/${comp.compSlug}`}
+                        className="surface-subtle rounded-card px-3 py-3 transition hover:bg-surface/80"
+                      >
+                        <div className="flex items-center justify-between gap-2 text-sm">
+                          <span className="font-medium text-fg">{formatTftCompName(comp.compName)}</span>
+                          <span className="text-fg/60">{comp.games}g</span>
+                        </div>
+                        <p className="mt-1 text-[11px] text-fg/62">
+                          Avg {comp.avgPlacement.toFixed(2)} · Top 4 {formatTftPercent(comp.top4Rate)} · Win{" "}
+                          {formatTftPercent(comp.winRate)}
+                        </p>
+                      </Link>
+                    ))}
+                  </div>
+                ) : null}
+
+                {insights.bestComps.length > 0 ? (
+                  <div className="grid gap-2">
+                    <p className="type-kicker text-fg/60">Best results</p>
+                    {insights.bestComps.map((comp) => (
+                      <Link
+                        key={`best-${comp.compSlug}`}
+                        href={`/tft/comps/${comp.compSlug}`}
+                        className="surface-subtle rounded-card px-3 py-3 transition hover:bg-surface/80"
+                      >
+                        <div className="flex items-center justify-between gap-2 text-sm">
+                          <span className="font-medium text-fg">{formatTftCompName(comp.compName)}</span>
+                          <span className="text-fg/60">{comp.games}g</span>
+                        </div>
+                        <p className="mt-1 text-[11px] text-fg/62">
+                          Avg {comp.avgPlacement.toFixed(2)} · Top 4 {formatTftPercent(comp.top4Rate)} · Win{" "}
+                          {formatTftPercent(comp.winRate)}
+                        </p>
+                      </Link>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </Card>
+          ) : null}
         </aside>
 
         <section className="grid gap-5">
@@ -648,6 +715,17 @@ function TftMatchCard({
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col gap-3 px-4 py-4 md:px-5 md:py-5">
+          {match.compName ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="type-caption rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 font-medium text-primary">
+                {formatTftCompName(match.compName)}
+              </span>
+              <span className="type-caption text-fg/55">
+                {match.patch ?? "Unknown patch"} · {match.setCoreName ?? `Set ${match.setNumber ?? "?"}`}
+              </span>
+            </div>
+          ) : null}
+
           <div className="flex flex-wrap items-center gap-2">
             <span className={`type-caption surface-chip rounded-full px-2.5 py-1 font-semibold ${placementColorClass(match.placement)}`}>
               {formatPlacement(match.placement)}
@@ -666,7 +744,7 @@ function TftMatchCard({
                 key={unit.characterId}
                 className="type-caption rounded-full border border-primary/22 bg-primary/10 px-2.5 py-1 font-medium text-primary"
               >
-                {unit.name ?? unit.characterId}
+                {formatTftUnitLabel(unit)}
                 {unit.tier > 1 && <span className="ml-0.5 text-rank-gold">{starString(unit.tier)}</span>}
               </span>
             ))}
@@ -680,14 +758,14 @@ function TftMatchCard({
                   key={trait.name}
                   className="type-caption surface-chip rounded-full px-2 py-1 text-fg/70"
                 >
-                  {trait.name} {trait.numUnits}
+                  {formatTftLabel(trait.name)} {trait.numUnits}
                 </span>
               ))}
           </div>
 
           <div className="type-caption flex flex-wrap items-center gap-2 text-fg/60">
             {match.augments.length > 0 && (
-              <span>Augments: {match.augments.map((a) => a.replace(/^TFT\d+_/i, "").replace(/_/g, " ")).join(" · ")}</span>
+              <span>Augments: {match.augments.map((a) => formatTftLabel(a)).join(" · ")}</span>
             )}
           </div>
         </div>
@@ -788,13 +866,24 @@ function TftMatchDetailTable({
                 <span className="truncate text-sm text-fg/80">{displayName}</span>
               )}
 
+              {p.compSlug && p.compName ? (
+                <div className="mt-0.5">
+                  <Link
+                  href={`/tft/comps/${p.compSlug}`}
+                  className="text-[10px] font-medium text-primary hover:text-primary/80"
+                >
+                    {formatTftCompName(p.compName)}
+                  </Link>
+                </div>
+              ) : null}
+
               <div className="mt-1 flex flex-wrap gap-1.5">
                 {p.units.map((u) => (
                   <span
                     key={u.characterId}
                     className="type-caption rounded-full border border-primary/18 bg-primary/8 px-2 py-0.5 text-fg/68"
                   >
-                    {u.name ?? u.characterId}
+                    {formatTftUnitLabel(u)}
                     {u.tier > 1 && <span className="text-rank-gold">{starString(u.tier)}</span>}
                   </span>
                 ))}
@@ -805,7 +894,7 @@ function TftMatchDetailTable({
                   .filter((t) => t.tierCurrent > 0)
                   .map((t) => (
                     <span key={t.name} className="type-caption surface-chip rounded-full px-2 py-0.5 text-fg/60">
-                      {t.name}
+                      {formatTftLabel(t.name)}
                     </span>
                   ))}
               </div>

@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
 
-import { TFT_FRONTEND_ENABLED } from "@/lib/featureFlags";
+import { TFT_ROUTES_ENABLED } from "@/lib/featureFlags";
 
 export default function TftLayout({ children }: { children: React.ReactNode }) {
-  if (!TFT_FRONTEND_ENABLED) {
+  if (!TFT_ROUTES_ENABLED) {
     notFound();
   }
 

@@ -3303,6 +3303,17 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TftStaticEntityDto"][];
+                        "application/json": components["schemas"]["TftStaticEntityDto"][];
+                        "text/json": components["schemas"]["TftStaticEntityDto"][];
+                    };
+                };
                 /** @description Too Many Requests */
                 429: {
                     headers: {
@@ -3342,6 +3353,28 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TftStaticEntityDto"];
+                        "application/json": components["schemas"]["TftStaticEntityDto"];
+                        "text/json": components["schemas"]["TftStaticEntityDto"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
                 /** @description Too Many Requests */
                 429: {
                     headers: {
@@ -5120,6 +5153,13 @@ export interface components {
             augments?: string[] | null;
             units?: components["schemas"]["TftUnitSummaryDto"][] | null;
             traits?: components["schemas"]["TftTraitSummaryDto"][] | null;
+        };
+        TftStaticEntityDto: {
+            apiName?: string | null;
+            name?: string | null;
+            description?: string | null;
+            icon?: string | null;
+            composition?: string[] | null;
         };
         TftSummonerProfileDto: {
             /** Format: uuid */

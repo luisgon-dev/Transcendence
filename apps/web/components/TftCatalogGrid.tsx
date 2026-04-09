@@ -6,7 +6,13 @@ import { useState } from "react";
 
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
-import { tftIconUrl, type TftStaticEntity } from "@/lib/tft";
+import {
+  formatTftDescription,
+  formatTftEntityName,
+  tftIconObjectClass,
+  tftIconUrl,
+  type TftStaticEntity
+} from "@/lib/tft";
 
 export function TftCatalogGrid({
   items,
@@ -18,9 +24,10 @@ export function TftCatalogGrid({
   columns?: string;
 }) {
   const [search, setSearch] = useState("");
+  const normalizedSearch = search.trim().toLowerCase();
 
-  const filtered = search.trim()
-    ? items.filter((item) => item.name.toLowerCase().includes(search.trim().toLowerCase()))
+  const filtered = normalizedSearch
+    ? items.filter((item) => formatTftEntityName(item).toLowerCase().includes(normalizedSearch))
     : items;
 
   return (
@@ -35,27 +42,31 @@ export function TftCatalogGrid({
       <div className={`grid gap-3 ${columns}`}>
         {filtered.map((item) => {
           const iconSrc = tftIconUrl(item.icon);
+          const displayName = formatTftEntityName(item);
+          const displayDescription = formatTftDescription(item.description);
           return (
             <Link key={item.apiName} href={`${basePath}/${item.apiName}`}>
               <Card className="flex items-center gap-3 p-4 transition hover:bg-white/8">
                 {iconSrc ? (
-                  <Image
-                    src={iconSrc}
-                    alt={item.name}
-                    width={40}
-                    height={40}
-                    className="rounded-lg"
-                    sizes="40px"
-                  />
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/50 bg-surface/60">
+                    <Image
+                      src={iconSrc}
+                      alt={displayName}
+                      width={48}
+                      height={48}
+                      className={`h-12 w-12 ${tftIconObjectClass(item.icon)}`}
+                      sizes="48px"
+                    />
+                  </div>
                 ) : (
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-primary/10 text-sm font-bold text-primary">
-                    {item.name.charAt(0)}
+                    {displayName.charAt(0)}
                   </div>
                 )}
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-fg">{item.name}</p>
-                  {item.description && (
-                    <p className="mt-0.5 line-clamp-1 text-xs text-fg/60">{item.description}</p>
+                  <p className="truncate text-sm font-semibold text-fg">{displayName}</p>
+                  {displayDescription && (
+                    <p className="mt-0.5 line-clamp-2 text-xs text-fg/60">{displayDescription}</p>
                   )}
                 </div>
               </Card>

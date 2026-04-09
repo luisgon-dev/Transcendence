@@ -4,7 +4,13 @@ import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl } from "@/lib/env";
-import { tftIconUrl, type TftStaticEntity } from "@/lib/tft";
+import {
+  formatTftDescription,
+  formatTftEntityName,
+  tftIconObjectClass,
+  tftIconUrl,
+  type TftStaticEntity
+} from "@/lib/tft";
 
 export default async function TftAugmentDetailPage({
   params
@@ -29,25 +35,36 @@ export default async function TftAugmentDetailPage({
 
   const entity = result.body;
   const iconSrc = tftIconUrl(entity.icon);
+  const displayName = formatTftEntityName(entity);
+  const description = formatTftDescription(entity.description);
 
   return (
     <Card className="page-panel grid gap-4 p-6">
       <Link href="/tft/augments" className="type-ui font-semibold text-primary hover:underline">Back to augments</Link>
       <div className="flex items-center gap-4">
         {iconSrc ? (
-          <Image src={iconSrc} alt={entity.name} width={64} height={64} sizes="64px" className="rounded-xl" />
+          <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border border-border/50 bg-surface/60">
+            <Image
+              src={iconSrc}
+              alt={displayName}
+              width={64}
+              height={64}
+              sizes="64px"
+              className={`h-16 w-16 ${tftIconObjectClass(entity.icon)}`}
+            />
+          </div>
         ) : (
           <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-border/50 bg-primary/10 text-xl font-bold text-primary">
-            {entity.name.charAt(0)}
+            {displayName.charAt(0)}
           </div>
         )}
         <div>
           <p className="type-kicker text-muted">TFT Augment</p>
-          <h1 className="type-page-title mt-2">{entity.name}</h1>
+          <h1 className="type-page-title mt-2">{displayName}</h1>
           <p className="type-ui mt-2 text-muted">Augment details</p>
         </div>
       </div>
-      {entity.description && <p className="type-ui text-fg/80">{entity.description}</p>}
+      {description && <p className="type-ui text-fg/80">{description}</p>}
     </Card>
   );
 }

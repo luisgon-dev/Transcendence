@@ -124,7 +124,7 @@ public class TftAnalyticsComputeService(
             .Where(x => x.SetNumber == activeSet)
             .OrderBy(x => x.Name)
             .Take(10)
-            .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, x.Description, x.Icon))
+            .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, x.Description, x.Icon, x.Composition))
             .ToListAsync(ct);
 
         var augments = await context.TftAugmentVersions
@@ -132,7 +132,7 @@ public class TftAnalyticsComputeService(
             .Where(x => x.SetNumber == activeSet)
             .OrderBy(x => x.Name)
             .Take(10)
-            .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, x.Description, x.Icon))
+            .Select(x => new TftStaticEntityDto(x.ApiName, x.Name, x.Description, x.Icon, null))
             .ToListAsync(ct);
 
         return new TftCompDetailDto(summary, items, augments);

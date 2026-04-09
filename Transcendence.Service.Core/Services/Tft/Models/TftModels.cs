@@ -95,7 +95,8 @@ public record TftStaticEntityDto(
     string ApiName,
     string Name,
     string? Description,
-    string? Icon
+    string? Icon,
+    IReadOnlyList<string>? Composition = null
 );
 
 public record TftCompListItemDto(

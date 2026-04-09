@@ -3,19 +3,23 @@
 import { Command } from "cmdk";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ArrowCornerIcon, SearchIcon, SparkIcon } from "@/components/ui/icons";
+import { cn } from "@/lib/cn";
 import {
   getGlobalSearchOpenDetail,
   GLOBAL_SEARCH_OPEN_EVENT,
   type GlobalSearchOpenOrigin
 } from "@/lib/globalSearch";
-import { TFT_FRONTEND_ENABLED } from "@/lib/featureFlags";
+import { TFT_ROUTES_ENABLED } from "@/lib/featureFlags";
 import { buildLolPublicSummonerSearchPath } from "@/lib/lolPublicApi";
 import { DEFAULT_TIERLIST_RANK_TIER, rankTierDisplayLabel } from "@/lib/ranks";
 import { encodeRiotIdPath, parseRiotIdInput } from "@/lib/riotid";
+import { buildTftPublicSummonerSearchPath } from "@/lib/tftPublicApi";
+
+type GameScope = "lol" | "tft";
 
 type ChampionSearchItem = {
   championId: number;
@@ -91,10 +95,6 @@ const TFT_TIER_LINKS = [
   { label: "TFT Traits", href: "/tft/traits" },
   { label: "TFT Augments", href: "/tft/augments" }
 ] as const;
-
-const TIER_LINKS = TFT_FRONTEND_ENABLED
-  ? [...LOL_TIER_LINKS, ...TFT_TIER_LINKS]
-  : LOL_TIER_LINKS;
 
 const RESULT_ITEM_CLASS =
   "group flex min-h-[52px] cursor-pointer items-center gap-3 rounded-card border border-transparent px-3 py-2.5 text-left text-fg/90 transition duration-150 data-[selected=true]:translate-x-1 data-[selected=true]:border-primary/25 data-[selected=true]:bg-primary/10 data-[selected=true]:shadow-card";
@@ -271,6 +271,7 @@ function SearchHint({
 }
 
 export function GlobalCommandPalette() {
+  const pathname = usePathname();
   const router = useRouter();
   const prefersReducedMotion = useReducedMotion() ?? false;
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -279,6 +280,9 @@ export function GlobalCommandPalette() {
   const [openOrigin, setOpenOrigin] = useState<GlobalSearchOpenOrigin | null>(null);
   const [query, setQuery] = useState("");
   const [region, setRegion] = useState("na");
+  const [gameScope, setGameScope] = useState<GameScope>(
+    pathname?.startsWith("/tft") && TFT_ROUTES_ENABLED ? "tft" : "lol"
+  );
   const [champions, setChampions] = useState<ChampionSearchItem[]>([]);
   const [ddragonVersion, setDdragonVersion] = useState<string | null>(null);
   const [championsLoaded, setChampionsLoaded] = useState(false);
@@ -288,6 +292,13 @@ export function GlobalCommandPalette() {
   const debouncedQuery = useDebouncedValue(query, 120);
   const normalizedQuery = debouncedQuery.trim().toLowerCase();
   const parsedRiotId = parseRiotIdInput(query.trim());
+  const tierLinks = gameScope === "tft" ? TFT_TIER_LINKS : LOL_TIER_LINKS;
+
+  useEffect(() => {
+    if (!TFT_ROUTES_ENABLED && gameScope === "tft") {
+      setGameScope("lol");
+    }
+  }, [gameScope]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -325,7 +336,7 @@ export function GlobalCommandPalette() {
   }, [open]);
 
   useEffect(() => {
-    if (!open || championsLoaded) return;
+    if (!open || championsLoaded || gameScope !== "lol") return;
 
     let active = true;
     void fetch("/api/static/champions", { cache: "force-cache" })
@@ -353,7 +364,7 @@ export function GlobalCommandPalette() {
     return () => {
       active = false;
     };
-  }, [open, championsLoaded]);
+  }, [open, championsLoaded, gameScope]);
 
   useEffect(() => {
     if (!open) return;
@@ -365,7 +376,7 @@ export function GlobalCommandPalette() {
       return;
     }
 
-    const cacheKey = `${region}|${trimmedQuery.toLowerCase()}`;
+    const cacheKey = `${gameScope}|${region}|${trimmedQuery.toLowerCase()}`;
     const cached = suggestionCacheRef.current.get(cacheKey);
     if (cached) {
       setSummonerResults(cached);
@@ -376,7 +387,12 @@ export function GlobalCommandPalette() {
     const abortController = new AbortController();
     setSummonerLoading(true);
 
-    void fetch(buildLolPublicSummonerSearchPath(region, trimmedQuery, 8), {
+    const searchPath =
+      gameScope === "tft"
+        ? buildTftPublicSummonerSearchPath(region, trimmedQuery, 8)
+        : buildLolPublicSummonerSearchPath(region, trimmedQuery, 8);
+
+    void fetch(searchPath, {
       cache: "no-store",
       signal: abortController.signal
     })
@@ -405,9 +421,10 @@ export function GlobalCommandPalette() {
     return () => {
       abortController.abort();
     };
-  }, [debouncedQuery, open, region]);
+  }, [debouncedQuery, gameScope, open, region]);
 
   const championResults = useMemo(() => {
+    if (gameScope !== "lol") return [];
     if (!normalizedQuery) return champions.slice(0, 8);
     return champions
       .filter((champion) => champion.name.toLowerCase().includes(normalizedQuery))
@@ -417,40 +434,42 @@ export function GlobalCommandPalette() {
         return aStarts - bStarts || a.name.localeCompare(b.name);
       })
       .slice(0, 10);
-  }, [champions, normalizedQuery]);
+  }, [champions, gameScope, normalizedQuery]);
 
   const tierResults = useMemo(() => {
-    if (!normalizedQuery) return TIER_LINKS;
-    return TIER_LINKS.filter((item) =>
+    if (!normalizedQuery) return tierLinks;
+    return tierLinks.filter((item) =>
       item.label.toLowerCase().includes(normalizedQuery)
     );
-  }, [normalizedQuery]);
+  }, [normalizedQuery, tierLinks]);
 
   const summonerResultPaths = useMemo(
     () =>
       summonerResults.map((item) =>
-        `/lol/summoners/${item.region}/${encodeRiotIdPath({
+        `/${gameScope}/summoners/${item.region}/${encodeRiotIdPath({
           gameName: item.gameName,
           tagLine: item.tagLine
         })}`
       ),
-    [summonerResults]
+    [gameScope, summonerResults]
   );
 
   const prefetchTargets = useMemo(() => {
     const paths = summonerResultPaths.slice(0, 3);
     if (paths.length === 0 && parsedRiotId) {
-      paths.push(`/lol/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`);
+      paths.push(`/${gameScope}/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`);
     }
 
-    for (const championPath of championResults
-      .slice(0, 3)
-      .map((c) => `/lol/champions/${c.championId}`)) {
-      paths.push(championPath);
+    if (gameScope === "lol") {
+      for (const championPath of championResults
+        .slice(0, 3)
+        .map((c) => `/lol/champions/${c.championId}`)) {
+        paths.push(championPath);
+      }
     }
     for (const tier of tierResults.slice(0, 2)) paths.push(tier.href);
     return paths;
-  }, [championResults, tierResults, parsedRiotId, region, summonerResultPaths]);
+  }, [championResults, gameScope, tierResults, parsedRiotId, region, summonerResultPaths]);
 
   useEffect(() => {
     if (!open) return;
@@ -471,12 +490,12 @@ export function GlobalCommandPalette() {
 
     e.preventDefault();
     e.stopPropagation();
-    navigate(`/lol/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`);
+    navigate(`/${gameScope}/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`);
   }
 
   const regionLabel = REGIONS.find((item) => item.value === region)?.label ?? region.toUpperCase();
   const directOpenPath = parsedRiotId
-    ? `/lol/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`
+    ? `/${gameScope}/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`
     : null;
   const showEmpty =
     championResults.length === 0 &&
@@ -567,7 +586,7 @@ export function GlobalCommandPalette() {
                     <div className="grid max-w-[34rem] gap-1">
                       <p className="type-kicker text-primary">Global Search</p>
                       <p className="type-ui measure text-fg/78">
-                        Jump to champions, meta routes, and player pages without leaving the current screen.
+                        Jump to players, meta routes, and champion pages without leaving the current screen.
                       </p>
                     </div>
                     <div className="hidden items-center gap-2 self-start lg:flex">
@@ -585,7 +604,11 @@ export function GlobalCommandPalette() {
                       {query.trim() ? "Filtering live" : "Ready for instant route"}
                     </span>
                     <span className="type-kicker surface-chip rounded-full px-2.5 py-1 text-fg/68">
-                      {championsLoaded ? `${championResults.length} champion routes` : "Loading champion index"}
+                      {gameScope === "lol"
+                        ? championsLoaded
+                          ? `${championResults.length} champion routes`
+                          : "Loading champion index"
+                        : "TFT route focus"}
                     </span>
                     <span className="type-kicker surface-chip rounded-full px-2.5 py-1 text-fg/68">
                       {summonerLoading ? `Checking ${regionLabel}` : `Region ${regionLabel}`}
@@ -603,11 +626,38 @@ export function GlobalCommandPalette() {
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={handleQueryKeyDown}
-                        placeholder="Search champions, tier list, or summoner"
+                        placeholder={
+                          gameScope === "tft"
+                            ? "Search TFT pages or enter a Riot ID"
+                            : "Search champions, tier list, or summoner"
+                        }
                         className="type-ui h-12 w-full rounded-control border border-border/65 bg-surface-2/55 pl-11 pr-4 text-fg shadow-inset outline-none transition placeholder:text-muted/70 focus:border-primary/65 focus:bg-surface-2/70 focus:ring-2 focus:ring-primary/18"
                         aria-label="Global search input"
                       />
                     </div>
+
+                    {TFT_ROUTES_ENABLED ? (
+                      <div className="sm:w-[148px]">
+                        <label className="type-kicker mb-2 block text-fg/65">Surface</label>
+                        <div className="flex h-12 items-center gap-1 rounded-control border border-border/65 bg-surface-2/55 p-1 shadow-inset">
+                          {(["lol", "tft"] as const).map((scope) => (
+                            <button
+                              key={scope}
+                              type="button"
+                              onClick={() => setGameScope(scope)}
+                              className={cn(
+                                "type-ui inline-flex min-h-10 flex-1 items-center justify-center rounded-md px-3 transition",
+                                gameScope === scope
+                                  ? "bg-surface/82 font-semibold text-fg shadow-inset"
+                                  : "text-fg/60 hover:bg-surface/55 hover:text-fg"
+                              )}
+                            >
+                              {scope.toUpperCase()}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
 
                     <div className="sm:w-[124px]">
                       <label className="type-kicker mb-2 block text-fg/65">Region</label>
@@ -680,7 +730,7 @@ export function GlobalCommandPalette() {
                           className="md:row-span-2"
                         >
                           {summonerResults.map((item) => {
-                            const path = `/lol/summoners/${item.region}/${encodeRiotIdPath({
+                            const path = `/${gameScope}/summoners/${item.region}/${encodeRiotIdPath({
                               gameName: item.gameName,
                               tagLine: item.tagLine
                             })}`;
@@ -712,7 +762,7 @@ export function GlobalCommandPalette() {
                                     <span className="text-fg/58">#{item.tagLine}</span>
                                   </p>
                                   <p className="type-caption truncate text-fg/65">
-                                    Live profile lookup
+                                    {gameScope === "tft" ? "TFT profile lookup" : "Live profile lookup"}
                                   </p>
                                 </div>
                                 <span className="type-kicker surface-chip rounded-full px-2 py-1 text-fg/68">
@@ -742,7 +792,9 @@ export function GlobalCommandPalette() {
                                 <p className="type-ui truncate font-medium text-fg">
                                   Open {parsedRiotId.gameName}#{parsedRiotId.tagLine}
                                 </p>
-                                <p className="type-caption text-fg/65">{regionLabel} direct profile route</p>
+                                <p className="type-caption text-fg/65">
+                                  {gameScope.toUpperCase()} · {regionLabel} direct profile route
+                                </p>
                               </div>
                             </Command.Item>
                           ) : null}
@@ -752,7 +804,7 @@ export function GlobalCommandPalette() {
                           !parsedRiotId &&
                           query.trim().length > 0 ? (
                             <SearchHint>
-                              No summoner suggestions yet. Enter a full Riot ID in the format
+                              No player suggestions yet. Enter a full Riot ID in the format
                               <span className="font-medium text-fg/82"> GameName#TAG</span> to open the profile directly.
                             </SearchHint>
                           ) : null}
@@ -767,33 +819,35 @@ export function GlobalCommandPalette() {
                         </SearchSection>
                       </motion.div>
 
-                      <motion.div variants={sectionVariants}>
-                        <SearchSection
-                          title="Champions"
-                          countLabel={`${championResults.length}`}
-                        >
-                          {championResults.length > 0 ? (
-                            championResults.map((champion) => (
-                              <Command.Item
-                                key={`champion-${champion.championId}`}
-                                value={`champion-${champion.name}`}
-                                onSelect={() => navigate(`/lol/champions/${champion.championId}`)}
-                                className={RESULT_ITEM_CLASS}
-                              >
-                                <span className="surface-subtle inline-flex h-9 w-9 items-center justify-center rounded-lg text-primary/88">
-                                  <SparkIcon className="h-4 w-4" />
-                                </span>
-                                <div className="min-w-0 flex-1">
-                                  <p className="type-ui truncate font-medium text-fg">{champion.name}</p>
-                                  <p className="type-caption text-fg/65">Champion profile and matchup data</p>
-                                </div>
-                              </Command.Item>
-                            ))
-                          ) : (
-                            <SearchHint>No champions match that query.</SearchHint>
-                          )}
-                        </SearchSection>
-                      </motion.div>
+                      {gameScope === "lol" ? (
+                        <motion.div variants={sectionVariants}>
+                          <SearchSection
+                            title="Champions"
+                            countLabel={`${championResults.length}`}
+                          >
+                            {championResults.length > 0 ? (
+                              championResults.map((champion) => (
+                                <Command.Item
+                                  key={`champion-${champion.championId}`}
+                                  value={`champion-${champion.name}`}
+                                  onSelect={() => navigate(`/lol/champions/${champion.championId}`)}
+                                  className={RESULT_ITEM_CLASS}
+                                >
+                                  <span className="surface-subtle inline-flex h-9 w-9 items-center justify-center rounded-lg text-primary/88">
+                                    <SparkIcon className="h-4 w-4" />
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="type-ui truncate font-medium text-fg">{champion.name}</p>
+                                    <p className="type-caption text-fg/65">Champion profile and matchup data</p>
+                                  </div>
+                                </Command.Item>
+                              ))
+                            ) : (
+                              <SearchHint>No champions match that query.</SearchHint>
+                            )}
+                          </SearchSection>
+                        </motion.div>
+                      ) : null}
 
                       <motion.div variants={sectionVariants}>
                         <SearchSection

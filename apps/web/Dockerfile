@@ -2,7 +2,9 @@ FROM node:22-bookworm-slim AS builder
 
 WORKDIR /app
 
+ARG NEXT_PUBLIC_TRN_TFT_RELEASE_STAGE=public
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_PUBLIC_TRN_TFT_RELEASE_STAGE=$NEXT_PUBLIC_TRN_TFT_RELEASE_STAGE
 
 RUN corepack enable
 
@@ -32,6 +34,7 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_PUBLIC_TRN_TFT_RELEASE_STAGE=public
 
 COPY --from=builder --chown=node:node /app/apps/web/.next/standalone ./
 COPY --from=builder --chown=node:node /app/apps/web/.next/static ./apps/web/.next/static

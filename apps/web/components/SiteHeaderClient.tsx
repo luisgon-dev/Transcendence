@@ -6,7 +6,8 @@ import { usePathname } from "next/navigation";
 import { BrandMark } from "@/components/BrandMark";
 import { GlobalSearchLauncher } from "@/components/GlobalSearchLauncher";
 import { cn } from "@/lib/cn";
-import { TFT_FRONTEND_ENABLED } from "@/lib/featureFlags";
+import { TFT_FRONTEND_ENABLED, TFT_PUBLIC_ENABLED, TFT_ROUTES_ENABLED } from "@/lib/featureFlags";
+import { getGameSwitcherItems } from "@/lib/siteHeader";
 
 const COMPACT_HEADER_PATHS = new Set(["/account/login", "/account/register"]);
 
@@ -39,6 +40,44 @@ function navLinkClass(pathname: string | null, prefix: string): string {
   );
 }
 
+function GameSwitcher({ pathname }: { pathname: string | null }) {
+  const items = getGameSwitcherItems(pathname, TFT_PUBLIC_ENABLED);
+
+  return (
+    <div className="flex items-center gap-1 rounded-full border border-border/45 bg-surface/30 p-1">
+      {items.map((item) =>
+        item.href ? (
+          <Link
+            key={item.label}
+            href={item.href}
+            className={cn(
+              "type-ui inline-flex min-h-9 items-center rounded-full px-3 py-1.5 transition",
+              item.isActive
+                ? "bg-surface/78 font-semibold text-fg shadow-inset"
+                : "text-fg/62 hover:bg-surface/50 hover:text-fg"
+            )}
+          >
+            {item.label}
+          </Link>
+        ) : (
+          <span
+            key={item.label}
+            aria-disabled="true"
+            className="type-ui inline-flex min-h-9 cursor-not-allowed items-center gap-1.5 rounded-full px-3 py-1.5 text-fg/42"
+          >
+            <span>{item.label}</span>
+            {item.comingSoon ? (
+              <span className="type-kicker rounded-full border border-border/40 bg-surface/50 px-2 py-0.5 text-fg/40">
+                Soon
+              </span>
+            ) : null}
+          </span>
+        )
+      )}
+    </div>
+  );
+}
+
 export function SiteHeaderClient({
   children,
   patch
@@ -49,8 +88,8 @@ export function SiteHeaderClient({
   const pathname = usePathname();
   const compact = pathname ? COMPACT_HEADER_PATHS.has(pathname) : false;
   const isTft = pathname?.startsWith("/tft") ?? false;
-  const contextLinks = isTft && TFT_FRONTEND_ENABLED ? TFT_LINKS : LOL_LINKS;
-  const surfaceLabel = isTft && TFT_FRONTEND_ENABLED ? "TFT" : "League";
+  const contextLinks = isTft && TFT_ROUTES_ENABLED ? TFT_LINKS : LOL_LINKS;
+  const surfaceLabel = isTft && TFT_ROUTES_ENABLED ? "TFT" : "League";
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/55 bg-bg/88 backdrop-blur-md">
@@ -86,6 +125,9 @@ export function SiteHeaderClient({
         {!compact ? (
           <div className="flex items-center border-t border-border/30 pt-2.5">
             <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+              <div className="mr-2 shrink-0">
+                <GameSwitcher pathname={pathname} />
+              </div>
               {contextLinks.map((link) => (
                 <Link key={link.href} href={link.href} className={navLinkClass(pathname, link.href)}>
                   {link.mobileLabel ?? link.label}

@@ -25,6 +25,14 @@ Compose reads local backend credentials from the repo-root [`.env.example`](../.
 - `RIOT_API_KEY_LOL`
 - `RIOT_API_KEY_TFT`
 
+For the default local bootstrap flow, the repo-root `.env` should also keep:
+
+- `WEBAPI_ASPNETCORE_ENVIRONMENT=Development`
+- `SERVICE_DOTNET_ENVIRONMENT=Development`
+- `NEXT_PUBLIC_TRN_TFT_RELEASE_STAGE=public`
+
+Those values let Docker Compose start the API and worker in the same development-mode auth posture documented below, including the local bootstrap API key path.
+
 2. Install JS dependencies:
 
 ```bash
@@ -46,6 +54,7 @@ cp apps/web/.env.example apps/web/.env.local
 Set:
 - `TRN_BACKEND_BASE_URL=http://localhost:8080`
 - `TRN_BACKEND_API_KEY=<api key for AppOnly endpoints>`
+- `NEXT_PUBLIC_TRN_TFT_RELEASE_STAGE=public`
   - Note: the web app allowlists AppOnly proxy paths; this key is not exposed as a generic proxy capability.
 
 Optional (admin bootstrap):
@@ -215,6 +224,10 @@ The logger provider now pre-creates the target `*.log` file and writes a one-tim
 
 Compose env contract:
 - [`compose.yml`](../compose.yml) injects Riot keys with `RiotApi__League__ApiKey` and `RiotApi__Tft__ApiKey`.
+- [`compose.yml`](../compose.yml) also respects:
+  - `WEBAPI_ASPNETCORE_ENVIRONMENT`
+  - `SERVICE_DOTNET_ENVIRONMENT`
+  - `NEXT_PUBLIC_TRN_TFT_RELEASE_STAGE`
 - The repo-root [`.env.example`](../.env.example) uses matching variables:
   - `RIOT_API_KEY_LOL`
   - `RIOT_API_KEY_TFT`

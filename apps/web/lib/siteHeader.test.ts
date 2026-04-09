@@ -38,4 +38,13 @@ describe("getGameSwitcherItems", () => {
     expect(tft.isActive).toBe(false);
     expect(tft.comingSoon).toBe(true);
   });
+
+  it("keeps TFT hidden from public navigation during preview stages", () => {
+    const [lol, tft] = getGameSwitcherItems("/lol/tierlist", false);
+
+    expect(lol.href).toBe("/lol");
+    expect(tft.href).toBeUndefined();
+    expect(tft.isDisabled).toBe(true);
+    expect(tft.comingSoon).toBe(true);
+  });
 });

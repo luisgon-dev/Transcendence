@@ -3,6 +3,7 @@ export type TftStaticEntity = {
   name: string;
   description?: string | null;
   icon?: string | null;
+  composition?: string[] | null;
 };
 
 export type TftUnitSummary = {
@@ -28,19 +29,55 @@ export type TftCompListItem = {
   patch?: string | null;
   region: string;
   rankTier: string;
+  regionScopeUsed?: string;
+  rankScopeUsed?: string;
   avgPlacement: number;
+  metaScore?: number;
   top4Rate: number;
   winRate: number;
+  bot4Rate?: number;
   pickRate: number;
+  placementDelta?: number;
+  contestRate?: number;
+  forceabilityIndex?: number;
+  consistencyScore?: number;
+  effectiveSampleSize?: number;
   sampleSize: number;
+  minimumRecommendedSampleSize?: number;
+  patchAgeHours?: number;
+  isEarlyPatchWindow?: boolean;
+  patchPhase?: string | null;
+  isProvisional?: boolean;
+  isEmerging?: boolean;
+  sampleStatus?: string;
   trend: string;
+  lastUpdatedUtc?: string;
+  confidence?: TftCompConfidence | null;
   units: TftUnitSummary[];
   traits: TftTraitSummary[];
   augments: string[];
 };
 
+export type TftConfidenceInterval = {
+  lower: number;
+  upper: number;
+};
+
+export type TftCompConfidence = {
+  top4: TftConfidenceInterval;
+  win: TftConfidenceInterval;
+  bot4: TftConfidenceInterval;
+};
+
+export type TftPlacementBucket = {
+  placement: number;
+  count: number;
+  rate: number;
+};
+
 export type TftCompDetail = {
   summary: TftCompListItem;
+  placementDistribution?: TftPlacementBucket[];
   coreItems: TftStaticEntity[];
   coreAugments: TftStaticEntity[];
 };
@@ -66,9 +103,29 @@ export type TftRecentMatchSummary = {
   setNumber?: number | null;
   setCoreName?: string | null;
   patch?: string | null;
+  compSlug?: string | null;
+  compName?: string | null;
   augments: string[];
   units: TftUnitSummary[];
   traits: TftTraitSummary[];
+};
+
+export type TftSummonerCompInsight = {
+  compSlug: string;
+  compName: string;
+  games: number;
+  avgPlacement: number;
+  top4Rate: number;
+  winRate: number;
+};
+
+export type TftSummonerInsights = {
+  recentGames: number;
+  avgPlacement: number;
+  top4Rate: number;
+  winRate: number;
+  mostPlayedComps: TftSummonerCompInsight[];
+  bestComps: TftSummonerCompInsight[];
 };
 
 export type TftSummonerProfile = {
@@ -82,6 +139,7 @@ export type TftSummonerProfile = {
   region: string;
   updatedAtUtc: string;
   ranks: TftRank[];
+  insights?: TftSummonerInsights | null;
   recentMatches: TftRecentMatchSummary[];
 };
 
@@ -117,6 +175,162 @@ export const TFT_REGION_OPTIONS = [
   "KR"
 ] as const;
 
+export type TftLabelMap = Record<string, string>;
+export type TftEntityMap = Record<string, TftStaticEntity>;
+
+function titleCaseWord(word: string): string {
+  if (!word) return word;
+  if (word.includes("-")) return word.split("-").map(titleCaseWord).join("-");
+  if (/^[A-Z0-9]+$/.test(word)) return word;
+  return `${word[0]?.toUpperCase() ?? ""}${word.slice(1).toLowerCase()}`;
+}
+
+function prettifyTftToken(value: string) {
+  let text = value.trim();
+  if (!text) return text;
+
+  text = text.replace(/^TFT\d+_/i, "").replace(/^TFT_/i, "");
+  text = text.replace(/_/g, " ");
+  text = text.replace(/([a-z0-9])([A-Z])/g, "$1 $2");
+  text = text.replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
+  text = text.replace(/([A-Za-z])(\d)/g, "$1 $2");
+  text = text.replace(/(\d)([A-Za-z])/g, "$1 $2");
+  text = text.replace(/\bTeamup\b/gi, "Team-Up");
+  text = text.replace(/\b([A-Za-z]+)\s+Trait\b/g, "$1");
+  text = text.replace(/\b([A-Za-z]+)\s+Unique\b/g, "$1");
+  text = text.replace(/\bDr Mundo\b/g, "Dr. Mundo");
+  text = text.replace(/\s+/g, " ").trim();
+
+  return text
+    .split(" ")
+    .map(titleCaseWord)
+    .join(" ");
+}
+
+function lookupTftLabel(rawValue: string, labelMap?: TftLabelMap) {
+  if (!labelMap) return null;
+  return labelMap[rawValue] ?? labelMap[rawValue.trim()] ?? null;
+}
+
+export function buildTftLabelMap(entities: TftStaticEntity[]): TftLabelMap {
+  return Object.fromEntries(
+    entities.flatMap((entity) => {
+      const entries: Array<[string, string]> = [];
+      if (entity.apiName) entries.push([entity.apiName, entity.name]);
+      if (entity.name) entries.push([entity.name, entity.name]);
+      return entries;
+    })
+  );
+}
+
+export function buildTftEntityMap(entities: TftStaticEntity[]): TftEntityMap {
+  return Object.fromEntries(
+    entities.flatMap((entity) => {
+      const entries: Array<[string, TftStaticEntity]> = [];
+      if (entity.apiName) entries.push([entity.apiName, entity]);
+      if (entity.name) entries.push([entity.name, entity]);
+      return entries;
+    })
+  );
+}
+
+export function isTftCraftableItem(
+  entity: Pick<TftStaticEntity, "composition">
+): entity is Pick<TftStaticEntity, "composition"> & { composition: string[] } {
+  return Array.isArray(entity.composition) && entity.composition.length === 2;
+}
+
+export function getTftCompositionEntities(
+  entity: Pick<TftStaticEntity, "composition">,
+  entityMap: TftEntityMap
+) {
+  if (!isTftCraftableItem(entity)) return [];
+  const composition = entity.composition;
+  return composition
+    .map((apiName) => entityMap[apiName])
+    .filter((value): value is TftStaticEntity => Boolean(value));
+}
+
+export function formatTftLabel(value: string | null | undefined, labelMap?: TftLabelMap) {
+  if (!value) return "";
+
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  return lookupTftLabel(trimmed, labelMap) ?? prettifyTftToken(trimmed);
+}
+
+export function formatTftUnitLabel(
+  unit: Pick<TftUnitSummary, "characterId" | "name">,
+  labelMap?: TftLabelMap
+) {
+  return formatTftLabel(unit.name ?? unit.characterId, labelMap) || formatTftLabel(unit.characterId, labelMap);
+}
+
+export function formatTftCompName(
+  name: string | null | undefined,
+  {
+    traitLabels,
+    unitLabels
+  }: {
+    traitLabels?: TftLabelMap;
+    unitLabels?: TftLabelMap;
+  } = {}
+) {
+  if (!name) return "";
+
+  const formatted = name
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .map((segment) => lookupTftLabel(segment, traitLabels) ?? lookupTftLabel(segment, unitLabels) ?? prettifyTftToken(segment))
+    .filter(Boolean);
+
+  return formatted.join(" / ");
+}
+
+function hasResolvableDisplayName(name: string | null | undefined) {
+  if (!name) return false;
+  const trimmed = name.trim();
+  if (!trimmed) return false;
+  if (trimmed.includes("@")) return false;
+  if (trimmed.includes("<")) return false;
+  return true;
+}
+
+function cleanTftEntityDisplayName(value: string) {
+  return value.replace(/^(Item|Trait|Augment)\s+/i, "").trim();
+}
+
+export function formatTftEntityName(entity: Pick<TftStaticEntity, "apiName" | "name">) {
+  if (hasResolvableDisplayName(entity.name)) return cleanTftEntityDisplayName(entity.name!.trim());
+  return cleanTftEntityDisplayName(formatTftLabel(entity.apiName));
+}
+
+export function formatTftDescription(value: string | null | undefined) {
+  if (!value) return null;
+
+  const sanitized = value
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<\/?expandRow[^>]*>/gi, " ")
+    .replace(/<\/?tftrules[^>]*>/gi, " ")
+    .replace(/<\/?[^>]+>/g, " ")
+    .replace(/%i:[^%\s]+%/gi, " ")
+    .replace(/@[A-Za-z0-9._:*+-]+@%?/g, " ")
+    .replace(/\(\s*\)/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .trim();
+
+  if (!sanitized || sanitized.includes("@")) return null;
+  return sanitized;
+}
+
+export function tftIconObjectClass(iconPath: string | null | undefined) {
+  if (iconPath && /\/characters\//i.test(iconPath)) return "object-cover";
+  return "object-contain";
+}
+
 // ---------------------------------------------------------------------------
 // Match detail types
 // ---------------------------------------------------------------------------
@@ -133,6 +347,8 @@ export type TftMatchParticipant = {
   totalDamageToPlayers: number;
   timeEliminatedSeconds: number;
   win: boolean;
+  compSlug?: string | null;
+  compName?: string | null;
   augments: string[];
   units: TftUnitSummary[];
   traits: TftTraitSummary[];
@@ -230,4 +446,24 @@ export function formatTftPercent(value: number, decimals = 1) {
 
 export function formatTftTime(epochMs: number) {
   return new Date(epochMs).toLocaleString();
+}
+
+export function formatTftSigned(value: number, decimals = 2) {
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value.toFixed(decimals)}`;
+}
+
+export function getTftMetaScore(comp: TftCompListItem) {
+  if (typeof comp.metaScore === "number") return comp.metaScore;
+  return comp.top4Rate * 100;
+}
+
+export function getTftBot4Rate(comp: TftCompListItem) {
+  if (typeof comp.bot4Rate === "number") return comp.bot4Rate;
+  return Math.max(0, 1 - comp.top4Rate);
+}
+
+export function getTftEffectiveSampleSize(comp: TftCompListItem) {
+  if (typeof comp.effectiveSampleSize === "number") return comp.effectiveSampleSize;
+  return comp.sampleSize;
 }

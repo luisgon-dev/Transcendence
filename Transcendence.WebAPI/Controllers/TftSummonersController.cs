@@ -8,6 +8,7 @@ using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.DTOs;
 using Transcendence.Service.Core.Services.Tft.Interfaces;
+using Transcendence.WebAPI.Models;
 
 namespace Transcendence.WebAPI.Controllers;
 
@@ -16,6 +17,7 @@ namespace Transcendence.WebAPI.Controllers;
 [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
 public class TftSummonersController(
     ITftSummonerReadService readService,
+    ITftMultiSearchService multiSearchService,
     IRefreshLockRepository refreshLockRepository,
     IBackgroundJobClient backgroundJobClient,
     ILogger<TftSummonersController> logger) : ControllerBase
@@ -152,6 +154,72 @@ public class TftSummonersController(
     {
         var result = await readService.GetMatchDetailAsync(summonerId, matchId, ct);
         return result == null ? NotFound() : Ok(result);
+    }
+
+    [HttpPost("multi-search")]
+    [EnableRateLimiting("multisearch-read")]
+    [ProducesResponseType(typeof(TftMultiSearchResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> MultiSearch([FromBody] TftMultiSearchRequest request, CancellationToken ct = default)
+    {
+        if (!PlatformRouteParser.TryParse(request.Region, out var platform))
+            return BadRequest($"Unsupported region '{request.Region}'.");
+
+        if (request.RiotIds.Count == 0 || request.RiotIds.Count > 8)
+            return BadRequest("Must provide between 1 and 8 Riot IDs.");
+
+        // Parse riotIds (format: "name#tag")
+        var parsedIds = request.RiotIds
+            .Select(id =>
+            {
+                var parts = id.Split('#', 2);
+                return parts.Length == 2 ? (parts[0], parts[1]) : (id, "");
+            })
+            .ToList();
+
+        var result = await multiSearchService.SearchAsync(platform.ToString(), parsedIds, ct);
+
+        var dto = new TftMultiSearchResponse(
+            result.Summoners.Select(s => new TftMultiSearchSummonerDto(
+                s.GameName,
+                s.TagLine,
+                s.Found,
+                s.SummonerId,
+                s.ProfileIconId,
+                s.SummonerLevel,
+                s.Rank != null ? new TftMultiSearchRankDto(
+                    s.Rank.Tier,
+                    s.Rank.Division,
+                    s.Rank.LeaguePoints,
+                    s.Rank.Wins,
+                    s.Rank.Losses) : null,
+                s.Overview != null ? new TftMultiSearchOverviewDto(
+                    s.Overview.TotalMatches,
+                    s.Overview.AveragePlacement,
+                    s.Overview.Top4Rate,
+                    s.Overview.WinRate) : null,
+                s.TopUnits?.Select(u => new TftMultiSearchChampionDto(
+                    u.CharacterId,
+                    u.Name,
+                    u.Cost,
+                    u.GamesPlayed,
+                    u.AveragePlacement,
+                    u.Top4Rate,
+                    u.WinRate)).ToList()
+            )).ToList(),
+            new TftMultiSearchLobbyAnalysisDto(
+                result.LobbyAnalysis.AverageRankScore,
+                result.LobbyAnalysis.AverageRankLabel,
+                result.LobbyAnalysis.FoundPlayers,
+                result.LobbyAnalysis.TotalPlayers,
+                result.LobbyAnalysis.PotentialIssues.Select(i => new TftMultiSearchAutofillDto(
+                    i.GameName,
+                    i.TagLine,
+                    i.Note)).ToList()
+            )
+        );
+
+        return Ok(dto);
     }
 }
 

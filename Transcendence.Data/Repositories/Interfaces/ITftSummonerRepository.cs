@@ -23,6 +23,14 @@ public interface ITftSummonerRepository
         Func<IQueryable<TftSummoner>, IQueryable<TftSummoner>>? includes = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Finds multiple summoners by their Riot IDs in a single query.
+    /// </summary>
+    Task<IReadOnlyList<TftSummoner>> FindByRiotIdsAsync(
+        string platformRegion,
+        IReadOnlyList<(string GameName, string TagLine)> riotIds,
+        CancellationToken cancellationToken = default);
+
     Task<TftSummoner> AddOrUpdateAsync(TftSummoner summoner, CancellationToken cancellationToken = default);
 }
 

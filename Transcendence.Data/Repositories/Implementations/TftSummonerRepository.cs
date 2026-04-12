@@ -104,6 +104,47 @@ public class TftSummonerRepository(TranscendenceContext context, ITftRankReposit
             && x.TagLineNormalized == tagKey, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<TftSummoner>> FindByRiotIdsAsync(
+        string platformRegion,
+        IReadOnlyList<(string GameName, string TagLine)> riotIds,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedPlatform = NormalizeForLookup(platformRegion);
+        if (normalizedPlatform == null || riotIds.Count == 0)
+            return [];
+
+        // Build normalized lookup keys
+        var normalizedIds = riotIds
+            .Select(id => (
+                GameName: NormalizeForLookup(id.GameName),
+                TagLine: NormalizeForLookup(id.TagLine)))
+            .Where(id => id.GameName != null && id.TagLine != null)
+            .ToList();
+
+        if (normalizedIds.Count == 0)
+            return [];
+
+        // Get all potential matches for the platform, then filter in memory
+        // This is more efficient than N+1 queries for small result sets
+        var gameNames = normalizedIds.Select(id => id.GameName).Distinct().ToList();
+        
+        var summoners = await context.TftSummoners
+            .AsNoTracking()
+            .Include(x => x.Ranks)
+            .Where(s => s.PlatformRegion == normalizedPlatform && 
+                        gameNames.Contains(s.GameNameNormalized))
+            .ToListAsync(cancellationToken);
+
+        // Filter to exact matches in memory
+        var idSet = normalizedIds
+            .Select(id => $"{id.GameName}#{id.TagLine}")
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return summoners
+            .Where(s => idSet.Contains($"{s.GameNameNormalized}#{s.TagLineNormalized}"))
+            .ToList();
+    }
+
     public async Task<TftSummoner> AddOrUpdateAsync(TftSummoner summoner, CancellationToken cancellationToken = default)
     {
         summoner.GameName = NormalizeValue(summoner.GameName);

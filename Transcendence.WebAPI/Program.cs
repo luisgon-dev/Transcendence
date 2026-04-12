@@ -231,6 +231,14 @@ builder.Services.AddHangfire(config =>
             options.UseNpgsqlConnection(builder.Configuration.GetConnectionString("MainDatabase"))));
 
 var app = builder.Build();
+
+// Apply pending migrations on startup (safe for single-instance deployment)
+using (var migrationScope = app.Services.CreateScope())
+{
+    var db = migrationScope.ServiceProvider.GetRequiredService<TranscendenceContext>();
+    await db.Database.MigrateAsync();
+}
+
 var enableSwagger = app.Environment.IsDevelopment()
     || ParseBool(app.Configuration["Swagger:Enable"], false);
 

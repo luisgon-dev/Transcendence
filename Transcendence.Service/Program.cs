@@ -105,6 +105,14 @@ builder.Services.Configure<TftAnalyticsComputeOptions>(builder.Configuration.Get
 builder.Services.AddProjectSyndraRepositories();
 
 var host = builder.Build();
+
+// Apply pending migrations on startup (safe for single-instance deployment)
+using (var migrationScope = host.Services.CreateScope())
+{
+    var db = migrationScope.ServiceProvider.GetRequiredService<TranscendenceContext>();
+    await db.Database.MigrateAsync();
+}
+
 host.Run();
 
 static void ConfigureSharedBackendConfiguration(ConfigurationManager configuration, IHostEnvironment environment)

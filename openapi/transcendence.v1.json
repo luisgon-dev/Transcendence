@@ -4580,6 +4580,160 @@
         }
       }
     },
+    "/api/tft/summoners/{summonerId}/stats/overview": {
+      "get": {
+        "tags": [
+          "TftSummonerStats"
+        ],
+        "summary": "Gets overall statistics for a TFT summoner",
+        "parameters": [
+          {
+            "name": "summonerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "recent",
+            "in": "query",
+            "description": "Number of recent games to include (default 20, max 100)",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TftSummonerOverviewDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Summoner not found"
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tft/summoners/{summonerId}/stats/champions": {
+      "get": {
+        "tags": [
+          "TftSummonerStats"
+        ],
+        "summary": "Gets top champion/unit stats for a TFT summoner",
+        "parameters": [
+          {
+            "name": "summonerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "top",
+            "in": "query",
+            "description": "Number of champions to return (default 10, max 50)",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TftChampionStatDto"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Summoner not found"
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tft/summoners/multi-search": {
+      "post": {
+        "tags": [
+          "TftSummoners"
+        ],
+        "summary": "Searches for multiple TFT summoners by their Riot IDs (lobby scouting)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TftMultiSearchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TftMultiSearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid region or too many players"
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/users/me/favorites": {
       "get": {
         "tags": [
@@ -8289,6 +8443,344 @@
           }
         },
         "additionalProperties": false
+      },
+      "TftSummonerOverviewDto": {
+        "type": "object",
+        "properties": {
+          "summonerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "totalMatches": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "averagePlacement": {
+            "type": "number",
+            "format": "double"
+          },
+          "top4Rate": {
+            "type": "number",
+            "format": "double"
+          },
+          "winRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "recentPerformance": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TftRecentPerformanceDto"
+            }
+          }
+        }
+      },
+      "TftRecentPerformanceDto": {
+        "type": "object",
+        "properties": {
+          "matchId": {
+            "type": "string"
+          },
+          "matchDate": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "placement": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "level": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "setCoreName": {
+            "type": "string",
+            "nullable": true
+          },
+          "patch": {
+            "type": "string",
+            "nullable": true
+          },
+          "units": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TftUnitPerformanceDto"
+            }
+          },
+          "traits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TftTraitPerformanceDto"
+            }
+          }
+        }
+      },
+      "TftUnitPerformanceDto": {
+        "type": "object",
+        "properties": {
+          "characterId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "tier": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        }
+      },
+      "TftTraitPerformanceDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "numUnits": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "tierCurrent": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "TftChampionStatDto": {
+        "type": "object",
+        "properties": {
+          "characterId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "cost": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "gamesPlayed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "averagePlacement": {
+            "type": "number",
+            "format": "double"
+          },
+          "top4Rate": {
+            "type": "number",
+            "format": "double"
+          },
+          "winRate": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "TftMultiSearchRequest": {
+        "type": "object",
+        "properties": {
+          "region": {
+            "type": "string"
+          },
+          "riotIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "TftMultiSearchResponse": {
+        "type": "object",
+        "properties": {
+          "summoners": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TftMultiSearchSummonerDto"
+            }
+          },
+          "lobbyAnalysis": {
+            "$ref": "#/components/schemas/TftMultiSearchLobbyAnalysisDto"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TftMultiSearchSummonerDto": {
+        "type": "object",
+        "properties": {
+          "gameName": {
+            "type": "string"
+          },
+          "tagLine": {
+            "type": "string"
+          },
+          "found": {
+            "type": "boolean"
+          },
+          "summonerId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "profileIconId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "summonerLevel": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "rank": {
+            "$ref": "#/components/schemas/TftMultiSearchRankDto",
+            "nullable": true
+          },
+          "overview": {
+            "$ref": "#/components/schemas/TftMultiSearchOverviewDto",
+            "nullable": true
+          },
+          "topUnits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TftMultiSearchChampionDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "TftMultiSearchRankDto": {
+        "type": "object",
+        "properties": {
+          "tier": {
+            "type": "string"
+          },
+          "division": {
+            "type": "string"
+          },
+          "leaguePoints": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "wins": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "losses": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TftMultiSearchOverviewDto": {
+        "type": "object",
+        "properties": {
+          "totalMatches": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "averagePlacement": {
+            "type": "number",
+            "format": "double"
+          },
+          "top4Rate": {
+            "type": "number",
+            "format": "double"
+          },
+          "winRate": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TftMultiSearchChampionDto": {
+        "type": "object",
+        "properties": {
+          "characterId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "cost": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "gamesPlayed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "averagePlacement": {
+            "type": "number",
+            "format": "double"
+          },
+          "top4Rate": {
+            "type": "number",
+            "format": "double"
+          },
+          "winRate": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TftMultiSearchLobbyAnalysisDto": {
+        "type": "object",
+        "properties": {
+          "averageRankScore": {
+            "type": "number",
+            "format": "double"
+          },
+          "averageRankLabel": {
+            "type": "string"
+          },
+          "foundPlayers": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPlayers": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "potentialIssues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TftMultiSearchAutofillDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "TftMultiSearchAutofillDto": {
+        "type": "object",
+        "properties": {
+          "gameName": {
+            "type": "string"
+          },
+          "tagLine": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       }
     },
     "securitySchemes": {
@@ -8339,6 +8831,9 @@
     },
     {
       "name": "TftSummoners"
+    },
+    {
+      "name": "TftSummonerStats"
     },
     {
       "name": "UserPreferences"

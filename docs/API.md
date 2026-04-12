@@ -191,6 +191,9 @@ Response includes:
 - `GET /api/tft/summoners/search`
 - `GET /api/tft/summoners/{summonerId}/matches/recent`
 - `GET /api/tft/summoners/{summonerId}/matches/{matchId}`
+- `GET /api/tft/summoners/{summonerId}/stats/overview`
+- `GET /api/tft/summoners/{summonerId}/stats/champions`
+- `POST /api/tft/summoners/multi-search`
 - `GET /api/tft/analytics/regions`
 - `GET /api/tft/analytics/comps`
 - `GET /api/tft/analytics/comps/{compSlug}`
@@ -208,6 +211,9 @@ TFT behavior notes:
 - TFT controllers are read-only against persisted data and never call Camille directly.
 - `GET /api/tft/summoners/{region}/{name}/{tag}` returns `200` with stored profile/matches or `202 Accepted` when the profile is missing or already refreshing.
 - `POST /api/tft/summoners/{region}/{name}/{tag}/refresh` queues a background refresh behind `tft:summoner-refresh:*` locks.
+- `GET /api/tft/summoners/{summonerId}/stats/overview` returns aggregate statistics including average placement, top4 rate, and win rate for the specified summoner.
+- `GET /api/tft/summoners/{summonerId}/stats/champions` returns per-unit statistics including games played, average placement, and win rates.
+- `POST /api/tft/summoners/multi-search` accepts a list of Riot IDs (format: `name#tag`) and returns batch results with lobby analysis for scouting.
 - TFT analytics are isolated from LoL analytics. The comps endpoint is a separate surface and does not share the LoL tier-list route or payload.
 - TFT catalog/detail analytics endpoints (`champions`, `items`, `traits`, `augments`) serve the active set only.
 - TFT static data remains set-versioned in storage; active-set reads preserve response shapes across set rollovers without returning duplicate cross-set rows.

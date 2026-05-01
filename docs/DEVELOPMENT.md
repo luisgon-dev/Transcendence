@@ -97,6 +97,17 @@ Rule of thumb:
 - Use `corepack pnpm e2e:stack` for true local E2E and TFT/worker verification.
 - Use the hybrid mode for day-to-day UI changes when you want faster frontend rebuilds.
 
+### E2E Test Location and Selector Guidance
+
+Playwright is configured in [`playwright.config.ts`](../playwright.config.ts) with `testDir: "./e2e"`. Add new end-to-end specs under [`e2e/`](../e2e/) using the existing `*.spec.ts` naming pattern.
+
+Selector guidance:
+- Prefer user-facing locators first: `getByRole`, `getByLabel`, `getByText`, and route assertions that match what users experience.
+- Add `data-testid` only when a stable semantic locator is not practical (for example, icon-only controls, repeated analytics cards, virtualized rows, or loading/error states with duplicated text).
+- Keep `data-testid` values stable, lowercase, and kebab-case (for example, `data-testid="summoner-refresh-button"`). Treat them as part of the E2E contract.
+- Scope selectors to the smallest meaningful component or region before using broad page-level queries.
+- Do not assert on generated CSS classes, DOM depth, or animation timing; those are implementation details and make E2E tests brittle.
+
 ## Run Without Docker (Backend)
 
 ### Secrets

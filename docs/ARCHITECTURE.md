@@ -7,6 +7,27 @@ Transcendence is a backend + web monorepo:
 - A Next.js web frontend that renders pages (SSR) and proxies to the backend via route handlers (BFF)
 - Game surfaces are modularized by route namespace: `/lol/*` + `/api/lol/*` and `/tft/*` + `/api/tft/*`
 
+## System Diagram
+
+```mermaid
+flowchart LR
+    Browser["Browser / Player"] --> Web["Next.js web app<br/>apps/web"]
+    Web --> BFF["Next.js route handlers<br/>BFF proxy"]
+    BFF --> API["Transcendence.WebAPI<br/>REST + OpenAPI"]
+    API --> Db["PostgreSQL<br/>canonical data"]
+    API --> Cache["Redis<br/>HybridCache L2 + Hangfire"]
+    API --> Hangfire["Hangfire storage<br/>queues + schedules"]
+    Hangfire --> Worker["Transcendence.Service<br/>Hangfire worker"]
+    Worker --> Riot["Riot APIs<br/>LoL + TFT"]
+    Worker --> Db
+    Worker --> Cache
+    Worker --> Logs["Operational logs<br/>shared volume"]
+    API --> Logs
+    API --> Admin["Admin API + dashboard<br/>/admin"]
+    Admin --> Hangfire
+    Admin --> Logs
+```
+
 ## Components
 
 ### `Transcendence.WebAPI`

@@ -2,7 +2,10 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-import { type LolAnalyticsPatchOption } from "@/lib/lolPatchFilters";
+import {
+  getVisibleAnalyticsPatches,
+  type LolAnalyticsPatchOption
+} from "@/lib/lolPatchFilters";
 
 export function AnalyticsPatchFilter({
   patches,
@@ -16,8 +19,9 @@ export function AnalyticsPatchFilter({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const visiblePatches = getVisibleAnalyticsPatches(patches);
   const normalizedActivePatch = activePatch?.trim() ?? "";
-  const hasActivePatchOption = patches.some((option) => option.patch === normalizedActivePatch);
+  const hasActivePatchOption = visiblePatches.some((option) => option.patch === normalizedActivePatch);
 
   function handleChange(event: React.ChangeEvent<HTMLSelectElement>) {
     const patch = event.target.value;
@@ -43,7 +47,7 @@ export function AnalyticsPatchFilter({
       {normalizedActivePatch && !hasActivePatchOption ? (
         <option value={normalizedActivePatch}>Patch {normalizedActivePatch}</option>
       ) : null}
-      {patches.map((option) => (
+      {visiblePatches.map((option) => (
         <option key={option.patch} value={option.patch}>
           {option.isActive ? `Current (${option.patch})` : `Patch ${option.patch}`}
         </option>

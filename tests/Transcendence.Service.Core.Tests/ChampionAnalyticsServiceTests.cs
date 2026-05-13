@@ -37,7 +37,7 @@ public class ChampionAnalyticsServiceTests
         });
         await harness.Db.SaveChangesAsync();
 
-        var result = await harness.Service.GetTierListAsync("ALL", null, null, CancellationToken.None);
+        var result = await harness.Service.GetTierListAsync("ALL", null, null, null, CancellationToken.None);
 
         result.Patch.Should().Be("Unknown");
         result.Entries.Should().BeEmpty();
@@ -136,13 +136,99 @@ public class ChampionAnalyticsServiceTests
     }
 
     [Fact]
+    public async Task GetWinRatesAsync_RequestedHistoricalPatch_UsesRequestedPatchAndStableSamplePhase()
+    {
+        await using var harness = await Harness.CreateAsync();
+        harness.SetActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        harness.SetInactivePatch("15.1", DateTime.UtcNow.AddHours(-400));
+        harness.ComputeService
+            .Setup(x => x.ComputeWinRatesAsync(
+                103,
+                It.Is<ChampionAnalyticsFilter>(filter => filter.Patch == "15.1"),
+                "15.1",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new ChampionWinRateDto(103, "MIDDLE", "EMERALD_PLUS", 24, 14, 0.583, 0.12, 0.01, 2, 40, "15.1")
+            ]);
+        await harness.Db.SaveChangesAsync();
+
+        var result = await harness.Service.GetWinRatesAsync(
+            103,
+            new ChampionAnalyticsFilter(RankTier: "EMERALD_PLUS", Patch: "15.1"),
+            CancellationToken.None);
+
+        result.Patch.Should().Be("15.1");
+        result.Sample.Should().NotBeNull();
+        result.Sample!.PatchPhase.Should().Be(AnalyticsPatchPhase.Steady);
+        result.Sample.IsProvisional.Should().BeFalse();
+        result.Sample.IsEarlyPatchWindow.Should().BeFalse();
+        harness.ComputeService.Verify(x => x.ComputeWinRatesAsync(
+            103,
+            It.Is<ChampionAnalyticsFilter>(filter => filter.Patch == "15.1"),
+            "15.1",
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetWinRatesAsync_SelectedPatch_IsPartOfCacheIdentity()
+    {
+        await using var harness = await Harness.CreateAsync();
+        harness.SetActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        harness.SetInactivePatch("15.1", DateTime.UtcNow.AddHours(-400));
+        harness.ComputeService
+            .Setup(x => x.ComputeWinRatesAsync(
+                103,
+                It.IsAny<ChampionAnalyticsFilter>(),
+                "15.2",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new ChampionWinRateDto(103, "MIDDLE", "EMERALD_PLUS", 5, 3, 0.6, 0.12, 0.01, 1, 40, "15.2")
+            ]);
+        harness.ComputeService
+            .Setup(x => x.ComputeWinRatesAsync(
+                103,
+                It.IsAny<ChampionAnalyticsFilter>(),
+                "15.1",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new ChampionWinRateDto(103, "MIDDLE", "EMERALD_PLUS", 24, 14, 0.583, 0.12, 0.01, 2, 40, "15.1")
+            ]);
+        await harness.Db.SaveChangesAsync();
+
+        var activeResult = await harness.Service.GetWinRatesAsync(
+            103,
+            new ChampionAnalyticsFilter(RankTier: "EMERALD_PLUS"),
+            CancellationToken.None);
+        var historicalResult = await harness.Service.GetWinRatesAsync(
+            103,
+            new ChampionAnalyticsFilter(RankTier: "EMERALD_PLUS", Patch: "15.1"),
+            CancellationToken.None);
+
+        activeResult.Patch.Should().Be("15.2");
+        historicalResult.Patch.Should().Be("15.1");
+        harness.ComputeService.Verify(x => x.ComputeWinRatesAsync(
+            103,
+            It.IsAny<ChampionAnalyticsFilter>(),
+            "15.2",
+            It.IsAny<CancellationToken>()), Times.Once);
+        harness.ComputeService.Verify(x => x.ComputeWinRatesAsync(
+            103,
+            It.IsAny<ChampionAnalyticsFilter>(),
+            "15.1",
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task GetTierListAsync_UnsupportedRegion_FallsBackToGlobal()
     {
         await using var harness = await Harness.CreateAsync();
         harness.SetActivePatch("15.2", DateTime.UtcNow.AddHours(-6));
         await harness.Db.SaveChangesAsync();
 
-        await harness.Service.GetTierListAsync("ALL", null, "OCE1", CancellationToken.None);
+        await harness.Service.GetTierListAsync("ALL", null, "OCE1", null, CancellationToken.None);
 
         harness.ComputeService.Verify(x => x.ComputeTierListAsync(
             "ALL",
@@ -238,6 +324,17 @@ public class ChampionAnalyticsServiceTests
             {
                 Version = version,
                 IsActive = true,
+                ReleaseDate = releaseUtc,
+                DetectedAt = releaseUtc
+            });
+        }
+
+        public void SetInactivePatch(string version, DateTime releaseUtc)
+        {
+            Db.Patches.Add(new Patch
+            {
+                Version = version,
+                IsActive = false,
                 ReleaseDate = releaseUtc,
                 DetectedAt = releaseUtc
             });

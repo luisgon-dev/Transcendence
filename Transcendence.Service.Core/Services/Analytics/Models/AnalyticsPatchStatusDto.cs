@@ -5,3 +5,11 @@ public record AnalyticsPatchStatusDto(
     DateTime? ActivePatchReleasedAtUtc,
     DateTime? ActivePatchDetectedAtUtc
 );
+
+public record AnalyticsPatchOptionDto(
+    string Patch,
+    DateTime? ReleasedAtUtc,
+    DateTime? DetectedAtUtc,
+    bool IsActive,
+    int RankedSoloDuoMatchCount
+);

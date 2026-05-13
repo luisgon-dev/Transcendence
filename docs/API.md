@@ -120,6 +120,7 @@ Example (`SummonerAcceptedResponse`):
 - `GET /api/lol/analytics/tierlist`
 - `GET /api/lol/analytics/regions`
 - `GET /api/lol/analytics/status`
+- `GET /api/lol/analytics/patches`
 - `GET /api/lol/analytics/champions/{championId}/winrates`
 - `GET /api/lol/analytics/champions/{championId}/builds`
 - `GET /api/lol/analytics/champions/{championId}/pro-builds`
@@ -127,7 +128,8 @@ Example (`SummonerAcceptedResponse`):
 - `POST /api/lol/analytics/cache/invalidate` (`AppOnly`)
 
 Early-patch semantics:
-- Analytics endpoints return **current active patch data only** (no previous-patch fallback payloads).
+- Analytics endpoints default to the active patch and support a `patch` query parameter for stored historical patches.
+- Historical patch requests do not fall back to another patch; unknown patch values return empty `200 OK` payloads with the requested patch echoed.
 - Responses now include `sample` metadata for UI messaging:
   - `sampleStatus` (`sufficient`, `low_sample`, `no_data`)
   - `sampleSize`
@@ -137,7 +139,7 @@ Early-patch semantics:
   - `patchPhase` (`bootstrap`, `provisional`, `maturing`, `steady`)
   - `isProvisional`
 - `low_sample` and `no_data` are expected during early patch windows while ingestion ramps up.
-- Tier-list entries may omit `movement` / `previousTier` while previous-patch comparisons are unavailable; current-patch rankings remain the primary response.
+- Tier-list entries may omit `movement` / `previousTier` while previous-patch comparisons are unavailable; selected-patch rankings remain the primary response.
 
 `rankTier` query semantics across tier list, win rates, builds, and matchups:
 - `all` (or omitted): no rank filter
@@ -150,10 +152,22 @@ Early-patch semantics:
 - Supported public region tokens are discoverable via `GET /api/lol/analytics/regions`
 - Tier list, builds, and matchup responses now echo the resolved `region` field so the UI can badge active scope without guessing
 
+`patch` query semantics across tier list, win rates, builds, matchups, and pro builds:
+- Omitted: use the backend-owned active analytics patch
+- Exact patch token: query that patch's persisted match/static-data slice
+- Available patch options are discoverable via `GET /api/lol/analytics/patches`
+
 `GET /api/lol/analytics/status` returns the backend-owned active LoL analytics patch metadata:
 - `patch`
 - `activePatchReleasedAtUtc`
 - `activePatchDetectedAtUtc`
+
+`GET /api/lol/analytics/patches` returns public patch options:
+- `patch`
+- `releasedAtUtc`
+- `detectedAtUtc`
+- `isActive`
+- `rankedSoloDuoMatchCount`
 
 `GET /api/lol/analytics/champions/{championId}/builds` includes full rune setup per build:
 - `primaryStyleId`, `subStyleId`

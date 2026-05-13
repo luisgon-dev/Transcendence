@@ -211,9 +211,11 @@ Operational implication:
 
 ### Analytics Response Semantics
 
-- Analytics APIs intentionally do not fall back to previous patch payloads.
-- Responses include sample metadata (`sampleStatus`, `sampleSize`, `minimumRecommendedSampleSize`, `patchAgeHours`, `isEarlyPatchWindow`) so web surfaces can show early-patch low-sample/no-data states explicitly.
+- Analytics APIs default to the active patch and can query stored historical patches with a `patch` query parameter.
+- Analytics APIs intentionally do not fall back to a different patch payload when the selected patch has no data.
+- Responses include sample metadata (`sampleStatus`, `sampleSize`, `minimumRecommendedSampleSize`, `patchAgeHours`, `isEarlyPatchWindow`) so web surfaces can show selected-patch low-sample/no-data states explicitly.
 - `GET /api/lol/analytics/status` is the lightweight source of truth for the active LoL analytics patch used by public web chrome and landing surfaces.
+- `GET /api/lol/analytics/patches` lists active and historical LoL patches available to public analytics filters.
 
 ### Match Queue Scope and History
 

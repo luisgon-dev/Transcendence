@@ -14,6 +14,8 @@ import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { GLOBAL_ANALYTICS_REGION } from "@/lib/analyticsRegionShared";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
+import { fetchLolAnalyticsPatches } from "@/lib/lolAnalyticsPatches";
+import { normalizeAnalyticsPatch } from "@/lib/lolPatchFilters";
 import {
   DEFAULT_TIERLIST_RANK_TIER,
   normalizeRankTierParam,
@@ -28,7 +30,7 @@ type TierListResponse = components["schemas"]["TierListResponse"];
 export default async function TierListPage({
   searchParams
 }: {
-  searchParams?: Promise<{ role?: string; rankTier?: string; region?: string }>;
+  searchParams?: Promise<{ role?: string; rankTier?: string; region?: string; patch?: string }>;
 }) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const { activeRegion, activeRegionLabel, options: regionOptions } = await resolveAnalyticsRegion(
@@ -37,6 +39,7 @@ export default async function TierListPage({
   const roleParam = (resolvedSearchParams?.role ?? "").toUpperCase();
   const rawRankParam = resolvedSearchParams?.rankTier ?? null;
   const normalizedRankParam = normalizeRankTierParam(rawRankParam);
+  const selectedPatch = normalizeAnalyticsPatch(resolvedSearchParams?.patch);
   const useDefaultRank = rawRankParam == null || rawRankParam.trim().length === 0;
   const effectiveRankParam = useDefaultRank ? DEFAULT_TIERLIST_RANK_TIER : normalizedRankParam;
 
@@ -46,6 +49,7 @@ export default async function TierListPage({
     if (roleParam && roleParam !== "ALL") requestQuery.set("role", roleParam);
     if (effectiveRankParam) requestQuery.set("rankTier", effectiveRankParam);
     if (region !== GLOBAL_ANALYTICS_REGION) requestQuery.set("region", region);
+    if (selectedPatch) requestQuery.set("patch", selectedPatch);
 
     return fetchBackendJson<TierListResponse>(
       `${getBackendBaseUrl()}/api/lol/analytics/tierlist?${requestQuery.toString()}`,
@@ -61,6 +65,8 @@ export default async function TierListPage({
     effectiveRegionLabel,
     fallbackMessage
   } = resolveAnalyticsRegionPresentation(activeRegion, activeRegionLabel, regionOptions, usedGlobalFallback);
+  const patchOptions = await fetchLolAnalyticsPatches();
+  const sharedFilterParams = selectedPatch ? { patch: selectedPatch } : {};
 
   if (!res.ok) {
     return (
@@ -89,6 +95,9 @@ export default async function TierListPage({
             activeRank={effectiveRankParam ?? "all"}
             regionOptions={regionOptions}
             activeRegion={activeRegion}
+            patchOptions={patchOptions}
+            activePatch={selectedPatch}
+            extraParams={sharedFilterParams}
             baseHref="/lol/tierlist"
             className="mt-0"
           />
@@ -141,6 +150,9 @@ export default async function TierListPage({
           activeRank={effectiveRankParam ?? "all"}
           regionOptions={regionOptions}
           activeRegion={effectiveRegion}
+          patchOptions={patchOptions}
+          activePatch={selectedPatch}
+          extraParams={sharedFilterParams}
           baseHref="/lol/tierlist"
           className="mt-4"
         />
@@ -152,6 +164,7 @@ export default async function TierListPage({
         version={version}
         rankTierValue={rankTierValue}
         activeRegion={effectiveRegion}
+        activePatch={selectedPatch}
       />
     </div>
   );

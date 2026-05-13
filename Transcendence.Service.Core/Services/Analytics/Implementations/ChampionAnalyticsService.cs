@@ -53,7 +53,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         ChampionAnalyticsFilter filter,
         CancellationToken ct)
     {
-        var patchContext = await GetActivePatchContextAsync(ct);
+        var patchContext = await ResolvePatchContextAsync(filter.Patch, ct);
         if (string.IsNullOrWhiteSpace(patchContext.Patch))
         {
             return new ChampionWinRateSummary(
@@ -70,7 +70,8 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         {
             RankTier = normalizedRankTier == "all" ? null : normalizedRankTier,
             Region = AnalyticsRegionCatalog.NormalizeToFilter(NormalizeAnalyticsRegion(filter.Region)),
-            Role = string.IsNullOrWhiteSpace(filter.Role) ? null : filter.Role.Trim().ToUpperInvariant()
+            Role = string.IsNullOrWhiteSpace(filter.Role) ? null : filter.Role.Trim().ToUpperInvariant(),
+            Patch = currentPatch
         };
 
         // Build cache key based on normalized filter parameters
@@ -98,9 +99,10 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         string? role,
         string? rankTier,
         string? region,
+        string? patch,
         CancellationToken ct)
     {
-        var patchContext = await GetActivePatchContextAsync(ct);
+        var patchContext = await ResolvePatchContextAsync(patch, ct);
         var normalizedRegion = NormalizeAnalyticsRegion(region);
         if (string.IsNullOrWhiteSpace(patchContext.Patch))
         {
@@ -154,9 +156,10 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         string role,
         string? rankTier,
         string? region,
+        string? patch,
         CancellationToken ct)
     {
-        var patchContext = await GetActivePatchContextAsync(ct);
+        var patchContext = await ResolvePatchContextAsync(patch, ct);
         var normalizedRole = role.ToUpperInvariant();
         var normalizedTier = NormalizeRankTier(rankTier);
         var normalizedRegion = NormalizeAnalyticsRegion(region);
@@ -172,10 +175,10 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
                 [],
                 BuildSampleMetadata(0, patchContext));
 
-        var patch = patchContext.Patch!;
+        var selectedPatch = patchContext.Patch!;
 
-        var cacheKey = $"{BuildsCacheKeyPrefix}{championId}:{normalizedRole}:{normalizedTier}:{normalizedRegion}:{patch}";
-        var tags = new[] { AnalyticsCacheTag, $"patch:{patch}", "builds" };
+        var cacheKey = $"{BuildsCacheKeyPrefix}{championId}:{normalizedRole}:{normalizedTier}:{normalizedRegion}:{selectedPatch}";
+        var tags = new[] { AnalyticsCacheTag, $"patch:{selectedPatch}", "builds" };
 
         var response = await _cache.GetOrCreateAsync(
             cacheKey,
@@ -184,7 +187,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
                 normalizedRole,
                 normalizedTier == "all" ? null : normalizedTier,
                 normalizedRegion,
-                patch,
+                selectedPatch,
                 cancel),
             AnalyticsCacheOptions,
             tags,
@@ -200,8 +203,8 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         string? patch,
         CancellationToken ct)
     {
-        var patchContext = await GetActivePatchContextAsync(ct);
-        var resolvedPatch = string.IsNullOrWhiteSpace(patch) ? patchContext.Patch : patch.Trim();
+        var patchContext = await ResolvePatchContextAsync(patch, ct);
+        var resolvedPatch = patchContext.Patch;
         var normalizedRole = string.IsNullOrWhiteSpace(role) ? "ALL" : role.Trim().ToUpperInvariant();
         var normalizedRegion = string.IsNullOrWhiteSpace(region) ? "ALL" : region.Trim().ToUpperInvariant();
 
@@ -241,9 +244,10 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         string role,
         string? rankTier,
         string? region,
+        string? patch,
         CancellationToken ct)
     {
-        var patchContext = await GetActivePatchContextAsync(ct);
+        var patchContext = await ResolvePatchContextAsync(patch, ct);
         var normalizedRole = role.ToUpperInvariant();
         var normalizedTier = NormalizeRankTier(rankTier);
         var normalizedRegion = NormalizeAnalyticsRegion(region);
@@ -264,9 +268,9 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             };
         }
 
-        var patch = patchContext.Patch!;
-        var cacheKey = $"{MatchupsCacheKeyPrefix}{championId}:{normalizedRole}:{normalizedTier}:{normalizedRegion}:{patch}";
-        var tags = new[] { AnalyticsCacheTag, $"patch:{patch}", "matchups" };
+        var selectedPatch = patchContext.Patch!;
+        var cacheKey = $"{MatchupsCacheKeyPrefix}{championId}:{normalizedRole}:{normalizedTier}:{normalizedRegion}:{selectedPatch}";
+        var tags = new[] { AnalyticsCacheTag, $"patch:{selectedPatch}", "matchups" };
 
         var response = await _cache.GetOrCreateAsync(
             cacheKey,
@@ -275,7 +279,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
                 normalizedRole,
                 normalizedTier == "all" ? null : normalizedTier,
                 normalizedRegion,
-                patch,
+                selectedPatch,
                 cancel),
             AnalyticsCacheOptions,
             tags,
@@ -289,8 +293,30 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         await _cache.RemoveByTagAsync(AnalyticsCacheTag, ct);
     }
 
-    private async Task<ActivePatchContext> GetActivePatchContextAsync(CancellationToken ct)
+    private async Task<ActivePatchContext> ResolvePatchContextAsync(string? requestedPatch, CancellationToken ct)
     {
+        var normalizedRequestedPatch = string.IsNullOrWhiteSpace(requestedPatch)
+            ? null
+            : requestedPatch.Trim();
+
+        if (!string.IsNullOrWhiteSpace(normalizedRequestedPatch))
+        {
+            var requestedPatchMetadata = await _context.Patches
+                .AsNoTracking()
+                .Where(p => p.Version == normalizedRequestedPatch)
+                .Select(p => new { p.Version, p.ReleaseDate })
+                .FirstOrDefaultAsync(ct);
+
+            if (requestedPatchMetadata == null)
+                return new ActivePatchContext(
+                    normalizedRequestedPatch,
+                    0,
+                    false,
+                    AnalyticsPatchPhase.Steady);
+
+            return BuildPatchContext(requestedPatchMetadata.Version, requestedPatchMetadata.ReleaseDate);
+        }
+
         var activePatch = await _context.Patches
             .AsNoTracking()
             .Where(p => p.IsActive)
@@ -300,13 +326,18 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         if (activePatch == null || string.IsNullOrWhiteSpace(activePatch.Version))
             return new ActivePatchContext(null, 0, false, AnalyticsPatchPhase.Bootstrap);
 
-        var releaseUtc = activePatch.ReleaseDate.Kind == DateTimeKind.Utc
-            ? activePatch.ReleaseDate
-            : DateTime.SpecifyKind(activePatch.ReleaseDate, DateTimeKind.Utc);
+        return BuildPatchContext(activePatch.Version, activePatch.ReleaseDate);
+    }
+
+    private ActivePatchContext BuildPatchContext(string patch, DateTime releaseDate)
+    {
+        var releaseUtc = releaseDate.Kind == DateTimeKind.Utc
+            ? releaseDate
+            : DateTime.SpecifyKind(releaseDate, DateTimeKind.Utc);
         var patchAgeHours = Math.Max(0, (DateTime.UtcNow - releaseUtc).TotalHours);
         var patchPhase = AnalyticsPatchPhaseCalculator.Resolve(patchAgeHours, _computeOptions);
         return new ActivePatchContext(
-            activePatch.Version,
+            patch,
             patchAgeHours,
             patchPhase != AnalyticsPatchPhase.Steady,
             patchPhase);

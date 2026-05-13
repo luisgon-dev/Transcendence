@@ -4,6 +4,7 @@ import type { components } from "@transcendence/api-client";
 
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
+import { AnalyticsPatchFilter } from "@/components/AnalyticsPatchFilter";
 import { AnalyticsRegionFilter } from "@/components/AnalyticsRegionFilter";
 import { RoleFilterTabs } from "@/components/RoleFilterTabs";
 import { RuneSetupDisplay } from "@/components/RuneSetupDisplay";
@@ -15,6 +16,7 @@ import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { pickMostSevereAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { formatDateTimeMs, formatRelativeTime } from "@/lib/format";
+import { fetchLolAnalyticsPatches } from "@/lib/lolAnalyticsPatches";
 import {
   buildProBuildFilterParams,
   buildProBuildPageHref,
@@ -104,15 +106,18 @@ export default async function ProBuildsChampionPage({
     patch: patchFilter
   });
   const proFilterQuery = proFilters.toString();
+  const winrateQuery = new URLSearchParams();
+  if (patchFilter) winrateQuery.set("patch", patchFilter);
 
   const verbosity = getErrorVerbosity();
-  const [{ version, champions }, itemStatic, runeStatic, winratesRes, proBuildsRes] =
+  const [{ version, champions }, itemStatic, runeStatic, patchOptions, winratesRes, proBuildsRes] =
     await Promise.all([
     fetchChampionMap(),
     fetchItemMap(),
     fetchRunesReforged(),
+    fetchLolAnalyticsPatches(),
     fetchBackendJson<ChampionWinRateSummary>(
-      `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/winrates`,
+      `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/winrates${winrateQuery.toString() ? `?${winrateQuery.toString()}` : ""}`,
       { next: { revalidate: 60 * 60 } }
     ),
     fetchBackendJson<ChampionProBuildsResponse>(
@@ -214,40 +219,19 @@ export default async function ProBuildsChampionPage({
             extraParams={roleExtraParams}
           />
           <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />
-          <form action={`/lol/pro-builds/${championId}`} method="get" className="flex flex-wrap items-center gap-2">
-            {roleFilter !== "ALL" ? <input type="hidden" name="role" value={roleFilter} /> : null}
-            {regionFilter !== "ALL" ? (
-              <input type="hidden" name="region" value={regionFilter} />
-            ) : null}
-            <label htmlFor="patch" className="text-xs text-muted">
-              Patch
-            </label>
-            <input
-              id="patch"
-              name="patch"
-              defaultValue={patchFilter ?? ""}
-              placeholder="14.5"
-              className="control-input h-9 w-28 rounded-control px-3 text-sm"
-            />
-            <button
-              type="submit"
-              className="h-9 rounded-control border border-primary/40 bg-primary/10 px-3 text-sm font-semibold text-primary hover:bg-primary/20"
+          <AnalyticsPatchFilter patches={patchOptions} activePatch={patchFilter} />
+          {patchFilter ? (
+            <Link
+              href={buildProBuildPageHref(championId, {
+                role: roleFilter,
+                region: regionFilter,
+                patch: null
+              })}
+              className="control-tab type-ui h-9 px-3"
             >
-              Apply
-            </button>
-            {patchFilter ? (
-              <Link
-                href={buildProBuildPageHref(championId, {
-                  role: roleFilter,
-                  region: regionFilter,
-                  patch: null
-                })}
-                className="control-tab type-ui h-9 px-3"
-              >
-                Clear
-              </Link>
-            ) : null}
-          </form>
+              Clear Patch
+            </Link>
+          ) : null}
         </div>
       </Card>
 

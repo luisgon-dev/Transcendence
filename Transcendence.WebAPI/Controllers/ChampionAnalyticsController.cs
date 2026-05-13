@@ -22,6 +22,7 @@ public class ChampionAnalyticsController(IChampionAnalyticsService analyticsServ
     /// <param name="rankTier">Optional rank tier filter (ALL, EMERALD_PLUS, IRON, BRONZE, SILVER, GOLD, PLATINUM, EMERALD, DIAMOND, MASTER, GRANDMASTER, CHALLENGER)</param>
     /// <param name="region">Optional region filter (e.g., NA1, EUW1)</param>
     /// <param name="role">Optional role filter (TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY)</param>
+    /// <param name="patch">Optional patch version. Defaults to the active analytics patch.</param>
     /// <param name="ct">Cancellation token</param>
     [HttpGet("{championId}/winrates")]
     [ProducesResponseType(typeof(ChampionWinRateSummary), StatusCodes.Status200OK)]
@@ -31,6 +32,7 @@ public class ChampionAnalyticsController(IChampionAnalyticsService analyticsServ
         [FromQuery] string? rankTier = null,
         [FromQuery] string? region = null,
         [FromQuery] string? role = null,
+        [FromQuery] string? patch = null,
         CancellationToken ct = default)
     {
         if (championId <= 0)
@@ -39,7 +41,8 @@ public class ChampionAnalyticsController(IChampionAnalyticsService analyticsServ
         var filter = new ChampionAnalyticsFilter(
             RankTier: rankTier,
             Region: region,
-            Role: role
+            Role: role,
+            Patch: patch
         );
 
         var summary = await analyticsService.GetWinRatesAsync(championId, filter, ct);
@@ -55,6 +58,7 @@ public class ChampionAnalyticsController(IChampionAnalyticsService analyticsServ
     /// <param name="role">Role: TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY</param>
     /// <param name="rankTier">Optional: Filter by rank tier</param>
     /// <param name="region">Optional: Filter by platform region</param>
+    /// <param name="patch">Optional patch version. Defaults to the active analytics patch.</param>
     [HttpGet("{championId}/builds")]
     [ProducesResponseType(typeof(ChampionBuildsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -63,12 +67,13 @@ public class ChampionAnalyticsController(IChampionAnalyticsService analyticsServ
         [FromQuery] string role,
         [FromQuery] string? rankTier = null,
         [FromQuery] string? region = null,
+        [FromQuery] string? patch = null,
         CancellationToken ct = default)
     {
         if (string.IsNullOrEmpty(role))
             return BadRequest("Role parameter is required");
 
-        var result = await analyticsService.GetBuildsAsync(championId, role, rankTier, region, ct);
+        var result = await analyticsService.GetBuildsAsync(championId, role, rankTier, region, patch, ct);
         return Ok(result);
     }
 
@@ -101,6 +106,7 @@ public class ChampionAnalyticsController(IChampionAnalyticsService analyticsServ
     /// <param name="role">Role: TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY</param>
     /// <param name="rankTier">Optional: Filter by rank tier</param>
     /// <param name="region">Optional: Filter by platform region</param>
+    /// <param name="patch">Optional patch version. Defaults to the active analytics patch.</param>
     [HttpGet("{championId}/matchups")]
     [ProducesResponseType(typeof(ChampionMatchupsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -109,12 +115,13 @@ public class ChampionAnalyticsController(IChampionAnalyticsService analyticsServ
         [FromQuery] string role,
         [FromQuery] string? rankTier = null,
         [FromQuery] string? region = null,
+        [FromQuery] string? patch = null,
         CancellationToken ct = default)
     {
         if (string.IsNullOrEmpty(role))
             return BadRequest("Role parameter is required");
 
-        var result = await analyticsService.GetMatchupsAsync(championId, role, rankTier, region, ct);
+        var result = await analyticsService.GetMatchupsAsync(championId, role, rankTier, region, patch, ct);
         return Ok(result);
     }
 

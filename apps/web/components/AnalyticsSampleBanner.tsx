@@ -44,7 +44,7 @@ export function AnalyticsSampleBanner({ sample }: AnalyticsSampleBannerProps) {
             card: "border-danger/40 bg-danger/10",
             badge: "border-danger/40 bg-danger/20 text-fg",
             kicker: "Early sample",
-            summary: "Treat this as early direction until more current-patch games land."
+            summary: "Treat this as early direction until more selected-patch games land."
           };
   const phaseLabel =
     normalized.patchPhase === "bootstrap"

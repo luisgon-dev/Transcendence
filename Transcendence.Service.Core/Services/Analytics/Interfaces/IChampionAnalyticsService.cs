@@ -25,6 +25,7 @@ public interface IChampionAnalyticsService
         string? role,
         string? rankTier,
         string? region,
+        string? patch,
         CancellationToken ct);
 
     /// <summary>
@@ -36,6 +37,7 @@ public interface IChampionAnalyticsService
         string role,
         string? rankTier,
         string? region,
+        string? patch,
         CancellationToken ct);
 
     Task<ChampionProBuildsResponse> GetProBuildsAsync(
@@ -55,6 +57,7 @@ public interface IChampionAnalyticsService
         string role,
         string? rankTier,
         string? region,
+        string? patch,
         CancellationToken ct);
 
     /// <summary>

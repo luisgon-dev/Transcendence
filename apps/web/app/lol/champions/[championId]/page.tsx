@@ -17,6 +17,8 @@ import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { pickMostSevereAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { formatGames, formatPercent } from "@/lib/format";
+import { fetchLolAnalyticsPatches } from "@/lib/lolAnalyticsPatches";
+import { normalizeAnalyticsPatch } from "@/lib/lolPatchFilters";
 import { normalizeRankTierParam, rankTierDisplayLabel } from "@/lib/ranks";
 import { roleDisplayLabel } from "@/lib/roles";
 import {
@@ -71,7 +73,7 @@ export default async function ChampionDetailPage({
   searchParams
 }: {
   params: Promise<{ championId: string }>;
-  searchParams?: Promise<{ role?: string; rankTier?: string; region?: string }>;
+  searchParams?: Promise<{ role?: string; rankTier?: string; region?: string; patch?: string }>;
 }) {
   const resolvedParams = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
@@ -90,16 +92,19 @@ export default async function ChampionDetailPage({
 
   const explicitRole = normalizeRole(resolvedSearchParams?.role);
   const normalizedRankTier = normalizeRankTierParam(resolvedSearchParams?.rankTier);
+  const selectedPatch = normalizeAnalyticsPatch(resolvedSearchParams?.patch);
   const winrateQuery = new URLSearchParams();
   if (normalizedRankTier) winrateQuery.set("rankTier", normalizedRankTier);
   if (activeRegion !== "ALL") winrateQuery.set("region", activeRegion);
+  if (selectedPatch) winrateQuery.set("patch", selectedPatch);
   const qsTier = winrateQuery.toString() ? `?${winrateQuery.toString()}` : "";
 
   const verbosity = getErrorVerbosity();
-  const [staticData, itemStatic, runeStatic, winRes] = await Promise.all([
+  const [staticData, itemStatic, runeStatic, patchOptions, winRes] = await Promise.all([
     fetchChampionMap(),
     fetchItemMap(),
     fetchRunesReforged(),
+    fetchLolAnalyticsPatches(),
     fetchBackendJson<ChampionWinRateSummary>(
       `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/winrates${qsTier}`,
       { next: { revalidate: 60 * 60 } }
@@ -116,6 +121,7 @@ export default async function ChampionDetailPage({
   ) {
     const fallbackQuery = new URLSearchParams();
     if (activeRegion !== "ALL") fallbackQuery.set("region", activeRegion);
+    if (selectedPatch) fallbackQuery.set("patch", selectedPatch);
     const fallbackWinRes = await fetchBackendJson<ChampionWinRateSummary>(
       `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/winrates${fallbackQuery.toString() ? `?${fallbackQuery.toString()}` : ""}`,
       { next: { revalidate: 60 * 60 } }
@@ -132,6 +138,7 @@ export default async function ChampionDetailPage({
   const buildMatchupQuery = new URLSearchParams({ role: effectiveRole });
   if (normalizedRankTier) buildMatchupQuery.set("rankTier", normalizedRankTier);
   if (activeRegion !== "ALL") buildMatchupQuery.set("region", activeRegion);
+  if (selectedPatch) buildMatchupQuery.set("patch", selectedPatch);
 
   const [buildRes, matchupRes] = await Promise.all([
     fetchBackendJson<ChampionBuildsResponse>(
@@ -200,6 +207,12 @@ export default async function ChampionDetailPage({
     (builds as { sample?: unknown } | null)?.sample as AnalyticsSampleLike,
     (matchups as { sample?: unknown } | null)?.sample as AnalyticsSampleLike
   );
+  const linkParams = new URLSearchParams();
+  if (normalizedRankTier) linkParams.set("rankTier", normalizedRankTier);
+  if (activeRegion !== "ALL") linkParams.set("region", activeRegion);
+  if (selectedPatch) linkParams.set("patch", selectedPatch);
+  const linkQuery = linkParams.toString();
+  const sharedFilterParams = selectedPatch ? { patch: selectedPatch } : {};
 
   return (
     <div className="grid gap-8">
@@ -245,13 +258,13 @@ export default async function ChampionDetailPage({
                 Ban Rate —
               </span>
               <Link
-                href={`/lol/matchups/${championId}?role=${encodeURIComponent(effectiveRole)}${normalizedRankTier ? `&rankTier=${encodeURIComponent(normalizedRankTier)}` : ""}${activeRegion !== "ALL" ? `&region=${encodeURIComponent(activeRegion)}` : ""}`}
+                href={`/lol/matchups/${championId}?role=${encodeURIComponent(effectiveRole)}${linkQuery ? `&${linkQuery}` : ""}`}
                 className="rounded-full border border-primary/40 bg-primary/10 px-2 py-1 text-primary hover:bg-primary/20"
               >
                 Matchup Analysis
               </Link>
               <Link
-                href={`/lol/pro-builds/${championId}${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
+                href={`/lol/pro-builds/${championId}${linkQuery ? `?${linkQuery}` : ""}`}
                 className="rounded-full border border-primary/40 bg-primary/10 px-2 py-1 text-primary hover:bg-primary/20"
               >
                 Pro Builds
@@ -275,6 +288,9 @@ export default async function ChampionDetailPage({
           activeRank={normalizedRankTier ?? "all"}
           regionOptions={regionOptions}
           activeRegion={activeRegion}
+          patchOptions={patchOptions}
+          activePatch={selectedPatch}
+          extraParams={sharedFilterParams}
           baseHref={`/lol/champions/${championId}`}
         />
         <div className="mt-3">
@@ -294,7 +310,7 @@ export default async function ChampionDetailPage({
             <p className="mt-1 text-xs text-muted">Try selecting a different region or check back after patch data has been processed.</p>
           </div>
         ) : winrateRows.length === 0 ? (
-          <p className="mt-2 text-sm text-fg/75">No games have been added for this patch yet.</p>
+          <p className="mt-2 text-sm text-fg/75">No games have been added for the selected patch yet.</p>
         ) : (
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -447,7 +463,7 @@ export default async function ChampionDetailPage({
                           className="flex items-center justify-between rounded-md border border-border/50 bg-white/[0.02] px-3 py-2"
                         >
                           <Link
-                            href={`/lol/champions/${opponentChampionId}`}
+                            href={`/lol/champions/${opponentChampionId}${linkQuery ? `?${linkQuery}` : ""}`}
                             className="flex min-w-0 items-center gap-2 hover:underline"
                           >
                             <ChampionPortrait
@@ -496,7 +512,7 @@ export default async function ChampionDetailPage({
                           className="flex items-center justify-between rounded-md border border-border/50 bg-white/[0.02] px-3 py-2"
                         >
                           <Link
-                            href={`/lol/champions/${opponentChampionId}`}
+                            href={`/lol/champions/${opponentChampionId}${linkQuery ? `?${linkQuery}` : ""}`}
                             className="flex min-w-0 items-center gap-2 hover:underline"
                           >
                             <ChampionPortrait

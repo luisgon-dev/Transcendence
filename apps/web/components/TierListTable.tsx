@@ -89,13 +89,15 @@ export function TierListTable({
   champions,
   version,
   rankTierValue,
-  activeRegion
+  activeRegion,
+  activePatch
 }: {
   entries: UITierListEntry[];
   champions: TierListChampionMap;
   version: string;
   rankTierValue: string | null;
   activeRegion: string;
+  activePatch?: string | null;
 }) {
   const [sortCol, setSortCol] = useState<SortColumn>("rank");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -292,6 +294,11 @@ export function TierListTable({
     const championName = champion?.name ?? `Champion ${entry.championId}`;
     const championSlug = champion?.id ?? "Unknown";
     const championSubtitle = champion?.title ?? "";
+    const rowParams = new URLSearchParams({ role: entry.role });
+    if (rankTierValue) rowParams.set("rankTier", rankTierValue);
+    if (activeRegion !== "ALL") rowParams.set("region", activeRegion);
+    if (activePatch) rowParams.set("patch", activePatch);
+    const rowQuery = rowParams.toString();
 
     return (
       <tr key={`${entry.tier}-${entry.role}-${entry.championId}`} className="tierlist-row border-b border-border/20 text-sm">
@@ -301,7 +308,7 @@ export function TierListTable({
         </td>
         <td className="px-2 py-3 md:px-3">
           <Link
-            href={`/lol/champions/${entry.championId}?role=${encodeURIComponent(entry.role)}${rankTierValue ? `&rankTier=${encodeURIComponent(rankTierValue)}` : ""}${activeRegion !== "ALL" ? `&region=${encodeURIComponent(activeRegion)}` : ""}`}
+            href={`/lol/champions/${entry.championId}?${rowQuery}`}
             className="flex items-center gap-2 hover:underline md:gap-2.5"
           >
             <Image
@@ -345,7 +352,7 @@ export function TierListTable({
         </td>
         <td className="hidden px-3 py-3 text-right lg:table-cell">
           <Link
-            href={`/lol/matchups/${entry.championId}?role=${encodeURIComponent(entry.role)}${rankTierValue ? `&rankTier=${encodeURIComponent(rankTierValue)}` : ""}`}
+            href={`/lol/matchups/${entry.championId}?${rowQuery}`}
             className="text-xs text-primary hover:underline"
           >
             Analyze
@@ -353,7 +360,7 @@ export function TierListTable({
         </td>
         <td className="hidden px-3 py-3 text-right lg:table-cell">
           <Link
-            href={`/lol/champions/${entry.championId}?role=${encodeURIComponent(entry.role)}${rankTierValue ? `&rankTier=${encodeURIComponent(rankTierValue)}` : ""}#builds`}
+            href={`/lol/champions/${entry.championId}?${rowQuery}#builds`}
             className="text-xs text-primary hover:underline"
           >
             Open

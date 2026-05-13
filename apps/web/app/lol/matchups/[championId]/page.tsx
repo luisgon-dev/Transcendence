@@ -14,6 +14,8 @@ import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { pickMostSevereAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { formatGames } from "@/lib/format";
+import { fetchLolAnalyticsPatches } from "@/lib/lolAnalyticsPatches";
+import { normalizeAnalyticsPatch } from "@/lib/lolPatchFilters";
 import { normalizeRankTierParam, rankTierDisplayLabel } from "@/lib/ranks";
 import { roleDisplayLabel } from "@/lib/roles";
 import { championIconUrl, fetchChampionMap } from "@/lib/staticData";
@@ -53,17 +55,20 @@ function buildSortHref({
   role,
   rankTier,
   region,
+  patch,
   sort
 }: {
   championId: number;
   role: string;
   rankTier: string | null;
   region: string;
+  patch: string | null;
   sort: string;
 }) {
   const params = new URLSearchParams({ role, sort });
   if (rankTier) params.set("rankTier", rankTier);
   if (region !== "ALL") params.set("region", region);
+  if (patch) params.set("patch", patch);
   return `/lol/matchups/${championId}?${params.toString()}`;
 }
 
@@ -72,7 +77,7 @@ export default async function MatchupAnalysisPage({
   searchParams
 }: {
   params: Promise<{ championId: string }>;
-  searchParams?: Promise<{ role?: string; rankTier?: string; sort?: string; region?: string }>;
+  searchParams?: Promise<{ role?: string; rankTier?: string; sort?: string; region?: string; patch?: string }>;
 }) {
   const resolvedParams = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
@@ -86,15 +91,18 @@ export default async function MatchupAnalysisPage({
 
   const explicitRole = normalizeRole(resolvedSearchParams?.role);
   const normalizedRankTier = normalizeRankTierParam(resolvedSearchParams?.rankTier);
+  const selectedPatch = normalizeAnalyticsPatch(resolvedSearchParams?.patch);
   const sortKey = resolvedSearchParams?.sort === "games" ? "games" : "winRate";
 
   const verbosity = getErrorVerbosity();
   const winrateQuery = new URLSearchParams();
   if (normalizedRankTier) winrateQuery.set("rankTier", normalizedRankTier);
   if (activeRegion !== "ALL") winrateQuery.set("region", activeRegion);
+  if (selectedPatch) winrateQuery.set("patch", selectedPatch);
   const qsTier = winrateQuery.toString() ? `?${winrateQuery.toString()}` : "";
-  const [staticData, winRes] = await Promise.all([
+  const [staticData, patchOptions, winRes] = await Promise.all([
     fetchChampionMap(),
+    fetchLolAnalyticsPatches(),
     fetchBackendJson<ChampionWinRateSummary>(
       `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/winrates${qsTier}`,
       { next: { revalidate: 60 * 60 } }
@@ -107,6 +115,7 @@ export default async function MatchupAnalysisPage({
   const matchupQuery = new URLSearchParams({ role: effectiveRole });
   if (normalizedRankTier) matchupQuery.set("rankTier", normalizedRankTier);
   if (activeRegion !== "ALL") matchupQuery.set("region", activeRegion);
+  if (selectedPatch) matchupQuery.set("patch", selectedPatch);
   const matchupRes = await fetchBackendJson<ChampionMatchupsResponse>(
     `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/matchups?${matchupQuery.toString()}`,
     { next: { revalidate: 60 * 60 } }
@@ -163,6 +172,12 @@ export default async function MatchupAnalysisPage({
     (winrates as { sample?: unknown } | null)?.sample as AnalyticsSampleLike,
     (matchups as { sample?: unknown } | null)?.sample as AnalyticsSampleLike
   );
+  const championLinkParams = new URLSearchParams();
+  if (normalizedRankTier) championLinkParams.set("rankTier", normalizedRankTier);
+  if (activeRegion !== "ALL") championLinkParams.set("region", activeRegion);
+  if (selectedPatch) championLinkParams.set("patch", selectedPatch);
+  const championLinkQuery = championLinkParams.toString();
+  const sharedFilterParams = selectedPatch ? { patch: selectedPatch } : {};
 
   return (
     <div className="grid gap-6">
@@ -179,7 +194,7 @@ export default async function MatchupAnalysisPage({
             <h1 className="type-page-title">
               Matchup Analysis
             </h1>
-            <p className="type-ui mt-2 text-fg/75">How {championName} performs into the current field.</p>
+            <p className="type-ui mt-2 text-fg/75">How {championName} performs into the selected patch field.</p>
           </div>
         </div>
 
@@ -199,6 +214,9 @@ export default async function MatchupAnalysisPage({
           activeRank={normalizedRankTier ?? "all"}
           regionOptions={regionOptions}
           activeRegion={activeRegion}
+          patchOptions={patchOptions}
+          activePatch={selectedPatch}
+          extraParams={sharedFilterParams}
           baseHref={`/lol/matchups/${championId}`}
         />
         <div className="mt-3">
@@ -219,7 +237,7 @@ export default async function MatchupAnalysisPage({
                 const opponent = champions[String(opponentId)];
                 return (
                   <li key={`${opponentId}-${idx}`} className="surface-subtle flex items-center justify-between rounded-card px-3 py-2">
-                    <Link href={`/lol/champions/${opponentId}${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`} className="min-w-0 hover:underline">
+                    <Link href={`/lol/champions/${opponentId}${championLinkQuery ? `?${championLinkQuery}` : ""}`} className="min-w-0 hover:underline">
                       <ChampionPortrait
                         championSlug={opponent?.id ?? "Unknown"}
                         championName={opponent?.name ?? `Champion ${opponentId}`}
@@ -249,7 +267,7 @@ export default async function MatchupAnalysisPage({
                 const opponent = champions[String(opponentId)];
                 return (
                   <li key={`${opponentId}-${idx}`} className="surface-subtle flex items-center justify-between rounded-card px-3 py-2">
-                    <Link href={`/lol/champions/${opponentId}${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`} className="min-w-0 hover:underline">
+                    <Link href={`/lol/champions/${opponentId}${championLinkQuery ? `?${championLinkQuery}` : ""}`} className="min-w-0 hover:underline">
                       <ChampionPortrait
                         championSlug={opponent?.id ?? "Unknown"}
                         championName={opponent?.name ?? `Champion ${opponentId}`}
@@ -278,6 +296,7 @@ export default async function MatchupAnalysisPage({
                 role: effectiveRole,
                 rankTier: normalizedRankTier,
                 region: activeRegion,
+                patch: selectedPatch,
                 sort: "winRate"
               })}
               className={`control-tab type-ui px-3 py-2 ${
@@ -295,6 +314,7 @@ export default async function MatchupAnalysisPage({
                 role: effectiveRole,
                 rankTier: normalizedRankTier,
                 region: activeRegion,
+                patch: selectedPatch,
                 sort: "games"
               })}
               className={`control-tab type-ui px-3 py-2 ${
@@ -334,7 +354,7 @@ export default async function MatchupAnalysisPage({
                   return (
                     <tr key={`${opponentId}-${idx}`} className="border-b border-border/20">
                       <td className="py-2.5 pr-4">
-                        <Link href={`/lol/champions/${opponentId}${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`} className="hover:underline">
+                        <Link href={`/lol/champions/${opponentId}${championLinkQuery ? `?${championLinkQuery}` : ""}`} className="hover:underline">
                           <ChampionPortrait
                             championSlug={opponent?.id ?? "Unknown"}
                             championName={opponent?.name ?? `Champion ${opponentId}`}

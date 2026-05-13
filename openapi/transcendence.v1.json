@@ -1072,6 +1072,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "patch",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1168,6 +1175,64 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/AnalyticsRegionDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lol/analytics/patches": {
+      "get": {
+        "tags": [
+          "Analytics"
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AnalyticsPatchOptionDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AnalyticsPatchOptionDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AnalyticsPatchOptionDto"
                   }
                 }
               }
@@ -1886,6 +1951,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "patch",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1983,6 +2055,13 @@
           },
           {
             "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "patch",
             "in": "query",
             "schema": {
               "type": "string"
@@ -2185,6 +2264,13 @@
           },
           {
             "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "patch",
             "in": "query",
             "schema": {
               "type": "string"
@@ -5690,6 +5776,33 @@
               "$ref": "#/components/schemas/AdminServiceLogDto"
             },
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AnalyticsPatchOptionDto": {
+        "type": "object",
+        "properties": {
+          "patch": {
+            "type": "string",
+            "nullable": true
+          },
+          "releasedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "detectedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "rankedSoloDuoMatchCount": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false

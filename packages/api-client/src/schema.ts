@@ -1013,6 +1013,7 @@ export interface paths {
                     role?: string;
                     rankTier?: string;
                     region?: string;
+                    patch?: string;
                 };
                 header?: never;
                 path?: never;
@@ -1077,6 +1078,54 @@ export interface paths {
                         "text/plain": components["schemas"]["AnalyticsRegionDto"][];
                         "application/json": components["schemas"]["AnalyticsRegionDto"][];
                         "text/json": components["schemas"]["AnalyticsRegionDto"][];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lol/analytics/patches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AnalyticsPatchOptionDto"][];
+                        "application/json": components["schemas"]["AnalyticsPatchOptionDto"][];
+                        "text/json": components["schemas"]["AnalyticsPatchOptionDto"][];
                     };
                 };
                 /** @description Too Many Requests */
@@ -1752,6 +1801,7 @@ export interface paths {
                     rankTier?: string;
                     region?: string;
                     role?: string;
+                    patch?: string;
                 };
                 header?: never;
                 path: {
@@ -1817,6 +1867,7 @@ export interface paths {
                     role?: string;
                     rankTier?: string;
                     region?: string;
+                    patch?: string;
                 };
                 header?: never;
                 path: {
@@ -1947,6 +1998,7 @@ export interface paths {
                     role?: string;
                     rankTier?: string;
                     region?: string;
+                    patch?: string;
                 };
                 header?: never;
                 path: {
@@ -4370,6 +4422,16 @@ export interface components {
         AdminServiceLogsResponse: {
             source?: components["schemas"]["AdminLogSourceDto"];
             items?: components["schemas"]["AdminServiceLogDto"][] | null;
+        };
+        AnalyticsPatchOptionDto: {
+            patch?: string | null;
+            /** Format: date-time */
+            releasedAtUtc?: string | null;
+            /** Format: date-time */
+            detectedAtUtc?: string | null;
+            isActive?: boolean;
+            /** Format: int32 */
+            rankedSoloDuoMatchCount?: number;
         };
         /**
          * Format: int32

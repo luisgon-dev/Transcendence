@@ -2,8 +2,10 @@
 
 import { cn } from "@/lib/cn";
 import { type AnalyticsRegionOption } from "@/lib/analyticsRegionShared";
+import { type LolAnalyticsPatchOption } from "@/lib/lolPatchFilters";
 import { RANK_TIER_FILTERS } from "@/lib/ranks";
 
+import { AnalyticsPatchFilter } from "./AnalyticsPatchFilter";
 import { AnalyticsRegionFilter } from "./AnalyticsRegionFilter";
 import { RankFilterDropdown } from "./RankFilterDropdown";
 import { RoleFilterTabs } from "./RoleFilterTabs";
@@ -18,6 +20,9 @@ export function FilterBar({
   activeRank = "all",
   regionOptions,
   activeRegion,
+  patchOptions,
+  activePatch,
+  extraParams,
   baseHref,
   className
 }: {
@@ -27,15 +32,25 @@ export function FilterBar({
   activeRank?: string;
   regionOptions?: readonly AnalyticsRegionOption[];
   activeRegion?: string;
+  patchOptions?: readonly LolAnalyticsPatchOption[];
+  activePatch?: string | null;
+  extraParams?: Record<string, string | null | undefined>;
   baseHref: string;
   className?: string;
 }) {
-  const roleExtraParams: Record<string, string> = {};
+  const sharedExtraParams: Record<string, string> = {};
+  if (extraParams) {
+    for (const [key, value] of Object.entries(extraParams)) {
+      if (value && value.toLowerCase() !== "all") sharedExtraParams[key] = value;
+    }
+  }
+
+  const roleExtraParams: Record<string, string> = { ...sharedExtraParams };
   if (activeRank && activeRank.toLowerCase() !== "all") {
     roleExtraParams.rankTier = activeRank;
   }
 
-  const rankExtraParams: Record<string, string> = {};
+  const rankExtraParams: Record<string, string> = { ...sharedExtraParams };
   if (activeRole && activeRole.toUpperCase() !== "ALL") {
     rankExtraParams.role = activeRole;
   }
@@ -56,6 +71,9 @@ export function FilterBar({
       />
       {regionOptions && activeRegion ? (
         <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />
+      ) : null}
+      {patchOptions ? (
+        <AnalyticsPatchFilter patches={patchOptions} activePatch={activePatch} />
       ) : null}
     </div>
   );

@@ -192,7 +192,11 @@ Admin web UI runs in `apps/web` under `/admin` and requires an authenticated use
 Admin diagnostics include:
 - `/admin` for worker/server status, database + analysis metrics, and top backlog groups
 - `/admin/jobs` for queue-state exploration, recurring-producer pause/resume, and backlog clearing
+- `/admin/jobs/[jobId]` for per-job detail (state history, inferred region, delete/retry)
 - `/admin/logs` for service/webapi operational logs
+- `/admin/audit` for the admin audit log
+- `/admin/api-keys` for AppOnly API key management (list/rotate/revoke)
+- `/admin/pro-summoners` for pro/tracked-roster curation
 `/api/auth/logout` revokes the active refresh token server-side and the web logout flow calls it before clearing cookies.
 WebAPI now defaults `Microsoft.EntityFrameworkCore.Database.Command` to `Warning` so operational logs are not dominated by insert/update chatter.
 
@@ -209,7 +213,7 @@ WebAPI now defaults `Microsoft.EntityFrameworkCore.Database.Command` to `Warning
   - `AdminLogs:Sources:webapi:DirectoryPath` (optional explicit path for `webapi.log`)
   - `AdminLogs:Sources:service:DirectoryPath` (optional explicit path for `service.log`)
 
-In Docker Compose (`docker-compose.yml` and `docker-compose.production.yml`), both services mount a shared `operational_logs` volume at `/var/log/transcendence` so admin APIs can read both log streams.
+In Docker Compose (`compose.yml`), both services mount a shared `operational_logs` volume at `/var/log/transcendence` so admin APIs can read both log streams.
 The admin logs API scans the live file plus rotated `*.log.N` archives and reports whether the selected source is currently available. In non-compose or split-host setups, configure the `AdminLogs:Sources:*:DirectoryPath` overrides in the Web API so `/api/admin/logs/services` can find worker logs outside the Web API's own content root.
 The logger provider now pre-creates the target `*.log` file and writes a one-time stderr warning if the process cannot create or append the file. In container deployments, that warning appears in the container's stdout/stderr stream and is the first place to check when `service.log` is missing.
 
@@ -273,21 +277,18 @@ Production defaults in `Transcendence.Service/appsettings.json` are coverage-fir
 - `match-timeline-backfill` is intentionally slower than ingestion because tier lists and core champion stats do not require timeline rows.
 - `Jobs:Schedule:PurgeBacklogOnPatchRolloverOnStartup` is disabled and startup rollover logic preserves queued current-patch catch-up work.
 
-### Development Worker Scope
+### Recurring Job Scheduling (Development and Production)
 
-When `Transcendence.Service` runs in the `Development` environment, the `DevelopmentWorker` schedules only analytics-oriented recurring jobs:
+`Transcendence.Service` hosts one of two background workers depending on environment (`Program.cs`): `DevelopmentWorker` when `ASPNETCORE_ENVIRONMENT=Development`, otherwise `ProductionWorker`. Both register the **same** recurring-job set through the shared `WorkerRecurringJobPolicy` — the two workers differ only in startup behavior, not in which recurring jobs they schedule.
 
-- `refresh-champion-analytics`
-- `refresh-champion-analytics-adaptive` (when enabled)
-- `champion-analytics-ingestion` (when enabled)
-- `summoner-maintenance` (when enabled)
-- `tft-static-data-refresh` (when enabled)
-- `tft-analytics-refresh` (when enabled)
-- `tft-analytics-ingestion` (when enabled)
-- `tft-summoner-maintenance` (when enabled)
-- `match-timeline-backfill` (when enabled)
+Which recurring jobs are active is determined by:
 
-It explicitly removes non-analytics recurring jobs (`detect-patch`, `retry-failed-matches`, `poll-live-games`) from the scheduler to keep local runs focused on analytics behavior.
+- the per-job `Enable*` flags under `Jobs:Schedule` (for example `EnableChampionAnalyticsIngestion`, `EnableMatchTimelineBackfill`), and
+- the resolved **scheduling profile** (`Jobs:Schedule:Profile`, falling back to `DefaultProfile`, default `stable`), whose `Jobs:SchedulingProfiles:Profiles:<name>:JobOverrides` can flip a job's `Enabled`/`Cron`/`MandatoryBaseline`. Profile overrides win over the descriptor defaults, and `poll-live-games` is disabled by default.
+
+The base `appsettings.json` ships `Jobs:Schedule:Profile = "stable"` (there is no `appsettings.Development.json`), so a local worker resolves the **same `stable` profile as production** unless you override `Jobs:Schedule:Profile` (or individual `Enable*` / `JobOverrides` values) via user-secrets or environment variables. Under `stable` the enabled jobs are the analytics-coverage set (adaptive analytics refresh + ramp, champion-analytics ingestion + ramp, summoner maintenance + ramp, match-timeline backfill, high-elo profile refresh) plus the baseline jobs (`detect-patch`, `retry-failed-matches`, `refresh-lock-lifecycle-cleanup`, `tft-static-data-refresh`); `poll-live-games`, `rune-selection-integrity-backfill`, the daily `refresh-champion-analytics`, and the TFT analytics jobs (`tft-analytics-refresh`, `tft-analytics-ingestion`, `tft-summoner-maintenance`) are disabled.
+
+`DevelopmentWorker`'s only environment-specific startup actions are: removing legacy/invalid recurring jobs (old `cache-warmup*` ids), an optional full Hangfire purge when `Jobs:Schedule:CleanupOnStartup=true` (default `false`), and a startup integrity check that fail-fasts on mandatory-baseline job failures. It does **not** run the production startup bootstrap described below.
 
 ### Production Startup Bootstrap
 
@@ -381,6 +382,9 @@ Non-ranked backfill ordering is tracked per summoner with `SummonerIngestionCurs
 - `DataStaleAfterMinutes`
 - `RefreshLockMinutes`
 - `PrioritizeFavoriteSummoners`
+- `PrioritizeTrackedHighValueSummoners`
+- `PrioritizeRankedHighEloSummoners`
+- `HighEloTiers`
 - `PauseWhenApiPriorityRefreshActive`
 - `NewPatchRampHours`
 - `RampMaxCandidateSummonersPerRun`

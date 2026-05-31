@@ -123,6 +123,7 @@ corepack pnpm web:dev
 - Ready health: `http://localhost:8080/health/ready`
 - Admin UI: `http://localhost:3000/admin`
 - pgAdmin: `http://localhost:5050` with `docker compose --profile local-tools up`
+- Dozzle (container log viewer): `http://localhost:9999` with `docker compose --profile ops-tools up`
 
 ### Example Usage
 

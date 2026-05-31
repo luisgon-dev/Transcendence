@@ -19,8 +19,8 @@ Transcendence is a backend + web monorepo:
 - Background host that runs Hangfire server and recurring jobs
 - Executes ingestion/refresh/analytics workflows
 - Owns Riot/Camille integration for both LoL and TFT
-- In `Development`, the worker narrows recurring schedules to analytics-oriented jobs only (analytics refresh/ingestion, summoner maintenance, timeline backfill)
-- In `Production`, the `stable` scheduling profile is coverage-first for LoL analytics:
+- Recurring jobs are registered through a shared `WorkerRecurringJobPolicy`; the active set is driven by the `Jobs:Schedule` `Enable*` flags and the resolved scheduling profile (`Jobs:Schedule:Profile`, default `stable`). `DevelopmentWorker` and `ProductionWorker` schedule the same job set and differ only in startup behavior, not in which recurring jobs run.
+- The default `stable` scheduling profile is coverage-first for LoL analytics:
   - adaptive analytics refresh
   - new-patch ramp refresh
   - champion analytics ingestion
@@ -42,6 +42,8 @@ Transcendence is a backend + web monorepo:
 - App Router pages + route handlers used as a BFF:
   - `/api/session/*` for browser auth/session interactions
   - `/api/trn/*` as proxy endpoints to backend (adds auth headers server-side)
+  - `/api/static/*` (champions, items, runes, spells) serve cached Data Dragon / CommunityDragon static maps to the browser (`public, s-maxage=86400, stale-while-revalidate=86400`)
+  - `/api/diagnostics/backend` is a server-side backend connectivity probe (GETs the analytics tier-list endpoint) that always returns HTTP `200` with `{ ok, backend, requestId, durationMs }`
 - Tailwind styling, SSR-first pages where possible
 - Admin dashboard routes under `/admin/*` for ops controls/reports (JWT `admin` role required)
 - Frontend analysis routes:
@@ -50,7 +52,7 @@ Transcendence is a backend + web monorepo:
   - `/lol/matchups/*`
   - `/lol/pro-builds/*`
   - `/lol/summoners/[region]/[riotId]` is the unified LoL profile + match history surface
-    - Legacy `/summoners/[region]/[riotId]/matches*` routes redirect into this unified view using query state (`page`, `queue`, `expandMatchId`)
+    - Legacy `/lol/summoners/[region]/[riotId]/matches*` routes redirect into this unified view using query state (`page`, `queue`, `expandMatchId`)
   - `/tft`
   - `/tft/comps/*`
   - `/tft/champions/*`
@@ -59,6 +61,7 @@ Transcendence is a backend + web monorepo:
   - `/tft/augments/*`
   - `/tft/summoners/[region]/[riotId]`
 - Public LoL patch badges now read backend analytics patch status instead of raw Data Dragon latest so web patch labels match the active analytics dataset
+- LoL analytics pages (tier list, champion, matchups, pro-builds) carry a historical patch selector (`AnalyticsPatchFilter`, backed by `lib/lolPatchFilters.ts` + `lib/lolAnalyticsPatches.ts`, surfaced via `FilterBar`) that reads `GET /api/lol/analytics/patches` and drives the `patch` query parameter
 
 ### `packages/api-client`
 - Generated OpenAPI TypeScript client artifacts built from the committed spec
@@ -296,6 +299,8 @@ The web app never exposes backend tokens to browser JS:
   - generic job detail with state history, inferred region, and delete/retry actions
   - bulk backlog delete for `enqueued`/`scheduled`/`failed` states
   - service operational log viewer (`webapi` and `service`) with source-availability metadata and rotated-log scanning
+  - API key management page (`/admin/api-keys`) for listing, rotating, and revoking AppOnly API keys
+  - pro/tracked-roster curation page (`/admin/pro-summoners`)
 - Admin queue observability is read from Hangfire monitoring APIs, not directly from worker-memory state, so observed backlog and active servers reflect storage-backed Hangfire truth.
 - Processing-job delete is exposed as an advanced operator control only; it transitions Hangfire job state to `Deleted`, but already-started side effects may still complete before the worker observes cancellation.
 

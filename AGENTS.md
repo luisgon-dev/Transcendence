@@ -28,7 +28,7 @@ corepack pnpm e2e:stack        # start stack for E2E tests
 corepack pnpm e2e:local        # run Playwright E2E tests locally
 
 # Git hooks
-corepack pnpm hooks:install    # install Husky hooks
+corepack pnpm hooks:install    # configure git core.hooksPath to .githooks
 
 # EF Migrations (run from repo root)
 dotnet ef migrations add <Name> --project Transcendence.Service --startup-project Transcendence.Service

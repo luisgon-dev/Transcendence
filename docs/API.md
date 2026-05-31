@@ -30,7 +30,7 @@ Read-heavy endpoints are protected by server-side fixed-window rate limiting and
 
 - `429 Too Many Requests`
 
-Auth endpoints (`/api/auth/register`, `/api/auth/login`, `/api/auth/refresh`, `/api/auth/logout`) also use dedicated per-client rate limits.
+Auth endpoints use dedicated per-client rate limits: `/api/auth/register` (`auth-register`), `/api/auth/login` (`auth-login`), and `/api/auth/refresh` + `/api/auth/logout` (shared `auth-refresh`). `/api/auth/password-reset` is not rate-limited.
 
 ## Key Endpoint Areas (Current)
 
@@ -126,6 +126,7 @@ Example (`SummonerAcceptedResponse`):
 - `GET /api/lol/analytics/champions/{championId}/pro-builds`
 - `GET /api/lol/analytics/champions/{championId}/matchups`
 - `POST /api/lol/analytics/cache/invalidate` (`AppOnly`)
+- `POST /api/lol/analytics/champions/cache/invalidate` (`AppOnly`)
 
 Early-patch semantics:
 - Analytics endpoints default to the active patch and support a `patch` query parameter for stored historical patches.
@@ -238,8 +239,12 @@ TFT behavior notes:
 - `POST /api/auth/login`
 - `POST /api/auth/refresh`
 - `POST /api/auth/logout`
+- `POST /api/auth/password-reset` (anonymous; always returns a generic `200 OK` whether or not the account exists)
 - `GET /api/auth/me` (`AppOrUser`)
-- Key management endpoints under `/api/auth/keys` (`AdminOnly`)
+- `GET /api/auth/keys` (`AdminOnly`)
+- `POST /api/auth/keys` (`AdminOnly`)
+- `POST /api/auth/keys/{id}/revoke` (`AdminOnly`)
+- `POST /api/auth/keys/{id}/rotate` (`AdminOnly`)
 
 Auth behavior notes:
 - Registration duplicate-email responses are intentionally generic (`Registration failed.`).

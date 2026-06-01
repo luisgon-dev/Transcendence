@@ -66,7 +66,7 @@ export default async function TftHomePage() {
           <Link key={item.label} href={item.href}>
             <Card className="page-stat-card p-5">
               <p className="type-kicker text-muted">{item.label}</p>
-              <p className="mt-2 text-3xl font-semibold text-fg">{item.value.toLocaleString()}</p>
+              <p className="type-tabular mt-2 text-3xl font-semibold text-fg">{item.value.toLocaleString()}</p>
             </Card>
           </Link>
         ))}
@@ -78,6 +78,14 @@ export default async function TftHomePage() {
           <p className="type-ui mt-2 text-fg/75">The default view starts on the live set at Emerald+.</p>
         </div>
 
+        {topComps.length === 0 ? (
+          <Card className="p-5">
+            <p className="text-sm text-fg/75">No comp data yet for the live set.</p>
+            <p className="mt-1 text-sm text-fg/60">
+              Comps populate as ranked TFT matches are ingested — check back soon.
+            </p>
+          </Card>
+        ) : (
         <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
           {topComps.map((comp) => (
             <Link key={comp.compSlug} href={`/tft/comps/${comp.compSlug}`}>
@@ -94,7 +102,7 @@ export default async function TftHomePage() {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 text-sm text-fg/80">
+                <div className="type-tabular grid grid-cols-2 gap-2 text-sm text-fg/80">
                   <p>Avg Place {comp.avgPlacement.toFixed(2)}</p>
                   <p>Top 4 {formatTftPercent(comp.top4Rate)}</p>
                   <p>Win {formatTftPercent(comp.winRate)}</p>
@@ -102,12 +110,15 @@ export default async function TftHomePage() {
                 </div>
 
                 <p className="text-xs text-fg/75">
-                  Traits: {comp.traits.map((trait) => `${trait.name} ${trait.numUnits}`).join(" · ")}
+                  Traits: {comp.traits.length > 0
+                    ? comp.traits.map((trait) => `${trait.name} ${trait.numUnits}`).join(" · ")
+                    : "None listed"}
                 </p>
               </Card>
             </Link>
           ))}
         </div>
+        )}
       </section>
     </div>
   );

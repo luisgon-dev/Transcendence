@@ -1,7 +1,8 @@
+import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { Card } from "@/components/ui/Card";
 import { TftSummonerProfileClient } from "@/components/TftSummonerProfileClient";
 import { fetchBackendJson } from "@/lib/backendCall";
-import { getBackendBaseUrl } from "@/lib/env";
+import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { decodeRiotIdPath } from "@/lib/riotid";
 import { type TftAcceptedResponse, type TftSummonerProfile } from "@/lib/tft";
 
@@ -31,6 +32,32 @@ export default async function TftSummonerPage({
     `${getBackendBaseUrl()}/api/tft/summoners/${encodeURIComponent(region)}/${encodeURIComponent(decoded.gameName)}/${encodeURIComponent(decoded.tagLine)}`,
     { cache: "no-store" }
   );
+
+  // fetchBackendJson reports ok=true for 202 (it's < 400); a non-ok result here is a
+  // genuine backend error (timeout/unreachable/5xx), so fail closed instead of casting
+  // a null/error body into the profile client.
+  if (!result.ok) {
+    const verbosity = getErrorVerbosity();
+    return (
+      <BackendErrorCard
+        title={`${decoded.gameName}#${decoded.tagLine}`}
+        message={
+          result.errorKind === "timeout"
+            ? "This profile is taking too long to load."
+            : result.errorKind === "unreachable"
+              ? "We couldn't reach the TFT service right now."
+              : "We couldn't load this TFT profile."
+        }
+        hint="Try again in a moment."
+        requestId={result.requestId}
+        detail={
+          verbosity === "verbose"
+            ? JSON.stringify({ status: result.status, errorKind: result.errorKind }, null, 2)
+            : null
+        }
+      />
+    );
+  }
 
   const initialPayload =
     result.status === 202

@@ -46,6 +46,7 @@ export function TftCompList({
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as SortOption)}
+          aria-label="Sort comps by"
           className="control-select h-10 max-w-[180px] text-sm"
         >
           {sortOptions.map((opt) => (
@@ -65,8 +66,12 @@ export function TftCompList({
           const tier = compTierLabel(comp.avgPlacement);
           const tierColor = compTierColorClass(tier);
           return (
-            <Link key={comp.compSlug} href={`/tft/comps/${comp.compSlug}${qs ? `?${qs}` : ""}`}>
-              <Card className="grid gap-3 p-5 transition hover:bg-white/8">
+            <Link
+              key={comp.compSlug}
+              href={`/tft/comps/${comp.compSlug}${qs ? `?${qs}` : ""}`}
+              className="block rounded-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            >
+              <Card className="grid gap-3 p-5 transition-colors hover:border-border/80 hover:bg-surface/40">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-lg font-semibold text-fg">{comp.name}</p>
@@ -79,7 +84,7 @@ export function TftCompList({
                   </Badge>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 text-sm text-fg/80">
+                <div className="type-tabular grid grid-cols-2 gap-2 text-sm text-fg/80">
                   <p>Avg Place <span className="font-medium text-fg">{comp.avgPlacement.toFixed(2)}</span></p>
                   <p>Top 4 <span className="font-medium text-fg">{formatTftPercent(comp.top4Rate)}</span></p>
                   <p>Win <span className="font-medium text-fg">{formatTftPercent(comp.winRate)}</span></p>

@@ -123,6 +123,11 @@ export const TFT_REGION_OPTIONS = [
 
 export type TftMatchParticipant = {
   puuid: string;
+  // The wire contract (TftMatchParticipantDetailDto) serializes Riot's match-v1
+  // field names: riotIdGameName / riotIdTagLine. gameName / tagLine are accepted
+  // as a forward-compatible fallback in case the backend DTO is later aligned.
+  riotIdGameName?: string | null;
+  riotIdTagLine?: string | null;
   gameName?: string | null;
   tagLine?: string | null;
   placement: number;
@@ -226,8 +231,4 @@ export function compTierColorClass(tier: string): string {
 
 export function formatTftPercent(value: number, decimals = 1) {
   return `${(value * 100).toFixed(decimals)}%`;
-}
-
-export function formatTftTime(epochMs: number) {
-  return new Date(epochMs).toLocaleString();
 }

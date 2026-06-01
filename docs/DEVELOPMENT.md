@@ -286,7 +286,7 @@ Which recurring jobs are active is determined by:
 - the per-job `Enable*` flags under `Jobs:Schedule` (for example `EnableChampionAnalyticsIngestion`, `EnableMatchTimelineBackfill`), and
 - the resolved **scheduling profile** (`Jobs:Schedule:Profile`, falling back to `DefaultProfile`, default `stable`), whose `Jobs:SchedulingProfiles:Profiles:<name>:JobOverrides` can flip a job's `Enabled`/`Cron`/`MandatoryBaseline`. Profile overrides win over the descriptor defaults, and `poll-live-games` is disabled by default.
 
-The base `appsettings.json` ships `Jobs:Schedule:Profile = "stable"` (there is no `appsettings.Development.json`), so a local worker resolves the **same `stable` profile as production** unless you override `Jobs:Schedule:Profile` (or individual `Enable*` / `JobOverrides` values) via user-secrets or environment variables. Under `stable` the enabled jobs are the analytics-coverage set (adaptive analytics refresh + ramp, champion-analytics ingestion + ramp, summoner maintenance + ramp, match-timeline backfill, high-elo profile refresh) plus the baseline jobs (`detect-patch`, `retry-failed-matches`, `refresh-lock-lifecycle-cleanup`, `tft-static-data-refresh`); `poll-live-games`, `rune-selection-integrity-backfill`, the daily `refresh-champion-analytics`, and the TFT analytics jobs (`tft-analytics-refresh`, `tft-analytics-ingestion`, `tft-summoner-maintenance`) are disabled.
+The base `appsettings.json` ships `Jobs:Schedule:Profile = "stable"` (there is no `appsettings.Development.json`), so a local worker resolves the **same `stable` profile as production** unless you override `Jobs:Schedule:Profile` (or individual `Enable*` / `JobOverrides` values) via user-secrets or environment variables. Under `stable` the enabled jobs are the LoL analytics-coverage set (adaptive analytics refresh + ramp, champion-analytics ingestion + ramp, summoner maintenance + ramp, match-timeline backfill, high-elo profile refresh), the full TFT set (`tft-static-data-refresh`, `tft-analytics-refresh`, `tft-analytics-ingestion`, `tft-summoner-maintenance`), plus the baseline jobs (`detect-patch`, `retry-failed-matches`, `refresh-lock-lifecycle-cleanup`); `poll-live-games`, `rune-selection-integrity-backfill`, and the daily `refresh-champion-analytics` are disabled. The TFT analytics jobs were enabled in the `stable` profile when the TFT frontend went live; they run on the isolated `tft-*` queues using the separate `RiotApi:Tft:ApiKey`, so TFT demand never competes with LoL refresh throughput. TFT comps and player profiles stay empty until these jobs have ingested data, which requires a valid TFT Riot key and some ramp-up time after deploy.
 
 `DevelopmentWorker`'s only environment-specific startup actions are: removing legacy/invalid recurring jobs (old `cache-warmup*` ids), an optional full Hangfire purge when `Jobs:Schedule:CleanupOnStartup=true` (default `false`), and a startup integrity check that fail-fasts on mandatory-baseline job failures. It does **not** run the production startup bootstrap described below.
 
@@ -411,9 +411,15 @@ Queue model:
 - TFT analytics/static-data work: `tft-default`
 - TFT maintenance/bootstrap work: `tft-refresh-low`
 
+All four TFT recurring jobs are enabled under the `stable` profile (see the scheduling-profile section above) now that the TFT web surface is live.
+
 Static-data behavior:
 - TFT champion/item/trait/augment catalog endpoints read only the currently active set.
 - If a TFT static-data refresh fails while previously stored static data exists, the worker logs the failure and continues serving the stored active-set catalog.
+
+### TFT web surface
+
+The TFT frontend (`/tft/*`) is gated by `TFT_FRONTEND_ENABLED` in `apps/web/lib/featureFlags.ts` (now `true`). With the flag on, the header game switcher, command palette, landing page, and `/tft` routes are all live. Catalog pages (units/items/traits/augments) render from the active-set static data immediately; the comps tier list and player profiles populate only once the TFT analytics/ingestion jobs above have run against a valid TFT Riot key.
 
 ### Refresh Lock Lifecycle Cleanup and Telemetry
 

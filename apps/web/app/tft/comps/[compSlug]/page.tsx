@@ -1,10 +1,11 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { fetchBackendJson } from "@/lib/backendCall";
-import { getBackendBaseUrl } from "@/lib/env";
+import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import {
   compTierColorClass,
   compTierLabel,
@@ -31,12 +32,33 @@ export default async function TftCompDetailPage({
     { next: { revalidate: 60 * 10 } }
   );
 
+  if (!result.ok && (result.errorKind === "timeout" || result.errorKind === "unreachable")) {
+    const verbosity = getErrorVerbosity();
+    return (
+      <BackendErrorCard
+        title="TFT comp"
+        message={
+          result.errorKind === "timeout"
+            ? "This comp is taking too long to load."
+            : "We couldn't reach the TFT service right now."
+        }
+        hint="Try again in a moment."
+        requestId={result.requestId}
+        detail={
+          verbosity === "verbose"
+            ? JSON.stringify({ status: result.status, errorKind: result.errorKind }, null, 2)
+            : null
+        }
+      />
+    );
+  }
+
   if (!result.ok || !result.body) {
     return (
       <Card className="p-6">
-        <p className="text-sm font-medium text-fg">Comp not found</p>
+        <p className="text-sm font-medium text-fg">Comp “{compSlug}” not found</p>
         <p className="mt-1 text-xs text-muted">This comp may no longer be tracked or may have changed with a recent patch.</p>
-        <Link href="/tft/comps" className="mt-3 inline-block text-sm text-primary hover:underline">Browse all comps</Link>
+        <Link href={`/tft/comps${qs.toString() ? `?${qs.toString()}` : ""}`} className="mt-3 inline-block text-sm text-primary hover:underline">Browse all comps</Link>
       </Card>
     );
   }
@@ -48,7 +70,7 @@ export default async function TftCompDetailPage({
   return (
     <div className="grid gap-6">
       <section className="page-hero p-6">
-        <Link href="/tft/comps" className="type-ui font-semibold text-primary hover:underline">
+        <Link href={`/tft/comps${qs.toString() ? `?${qs.toString()}` : ""}`} className="type-ui font-semibold text-primary hover:underline">
           Back to comps
         </Link>
         <div className="mt-3 flex items-center gap-3">
@@ -64,10 +86,10 @@ export default async function TftCompDetailPage({
         </p>
 
         <div className="mt-4 grid gap-3 md:grid-cols-4">
-          <Card className="page-stat-card p-4"><p className="type-kicker text-muted">Avg Placement</p><p className="mt-1 text-xl font-semibold">{comp.summary.avgPlacement.toFixed(2)}</p></Card>
-          <Card className="page-stat-card p-4"><p className="type-kicker text-muted">Top 4 Rate</p><p className="mt-1 text-xl font-semibold">{formatTftPercent(comp.summary.top4Rate)}</p></Card>
-          <Card className="page-stat-card p-4"><p className="type-kicker text-muted">Win Rate</p><p className="mt-1 text-xl font-semibold">{formatTftPercent(comp.summary.winRate)}</p></Card>
-          <Card className="page-stat-card p-4"><p className="type-kicker text-muted">Games</p><p className="mt-1 text-xl font-semibold">{comp.summary.sampleSize.toLocaleString()}</p></Card>
+          <Card className="page-stat-card p-4"><p className="type-kicker text-muted">Avg Placement</p><p className="type-tabular mt-1 text-xl font-semibold">{comp.summary.avgPlacement.toFixed(2)}</p></Card>
+          <Card className="page-stat-card p-4"><p className="type-kicker text-muted">Top 4 Rate</p><p className="type-tabular mt-1 text-xl font-semibold">{formatTftPercent(comp.summary.top4Rate)}</p></Card>
+          <Card className="page-stat-card p-4"><p className="type-kicker text-muted">Win Rate</p><p className="type-tabular mt-1 text-xl font-semibold">{formatTftPercent(comp.summary.winRate)}</p></Card>
+          <Card className="page-stat-card p-4"><p className="type-kicker text-muted">Games</p><p className="type-tabular mt-1 text-xl font-semibold">{comp.summary.sampleSize.toLocaleString()}</p></Card>
         </div>
       </section>
 

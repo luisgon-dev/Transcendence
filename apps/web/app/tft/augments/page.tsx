@@ -1,3 +1,4 @@
+import { TftCatalogError } from "@/components/TftCatalogError";
 import { TftCatalogGrid } from "@/components/TftCatalogGrid";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl } from "@/lib/env";
@@ -7,7 +8,11 @@ export default async function TftAugmentsPage() {
   const result = await fetchBackendJson<TftStaticEntity[]>(`${getBackendBaseUrl()}/api/tft/analytics/augments`, {
     next: { revalidate: 60 * 60 }
   });
-  const augments = result.ok ? result.body ?? [] : [];
+
+  if (!result.ok) {
+    return <TftCatalogError title="TFT Augments" noun="augment" result={result} />;
+  }
+  const augments = result.body ?? [];
 
   return (
     <div className="grid gap-6">

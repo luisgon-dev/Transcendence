@@ -1,6 +1,7 @@
+import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { TftCompList } from "@/components/TftCompList";
 import { fetchBackendJson } from "@/lib/backendCall";
-import { getBackendBaseUrl } from "@/lib/env";
+import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { TFT_RANK_OPTIONS, TFT_REGION_OPTIONS, type TftCompListItem } from "@/lib/tft";
 
 export default async function TftCompsPage({
@@ -20,7 +21,7 @@ export default async function TftCompsPage({
     { next: { revalidate: 60 * 10 } }
   );
 
-  const comps = result.ok ? result.body ?? [] : [];
+  const verbosity = getErrorVerbosity();
 
   return (
     <div className="grid gap-6">
@@ -31,14 +32,14 @@ export default async function TftCompsPage({
           Compare the strongest boards for the live set and sort by the stat that matters most to you.
         </p>
         <form className="mt-4 flex flex-wrap gap-2" action="/tft/comps" method="get">
-          <select name="rankTier" defaultValue={rankTier} className="control-select max-w-[220px]">
+          <select name="rankTier" aria-label="Rank tier" defaultValue={rankTier} className="control-select max-w-[220px]">
             {TFT_RANK_OPTIONS.map((option) => (
               <option key={option} value={option}>
                 {option}
               </option>
             ))}
           </select>
-          <select name="region" defaultValue={region} className="control-select max-w-[180px]">
+          <select name="region" aria-label="Region" defaultValue={region} className="control-select max-w-[180px]">
             {TFT_REGION_OPTIONS.map((option) => (
               <option key={option} value={option}>
                 {option}
@@ -51,7 +52,27 @@ export default async function TftCompsPage({
         </form>
       </section>
 
-      <TftCompList comps={comps} qs={qs.toString()} />
+      {result.ok ? (
+        <TftCompList comps={result.body ?? []} qs={qs.toString()} />
+      ) : (
+        <BackendErrorCard
+          title="TFT Meta Comps"
+          message={
+            result.errorKind === "timeout"
+              ? "Comps are taking too long to load."
+              : result.errorKind === "unreachable"
+                ? "We couldn't reach the TFT service right now."
+                : "We couldn't load TFT comps."
+          }
+          hint="Try again in a moment."
+          requestId={result.requestId}
+          detail={
+            verbosity === "verbose"
+              ? JSON.stringify({ status: result.status, errorKind: result.errorKind }, null, 2)
+              : null
+          }
+        />
+      )}
     </div>
   );
 }

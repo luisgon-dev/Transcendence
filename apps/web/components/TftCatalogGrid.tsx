@@ -28,6 +28,7 @@ export function TftCatalogGrid({
       <Input
         type="search"
         placeholder="Search by name..."
+        aria-label="Search by name"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         className="max-w-sm"
@@ -36,8 +37,12 @@ export function TftCatalogGrid({
         {filtered.map((item) => {
           const iconSrc = tftIconUrl(item.icon);
           return (
-            <Link key={item.apiName} href={`${basePath}/${item.apiName}`}>
-              <Card className="flex items-center gap-3 p-4 transition hover:bg-white/8">
+            <Link
+              key={item.apiName}
+              href={`${basePath}/${item.apiName}`}
+              className="block rounded-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            >
+              <Card className="flex items-center gap-3 p-4 transition-colors hover:border-border/80 hover:bg-surface/40">
                 {iconSrc ? (
                   <Image
                     src={iconSrc}
@@ -49,7 +54,7 @@ export function TftCatalogGrid({
                   />
                 ) : (
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-primary/10 text-sm font-bold text-primary">
-                    {item.name.charAt(0)}
+                    {item.name.charAt(0) || "?"}
                   </div>
                 )}
                 <div className="min-w-0">
@@ -63,7 +68,11 @@ export function TftCatalogGrid({
           );
         })}
         {filtered.length === 0 && (
-          <p className="col-span-full text-sm text-fg/60">No results for &quot;{search}&quot;</p>
+          <p className="col-span-full text-sm text-fg/70" role="status" aria-live="polite">
+            {items.length === 0
+              ? "No entries available for the current set yet."
+              : `No matches for “${search.trim()}”.`}
+          </p>
         )}
       </div>
     </div>

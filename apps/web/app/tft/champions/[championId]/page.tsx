@@ -38,7 +38,7 @@ export default async function TftChampionDetailPage({
           <Image src={iconSrc} alt={entity.name} width={64} height={64} sizes="64px" className="rounded-xl" />
         ) : (
           <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-border/50 bg-primary/10 text-xl font-bold text-primary">
-            {entity.name.charAt(0)}
+            {entity.name.charAt(0) || "?"}
           </div>
         )}
         <div>

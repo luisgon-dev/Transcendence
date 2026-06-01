@@ -70,6 +70,11 @@ function starString(tier: number): string {
   return "\u2605".repeat(tier);
 }
 
+// Stop polling after this many attempts (~a few minutes once the delay reaches its
+// 10s cap) so a never-resolving 202 \u2014 e.g. ingestion still catching up, or a player
+// with no ranked TFT games \u2014 can't spin an infinite spinner.
+const POLL_MAX_ATTEMPTS = 24;
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -98,6 +103,8 @@ export function TftSummonerProfileClient({
   const [refreshing, setRefreshing] = useState(false);
   const [polling, setPolling] = useState(initialPayload.kind === "accepted");
   const [pollDelayMs, setPollDelayMs] = useState(2000);
+  const [pollAttempts, setPollAttempts] = useState(0);
+  const [pollTimedOut, setPollTimedOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ddVersion, setDdVersion] = useState<string | null>(null);
 
@@ -107,6 +114,7 @@ export function TftSummonerProfileClient({
   const [history, setHistory] = useState<TftPagedMatches | null>(null);
   const [historyBusy, setHistoryBusy] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyReloadKey, setHistoryReloadKey] = useState(0);
 
   // Match detail expand state
   const [expandedMatchId, setExpandedMatchId] = useState<string | null>(null);
@@ -157,15 +165,29 @@ export function TftSummonerProfileClient({
 
   useEffect(() => {
     if (!polling) return;
+    if (pollAttempts >= POLL_MAX_ATTEMPTS) {
+      setPolling(false);
+      setPollTimedOut(true);
+      return;
+    }
     const t = setTimeout(async () => {
       try {
         await loadProfile();
       } finally {
+        setPollAttempts((n) => n + 1);
         setPollDelayMs((d) => computeNextPollDelayMs(d));
       }
     }, pollDelayMs);
     return () => clearTimeout(t);
-  }, [loadProfile, pollDelayMs, polling]);
+  }, [loadProfile, pollDelayMs, polling, pollAttempts]);
+
+  // Reset polling back to an active state (used by "Update Now" and "Check Again").
+  const restartPolling = useCallback(() => {
+    setPollTimedOut(false);
+    setPollAttempts(0);
+    setPollDelayMs(2000);
+    setPolling(true);
+  }, []);
 
   // ---------------------------------------------------------------------------
   // Refresh action
@@ -184,6 +206,8 @@ export function TftSummonerProfileClient({
         return;
       }
       setPayload({ kind: "accepted", accepted: json });
+      setPollTimedOut(false);
+      setPollAttempts(0);
       setPolling(true);
       setPollDelayMs(computeNextPollDelayMs(2000, json.retryAfterSeconds));
     } finally {
@@ -221,7 +245,7 @@ export function TftSummonerProfileClient({
     }
     void load(summonerId);
     return () => { cancelled = true; };
-  }, [page, profile?.summonerId]);
+  }, [page, profile?.summonerId, historyReloadKey]);
 
   // ---------------------------------------------------------------------------
   // Quick stats computed from match history
@@ -298,14 +322,29 @@ export function TftSummonerProfileClient({
             {title}
           </h1>
           <p className="mt-3 text-sm text-fg/75">
-            {payload.accepted.message ?? "We are pulling this player's latest TFT matches now."}
+            {pollTimedOut
+              ? "This is taking longer than expected. This player may not have recent ranked TFT games yet, or ingestion is still catching up — try again shortly."
+              : payload.accepted.message ?? "We are pulling this player's latest TFT matches now."}
           </p>
+          {polling && !pollTimedOut ? (
+            <p className="mt-2 type-caption text-muted" role="status" aria-live="polite">
+              Checking for updates…
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" onClick={queueRefresh} disabled={refreshing}>
             {refreshing ? "Starting..." : "Update Now"}
           </Button>
-          <Button type="button" variant="outline" onClick={() => void loadProfile()}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={polling && !pollTimedOut}
+            onClick={() => {
+              restartPolling();
+              void loadProfile();
+            }}
+          >
             Check Again
           </Button>
         </div>
@@ -359,12 +398,12 @@ export function TftSummonerProfileClient({
                 <div className="mt-4">
                   <div className="flex items-center justify-between gap-3">
                     <p className="type-kicker text-fg/68">Recent placements</p>
-                    <p className="text-xs text-fg/55">Latest {recentForm.length} games</p>
+                    <p className="text-xs text-fg/70">Latest {recentForm.length} games</p>
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-1.5" aria-label="Recent placements (latest first)">
                     {recentForm.map((placement, idx) => (
                       <span
-                        key={`p-${idx}`}
+                        key={`p-${idx}-${placement}`}
                         className={`type-overline flex h-7 w-7 items-center justify-center rounded-full font-bold tracking-normal shadow-soft ${placementBgClass(placement)} ${placementColorClass(placement)}`}
                         title={formatPlacement(placement)}
                       >
@@ -408,7 +447,7 @@ export function TftSummonerProfileClient({
               </div>
               <div className="profile-metric-tile">
                 <p className="type-kicker text-muted">Top 4 rate</p>
-                <p className="mt-2 text-xl font-semibold text-success">
+                <p className="type-tabular mt-2 text-xl font-semibold text-success">
                   {quickStats ? formatTftPercent(quickStats.top4) : "Pending"}
                 </p>
                 <p className="mt-1 text-sm text-fg/66">
@@ -419,7 +458,7 @@ export function TftSummonerProfileClient({
               </div>
               <div className="profile-metric-tile">
                 <p className="type-kicker text-muted">Wins</p>
-                <p className="mt-2 text-xl font-semibold text-warning">
+                <p className="type-tabular mt-2 text-xl font-semibold text-warning">
                   {quickStats ? formatTftPercent(quickStats.wins) : "Pending"}
                 </p>
                 <p className="mt-1 text-sm text-fg/66">
@@ -498,18 +537,18 @@ export function TftSummonerProfileClient({
               <div className="mt-4 grid gap-3">
                 <div className="profile-metric-tile">
                   <p className="type-kicker text-muted">Average placement</p>
-                  <p className="mt-2 text-2xl font-semibold text-fg">{quickStats.avgPlacement.toFixed(1)}</p>
+                  <p className="type-tabular mt-2 text-2xl font-semibold text-fg">{quickStats.avgPlacement.toFixed(1)}</p>
                   <p className="mt-1 text-sm text-fg/66">Across {quickStats.total} recent games</p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="profile-metric-tile">
                     <p className="type-kicker text-muted">Top 4</p>
-                    <p className="mt-2 text-xl font-semibold text-success">{formatTftPercent(quickStats.top4)}</p>
+                    <p className="type-tabular mt-2 text-xl font-semibold text-success">{formatTftPercent(quickStats.top4)}</p>
                     <p className="mt-1 text-sm text-fg/66">High-floor finishes</p>
                   </div>
                   <div className="profile-metric-tile">
                     <p className="type-kicker text-muted">Wins</p>
-                    <p className="mt-2 text-xl font-semibold text-warning">{formatTftPercent(quickStats.wins)}</p>
+                    <p className="type-tabular mt-2 text-xl font-semibold text-warning">{formatTftPercent(quickStats.wins)}</p>
                     <p className="mt-1 text-sm text-fg/66">First place rate</p>
                   </div>
                 </div>
@@ -539,6 +578,7 @@ export function TftSummonerProfileClient({
                 <select
                   value={sort}
                   onChange={(e) => setSort(e.target.value as TftSortOption)}
+                  aria-label="Sort matches by"
                   className="h-10 rounded-control border border-border/70 bg-surface-2/55 px-3 text-sm text-fg shadow-inset"
                 >
                   {sortOptions.map((opt) => (
@@ -556,15 +596,27 @@ export function TftSummonerProfileClient({
               </div>
             </div>
 
-            <div className="mt-5 grid gap-4">
+            <div className="mt-5 grid gap-4" aria-busy={historyBusy && !history}>
               {historyBusy && !history ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <Skeleton key={i} className="h-20 w-full rounded-xl" />
                 ))
               ) : historyError ? (
-                <p className="text-sm text-danger">{historyError}</p>
+                <div className="surface-subtle grid gap-3 rounded-card p-4" role="status">
+                  <p className="text-sm text-danger">{historyError}</p>
+                  <div>
+                    <Button variant="outline" onClick={() => setHistoryReloadKey((k) => k + 1)} disabled={historyBusy}>
+                      Retry
+                    </Button>
+                  </div>
+                </div>
               ) : visibleMatches.length === 0 ? (
-                <p className="text-sm text-fg/65">No matches found.</p>
+                <Card className="surface-subtle p-5">
+                  <p className="text-sm text-fg/75">No ranked TFT matches recorded yet for this player.</p>
+                  <p className="mt-1 text-sm text-fg/60">
+                    Use <span className="font-medium text-fg/80">Update Now</span> to fetch the latest games — they appear here once ingestion finishes.
+                  </p>
+                </Card>
               ) : (
                 visibleMatches.map((match) => (
                   <TftMatchCard
@@ -694,8 +746,8 @@ function TftMatchCard({
 
         <div className="flex shrink-0 flex-col items-end justify-center gap-2 px-4 py-4 text-right text-xs text-fg/70">
           <div className="surface-subtle rounded-control px-3 py-2">
-            <p className="text-sm font-semibold text-fg">{match.totalDamageToPlayers.toLocaleString()} dmg</p>
-            <p className="type-caption mt-1 text-fg/62">{match.playersEliminated} elim</p>
+            <p className="type-tabular text-sm font-semibold text-fg">{match.totalDamageToPlayers.toLocaleString()} dmg</p>
+            <p className="type-tabular type-caption mt-1 text-fg/75">{match.playersEliminated} elim</p>
           </div>
           <span className="type-overline text-fg/65">
             {expanded ? "Collapse" : "Expand"}
@@ -752,16 +804,18 @@ function TftMatchDetailTable({
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="type-kicker text-muted">Lobby table</p>
-          <p className="mt-1 text-xs text-fg/62">
+          <p className="mt-1 text-xs text-fg/75">
             Duration: {formatDurationSeconds(durationSeconds)}
           </p>
         </div>
       </div>
       {sorted.map((p) => {
+        const gn = p.riotIdGameName ?? p.gameName ?? null;
+        const tl = p.riotIdTagLine ?? p.tagLine ?? null;
         const isMe =
-          (p.gameName ?? "").toLowerCase() === currentGameName.toLowerCase() &&
-          (p.tagLine ?? "").toLowerCase() === currentTagLine.toLowerCase();
-        const displayName = p.gameName && p.tagLine ? `${p.gameName}#${p.tagLine}` : p.gameName ?? "Unknown";
+          (gn ?? "").toLowerCase() === currentGameName.toLowerCase() &&
+          (tl ?? "").toLowerCase() === currentTagLine.toLowerCase();
+        const displayName = gn && tl ? `${gn}#${tl}` : gn ?? "Unknown";
 
         return (
           <div
@@ -777,10 +831,10 @@ function TftMatchDetailTable({
             </span>
 
             <div className="min-w-0 flex-1">
-              {p.gameName && p.tagLine ? (
+              {gn && tl ? (
                 <Link
-                  href={`/tft/summoners/${region}/${encodeRiotIdPath({ gameName: p.gameName, tagLine: p.tagLine })}`}
-                  className="truncate text-sm font-medium text-fg hover:text-primary"
+                  href={`/tft/summoners/${region}/${encodeRiotIdPath({ gameName: gn, tagLine: tl })}`}
+                  className="truncate rounded text-sm font-medium text-fg hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                 >
                   {displayName}
                 </Link>
@@ -811,7 +865,7 @@ function TftMatchDetailTable({
               </div>
             </div>
 
-            <div className="type-caption surface-subtle shrink-0 rounded-control px-3 py-2 text-right text-fg/65">
+            <div className="type-caption type-tabular surface-subtle shrink-0 rounded-control px-3 py-2 text-right text-fg/75">
               <p>Lvl {p.level}</p>
               <p>{p.goldLeft}g left</p>
               <p>{p.totalDamageToPlayers.toLocaleString()} dmg</p>

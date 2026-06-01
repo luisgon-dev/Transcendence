@@ -4,6 +4,7 @@ import type { components } from "@transcendence/api-client/schema";
 
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { LaneIcon } from "@/components/ui/LaneIcon";
 import { AnalyticsRegionFilter } from "@/components/AnalyticsRegionFilter";
 import { GlobalSearchLauncher } from "@/components/GlobalSearchLauncher";
 import { fetchBackendJson } from "@/lib/backendCall";
@@ -70,17 +71,14 @@ export default async function HomePage({
         </div>
 
         <h1 className="type-display mt-4 max-w-3xl">
-          League of Legends tier lists, builds, and matchup tools for the current patch.
+          League tier lists, matchups, and builds.
         </h1>
-        <p className="type-lead mt-4 max-w-2xl">
-          Start with the live tier list. Search is there when you already know the champion or player you want.
-        </p>
 
         {/* Action zone */}
         <div className="mt-8 grid gap-3 lg:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] lg:items-center">
           <Link
             href={hrefWithRegion("/lol/tierlist")}
-            className="type-ui inline-flex h-14 items-center justify-center rounded-full bg-primary px-5 text-center font-semibold text-bg transition hover:bg-primary/92"
+            className="type-ui inline-flex h-14 items-center justify-center rounded-xl bg-primary px-5 text-center font-semibold text-bg transition hover:bg-primary/92"
           >
             Browse tier list
           </Link>
@@ -89,9 +87,6 @@ export default async function HomePage({
             className="h-14 w-full px-4 text-left lg:max-w-none"
           />
         </div>
-        <p className="type-ui mt-3 text-fg/60">
-          Use search for direct lookups. Use the tier list to get oriented fast.
-        </p>
 
         {/* Navigation zone */}
         <div className="mt-8 grid gap-4 border-t border-border/25 pt-4">
@@ -140,7 +135,7 @@ export default async function HomePage({
                 <thead className="type-overline text-muted">
                   <tr className="border-b border-border/30">
                     <th className="px-4 py-2">Champion</th>
-                    <th className="px-3 py-2">Role</th>
+                    <th className="px-3 py-2">Lane</th>
                     <th className="px-3 py-2 text-right">Win Rate</th>
                     <th className="px-3 py-2 text-right">Games</th>
                   </tr>
@@ -169,7 +164,12 @@ export default async function HomePage({
                             </span>
                           </Link>
                         </td>
-                        <td className="px-3 py-2.5 text-xs text-fg/80">{roleDisplayLabel(entry.role)}</td>
+                        <td className="px-3 py-2.5 text-xs text-fg/80">
+                          <span className="inline-flex items-center gap-1.5">
+                            <LaneIcon role={entry.role} className="h-4 w-4 shrink-0 text-fg/55" />
+                            {roleDisplayLabel(entry.role)}
+                          </span>
+                        </td>
                         <td className="px-3 py-2.5 text-right text-fg/90">
                           {formatPercent(entry.winRate, { decimals: 2 })}
                         </td>
@@ -223,10 +223,6 @@ export default async function HomePage({
 
           <Card className="p-5">
             <p className="type-kicker text-fg/56">Player Tools</p>
-            <h2 className="type-section mt-2 text-fg">Builds, matchups, and player routes</h2>
-            <p className="type-ui mt-2 text-fg/80">
-              Matchup breakdowns, pro builds, and player profiles.
-            </p>
             <div className="mt-4 grid gap-3 border-t border-border/25 pt-4">
               <Link
                 href={hrefWithRegion("/lol/matchups")}

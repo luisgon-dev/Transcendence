@@ -49,25 +49,22 @@ export default async function TftHomePage() {
           <Link href="/tft/comps" className="control-tab type-ui font-semibold" data-active="true">
             Explore Comps
           </Link>
-          <Link href="/tft/champions" className="control-tab type-ui">
-            Units
-          </Link>
-          <Link href="/tft/items" className="control-tab type-ui">
-            Items
-          </Link>
           <Link href={EXAMPLE_SUMMONER_HREF} className="control-tab type-ui">
             Example Profile
           </Link>
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-4">
+      <section className="flex flex-wrap items-center gap-2">
+        <p className="type-kicker mr-1 text-muted">Browse</p>
         {counts.map((item) => (
-          <Link key={item.label} href={item.href}>
-            <Card className="page-stat-card p-5">
-              <p className="type-kicker text-muted">{item.label}</p>
-              <p className="type-tabular mt-2 text-3xl font-semibold text-fg">{item.value.toLocaleString()}</p>
-            </Card>
+          <Link
+            key={item.label}
+            href={item.href}
+            className="surface-chip type-ui inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-fg/80 transition hover:border-border-strong/70 hover:text-fg"
+          >
+            {item.label}
+            <span className="type-tabular text-fg/55">{item.value.toLocaleString()}</span>
           </Link>
         ))}
       </section>
@@ -75,7 +72,7 @@ export default async function TftHomePage() {
       <section className="grid gap-4">
         <div>
           <h2 className="type-title">Top Comps</h2>
-          <p className="type-ui mt-2 text-fg/75">The default view starts on the live set at Emerald+.</p>
+          <p className="type-ui mt-2 text-fg/75">Emerald+ ranked · live set.</p>
         </div>
 
         {topComps.length === 0 ? (

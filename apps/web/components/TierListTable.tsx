@@ -9,6 +9,7 @@ import { TierBadge } from "@/components/TierBadge";
 import { WinRateText } from "@/components/WinRateText";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { LaneIcon } from "@/components/ui/LaneIcon";
 import { cn } from "@/lib/cn";
 import { formatGames, formatPercent } from "@/lib/format";
 import { roleDisplayLabel } from "@/lib/roles";
@@ -39,7 +40,7 @@ const COLUMNS: { label: string; sortKey?: SortColumn; className: string; hiddenM
   { label: "#", sortKey: "rank", className: "w-10 px-2 text-center md:px-4" },
   { label: "Tier", className: "w-10 px-2" },
   { label: "Champion", className: "px-2 md:px-3" },
-  { label: "Role", className: "px-2 md:px-3" },
+  { label: "Lane", className: "px-2 md:px-3" },
   { label: "Win Rate", sortKey: "winRate", className: "px-2 text-right md:px-3" },
   { label: "Pick Rate", sortKey: "pickRate", className: "px-3 text-right", hiddenMobile: true },
   { label: "Ban Rate", className: "px-3 text-right", hiddenMobile: true },
@@ -68,20 +69,6 @@ function startVisualTransition(update: () => void) {
   }
 
   startTransition(update);
-}
-
-function sortLabel(sortCol: SortColumn) {
-  switch (sortCol) {
-    case "winRate":
-      return "Win rate";
-    case "pickRate":
-      return "Pick rate";
-    case "games":
-      return "Games";
-    case "rank":
-    default:
-      return "Composite rank";
-  }
 }
 
 export function TierListTable({
@@ -162,8 +149,6 @@ export function TierListTable({
     [summary.tierCounts]
   );
 
-  const leadEntry = sortedEntries[0] ?? null;
-  const leadChampion = leadEntry ? champions[String(leadEntry.championId)] : null;
   const showTierRail = isDefaultSort && focusTier === "ALL" && visibleTiers.length > 1;
 
   useEffect(() => {
@@ -328,7 +313,12 @@ export function TierListTable({
             </span>
           </Link>
         </td>
-        <td className="px-2 py-3 text-xs text-muted md:px-3">{roleDisplayLabel(entry.role)}</td>
+        <td className="px-2 py-3 md:px-3">
+          <span className="inline-flex items-center gap-1.5 text-xs text-muted">
+            <LaneIcon role={entry.role} className="h-[18px] w-[18px] shrink-0 text-fg/55" />
+            <span className="sr-only sm:not-sr-only">{roleDisplayLabel(entry.role)}</span>
+          </span>
+        </td>
         <td className="px-2 py-3 text-right md:px-3">
           <WinRateText value={entry.winRate} decimals={2} />
         </td>
@@ -372,82 +362,40 @@ export function TierListTable({
 
   return (
     <div className="grid gap-4">
-      <Card className="tierlist-toolbar p-4 sm:p-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div className="grid gap-1.5">
-            <p className="type-kicker text-primary/88">Board view</p>
-            <p className="type-ui text-fg/74">
-              {focusTier === "ALL"
-                ? `${allSummary.visibleCount} champions ranked for this patch window.`
-                : `Showing Tier ${focusTier} champions only.`}
-            </p>
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <span className="surface-chip rounded-full px-3 py-1.5 text-xs text-fg/72">
-                {summary.totalGames.toLocaleString()} games
+      <div className="flex flex-col gap-3 px-1 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+          <span className="type-kicker mr-1 text-fg/45">Tier</span>
+          {(["ALL", ...TIER_ORDER] as const).map((tier) => (
+            <button
+              key={tier}
+              type="button"
+              className="tierlist-filter-pill"
+              data-active={focusTier === tier}
+              aria-pressed={focusTier === tier}
+              onClick={() => applyFocusTier(tier)}
+            >
+              <span>{tier === "ALL" ? "All" : tier}</span>
+              <span className="text-fg/50">
+                {tier === "ALL" ? allSummary.visibleCount : allSummary.tierCounts[tier]}
               </span>
-              {summary.averageWinRate != null ? (
-                <span className="surface-chip rounded-full px-3 py-1.5 text-xs text-fg/72">
-                  Avg WR {formatPercent(summary.averageWinRate, { decimals: 2 })}
-                </span>
-              ) : null}
-              {leadEntry ? (
-                <span className="surface-chip rounded-full px-3 py-1.5 text-xs text-fg/72">
-                  Lead {leadChampion?.name ?? `#${leadEntry.championId}`}{" "}
-                  {formatPercent(leadEntry.winRate, { decimals: 2 })}
-                </span>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="grid gap-2 xl:justify-items-end">
-            <p className="type-kicker text-muted">Sort locally</p>
-            <div className="flex flex-wrap gap-2 xl:justify-end">
-              {(["rank", "winRate", "pickRate", "games"] as const).map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  className="tierlist-filter-pill"
-                  data-active={sortCol === option}
-                  aria-pressed={sortCol === option}
-                  onClick={() => applySort(option)}
-                >
-                  <span>{sortLabel(option)}</span>
-                  {sortCol === option ? (
-                    <span className="text-primary">{sortDir === "asc" ? "\u25B2" : "\u25BC"}</span>
-                  ) : null}
-                </button>
-              ))}
-            </div>
-          </div>
+            </button>
+          ))}
         </div>
 
-        <div className="mt-4 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="type-kicker mr-1 text-muted">Tier focus</span>
-            {(["ALL", ...TIER_ORDER] as const).map((tier) => (
-              <button
-                key={tier}
-                type="button"
-                className="tierlist-filter-pill"
-                data-active={focusTier === tier}
-                aria-pressed={focusTier === tier}
-                onClick={() => applyFocusTier(tier)}
-              >
-                <span>{tier === "ALL" ? "All tiers" : `Tier ${tier}`}</span>
-                <span className="text-fg/56">
-                  {tier === "ALL" ? allSummary.visibleCount : allSummary.tierCounts[tier]}
-                </span>
-              </button>
-            ))}
-          </div>
-
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+          <span className="type-tabular">{summary.totalGames.toLocaleString()} games</span>
+          {summary.averageWinRate != null ? (
+            <span className="type-tabular border-l border-border/30 pl-3">
+              Avg WR {formatPercent(summary.averageWinRate, { decimals: 2 })}
+            </span>
+          ) : null}
           {isFilteredView ? (
-            <Button variant="ghost" size="sm" onClick={resetView} className="w-fit rounded-full px-4">
-              Reset board view
+            <Button variant="ghost" size="sm" onClick={resetView} className="ml-1 h-8 rounded-lg px-3">
+              Reset
             </Button>
           ) : null}
         </div>
-      </Card>
+      </div>
 
       {summary.visibleCount === 0 ? (
         <Card className="tierlist-table-shell grid gap-3 p-6">

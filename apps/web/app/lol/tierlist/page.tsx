@@ -2,7 +2,7 @@ import type { components } from "@transcendence/api-client";
 
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
-import { FilterBar } from "@/components/FilterBar";
+import { TierListFilterBar } from "@/components/TierListFilterBar";
 import { TierListTable } from "@/components/TierListTable";
 import { Badge } from "@/components/ui/Badge";
 import {
@@ -90,7 +90,7 @@ export default async function TierListPage({
           <p className="type-ui text-fg/70">
             Try switching back to Global or another region.
           </p>
-          <FilterBar
+          <TierListFilterBar
             activeRole={roleParam || "ALL"}
             activeRank={effectiveRankParam ?? "all"}
             regionOptions={regionOptions}
@@ -116,17 +116,12 @@ export default async function TierListPage({
       : null;
 
   return (
-    <div className="grid gap-8">
-      <header className="page-hero p-5 md:p-8">
+    <div className="grid gap-5">
+      <header className="page-hero p-5 md:p-7">
         <p className="type-kicker text-muted">League Analytics</p>
-        <h1 className="type-page-title mt-3">
-          Tier List
-        </h1>
-        <p className="type-ui mt-3 text-fg/75">
-          See which champions are winning most often for this role, rank, and region.
-        </p>
+        <h1 className="type-page-title mt-2">Tier List</h1>
 
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+        <div className="mt-4 flex flex-wrap items-center gap-2">
           <Badge className="border-primary/40 bg-primary/10 text-primary">
             Patch {tierlist.patch ?? "Unknown"}
           </Badge>
@@ -144,8 +139,10 @@ export default async function TierListPage({
             sample={(tierlist as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
           />
         </div>
+      </header>
 
-        <FilterBar
+      <div className="grid gap-3">
+        <TierListFilterBar
           activeRole={roleParam || "ALL"}
           activeRank={effectiveRankParam ?? "all"}
           regionOptions={regionOptions}
@@ -154,18 +151,17 @@ export default async function TierListPage({
           activePatch={selectedPatch}
           extraParams={sharedFilterParams}
           baseHref="/lol/tierlist"
-          className="mt-4"
         />
-      </header>
 
-      <TierListTable
-        entries={normalizedEntries}
-        champions={champions}
-        version={version}
-        rankTierValue={rankTierValue}
-        activeRegion={effectiveRegion}
-        activePatch={selectedPatch}
-      />
+        <TierListTable
+          entries={normalizedEntries}
+          champions={champions}
+          version={version}
+          rankTierValue={rankTierValue}
+          activeRegion={effectiveRegion}
+          activePatch={selectedPatch}
+        />
+      </div>
     </div>
   );
 }

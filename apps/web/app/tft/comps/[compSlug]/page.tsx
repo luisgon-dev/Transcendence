@@ -4,6 +4,7 @@ import Link from "next/link";
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { Stat } from "@/components/ui/Stat";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import {
@@ -85,11 +86,11 @@ export default async function TftCompDetailPage({
           {comp.summary.setCoreName ?? `Set ${comp.summary.setNumber ?? "?"}`} · {comp.summary.patch ?? "Unknown patch"} · {comp.summary.region}
         </p>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-4">
-          <Card className="page-stat-card p-4"><p className="type-kicker text-muted">Avg Placement</p><p className="type-tabular mt-1 text-xl font-semibold">{comp.summary.avgPlacement.toFixed(2)}</p></Card>
-          <Card className="page-stat-card p-4"><p className="type-kicker text-muted">Top 4 Rate</p><p className="type-tabular mt-1 text-xl font-semibold">{formatTftPercent(comp.summary.top4Rate)}</p></Card>
-          <Card className="page-stat-card p-4"><p className="type-kicker text-muted">Win Rate</p><p className="type-tabular mt-1 text-xl font-semibold">{formatTftPercent(comp.summary.winRate)}</p></Card>
-          <Card className="page-stat-card p-4"><p className="type-kicker text-muted">Games</p><p className="type-tabular mt-1 text-xl font-semibold">{comp.summary.sampleSize.toLocaleString()}</p></Card>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+          <div className="page-stat-card"><Stat label="Avg Placement" value={comp.summary.avgPlacement.toFixed(2)} /></div>
+          <div className="page-stat-card"><Stat label="Top 4 Rate" value={formatTftPercent(comp.summary.top4Rate)} /></div>
+          <div className="page-stat-card"><Stat label="Win Rate" value={formatTftPercent(comp.summary.winRate)} /></div>
+          <div className="page-stat-card"><Stat label="Games" value={comp.summary.sampleSize.toLocaleString()} /></div>
         </div>
       </section>
 
@@ -98,8 +99,9 @@ export default async function TftCompDetailPage({
           <h2 className="type-section">Core Board</h2>
           <div className="mt-3 flex flex-wrap gap-2">
             {comp.summary.units.map((unit) => (
-              <span key={unit.characterId} className="rounded border border-primary/35 bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary">
-                {unit.name ?? unit.characterId} {unit.tier > 1 ? `${"★".repeat(unit.tier)}` : ""}
+              <span key={unit.characterId} className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface-2/70 px-3 py-1.5 text-sm font-medium text-fg/90">
+                {unit.name ?? unit.characterId}
+                {unit.tier > 1 ? <span className="text-primary">{"★".repeat(unit.tier)}</span> : null}
               </span>
             ))}
           </div>

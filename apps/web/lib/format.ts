@@ -36,6 +36,13 @@ export function formatDurationSeconds(value: number | null | undefined) {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
+// Normalize a win rate that may arrive as a 0-1 ratio or a 0-100 percent into a
+// percent number (0-100). Returns null when not finite.
+export function toWinPercent(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  return Math.abs(value) >= 1.5 ? value : value * 100;
+}
+
 export function winRateColorClass(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "";
   const pct = Math.abs(value) >= 1.5 ? value : value * 100;

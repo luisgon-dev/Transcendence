@@ -1,5 +1,6 @@
 import { TftCatalogError } from "@/components/TftCatalogError";
 import { TftCatalogGrid } from "@/components/TftCatalogGrid";
+import { Toolbar } from "@/components/ui/Toolbar";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl } from "@/lib/env";
 import { type TftStaticEntity } from "@/lib/tft";
@@ -15,12 +16,12 @@ export default async function TftItemsPage() {
   const items = result.body ?? [];
 
   return (
-    <div className="grid gap-6">
-      <section className="page-hero p-6">
-        <p className="type-kicker text-muted">TFT Catalog</p>
-        <h1 className="type-page-title mt-3">TFT Items</h1>
-        <p className="type-ui mt-3 text-fg/75">Browse completed items and quickly check what each one does.</p>
-      </section>
+    <div className="grid gap-4">
+      <Toolbar
+        eyebrow="TFT Catalog"
+        title="Items"
+        meta={<span>Completed items and what each one does</span>}
+      />
       <TftCatalogGrid items={items} basePath="/tft/items" />
     </div>
   );

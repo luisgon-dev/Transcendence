@@ -5,8 +5,8 @@ import type { components } from "@transcendence/api-client";
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { AnalyticsRegionFilter } from "@/components/AnalyticsRegionFilter";
 import { BackendErrorCard } from "@/components/BackendErrorCard";
-import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { Toolbar } from "@/components/ui/Toolbar";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { type AnalyticsSampleLike } from "@/lib/analyticsSample";
@@ -189,32 +189,28 @@ export default async function ProBuildsIndexPage({
   }
 
   return (
-    <div className="grid gap-8">
-      <header className="page-hero p-5 md:p-8">
-        <p className="type-kicker text-muted">Tracked Matches</p>
-        <h1 className="type-page-title mt-3">
-          Pro Builds
-        </h1>
-        <p className="type-ui mt-3 text-fg/75">
-          Recent builds from tracked pro and high-MMR matches, with quick champion search.
-        </p>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Badge className="border-primary/45 bg-primary/10 text-primary">
-            {recentMatchesFeed.length} matches loaded
-          </Badge>
-          <Badge>{feedChampionIds.length} champions featured</Badge>
-          <Badge>{activeRegionLabel}</Badge>
-          {championQuery ? <Badge>Search: {championQuery}</Badge> : null}
-        </div>
-        <div className="mt-3">
-          <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />
-        </div>
-        <div className="mt-3">
-          <AnalyticsSampleBanner
-            sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
-          />
-        </div>
-      </header>
+    <div className="grid gap-4">
+      <Toolbar
+        eyebrow="Tracked Matches"
+        title="Pro Builds"
+        meta={
+          <>
+            <span className="type-tabular tabular-nums">{recentMatchesFeed.length} matches</span>
+            <span aria-hidden="true">·</span>
+            <span>{activeRegionLabel}</span>
+            {championQuery ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>Search: {championQuery}</span>
+              </>
+            ) : null}
+          </>
+        }
+        filters={<AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />}
+      />
+      <AnalyticsSampleBanner
+        sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
+      />
 
       <Card className="page-panel p-5">
         <h2 className="type-section">Search Champions</h2>
@@ -305,7 +301,7 @@ export default async function ProBuildsIndexPage({
                 <li key={`${entry.match.matchId ?? "match"}-${entry.championId}-${idx}`}>
                   <Link
                     href={`/lol/pro-builds/${entry.championId}`}
-                    className="block border-b border-border/20 px-4 py-3 transition hover:bg-white/[0.04]"
+                    className="block border-b border-border/20 px-4 py-3 transition hover:bg-surface-2/40"
                   >
                     <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
                       <div className="min-w-0">

@@ -5,12 +5,12 @@ import type { components } from "@transcendence/api-client/schema";
 import { GlobalSearchLauncher } from "@/components/GlobalSearchLauncher";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { DataBar } from "@/components/ui/DataBar";
 import { LaneIcon } from "@/components/ui/LaneIcon";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl } from "@/lib/env";
 import { TFT_FRONTEND_ENABLED } from "@/lib/featureFlags";
 import { fetchLolAnalyticsStatus } from "@/lib/lolAnalyticsStatus";
-import { formatPercent } from "@/lib/format";
 import { DEFAULT_TIERLIST_RANK_TIER } from "@/lib/ranks";
 import { roleDisplayLabel } from "@/lib/roles";
 import { championIconUrl, fetchChampionMap } from "@/lib/staticData";
@@ -106,7 +106,7 @@ export default async function LandingPage() {
         <div className="mt-7 grid gap-3 sm:grid-cols-2 sm:items-stretch">
           <Link
             href="/lol/tierlist"
-            className="type-ui inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-primary px-5 py-3 font-semibold text-bg transition hover:bg-primary/92"
+            className="type-ui inline-flex min-h-12 w-full items-center justify-center rounded-control bg-primary px-5 py-3 font-semibold text-primary-fg transition hover:bg-primary/92"
           >
             Open LoL tier list
           </Link>
@@ -157,11 +157,9 @@ export default async function LandingPage() {
                           className="rounded-md"
                         />
                         <span className="type-ui min-w-0 flex-1 truncate text-fg">{name}</span>
-                        <span className="inline-flex items-center gap-1.5 text-xs text-muted">
-                          <LaneIcon role={entry.role} className="h-3.5 w-3.5 shrink-0 text-fg/45" />
-                          <span className="sr-only">{roleDisplayLabel(entry.role)} lane, </span>
-                          {formatPercent(entry.winRate, { decimals: 1 })} WR
-                        </span>
+                        <LaneIcon role={entry.role} className="h-3.5 w-3.5 shrink-0 text-fg/45" />
+                        <span className="sr-only">{roleDisplayLabel(entry.role)} lane, </span>
+                        <DataBar value={entry.winRate} decimals={1} />
                       </Link>
                     );
                   })}

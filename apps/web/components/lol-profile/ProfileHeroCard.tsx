@@ -140,12 +140,12 @@ export function ProfileHeroCard({
           ) : null}
 
           {accepted?.message ? (
-            <p className="rounded-2xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm text-fg/84">
+            <p className="rounded-card border border-info/30 bg-info/10 px-4 py-3 text-sm text-fg/84">
               {friendlyAcceptedMessage(accepted.message)}
             </p>
           ) : null}
           {error?.message ? (
-            <p className="rounded-2xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+            <p className="rounded-card border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
               {error.message}
             </p>
           ) : null}

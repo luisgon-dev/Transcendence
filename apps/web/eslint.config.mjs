@@ -7,6 +7,7 @@ import next from "@next/eslint-plugin-next";
 import react from "eslint-plugin-react";
 import reactHooks from "eslint-plugin-react-hooks";
 import tsParser from "@typescript-eslint/parser";
+import tsPlugin from "@typescript-eslint/eslint-plugin";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -46,11 +47,22 @@ export default [
   },
   {
     files: ["**/*.ts", "**/*.tsx"],
+    plugins: {
+      "@typescript-eslint": tsPlugin
+    },
     rules: {
       // TypeScript already validates globals/types; this rule doesn't understand type-only identifiers.
       "no-undef": "off",
       // We use TypeScript types for props.
-      "react/prop-types": "off"
+      "react/prop-types": "off",
+      // The base rule is TS-naive (it flags parameter names inside function-type
+      // annotations as "unused"). Hand off to the TS-aware version, which
+      // understands type-only identifiers. Underscore-prefixed args are ignored.
+      "no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", ignoreRestSiblings: true }
+      ]
     }
   }
 ];

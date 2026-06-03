@@ -114,7 +114,6 @@ function buildLogsHref(job: {
 }
 
 type MutationStatusSetter = Dispatch<SetStateAction<MutationStatus>>;
-// eslint-disable-next-line no-unused-vars
 type PauseStateChangeHandler = (isPaused: boolean) => void;
 
 export function AdminRecurringJobsTable({ jobs }: { jobs: AdminRecurringJob[] }) {
@@ -125,7 +124,6 @@ export function AdminRecurringJobsTable({ jobs }: { jobs: AdminRecurringJob[] })
   useEffect(() => {
     setRows(jobs);
   }, [jobs]);
-  // eslint-disable-next-line no-unused-vars
   function updateRow(id: string, recipe: (currentJob: AdminRecurringJob) => AdminRecurringJob) {
     setRows((current) =>
       current.map((row) => (row.id === id ? recipe(row) : row))

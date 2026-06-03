@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { cn } from "@/lib/cn";
 
+// Flat placeholder — a quiet opacity pulse, no shimmer sweep in data areas.
 export function Skeleton({
   className,
   ...props
@@ -9,11 +10,10 @@ export function Skeleton({
   return (
     <div
       className={cn(
-        "animate-shimmer rounded-md bg-gradient-to-r from-white/5 via-white/12 to-white/5 bg-[length:200%_100%]",
+        "animate-pulse rounded-md border border-border/60 bg-surface-2/70",
         className
       )}
       {...props}
     />
   );
 }
-

@@ -46,7 +46,7 @@ function ItemRow({
             return (
               <div
                 key={`empty-${idx}`}
-                className="rounded-md border border-border/60 bg-black/25"
+                className="rounded-md border border-border/60 bg-surface-2/60"
                 style={{ width: iconSize, height: iconSize }}
               />
             );

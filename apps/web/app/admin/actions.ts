@@ -12,7 +12,6 @@ function revalidateAdminSurfaces() {
 async function simpleAdminAction(
   formData: FormData,
   formKey: string,
-  // eslint-disable-next-line no-unused-vars
   pathFn: (encodedId: string) => string,
   revalidateFn: () => void,
   method: "POST" | "DELETE" = "POST"

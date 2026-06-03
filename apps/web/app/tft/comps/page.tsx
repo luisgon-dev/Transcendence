@@ -1,5 +1,7 @@
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { TftCompList } from "@/components/TftCompList";
+import { Button } from "@/components/ui/Button";
+import { Toolbar } from "@/components/ui/Toolbar";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { TFT_RANK_OPTIONS, TFT_REGION_OPTIONS, type TftCompListItem } from "@/lib/tft";
@@ -24,33 +26,31 @@ export default async function TftCompsPage({
   const verbosity = getErrorVerbosity();
 
   return (
-    <div className="grid gap-6">
-      <section className="page-hero p-6">
-        <p className="type-kicker text-muted">TFT Analytics</p>
-        <h1 className="type-page-title mt-3">TFT Meta Comps</h1>
-        <p className="type-ui mt-3 text-fg/75">
-          Compare the strongest boards for the live set and sort by the stat that matters most to you.
-        </p>
-        <form className="mt-4 flex flex-wrap gap-2" action="/tft/comps" method="get">
-          <select name="rankTier" aria-label="Rank tier" defaultValue={rankTier} className="control-select max-w-[220px]">
-            {TFT_RANK_OPTIONS.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-          <select name="region" aria-label="Region" defaultValue={region} className="control-select max-w-[180px]">
-            {TFT_REGION_OPTIONS.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-          <button type="submit" className="type-ui h-11 rounded-xl border border-primary/45 bg-primary/12 px-4 font-semibold text-primary">
-            Apply
-          </button>
-        </form>
-      </section>
+    <div className="grid gap-4">
+      <Toolbar
+        eyebrow="TFT Analytics"
+        title="Meta Comps"
+        meta={<span>Strongest boards for the live set, sorted your way</span>}
+        filters={
+          <form className="flex flex-wrap items-center gap-2" action="/tft/comps" method="get">
+            <select name="rankTier" aria-label="Rank tier" defaultValue={rankTier} className="control-select max-w-[200px]">
+              {TFT_RANK_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            <select name="region" aria-label="Region" defaultValue={region} className="control-select max-w-[160px]">
+              {TFT_REGION_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            <Button type="submit" size="sm">Apply</Button>
+          </form>
+        }
+      />
 
       {result.ok ? (
         <TftCompList comps={result.body ?? []} qs={qs.toString()} />

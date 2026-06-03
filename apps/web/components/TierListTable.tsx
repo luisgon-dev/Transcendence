@@ -6,10 +6,11 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { TierBadge } from "@/components/TierBadge";
-import { WinRateText } from "@/components/WinRateText";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { DataBar } from "@/components/ui/DataBar";
 import { LaneIcon } from "@/components/ui/LaneIcon";
+import { TierSpine } from "@/components/ui/TierSpine";
 import { cn } from "@/lib/cn";
 import { formatGames, formatPercent } from "@/lib/format";
 import { roleDisplayLabel } from "@/lib/roles";
@@ -17,9 +18,9 @@ import { championIconUrl } from "@/lib/staticData";
 import {
   movementClass,
   movementIcon,
+  movementLabel,
   summarizeTierListEntries,
   tierBgClass,
-  tierBorderClass,
   tierColorClass,
   TIER_ORDER,
   type TierListChampionMap,
@@ -36,18 +37,23 @@ type DocumentWithViewTransition = Document & {
   startViewTransition?: typeof startTransition;
 };
 
-const COLUMNS: { label: string; sortKey?: SortColumn; className: string; hiddenMobile?: boolean }[] = [
-  { label: "#", sortKey: "rank", className: "w-10 px-2 text-center md:px-4" },
+// Column visibility is encoded per-column so header and body stay in lockstep.
+// Core columns (rank, tier, champion, win rate, games) show at every width; the
+// rest reveal progressively — no forced horizontal scroll, no silent drops.
+const COLUMNS: {
+  label: string;
+  sortKey?: SortColumn;
+  className: string;
+}[] = [
+  { label: "#", sortKey: "rank", className: "w-9 px-2 text-center md:px-3" },
   { label: "Tier", className: "w-10 px-2" },
   { label: "Champion", className: "px-2 md:px-3" },
-  { label: "Lane", className: "px-2 md:px-3" },
+  { label: "Lane", className: "hidden px-2 sm:table-cell md:px-3" },
   { label: "Win Rate", sortKey: "winRate", className: "px-2 text-right md:px-3" },
-  { label: "Pick Rate", sortKey: "pickRate", className: "px-3 text-right", hiddenMobile: true },
-  { label: "Ban Rate", className: "px-3 text-right", hiddenMobile: true },
+  { label: "Pick Rate", sortKey: "pickRate", className: "hidden px-3 text-right lg:table-cell" },
   { label: "Games", sortKey: "games", className: "px-2 text-right md:px-3" },
-  { label: "Trend", className: "w-16 px-3 text-center", hiddenMobile: true },
-  { label: "Counters", className: "px-3 text-right", hiddenMobile: true },
-  { label: "Build", className: "px-3 text-right", hiddenMobile: true }
+  { label: "Trend", className: "hidden w-14 px-3 text-center lg:table-cell" },
+  { label: "Analyze", className: "hidden px-3 text-right md:table-cell" }
 ];
 
 function motionReduced() {
@@ -129,18 +135,10 @@ export function TierListTable({
   const groups = useMemo(() => {
     if (!isDefaultSort) return null;
 
-    const grouped: Record<UITierGrade, RowEntry[]> = {
-      S: [],
-      A: [],
-      B: [],
-      C: [],
-      D: []
-    };
-
+    const grouped: Record<UITierGrade, RowEntry[]> = { S: [], A: [], B: [], C: [], D: [] };
     for (const entry of sortedEntries) {
       grouped[entry.tier].push(entry);
     }
-
     return grouped;
   }, [isDefaultSort, sortedEntries]);
 
@@ -172,10 +170,7 @@ export function TierListTable({
           setActiveTierSection(tier as UITierGrade);
         }
       },
-      {
-        rootMargin: "-18% 0px -58% 0px",
-        threshold: [0.2, 0.45, 0.7]
-      }
+      { rootMargin: "-18% 0px -58% 0px", threshold: [0.2, 0.45, 0.7] }
     );
 
     const nodes = visibleTiers
@@ -183,7 +178,6 @@ export function TierListTable({
       .filter((node): node is HTMLElement => node !== null);
 
     nodes.forEach((node) => observer.observe(node));
-
     return () => observer.disconnect();
   }, [showTierRail, visibleTiers]);
 
@@ -193,7 +187,6 @@ export function TierListTable({
         setSortDir((currentDir) => (currentDir === "asc" ? "desc" : "asc"));
         return;
       }
-
       setSortCol(nextSortCol);
       setSortDir(nextSortCol === "rank" ? "asc" : "desc");
     });
@@ -214,20 +207,16 @@ export function TierListTable({
     });
   }
 
-  function jumpToTier(tier: UITierGrade) {
-    const target = sectionRefs.current[tier];
+  function jumpToTier(tier: string) {
+    const target = sectionRefs.current[tier as UITierGrade];
     if (!target) return;
-
-    target.scrollIntoView({
-      behavior: motionReduced() ? "auto" : "smooth",
-      block: "start"
-    });
+    target.scrollIntoView({ behavior: motionReduced() ? "auto" : "smooth", block: "start" });
   }
 
   function renderHeader() {
     return (
       <thead className="type-overline text-muted">
-        <tr className="border-b border-border/30">
+        <tr className="border-b border-border/60">
           {COLUMNS.map((column) => {
             const sortable = Boolean(column.sortKey);
             const active = column.sortKey === sortCol;
@@ -235,36 +224,27 @@ export function TierListTable({
             return (
               <th
                 key={column.label}
-                className={cn(
-                  "tierlist-sticky-head",
-                  column.className,
-                  column.hiddenMobile ? "hidden lg:table-cell" : "",
-                  "cursor-default py-2.5"
-                )}
+                className={cn("tierlist-sticky-head cursor-default py-2.5", column.className)}
                 aria-sort={
-                  sortable && active
-                    ? sortDir === "asc"
-                      ? "ascending"
-                      : "descending"
-                    : undefined
+                  sortable && active ? (sortDir === "asc" ? "ascending" : "descending") : undefined
                 }
               >
                 {sortable ? (
                   <button
                     type="button"
                     onClick={() => applySort(column.sortKey!)}
-                    className="inline-flex items-center gap-1 select-none transition hover:text-fg/82"
+                    className="inline-flex items-center gap-1 select-none transition-colors hover:text-fg"
                     aria-label={`Sort by ${column.label}${active ? `, currently ${sortDir === "asc" ? "ascending" : "descending"}` : ""}`}
                   >
                     {column.label}
                     {active ? (
-                      <span aria-hidden="true" className="type-overline text-primary">
-                        {sortDir === "asc" ? "\u25B2" : "\u25BC"}
+                      <span aria-hidden="true" className="text-primary">
+                        {sortDir === "asc" ? "▲" : "▼"}
                       </span>
                     ) : null}
                   </button>
                 ) : (
-                  <span className="inline-flex items-center gap-1">{column.label}</span>
+                  <span>{column.label}</span>
                 )}
               </th>
             );
@@ -286,25 +266,34 @@ export function TierListTable({
     const rowQuery = rowParams.toString();
 
     return (
-      <tr key={`${entry.tier}-${entry.role}-${entry.championId}`} className="tierlist-row border-b border-border/20 text-sm">
-        <td className="px-2 py-3 text-center text-xs text-muted md:px-4">{entry.rank}</td>
-        <td className="px-2 py-3">
+      <tr
+        key={`${entry.tier}-${entry.role}-${entry.championId}`}
+        className="tierlist-row border-b border-border/40 text-sm last:border-0"
+      >
+        <td className="px-2 py-2.5 text-center md:px-3">
+          <span className={cn("type-tabular tabular-nums text-xs font-semibold", tierColorClass(entry.tier))}>
+            {entry.rank}
+          </span>
+        </td>
+        <td className="px-2 py-2.5">
           <TierBadge tier={entry.tier} />
         </td>
-        <td className="px-2 py-3 md:px-3">
+        <td className="px-2 py-2.5 md:px-3">
           <Link
             href={`/lol/champions/${entry.championId}?${rowQuery}`}
-            className="flex items-center gap-2 hover:underline md:gap-2.5"
+            className="group flex items-center gap-2.5"
           >
             <Image
               src={championIconUrl(version, championSlug)}
               alt={championName}
-              width={28}
-              height={28}
-              className="rounded-md"
+              width={30}
+              height={30}
+              className="rounded-md ring-1 ring-border/60"
             />
             <span className="min-w-0">
-              <span className="block truncate font-medium text-fg">{championName}</span>
+              <span className="block truncate font-semibold text-fg group-hover:text-primary">
+                {championName}
+              </span>
               {championSubtitle ? (
                 <span className="type-caption hidden truncate text-muted md:block">
                   {championSubtitle}
@@ -313,58 +302,62 @@ export function TierListTable({
             </span>
           </Link>
         </td>
-        <td className="px-2 py-3 md:px-3">
+        <td className="hidden px-2 py-2.5 sm:table-cell md:px-3">
           <span className="inline-flex items-center gap-1.5 text-xs text-muted">
-            <LaneIcon role={entry.role} className="h-[18px] w-[18px] shrink-0 text-fg/55" />
-            <span className="sr-only sm:not-sr-only">{roleDisplayLabel(entry.role)}</span>
+            <LaneIcon role={entry.role} className="size-[18px] shrink-0 text-fg/55" />
+            <span className="hidden md:inline">{roleDisplayLabel(entry.role)}</span>
           </span>
         </td>
-        <td className="px-2 py-3 text-right md:px-3">
-          <WinRateText value={entry.winRate} decimals={2} />
+        <td className="px-2 py-2.5 text-right md:px-3">
+          <DataBar value={entry.winRate} decimals={2} className="justify-end" />
         </td>
-        <td className="hidden px-3 py-3 text-right text-fg/70 lg:table-cell">
+        <td className="hidden px-3 py-2.5 text-right text-fg/70 lg:table-cell">
           {formatPercent(entry.pickRate, { decimals: 1 })}
         </td>
-        <td
-          className="hidden px-3 py-3 text-right text-muted lg:table-cell"
-          title="Ban rate is not exposed by the current analytics API yet."
-        >
-          N/A
+        <td className="type-tabular px-2 py-2.5 text-right tabular-nums text-fg/70 md:px-3">
+          {formatGames(entry.games)}
         </td>
-        <td className="px-2 py-3 text-right text-fg/70 md:px-3">{formatGames(entry.games)}</td>
-        <td className="hidden px-3 py-3 text-center lg:table-cell">
+        <td className="hidden px-3 py-2.5 text-center lg:table-cell">
           <span
-            className={`text-sm font-medium ${movementClass(entry.movement)}`}
-            title={entry.previousTier ? `Previous: ${entry.previousTier}` : undefined}
+            className={cn("text-sm font-semibold", movementClass(entry.movement))}
+            title={entry.previousTier ? `Previous: ${entry.previousTier}` : movementLabel(entry.movement)}
           >
             {movementIcon(entry.movement)}
+            <span className="sr-only">{movementLabel(entry.movement)}</span>
           </span>
         </td>
-        <td className="hidden px-3 py-3 text-right lg:table-cell">
+        <td className="hidden px-3 py-2.5 text-right md:table-cell">
           <Link
             href={`/lol/matchups/${entry.championId}?${rowQuery}`}
-            className="text-xs text-primary hover:underline"
+            className="type-ui font-medium text-primary hover:underline"
           >
             Analyze
-          </Link>
-        </td>
-        <td className="hidden px-3 py-3 text-right lg:table-cell">
-          <Link
-            href={`/lol/champions/${entry.championId}?${rowQuery}#builds`}
-            className="text-xs text-primary hover:underline"
-          >
-            Open
           </Link>
         </td>
       </tr>
     );
   }
 
+  const spineItems = useMemo(
+    () =>
+      visibleTiers.map((tier) => {
+        const tierEntries = groups?.[tier] ?? [];
+        const bestWr = tierEntries.length
+          ? Math.max(...tierEntries.map((e) => e.winRate))
+          : null;
+        return {
+          tier,
+          count: tierEntries.length,
+          hint: bestWr != null ? `Best ${formatPercent(bestWr, { decimals: 1 })}` : undefined
+        };
+      }),
+    [visibleTiers, groups]
+  );
+
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-3">
       <div className="flex flex-col gap-3 px-1 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-          <span className="type-kicker mr-1 text-fg/45">Tier</span>
+        <div className="flex flex-wrap items-center gap-1.5">
           {(["ALL", ...TIER_ORDER] as const).map((tier) => (
             <button
               key={tier}
@@ -374,23 +367,23 @@ export function TierListTable({
               aria-pressed={focusTier === tier}
               onClick={() => applyFocusTier(tier)}
             >
-              <span>{tier === "ALL" ? "All" : tier}</span>
-              <span className="text-fg/50">
+              <span className="font-semibold">{tier === "ALL" ? "All" : tier}</span>
+              <span className="type-tabular tabular-nums text-muted">
                 {tier === "ALL" ? allSummary.visibleCount : allSummary.tierCounts[tier]}
               </span>
             </button>
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-          <span className="type-tabular">{summary.totalGames.toLocaleString()} games</span>
+        <div className="type-tabular flex flex-wrap items-center gap-x-3 gap-y-1 tabular-nums text-xs text-muted">
+          <span>{summary.totalGames.toLocaleString()} games</span>
           {summary.averageWinRate != null ? (
-            <span className="type-tabular border-l border-border/30 pl-3">
+            <span className="border-l border-border pl-3">
               Avg WR {formatPercent(summary.averageWinRate, { decimals: 2 })}
             </span>
           ) : null}
           {isFilteredView ? (
-            <Button variant="ghost" size="sm" onClick={resetView} className="ml-1 h-8 rounded-lg px-3">
+            <Button variant="ghost" size="sm" onClick={resetView} className="ml-1 h-8 px-3">
               Reset
             </Button>
           ) : null}
@@ -398,53 +391,30 @@ export function TierListTable({
       </div>
 
       {summary.visibleCount === 0 ? (
-        <Card className="tierlist-table-shell grid gap-3 p-6">
-          <p className="type-section text-fg">No champions match this local view.</p>
-          <p className="type-ui text-fg/72">
-            Reset the board view to bring every tier back into the table.
-          </p>
+        <Card className="grid gap-3 p-6">
+          <p className="type-section text-fg">No champions match this view.</p>
+          <p className="type-ui text-muted">Reset the board to bring every tier back into the table.</p>
           <Button variant="outline" size="sm" onClick={resetView} className="w-fit">
             Reset board view
           </Button>
         </Card>
       ) : (
-        <div className={cn("grid gap-4", showTierRail ? "xl:grid-cols-[200px_minmax(0,1fr)]" : "")}>
+        <div className={cn("grid gap-4", showTierRail ? "xl:grid-cols-[180px_minmax(0,1fr)]" : "")}>
           {showTierRail ? (
-            <nav className="hidden xl:grid xl:h-fit xl:gap-2 xl:sticky xl:top-24">
-              {visibleTiers.map((tier) => {
-                const tierEntries = groups?.[tier] ?? [];
-
-                return (
-                  <button
-                    key={tier}
-                    type="button"
-                    className={cn("tierlist-tier-rail", tierBorderClass(tier))}
-                    data-active={activeTierSection === tier}
-                    onClick={() => jumpToTier(tier)}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className={cn("font-semibold", tierColorClass(tier))}>Tier {tier}</span>
-                      <span className="type-ui text-fg/62">{tierEntries.length}</span>
-                    </div>
-                    <p className="mt-1 text-xs text-fg/58">
-                      Best WR{" "}
-                      {tierEntries.length > 0
-                        ? formatPercent(
-                            Math.max(...tierEntries.map((entry) => entry.winRate)),
-                            { decimals: 2 }
-                          )
-                        : "n/a"}
-                    </p>
-                  </button>
-                );
-              })}
-            </nav>
+            <div className="hidden xl:block">
+              <TierSpine
+                items={spineItems}
+                active={activeTierSection}
+                onSelect={jumpToTier}
+                className="sticky top-24"
+              />
+            </div>
           ) : null}
 
-          <Card className="tierlist-table-shell p-0">
+          <Card className="overflow-hidden p-0">
             {isDefaultSort && groups ? (
-              <div className="grid gap-px bg-border/20">
-                {TIER_ORDER.map((tier) => {
+              <div className="grid">
+                {TIER_ORDER.map((tier, tierIdx) => {
                   const tierEntries = groups[tier];
                   if (tierEntries.length === 0) return null;
 
@@ -455,31 +425,21 @@ export function TierListTable({
                         sectionRefs.current[tier] = node;
                       }}
                       data-tier={tier}
-                      className="tierlist-tier-section bg-surface/12"
+                      className="tierlist-tier-section reveal-up"
+                      style={{ animationDelay: `${tierIdx * 55}ms` }}
                     >
-                      <div
-                        className={cn(
-                          "flex items-center gap-3 border-b border-border/40 px-4 py-3",
-                          tierBgClass(tier)
-                        )}
-                      >
+                      <div className={cn("flex items-center gap-3 border-y border-border/60 px-4 py-2.5", tierBgClass(tier))}>
                         <TierBadge tier={tier} size="md" />
-                        <span className={cn("text-sm font-semibold", tierColorClass(tier))}>
-                          Tier {tier}
-                        </span>
-                        <span className="text-xs text-muted">
+                        <span className={cn("text-sm font-bold", tierColorClass(tier))}>Tier {tier}</span>
+                        <span className="type-tabular tabular-nums text-xs text-muted">
                           {tierEntries.length} champion{tierEntries.length !== 1 ? "s" : ""}
                         </span>
-                        <span className="ml-auto hidden text-xs text-fg/58 sm:block">
-                          Best WR{" "}
-                          {formatPercent(
-                            Math.max(...tierEntries.map((entry) => entry.winRate)),
-                            { decimals: 2 }
-                          )}
+                        <span className="type-tabular ml-auto hidden tabular-nums text-xs text-muted sm:block">
+                          Best WR {formatPercent(Math.max(...tierEntries.map((e) => e.winRate)), { decimals: 2 })}
                         </span>
                       </div>
-                      <div className="tierlist-table-scroll overflow-x-auto">
-                        <table className="w-full min-w-0 text-left lg:min-w-[940px]">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left">
                           {renderHeader()}
                           <tbody>{tierEntries.map(renderRow)}</tbody>
                         </table>
@@ -489,8 +449,8 @@ export function TierListTable({
                 })}
               </div>
             ) : (
-              <div className="tierlist-table-scroll overflow-x-auto">
-                <table className="w-full min-w-0 text-left lg:min-w-[940px]">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
                   {renderHeader()}
                   <tbody>{sortedEntries.map(renderRow)}</tbody>
                 </table>

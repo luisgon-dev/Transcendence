@@ -1,5 +1,6 @@
 import { TftCatalogError } from "@/components/TftCatalogError";
 import { TftCatalogGrid } from "@/components/TftCatalogGrid";
+import { Toolbar } from "@/components/ui/Toolbar";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl } from "@/lib/env";
 import { type TftStaticEntity } from "@/lib/tft";
@@ -15,12 +16,12 @@ export default async function TftChampionsPage() {
   const champions = result.body ?? [];
 
   return (
-    <div className="grid gap-6">
-      <section className="page-hero p-6">
-        <p className="type-kicker text-muted">TFT Catalog</p>
-        <h1 className="type-page-title mt-3">TFT Units</h1>
-        <p className="type-ui mt-3 text-fg/75">Browse every unit in the live set and jump into quick detail pages.</p>
-      </section>
+    <div className="grid gap-4">
+      <Toolbar
+        eyebrow="TFT Catalog"
+        title="Units"
+        meta={<span>Every unit in the live set</span>}
+      />
       <TftCatalogGrid items={champions} basePath="/tft/champions" />
     </div>
   );

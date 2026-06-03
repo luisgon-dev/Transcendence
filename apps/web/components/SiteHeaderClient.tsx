@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 import { BrandMark } from "@/components/BrandMark";
 import { GlobalSearchLauncher } from "@/components/GlobalSearchLauncher";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { cn } from "@/lib/cn";
 import { TFT_FRONTEND_ENABLED } from "@/lib/featureFlags";
 
@@ -30,12 +31,10 @@ const TFT_LINKS: NavLink[] = [
 function navLinkClass(pathname: string | null, prefix: string): string {
   const isActive = pathname?.startsWith(prefix) ?? false;
   return cn(
-    "type-ui relative inline-flex min-h-11 items-center whitespace-nowrap rounded-full px-2.5 py-2 transition-[color,background-color,transform,box-shadow] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/26 focus-visible:ring-offset-2 focus-visible:ring-offset-bg sm:px-3",
-    isActive
-      ? "bg-surface/72 font-semibold text-fg shadow-inset"
-      : "text-fg/70 hover:-translate-y-px hover:bg-surface/42 hover:text-fg",
+    "type-ui relative inline-flex min-h-11 items-center whitespace-nowrap rounded-md px-2 py-2 transition-colors duration-150 ease-[cubic-bezier(0.25,1,0.5,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-bg sm:px-2.5",
+    isActive ? "font-semibold text-fg" : "text-fg/65 hover:text-fg",
     isActive &&
-      "after:absolute after:inset-x-2 after:bottom-0 after:h-px after:rounded-full after:bg-primary/85"
+      "after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary"
   );
 }
 
@@ -79,6 +78,7 @@ export function SiteHeaderClient({
               size="sm"
               className="w-11 px-0 lg:w-auto lg:px-3"
             />
+            <ThemeToggle />
             <div className="shrink-0">{children}</div>
           </div>
         </div>

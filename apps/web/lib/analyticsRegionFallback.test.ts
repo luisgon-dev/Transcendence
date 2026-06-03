@@ -35,7 +35,6 @@ describe("fetchWithGlobalAnalyticsRegionFallback", () => {
 
   it("retries with Global when a non-global region fails", async () => {
     const fetcher = vi
-      // eslint-disable-next-line no-unused-vars
       .fn<(region: string) => Promise<{ ok: boolean; source: string }>>()
       .mockImplementation(async (region: string) =>
         region === "ALL"

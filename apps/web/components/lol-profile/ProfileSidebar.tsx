@@ -4,6 +4,7 @@ import Link from "next/link";
 import { LiveGameCard } from "@/components/LiveGameCard";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { DataBar } from "@/components/ui/DataBar";
 import { formatPercent, winRateColorClass } from "@/lib/format";
 import { rankEmblemUrl, rankTierDisplayLabel } from "@/lib/ranks";
 
@@ -121,7 +122,7 @@ export function ProfileSidebar({
               <Link
                 key={championStat.championId}
                 href={`/lol/champions/${championStat.championId}`}
-                className="surface-subtle group grid gap-2 rounded-control px-3 py-3 transition hover:border-primary/24 hover:bg-primary/6"
+                className="surface-subtle group grid gap-2 rounded-control px-3 py-3 transition hover:border-border-strong hover:bg-surface-2/60"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -130,9 +131,7 @@ export function ProfileSidebar({
                       {champion?.name ?? championStat.championName}
                     </p>
                   </div>
-                  <span className={`text-sm font-semibold ${winRateColorClass(championStat.winRate)}`}>
-                    {formatPercent(championStat.winRate)}
-                  </span>
+                  <DataBar value={championStat.winRate} />
                 </div>
                 <div className="flex items-center justify-between gap-2 text-xs text-fg/64">
                   <span>{championStat.games} games tracked</span>

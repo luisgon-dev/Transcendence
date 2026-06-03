@@ -1,4 +1,3 @@
-/* eslint-disable no-unused-vars */
 import Image from "next/image";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
@@ -7,6 +6,7 @@ import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Select } from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { RuneSetupDisplay } from "@/components/RuneSetupDisplay";
 import {
@@ -755,23 +755,13 @@ export function MatchHistorySection({
               </datalist>
             </div>
 
-            <div>
-              <label htmlFor="match-sort" className="sr-only">
-                Sort matches
-              </label>
-              <select
-                id="match-sort"
-                value={sort}
-                onChange={(event) => onSortChange(normalizeInitialSort(event.currentTarget.value))}
-                className="h-10 w-full rounded-control border border-border/70 bg-surface-2/55 px-3 text-sm text-fg shadow-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45"
-              >
-                {sortOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <Select
+              value={sort}
+              onValueChange={(v) => onSortChange(normalizeInitialSort(v))}
+              ariaLabel="Sort matches"
+              options={sortOptions}
+              className="w-full"
+            />
 
             <div className="flex flex-wrap items-center gap-2">
               <Badge className="surface-chip text-fg/72">

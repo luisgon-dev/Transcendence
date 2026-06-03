@@ -5,7 +5,9 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Toolbar } from "@/components/ui/Toolbar";
 import { encodeRiotIdPath, parseRiotIdInput } from "@/lib/riotid";
 
 type FavoriteSummonerDto = {
@@ -78,16 +80,12 @@ export default function FavoritesPage() {
   }
 
   return (
-    <div className="grid gap-6">
-      <header className="page-hero grid gap-2 p-5">
-        <p className="type-kicker text-muted">Account</p>
-        <h1 className="type-page-title">
-          Favorites
-        </h1>
-        <p className="type-ui text-fg/75">
-          Your saved players from League and TFT profile pages.
-        </p>
-      </header>
+    <div className="grid gap-4">
+      <Toolbar
+        eyebrow="Account"
+        title="Favorites"
+        meta={<span>Your saved players from League and TFT profiles</span>}
+      />
 
       {error ? (
         <Card className="p-5">
@@ -111,12 +109,18 @@ export default function FavoritesPage() {
           </Card>
         </div>
       ) : items.length === 0 ? (
-        <Card className="p-5">
-          <p className="type-ui text-muted">
-            No favorites yet. Open a player profile and click{" "}
-            <span className="font-medium text-fg">Add Favorite</span>.
-          </p>
-        </Card>
+        <EmptyState
+          title="No saved players yet"
+          description="Open any League or TFT player profile and use Add Favorite to pin it here for quick access."
+          action={
+            <Link
+              href="/lol/tierlist"
+              className="type-ui font-semibold text-primary hover:underline"
+            >
+              Browse the tier list to find players
+            </Link>
+          }
+        />
       ) : (
         <div className="grid gap-2">
           {items.map((f) => (

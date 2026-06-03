@@ -39,7 +39,7 @@ export function BackendErrorCard({
               </p>
             ) : null}
             {detail ? (
-              <pre className="max-w-full overflow-x-auto rounded-lg border border-border/60 bg-black/25 p-3 text-fg/65">
+              <pre className="max-w-full overflow-x-auto rounded-lg border border-border/60 bg-surface-2/60 p-3 text-fg/65">
                 {detail}
               </pre>
             ) : null}

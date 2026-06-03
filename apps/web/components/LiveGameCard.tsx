@@ -74,7 +74,7 @@ export function LiveGameCard({
       {error ? <p className="type-ui mt-3 text-danger">{error}</p> : null}
 
       {data ? (
-        <pre className="mt-4 max-h-[360px] overflow-auto rounded-lg border border-border/60 bg-black/30 p-3 text-xs text-fg/85">
+        <pre className="mt-4 max-h-[360px] overflow-auto rounded-lg border border-border/60 bg-surface-2/70 p-3 text-xs text-fg/85">
           {JSON.stringify(data, null, 2)}
         </pre>
       ) : (

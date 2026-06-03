@@ -8,7 +8,6 @@ export async function fetchWithGlobalAnalyticsRegionFallback<
   TResult extends { ok: boolean },
 >(
   activeRegion: string,
-  // eslint-disable-next-line no-unused-vars
   fetcher: (region: string) => Promise<TResult>,
 ): Promise<{
   result: TResult;

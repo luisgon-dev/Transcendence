@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { Select } from "@/components/ui/Select";
 import {
   compTierColorClass,
   compTierLabel,
@@ -43,16 +44,13 @@ export function TftCompList({
     <div className="grid gap-4">
       <div className="flex items-center gap-2">
         <span className="type-meta text-fg/60">Sort by</span>
-        <select
+        <Select
           value={sort}
-          onChange={(e) => setSort(e.target.value as SortOption)}
-          aria-label="Sort comps by"
-          className="control-select h-10 max-w-[180px] text-sm"
-        >
-          {sortOptions.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
+          onValueChange={(v) => setSort(v as SortOption)}
+          ariaLabel="Sort comps by"
+          options={sortOptions}
+          className="min-w-[170px]"
+        />
       </div>
 
       {sorted.length === 0 ? (
@@ -62,14 +60,15 @@ export function TftCompList({
       ) : null}
 
       <div className="grid gap-3 lg:grid-cols-2">
-        {sorted.map((comp) => {
+        {sorted.map((comp, idx) => {
           const tier = compTierLabel(comp.avgPlacement);
           const tierColor = compTierColorClass(tier);
           return (
             <Link
               key={comp.compSlug}
               href={`/tft/comps/${comp.compSlug}${qs ? `?${qs}` : ""}`}
-              className="block rounded-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              style={{ animationDelay: `${Math.min(idx, 10) * 35}ms` }}
+              className="reveal-up block rounded-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
               <Card className="grid gap-3 p-5 transition-colors hover:border-border/80 hover:bg-surface/40">
                 <div className="flex items-start justify-between gap-3">
@@ -93,7 +92,7 @@ export function TftCompList({
 
                 <div className="flex flex-wrap gap-1">
                   {comp.units.map((unit) => (
-                    <span key={unit.characterId} className="type-caption rounded border border-primary/25 bg-primary/8 px-1.5 py-0.5 font-medium text-primary">
+                    <span key={unit.characterId} className="type-caption rounded border border-border bg-surface-2/70 px-1.5 py-0.5 font-medium text-fg/85">
                       {unit.name ?? unit.characterId}
                     </span>
                   ))}

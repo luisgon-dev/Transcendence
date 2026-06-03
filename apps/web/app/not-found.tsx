@@ -31,7 +31,7 @@ export default function NotFound() {
             <div className="mt-6 flex flex-wrap gap-3">
               <Link
                 href="/"
-                className="type-ui inline-flex min-h-12 items-center justify-center rounded-full bg-primary px-5 py-3 font-semibold text-bg shadow-soft transition hover:-translate-y-px hover:bg-primary/94 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/28 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+                className="type-ui inline-flex min-h-12 items-center justify-center rounded-control bg-primary px-5 py-3 font-semibold text-primary-fg shadow-soft transition hover:-translate-y-px hover:bg-primary/94 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/28 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
               >
                 Go home
               </Link>

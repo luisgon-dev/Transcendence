@@ -1,15 +1,5 @@
-import Link from "next/link";
-
+import { AdminNav } from "@/app/admin/AdminNav";
 import { requireAdminSession } from "@/lib/adminSession";
-
-const links = [
-  { href: "/admin", label: "Pipeline" },
-  { href: "/admin/jobs?state=enqueued", label: "Jobs" },
-  { href: "/admin/logs", label: "Service Logs" },
-  { href: "/admin/pro-summoners", label: "Pro Summoners" },
-  { href: "/admin/api-keys", label: "API Keys" },
-  { href: "/admin/audit", label: "Audit Log" }
-];
 
 export default async function AdminLayout({
   children
@@ -35,17 +25,9 @@ export default async function AdminLayout({
             <p className="type-ui mt-2 text-fg/82">Admin role active</p>
           </div>
         </div>
-        <nav className="mt-5 flex flex-wrap gap-x-4 gap-y-2 border-t border-border/20 pt-3">
-          {links.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="control-tab type-ui"
-            >
-              {link.label}
-            </Link>
-          ))}
-        </nav>
+        <div className="mt-5">
+          <AdminNav />
+        </div>
       </header>
       {children}
     </section>

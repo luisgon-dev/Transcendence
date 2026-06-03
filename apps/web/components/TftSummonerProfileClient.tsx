@@ -8,6 +8,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Select } from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { formatDurationSeconds, formatPercent, formatRelativeTime } from "@/lib/format";
 import { computeNextPollDelayMs } from "@/lib/polling";
@@ -575,16 +576,12 @@ export function TftSummonerProfileClient({
                 )}
               </div>
               <div className="surface-card grid gap-3 rounded-card p-4">
-                <select
+                <Select
                   value={sort}
-                  onChange={(e) => setSort(e.target.value as TftSortOption)}
-                  aria-label="Sort matches by"
-                  className="h-10 rounded-control border border-border/70 bg-surface-2/55 px-3 text-sm text-fg shadow-inset"
-                >
-                  {sortOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+                  onValueChange={(v) => setSort(v as TftSortOption)}
+                  ariaLabel="Sort matches by"
+                  options={sortOptions}
+                />
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge className="surface-chip text-fg/72">
                     {history?.items.length ?? 0} shown
@@ -693,8 +690,8 @@ function TftMatchCard({
         className="flex w-full items-stretch gap-0 px-0 text-left"
       >
         <div className={`flex w-16 shrink-0 flex-col items-center justify-center ${placementBarClass(match.placement)}`}>
-          <span className="text-2xl font-extrabold text-bg">{match.placement}</span>
-          <span className="type-overline mt-1 text-bg/70">
+          <span className="text-2xl font-extrabold text-[oklch(0.2_0.02_264)]">{match.placement}</span>
+          <span className="type-overline mt-1 text-[oklch(0.2_0.02_264/0.7)]">
             place
           </span>
         </div>

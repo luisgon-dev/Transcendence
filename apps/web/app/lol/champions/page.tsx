@@ -3,6 +3,7 @@ import type { components } from "@transcendence/api-client";
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { AnalyticsRegionFilter } from "@/components/AnalyticsRegionFilter";
 import { BackendErrorCard } from "@/components/BackendErrorCard";
+import { Toolbar } from "@/components/ui/Toolbar";
 import {
   ChampionsGridClient,
   type ChampionGridEntry
@@ -100,25 +101,16 @@ export default async function ChampionsPage({
     .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <div className="grid gap-8">
-      <header className="page-hero p-5 md:p-8">
-        <p className="type-kicker text-muted">League Directory</p>
-        <h1 className="type-page-title mt-3">
-          Champions
-        </h1>
-        <p className="type-ui mt-3 text-fg/75">
-          Browse every champion and jump straight into builds, win rates, and matchup pages.
-        </p>
-        <div className="mt-4">
-          <AnalyticsSampleBanner
-            sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
-          />
-        </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />
-        </div>
-      </header>
-
+    <div className="grid gap-4">
+      <Toolbar
+        eyebrow="League Directory"
+        title="Champions"
+        meta={<span>Builds, win rates, and matchups for every champion</span>}
+        filters={<AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />}
+      />
+      <AnalyticsSampleBanner
+        sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
+      />
       <ChampionsGridClient champions={list} version={version} activeRegion={activeRegion} />
     </div>
   );

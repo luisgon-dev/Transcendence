@@ -1,5 +1,6 @@
 import { TftCatalogError } from "@/components/TftCatalogError";
 import { TftCatalogGrid } from "@/components/TftCatalogGrid";
+import { Toolbar } from "@/components/ui/Toolbar";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl } from "@/lib/env";
 import { type TftStaticEntity } from "@/lib/tft";
@@ -15,12 +16,12 @@ export default async function TftAugmentsPage() {
   const augments = result.body ?? [];
 
   return (
-    <div className="grid gap-6">
-      <section className="page-hero p-6">
-        <p className="type-kicker text-muted">TFT Catalog</p>
-        <h1 className="type-page-title mt-3">TFT Augments</h1>
-        <p className="type-ui mt-3 text-fg/75">Browse the full augment pool and open details for any option you are considering.</p>
-      </section>
+    <div className="grid gap-4">
+      <Toolbar
+        eyebrow="TFT Catalog"
+        title="Augments"
+        meta={<span>The full augment pool, with details for any option</span>}
+      />
       <TftCatalogGrid items={augments} basePath="/tft/augments" />
     </div>
   );

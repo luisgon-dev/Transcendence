@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 
-import { cn } from "@/lib/cn";
+import { Select } from "@/components/ui/Select";
 import { rankTierDisplayLabel } from "@/lib/ranks";
 
 export function RankFilterDropdown({
@@ -20,8 +20,7 @@ export function RankFilterDropdown({
 }) {
   const router = useRouter();
 
-  function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const rank = e.target.value;
+  function handleChange(rank: string) {
     const params = new URLSearchParams();
     if (extraParams) {
       for (const [k, v] of Object.entries(extraParams)) {
@@ -34,19 +33,12 @@ export function RankFilterDropdown({
   }
 
   return (
-    <select
+    <Select
       value={activeRank || "all"}
-      onChange={handleChange}
-      className={cn(
-        "control-select min-w-[156px]",
-        className
-      )}
-    >
-      {ranks.map((rank) => (
-        <option key={rank} value={rank}>
-          {rankTierDisplayLabel(rank)}
-        </option>
-      ))}
-    </select>
+      onValueChange={handleChange}
+      ariaLabel="Rank"
+      options={ranks.map((rank) => ({ value: rank, label: rankTierDisplayLabel(rank) }))}
+      className={className}
+    />
   );
 }

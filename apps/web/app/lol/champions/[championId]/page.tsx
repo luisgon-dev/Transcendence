@@ -12,6 +12,7 @@ import { StatsBar } from "@/components/StatsBar";
 import { TierBadge } from "@/components/TierBadge";
 import { WinRateText } from "@/components/WinRateText";
 import { Card } from "@/components/ui/Card";
+import { DataBar } from "@/components/ui/DataBar";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { pickMostSevereAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyticsSample";
@@ -221,7 +222,7 @@ export default async function ChampionDetailPage({
         <div
           className="pointer-events-none absolute inset-0 opacity-30"
           style={{
-            backgroundImage: `linear-gradient(to right, hsl(var(--bg)) 20%, hsl(var(--bg) / 0.82) 45%, transparent 100%), url(${splashUrl})`,
+            backgroundImage: `linear-gradient(to right, var(--t-bg) 20%, color-mix(in oklch, var(--t-bg), transparent 18%) 45%, transparent 100%), url(${splashUrl})`,
             backgroundSize: "cover",
             backgroundPosition: "top right"
           }}
@@ -247,25 +248,16 @@ export default async function ChampionDetailPage({
             <p className="mt-0.5 text-sm text-muted">
               {roleDisplayLabel(effectiveRole)} &middot; {rankTierDisplayLabel(normalizedRankTier ?? "all")} &middot; {activeRegionLabel}
             </p>
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-              <span className="surface-chip rounded-full px-2 py-1 text-fg/80">
-                Rankings coming soon
-              </span>
-              <span
-                className="surface-chip rounded-full px-2 py-1 text-muted"
-                title="Ban rate is not available yet."
-              >
-                Ban Rate —
-              </span>
+            <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs">
               <Link
                 href={`/lol/matchups/${championId}?role=${encodeURIComponent(effectiveRole)}${linkQuery ? `&${linkQuery}` : ""}`}
-                className="rounded-full border border-primary/40 bg-primary/10 px-2 py-1 text-primary hover:bg-primary/20"
+                className="rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 font-medium text-primary transition-colors hover:bg-primary/20"
               >
                 Matchup Analysis
               </Link>
               <Link
                 href={`/lol/pro-builds/${championId}${linkQuery ? `?${linkQuery}` : ""}`}
-                className="rounded-full border border-primary/40 bg-primary/10 px-2 py-1 text-primary hover:bg-primary/20"
+                className="rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 font-medium text-primary transition-colors hover:bg-primary/20"
               >
                 Pro Builds
               </Link>
@@ -330,7 +322,7 @@ export default async function ChampionDetailPage({
                   .map((w) => (
                     <tr
                       key={`${w.role ?? "ALL"}-${w.rankTier ?? "all"}`}
-                      className="border-t border-border/30 transition hover:bg-surface-2/28"
+                      className="border-t border-border/40 transition hover:bg-surface-2/40"
                     >
                       <td className="py-2.5 pr-4 font-medium">
                         {roleDisplayLabel(w.role ?? "ALL")}
@@ -339,12 +331,12 @@ export default async function ChampionDetailPage({
                         {rankTierDisplayLabel(w.rankTier ?? "all")}
                       </td>
                       <td className="py-2.5 pr-4 text-right">
-                        <WinRateText value={w.winRate} decimals={2} />
+                        <DataBar value={w.winRate} decimals={2} className="justify-end" />
                       </td>
-                      <td className="py-2.5 pr-4 text-right text-fg/70">
+                      <td className="type-tabular py-2.5 pr-4 text-right tabular-nums text-fg/70">
                         {formatPercent(w.pickRate, { decimals: 1 })}
                       </td>
-                      <td className="py-2.5 pr-4 text-right text-fg/70">
+                      <td className="type-tabular py-2.5 pr-4 text-right tabular-nums text-fg/70">
                         {formatGames(w.games)}
                       </td>
                     </tr>
@@ -385,7 +377,7 @@ export default async function ChampionDetailPage({
               {buildRows.map((b, idx) => (
                 <div
                   key={idx}
-                  className="rounded-lg border border-border/60 bg-white/[0.02] p-3"
+                  className="rounded-lg border border-border/60 bg-surface-2/40 p-3"
                 >
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-semibold text-fg">
@@ -460,7 +452,7 @@ export default async function ChampionDetailPage({
                       return (
                         <li
                           key={`${opponentChampionId}-${idx}`}
-                          className="flex items-center justify-between rounded-md border border-border/50 bg-white/[0.02] px-3 py-2"
+                          className="flex items-center justify-between rounded-md border border-border/50 bg-surface-2/40 px-3 py-2"
                         >
                           <Link
                             href={`/lol/champions/${opponentChampionId}${linkQuery ? `?${linkQuery}` : ""}`}
@@ -475,12 +467,8 @@ export default async function ChampionDetailPage({
                               className="min-w-0"
                             />
                           </Link>
-                          <span className="shrink-0 text-xs">
-                            <WinRateText
-                              value={m.winRate}
-                              decimals={1}
-                              games={m.games}
-                            />
+                          <span className="shrink-0">
+                            <DataBar value={m.winRate} decimals={1} />
                           </span>
                         </li>
                       );
@@ -509,7 +497,7 @@ export default async function ChampionDetailPage({
                       return (
                         <li
                           key={`${opponentChampionId}-${idx}`}
-                          className="flex items-center justify-between rounded-md border border-border/50 bg-white/[0.02] px-3 py-2"
+                          className="flex items-center justify-between rounded-md border border-border/50 bg-surface-2/40 px-3 py-2"
                         >
                           <Link
                             href={`/lol/champions/${opponentChampionId}${linkQuery ? `?${linkQuery}` : ""}`}
@@ -524,12 +512,8 @@ export default async function ChampionDetailPage({
                               className="min-w-0"
                             />
                           </Link>
-                          <span className="shrink-0 text-xs">
-                            <WinRateText
-                              value={m.winRate}
-                              decimals={1}
-                              games={m.games}
-                            />
+                          <span className="shrink-0">
+                            <DataBar value={m.winRate} decimals={1} />
                           </span>
                         </li>
                       );

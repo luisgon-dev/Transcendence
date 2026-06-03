@@ -4,7 +4,7 @@ import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { AnalyticsRegionFilter } from "@/components/AnalyticsRegionFilter";
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
+import { Toolbar } from "@/components/ui/Toolbar";
 import { MatchupsExplorerClient } from "@/components/MatchupsExplorerClient";
 import {
   fetchWithGlobalAnalyticsRegionFallback,
@@ -96,33 +96,23 @@ export default async function MatchupsIndexPage({
     }));
 
   return (
-    <div className="grid gap-8">
-      <header className="page-hero p-5 md:p-8">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge className="border-primary/40 bg-primary/10 text-primary">
-            Matchup Tool
-          </Badge>
-          <Badge>{popular.length} role pages</Badge>
-        </div>
-        <h1 className="type-page-title mt-4">
-          Matchup Analysis
-        </h1>
-        <p className="type-ui mt-3 text-fg/75">
-          Search for a champion, pick a role, and jump straight to counters and favorable lanes.
-        </p>
-        {fallbackMessage ? (
-          <p className="type-ui mt-3 text-fg/68">{fallbackMessage}</p>
-        ) : null}
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <Badge>{effectiveRegionLabel}</Badge>
-          <AnalyticsRegionFilter options={regionOptions} activeRegion={effectiveRegion} />
-        </div>
-        <div className="mt-3">
-          <AnalyticsSampleBanner
-            sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
-          />
-        </div>
-      </header>
+    <div className="grid gap-4">
+      <Toolbar
+        eyebrow="Matchup Tool"
+        title="Matchup Analysis"
+        meta={
+          <>
+            <span>{effectiveRegionLabel}</span>
+            <span aria-hidden="true">·</span>
+            <span className="type-tabular tabular-nums">{popular.length} role pages</span>
+          </>
+        }
+        filters={<AnalyticsRegionFilter options={regionOptions} activeRegion={effectiveRegion} />}
+      />
+      {fallbackMessage ? <p className="type-ui px-1 text-muted">{fallbackMessage}</p> : null}
+      <AnalyticsSampleBanner
+        sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
+      />
 
       <Card className="page-panel p-4 md:p-5">
         <MatchupsExplorerClient

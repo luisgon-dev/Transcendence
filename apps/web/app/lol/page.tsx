@@ -78,7 +78,7 @@ export default async function HomePage({
         <div className="mt-8 grid gap-3 lg:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] lg:items-center">
           <Link
             href={hrefWithRegion("/lol/tierlist")}
-            className="type-ui inline-flex h-14 items-center justify-center rounded-xl bg-primary px-5 text-center font-semibold text-bg transition hover:bg-primary/92"
+            className="type-ui inline-flex h-14 items-center justify-center rounded-control bg-primary px-5 text-center font-semibold text-primary-fg transition hover:bg-primary/92"
           >
             Browse tier list
           </Link>

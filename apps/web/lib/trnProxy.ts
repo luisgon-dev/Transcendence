@@ -27,7 +27,6 @@ export async function proxyToBackend(
     onUnauthorized
   }: {
     addHeaders?: Record<string, string>;
-    // eslint-disable-next-line no-unused-vars
     onUnauthorized?: (requestId: string) => Promise<Record<string, string> | null>;
   } = {}
 ) {

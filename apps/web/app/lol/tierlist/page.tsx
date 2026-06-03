@@ -5,6 +5,7 @@ import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { TierListFilterBar } from "@/components/TierListFilterBar";
 import { TierListTable } from "@/components/TierListTable";
 import { Badge } from "@/components/ui/Badge";
+import { Toolbar } from "@/components/ui/Toolbar";
 import {
   fetchWithGlobalAnalyticsRegionFallback,
   resolveAnalyticsRegionPresentation
@@ -116,52 +117,52 @@ export default async function TierListPage({
       : null;
 
   return (
-    <div className="grid gap-5">
-      <header className="page-hero p-5 md:p-7">
-        <p className="type-kicker text-muted">League Analytics</p>
-        <h1 className="type-page-title mt-2">Tier List</h1>
-
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <Badge className="border-primary/40 bg-primary/10 text-primary">
-            Patch {tierlist.patch ?? "Unknown"}
-          </Badge>
-          <Badge>{effectiveRegionLabel}</Badge>
-          <Badge>{roleDisplayLabel(tierlist.role ?? "ALL")}</Badge>
-          <Badge>{rankTierDisplayLabel(rankTierValue ?? "all")}</Badge>
-          <Badge>{normalizedEntries.length} champions</Badge>
-        </div>
-        {fallbackMessage ? (
-          <p className="type-ui mt-3 text-fg/68">{fallbackMessage}</p>
-        ) : null}
-
-        <div className="mt-3">
-          <AnalyticsSampleBanner
-            sample={(tierlist as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
+    <div className="grid gap-4">
+      <Toolbar
+        eyebrow="League Analytics"
+        title="Tier List"
+        meta={
+          <>
+            <Badge className="border-primary/40 bg-primary/10 text-primary">
+              Patch {tierlist.patch ?? "Unknown"}
+            </Badge>
+            <span>{effectiveRegionLabel}</span>
+            <span aria-hidden="true">·</span>
+            <span>{roleDisplayLabel(tierlist.role ?? "ALL")}</span>
+            <span aria-hidden="true">·</span>
+            <span>{rankTierDisplayLabel(rankTierValue ?? "all")}</span>
+            <span aria-hidden="true">·</span>
+            <span className="type-tabular tabular-nums">{normalizedEntries.length} champions</span>
+          </>
+        }
+        filters={
+          <TierListFilterBar
+            activeRole={roleParam || "ALL"}
+            activeRank={effectiveRankParam ?? "all"}
+            regionOptions={regionOptions}
+            activeRegion={effectiveRegion}
+            patchOptions={patchOptions}
+            activePatch={selectedPatch}
+            extraParams={sharedFilterParams}
+            baseHref="/lol/tierlist"
+            className="mt-0 w-full border-0 bg-transparent p-0 shadow-none"
           />
-        </div>
-      </header>
+        }
+      />
 
-      <div className="grid gap-3">
-        <TierListFilterBar
-          activeRole={roleParam || "ALL"}
-          activeRank={effectiveRankParam ?? "all"}
-          regionOptions={regionOptions}
-          activeRegion={effectiveRegion}
-          patchOptions={patchOptions}
-          activePatch={selectedPatch}
-          extraParams={sharedFilterParams}
-          baseHref="/lol/tierlist"
-        />
+      {fallbackMessage ? <p className="type-ui px-1 text-muted">{fallbackMessage}</p> : null}
+      <AnalyticsSampleBanner
+        sample={(tierlist as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
+      />
 
-        <TierListTable
-          entries={normalizedEntries}
-          champions={champions}
-          version={version}
-          rankTierValue={rankTierValue}
-          activeRegion={effectiveRegion}
-          activePatch={selectedPatch}
-        />
-      </div>
+      <TierListTable
+        entries={normalizedEntries}
+        champions={champions}
+        version={version}
+        rankTierValue={rankTierValue}
+        activeRegion={effectiveRegion}
+        activePatch={selectedPatch}
+      />
     </div>
   );
 }

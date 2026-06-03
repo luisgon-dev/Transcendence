@@ -6,9 +6,9 @@ import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { ChampionPortrait } from "@/components/ChampionPortrait";
 import { FilterBar } from "@/components/FilterBar";
-import { WinRateText } from "@/components/WinRateText";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { DataBar } from "@/components/ui/DataBar";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { pickMostSevereAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyticsSample";
@@ -247,7 +247,7 @@ export default async function MatchupAnalysisPage({
                         className="min-w-0"
                       />
                     </Link>
-                    <WinRateText value={entry.winRate} decimals={1} games={entry.games} className="text-xs" />
+                    <DataBar value={entry.winRate} decimals={1} />
                   </li>
                 );
               })}
@@ -277,7 +277,7 @@ export default async function MatchupAnalysisPage({
                         className="min-w-0"
                       />
                     </Link>
-                    <WinRateText value={entry.winRate} decimals={1} games={entry.games} className="text-xs" />
+                    <DataBar value={entry.winRate} decimals={1} />
                   </li>
                 );
               })}
@@ -336,13 +336,12 @@ export default async function MatchupAnalysisPage({
                 <th className="py-2 pr-4 text-right">Win Rate</th>
                 <th className="py-2 pr-4 text-right">Games</th>
                 <th className="py-2 pr-4 text-right">Verdict</th>
-                <th className="py-2 pr-4 text-right">Gold @ 15</th>
               </tr>
             </thead>
             <tbody>
               {allMatchups.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-4 text-sm text-muted">
+                  <td colSpan={4} className="py-4 text-sm text-muted">
                     No matchup data is available for the selected filters yet.
                   </td>
                 </tr>
@@ -351,8 +350,10 @@ export default async function MatchupAnalysisPage({
                   const opponentId = entry.opponentChampionId ?? 0;
                   const opponent = champions[String(opponentId)];
                   const verdict = matchupVerdict(entry.winRate);
+                  const verdictClass =
+                    verdict === "Favored" ? "text-win" : verdict === "Unfavored" ? "text-loss" : "text-muted";
                   return (
-                    <tr key={`${opponentId}-${idx}`} className="border-b border-border/20">
+                    <tr key={`${opponentId}-${idx}`} className="border-b border-border/40">
                       <td className="py-2.5 pr-4">
                         <Link href={`/lol/champions/${opponentId}${championLinkQuery ? `?${championLinkQuery}` : ""}`} className="hover:underline">
                           <ChampionPortrait
@@ -365,16 +366,10 @@ export default async function MatchupAnalysisPage({
                         </Link>
                       </td>
                       <td className="py-2.5 pr-4 text-right">
-                        <WinRateText value={entry.winRate} decimals={1} />
+                        <DataBar value={entry.winRate} decimals={1} className="justify-end" />
                       </td>
-                      <td className="py-2.5 pr-4 text-right text-fg/70">{formatGames(entry.games)}</td>
-                      <td className="py-2.5 pr-4 text-right text-fg/75">{verdict}</td>
-                      <td
-                        className="py-2.5 pr-4 text-right text-muted"
-                        title="Gold difference at 15 minutes is not available yet."
-                      >
-                        —
-                      </td>
+                      <td className="type-tabular py-2.5 pr-4 text-right tabular-nums text-fg/70">{formatGames(entry.games)}</td>
+                      <td className={`py-2.5 pr-4 text-right font-medium ${verdictClass}`}>{verdict}</td>
                     </tr>
                   );
                 })

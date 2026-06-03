@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { Card } from "@/components/ui/Card";
+import { Toolbar } from "@/components/ui/Toolbar";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl } from "@/lib/env";
 import { formatTftPercent, type TftCompListItem, type TftStaticEntity } from "@/lib/tft";
@@ -37,23 +38,27 @@ export default async function TftHomePage() {
 
   return (
     <div className="grid gap-6">
-      <section className="page-hero p-6 sm:p-8">
-        <p className="type-kicker text-muted">Teamfight Tactics</p>
-        <h1 className="type-display mt-4 max-w-4xl">
-          TFT comps, unit lookups, and player pages built for the live set.
-        </h1>
-        <p className="type-lead mt-4 max-w-3xl">
-          Find the best-performing comps, browse units and items, and check how players are finishing their recent games.
-        </p>
-        <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2">
-          <Link href="/tft/comps" className="control-tab type-ui font-semibold" data-active="true">
-            Explore Comps
-          </Link>
-          <Link href={EXAMPLE_SUMMONER_HREF} className="control-tab type-ui">
-            Example Profile
-          </Link>
-        </div>
-      </section>
+      <Toolbar
+        eyebrow="Teamfight Tactics"
+        title="Comps & Analytics"
+        meta={<span>Best comps, unit lookups, and player pages for the live set</span>}
+        actions={
+          <>
+            <Link
+              href="/tft/comps"
+              className="type-ui inline-flex h-9 items-center rounded-control bg-primary px-4 font-semibold text-primary-fg transition-colors hover:bg-primary/92"
+            >
+              Explore Comps
+            </Link>
+            <Link
+              href={EXAMPLE_SUMMONER_HREF}
+              className="type-ui inline-flex h-9 items-center rounded-control border border-border px-4 font-medium text-fg/85 transition-colors hover:border-border-strong hover:text-fg"
+            >
+              Example Profile
+            </Link>
+          </>
+        }
+      />
 
       <section className="flex flex-wrap items-center gap-2">
         <p className="type-kicker mr-1 text-muted">Browse</p>

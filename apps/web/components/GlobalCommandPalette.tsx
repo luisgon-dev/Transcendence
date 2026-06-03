@@ -148,9 +148,9 @@ function getOverlayBackground(origin: GlobalSearchOpenOrigin | null) {
 
   return {
     background: `
-      radial-gradient(480px 280px at ${spotlightX}px ${spotlightY}px, hsl(var(--primary) / 0.14), transparent 60%),
-      radial-gradient(760px 340px at 50% 0%, hsl(var(--fg) / 0.035), transparent 68%),
-      hsl(222 30% 3% / 0.84)
+      radial-gradient(480px 280px at ${spotlightX}px ${spotlightY}px, color-mix(in oklch, var(--t-primary), transparent 86%), transparent 60%),
+      radial-gradient(760px 340px at 50% 0%, color-mix(in oklch, var(--t-fg), transparent 96%), transparent 68%),
+      oklch(0.12 0.02 264 / 0.72)
     `
   };
 }

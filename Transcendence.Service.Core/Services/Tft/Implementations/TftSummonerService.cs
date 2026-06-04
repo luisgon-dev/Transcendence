@@ -22,7 +22,7 @@ public class TftSummonerService(TftRiotApiContext riotApiContext, ITftRankServic
     {
         var account = await riotApiContext.Api.AccountV1().GetByRiotIdAsync(platformRoute.ToRegional(), gameName, tagLine, ct);
         if (account == null || string.IsNullOrWhiteSpace(account.Puuid))
-            throw new InvalidOperationException($"Riot Account API returned no PUUID for {gameName}#{tagLine}.");
+            throw new RiotAccountNotFoundException($"Riot Account API returned no PUUID for {gameName}#{tagLine}.");
 
         var summoner = await riotApiContext.Api.TftSummonerV1().GetByPUUIDAsync(platformRoute, account.Puuid, ct);
         if (summoner == null || string.IsNullOrWhiteSpace(summoner.Puuid))

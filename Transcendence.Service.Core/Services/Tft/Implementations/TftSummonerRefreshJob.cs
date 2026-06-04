@@ -2,6 +2,7 @@ using Camille.Enums;
 using Hangfire;
 using Transcendence.Data;
 using Transcendence.Data.Repositories.Interfaces;
+using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.Tft.Interfaces;
 
 namespace Transcendence.Service.Core.Services.Tft.Implementations;
@@ -50,6 +51,12 @@ public class TftSummonerRefreshJob(
             }
 
             await db.SaveChangesAsync(ct);
+        }
+        catch (RiotAccountNotFoundException ex)
+        {
+            // Riot id no longer resolves (deleted/renamed/reassigned). Permanent — skip without
+            // failing so Hangfire does not retry this dead entry indefinitely.
+            logger.LogWarning(ex, "Skipping TFT refresh for {GameName}#{TagLine} on {Platform}: account no longer resolves.", gameName, tagLine, platformRoute);
         }
         catch (Exception ex)
         {

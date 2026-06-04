@@ -1,4 +1,5 @@
 using System.Data;
+using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Transcendence.Data.Models.LoL.Account;
@@ -272,11 +273,59 @@ public class SummonerRepository(TranscendenceContext context, IRankRepository ra
 
             throw new InvalidOperationException("Summoner upsert did not return a valid Id.");
         }
+        catch (DbException ex) when (ex.SqlState == UniqueViolationSqlState)
+        {
+            // ON CONFLICT ("Puuid") already absorbs PUUID collisions, so the only unique violation that
+            // can escape here is IX_Summoners_SearchPrefix: the (PlatformRegion, GameName, TagLine) is held
+            // by a row with a different PUUID. Riot riot-ids are mutable/reusable while the PUUID is the
+            // stable identity, and match data carries the names as they were at match time — so a new-PUUID
+            // upsert can collide on the riot-id index. Reuse the existing row instead of failing the whole
+            // ingestion job. (If no such row resolves, this was an unexpected conflict — rethrow.)
+            var currentTransaction = context.Database.CurrentTransaction?.GetDbTransaction();
+            var existingId = await TryGetExistingSummonerIdByRiotIdAsync(connection, currentTransaction, summoner, cancellationToken);
+            if (existingId is { } resolvedId)
+                return resolvedId;
+            throw;
+        }
         finally
         {
             if (wasClosed)
                 await connection.CloseAsync();
         }
+    }
+
+    private const string UniqueViolationSqlState = "23505";
+
+    private static async Task<Guid?> TryGetExistingSummonerIdByRiotIdAsync(
+        DbConnection connection,
+        DbTransaction? transaction,
+        Summoner summoner,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+                           SELECT "Id" FROM "Summoners"
+                           WHERE "PlatformRegion" = @platformRegion
+                             AND "GameNameNormalized" = @gameNameNormalized
+                             AND "TagLineNormalized" = @tagLineNormalized
+                           LIMIT 1;
+                           """;
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        command.CommandType = CommandType.Text;
+        if (transaction != null)
+            command.Transaction = transaction;
+
+        AddParameter(command, "@platformRegion", summoner.PlatformRegion);
+        AddParameter(command, "@gameNameNormalized", summoner.GameNameNormalized);
+        AddParameter(command, "@tagLineNormalized", summoner.TagLineNormalized);
+
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        if (result is Guid id)
+            return id;
+        if (result is string value && Guid.TryParse(value, out var parsedId))
+            return parsedId;
+        return null;
     }
 
     private static void AddParameter(IDbCommand command, string name, object? value)

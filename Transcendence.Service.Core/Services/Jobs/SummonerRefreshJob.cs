@@ -126,6 +126,13 @@ public class SummonerRefreshJob(
         {
             throw;
         }
+        catch (RiotAccountNotFoundException ex)
+        {
+            // Riot id no longer resolves (deleted/renamed/reassigned). Permanent — skip without
+            // failing so Hangfire does not retry this dead entry indefinitely.
+            logger.LogWarning(ex, "[Refresh] Skipping {GameName}#{Tag} on {Platform}: account no longer resolves.",
+                gameName, tagLine, platformRoute);
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "[Refresh] Error refreshing {GameName}#{Tag} on {Platform}", gameName, tagLine,

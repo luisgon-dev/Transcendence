@@ -24,7 +24,7 @@ public class SummonerService(LeagueRiotApiContext riotApiContext, IRankService r
         var account = await riotApiContext.Api.AccountV1()
             .GetByRiotIdAsync(regional, gameName, tagLine, cancellationToken);
         if (account == null || string.IsNullOrWhiteSpace(account.Puuid))
-            throw new InvalidOperationException(
+            throw new RiotAccountNotFoundException(
                 $"Riot Account API returned no PUUID for {gameName}#{tagLine} on {regional}.");
 
         var summoner = await riotApiContext.Api.SummonerV4()

@@ -37,6 +37,9 @@ builder.Services.AddHangfire(config =>
 builder.Services.AddHangfireServer(options =>
 {
     options.Queues = ["refresh-high", "default", "refresh-low", "tft-refresh-high", "tft-default", "tft-refresh-low"];
+    // Refresh jobs are I/O-bound (awaiting the Riot API, throttled per-region by Camille), so a
+    // worker count well above CPU count keeps more regions/summoners in flight concurrently.
+    options.WorkerCount = 24;
 });
 
 builder.Services.AddHttpClient();

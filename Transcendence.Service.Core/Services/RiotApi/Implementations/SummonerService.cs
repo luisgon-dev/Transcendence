@@ -30,11 +30,13 @@ public class SummonerService(LeagueRiotApiContext riotApiContext, IRankService r
         var summoner = await riotApiContext.Api.SummonerV4()
             .GetByPUUIDAsync(platformRoute, account.Puuid, cancellationToken);
 
-        return await CreateSummonerAsync(summoner, platformRoute, cancellationToken);
+        // Reuse the account we already resolved above instead of re-fetching it (saves 1 Account-V1 call).
+        return await CreateSummonerAsync(summoner, platformRoute, cancellationToken, account);
     }
 
     private async Task<Summoner> CreateSummonerAsync(Camille.RiotGames.SummonerV4.Summoner summoner,
-        PlatformRoute platformRoute, CancellationToken cancellationToken)
+        PlatformRoute platformRoute, CancellationToken cancellationToken,
+        Camille.RiotGames.AccountV1.Account? account = null)
     {
         var current = new Summoner
         {
@@ -48,7 +50,7 @@ public class SummonerService(LeagueRiotApiContext riotApiContext, IRankService r
             Region = platformRoute.ToRegional().ToString()
         };
 
-        var account = await riotApiContext.Api.AccountV1()
+        account ??= await riotApiContext.Api.AccountV1()
             .GetByPuuidAsync(platformRoute.ToRegional(), summoner.Puuid, cancellationToken);
         if (account == null)
             throw new InvalidOperationException(

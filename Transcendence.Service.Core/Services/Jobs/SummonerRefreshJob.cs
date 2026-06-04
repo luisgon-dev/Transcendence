@@ -357,26 +357,54 @@ public class SummonerRefreshJob(
             }
 
             var matchesToPersist = new List<DataMatch>(pendingIds.Count);
-            foreach (var matchId in pendingIds)
+            var fetchConcurrency = Math.Max(1, ingestionOptions.Value.MatchFetchConcurrency);
+            // Fetch match details in bounded-parallel chunks. Camille's per-region limiter still
+            // governs the actual request rate; this just stops the app from serializing below it.
+            // shouldStop is re-checked between chunks so high-priority demand still preempts.
+            for (var offset = 0; offset < pendingIds.Count; offset += fetchConcurrency)
             {
                 ct.ThrowIfCancellationRequested();
                 if (shouldStop != null && await shouldStop())
                     break;
 
-                try
+                var chunk = pendingIds.Skip(offset).Take(fetchConcurrency).ToList();
+                var fetched = await Task.WhenAll(chunk.Select(async matchId =>
                 {
-                    var match = lightweight
-                        ? await matchService.GetMatchDetailsLightweightAsync(matchId, regional, platformRoute, ct)
-                        : await matchService.GetMatchDetailsAsync(matchId, regional, platformRoute, ct);
+                    try
+                    {
+                        var match = lightweight
+                            ? await matchService.GetMatchDetailsLightweightAsync(matchId, regional, platformRoute, ct)
+                            : await matchService.GetMatchDetailsAsync(matchId, regional, platformRoute, ct);
+                        return (matchId, match, error: (Exception?)null);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        return (matchId, match: (DataMatch?)null, error: (Exception?)ex);
+                    }
+                }));
+
+                foreach (var (matchId, match, error) in fetched)
+                {
+                    if (error != null)
+                    {
+                        fetchExceptionCount++;
+                        firstFetchException ??= error;
+                        AddSample(fetchFailureSamples, matchId);
+                        logger.LogDebug(error, "[Refresh] Error fetching match {MatchId} for {GameName}#{Tag}",
+                            matchId, gameName, tagLine);
+                        continue;
+                    }
 
                     if (match == null)
                     {
                         nullFetchCount++;
                         AddSample(fetchFailureSamples, matchId);
                         logger.LogDebug("[Refresh] Match {MatchId} failed to fetch for {GameName}#{Tag}",
-                            matchId,
-                            gameName,
-                            tagLine);
+                            matchId, gameName, tagLine);
                         continue;
                     }
 
@@ -390,20 +418,6 @@ public class SummonerRefreshJob(
                         continue;
 
                     matchesToPersist.Add(match);
-                }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    fetchExceptionCount++;
-                    firstFetchException ??= ex;
-                    AddSample(fetchFailureSamples, matchId);
-                    logger.LogDebug(ex, "[Refresh] Error fetching match {MatchId} for {GameName}#{Tag}",
-                        matchId,
-                        gameName,
-                        tagLine);
                 }
             }
 

@@ -2,7 +2,9 @@ using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.RateLimiting;
+using StackExchange.Redis;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration.Json;
 using Microsoft.IdentityModel.Tokens;
@@ -146,6 +148,19 @@ builder.Services.AddStackExchangeRedisCache(options =>
     options.Configuration = builder.Configuration.GetConnectionString("Redis");
     options.InstanceName = "Transcendence_";
 });
+
+// Persist DataProtection keys to Redis so antiforgery/auth cookies survive container
+// redeploys. The default ephemeral container key-ring is regenerated on every deploy
+// (logging users out and emitting a startup warning). No-op when Redis isn't configured.
+var dataProtectionRedis = builder.Configuration.GetConnectionString("Redis");
+if (!string.IsNullOrWhiteSpace(dataProtectionRedis))
+{
+    builder.Services.AddDataProtection()
+        .SetApplicationName("Transcendence")
+        .PersistKeysToStackExchangeRedis(
+            ConnectionMultiplexer.Connect(dataProtectionRedis),
+            "Transcendence:DataProtection:Keys");
+}
 
 // Configure HybridCache with L1/L2 TTL relationship
 builder.Services.AddHybridCache(options =>

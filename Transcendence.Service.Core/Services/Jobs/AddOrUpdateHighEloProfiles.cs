@@ -163,6 +163,9 @@ public class AddOrUpdateHighEloProfiles(
                 GameName = summoner.GameName,
                 TagLine = summoner.TagLine,
                 IsPro = false,
+                // These are auto-discovered Challenger/GM/Master players — flag them so the
+                // "high-elo" / "all" pro-analytics scopes can include them (IsPro stays curated).
+                IsHighEloOtp = true,
                 IsActive = true,
                 UpdatedAtUtc = nowUtc,
                 CreatedAtUtc = nowUtc
@@ -172,6 +175,7 @@ public class AddOrUpdateHighEloProfiles(
 
         existing.GameName = summoner.GameName;
         existing.TagLine = summoner.TagLine;
+        existing.IsHighEloOtp = true;
         existing.IsActive = true;
         existing.UpdatedAtUtc = nowUtc;
     }

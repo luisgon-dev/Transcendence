@@ -155,10 +155,14 @@ builder.Services.AddStackExchangeRedisCache(options =>
 var dataProtectionRedis = builder.Configuration.GetConnectionString("Redis");
 if (!string.IsNullOrWhiteSpace(dataProtectionRedis))
 {
+    // AbortOnConnectFail=false so the host still starts when Redis is briefly unreachable
+    // (CI/OpenAPI-export has no Redis; prod startup shouldn't hard-fail on a Redis blip).
+    var dataProtectionRedisOptions = ConfigurationOptions.Parse(dataProtectionRedis);
+    dataProtectionRedisOptions.AbortOnConnectFail = false;
     builder.Services.AddDataProtection()
         .SetApplicationName("Transcendence")
         .PersistKeysToStackExchangeRedis(
-            ConnectionMultiplexer.Connect(dataProtectionRedis),
+            ConnectionMultiplexer.Connect(dataProtectionRedisOptions),
             "Transcendence:DataProtection:Keys");
 }
 

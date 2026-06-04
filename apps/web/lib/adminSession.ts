@@ -31,7 +31,7 @@ export async function requireAdminSession(): Promise<AdminSession> {
   }
 
   const token = await getAccessTokenOrRefresh();
-  if (!token) {
+  if (!token.ok) {
     redirect("/account/login");
   }
 
@@ -39,6 +39,6 @@ export async function requireAdminSession(): Promise<AdminSession> {
     userId: me.subject,
     name: me.name,
     roles: me.roles,
-    accessToken: token
+    accessToken: token.accessToken
   };
 }

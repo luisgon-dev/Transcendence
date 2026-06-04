@@ -43,15 +43,23 @@ async function handler(req: NextRequest, ctx: Ctx) {
   }
 
   const accessToken = await getAccessTokenOrRefresh();
-  if (!accessToken) {
-    return NextResponse.json({ message: "Not authenticated." }, { status: 401 });
+  if (!accessToken.ok) {
+    return NextResponse.json(
+      {
+        message:
+          accessToken.reason === "unavailable"
+            ? "Authentication service temporarily unavailable."
+            : "Not authenticated."
+      },
+      { status: accessToken.reason === "unavailable" ? 503 : 401 }
+    );
   }
 
   const { path } = await ctx.params;
   // Backend admin endpoints live under /api/admin/* (this BFF folder strips the "admin"
   // segment), so prepend it: /api/trn/admin/<x> -> /api/admin/<x>.
   return proxyToBackend(req, ["admin", ...path], {
-    addHeaders: { authorization: `Bearer ${accessToken}` }
+    addHeaders: { authorization: `Bearer ${accessToken.accessToken}` }
   });
 }
 

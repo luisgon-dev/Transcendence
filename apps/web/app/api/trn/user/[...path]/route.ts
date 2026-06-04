@@ -13,24 +13,30 @@ type Ctx = { params: Promise<{ path: string[] }> };
 async function handler(req: NextRequest, ctx: Ctx) {
   const token = await getAccessTokenOrRefresh();
 
-  if (!token) {
-    await clearAuthCookies();
+  if (!token.ok) {
+    // Only log out for a definitive auth failure. A transient backend outage (e.g. a
+    // container redeploy) must keep the session intact — clearing cookies here is what
+    // signed users out on every deploy.
+    if (token.reason === "unauthenticated") {
+      await clearAuthCookies();
+      return NextResponse.json({ message: "Not authenticated." }, { status: 401 });
+    }
     return NextResponse.json(
-      { message: "Not authenticated." },
-      { status: 401 }
+      { message: "Authentication service temporarily unavailable." },
+      { status: 503 }
     );
   }
 
   const { path } = await ctx.params;
   return proxyToBackend(req, path, {
-    addHeaders: { authorization: `Bearer ${token}` },
+    addHeaders: { authorization: `Bearer ${token.accessToken}` },
     onUnauthorized: async (requestId) => {
       const refreshed = await refreshAccessToken({ requestId });
-      if (!refreshed) {
-        await clearAuthCookies();
+      if (!refreshed.ok) {
+        if (refreshed.reason === "unauthenticated") await clearAuthCookies();
         return null;
       }
-      return { authorization: `Bearer ${refreshed}` };
+      return { authorization: `Bearer ${refreshed.accessToken}` };
     }
   });
 }

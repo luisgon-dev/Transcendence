@@ -37,7 +37,12 @@ export async function getSessionMe(): Promise<SessionMe> {
     let token = accessToken;
 
     if (!token || shouldRefreshAccessToken(accessExpiresAtUtc)) {
-      token = await refreshAccessToken();
+      const refreshed = await refreshAccessToken();
+      if (!refreshed.ok) {
+        if (refreshed.reason === "unauthenticated") await clearAuthCookies();
+        return { authenticated: false };
+      }
+      token = refreshed.accessToken;
     }
 
     if (!token) {
@@ -56,11 +61,12 @@ export async function getSessionMe(): Promise<SessionMe> {
     }
 
     if (me.response.status === 401) {
-      token = await refreshAccessToken();
-      if (!token) {
-        await clearAuthCookies();
+      const refreshed = await refreshAccessToken();
+      if (!refreshed.ok) {
+        if (refreshed.reason === "unauthenticated") await clearAuthCookies();
         return { authenticated: false };
       }
+      token = refreshed.accessToken;
 
       try {
         me = await client.GET("/api/auth/me", {

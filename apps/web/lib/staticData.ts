@@ -89,7 +89,27 @@ const STAT_SHARD_FALLBACKS: Array<{ id: number; name: string; iconPath: string }
     id: 5010,
     name: "Move Speed",
     iconPath: "/lol-game-data/assets/v1/perk-images/statmods/statmodsmovementspeedicon.png"
+  },
+  {
+    id: 5011,
+    name: "Health",
+    iconPath: "/lol-game-data/assets/v1/perk-images/statmods/statmodshealthscalingicon.png"
+  },
+  {
+    id: 5013,
+    name: "Tenacity and Slow Resist",
+    iconPath: "/lol-game-data/assets/v1/perk-images/statmods/statmodstenacityicon.png"
   }
+];
+
+/**
+ * The canonical 3x3 stat-shard grid as shown in the in-client rune page (one pick per row).
+ * Offense / Flex / Defense. IDs validated against CommunityDragon perks.json.
+ */
+export const STAT_SHARD_ROWS: number[][] = [
+  [5008, 5005, 5007], // Offense: Adaptive Force, Attack Speed, Ability Haste
+  [5008, 5010, 5001], // Flex:    Adaptive Force, Move Speed, Health Scaling
+  [5011, 5013, 5001] // Defense:  Health, Tenacity & Slow Resist, Health Scaling
 ];
 
 export type ItemMap = {
@@ -102,11 +122,17 @@ export type SummonerSpellMap = {
   spells: Record<string, { id: string; name: string }>;
 };
 
+export type RuneTreeRune = { id: number; name: string; icon: string };
+export type RuneTreeSlot = { runes: RuneTreeRune[] };
+export type RuneTree = { id: number; name: string; icon: string; slots: RuneTreeSlot[] };
+
 export type RuneStaticData = {
   version: string;
   runeById: Record<string, { name: string; icon: string }>;
   styleById: Record<string, { name: string; icon: string }>;
   runeSortById: Record<string, number>;
+  /** Full structured trees (style → slots → runes), for rendering the complete rune page. */
+  trees: RuneTree[];
 };
 
 async function fetchLatestVersion() {
@@ -252,7 +278,20 @@ export async function fetchRunesReforged(): Promise<RuneStaticData> {
     runeSortById[key] = 1000 + STAT_SHARD_FALLBACKS.findIndex((entry) => entry.id === shard.id);
   }
 
-  return { version, runeById, styleById, runeSortById };
+  const trees: RuneTree[] = styles.map((style) => ({
+    id: style.id,
+    name: style.name,
+    icon: style.icon,
+    slots: (style.slots ?? []).map((slot) => ({
+      runes: (slot.runes ?? []).map((rune) => ({
+        id: rune.id,
+        name: rune.name,
+        icon: rune.icon
+      }))
+    }))
+  }));
+
+  return { version, runeById, styleById, runeSortById, trees };
 }
 
 export function runeIconUrl(iconPath: string) {

@@ -2186,6 +2186,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/lol/analytics/pro/champions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    region?: string;
+                    scope?: string;
+                    patch?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProChampionPlayrateResponse"];
+                        "application/json": components["schemas"]["ProChampionPlayrateResponse"];
+                        "text/json": components["schemas"]["ProChampionPlayrateResponse"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lol/analytics/pro/players": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    region?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProRosterResponse"];
+                        "application/json": components["schemas"]["ProRosterResponse"];
+                        "text/json": components["schemas"]["ProRosterResponse"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/pro-summoners": {
         parameters: {
             query?: never;
@@ -4883,6 +4985,25 @@ export interface components {
         PasswordResetRequest: {
             email?: string | null;
         };
+        ProChampionPlayrateDto: {
+            /** Format: int32 */
+            championId?: number;
+            /** Format: int32 */
+            games?: number;
+            /** Format: int32 */
+            wins?: number;
+            /** Format: double */
+            winRate?: number;
+            /** Format: int32 */
+            uniquePlayers?: number;
+        };
+        ProChampionPlayrateResponse: {
+            patch?: string | null;
+            region?: string | null;
+            scope?: string | null;
+            champions?: components["schemas"]["ProChampionPlayrateDto"][] | null;
+            sample?: components["schemas"]["AnalyticsSampleMetadata"];
+        };
         ProMatchBuildDto: {
             matchId?: string | null;
             playerName?: string | null;
@@ -4899,6 +5020,13 @@ export interface components {
             subRunes?: number[] | null;
             statShards?: number[] | null;
         };
+        ProPlayerDto: {
+            proName?: string | null;
+            teamName?: string | null;
+            platformRegion?: string | null;
+            gameName?: string | null;
+            tagLine?: string | null;
+        };
         ProPlayerSummaryDto: {
             playerName?: string | null;
             teamName?: string | null;
@@ -4906,6 +5034,10 @@ export interface components {
             games?: number;
             /** Format: double */
             winRate?: number;
+        };
+        ProRosterResponse: {
+            region?: string | null;
+            players?: components["schemas"]["ProPlayerDto"][] | null;
         };
         ProblemDetails: {
             type?: string | null;

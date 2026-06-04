@@ -48,9 +48,8 @@ Transcendence is a backend + web monorepo:
 - Admin dashboard routes under `/admin/*` for ops controls/reports (JWT `admin` role required)
 - Frontend analysis routes:
   - `/lol/tierlist`
-  - `/lol/champions/*`
-  - `/lol/matchups/*`
-  - `/lol/pro-builds/*`
+  - `/lol/champions/*` is the unified champion surface: win rates, builds (with the full rune tree), inline matchups summary, a sortable "All Matchups" table (`?sort=winRate|games`, anchored at `#matchups`), and a quick link to pro builds. The standalone `/lol/matchups` surface was removed; `/lol/matchups` and `/lol/matchups/:championId` now 308-redirect into `/lol/champions/*` (preserving query state) via `next.config.mjs` `redirects()`.
+  - `/lol/pro-builds/*` — the index hero is a pro/high-elo champion playrate ranking with a `scope` segmented control (Pro / High-Elo / All) plus a public "Tracked Pros" roster panel, retaining champion search and the recent-pro-matches feed.
   - `/lol/summoners/[region]/[riotId]` is the unified LoL profile + match history surface
     - Legacy `/lol/summoners/[region]/[riotId]/matches*` routes redirect into this unified view using query state (`page`, `queue`, `expandMatchId`)
   - `/tft`
@@ -61,7 +60,7 @@ Transcendence is a backend + web monorepo:
   - `/tft/augments/*`
   - `/tft/summoners/[region]/[riotId]`
 - Public LoL patch badges now read backend analytics patch status instead of raw Data Dragon latest so web patch labels match the active analytics dataset
-- LoL analytics pages (tier list, champion, matchups, pro-builds) carry a historical patch selector (`AnalyticsPatchFilter`, backed by `lib/lolPatchFilters.ts` + `lib/lolAnalyticsPatches.ts`, surfaced via `FilterBar`) that reads `GET /api/lol/analytics/patches` and drives the `patch` query parameter
+- LoL analytics pages (tier list, champion, pro-builds) carry a historical patch selector (`AnalyticsPatchFilter`, backed by `lib/lolPatchFilters.ts` + `lib/lolAnalyticsPatches.ts`, surfaced via `FilterBar`) that reads `GET /api/lol/analytics/patches` and drives the `patch` query parameter
 
 ### `packages/api-client`
 - Generated OpenAPI TypeScript client artifacts built from the committed spec
@@ -250,6 +249,10 @@ Operational implication:
   - recent pro matches
   - top players
   - common builds
+- Cross-champion pro analytics live on a dedicated `ProAnalyticsController` (`/api/lol/analytics/pro/*`, separate from the `{championId}` champion routes to avoid route ambiguity):
+  - `GET /pro/champions` ranks champions by tracked-player pick frequency. A `scope` parameter selects the roster predicate — `pro` (`IsPro`), `highelo` (`IsHighEloOtp`), or `all` (`IsPro || IsHighEloOtp`, the default) — so the surface stays populated from the continuously-ingested high-elo roster even when the manually-curated `IsPro` set is sparse. Aggregation mirrors the pro-build compute: materialize `{ ChampionId, Win, Puuid }` scalar rows (ranked solo/duo, patch, region→platform), then group in memory (games / wins / win rate / distinct players). Cached 24h (`proplayrate` tag).
+  - `GET /pro/players` exposes a public, slimmed projection of the `IsActive && IsPro` roster (no internal identifiers) for the Tracked Pros panel. Cached 24h (`proroster` tag).
+  - Both tags compose under the shared `analytics` cache tag, so the existing analytics cache invalidation clears them.
 
 ### Rune Hierarchy Pipeline
 

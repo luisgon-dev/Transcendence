@@ -901,6 +901,113 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             commonBuilds);
     }
 
+    public async Task<ProChampionPlayrateResponse> ComputeProChampionPlayrateAsync(
+        string? region,
+        string scope,
+        string patch,
+        CancellationToken ct)
+    {
+        var normalizedRegion = string.IsNullOrWhiteSpace(region) ? "ALL" : region.Trim().ToUpperInvariant();
+        var normalizedScope = NormalizeProScope(scope);
+
+        var rosterQuery = _context.TrackedProSummoners
+            .AsNoTracking()
+            .Where(x => x.IsActive);
+
+        rosterQuery = normalizedScope switch
+        {
+            "highelo" => rosterQuery.Where(x => x.IsHighEloOtp),
+            "all" => rosterQuery.Where(x => x.IsPro || x.IsHighEloOtp),
+            _ => rosterQuery.Where(x => x.IsPro)
+        };
+
+        if (!string.Equals(normalizedRegion, "ALL", StringComparison.Ordinal))
+        {
+            var platforms = ResolvePlatformsForRegion(normalizedRegion);
+            rosterQuery = rosterQuery.Where(x => platforms.Contains(x.PlatformRegion.ToUpper()));
+        }
+
+        var rosterPuuids = await rosterQuery
+            .Select(x => x.Puuid)
+            .ToListAsync(ct);
+
+        var trackedPuuids = rosterPuuids
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (trackedPuuids.Count == 0)
+            return new ProChampionPlayrateResponse(patch, normalizedRegion, normalizedScope, []);
+
+        var rows = await _context.MatchParticipants
+            .AsNoTracking()
+            .Where(mp => mp.Match.Patch == patch)
+            .Where(mp => mp.Match.Status == FetchStatus.Success)
+            .Where(mp => mp.Match.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
+                         (mp.Match.QueueId == 0 &&
+                          mp.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString()))
+            .Where(mp => mp.Puuid != null && trackedPuuids.Contains(mp.Puuid))
+            .Select(mp => new { mp.ChampionId, mp.Win, mp.Puuid })
+            .ToListAsync(ct);
+
+        if (rows.Count == 0)
+            return new ProChampionPlayrateResponse(patch, normalizedRegion, normalizedScope, []);
+
+        var champions = rows
+            .GroupBy(r => r.ChampionId)
+            .Select(g =>
+            {
+                var games = g.Count();
+                var wins = g.Count(x => x.Win);
+                return new ProChampionPlayrateDto(
+                    g.Key,
+                    games,
+                    wins,
+                    games > 0 ? (double)wins / games : 0.0,
+                    g.Select(x => x.Puuid).Distinct().Count());
+            })
+            .OrderByDescending(c => c.Games)
+            .ThenByDescending(c => c.WinRate)
+            .ToList();
+
+        return new ProChampionPlayrateResponse(patch, normalizedRegion, normalizedScope, champions);
+    }
+
+    public async Task<List<ProPlayerDto>> ComputeProRosterAsync(
+        string? region,
+        CancellationToken ct)
+    {
+        var normalizedRegion = string.IsNullOrWhiteSpace(region) ? "ALL" : region.Trim().ToUpperInvariant();
+
+        var query = _context.TrackedProSummoners
+            .AsNoTracking()
+            .Where(x => x.IsActive && x.IsPro);
+
+        if (!string.Equals(normalizedRegion, "ALL", StringComparison.Ordinal))
+        {
+            var platforms = ResolvePlatformsForRegion(normalizedRegion);
+            query = query.Where(x => platforms.Contains(x.PlatformRegion.ToUpper()));
+        }
+
+        return await query
+            .OrderBy(x => x.ProName ?? x.GameName)
+            .Select(x => new ProPlayerDto(
+                x.ProName,
+                x.TeamName,
+                x.PlatformRegion,
+                x.GameName,
+                x.TagLine))
+            .ToListAsync(ct);
+    }
+
+    internal static string NormalizeProScope(string? scope) =>
+        (scope ?? "all").Trim().ToLowerInvariant() switch
+        {
+            "pro" => "pro",
+            "highelo" => "highelo",
+            _ => "all"
+        };
+
     private readonly record struct BuildItemMetadata(
         IReadOnlyList<int> BuildsFrom,
         IReadOnlyList<int> BuildsInto,

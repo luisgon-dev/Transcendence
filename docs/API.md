@@ -125,6 +125,8 @@ Example (`SummonerAcceptedResponse`):
 - `GET /api/lol/analytics/champions/{championId}/builds`
 - `GET /api/lol/analytics/champions/{championId}/pro-builds`
 - `GET /api/lol/analytics/champions/{championId}/matchups`
+- `GET /api/lol/analytics/pro/champions`
+- `GET /api/lol/analytics/pro/players`
 - `POST /api/lol/analytics/cache/invalidate` (`AppOnly`)
 - `POST /api/lol/analytics/champions/cache/invalidate` (`AppOnly`)
 
@@ -194,6 +196,15 @@ Response includes:
 - `recentProMatches[]`
 - `topPlayers[]`
 - `commonBuilds[]`
+
+`GET /api/lol/analytics/pro/champions` (public) returns champions ranked by pick/play frequency among tracked pro / high-elo players (the "Pro Builds" home ranking). Optional filters:
+- `region` (`ALL` or supported platform-region token such as `NA1|EUW1|EUN1|KR`)
+- `scope`: `pro` (official pros, `IsPro`), `highelo` (auto-discovered Challenger/GM/Master one-tricks, `IsHighEloOtp`), or `all` (either). Defaults to `all`.
+- `patch`
+
+Response: `{ patch, region, scope, champions[], sample }` where each champion entry is `{ championId, games, wins, winRate, uniquePlayers }`, ordered by games descending. Cached 24h (`analytics` + `proplayrate` tags).
+
+`GET /api/lol/analytics/pro/players` (public) returns the public tracked-pro roster (`IsActive && IsPro`). Optional `region` filter. Response: `{ region, players[] }` where each player is `{ proName, teamName, platformRegion, gameName, tagLine }` (no internal identifiers). Cached 24h (`analytics` + `proroster` tags).
 
 ### Live Game (`AppOnly`)
 

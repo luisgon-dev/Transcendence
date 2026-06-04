@@ -41,6 +41,16 @@ import {
 
 export type { SummonerProfileResponse } from "@/components/lol-profile/shared";
 
+// Stable hash of a riot id so the hero splash picks the same skin on every render
+// (avoids SSR/hydration drift that Math.random() would cause).
+function hashRiotId(value: string): number {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = (hash * 31 + value.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
+
 export function SummonerProfileClient({
   region,
   gameName,
@@ -97,6 +107,7 @@ export function SummonerProfileClient({
   const [details, setDetails] = useState<Record<string, MatchDetail | null>>({});
   const [detailBusy, setDetailBusy] = useState<Record<string, boolean>>({});
   const [expandedRunes, setExpandedRunes] = useState<Record<string, boolean>>({});
+  const [heroSkinNum, setHeroSkinNum] = useState(0);
 
   const queueOptions = useMemo<QueueOption[]>(() => {
     const optionMap = new Map<string, QueueOption>();
@@ -421,6 +432,41 @@ export function SummonerProfileClient({
   const featuredChampionName = featuredChampion
     ? championStatic?.champions[String(featuredChampion.championId)]?.name ?? featuredChampion.championName
     : null;
+  const featuredSlug = featuredChampion
+    ? championStatic?.champions[String(featuredChampion.championId)]?.id ?? null
+    : null;
+  const staticVersion = championStatic?.version ?? null;
+
+  // Pick a (stable) random skin splash for the most-played champion as the hero backdrop.
+  useEffect(() => {
+    setHeroSkinNum(0);
+    if (!featuredSlug || !staticVersion) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `https://ddragon.leagueoflegends.com/cdn/${staticVersion}/data/en_US/champion/${featuredSlug}.json`
+        );
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as {
+          data?: Record<string, { skins?: Array<{ num: number }> }>;
+        };
+        const skins = data?.data?.[featuredSlug]?.skins ?? [];
+        if (skins.length === 0 || cancelled) return;
+        const picked = skins[hashRiotId(`${gameName}#${tagLine}`) % skins.length]?.num ?? 0;
+        if (!cancelled) setHeroSkinNum(picked);
+      } catch {
+        // Keep the base splash on any failure.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [featuredSlug, staticVersion, gameName, tagLine]);
+
+  const heroBackgroundUrl = featuredSlug
+    ? `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${featuredSlug}_${heroSkinNum}.jpg`
+    : null;
   const sortOptions: Array<{ value: MatchSortOption; label: string }> = [
     { value: "DATE_DESC", label: "Most Recent" },
     { value: "KDA_DESC", label: "Best KDA" },
@@ -435,6 +481,7 @@ export function SummonerProfileClient({
         gameName={gameName}
         tagLine={tagLine}
         profile={profile}
+        backgroundUrl={heroBackgroundUrl}
         championStatic={championStatic}
         history={history}
         dataAge={dataAge}

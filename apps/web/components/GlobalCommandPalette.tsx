@@ -80,7 +80,7 @@ const LOL_TIER_LINKS = [
   },
   { label: "Tier List · All Ranks", href: "/lol/tierlist?rankTier=all" },
   { label: "Tier List · Challenger", href: "/lol/tierlist?rankTier=CHALLENGER" },
-  { label: "Matchup Analysis", href: "/lol/matchups" },
+  { label: "Champions", href: "/lol/champions" },
   { label: "Pro Builds", href: "/lol/pro-builds" }
 ] as const;
 

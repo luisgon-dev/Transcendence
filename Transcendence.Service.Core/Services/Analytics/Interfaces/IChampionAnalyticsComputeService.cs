@@ -50,6 +50,23 @@ public interface IChampionAnalyticsComputeService
         CancellationToken ct);
 
     /// <summary>
+    /// Computes champions ranked by pick/play frequency among tracked pro / high-elo players.
+    /// Scope selects the roster: "pro" (IsPro), "highelo" (IsHighEloOtp), or "all" (either).
+    /// </summary>
+    Task<ProChampionPlayrateResponse> ComputeProChampionPlayrateAsync(
+        string? region,
+        string scope,
+        string patch,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Returns the public roster of tracked pro players (IsActive &amp;&amp; IsPro).
+    /// </summary>
+    Task<List<ProPlayerDto>> ComputeProRosterAsync(
+        string? region,
+        CancellationToken ct);
+
+    /// <summary>
     /// Computes matchup data (counters and favorable matchups) for a champion.
     /// Matchups are lane-specific (Mid vs Mid, Top vs Top, etc.).
     /// </summary>

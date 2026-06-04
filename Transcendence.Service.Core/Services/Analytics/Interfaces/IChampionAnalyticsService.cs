@@ -48,6 +48,23 @@ public interface IChampionAnalyticsService
         CancellationToken ct);
 
     /// <summary>
+    /// Gets champions ranked by pro / high-elo pick frequency, with caching.
+    /// Scope: "pro" | "highelo" | "all" (default all). Cached for 24 hours.
+    /// </summary>
+    Task<ProChampionPlayrateResponse> GetProChampionPlayrateAsync(
+        string? region,
+        string? scope,
+        string? patch,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Gets the public roster of tracked pro players, with caching.
+    /// </summary>
+    Task<ProRosterResponse> GetProRosterAsync(
+        string? region,
+        CancellationToken ct);
+
+    /// <summary>
     /// Gets matchup data (counters and favorable matchups) for a champion.
     /// Matchups are lane-specific (Mid vs Mid, Top vs Top, etc.).
     /// Data is cached for 24 hours.

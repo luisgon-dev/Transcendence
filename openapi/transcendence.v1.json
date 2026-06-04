@@ -2486,6 +2486,136 @@
         ]
       }
     },
+    "/api/lol/analytics/pro/champions": {
+      "get": {
+        "tags": [
+          "ProAnalytics"
+        ],
+        "parameters": [
+          {
+            "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "patch",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProChampionPlayrateResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProChampionPlayrateResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProChampionPlayrateResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lol/analytics/pro/players": {
+      "get": {
+        "tags": [
+          "ProAnalytics"
+        ],
+        "parameters": [
+          {
+            "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProRosterResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProRosterResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProRosterResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/pro-summoners": {
       "get": {
         "tags": [
@@ -7164,6 +7294,60 @@
         },
         "additionalProperties": false
       },
+      "ProChampionPlayrateDto": {
+        "type": "object",
+        "properties": {
+          "championId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "wins": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "winRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "uniquePlayers": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProChampionPlayrateResponse": {
+        "type": "object",
+        "properties": {
+          "patch": {
+            "type": "string",
+            "nullable": true
+          },
+          "region": {
+            "type": "string",
+            "nullable": true
+          },
+          "scope": {
+            "type": "string",
+            "nullable": true
+          },
+          "champions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProChampionPlayrateDto"
+            },
+            "nullable": true
+          },
+          "sample": {
+            "$ref": "#/components/schemas/AnalyticsSampleMetadata"
+          }
+        },
+        "additionalProperties": false
+      },
       "ProMatchBuildDto": {
         "type": "object",
         "properties": {
@@ -7229,6 +7413,32 @@
         },
         "additionalProperties": false
       },
+      "ProPlayerDto": {
+        "type": "object",
+        "properties": {
+          "proName": {
+            "type": "string",
+            "nullable": true
+          },
+          "teamName": {
+            "type": "string",
+            "nullable": true
+          },
+          "platformRegion": {
+            "type": "string",
+            "nullable": true
+          },
+          "gameName": {
+            "type": "string",
+            "nullable": true
+          },
+          "tagLine": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "ProPlayerSummaryDto": {
         "type": "object",
         "properties": {
@@ -7247,6 +7457,23 @@
           "winRate": {
             "type": "number",
             "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProRosterResponse": {
+        "type": "object",
+        "properties": {
+          "region": {
+            "type": "string",
+            "nullable": true
+          },
+          "players": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProPlayerDto"
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -8339,6 +8566,9 @@
     },
     {
       "name": "LiveGame"
+    },
+    {
+      "name": "ProAnalytics"
     },
     {
       "name": "ProSummoners"

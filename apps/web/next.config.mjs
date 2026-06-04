@@ -29,6 +29,21 @@ const nextConfig = {
         pathname: "/latest/game/assets/**"
       }
     ]
+  },
+  async redirects() {
+    // The standalone Matchups surface was folded into the champion pages.
+    return [
+      {
+        source: "/lol/matchups",
+        destination: "/lol/champions",
+        permanent: true
+      },
+      {
+        source: "/lol/matchups/:championId",
+        destination: "/lol/champions/:championId",
+        permanent: true
+      }
+    ];
   }
 };
 

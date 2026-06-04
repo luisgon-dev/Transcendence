@@ -328,7 +328,7 @@ export function TierListTable({
         </td>
         <td className="hidden px-3 py-2.5 text-right md:table-cell">
           <Link
-            href={`/lol/matchups/${entry.championId}?${rowQuery}`}
+            href={`/lol/champions/${entry.championId}?${rowQuery}#matchups`}
             className="type-ui font-medium text-primary hover:underline"
           >
             Analyze

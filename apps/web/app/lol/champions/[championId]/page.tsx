@@ -7,7 +7,7 @@ import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { ChampionPortrait } from "@/components/ChampionPortrait";
 import { FilterBar } from "@/components/FilterBar";
 import { ItemBuildDisplay } from "@/components/ItemBuildDisplay";
-import { RuneSetupDisplay } from "@/components/RuneSetupDisplay";
+import { RuneTreeDisplay } from "@/components/RuneTreeDisplay";
 import { StatsBar } from "@/components/StatsBar";
 import { TierBadge } from "@/components/TierBadge";
 import { WinRateText } from "@/components/WinRateText";
@@ -34,8 +34,16 @@ type ChampionWinRateDto = components["schemas"]["ChampionWinRateDto"];
 type ChampionWinRateSummary = components["schemas"]["ChampionWinRateSummary"];
 type ChampionBuildsResponse = components["schemas"]["ChampionBuildsResponse"];
 type ChampionMatchupsResponse = components["schemas"]["ChampionMatchupsResponse"];
+type MatchupEntryDto = components["schemas"]["MatchupEntryDto"];
 
 const ROLES = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"] as const;
+
+function matchupVerdict(winRate: number | null | undefined): string {
+  const pct = (winRate ?? 0) * 100;
+  if (pct >= 52) return "Favored";
+  if (pct < 48) return "Unfavored";
+  return "Even";
+}
 
 function normalizeRole(role: string | undefined) {
   if (!role) return null;
@@ -74,7 +82,7 @@ export default async function ChampionDetailPage({
   searchParams
 }: {
   params: Promise<{ championId: string }>;
-  searchParams?: Promise<{ role?: string; rankTier?: string; region?: string; patch?: string }>;
+  searchParams?: Promise<{ role?: string; rankTier?: string; region?: string; patch?: string; sort?: string }>;
 }) {
   const resolvedParams = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
@@ -160,7 +168,7 @@ export default async function ChampionDetailPage({
   const items = itemStatic.items;
   const runeById = runeStatic.runeById;
   const styleById = runeStatic.styleById;
-  const runeSortById = runeStatic.runeSortById;
+  const runeTrees = runeStatic.trees;
 
   if (!winRes.ok && !buildRes.ok && !matchupRes.ok) {
     const requestId = winRes.requestId || buildRes.requestId || matchupRes.requestId;
@@ -200,6 +208,25 @@ export default async function ChampionDetailPage({
   const globalCoreItems = builds?.globalCoreItems ?? [];
   const counters = matchups?.counters ?? [];
   const favorableMatchups = matchups?.favorableMatchups ?? [];
+  const matchupSortKey = resolvedSearchParams?.sort === "games" ? "games" : "winRate";
+  const allMatchups = [...counters, ...favorableMatchups]
+    .filter((m): m is MatchupEntryDto => Boolean(m?.opponentChampionId))
+    .filter(
+      (entry, idx, rows) =>
+        rows.findIndex((candidate) => candidate.opponentChampionId === entry.opponentChampionId) === idx
+    )
+    .sort((a, b) =>
+      matchupSortKey === "games"
+        ? (b.games ?? 0) - (a.games ?? 0)
+        : (a.winRate ?? 0) - (b.winRate ?? 0)
+    );
+  const buildMatchupSortHref = (sort: string) => {
+    const sortParams = new URLSearchParams({ role: effectiveRole, sort });
+    if (normalizedRankTier) sortParams.set("rankTier", normalizedRankTier);
+    if (activeRegion !== "ALL") sortParams.set("region", activeRegion);
+    if (selectedPatch) sortParams.set("patch", selectedPatch);
+    return `/lol/champions/${championId}?${sortParams.toString()}#matchups`;
+  };
   const heroEntry = pickBestEntry(winrates, effectiveRole);
   const heroTier = deriveTier(heroEntry?.winRate);
   const splashUrl = `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${champSlug}_0.jpg`;
@@ -250,10 +277,10 @@ export default async function ChampionDetailPage({
             </p>
             <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs">
               <Link
-                href={`/lol/matchups/${championId}?role=${encodeURIComponent(effectiveRole)}${linkQuery ? `&${linkQuery}` : ""}`}
-                className="rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 font-medium text-primary transition-colors hover:bg-primary/20"
+                href="#matchups"
+                className="rounded-lg border border-border/60 bg-surface-2/50 px-2.5 py-1 font-medium text-fg/80 transition-colors hover:bg-surface-2/80"
               >
-                Matchup Analysis
+                Matchups
               </Link>
               <Link
                 href={`/lol/pro-builds/${championId}${linkQuery ? `?${linkQuery}` : ""}`}
@@ -404,16 +431,16 @@ export default async function ChampionDetailPage({
                   {/* Runes */}
                   <div className="mt-3 border-t border-border/40 pt-3">
                     <p className="mb-2 text-xs font-medium text-muted">Runes</p>
-                    <RuneSetupDisplay
+                    <RuneTreeDisplay
                       primaryStyleId={b.primaryStyleId ?? 0}
                       subStyleId={b.subStyleId ?? 0}
                       primarySelections={b.primaryRunes ?? []}
                       subSelections={b.subRunes ?? []}
                       statShards={b.statShards ?? []}
+                      trees={runeTrees}
                       runeById={runeById}
                       styleById={styleById}
-                      runeSortById={runeSortById}
-                      iconSize={24}
+                      iconSize={22}
                     />
                   </div>
                 </div>
@@ -525,6 +552,94 @@ export default async function ChampionDetailPage({
           )}
         </Card>
       </div>
+
+      {/* ── All Matchups (full table) ── */}
+      <Card className="p-5" id="matchups">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="type-section">All Matchups</h2>
+            <p className="mt-1 text-xs text-muted">
+              Lane matchups for {champName} as {roleDisplayLabel(effectiveRole)}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <Link
+              href={buildMatchupSortHref("winRate")}
+              scroll={false}
+              className="control-tab type-ui px-3 py-2"
+              data-active={matchupSortKey === "winRate"}
+            >
+              Sort by Win Rate
+            </Link>
+            <Link
+              href={buildMatchupSortHref("games")}
+              scroll={false}
+              className="control-tab type-ui px-3 py-2"
+              data-active={matchupSortKey === "games"}
+            >
+              Sort by Games
+            </Link>
+          </div>
+        </div>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[640px] text-left text-sm">
+            <thead className="type-overline text-muted">
+              <tr className="border-b border-border/30">
+                <th className="py-2 pr-4">Opponent</th>
+                <th className="py-2 pr-4 text-right">Win Rate</th>
+                <th className="py-2 pr-4 text-right">Games</th>
+                <th className="py-2 pr-4 text-right">Verdict</th>
+              </tr>
+            </thead>
+            <tbody>
+              {allMatchups.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="py-4 text-sm text-muted">
+                    No matchup data is available for the selected filters yet.
+                  </td>
+                </tr>
+              ) : (
+                allMatchups.map((entry, idx) => {
+                  const opponentId = entry.opponentChampionId ?? 0;
+                  const opponent = champions[String(opponentId)];
+                  const verdict = matchupVerdict(entry.winRate);
+                  const verdictClass =
+                    verdict === "Favored"
+                      ? "text-win"
+                      : verdict === "Unfavored"
+                        ? "text-loss"
+                        : "text-muted";
+                  return (
+                    <tr key={`${opponentId}-${idx}`} className="border-b border-border/40 transition hover:bg-surface-2/40">
+                      <td className="py-2.5 pr-4">
+                        <Link
+                          href={`/lol/champions/${opponentId}${linkQuery ? `?${linkQuery}` : ""}`}
+                          className="hover:underline"
+                        >
+                          <ChampionPortrait
+                            championSlug={opponent?.id ?? "Unknown"}
+                            championName={opponent?.name ?? `Champion ${opponentId}`}
+                            version={version}
+                            size={24}
+                            showName
+                          />
+                        </Link>
+                      </td>
+                      <td className="py-2.5 pr-4 text-right">
+                        <DataBar value={entry.winRate} decimals={1} className="justify-end" />
+                      </td>
+                      <td className="type-tabular py-2.5 pr-4 text-right tabular-nums text-fg/70">
+                        {formatGames(entry.games)}
+                      </td>
+                      <td className={`py-2.5 pr-4 text-right font-medium ${verdictClass}`}>{verdict}</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
     </div>
   );
 }

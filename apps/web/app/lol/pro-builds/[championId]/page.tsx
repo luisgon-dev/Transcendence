@@ -398,10 +398,10 @@ export default async function ProBuildsChampionPage({
             Open Champion Details
           </Link>
           <Link
-            href={`/lol/matchups/${championId}`}
+            href={`/lol/champions/${championId}#matchups`}
             className="control-tab type-ui"
           >
-            Open Matchup Analysis
+            View Matchups
           </Link>
         </div>
       </Card>

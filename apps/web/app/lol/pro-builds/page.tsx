@@ -6,18 +6,67 @@ import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { AnalyticsRegionFilter } from "@/components/AnalyticsRegionFilter";
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { Card } from "@/components/ui/Card";
+import { DataBar } from "@/components/ui/DataBar";
+import { SegmentedLinks } from "@/components/ui/SegmentedControl";
 import { Toolbar } from "@/components/ui/Toolbar";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
-import { formatDateTimeMs, formatRelativeTime } from "@/lib/format";
+import { formatDateTimeMs, formatGames, formatRelativeTime } from "@/lib/format";
+import { encodeRiotIdPath } from "@/lib/riotid";
 import { championIconUrl, fetchChampionMap, fetchItemMap, itemIconUrl } from "@/lib/staticData";
 import { normalizeTierListEntries } from "@/lib/tierlist";
 
 type TierListResponse = components["schemas"]["TierListResponse"];
 type ChampionProBuildsResponse = components["schemas"]["ChampionProBuildsResponse"];
 type ProMatchBuildDto = components["schemas"]["ProMatchBuildDto"];
+type ProChampionPlayrateResponse = components["schemas"]["ProChampionPlayrateResponse"];
+type ProRosterResponse = components["schemas"]["ProRosterResponse"];
+
+type ProScope = "all" | "pro" | "highelo";
+
+const SCOPE_OPTIONS = [
+  { value: "all", label: "All" },
+  { value: "pro", label: "Pros" },
+  { value: "highelo", label: "High-Elo" }
+] as const;
+
+const SCOPE_TITLE: Record<ProScope, string> = {
+  all: "Pro & High-Elo",
+  pro: "Pro",
+  highelo: "High-Elo"
+};
+
+const SCOPE_NOUN: Record<ProScope, string> = {
+  all: "pros and high-elo one-tricks",
+  pro: "pro players",
+  highelo: "high-elo one-tricks"
+};
+
+const MAX_PLAYRATE_ROWS = 30;
+
+function normalizeProScope(value: string | undefined): ProScope {
+  const lower = (value ?? "all").toLowerCase();
+  return lower === "pro" || lower === "highelo" ? lower : "all";
+}
+
+function buildProHomeHref({
+  scope,
+  region,
+  query
+}: {
+  scope: string;
+  region: string;
+  query: string | null;
+}) {
+  const params = new URLSearchParams();
+  if (scope && scope !== "all") params.set("scope", scope);
+  if (region && region !== "ALL") params.set("region", region);
+  if (query) params.set("q", query);
+  const qs = params.toString();
+  return qs ? `/lol/pro-builds?${qs}` : "/lol/pro-builds";
+}
 
 type ChampionLookup = {
   championId: number;
@@ -74,7 +123,7 @@ function compareChampionQueryRelevance(
 export default async function ProBuildsIndexPage({
   searchParams
 }: {
-  searchParams?: Promise<{ q?: string; region?: string }>;
+  searchParams?: Promise<{ q?: string; region?: string; scope?: string }>;
 }) {
   const verbosity = getErrorVerbosity();
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
@@ -82,16 +131,31 @@ export default async function ProBuildsIndexPage({
     resolvedSearchParams?.region
   );
   const championQuery = normalizeChampionQuery(resolvedSearchParams?.q);
+  const scope = normalizeProScope(resolvedSearchParams?.scope);
   const tierListQuery = new URLSearchParams();
   if (activeRegion !== "ALL") tierListQuery.set("region", activeRegion);
 
-  const [{ version, champions }, itemStatic, tierListRes] = await Promise.all([
+  const [{ version, champions }, itemStatic, tierListRes, playrateRes, rosterRes] = await Promise.all([
     fetchChampionMap(),
     fetchItemMap(),
     fetchBackendJson<TierListResponse>(`${getBackendBaseUrl()}/api/lol/analytics/tierlist?${tierListQuery.toString()}`, {
       next: { revalidate: 60 * 60 }
-    })
+    }),
+    fetchBackendJson<ProChampionPlayrateResponse>(
+      `${getBackendBaseUrl()}/api/lol/analytics/pro/champions?scope=${encodeURIComponent(scope)}&region=${encodeURIComponent(activeRegion)}`,
+      { next: { revalidate: 60 * 30 } }
+    ),
+    fetchBackendJson<ProRosterResponse>(
+      `${getBackendBaseUrl()}/api/lol/analytics/pro/players?region=${encodeURIComponent(activeRegion)}`,
+      { next: { revalidate: 60 * 30 } }
+    )
   ]);
+
+  const playrateChampions = (playrateRes.ok ? playrateRes.body?.champions ?? [] : []).slice(
+    0,
+    MAX_PLAYRATE_ROWS
+  );
+  const rosterPlayers = rosterRes.ok ? rosterRes.body?.players ?? [] : [];
 
   const championCatalog = Object.entries(champions)
     .map(([championId, champion]) => ({
@@ -191,7 +255,7 @@ export default async function ProBuildsIndexPage({
   return (
     <div className="grid gap-4">
       <Toolbar
-        eyebrow="Tracked Matches"
+        eyebrow="League · Pros"
         title="Pro Builds"
         meta={
           <>
@@ -211,6 +275,125 @@ export default async function ProBuildsIndexPage({
       <AnalyticsSampleBanner
         sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
       />
+
+      <Card className="page-panel p-0">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/40 px-5 py-4">
+          <div>
+            <h2 className="type-section">{SCOPE_TITLE[scope]} Picks</h2>
+            <p className="type-ui mt-1 text-muted">
+              Champions most picked by tracked {SCOPE_NOUN[scope]} this patch.
+            </p>
+          </div>
+          <SegmentedLinks
+            options={SCOPE_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+            activeValue={scope}
+            hrefFor={(value) =>
+              buildProHomeHref({ scope: value, region: activeRegion, query: championQuery })
+            }
+            ariaLabel="Pro pool scope"
+          />
+        </div>
+
+        {playrateChampions.length === 0 ? (
+          <p className="px-5 py-6 text-sm text-muted">
+            No pro picks available for the current selection yet. Try a different region or scope.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="type-overline text-muted">
+                <tr className="border-b border-border/30">
+                  <th className="w-10 py-2.5 pl-5 pr-3">#</th>
+                  <th className="py-2.5 pr-4">Champion</th>
+                  <th className="py-2.5 pr-4 text-right">Games</th>
+                  <th className="py-2.5 pr-4 text-right">Win Rate</th>
+                  <th className="py-2.5 pr-5 text-right">Players</th>
+                </tr>
+              </thead>
+              <tbody>
+                {playrateChampions.map((entry, idx) => {
+                  const championId = entry.championId ?? 0;
+                  const champion = championById.get(championId);
+                  const slug = champion?.slug ?? "Unknown";
+                  const name = champion?.name ?? `Champion ${championId}`;
+                  return (
+                    <tr
+                      key={championId || idx}
+                      className="border-t border-border/40 transition hover:bg-surface-2/40"
+                    >
+                      <td className="type-tabular py-2.5 pl-5 pr-3 tabular-nums text-muted">{idx + 1}</td>
+                      <td className="py-2.5 pr-4">
+                        <Link
+                          href={`/lol/champions/${championId}${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
+                          className="flex min-w-0 items-center gap-2.5 hover:underline"
+                        >
+                          <Image
+                            src={championIconUrl(version, slug)}
+                            alt={name}
+                            width={28}
+                            height={28}
+                            className="rounded-md border border-border/50"
+                          />
+                          <span className="truncate font-medium text-fg">{name}</span>
+                        </Link>
+                      </td>
+                      <td className="type-tabular py-2.5 pr-4 text-right tabular-nums text-fg/75">
+                        {formatGames(entry.games ?? 0)}
+                      </td>
+                      <td className="py-2.5 pr-4 text-right">
+                        <DataBar value={entry.winRate ?? 0} decimals={1} className="justify-end" />
+                      </td>
+                      <td className="type-tabular py-2.5 pr-5 text-right tabular-nums text-fg/70">
+                        {entry.uniquePlayers ?? 0}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {rosterPlayers.length > 0 ? (
+        <Card className="p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="type-section">Tracked Pros</h2>
+              <p className="type-ui mt-1 text-muted">Pro players we follow — open any profile.</p>
+            </div>
+            <span className="type-tabular tabular-nums text-muted">{rosterPlayers.length} players</span>
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {rosterPlayers.map((pro, idx) => {
+              const displayName =
+                pro.proName?.trim() ||
+                (pro.gameName ? `${pro.gameName}#${pro.tagLine ?? ""}` : "Unknown player");
+              const meta = [pro.teamName, pro.platformRegion?.toUpperCase()].filter(Boolean).join(" · ");
+              const canLink = Boolean(pro.gameName && pro.tagLine && pro.platformRegion);
+              const body = (
+                <>
+                  <p className="truncate text-sm font-medium text-fg">{displayName}</p>
+                  {meta ? <p className="truncate text-xs text-muted">{meta}</p> : null}
+                </>
+              );
+              return canLink ? (
+                <Link
+                  key={`${displayName}-${idx}`}
+                  href={`/lol/summoners/${(pro.platformRegion ?? "").toLowerCase()}/${encodeRiotIdPath({ gameName: pro.gameName!, tagLine: pro.tagLine! })}`}
+                  className="surface-subtle min-w-0 rounded-card p-3 transition hover:bg-surface-2/72"
+                >
+                  {body}
+                </Link>
+              ) : (
+                <div key={`${displayName}-${idx}`} className="surface-subtle min-w-0 rounded-card p-3 opacity-80">
+                  {body}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      ) : null}
 
       <Card className="page-panel p-5">
         <h2 className="type-section">Search Champions</h2>

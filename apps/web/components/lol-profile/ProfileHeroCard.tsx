@@ -38,6 +38,7 @@ export function ProfileHeroCard({
   gameName,
   tagLine,
   profile,
+  backgroundUrl,
   championStatic,
   history,
   dataAge,
@@ -56,6 +57,7 @@ export function ProfileHeroCard({
   gameName: string;
   tagLine: string;
   profile: SummonerProfileResponse | null;
+  backgroundUrl?: string | null;
   championStatic: ChampionStatic | null;
   history: PagedResultDto<MatchSummary> | null;
   dataAge: string;
@@ -72,7 +74,18 @@ export function ProfileHeroCard({
   const primaryRank = rankedEntries[0]?.rank;
 
   return (
-    <Card className="profile-hero-card rounded-hero p-5 md:p-8">
+    <Card className="profile-hero-card relative overflow-hidden rounded-hero p-5 md:p-8">
+      {backgroundUrl ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 opacity-25"
+          style={{
+            backgroundImage: `linear-gradient(to right, var(--t-bg) 12%, color-mix(in oklch, var(--t-bg), transparent 35%) 55%, transparent 100%), url(${backgroundUrl})`,
+            backgroundSize: "cover",
+            backgroundPosition: "top right"
+          }}
+        />
+      ) : null}
       <div className="relative grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.78fr)] xl:items-end">
         <div className="grid gap-5">
           <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-center">

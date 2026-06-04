@@ -18,6 +18,8 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
     private const string TierListCacheKeyPrefix = "analytics:tierlist:v2:";
     private const string BuildsCacheKeyPrefix = "analytics:builds:";
     private const string ProBuildsCacheKeyPrefix = "analytics:probuilds:";
+    private const string ProPlayrateCacheKeyPrefix = "analytics:proplayrate:";
+    private const string ProRosterCacheKeyPrefix = "analytics:proroster:";
     private const string MatchupsCacheKeyPrefix = "analytics:matchups:";
     private const string AnalyticsCacheTag = "analytics";
 
@@ -237,6 +239,60 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             response.CommonBuilds.Sum(x => Math.Max(0, x.Games)),
             response.RecentProMatches.Count);
         return response with { Sample = BuildSampleMetadata(sampleSize, patchContext) };
+    }
+
+    public async Task<ProChampionPlayrateResponse> GetProChampionPlayrateAsync(
+        string? region,
+        string? scope,
+        string? patch,
+        CancellationToken ct)
+    {
+        var patchContext = await ResolvePatchContextAsync(patch, ct);
+        var normalizedRegion = string.IsNullOrWhiteSpace(region) ? "ALL" : region.Trim().ToUpperInvariant();
+        var normalizedScope = ChampionAnalyticsComputeService.NormalizeProScope(scope);
+
+        if (string.IsNullOrWhiteSpace(patchContext.Patch))
+            return new ProChampionPlayrateResponse(
+                "Unknown",
+                normalizedRegion,
+                normalizedScope,
+                [],
+                BuildSampleMetadata(0, patchContext));
+
+        var resolvedPatch = patchContext.Patch!;
+        var cacheKey = $"{ProPlayrateCacheKeyPrefix}{normalizedScope}:{normalizedRegion}:{resolvedPatch}";
+        var tags = new[] { AnalyticsCacheTag, $"patch:{resolvedPatch}", "proplayrate" };
+
+        var response = await _cache.GetOrCreateAsync(
+            cacheKey,
+            async cancel => await _computeService.ComputeProChampionPlayrateAsync(
+                normalizedRegion,
+                normalizedScope,
+                resolvedPatch,
+                cancel),
+            AnalyticsCacheOptions,
+            tags,
+            cancellationToken: ct);
+        var sampleSize = response.Champions.Sum(x => Math.Max(0, x.Games));
+        return response with { Sample = BuildSampleMetadata(sampleSize, patchContext) };
+    }
+
+    public async Task<ProRosterResponse> GetProRosterAsync(
+        string? region,
+        CancellationToken ct)
+    {
+        var normalizedRegion = string.IsNullOrWhiteSpace(region) ? "ALL" : region.Trim().ToUpperInvariant();
+        var cacheKey = $"{ProRosterCacheKeyPrefix}{normalizedRegion}";
+        var tags = new[] { AnalyticsCacheTag, "proroster" };
+
+        var players = await _cache.GetOrCreateAsync(
+            cacheKey,
+            async cancel => await _computeService.ComputeProRosterAsync(normalizedRegion, cancel),
+            AnalyticsCacheOptions,
+            tags,
+            cancellationToken: ct);
+
+        return new ProRosterResponse(normalizedRegion, players);
     }
 
     public async Task<ChampionMatchupsResponse> GetMatchupsAsync(

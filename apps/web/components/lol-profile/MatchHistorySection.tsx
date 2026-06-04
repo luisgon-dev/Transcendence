@@ -97,6 +97,7 @@ function MatchParticipantCard({
   teamId,
   roleKey,
   rowIndex,
+  region,
   gameName,
   tagLine,
   championStatic,
@@ -111,6 +112,7 @@ function MatchParticipantCard({
   teamId: 100 | 200;
   roleKey: string;
   rowIndex: number;
+  region: string;
   gameName: string;
   tagLine: string;
   championStatic: ChampionStatic | null;
@@ -163,9 +165,18 @@ function MatchParticipantCard({
             <div className="h-[34px] w-[34px] rounded-lg border border-border/50 bg-surface/70" />
           )}
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-fg/95">
-              {participantDisplayName(participant.gameName, participant.tagLine)}
-            </p>
+            {participant.gameName && participant.tagLine && !isCurrent ? (
+              <Link
+                href={`/lol/summoners/${region}/${encodeRiotIdPath({ gameName: participant.gameName, tagLine: participant.tagLine })}`}
+                className="block truncate text-sm font-medium text-fg/95 transition-colors hover:text-primary hover:underline"
+              >
+                {participantDisplayName(participant.gameName, participant.tagLine)}
+              </Link>
+            ) : (
+              <p className="truncate text-sm font-medium text-fg/95">
+                {participantDisplayName(participant.gameName, participant.tagLine)}
+              </p>
+            )}
             <div className="type-caption mt-1 flex flex-wrap items-center gap-2 text-muted">
               <span>{participant.kills}/{participant.deaths}/{participant.assists}</span>
               <span>{cs} CS</span>
@@ -280,6 +291,7 @@ function MatchParticipantCard({
 function MatchDetailPanel({
   match,
   detail,
+  region,
   gameName,
   tagLine,
   championStatic,
@@ -292,6 +304,7 @@ function MatchDetailPanel({
 }: {
   match: MatchSummary;
   detail: MatchDetail;
+  region: string;
   gameName: string;
   tagLine: string;
   championStatic: ChampionStatic | null;
@@ -363,6 +376,7 @@ function MatchDetailPanel({
                 teamId={100}
                 roleKey={row.roleKey}
                 rowIndex={rowIndex}
+                region={region}
                 gameName={gameName}
                 tagLine={tagLine}
                 championStatic={championStatic}
@@ -378,6 +392,7 @@ function MatchDetailPanel({
                 teamId={200}
                 roleKey={row.roleKey}
                 rowIndex={rowIndex}
+                region={region}
                 gameName={gameName}
                 tagLine={tagLine}
                 championStatic={championStatic}
@@ -401,6 +416,7 @@ function MatchHistoryCard({
   detail,
   detailBusy,
   prefersReducedMotion,
+  region,
   gameName,
   tagLine,
   championStatic,
@@ -417,6 +433,7 @@ function MatchHistoryCard({
   detail: MatchDetail | null;
   detailBusy: boolean;
   prefersReducedMotion: boolean;
+  region: string;
   gameName: string;
   tagLine: string;
   championStatic: ChampionStatic | null;
@@ -652,6 +669,7 @@ function MatchHistoryCard({
                 <MatchDetailPanel
                   match={match}
                   detail={detail}
+                  region={region}
                   gameName={gameName}
                   tagLine={tagLine}
                   championStatic={championStatic}
@@ -787,6 +805,7 @@ export function MatchHistorySection({
               detail={details[match.matchId]}
               detailBusy={detailBusy[match.matchId] === true}
               prefersReducedMotion={prefersReducedMotion}
+              region={region}
               gameName={gameName}
               tagLine={tagLine}
               championStatic={championStatic}

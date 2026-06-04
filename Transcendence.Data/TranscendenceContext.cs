@@ -93,10 +93,11 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             .HasIndex(s => s.Puuid)
             .IsUnique();
 
-        modelBuilder.Entity<Summoner>()
-            .HasIndex(s => new { s.PlatformRegion, s.GameNameNormalized, s.TagLineNormalized })
-            .IsUnique();
-
+        // Riot riot-ids (gameName#tagLine) are mutable and reusable, so they are NOT a stable
+        // unique identity — the PUUID is (IX_Summoners_Puuid, unique). This is therefore a
+        // NON-unique lookup index for search/refresh; FindByRiotIdsAsync dedupes to the most
+        // recently updated row. (A unique constraint here caused upsert collisions when match
+        // data carried a historical name now held by a different PUUID.)
         modelBuilder.Entity<Summoner>()
             .HasIndex(s => new { s.PlatformRegion, s.GameNameNormalized, s.TagLineNormalized })
             .HasDatabaseName("IX_Summoners_SearchPrefix")

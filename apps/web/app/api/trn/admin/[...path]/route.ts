@@ -48,7 +48,9 @@ async function handler(req: NextRequest, ctx: Ctx) {
   }
 
   const { path } = await ctx.params;
-  return proxyToBackend(req, path, {
+  // Backend admin endpoints live under /api/admin/* (this BFF folder strips the "admin"
+  // segment), so prepend it: /api/trn/admin/<x> -> /api/admin/<x>.
+  return proxyToBackend(req, ["admin", ...path], {
     addHeaders: { authorization: `Bearer ${accessToken}` }
   });
 }

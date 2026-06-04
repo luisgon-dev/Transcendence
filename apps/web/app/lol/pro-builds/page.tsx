@@ -7,7 +7,6 @@ import { AnalyticsRegionFilter } from "@/components/AnalyticsRegionFilter";
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { Card } from "@/components/ui/Card";
 import { DataBar } from "@/components/ui/DataBar";
-import { SegmentedLinks } from "@/components/ui/SegmentedControl";
 import { Toolbar } from "@/components/ui/Toolbar";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
@@ -284,14 +283,19 @@ export default async function ProBuildsIndexPage({
               Champions most picked by tracked {SCOPE_NOUN[scope]} this patch.
             </p>
           </div>
-          <SegmentedLinks
-            options={SCOPE_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-            activeValue={scope}
-            hrefFor={(value) =>
-              buildProHomeHref({ scope: value, region: activeRegion, query: championQuery })
-            }
-            ariaLabel="Pro pool scope"
-          />
+          <div role="group" aria-label="Pro pool scope" className="flex items-center gap-2 text-xs">
+            {SCOPE_OPTIONS.map((option) => (
+              <Link
+                key={option.value}
+                href={buildProHomeHref({ scope: option.value, region: activeRegion, query: championQuery })}
+                className="control-tab type-ui px-3 py-2"
+                data-active={option.value === scope}
+                aria-current={option.value === scope ? "page" : undefined}
+              >
+                {option.label}
+              </Link>
+            ))}
+          </div>
         </div>
 
         {playrateChampions.length === 0 ? (

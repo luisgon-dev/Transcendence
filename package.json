@@ -5,10 +5,18 @@
   "pnpm": {
     "overrides": {
       "ajv@<6.14.0": "6.14.0",
+      "brace-expansion@<1.1.13": "1.1.13",
+      "brace-expansion@>=2.0.0 <2.0.3": "2.0.3",
+      "fast-uri@<3.1.2": "3.1.2",
+      "flatted@<3.4.2": "3.4.2",
       "minimatch@<3.1.4": "3.1.4",
       "minimatch@>=5.0.0 <5.1.8": "5.1.8",
       "minimatch@>=9.0.0 <9.0.7": "9.0.9",
-      "rollup@<4.59.0": "4.59.0"
+      "picomatch@<2.3.2": "2.3.2",
+      "picomatch@>=4.0.0 <4.0.4": "4.0.4",
+      "postcss@<8.5.10": "8.5.10",
+      "rollup@<4.59.0": "4.59.0",
+      "ws@>=8.0.0 <8.20.1": "8.20.1"
     },
     "onlyBuiltDependencies": [
       "esbuild",

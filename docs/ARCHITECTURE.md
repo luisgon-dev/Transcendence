@@ -185,6 +185,34 @@ Operational implication:
   - `summoner-maintenance-ramp`
 - Ramp jobs are gated by active-patch age and no-op automatically after the configured ramp window.
 
+### Match Detail Retention and Archival
+
+The binding constraint on tier-list sample size is storage, not the Riot API budget, so old-patch match
+detail is archived off-box and pruned to keep the database from growing unbounded while ingestion scales up.
+
+- **Policy:** keep full match detail for the newest `KEEP_PATCHES` (default 3 = active + last 2); every older
+  patch is archived to the NAS, then pruned from Postgres. Cached analytics aggregates for old patches are
+  unaffected (they are recomputed/served from their own stores, not the raw match tables).
+- **Archival job** (`scripts/ops/archive-old-patches.sh`, weekly cron on the Docker host): for each eligible
+  patch it streams `Matches` + all cascade children (`MatchParticipants`, `MatchParticipantItems`,
+  `MatchParticipantRunes`, `MatchBans`, `MatchSummoner`, `MatchParticipantTimelineSnapshots`,
+  `MatchTimelineFetchStates`) out via Postgres `COPY` → `gzip` → `ssh` to the NAS, verifies each archive
+  (gzip integrity + exact row count) and only then prunes (one cascading `DELETE` on `Matches`, batched).
+  Restore is `zcat <Table>.csv.gz | psql -c "COPY \"<Table>\" FROM STDIN WITH (FORMAT csv, HEADER true)"`
+  (parents before children).
+- **Consistency under the live writer:** the ingestion worker keeps inserting old-patch matches (lapsed
+  players returning, retried failed matches), so each patch's match-ID set is first frozen into a work table
+  (T0 snapshot); count/export/verify/delete are all bounded to that frozen set. Rows inserted after T0 are
+  excluded (no verify race, no data loss) and archived on the next run (residuals land in a non-clobbering
+  `NAS/<patch>/residual-<epoch>/` once a patch is already `_DONE`).
+- **Plan/throughput:** export uses an adaptive query plan (large slices sequential-scan; small slices force
+  index nested-loops) because the prod DB is HDD-backed; deletes free pages for reuse inside Postgres
+  (`VACUUM FULL` is intentionally avoided — it locks the table — so the file does not shrink but the DB stops
+  growing as new ingestion reuses the freed pages). A one-time `scripts/ops/archive-remaining-bulk.sh` does the
+  same with a single frozen set across all old patches for an initial backlog sweep.
+- With retention bounding growth, ingestion is scaled up: more enabled regions and a higher per-patch
+  `TargetSuccessfulMatchesForCurrentPatch` (steady-state detail ≈ `KEEP_PATCHES × target` matches).
+
 ### Ingestion Throughput Telemetry
 
 - Throughput telemetry follows the same best-effort/non-blocking pattern as refresh-lock lifecycle telemetry so instrumentation failures cannot block producer execution.

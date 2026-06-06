@@ -14,7 +14,7 @@ public class RiotAccountService(LeagueRiotApiContext riotApiContext) : IRiotAcco
         try
         {
             var account = await riotApiContext.Api.AccountV1()
-                .GetByRiotIdAsync(platform.ToRegional(), gameName, tagLine, ct);
+                .GetByRiotIdAsync(platform.ToAccountRegional(), gameName, tagLine, ct);
             return account?.Puuid;
         }
         catch (RiotResponseException ex) when (ex.GetResponse()?.StatusCode == System.Net.HttpStatusCode.NotFound)

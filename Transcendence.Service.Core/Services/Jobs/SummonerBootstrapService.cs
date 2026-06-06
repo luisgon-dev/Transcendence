@@ -263,7 +263,7 @@ public class SummonerBootstrapService(
             try
             {
                 var summonerV4 = await riotApiContext.Api.SummonerV4().GetByPUUIDAsync(platform, puuid, ct);
-                var account = await riotApiContext.Api.AccountV1().GetByPuuidAsync(platform.ToRegional(), puuid, ct);
+                var account = await riotApiContext.Api.AccountV1().GetByPuuidAsync(platform.ToAccountRegional(), puuid, ct);
 
                 if (account == null ||
                     string.IsNullOrWhiteSpace(account.GameName) ||

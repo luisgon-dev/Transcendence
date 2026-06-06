@@ -20,7 +20,7 @@ public class SummonerService(LeagueRiotApiContext riotApiContext, IRankService r
     public async Task<Summoner> GetSummonerByRiotIdAsync(string gameName, string tagLine, PlatformRoute platformRoute,
         CancellationToken cancellationToken = default)
     {
-        var regional = platformRoute.ToRegional();
+        var regional = platformRoute.ToAccountRegional();
         var account = await riotApiContext.Api.AccountV1()
             .GetByRiotIdAsync(regional, gameName, tagLine, cancellationToken);
         if (account == null || string.IsNullOrWhiteSpace(account.Puuid))
@@ -51,10 +51,10 @@ public class SummonerService(LeagueRiotApiContext riotApiContext, IRankService r
         };
 
         account ??= await riotApiContext.Api.AccountV1()
-            .GetByPuuidAsync(platformRoute.ToRegional(), summoner.Puuid, cancellationToken);
+            .GetByPuuidAsync(platformRoute.ToAccountRegional(), summoner.Puuid, cancellationToken);
         if (account == null)
             throw new InvalidOperationException(
-                $"Riot Account API returned no account for PUUID {summoner.Puuid} on {platformRoute.ToRegional()}.");
+                $"Riot Account API returned no account for PUUID {summoner.Puuid} on {platformRoute.ToAccountRegional()}.");
 
         current.GameName = account.GameName;
         current.TagLine = account.TagLine;

@@ -20,7 +20,7 @@ public class TftSummonerService(TftRiotApiContext riotApiContext, ITftRankServic
     public async Task<TftSummoner> GetSummonerByRiotIdAsync(string gameName, string tagLine, PlatformRoute platformRoute,
         CancellationToken ct = default)
     {
-        var account = await riotApiContext.Api.AccountV1().GetByRiotIdAsync(platformRoute.ToRegional(), gameName, tagLine, ct);
+        var account = await riotApiContext.Api.AccountV1().GetByRiotIdAsync(platformRoute.ToAccountRegional(), gameName, tagLine, ct);
         if (account == null || string.IsNullOrWhiteSpace(account.Puuid))
             throw new RiotAccountNotFoundException($"Riot Account API returned no PUUID for {gameName}#{tagLine}.");
 
@@ -37,7 +37,7 @@ public class TftSummonerService(TftRiotApiContext riotApiContext, ITftRankServic
     private async Task<TftSummoner> CreateAsync(Camille.RiotGames.TftSummonerV1.Summoner summoner, PlatformRoute platformRoute,
         CancellationToken ct)
     {
-        var account = await riotApiContext.Api.AccountV1().GetByPuuidAsync(platformRoute.ToRegional(), summoner.Puuid, ct);
+        var account = await riotApiContext.Api.AccountV1().GetByPuuidAsync(platformRoute.ToAccountRegional(), summoner.Puuid, ct);
         if (account == null || string.IsNullOrWhiteSpace(account.GameName) || string.IsNullOrWhiteSpace(account.TagLine))
             throw new InvalidOperationException($"Unable to resolve Riot account for TFT PUUID {summoner.Puuid}.");
 

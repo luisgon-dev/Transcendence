@@ -353,6 +353,94 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         await _cache.RemoveByTagAsync(AnalyticsCacheTag, ct);
     }
 
+    public async Task InvalidateAnalyticsCacheForPatchAsync(string patch, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(patch))
+        {
+            await InvalidateAnalyticsCacheAsync(ct);
+            return;
+        }
+
+        await _cache.RemoveByTagAsync($"patch:{patch.Trim()}", ct);
+    }
+
+    public async Task<string?> RefreshDefaultProfileCacheAsync(
+        int championId,
+        string? rankTier,
+        bool includeProBuilds,
+        CancellationToken ct)
+    {
+        var patchContext = await ResolvePatchContextAsync(null, ct);
+        var currentPatch = patchContext.Patch;
+        if (string.IsNullOrWhiteSpace(currentPatch))
+            return null;
+
+        var normalizedTier = NormalizeRankTier(rankTier);
+        var tierForCompute = normalizedTier == "all" ? null : normalizedTier;
+        var normalizedRegion = NormalizeAnalyticsRegion(null); // "ALL"
+        var globalRegionFilter = AnalyticsRegionCatalog.NormalizeToFilter(normalizedRegion);
+
+        // ── Win rates: mirror the profile endpoint's default read (given tier, region=ALL, no role).
+        // Compute fresh, then SetAsync the SAME key/tags GetWinRatesAsync would cache under so the
+        // page read is a hit. SetAsync overwrites in place — no invalidate-then-cold gap.
+        var winFilter = new ChampionAnalyticsFilter(
+            RankTier: tierForCompute,
+            Region: globalRegionFilter,
+            Role: null,
+            Patch: currentPatch);
+        var winKey = BuildCacheKey(championId, winFilter, currentPatch);
+        var winTags = new[] { AnalyticsCacheTag, $"champion:{championId}", $"patch:{currentPatch}" };
+        var winRates = await _computeService.ComputeWinRatesAsync(championId, winFilter, currentPatch, ct);
+        await _cache.SetAsync(winKey, winRates, AnalyticsCacheOptions, winTags, ct);
+
+        // Resolve the most-played lane EXACTLY like ChampionAnalyticsController.GetProfile so the
+        // builds/matchups keys we warm match what the page will request.
+        var effectiveRole = PickMostPlayedLane(winRates);
+        if (effectiveRole == null && normalizedTier != "all")
+        {
+            // Mirror GetProfile's all-rank fallback: when the scoped tier has no rows, resolve the
+            // lane from all-rank win rates (builds/matchups still warmed at the scoped tier).
+            var fallbackFilter = new ChampionAnalyticsFilter(
+                RankTier: null,
+                Region: globalRegionFilter,
+                Role: null,
+                Patch: currentPatch);
+            var fallbackKey = BuildCacheKey(championId, fallbackFilter, currentPatch);
+            var fallbackWinRates = await _computeService.ComputeWinRatesAsync(championId, fallbackFilter, currentPatch, ct);
+            await _cache.SetAsync(fallbackKey, fallbackWinRates, AnalyticsCacheOptions, winTags, ct);
+            effectiveRole = PickMostPlayedLane(fallbackWinRates);
+        }
+
+        effectiveRole ??= "MIDDLE"; // mirror GetProfile's final fallback so the key always matches
+
+        // ── Builds + matchups for the resolved lane (region=ALL, given tier) ──
+        var buildsKey = $"{BuildsCacheKeyPrefix}{championId}:{effectiveRole}:{normalizedTier}:{normalizedRegion}:{currentPatch}";
+        var buildsTags = new[] { AnalyticsCacheTag, $"patch:{currentPatch}", "builds" };
+        var builds = await _computeService.ComputeBuildsAsync(
+            championId, effectiveRole, tierForCompute, normalizedRegion, currentPatch, ct);
+        await _cache.SetAsync(buildsKey, builds, AnalyticsCacheOptions, buildsTags, ct);
+
+        var matchupsKey = $"{MatchupsCacheKeyPrefix}{championId}:{effectiveRole}:{normalizedTier}:{normalizedRegion}:{currentPatch}";
+        var matchupsTags = new[] { AnalyticsCacheTag, $"patch:{currentPatch}", "matchups" };
+        var matchups = await _computeService.ComputeMatchupsAsync(
+            championId, effectiveRole, tierForCompute, normalizedRegion, currentPatch, ct);
+        await _cache.SetAsync(matchupsKey, matchups, AnalyticsCacheOptions, matchupsTags, ct);
+
+        // ── Pro-builds default (most-played lane, region=ALL, scope=all) ──
+        if (includeProBuilds)
+        {
+            var proScope = ChampionAnalyticsComputeService.NormalizeProScope(null); // "all"
+            const string proRegion = "ALL";
+            var proKey = $"{ProBuildsCacheKeyPrefix}{championId}:{proRegion}:{effectiveRole}:{proScope}:{currentPatch}";
+            var proTags = new[] { AnalyticsCacheTag, $"patch:{currentPatch}", "probuilds" };
+            var proBuilds = await _computeService.ComputeProBuildsAsync(
+                championId, proRegion, effectiveRole, proScope, currentPatch, ct);
+            await _cache.SetAsync(proKey, proBuilds, AnalyticsCacheOptions, proTags, ct);
+        }
+
+        return effectiveRole;
+    }
+
     private async Task<ActivePatchContext> ResolvePatchContextAsync(string? requestedPatch, CancellationToken ct)
     {
         var normalizedRequestedPatch = string.IsNullOrWhiteSpace(requestedPatch)
@@ -433,6 +521,32 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         return allowed.Contains(normalized)
             ? normalized
             : AnalyticsRegionCatalog.GlobalRegionCode;
+    }
+
+    private static readonly HashSet<string> LaneRoles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"
+    };
+
+    // Must produce the SAME result as ChampionAnalyticsController.PickMostPlayedRole (operating on
+    // the by-role win-rate rows) so the lane this warms matches the lane the profile page requests.
+    private static string? PickMostPlayedLane(IEnumerable<ChampionWinRateDto> winRates) =>
+        winRates
+            .Select(row => new { Role = NormalizeLane(row.Role), row.Games })
+            .Where(row => row.Role != null)
+            .GroupBy(row => row.Role!)
+            .Select(group => new { Role = group.Key, Games = group.Sum(row => Math.Max(0, row.Games)) })
+            .OrderByDescending(row => row.Games)
+            .Select(row => row.Role)
+            .FirstOrDefault();
+
+    private static string? NormalizeLane(string? role)
+    {
+        if (string.IsNullOrWhiteSpace(role))
+            return null;
+
+        var upper = role.Trim().ToUpperInvariant();
+        return LaneRoles.Contains(upper) ? upper : null;
     }
 
     private static string NormalizeRankTier(string? rankTier)

@@ -31,6 +31,7 @@ public sealed class WorkerRecurringJobPolicy(
     public const string RefreshChampionAnalyticsJobId = "refresh-champion-analytics";
     public const string RefreshChampionAnalyticsAdaptiveJobId = "refresh-champion-analytics-adaptive";
     public const string RefreshChampionAnalyticsRampJobId = "refresh-champion-analytics-ramp";
+    public const string WarmDefaultChampionProfilesJobId = "warm-default-champion-profiles";
     public const string ChampionAnalyticsIngestionJobId = "champion-analytics-ingestion";
     public const string ChampionAnalyticsIngestionRampJobId = "champion-analytics-ingestion-ramp";
     public const string SummonerMaintenanceJobId = "summoner-maintenance";
@@ -61,6 +62,7 @@ public sealed class WorkerRecurringJobPolicy(
         RefreshChampionAnalyticsJobId,
         RefreshChampionAnalyticsAdaptiveJobId,
         RefreshChampionAnalyticsRampJobId,
+        WarmDefaultChampionProfilesJobId,
         ChampionAnalyticsIngestionJobId,
         ChampionAnalyticsIngestionRampJobId,
         SummonerMaintenanceJobId,
@@ -125,6 +127,12 @@ public sealed class WorkerRecurringJobPolicy(
                 schedule.RefreshChampionAnalyticsRampCron,
                 schedule.EnableAdaptiveAnalyticsRefresh && schedule.EnableNewPatchRamp,
                 ConfigureRefreshChampionAnalyticsRamp),
+            CreateDescriptor(
+                WarmDefaultChampionProfilesJobId,
+                "Jobs:Schedule:WarmDefaultChampionProfilesCron",
+                schedule.WarmDefaultChampionProfilesCron,
+                schedule.EnableWarmDefaultChampionProfiles,
+                ConfigureWarmDefaultChampionProfiles),
             CreateDescriptor(
                 ChampionAnalyticsIngestionJobId,
                 "Jobs:Schedule:ChampionAnalyticsIngestionCron",
@@ -288,6 +296,15 @@ public sealed class WorkerRecurringJobPolicy(
         recurringJobManager.AddOrUpdate<RefreshChampionAnalyticsJob>(
             RefreshChampionAnalyticsRampJobId,
             job => job.ExecuteRampAsync(CancellationToken.None),
+            cronExpression,
+            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
+    private static void ConfigureWarmDefaultChampionProfiles(
+        IRecurringJobManager recurringJobManager,
+        string cronExpression) =>
+        recurringJobManager.AddOrUpdate<WarmDefaultChampionProfilesJob>(
+            WarmDefaultChampionProfilesJobId,
+            job => job.ExecuteAsync(CancellationToken.None),
             cronExpression,
             new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
 

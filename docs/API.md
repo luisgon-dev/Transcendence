@@ -196,9 +196,11 @@ Additional analytics fields:
 
 `GET /api/lol/analytics/champions/{championId}/pro-builds` supports optional filters:
 - `region` (`ALL` or supported platform-region token such as `NA1|EUW1|EUN1|KR`)
-- `role`
+- `role` — when omitted (or `ALL`), the champion's **most-played lane** is resolved from the cached win-rate aggregate (mirrors the profile endpoint) and echoed back as `role`, so the landing view is lane-scoped instead of the heavier cross-role aggregate. Any other unrecognized role is rejected with `400`.
 - `scope`: `pro` (official pros, `IsPro`), `highelo` (auto-discovered Challenger/GM/Master one-tricks, `IsHighEloOtp`), or `all` (either). Defaults to `all`.
 - `patch`
+
+The cross-role aggregate (no resolvable lane) bounds its participant scan to the most-recent `Analytics:Compute:ProBuildMaxParticipantRows` rows (default 1500) so the wide `role=ALL` + `scope=all` + `region=ALL` pool cannot command-timeout.
 
 Response includes:
 - `scope`

@@ -9,6 +9,7 @@ public class WorkerJobScheduleOptions
     public string RefreshChampionAnalyticsDailyCron { get; set; } = "0 4 * * *";
     public string RefreshChampionAnalyticsAdaptiveCron { get; set; } = "*/30 * * * *";
     public string RefreshChampionAnalyticsRampCron { get; set; } = "*/5 * * * *";
+    public string WarmDefaultChampionProfilesCron { get; set; } = "0 * * * *";
     public string ChampionAnalyticsIngestionCron { get; set; } = "*/30 * * * *";
     public string ChampionAnalyticsIngestionRampCron { get; set; } = "*/2 * * * *";
     public string SummonerMaintenanceCron { get; set; } = "*/20 * * * *";
@@ -22,6 +23,7 @@ public class WorkerJobScheduleOptions
     public string TftAnalyticsIngestionCron { get; set; } = "*/30 * * * *";
     public string TftSummonerMaintenanceCron { get; set; } = "*/45 * * * *";
     public bool EnableAdaptiveAnalyticsRefresh { get; set; } = true;
+    public bool EnableWarmDefaultChampionProfiles { get; set; } = true;
     public bool EnableNewPatchRamp { get; set; } = true;
     public bool EnableChampionAnalyticsIngestion { get; set; } = true;
     public bool EnableSummonerMaintenance { get; set; } = true;

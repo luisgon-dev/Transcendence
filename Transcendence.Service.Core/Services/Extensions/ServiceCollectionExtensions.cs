@@ -59,6 +59,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITftSummonerBootstrapService, TftSummonerBootstrapService>();
         services.AddScoped<ChampionAnalyticsIngestionJob>();
         services.AddScoped<RefreshChampionAnalyticsJob>();
+        services.AddScoped<WarmDefaultChampionProfilesJob>();
         services.AddScoped<LiveGamePollingJob>();
         services.AddScoped<RuneSelectionIntegrityBackfillJob>();
         services.AddScoped<MatchTimelineBackfillJob>();

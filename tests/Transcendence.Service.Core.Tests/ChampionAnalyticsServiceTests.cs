@@ -238,6 +238,62 @@ public class ChampionAnalyticsServiceTests
             It.IsAny<CancellationToken>()));
     }
 
+    [Fact]
+    public async Task RefreshDefaultProfileCacheAsync_WarmsTheKeysTheDefaultProfileReadsHit()
+    {
+        await using var harness = await Harness.CreateAsync();
+        harness.SetActivePatch("15.1", DateTime.UtcNow.AddHours(-300));
+
+        harness.ComputeService
+            .Setup(x => x.ComputeWinRatesAsync(103, It.IsAny<ChampionAnalyticsFilter>(), "15.1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new ChampionWinRateDto(103, "MIDDLE", "EMERALD_PLUS", 200, 110, 0.55, 0.2, 0.02, 1, 50, "15.1"),
+                new ChampionWinRateDto(103, "TOP", "EMERALD_PLUS", 40, 18, 0.45, 0.05, 0.02, 12, 50, "15.1")
+            ]);
+        harness.ComputeService
+            .Setup(x => x.ComputeBuildsAsync(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ChampionBuildsResponse(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", [], []));
+        harness.ComputeService
+            .Setup(x => x.ComputeMatchupsAsync(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ChampionMatchupsResponse
+            {
+                ChampionId = 103,
+                Role = "MIDDLE",
+                RankTier = "EMERALD_PLUS",
+                Region = "ALL",
+                Patch = "15.1"
+            });
+        harness.ComputeService
+            .Setup(x => x.ComputeProBuildsAsync(103, "ALL", "MIDDLE", "all", "15.1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ChampionProBuildsResponse(103, "15.1", "MIDDLE", "ALL", "all", [], [], []));
+        await harness.Db.SaveChangesAsync();
+
+        var resolvedRole = await harness.Service.RefreshDefaultProfileCacheAsync(
+            103, "EMERALD_PLUS", includeProBuilds: true, CancellationToken.None);
+
+        resolvedRole.Should().Be("MIDDLE");
+
+        // Each default-profile read must now be a cache HIT (compute not invoked a second time).
+        await harness.Service.GetWinRatesAsync(103, new ChampionAnalyticsFilter(RankTier: "EMERALD_PLUS"), CancellationToken.None);
+        await harness.Service.GetBuildsAsync(103, "MIDDLE", "EMERALD_PLUS", null, null, CancellationToken.None);
+        await harness.Service.GetMatchupsAsync(103, "MIDDLE", "EMERALD_PLUS", null, null, CancellationToken.None);
+        await harness.Service.GetProBuildsAsync(103, null, "MIDDLE", null, null, CancellationToken.None);
+
+        harness.ComputeService.Verify(
+            x => x.ComputeWinRatesAsync(103, It.IsAny<ChampionAnalyticsFilter>(), "15.1", It.IsAny<CancellationToken>()),
+            Times.Once);
+        harness.ComputeService.Verify(
+            x => x.ComputeBuildsAsync(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", It.IsAny<CancellationToken>()),
+            Times.Once);
+        harness.ComputeService.Verify(
+            x => x.ComputeMatchupsAsync(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", It.IsAny<CancellationToken>()),
+            Times.Once);
+        harness.ComputeService.Verify(
+            x => x.ComputeProBuildsAsync(103, "ALL", "MIDDLE", "all", "15.1", It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;

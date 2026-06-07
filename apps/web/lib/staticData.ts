@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 export type ChampionMap = {
   version: string;
   champions: Record<string, { id: string; name: string; title?: string }>;
@@ -135,7 +137,10 @@ export type RuneStaticData = {
   trees: RuneTree[];
 };
 
-async function fetchLatestVersion() {
+// cache() dedupes the version lookup + heavy JSON parse/transform within a single
+// server render, so the page (and its sibling components) share one result instead of
+// each fetcher independently re-fetching versions.json and re-building the maps.
+const fetchLatestVersion = cache(async () => {
   const versionsRes = await fetch(
     "https://ddragon.leagueoflegends.com/api/versions.json",
     { next: { revalidate: 60 * 60 * 24 } }
@@ -148,9 +153,9 @@ async function fetchLatestVersion() {
   const version = versions[0];
   if (!version) throw new Error("No Data Dragon versions available.");
   return version;
-}
+});
 
-export async function fetchChampionMap(): Promise<ChampionMap> {
+export const fetchChampionMap = cache(async (): Promise<ChampionMap> => {
   const version = await fetchLatestVersion();
 
   const champsRes = await fetch(
@@ -169,7 +174,7 @@ export async function fetchChampionMap(): Promise<ChampionMap> {
   }
 
   return { version, champions };
-}
+});
 
 export function championIconUrl(version: string, champId: string) {
   return `https://ddragon.leagueoflegends.com/cdn/${version}/img/champion/${champId}.png`;
@@ -179,7 +184,7 @@ export function profileIconUrl(version: string, profileIconId: number) {
   return `https://ddragon.leagueoflegends.com/cdn/${version}/img/profileicon/${profileIconId}.png`;
 }
 
-export async function fetchItemMap(): Promise<ItemMap> {
+export const fetchItemMap = cache(async (): Promise<ItemMap> => {
   const version = await fetchLatestVersion();
 
   const res = await fetch(
@@ -195,13 +200,13 @@ export async function fetchItemMap(): Promise<ItemMap> {
   }
 
   return { version, items };
-}
+});
 
 export function itemIconUrl(version: string, itemId: number) {
   return `https://ddragon.leagueoflegends.com/cdn/${version}/img/item/${itemId}.png`;
 }
 
-export async function fetchSummonerSpellMap(): Promise<SummonerSpellMap> {
+export const fetchSummonerSpellMap = cache(async (): Promise<SummonerSpellMap> => {
   const version = await fetchLatestVersion();
 
   const res = await fetch(
@@ -217,13 +222,13 @@ export async function fetchSummonerSpellMap(): Promise<SummonerSpellMap> {
   }
 
   return { version, spells };
-}
+});
 
 export function summonerSpellIconUrl(version: string, spellCdnId: string) {
   return `https://ddragon.leagueoflegends.com/cdn/${version}/img/spell/${spellCdnId}.png`;
 }
 
-export async function fetchRunesReforged(): Promise<RuneStaticData> {
+export const fetchRunesReforged = cache(async (): Promise<RuneStaticData> => {
   const version = await fetchLatestVersion();
 
   const res = await fetch(
@@ -292,7 +297,7 @@ export async function fetchRunesReforged(): Promise<RuneStaticData> {
   }));
 
   return { version, runeById, styleById, runeSortById, trees };
-}
+});
 
 export function runeIconUrl(iconPath: string) {
   if (/^https?:\/\//i.test(iconPath)) return iconPath;

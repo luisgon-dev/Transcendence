@@ -43,6 +43,7 @@ public class RefreshChampionAnalyticsJob(
         await ExecuteInternalAsync("daily", ct);
     }
 
+    [Queue(HangfireQueues.AnalyticsWarm)]
     public async Task ExecuteRampAsync(CancellationToken ct)
     {
         var patchState = await GetCurrentPatchStateAsync(ct);
@@ -55,6 +56,7 @@ public class RefreshChampionAnalyticsJob(
         await ExecuteAdaptiveAsync(ct);
     }
 
+    [Queue(HangfireQueues.AnalyticsWarm)]
     public async Task ExecuteAdaptiveAsync(CancellationToken ct)
     {
         var patchState = await GetCurrentPatchStateAsync(ct);
@@ -143,9 +145,11 @@ public class RefreshChampionAnalyticsJob(
 
             await staticDataService.EnsureStaticDataForPatchAsync(currentPatch, ct);
 
-            // Step 1: Invalidate all analytics cache
-            logger.LogInformation("Invalidating analytics cache");
-            await analyticsService.InvalidateAnalyticsCacheAsync(ct);
+            // Step 1: Invalidate only this patch's analytics cache. Keeps other patches, the pro
+            // roster, and pro-playrate entries warm so a routine current-patch refresh does not
+            // cold-start every cached entry at once.
+            logger.LogInformation("Invalidating analytics cache for patch {Patch}", currentPatch);
+            await analyticsService.InvalidateAnalyticsCacheForPatchAsync(currentPatch, ct);
 
             // Step 2: Get popular champions to pre-warm
             var popularChampions = await GetPopularChampionsAsync(currentPatch, ct);
@@ -199,11 +203,20 @@ public class RefreshChampionAnalyticsJob(
                 logger.LogWarning(ex, "Failed to pre-warm unified tier list variants");
             }
 
-            // Step 5: Pre-warm win rates, builds, matchups for top 20 champions per role
+            // Step 5: Pre-warm win rates / builds / matchups (and, bounded, pro-builds) for the
+            // top champions per role at the SAME parameters the champion page reads — rankTier =
+            // the frontend default (Emerald+), win rates with no role filter (the profile endpoint
+            // reads the full by-role table to resolve the most-played lane). Warming the wrong tier
+            // means real requests never hit the pre-warmed keys.
             var preWarmCount = 0;
+            var proBuildPreWarmCount = 0;
+            var preWarmTier = string.IsNullOrWhiteSpace(options.Value.PreWarmRankTier)
+                ? null
+                : options.Value.PreWarmRankTier.Trim();
             var championsPerRole = Math.Max(
                 1,
                 useRampTuning ? options.Value.RampChampionsPerRoleToPreWarm : options.Value.ChampionsPerRoleToPreWarm);
+            var proBuildChampionsPerRole = Math.Max(0, options.Value.ProBuildChampionsPerRoleToPreWarm);
             foreach (var role in Roles)
             {
                 var roleChampions = popularChampions
@@ -211,19 +224,29 @@ public class RefreshChampionAnalyticsJob(
                     .Take(championsPerRole)
                     .ToList();
 
-                foreach (var champ in roleChampions)
+                for (var i = 0; i < roleChampions.Count; i++)
                 {
+                    var champ = roleChampions[i];
                     try
                     {
                         await analyticsService.GetWinRatesAsync(
                             champ.ChampionId,
-                            new ChampionAnalyticsFilter(Role: role),
+                            new ChampionAnalyticsFilter(RankTier: preWarmTier),
                             ct);
 
-                        await analyticsService.GetBuildsAsync(champ.ChampionId, role, null, null, null, ct);
-                        await analyticsService.GetMatchupsAsync(champ.ChampionId, role, null, null, null, ct);
+                        await analyticsService.GetBuildsAsync(champ.ChampionId, role, preWarmTier, null, null, ct);
+                        await analyticsService.GetMatchupsAsync(champ.ChampionId, role, preWarmTier, null, null, ct);
 
                         preWarmCount++;
+
+                        // Pro-builds compute is heavier, so warm a smaller bounded set. role-scoped
+                        // here mirrors the page default (no role -> most-played lane == this role).
+                        if (options.Value.PreWarmProBuilds && i < proBuildChampionsPerRole)
+                        {
+                            await analyticsService.GetProBuildsAsync(champ.ChampionId, null, role, null, null, ct);
+                            proBuildPreWarmCount++;
+                        }
+
                         logger.LogDebug("Pre-warmed analytics for champion {ChampId} in {Role}",
                             champ.ChampionId, role);
                     }
@@ -239,9 +262,11 @@ public class RefreshChampionAnalyticsJob(
 
             stopwatch.Stop();
             logger.LogInformation(
-                "Analytics refresh complete ({TriggerReason}). Pre-warmed {Count} champion/role combinations in {Elapsed}ms",
+                "Analytics refresh complete ({TriggerReason}). Pre-warmed {Count} champion/role combinations ({ProBuilds} pro-builds) at tier {Tier} in {Elapsed}ms",
                 triggerReason,
                 preWarmCount,
+                proBuildPreWarmCount,
+                preWarmTier ?? "all",
                 stopwatch.ElapsedMilliseconds);
         }
         catch (Exception ex)

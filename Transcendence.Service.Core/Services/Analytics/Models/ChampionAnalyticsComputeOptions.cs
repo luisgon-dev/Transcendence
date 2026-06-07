@@ -9,4 +9,12 @@ public class ChampionAnalyticsComputeOptions
     public int BootstrapWindowHours { get; set; } = 24;
     public int ProvisionalWindowHours { get; set; } = 96;
     public int MaturingWindowHours { get; set; } = 240;
+
+    /// <summary>
+    /// Upper bound on tracked-pro participant rows materialized per pro-builds computation.
+    /// Caps the cost of the heavy item/rune collection projection so the wide
+    /// (role=ALL + scope=all + region=ALL) pool cannot command-timeout. Rows are taken
+    /// most-recent-first, which matches the "recent pro/high-MMR builds" surface.
+    /// </summary>
+    public int ProBuildMaxParticipantRows { get; set; } = 1500;
 }

@@ -7,6 +7,7 @@ using Transcendence.Data.Extensions;
 using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Extensions;
+using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Priority;
 using Transcendence.Service.Core.Services.Tft.Configuration;
@@ -42,6 +43,19 @@ builder.Services.AddHangfireServer(options =>
     options.WorkerCount = 24;
 });
 
+// Dedicated worker pool for the analytics warm/refresh lane. The main pool above pulls queues
+// highest-priority-first, so a saturated refresh backlog could starve a low-priority analytics
+// job indefinitely. A second server with its own workers — serving ONLY the reserved queue —
+// guarantees these jobs are always ready to run on schedule no matter how busy the main pool is.
+builder.Services.AddHangfireServer(options =>
+{
+    options.ServerName = HangfireQueues.AnalyticsWarm;
+    options.Queues = [HangfireQueues.AnalyticsWarm];
+    // Sized for the lane's recurring jobs (default-profile warm + adaptive + ramp refresh) running
+    // concurrently; each fans out internally, so a small dedicated pool is plenty.
+    options.WorkerCount = 4;
+});
+
 builder.Services.AddHttpClient();
 
 // Configure Redis distributed cache
@@ -67,6 +81,8 @@ builder.Services.Configure<LiveGamePollingJobOptions>(builder.Configuration.GetS
 builder.Services.Configure<RetryFailedMatchesJobOptions>(builder.Configuration.GetSection("Jobs:RetryFailedMatches"));
 builder.Services.Configure<RefreshChampionAnalyticsJobOptions>(
     builder.Configuration.GetSection("Jobs:RefreshChampionAnalytics"));
+builder.Services.Configure<WarmDefaultChampionProfilesJobOptions>(
+    builder.Configuration.GetSection("Jobs:WarmDefaultChampionProfiles"));
 builder.Services.Configure<ChampionAnalyticsIngestionJobOptions>(
     builder.Configuration.GetSection("Jobs:ChampionAnalyticsIngestion"));
 builder.Services.Configure<SummonerMaintenanceJobOptions>(builder.Configuration.GetSection("Jobs:SummonerMaintenance"));

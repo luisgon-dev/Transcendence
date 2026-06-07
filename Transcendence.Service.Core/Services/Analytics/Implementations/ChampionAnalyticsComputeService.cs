@@ -801,7 +801,15 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         if (!string.Equals(normalizedRole, "ALL", StringComparison.Ordinal))
             participantQuery = participantQuery.Where(mp => mp.TeamPosition == normalizedRole);
 
+        // Bound the heavy item/rune collection projection to the most-recent N rows so the wide
+        // role=ALL + scope=all + region=ALL pool cannot command-timeout (the surface only renders
+        // recent matches + aggregate top-players/common-builds, which a recency window represents).
+        var maxParticipantRows = Math.Max(100, _options.ProBuildMaxParticipantRows);
+
         var rows = await participantQuery
+            .OrderByDescending(mp => mp.Match.MatchDate)
+            .ThenByDescending(mp => mp.Match.MatchId)
+            .Take(maxParticipantRows)
             .Select(mp => new
             {
                 mp.Match.MatchId,

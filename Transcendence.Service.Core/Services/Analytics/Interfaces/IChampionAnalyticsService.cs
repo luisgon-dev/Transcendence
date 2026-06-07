@@ -83,4 +83,25 @@ public interface IChampionAnalyticsService
     /// Called when patch changes or significant data updates occur.
     /// </summary>
     Task InvalidateAnalyticsCacheAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Invalidates only the analytics cache entries tagged for a single patch.
+    /// Used by the routine refresh job so re-ingesting current-patch matches does not
+    /// cold-start every cached entry (other patches, pro roster, playrate) at once.
+    /// </summary>
+    Task InvalidateAnalyticsCacheForPatchAsync(string patch, CancellationToken ct);
+
+    /// <summary>
+    /// Recomputes and OVERWRITES (gap-free, via HybridCache SetAsync) the cached analytics the
+    /// default champion profile page reads: win rates (at <paramref name="rankTier"/>, region=ALL,
+    /// no role), then builds + matchups for the resolved most-played lane, and optionally the
+    /// lane-scoped pro-builds default. Lets the hourly warm job keep the default page a permanent
+    /// cache hit with ≤refresh-interval-old stats and no invalidate-then-cold window.
+    /// Returns the resolved lane, or null when there is no active patch.
+    /// </summary>
+    Task<string?> RefreshDefaultProfileCacheAsync(
+        int championId,
+        string? rankTier,
+        bool includeProBuilds,
+        CancellationToken ct);
 }

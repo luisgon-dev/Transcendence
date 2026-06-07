@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { cache, Suspense } from "react";
 import type { components } from "@transcendence/api-client";
 
 import { BackendErrorCard } from "@/components/BackendErrorCard";
@@ -13,6 +14,7 @@ import { TierBadge } from "@/components/TierBadge";
 import { WinRateText } from "@/components/WinRateText";
 import { Card } from "@/components/ui/Card";
 import { DataBar } from "@/components/ui/DataBar";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { pickMostSevereAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyticsSample";
@@ -34,6 +36,8 @@ type ChampionWinRateDto = components["schemas"]["ChampionWinRateDto"];
 type ChampionWinRateSummary = components["schemas"]["ChampionWinRateSummary"];
 type ChampionProfileAnalyticsResponse = components["schemas"]["ChampionProfileAnalyticsResponse"];
 type MatchupEntryDto = components["schemas"]["MatchupEntryDto"];
+
+type ChampionSearchParams = { role?: string; rankTier?: string; region?: string; patch?: string; sort?: string };
 
 const ROLES = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"] as const;
 
@@ -76,18 +80,61 @@ function pickBestEntry(
   return forRole.reduce((best, cur) => ((cur.games ?? 0) > (best.games ?? 0) ? cur : best));
 }
 
+/**
+ * Loads the champion profile + the static maps the data sections need. Wrapped in cache()
+ * so the two streamed regions (hero meta + sections) below share a single profile fetch and
+ * a single static-data transform within one render instead of fetching/parsing twice.
+ */
+const loadChampionData = cache(async (championId: number, sp: ChampionSearchParams) => {
+  const { activeRegion, activeRegionLabel, options: regionOptions } =
+    await resolveAnalyticsRegion(sp.region);
+
+  const explicitRole = normalizeRole(sp.role);
+  // Champion pages default to Emerald+ unless a rank is in the URL; an explicit
+  // ?rankTier=all resolves to null (all ranks). See resolveDefaultedRankTier.
+  const normalizedRankTier = resolveDefaultedRankTier(sp.rankTier);
+  const selectedPatch = normalizeAnalyticsPatch(sp.patch);
+
+  const winrateQuery = new URLSearchParams();
+  if (normalizedRankTier) winrateQuery.set("rankTier", normalizedRankTier);
+  if (activeRegion !== "ALL") winrateQuery.set("region", activeRegion);
+  if (selectedPatch) winrateQuery.set("patch", selectedPatch);
+  if (explicitRole) winrateQuery.set("role", explicitRole);
+  const profileQuery = winrateQuery.toString() ? `?${winrateQuery.toString()}` : "";
+
+  const [itemStatic, runeStatic, patchOptions, profileRes] = await Promise.all([
+    fetchItemMap(),
+    fetchRunesReforged(),
+    fetchLolAnalyticsPatches(),
+    fetchBackendJson<ChampionProfileAnalyticsResponse>(
+      `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/profile${profileQuery}`,
+      { next: { revalidate: 60 * 60 } }
+    )
+  ]);
+
+  return {
+    activeRegion,
+    activeRegionLabel,
+    regionOptions,
+    explicitRole,
+    normalizedRankTier,
+    selectedPatch,
+    itemStatic,
+    runeStatic,
+    patchOptions,
+    profileRes
+  };
+});
+
 export default async function ChampionDetailPage({
   params,
   searchParams
 }: {
   params: Promise<{ championId: string }>;
-  searchParams?: Promise<{ role?: string; rankTier?: string; region?: string; patch?: string; sort?: string }>;
+  searchParams?: Promise<ChampionSearchParams>;
 }) {
   const resolvedParams = await params;
-  const resolvedSearchParams = searchParams ? await searchParams : undefined;
-  const { activeRegion, activeRegionLabel, options: regionOptions } = await resolveAnalyticsRegion(
-    resolvedSearchParams?.region
-  );
+  const resolvedSearchParams = (searchParams ? await searchParams : undefined) ?? {};
   const championId = Number(resolvedParams.championId);
   if (!Number.isFinite(championId) || championId <= 0) {
     return (
@@ -98,42 +145,186 @@ export default async function ChampionDetailPage({
     );
   }
 
-  const explicitRole = normalizeRole(resolvedSearchParams?.role);
-  // Champion pages default to Emerald+ unless a rank is in the URL; an explicit
-  // ?rankTier=all resolves to null (all ranks). See resolveDefaultedRankTier.
-  const normalizedRankTier = resolveDefaultedRankTier(resolvedSearchParams?.rankTier);
-  const selectedPatch = normalizeAnalyticsPatch(resolvedSearchParams?.patch);
-  const winrateQuery = new URLSearchParams();
-  if (normalizedRankTier) winrateQuery.set("rankTier", normalizedRankTier);
-  if (activeRegion !== "ALL") winrateQuery.set("region", activeRegion);
-  if (selectedPatch) winrateQuery.set("patch", selectedPatch);
-  if (explicitRole) winrateQuery.set("role", explicitRole);
-  const profileQuery = winrateQuery.toString() ? `?${winrateQuery.toString()}` : "";
-
-  const verbosity = getErrorVerbosity();
-  const [staticData, itemStatic, runeStatic, patchOptions, profileRes] = await Promise.all([
-    fetchChampionMap(),
-    fetchItemMap(),
-    fetchRunesReforged(),
-    fetchLolAnalyticsPatches(),
-    fetchBackendJson<ChampionProfileAnalyticsResponse>(
-      `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/profile${profileQuery}`,
-      { next: { revalidate: 60 * 60 } }
-    )
-  ]);
-
-  const { version, champions } = staticData;
+  // Identity (cached static data) — paints the shell immediately while the profile streams in.
+  const { version, champions } = await fetchChampionMap();
   const champ = champions[String(championId)];
   const champName = champ?.name ?? `Champion ${championId}`;
   const champSlug = champ?.id ?? "Unknown";
-  const itemVersion = itemStatic.version;
-  const items = itemStatic.items;
-  const runeById = runeStatic.runeById;
-  const styleById = runeStatic.styleById;
-  const runeTrees = runeStatic.trees;
+  const splashUrl = `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${champSlug}_0.jpg`;
+
+  return (
+    <div className="grid gap-8">
+      {/* ── Champion Header (identity is instant; meta streams) ── */}
+      <header className="page-hero relative p-5 md:p-8">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-30"
+          style={{
+            backgroundImage: `linear-gradient(to right, var(--t-bg) 20%, color-mix(in oklch, var(--t-bg), transparent 18%) 45%, transparent 100%), url(${splashUrl})`,
+            backgroundSize: "cover",
+            backgroundPosition: "top right"
+          }}
+        />
+
+        <div className="relative flex flex-col gap-5">
+          <div className="flex items-start gap-3 sm:items-center sm:gap-4">
+            <Image
+              src={championIconUrl(version, champSlug)}
+              alt={champName}
+              width={64}
+              height={64}
+              className="h-12 w-12 rounded-xl border border-border/60 sm:h-16 sm:w-16"
+            />
+            <div className="min-w-0">
+              <h1 className="type-page-title">{champName}</h1>
+              {champ?.title ? (
+                <p className="mt-0.5 text-xs uppercase tracking-wide text-muted">{champ.title}</p>
+              ) : null}
+            </div>
+          </div>
+
+          <Suspense fallback={<ChampionHeroMetaSkeleton />}>
+            <ChampionHeroMeta championId={championId} searchParams={resolvedSearchParams} />
+          </Suspense>
+        </div>
+      </header>
+
+      <Suspense fallback={<ChampionSectionsSkeleton />}>
+        <ChampionSections
+          championId={championId}
+          champName={champName}
+          version={version}
+          champions={champions}
+          searchParams={resolvedSearchParams}
+        />
+      </Suspense>
+    </div>
+  );
+}
+
+// ── Streamed: tier badge + meta line + stats + filters ──────────────────────
+async function ChampionHeroMeta({
+  championId,
+  searchParams
+}: {
+  championId: number;
+  searchParams: ChampionSearchParams;
+}) {
+  const data = await loadChampionData(championId, searchParams);
+  const {
+    activeRegion,
+    activeRegionLabel,
+    regionOptions,
+    explicitRole,
+    normalizedRankTier,
+    selectedPatch,
+    patchOptions,
+    profileRes
+  } = data;
+
+  if (!profileRes.ok) {
+    // The full error renders in the sections region; keep the hero meta quiet on failure.
+    return null;
+  }
+
+  const profile = profileRes.body!;
+  const winrates = profile.winRates ?? null;
+  const builds = profile.builds ?? null;
+  const matchups = profile.matchups ?? null;
+  const effectiveRole =
+    normalizeRole(profile.effectiveRole) ?? explicitRole ?? pickMostPlayedRole(winrates) ?? "MIDDLE";
+  const heroEntry = pickBestEntry(winrates, effectiveRole);
+  const heroTier = deriveTier(heroEntry?.winRate);
+  const sampleNotice = pickMostSevereAnalyticsSample(
+    (winrates as { sample?: unknown } | null)?.sample as AnalyticsSampleLike,
+    (builds as { sample?: unknown } | null)?.sample as AnalyticsSampleLike,
+    (matchups as { sample?: unknown } | null)?.sample as AnalyticsSampleLike
+  );
+  const linkParams = new URLSearchParams();
+  if (normalizedRankTier) linkParams.set("rankTier", normalizedRankTier);
+  if (activeRegion !== "ALL") linkParams.set("region", activeRegion);
+  if (selectedPatch) linkParams.set("patch", selectedPatch);
+  const linkQuery = linkParams.toString();
+  const sharedFilterParams = selectedPatch ? { patch: selectedPatch } : {};
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <TierBadge tier={heroTier} size="md" />
+        <p className="text-sm text-muted">
+          {roleDisplayLabel(effectiveRole)} &middot; {rankTierDisplayLabel(normalizedRankTier ?? "all")} &middot; {activeRegionLabel}
+        </p>
+      </div>
+      <div className="-mt-2 flex flex-wrap items-center gap-2 text-xs">
+        <Link
+          href="#matchups"
+          className="rounded-lg border border-border/60 bg-surface-2/50 px-2.5 py-1 font-medium text-fg/80 transition-colors hover:bg-surface-2/80"
+        >
+          Matchups
+        </Link>
+        <Link
+          href={`/lol/pro-builds/${championId}${linkQuery ? `?${linkQuery}` : ""}`}
+          className="rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 font-medium text-primary transition-colors hover:bg-primary/20"
+        >
+          Pro Builds
+        </Link>
+      </div>
+
+      {/* ── Stats Bar ── */}
+      <StatsBar
+        tier={heroTier}
+        winRate={heroEntry?.winRate}
+        pickRate={heroEntry?.pickRate}
+        games={heroEntry?.games}
+      />
+
+      {/* ── Filters ── */}
+      <FilterBar
+        roles={ROLES}
+        activeRole={effectiveRole}
+        activeRank={normalizedRankTier ?? "all"}
+        regionOptions={regionOptions}
+        activeRegion={activeRegion}
+        patchOptions={patchOptions}
+        activePatch={selectedPatch}
+        extraParams={sharedFilterParams}
+        explicitAllRank
+        baseHref={`/lol/champions/${championId}`}
+      />
+      <div className="mt-3">
+        <AnalyticsSampleBanner sample={sampleNotice} />
+      </div>
+    </>
+  );
+}
+
+// ── Streamed: win-rate table + builds + matchups ────────────────────────────
+async function ChampionSections({
+  championId,
+  champName,
+  version,
+  champions,
+  searchParams
+}: {
+  championId: number;
+  champName: string;
+  version: string;
+  champions: Record<string, { id: string; name: string; title?: string }>;
+  searchParams: ChampionSearchParams;
+}) {
+  const data = await loadChampionData(championId, searchParams);
+  const {
+    activeRegion,
+    explicitRole,
+    normalizedRankTier,
+    selectedPatch,
+    itemStatic,
+    runeStatic,
+    profileRes
+  } = data;
 
   if (!profileRes.ok) {
     const kind = profileRes.errorKind;
+    const verbosity = getErrorVerbosity();
     return (
       <BackendErrorCard
         title={champName}
@@ -160,17 +351,24 @@ export default async function ChampionDetailPage({
     );
   }
 
+  const itemVersion = itemStatic.version;
+  const items = itemStatic.items;
+  const runeById = runeStatic.runeById;
+  const styleById = runeStatic.styleById;
+  const runeTrees = runeStatic.trees;
+
   const profile = profileRes.body!;
   const winrates = profile.winRates ?? null;
   const builds = profile.builds ?? null;
   const matchups = profile.matchups ?? null;
-  const effectiveRole = normalizeRole(profile.effectiveRole) ?? explicitRole ?? pickMostPlayedRole(winrates) ?? "MIDDLE";
+  const effectiveRole =
+    normalizeRole(profile.effectiveRole) ?? explicitRole ?? pickMostPlayedRole(winrates) ?? "MIDDLE";
   const winrateRows = winrates?.byRoleTier ?? [];
   const buildRows = builds?.builds ?? [];
   const globalCoreItems = builds?.globalCoreItems ?? [];
   const counters = matchups?.counters ?? [];
   const favorableMatchups = matchups?.favorableMatchups ?? [];
-  const matchupSortKey = resolvedSearchParams?.sort === "games" ? "games" : "winRate";
+  const matchupSortKey = searchParams.sort === "games" ? "games" : "winRate";
   const allMatchups = [...counters, ...favorableMatchups]
     .filter((m): m is MatchupEntryDto => Boolean(m?.opponentChampionId))
     .filter(
@@ -189,98 +387,14 @@ export default async function ChampionDetailPage({
     if (selectedPatch) sortParams.set("patch", selectedPatch);
     return `/lol/champions/${championId}?${sortParams.toString()}#matchups`;
   };
-  const heroEntry = pickBestEntry(winrates, effectiveRole);
-  const heroTier = deriveTier(heroEntry?.winRate);
-  const splashUrl = `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${champSlug}_0.jpg`;
-  const sampleNotice = pickMostSevereAnalyticsSample(
-    (winrates as { sample?: unknown } | null)?.sample as AnalyticsSampleLike,
-    (builds as { sample?: unknown } | null)?.sample as AnalyticsSampleLike,
-    (matchups as { sample?: unknown } | null)?.sample as AnalyticsSampleLike
-  );
   const linkParams = new URLSearchParams();
   if (normalizedRankTier) linkParams.set("rankTier", normalizedRankTier);
   if (activeRegion !== "ALL") linkParams.set("region", activeRegion);
   if (selectedPatch) linkParams.set("patch", selectedPatch);
   const linkQuery = linkParams.toString();
-  const sharedFilterParams = selectedPatch ? { patch: selectedPatch } : {};
 
   return (
-    <div className="grid gap-8">
-      {/* ── Champion Header ── */}
-      <header className="page-hero relative p-5 md:p-8">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-30"
-          style={{
-            backgroundImage: `linear-gradient(to right, var(--t-bg) 20%, color-mix(in oklch, var(--t-bg), transparent 18%) 45%, transparent 100%), url(${splashUrl})`,
-            backgroundSize: "cover",
-            backgroundPosition: "top right"
-          }}
-        />
-
-        <div className="relative flex flex-col gap-5">
-        <div className="flex items-start gap-3 sm:items-center sm:gap-4">
-          <Image
-            src={championIconUrl(version, champSlug)}
-            alt={champName}
-            width={64}
-            height={64}
-            className="h-12 w-12 rounded-xl border border-border/60 sm:h-16 sm:w-16"
-          />
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="type-page-title">
-                {champName}
-              </h1>
-              <TierBadge tier={heroTier} size="md" />
-            </div>
-            {champ?.title ? <p className="mt-0.5 text-xs uppercase tracking-wide text-muted">{champ.title}</p> : null}
-            <p className="mt-0.5 text-sm text-muted">
-              {roleDisplayLabel(effectiveRole)} &middot; {rankTierDisplayLabel(normalizedRankTier ?? "all")} &middot; {activeRegionLabel}
-            </p>
-            <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs">
-              <Link
-                href="#matchups"
-                className="rounded-lg border border-border/60 bg-surface-2/50 px-2.5 py-1 font-medium text-fg/80 transition-colors hover:bg-surface-2/80"
-              >
-                Matchups
-              </Link>
-              <Link
-                href={`/lol/pro-builds/${championId}${linkQuery ? `?${linkQuery}` : ""}`}
-                className="rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 font-medium text-primary transition-colors hover:bg-primary/20"
-              >
-                Pro Builds
-              </Link>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Stats Bar ── */}
-        <StatsBar
-          tier={heroTier}
-          winRate={heroEntry?.winRate}
-          pickRate={heroEntry?.pickRate}
-          games={heroEntry?.games}
-        />
-
-        {/* ── Filters ── */}
-        <FilterBar
-          roles={ROLES}
-          activeRole={effectiveRole}
-          activeRank={normalizedRankTier ?? "all"}
-          regionOptions={regionOptions}
-          activeRegion={activeRegion}
-          patchOptions={patchOptions}
-          activePatch={selectedPatch}
-          extraParams={sharedFilterParams}
-          explicitAllRank
-          baseHref={`/lol/champions/${championId}`}
-        />
-        <div className="mt-3">
-          <AnalyticsSampleBanner sample={sampleNotice} />
-        </div>
-        </div>
-      </header>
-
+    <>
       {/* ── Win Rates Table ── */}
       <Card className="p-5">
         <h2 className="type-section">
@@ -603,6 +717,54 @@ export default async function ChampionDetailPage({
           </table>
         </div>
       </Card>
-    </div>
+    </>
+  );
+}
+
+// ── Suspense fallbacks (mirror the streamed regions' layout) ────────────────
+function ChampionHeroMetaSkeleton() {
+  return (
+    <>
+      <Skeleton className="h-5 w-56" />
+      <Skeleton className="h-14 w-full rounded-lg" />
+      <div className="flex flex-wrap gap-3">
+        <Skeleton className="h-10 w-64 rounded-lg" />
+        <Skeleton className="h-10 w-36 rounded-control" />
+        <Skeleton className="h-10 w-40 rounded-lg" />
+      </div>
+    </>
+  );
+}
+
+function ChampionSectionsSkeleton() {
+  return (
+    <>
+      <Card className="p-5">
+        <Skeleton className="h-6 w-28" />
+        <div className="mt-4 grid gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-10 w-full rounded-md" />
+          ))}
+        </div>
+      </Card>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card className="p-5">
+          <Skeleton className="h-6 w-24" />
+          <div className="mt-4 grid gap-4">
+            <Skeleton className="h-28 w-full rounded-lg" />
+            <Skeleton className="h-28 w-full rounded-lg" />
+          </div>
+        </Card>
+        <Card className="p-5">
+          <Skeleton className="h-6 w-28" />
+          <div className="mt-4 grid gap-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-10 w-full rounded-md" />
+            ))}
+          </div>
+        </Card>
+      </div>
+    </>
   );
 }

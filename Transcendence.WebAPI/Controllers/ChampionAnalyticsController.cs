@@ -164,7 +164,9 @@ public class ChampionAnalyticsController(
 
     /// <summary>
     /// Get pro/high-ELO builds for a champion.
-    /// Region defaults to ALL. Role, scope, and patch are optional.
+    /// Region defaults to ALL. Scope and patch are optional. When no role is supplied
+    /// (or role=ALL), the champion's most-played lane is used so the landing view is
+    /// lane-scoped instead of the heavy cross-role aggregate (mirrors the profile endpoint).
     /// </summary>
     [HttpGet("{championId}/pro-builds")]
     [ProducesResponseType(typeof(ChampionProBuildsResponse), StatusCodes.Status200OK)]
@@ -180,7 +182,26 @@ public class ChampionAnalyticsController(
         if (championId <= 0)
             return BadRequest("Invalid champion ID. Must be positive integer.");
 
-        var result = await analyticsService.GetProBuildsAsync(championId, region, role, scope, patch, ct);
+        // Treat an absent or explicit "ALL" role as "use the champion's most-played lane"
+        // (mirrors GetProfile); reject any other unrecognized role.
+        var requestedAll = string.Equals(role?.Trim(), "ALL", StringComparison.OrdinalIgnoreCase);
+        var normalizedRole = requestedAll ? null : NormalizeRole(role);
+        if (!requestedAll && !string.IsNullOrWhiteSpace(role) && normalizedRole == null)
+            return BadRequest("Invalid role. Expected TOP, JUNGLE, MIDDLE, BOTTOM, or UTILITY.");
+
+        var effectiveRole = normalizedRole;
+        if (effectiveRole == null)
+        {
+            // Reuses the cached win-rate aggregate; null result falls through to the
+            // (now-bounded) cross-role aggregate for champions with no role data.
+            var winRates = await analyticsService.GetWinRatesAsync(
+                championId,
+                new ChampionAnalyticsFilter(Region: region, Patch: patch),
+                ct);
+            effectiveRole = PickMostPlayedRole(winRates);
+        }
+
+        var result = await analyticsService.GetProBuildsAsync(championId, region, effectiveRole, scope, patch, ct);
         return Ok(result);
     }
 

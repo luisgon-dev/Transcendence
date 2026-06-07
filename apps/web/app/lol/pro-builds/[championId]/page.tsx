@@ -188,7 +188,10 @@ export default async function ProBuildsChampionPage({
 
   const effectivePatch =
     proBuilds?.patch ?? winrates?.patch ?? patchFilter ?? "Unknown";
-  const effectiveRole = proBuilds?.role ?? roleFilter;
+  // When no role is in the URL the backend resolves the champion's most-played lane and
+  // echoes it back as proBuilds.role; drive the active tab, badge, and scope/patch links
+  // off that so the most-played lane lights up and navigation preserves it.
+  const effectiveRole = normalizeProBuildRole(proBuilds?.role ?? roleFilter);
   const effectiveScope = normalizeProBuildScope(proBuilds?.scope ?? scopeFilter);
   const sampleNotice = pickMostSevereAnalyticsSample(
     (proBuilds as { sample?: unknown } | null)?.sample as AnalyticsSampleLike,
@@ -232,7 +235,7 @@ export default async function ProBuildsChampionPage({
         <div className="mt-3 grid gap-3">
           <RoleFilterTabs
             roles={LANE_ROLES}
-            activeRole={roleFilter}
+            activeRole={effectiveRole}
             baseHref={`/lol/pro-builds/${championId}`}
             extraParams={roleExtraParams}
           />
@@ -242,7 +245,7 @@ export default async function ProBuildsChampionPage({
               <Link
                 key={option.value}
                 href={buildProBuildPageHref(championId, {
-                  role: roleFilter,
+                  role: effectiveRole,
                   region: regionFilter,
                   scope: option.value,
                   patch: patchFilter
@@ -259,7 +262,7 @@ export default async function ProBuildsChampionPage({
           {patchFilter ? (
             <Link
               href={buildProBuildPageHref(championId, {
-                role: roleFilter,
+                role: effectiveRole,
                 region: regionFilter,
                 scope: scopeFilter,
                 patch: null

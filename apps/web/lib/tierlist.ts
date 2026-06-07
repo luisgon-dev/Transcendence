@@ -205,7 +205,7 @@ export function tierBorderClass(tier: UITierGrade): string {
 }
 
 export function filterTierListEntries<T extends UITierListEntry>(
-  entries: T[],
+  entries: readonly T[],
   champions: TierListChampionMap,
   options?: {
     query?: string | null;

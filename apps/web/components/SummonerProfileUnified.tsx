@@ -454,7 +454,15 @@ export function SummonerProfileClient({
         const skins = data?.data?.[featuredSlug]?.skins ?? [];
         if (skins.length === 0 || cancelled) return;
         const picked = skins[hashRiotId(`${gameName}#${tagLine}`) % skins.length]?.num ?? 0;
-        if (!cancelled) setHeroSkinNum(picked);
+        if (picked === 0 || cancelled) return;
+        // Some skin `num`s have no splash art on the (versionless) CDN, which
+        // would leave the backdrop blank. Only upgrade from the base splash
+        // once the chosen skin's art actually loads; otherwise keep `_0`.
+        const probe = new window.Image();
+        probe.onload = () => {
+          if (!cancelled) setHeroSkinNum(picked);
+        };
+        probe.src = `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${featuredSlug}_${picked}.jpg`;
       } catch {
         // Keep the base splash on any failure.
       }

@@ -16,10 +16,12 @@ import { TFT_FRONTEND_ENABLED } from "@/lib/featureFlags";
 import { buildLolPublicSummonerSearchPath } from "@/lib/lolPublicApi";
 import { DEFAULT_TIERLIST_RANK_TIER, rankTierDisplayLabel } from "@/lib/ranks";
 import { encodeRiotIdPath, parseRiotIdInput } from "@/lib/riotid";
+import { championIconUrl } from "@/lib/staticData";
 
 type ChampionSearchItem = {
   championId: number;
   name: string;
+  slug: string;
 };
 
 type ChampionsResponse = {
@@ -335,7 +337,8 @@ export function GlobalCommandPalette() {
         const parsed = Object.entries(json.champions)
           .map(([championId, data]) => ({
             championId: Number(championId),
-            name: data.name
+            name: data.name,
+            slug: data.id
           }))
           .filter((item) => Number.isFinite(item.championId))
           .sort((a, b) => a.name.localeCompare(b.name));
@@ -773,22 +776,37 @@ export function GlobalCommandPalette() {
                           countLabel={`${championResults.length}`}
                         >
                           {championResults.length > 0 ? (
-                            championResults.map((champion) => (
-                              <Command.Item
-                                key={`champion-${champion.championId}`}
-                                value={`champion-${champion.name}`}
-                                onSelect={() => navigate(`/lol/champions/${champion.championId}`)}
-                                className={RESULT_ITEM_CLASS}
-                              >
-                                <span className="surface-subtle inline-flex h-9 w-9 items-center justify-center rounded-lg text-primary/88">
-                                  <SparkIcon className="h-4 w-4" />
-                                </span>
-                                <div className="min-w-0 flex-1">
-                                  <p className="type-ui truncate font-medium text-fg">{champion.name}</p>
-                                  <p className="type-caption text-fg/65">Champion profile and matchup data</p>
-                                </div>
-                              </Command.Item>
-                            ))
+                            championResults.map((champion) => {
+                              const championHref = `/lol/champions/${champion.championId}`;
+                              return (
+                                <Command.Item
+                                  key={`champion-${champion.championId}`}
+                                  value={`champion-${champion.name}`}
+                                  onSelect={() => navigate(championHref)}
+                                  onMouseEnter={() => router.prefetch(championHref)}
+                                  onFocus={() => router.prefetch(championHref)}
+                                  className={RESULT_ITEM_CLASS}
+                                >
+                                  {ddragonVersion && champion.slug ? (
+                                    <Image
+                                      src={championIconUrl(ddragonVersion, champion.slug)}
+                                      alt=""
+                                      width={36}
+                                      height={36}
+                                      className="h-9 w-9 shrink-0 rounded-lg border border-border/50"
+                                    />
+                                  ) : (
+                                    <span className="surface-subtle inline-flex h-9 w-9 items-center justify-center rounded-lg text-primary/88">
+                                      <SparkIcon className="h-4 w-4" />
+                                    </span>
+                                  )}
+                                  <div className="min-w-0 flex-1">
+                                    <p className="type-ui truncate font-medium text-fg">{champion.name}</p>
+                                    <p className="type-caption text-fg/65">Champion profile and matchup data</p>
+                                  </div>
+                                </Command.Item>
+                              );
+                            })
                           ) : (
                             <SearchHint>No champions match that query.</SearchHint>
                           )}

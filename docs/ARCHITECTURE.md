@@ -45,6 +45,7 @@ Transcendence is a backend + web monorepo:
   - `/api/static/*` (champions, items, runes, spells) serve cached Data Dragon / CommunityDragon static maps to the browser (`public, s-maxage=86400, stale-while-revalidate=86400`)
   - `/api/diagnostics/backend` is a server-side backend connectivity probe (GETs the analytics tier-list endpoint) that always returns HTTP `200` with `{ ok, backend, requestId, durationMs }`
 - Tailwind styling, SSR-first pages where possible
+- **Auth token refresh runs in `proxy.ts` (Next 16 middleware), not during render.** Auth uses a short-lived access token + a single-use, rotated refresh token (the backend revokes the presented refresh token on every `/api/auth/refresh`, no grace window). Refreshing inside a Server Component render can't persist the rotated cookie (cookie writes are illegal during render), which would burn the refresh token and silently log users out. So `proxy.ts` refreshes a stale access token on page navigations and writes the rotated cookies to **both** the forwarded request (so the SSR render reads the fresh token and doesn't refresh again) and the response (so the browser persists them). It is fail-safe: it only acts when a refresh token exists and the access token is stale, skips prefetch requests (so a speculative prefetch can't burn the single-use token), and on any failure (401/5xx/network/timeout/malformed) passes through **without** clearing cookies. The matcher excludes `/api/*` (route handlers refresh + clear in their own writable context via `getAccessTokenOrRefresh`/`getSessionMe`), `_next`, and static files. Pure helpers live in `lib/proxyAuth.ts`; cookie names + the staleness check in `lib/authCookieShared.ts`.
 - Admin dashboard routes under `/admin/*` for ops controls/reports (JWT `admin` role required)
 - Frontend analysis routes:
   - `/lol/tierlist`
@@ -61,6 +62,11 @@ Transcendence is a backend + web monorepo:
   - `/tft/summoners/[region]/[riotId]`
 - Public LoL patch badges now read backend analytics patch status instead of raw Data Dragon latest so web patch labels match the active analytics dataset
 - LoL analytics pages (tier list, champion, pro-builds) carry a historical patch selector (`AnalyticsPatchFilter`, backed by `lib/lolPatchFilters.ts` + `lib/lolAnalyticsPatches.ts`, surfaced via `FilterBar`) that reads `GET /api/lol/analytics/patches` and drives the `patch` query parameter
+- Analytics filter defaults and feedback:
+  - The champion detail page (`/lol/champions/[championId]`) defaults to **Emerald+** when the `rankTier` param is absent (`resolveDefaultedRankTier` in `lib/ranks.ts`). An explicit `?rankTier=all` means all-ranks; to keep that selectable, the page's `FilterBar` runs in `explicitAllRank` mode so the rank dropdown/lane tabs emit and preserve a literal `rankTier=all`. The tier list keeps its own `DEFAULT_TIERLIST_RANK_TIER` handling.
+  - Lane selectors site-wide use `LANE_ROLES` (`lib/roles.ts`) — the five lanes, no "All" tab. Pages that aggregate across lanes (tier list, pro-builds) do so via an absent `role` param (no lane highlighted), not a selectable tab.
+  - Navigation/filter pending feedback uses Next 16 primitives: segment-level `loading.tsx` skeletons (champion, tier list, pro-builds) for instant route fallback + partial prefetch, `useLinkStatus` spinners on lane/role `<Link>` tabs (`components/ui/LinkPendingDot.tsx`), and `useTransition` `isPending` spinners on the rank/region/patch controls.
+  - The unified LoL profile hero backdrop uses the most-played champion's splash; a stable per-summoner skin is only used once its splash art loads (some skin `num`s lack art and would blank the backdrop), otherwise the base `_0` splash.
 
 ### `packages/api-client`
 - Generated OpenAPI TypeScript client artifacts built from the committed spec

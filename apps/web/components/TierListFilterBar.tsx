@@ -4,13 +4,14 @@ import { cn } from "@/lib/cn";
 import { type AnalyticsRegionOption } from "@/lib/analyticsRegionShared";
 import { type LolAnalyticsPatchOption } from "@/lib/lolPatchFilters";
 import { RANK_TIER_FILTERS } from "@/lib/ranks";
+import { LANE_ROLES } from "@/lib/roles";
 
 import { LaneTabs } from "./LaneTabs";
 import { AnalyticsPatchFilter } from "./AnalyticsPatchFilter";
 import { AnalyticsRegionFilter } from "./AnalyticsRegionFilter";
 import { RankFilterDropdown } from "./RankFilterDropdown";
 
-const DEFAULT_ROLES = ["ALL", "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"] as const;
+const DEFAULT_ROLES = LANE_ROLES;
 const DEFAULT_RANKS = RANK_TIER_FILTERS;
 
 /**

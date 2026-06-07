@@ -4,13 +4,14 @@ import { cn } from "@/lib/cn";
 import { type AnalyticsRegionOption } from "@/lib/analyticsRegionShared";
 import { type LolAnalyticsPatchOption } from "@/lib/lolPatchFilters";
 import { RANK_TIER_FILTERS } from "@/lib/ranks";
+import { LANE_ROLES } from "@/lib/roles";
 
 import { AnalyticsPatchFilter } from "./AnalyticsPatchFilter";
 import { AnalyticsRegionFilter } from "./AnalyticsRegionFilter";
 import { RankFilterDropdown } from "./RankFilterDropdown";
 import { RoleFilterTabs } from "./RoleFilterTabs";
 
-const DEFAULT_ROLES = ["ALL", "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"] as const;
+const DEFAULT_ROLES = LANE_ROLES;
 const DEFAULT_RANKS = RANK_TIER_FILTERS;
 
 export function FilterBar({
@@ -23,6 +24,7 @@ export function FilterBar({
   patchOptions,
   activePatch,
   extraParams,
+  explicitAllRank = false,
   baseHref,
   className
 }: {
@@ -35,6 +37,8 @@ export function FilterBar({
   patchOptions?: readonly LolAnalyticsPatchOption[];
   activePatch?: string | null;
   extraParams?: Record<string, string | null | undefined>;
+  /** Keep "All Ranks" selectable on pages whose absent-param default is Emerald+. */
+  explicitAllRank?: boolean;
   baseHref: string;
   className?: string;
 }) {
@@ -46,7 +50,7 @@ export function FilterBar({
   }
 
   const roleExtraParams: Record<string, string> = { ...sharedExtraParams };
-  if (activeRank && activeRank.toLowerCase() !== "all") {
+  if (activeRank && (activeRank.toLowerCase() !== "all" || explicitAllRank)) {
     roleExtraParams.rankTier = activeRank;
   }
 
@@ -62,12 +66,14 @@ export function FilterBar({
         activeRole={activeRole}
         baseHref={baseHref}
         extraParams={roleExtraParams}
+        keepRankAll={explicitAllRank}
       />
       <RankFilterDropdown
         ranks={ranks}
         activeRank={activeRank}
         baseHref={baseHref}
         extraParams={rankExtraParams}
+        emitAllRank={explicitAllRank}
       />
       {regionOptions && activeRegion ? (
         <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />

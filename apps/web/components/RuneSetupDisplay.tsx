@@ -115,7 +115,7 @@ export function RuneSetupDisplay({
   const shards = sortRuneIds(statShards, runeSortById).slice(0, 3);
 
   return (
-    <div className={cn("grid gap-2", className)}>
+    <div className={cn("grid w-full gap-2", className)}>
       <div className={cn("grid grid-cols-2", isCompact ? "gap-2" : "gap-3")}>
         <div className={cn("surface-subtle rounded-control", isCompact ? "p-1.5" : "p-2")}>
           <div className={cn("flex items-center gap-2", isCompact ? "mb-1" : "mb-2")}>

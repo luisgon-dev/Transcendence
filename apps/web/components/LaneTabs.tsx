@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { cn } from "@/lib/cn";
 import { roleDisplayLabel } from "@/lib/roles";
+import { LinkPendingDot } from "@/components/ui/LinkPendingDot";
 
 import { LaneIcon } from "./ui/LaneIcon";
 
@@ -57,7 +58,10 @@ export function LaneTabs({
               role={role}
               className="h-[18px] w-[18px] shrink-0 opacity-80 transition-opacity group-hover:opacity-100"
             />
-            <span className="type-ui font-medium">{roleDisplayLabel(role)}</span>
+            <span className="type-ui inline-flex items-center gap-1.5 font-medium">
+              {roleDisplayLabel(role)}
+              <LinkPendingDot />
+            </span>
           </Link>
         );
       })}

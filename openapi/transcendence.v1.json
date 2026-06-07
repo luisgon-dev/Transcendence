@@ -1916,6 +1916,114 @@
         ]
       }
     },
+    "/api/lol/analytics/champions/{championId}/profile": {
+      "get": {
+        "tags": [
+          "ChampionAnalytics"
+        ],
+        "parameters": [
+          {
+            "name": "championId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rankTier",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "patch",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChampionProfileAnalyticsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChampionProfileAnalyticsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChampionProfileAnalyticsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/lol/analytics/champions/{championId}/winrates": {
       "get": {
         "tags": [
@@ -6371,6 +6479,29 @@
           },
           "sample": {
             "$ref": "#/components/schemas/AnalyticsSampleMetadata"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChampionProfileAnalyticsResponse": {
+        "type": "object",
+        "properties": {
+          "championId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "effectiveRole": {
+            "type": "string",
+            "nullable": true
+          },
+          "winRates": {
+            "$ref": "#/components/schemas/ChampionWinRateSummary"
+          },
+          "builds": {
+            "$ref": "#/components/schemas/ChampionBuildsResponse"
+          },
+          "matchups": {
+            "$ref": "#/components/schemas/ChampionMatchupsResponse"
           }
         },
         "additionalProperties": false

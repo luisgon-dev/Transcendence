@@ -32,8 +32,7 @@ import { deriveTier } from "@/lib/tierlist";
 
 type ChampionWinRateDto = components["schemas"]["ChampionWinRateDto"];
 type ChampionWinRateSummary = components["schemas"]["ChampionWinRateSummary"];
-type ChampionBuildsResponse = components["schemas"]["ChampionBuildsResponse"];
-type ChampionMatchupsResponse = components["schemas"]["ChampionMatchupsResponse"];
+type ChampionProfileAnalyticsResponse = components["schemas"]["ChampionProfileAnalyticsResponse"];
 type MatchupEntryDto = components["schemas"]["MatchupEntryDto"];
 
 const ROLES = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"] as const;
@@ -45,7 +44,7 @@ function matchupVerdict(winRate: number | null | undefined): string {
   return "Even";
 }
 
-function normalizeRole(role: string | undefined) {
+function normalizeRole(role: string | null | undefined) {
   if (!role) return null;
   const upper = role.toUpperCase();
   return ROLES.includes(upper as (typeof ROLES)[number]) ? upper : null;
@@ -108,56 +107,17 @@ export default async function ChampionDetailPage({
   if (normalizedRankTier) winrateQuery.set("rankTier", normalizedRankTier);
   if (activeRegion !== "ALL") winrateQuery.set("region", activeRegion);
   if (selectedPatch) winrateQuery.set("patch", selectedPatch);
-  const qsTier = winrateQuery.toString() ? `?${winrateQuery.toString()}` : "";
+  if (explicitRole) winrateQuery.set("role", explicitRole);
+  const profileQuery = winrateQuery.toString() ? `?${winrateQuery.toString()}` : "";
 
   const verbosity = getErrorVerbosity();
-  const [staticData, itemStatic, runeStatic, patchOptions, winRes] = await Promise.all([
+  const [staticData, itemStatic, runeStatic, patchOptions, profileRes] = await Promise.all([
     fetchChampionMap(),
     fetchItemMap(),
     fetchRunesReforged(),
     fetchLolAnalyticsPatches(),
-    fetchBackendJson<ChampionWinRateSummary>(
-      `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/winrates${qsTier}`,
-      { next: { revalidate: 60 * 60 } }
-    )
-  ]);
-
-  const winrates = winRes.ok ? winRes.body! : null;
-  let fallbackWinrates: ChampionWinRateSummary | null = null;
-
-  if (
-    !explicitRole &&
-    normalizedRankTier &&
-    (!winrates || (winrates.byRoleTier?.length ?? 0) === 0)
-  ) {
-    const fallbackQuery = new URLSearchParams();
-    if (activeRegion !== "ALL") fallbackQuery.set("region", activeRegion);
-    if (selectedPatch) fallbackQuery.set("patch", selectedPatch);
-    const fallbackWinRes = await fetchBackendJson<ChampionWinRateSummary>(
-      `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/winrates${fallbackQuery.toString() ? `?${fallbackQuery.toString()}` : ""}`,
-      { next: { revalidate: 60 * 60 } }
-    );
-    fallbackWinrates = fallbackWinRes.ok ? fallbackWinRes.body! : null;
-  }
-
-  const effectiveRole =
-    explicitRole ??
-    pickMostPlayedRole(winrates) ??
-    pickMostPlayedRole(fallbackWinrates) ??
-    "MIDDLE";
-
-  const buildMatchupQuery = new URLSearchParams({ role: effectiveRole });
-  if (normalizedRankTier) buildMatchupQuery.set("rankTier", normalizedRankTier);
-  if (activeRegion !== "ALL") buildMatchupQuery.set("region", activeRegion);
-  if (selectedPatch) buildMatchupQuery.set("patch", selectedPatch);
-
-  const [buildRes, matchupRes] = await Promise.all([
-    fetchBackendJson<ChampionBuildsResponse>(
-      `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/builds?${buildMatchupQuery.toString()}`,
-      { next: { revalidate: 60 * 60 } }
-    ),
-    fetchBackendJson<ChampionMatchupsResponse>(
-      `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/matchups?${buildMatchupQuery.toString()}`,
+    fetchBackendJson<ChampionProfileAnalyticsResponse>(
+      `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/profile${profileQuery}`,
       { next: { revalidate: 60 * 60 } }
     )
   ]);
@@ -172,9 +132,8 @@ export default async function ChampionDetailPage({
   const styleById = runeStatic.styleById;
   const runeTrees = runeStatic.trees;
 
-  if (!winRes.ok && !buildRes.ok && !matchupRes.ok) {
-    const requestId = winRes.requestId || buildRes.requestId || matchupRes.requestId;
-    const kind = winRes.errorKind ?? buildRes.errorKind ?? matchupRes.errorKind;
+  if (!profileRes.ok) {
+    const kind = profileRes.errorKind;
     return (
       <BackendErrorCard
         title={champName}
@@ -185,14 +144,12 @@ export default async function ChampionDetailPage({
               ? "We couldn't load champion data right now."
               : "We couldn't load champion data."
         }
-        requestId={requestId}
+        requestId={profileRes.requestId}
         detail={
           verbosity === "verbose"
             ? JSON.stringify(
                 {
-                  winrates: { status: winRes.status, errorKind: winRes.errorKind },
-                  builds: { status: buildRes.status, errorKind: buildRes.errorKind },
-                  matchups: { status: matchupRes.status, errorKind: matchupRes.errorKind }
+                  profile: { status: profileRes.status, errorKind: profileRes.errorKind }
                 },
                 null,
                 2
@@ -203,8 +160,11 @@ export default async function ChampionDetailPage({
     );
   }
 
-  const builds = buildRes.ok ? buildRes.body! : null;
-  const matchups = matchupRes.ok ? matchupRes.body! : null;
+  const profile = profileRes.body!;
+  const winrates = profile.winRates ?? null;
+  const builds = profile.builds ?? null;
+  const matchups = profile.matchups ?? null;
+  const effectiveRole = normalizeRole(profile.effectiveRole) ?? explicitRole ?? pickMostPlayedRole(winrates) ?? "MIDDLE";
   const winrateRows = winrates?.byRoleTier ?? [];
   const buildRows = builds?.builds ?? [];
   const globalCoreItems = builds?.globalCoreItems ?? [];

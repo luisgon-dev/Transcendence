@@ -13,6 +13,7 @@ import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { formatDateTimeMs, formatGames, formatRelativeTime } from "@/lib/format";
+import { buildProBuildPageHref } from "@/lib/proBuilds";
 import { encodeRiotIdPath } from "@/lib/riotid";
 import { championIconUrl, fetchChampionMap, fetchItemMap, itemIconUrl } from "@/lib/staticData";
 import { normalizeTierListEntries } from "@/lib/tierlist";
@@ -328,7 +329,11 @@ export default async function ProBuildsIndexPage({
                       <td className="type-tabular py-2.5 pl-5 pr-3 tabular-nums text-muted">{idx + 1}</td>
                       <td className="py-2.5 pr-4">
                         <Link
-                          href={`/lol/champions/${championId}${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
+                          href={buildProBuildPageHref(championId, {
+                            role: "ALL",
+                            region: activeRegion,
+                            patch: null
+                          })}
                           className="flex min-w-0 items-center gap-2.5 hover:underline"
                         >
                           <Image
@@ -435,7 +440,11 @@ export default async function ProBuildsIndexPage({
             championsToShow.map((champion) => (
               <Link
                 key={champion.championId}
-                href={`/lol/pro-builds/${champion.championId}${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
+                href={buildProBuildPageHref(champion.championId, {
+                  role: "ALL",
+                  region: activeRegion,
+                  patch: null
+                })}
                 className="surface-subtle rounded-card p-3 transition hover:bg-surface-2/72"
               >
                 <div className="flex items-center gap-2.5">
@@ -487,7 +496,11 @@ export default async function ProBuildsIndexPage({
               return (
                 <li key={`${entry.match.matchId ?? "match"}-${entry.championId}-${idx}`}>
                   <Link
-                    href={`/lol/pro-builds/${entry.championId}`}
+                    href={buildProBuildPageHref(entry.championId, {
+                      role: "ALL",
+                      region: activeRegion,
+                      patch: null
+                    })}
                     className="block border-b border-border/20 px-4 py-3 transition hover:bg-surface-2/40"
                   >
                     <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">

@@ -122,6 +122,7 @@ Example (`SummonerAcceptedResponse`):
 - `GET /api/lol/analytics/status`
 - `GET /api/lol/analytics/patches`
 - `GET /api/lol/analytics/champions/{championId}/winrates`
+- `GET /api/lol/analytics/champions/{championId}/profile`
 - `GET /api/lol/analytics/champions/{championId}/builds`
 - `GET /api/lol/analytics/champions/{championId}/pro-builds`
 - `GET /api/lol/analytics/champions/{championId}/matchups`
@@ -177,6 +178,12 @@ Early-patch semantics:
 - `primaryRunes` (4), `subRunes` (2), `statShards` (3)
 - Build item lists include only completed, build-impact items (no components, trinkets, wards, or consumables).
 - If patch item metadata is temporarily incomplete, the service uses a legacy exclusion fallback so builds still render while metadata refresh catches up.
+
+`GET /api/lol/analytics/champions/{championId}/profile` returns the champion detail payload in one request:
+- Query filters: `role`, `rankTier`, `region`, `patch`
+- Response: `{ championId, effectiveRole, winRates, builds, matchups }`
+- The endpoint reuses the cached winrate, build, and matchup aggregates. When `role` is omitted, it chooses the most-played role from winrates; if a scoped rank filter has no winrate rows, it uses all-rank winrates only to choose the role while keeping the requested rank filter for build and matchup data.
+- The build and matchup reads run in separate backend scopes so their cached aggregate reads can execute concurrently without sharing an EF `DbContext`.
 
 Additional analytics fields:
 - Tier list and champion winrate surfaces now include `banRate` (ranked solo queue denominator).

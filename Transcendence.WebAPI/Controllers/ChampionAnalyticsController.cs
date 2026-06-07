@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.DependencyInjection;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.WebAPI.Security;
@@ -11,8 +12,92 @@ namespace Transcendence.WebAPI.Controllers;
 [Route("api/lol/analytics/champions")]
 [EnableRateLimiting("expensive-read")]
 [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
-public class ChampionAnalyticsController(IChampionAnalyticsService analyticsService) : ControllerBase
+public class ChampionAnalyticsController(
+    IChampionAnalyticsService analyticsService,
+    IServiceScopeFactory? serviceScopeFactory) : ControllerBase
 {
+    private static readonly HashSet<string> ValidRoles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "BOTTOM",
+        "UTILITY"
+    };
+
+    /// <summary>
+    /// Get the champion detail page payload in one request.
+    /// Reuses the cached winrate/build/matchup aggregates and parallelizes the role-scoped reads.
+    /// </summary>
+    [HttpGet("{championId}/profile")]
+    [ProducesResponseType(typeof(ChampionProfileAnalyticsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ChampionProfileAnalyticsResponse>> GetProfile(
+        [FromRoute] int championId,
+        [FromQuery] string? role = null,
+        [FromQuery] string? rankTier = null,
+        [FromQuery] string? region = null,
+        [FromQuery] string? patch = null,
+        CancellationToken ct = default)
+    {
+        if (championId <= 0)
+            return BadRequest("Invalid champion ID. Must be positive integer.");
+
+        var normalizedRole = NormalizeRole(role);
+        if (!string.IsNullOrWhiteSpace(role) && normalizedRole == null)
+            return BadRequest("Invalid role. Expected TOP, JUNGLE, MIDDLE, BOTTOM, or UTILITY.");
+
+        var winRates = await analyticsService.GetWinRatesAsync(
+            championId,
+            new ChampionAnalyticsFilter(
+                RankTier: rankTier,
+                Region: region,
+                Patch: patch),
+            ct);
+
+        ChampionWinRateSummary? fallbackWinRates = null;
+        if (normalizedRole == null && ShouldUseAllRankFallback(rankTier) && winRates.ByRoleTier.Count == 0)
+        {
+            fallbackWinRates = await analyticsService.GetWinRatesAsync(
+                championId,
+                new ChampionAnalyticsFilter(
+                    Region: region,
+                    Patch: patch),
+                ct);
+        }
+
+        var effectiveRole = normalizedRole
+                            ?? PickMostPlayedRole(winRates)
+                            ?? PickMostPlayedRole(fallbackWinRates)
+                            ?? "MIDDLE";
+
+        ChampionBuildsResponse builds;
+        ChampionMatchupsResponse matchups;
+        if (serviceScopeFactory == null)
+        {
+            builds = await analyticsService.GetBuildsAsync(championId, effectiveRole, rankTier, region, patch, ct);
+            matchups = await analyticsService.GetMatchupsAsync(championId, effectiveRole, rankTier, region, patch, ct);
+        }
+        else
+        {
+            var buildsTask = RunInAnalyticsScopeAsync(
+                scoped => scoped.GetBuildsAsync(championId, effectiveRole, rankTier, region, patch, ct));
+            var matchupsTask = RunInAnalyticsScopeAsync(
+                scoped => scoped.GetMatchupsAsync(championId, effectiveRole, rankTier, region, patch, ct));
+
+            await Task.WhenAll(buildsTask, matchupsTask);
+            builds = await buildsTask;
+            matchups = await matchupsTask;
+        }
+
+        return Ok(new ChampionProfileAnalyticsResponse(
+            championId,
+            effectiveRole,
+            winRates,
+            builds,
+            matchups));
+    }
+
     /// <summary>
     /// Get champion win rates by role and rank tier.
     /// Uses adaptive sample thresholds to remain useful during early patch windows.
@@ -136,5 +221,53 @@ public class ChampionAnalyticsController(IChampionAnalyticsService analyticsServ
     {
         await analyticsService.InvalidateAnalyticsCacheAsync(ct);
         return Ok(new { message = "Analytics cache invalidated successfully" });
+    }
+
+    private async Task<T> RunInAnalyticsScopeAsync<T>(Func<IChampionAnalyticsService, Task<T>> action)
+    {
+        using var scope = serviceScopeFactory!.CreateScope();
+        var scopedAnalyticsService = scope.ServiceProvider.GetRequiredService<IChampionAnalyticsService>();
+        return await action(scopedAnalyticsService);
+    }
+
+    private static string? NormalizeRole(string? role)
+    {
+        if (string.IsNullOrWhiteSpace(role))
+            return null;
+
+        var normalized = role.Trim().ToUpperInvariant();
+        return ValidRoles.Contains(normalized) ? normalized : null;
+    }
+
+    private static bool ShouldUseAllRankFallback(string? rankTier)
+    {
+        if (string.IsNullOrWhiteSpace(rankTier))
+            return false;
+
+        return !string.Equals(rankTier.Trim(), "all", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? PickMostPlayedRole(ChampionWinRateSummary? summary)
+    {
+        if (summary?.ByRoleTier.Count is null or 0)
+            return null;
+
+        return summary.ByRoleTier
+            .Where(row => !string.IsNullOrWhiteSpace(row.Role))
+            .Select(row => new
+            {
+                Role = NormalizeRole(row.Role),
+                row.Games
+            })
+            .Where(row => row.Role != null)
+            .GroupBy(row => row.Role!)
+            .Select(group => new
+            {
+                Role = group.Key,
+                Games = group.Sum(row => Math.Max(0, row.Games))
+            })
+            .OrderByDescending(row => row.Games)
+            .Select(row => row.Role)
+            .FirstOrDefault();
     }
 }

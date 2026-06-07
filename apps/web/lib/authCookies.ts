@@ -2,9 +2,21 @@ import { cookies } from "next/headers";
 
 import type { components } from "@transcendence/api-client";
 
-export const ACCESS_TOKEN_COOKIE = "trn_access_token";
-export const REFRESH_TOKEN_COOKIE = "trn_refresh_token";
-export const ACCESS_EXPIRES_AT_COOKIE = "trn_access_expires_at";
+import {
+  ACCESS_EXPIRES_AT_COOKIE,
+  ACCESS_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE,
+  shouldRefreshAccessToken
+} from "@/lib/authCookieShared";
+
+// Re-exported so existing callers that import these from "@/lib/authCookies" keep working.
+// The source of truth is authCookieShared (middleware-safe, no next/headers).
+export {
+  ACCESS_EXPIRES_AT_COOKIE,
+  ACCESS_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE,
+  shouldRefreshAccessToken
+};
 
 export type AuthTokenResponse = components["schemas"]["AuthTokenResponse"];
 
@@ -90,11 +102,4 @@ export async function clearAuthCookies() {
     if (!isReadonlyCookieStoreError(error)) throw error;
     // Render context — nothing to persist; cookies are cleared on the next action/route handler.
   }
-}
-
-export function shouldRefreshAccessToken(accessExpiresAtUtc: string | null) {
-  if (!accessExpiresAtUtc) return true;
-  const exp = new Date(accessExpiresAtUtc).getTime();
-  if (!Number.isFinite(exp)) return true;
-  return exp - Date.now() < 60_000;
 }

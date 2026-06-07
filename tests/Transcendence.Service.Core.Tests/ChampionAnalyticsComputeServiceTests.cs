@@ -138,6 +138,72 @@ public class ChampionAnalyticsComputeServiceTests
         all.Champions[0].ChampionId.Should().Be(266); // most games first
     }
 
+    [Fact]
+    public async Task ComputeProBuildsAsync_HonorsRosterScope()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<TranscendenceContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var db = new SqliteCompatibleTranscendenceContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        db.Patches.Add(new Patch
+        {
+            Version = "15.2",
+            ReleaseDate = DateTime.UtcNow.AddDays(-2),
+            DetectedAt = DateTime.UtcNow.AddDays(-2),
+            IsActive = true
+        });
+
+        db.TrackedProSummoners.Add(new TrackedProSummoner
+        {
+            Id = Guid.NewGuid(),
+            Puuid = "pro-puuid",
+            PlatformRegion = "NA1",
+            ProName = "Pro",
+            TeamName = "Team",
+            IsPro = true,
+            IsHighEloOtp = false,
+            IsActive = true
+        });
+        db.TrackedProSummoners.Add(new TrackedProSummoner
+        {
+            Id = Guid.NewGuid(),
+            Puuid = "otp-puuid",
+            PlatformRegion = "NA1",
+            IsPro = false,
+            IsHighEloOtp = true,
+            IsActive = true
+        });
+
+        var pro = SeedProSummoner(db, "pro-puuid", "Pro");
+        var otp = SeedProSummoner(db, "otp-puuid", "Otp");
+        SeedParticipantMatch(db, "15.2", "NA1_1", pro, championId: 266, role: "TOP", win: true);
+        SeedParticipantMatch(db, "15.2", "NA1_2", otp, championId: 266, role: "TOP", win: true);
+        await db.SaveChangesAsync();
+
+        var service = CreateComputeService(db);
+
+        var proOnly = await service.ComputeProBuildsAsync(266, null, "TOP", "pro", "15.2", CancellationToken.None);
+        proOnly.Scope.Should().Be("pro");
+        proOnly.RecentProMatches.Should().ContainSingle();
+        proOnly.TopPlayers.Should().ContainSingle(p => p.PlayerName == "Pro");
+
+        var highEloOnly = await service.ComputeProBuildsAsync(266, null, "TOP", "highelo", "15.2", CancellationToken.None);
+        highEloOnly.Scope.Should().Be("highelo");
+        highEloOnly.RecentProMatches.Should().ContainSingle();
+        highEloOnly.TopPlayers.Should().ContainSingle(p => p.PlayerName == "Otp#NA1");
+
+        var all = await service.ComputeProBuildsAsync(266, null, "TOP", "all", "15.2", CancellationToken.None);
+        all.Scope.Should().Be("all");
+        all.RecentProMatches.Should().HaveCount(2);
+        all.TopPlayers.Select(p => p.PlayerName).Should().BeEquivalentTo(new[] { "Pro", "Otp#NA1" });
+    }
+
     private static ChampionAnalyticsComputeService CreateComputeService(TranscendenceContext db) =>
         new(
             db,

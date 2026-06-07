@@ -4,7 +4,8 @@ import {
   buildProBuildFilterParams,
   buildProBuildPageHref,
   normalizeProBuildPatch,
-  normalizeProBuildRole
+  normalizeProBuildRole,
+  normalizeProBuildScope
 } from "@/lib/proBuilds";
 
 describe("normalizeProBuildRole", () => {
@@ -30,6 +31,18 @@ describe("normalizeProBuildPatch", () => {
   });
 });
 
+describe("normalizeProBuildScope", () => {
+  it("normalizes valid scope values", () => {
+    expect(normalizeProBuildScope("PRO")).toBe("pro");
+    expect(normalizeProBuildScope(" highelo ")).toBe("highelo");
+  });
+
+  it("falls back to all for invalid or missing values", () => {
+    expect(normalizeProBuildScope(undefined)).toBe("all");
+    expect(normalizeProBuildScope("pros")).toBe("all");
+  });
+});
+
 describe("buildProBuildFilterParams", () => {
   it("only includes non-default filters", () => {
     const params = buildProBuildFilterParams({
@@ -45,18 +58,19 @@ describe("buildProBuildFilterParams", () => {
     const params = buildProBuildFilterParams({
       role: "MIDDLE",
       region: "KR",
+      scope: "pro",
       patch: "14.5"
     });
 
-    expect(params.toString()).toBe("role=MIDDLE&region=KR&patch=14.5");
+    expect(params.toString()).toBe("role=MIDDLE&region=KR&scope=pro&patch=14.5");
   });
 });
 
 describe("buildProBuildPageHref", () => {
   it("builds href with filters", () => {
     expect(
-      buildProBuildPageHref(222, { role: "MIDDLE", region: "KR", patch: "14.5" })
-    ).toBe("/lol/pro-builds/222?role=MIDDLE&region=KR&patch=14.5");
+      buildProBuildPageHref(222, { role: "MIDDLE", region: "KR", scope: "highelo", patch: "14.5" })
+    ).toBe("/lol/pro-builds/222?role=MIDDLE&region=KR&scope=highelo&patch=14.5");
   });
 
   it("omits query string when all filters are default", () => {

@@ -116,6 +116,7 @@ function AddSummonerForm() {
               </option>
             ))}
           </select>
+          <Input name="puuid" placeholder="PUUID (optional)" />
           <Input name="proName" placeholder="Pro Name" />
           <Input name="teamName" placeholder="Team Name" />
         </div>
@@ -167,8 +168,8 @@ function CsvImportForm() {
     <div className="page-panel p-4">
       <h3 className="mb-3 text-sm font-semibold">CSV Import</h3>
       <p className="mb-2 text-xs text-fg/60">
-        Required columns: gameName, tagLine, platformRegion. Optional: proName,
-        teamName, type (pro|otp, defaults to pro)
+        Required columns: gameName, tagLine, platformRegion. Optional: puuid,
+        proName, teamName, type (pro|otp, defaults to pro)
       </p>
       <form ref={formRef} action={handleSubmit} className="flex items-center gap-3">
         <input

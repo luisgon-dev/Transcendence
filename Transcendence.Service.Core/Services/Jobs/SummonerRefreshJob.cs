@@ -357,47 +357,20 @@ public class SummonerRefreshJob(
             }
 
             var matchesToPersist = new List<DataMatch>(pendingIds.Count);
-            var fetchConcurrency = Math.Max(1, ingestionOptions.Value.MatchFetchConcurrency);
-            // Fetch match details in bounded-parallel chunks. Camille's per-region limiter still
-            // governs the actual request rate; this just stops the app from serializing below it.
-            // shouldStop is re-checked between chunks so high-priority demand still preempts.
-            for (var offset = 0; offset < pendingIds.Count; offset += fetchConcurrency)
+            // Keep match preparation sequential. IMatchService builds EF entity graphs with this
+            // job's scoped DbContext; parallel calls would share that context and EF contexts are
+            // not thread-safe.
+            foreach (var matchId in pendingIds)
             {
                 ct.ThrowIfCancellationRequested();
                 if (shouldStop != null && await shouldStop())
                     break;
 
-                var chunk = pendingIds.Skip(offset).Take(fetchConcurrency).ToList();
-                var fetched = await Task.WhenAll(chunk.Select(async matchId =>
+                try
                 {
-                    try
-                    {
-                        var match = lightweight
-                            ? await matchService.GetMatchDetailsLightweightAsync(matchId, regional, platformRoute, ct)
-                            : await matchService.GetMatchDetailsAsync(matchId, regional, platformRoute, ct);
-                        return (matchId, match, error: (Exception?)null);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        throw;
-                    }
-                    catch (Exception ex)
-                    {
-                        return (matchId, match: (DataMatch?)null, error: (Exception?)ex);
-                    }
-                }));
-
-                foreach (var (matchId, match, error) in fetched)
-                {
-                    if (error != null)
-                    {
-                        fetchExceptionCount++;
-                        firstFetchException ??= error;
-                        AddSample(fetchFailureSamples, matchId);
-                        logger.LogDebug(error, "[Refresh] Error fetching match {MatchId} for {GameName}#{Tag}",
-                            matchId, gameName, tagLine);
-                        continue;
-                    }
+                    var match = lightweight
+                        ? await matchService.GetMatchDetailsLightweightAsync(matchId, regional, platformRoute, ct)
+                        : await matchService.GetMatchDetailsAsync(matchId, regional, platformRoute, ct);
 
                     if (match == null)
                     {
@@ -418,6 +391,18 @@ public class SummonerRefreshJob(
                         continue;
 
                     matchesToPersist.Add(match);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    fetchExceptionCount++;
+                    firstFetchException ??= ex;
+                    AddSample(fetchFailureSamples, matchId);
+                    logger.LogDebug(ex, "[Refresh] Error fetching match {MatchId} for {GameName}#{Tag}",
+                        matchId, gameName, tagLine);
                 }
             }
 

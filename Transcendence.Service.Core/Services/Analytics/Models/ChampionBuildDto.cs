@@ -62,6 +62,7 @@ public record ChampionProBuildsResponse(
     string Patch,
     string Role,
     string Region,
+    string Scope,
     List<ProMatchBuildDto> RecentProMatches,
     List<ProPlayerSummaryDto> TopPlayers,
     List<CommonProBuildDto> CommonBuilds,

@@ -164,7 +164,7 @@ public class ChampionAnalyticsController(
 
     /// <summary>
     /// Get pro/high-ELO builds for a champion.
-    /// Region defaults to ALL. Role and patch are optional.
+    /// Region defaults to ALL. Role, scope, and patch are optional.
     /// </summary>
     [HttpGet("{championId}/pro-builds")]
     [ProducesResponseType(typeof(ChampionProBuildsResponse), StatusCodes.Status200OK)]
@@ -173,13 +173,14 @@ public class ChampionAnalyticsController(
         int championId,
         [FromQuery] string? region = null,
         [FromQuery] string? role = null,
+        [FromQuery] string? scope = null,
         [FromQuery] string? patch = null,
         CancellationToken ct = default)
     {
         if (championId <= 0)
             return BadRequest("Invalid champion ID. Must be positive integer.");
 
-        var result = await analyticsService.GetProBuildsAsync(championId, region, role, patch, ct);
+        var result = await analyticsService.GetProBuildsAsync(championId, region, role, scope, patch, ct);
         return Ok(result);
     }
 

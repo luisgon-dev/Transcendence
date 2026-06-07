@@ -277,9 +277,9 @@ detail is archived off-box and pruned to keep the database from growing unbounde
 ### Pro Roster and Pro Builds
 
 - Tracked pro/high-ELO roster entries are stored in `TrackedProSummoners` with optional pro/team metadata.
-- The same roster table is also used as a high-value analytics seed source. Automated high-elo refresh writes active roster rows with `IsPro=false`; pro-build analytics explicitly filter to `IsPro=true`.
+- The same roster table is also used as a high-value analytics seed source. Automated high-elo refresh writes active roster rows with `IsPro=false`; pro-build analytics can select `pro`, `highelo`, or `all` roster scope.
 - Admin API (`/api/admin/pro-summoners`) allows manual curation and updates.
-- Champion pro-build analytics joins tracked roster participants against ranked solo/duo match data for:
+- Champion pro-build analytics joins tracked roster participants against ranked solo/duo match data using the selected roster scope for:
   - recent pro matches
   - top players
   - common builds

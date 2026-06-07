@@ -738,15 +738,24 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         int championId,
         string? region,
         string? role,
+        string scope,
         string patch,
         CancellationToken ct)
     {
         var normalizedRegion = string.IsNullOrWhiteSpace(region) ? "ALL" : region.Trim().ToUpperInvariant();
         var normalizedRole = string.IsNullOrWhiteSpace(role) ? "ALL" : role.Trim().ToUpperInvariant();
+        var normalizedScope = NormalizeProScope(scope);
 
         var proQuery = _context.TrackedProSummoners
             .AsNoTracking()
-            .Where(x => x.IsActive && x.IsPro);
+            .Where(x => x.IsActive);
+
+        proQuery = normalizedScope switch
+        {
+            "highelo" => proQuery.Where(x => x.IsHighEloOtp),
+            "all" => proQuery.Where(x => x.IsPro || x.IsHighEloOtp),
+            _ => proQuery.Where(x => x.IsPro)
+        };
 
         if (!string.Equals(normalizedRegion, "ALL", StringComparison.Ordinal))
         {
@@ -773,7 +782,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             .ToList();
 
         if (trackedPuuids.Count == 0)
-            return new ChampionProBuildsResponse(championId, patch, normalizedRole, normalizedRegion, [], [], []);
+            return new ChampionProBuildsResponse(championId, patch, normalizedRole, normalizedRegion, normalizedScope, [], [], []);
 
         var participantQuery = _context.MatchParticipants
             .AsNoTracking()
@@ -811,7 +820,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             .ToListAsync(ct);
 
         if (rows.Count == 0)
-            return new ChampionProBuildsResponse(championId, patch, normalizedRole, normalizedRegion, [], [], []);
+            return new ChampionProBuildsResponse(championId, patch, normalizedRole, normalizedRegion, normalizedScope, [], [], []);
 
         var rosterByPuuid = proRoster
             .GroupBy(x => x.Puuid, StringComparer.Ordinal)
@@ -896,6 +905,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             patch,
             normalizedRole,
             normalizedRegion,
+            normalizedScope,
             recentMatches,
             topPlayers,
             commonBuilds);

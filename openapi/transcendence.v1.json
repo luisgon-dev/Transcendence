@@ -2270,6 +2270,13 @@
             }
           },
           {
+            "name": "scope",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "patch",
             "in": "query",
             "schema": {
@@ -6453,6 +6460,10 @@
             "nullable": true
           },
           "region": {
+            "type": "string",
+            "nullable": true
+          },
+          "scope": {
             "type": "string",
             "nullable": true
           },

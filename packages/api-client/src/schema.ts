@@ -1998,6 +1998,7 @@ export interface paths {
                 query?: {
                     region?: string;
                     role?: string;
+                    scope?: string;
                     patch?: string;
                 };
                 header?: never;
@@ -4728,6 +4729,7 @@ export interface components {
             patch?: string | null;
             role?: string | null;
             region?: string | null;
+            scope?: string | null;
             recentProMatches?: components["schemas"]["ProMatchBuildDto"][] | null;
             topPlayers?: components["schemas"]["ProPlayerSummaryDto"][] | null;
             commonBuilds?: components["schemas"]["CommonProBuildDto"][] | null;

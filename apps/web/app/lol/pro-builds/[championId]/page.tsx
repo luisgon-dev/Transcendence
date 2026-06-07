@@ -21,7 +21,9 @@ import {
   buildProBuildFilterParams,
   buildProBuildPageHref,
   normalizeProBuildPatch,
-  normalizeProBuildRole
+  normalizeProBuildRole,
+  normalizeProBuildScope,
+  type ProBuildScope
 } from "@/lib/proBuilds";
 import { LANE_ROLES, roleDisplayLabel } from "@/lib/roles";
 import {
@@ -34,6 +36,18 @@ import {
 
 type ChampionWinRateSummary = components["schemas"]["ChampionWinRateSummary"];
 type ChampionProBuildsResponse = components["schemas"]["ChampionProBuildsResponse"];
+
+const SCOPE_OPTIONS: readonly { value: ProBuildScope; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "pro", label: "Pros" },
+  { value: "highelo", label: "High-Elo" }
+];
+
+const SCOPE_LABEL: Record<ProBuildScope, string> = {
+  all: "Pro & High-Elo",
+  pro: "Pros",
+  highelo: "High-Elo"
+};
 
 function proFeedErrorMessage(result: BackendJsonResult<ChampionProBuildsResponse>) {
   if (result.errorKind === "timeout") return "This page is taking too long to load.";
@@ -83,7 +97,7 @@ export default async function ProBuildsChampionPage({
   searchParams
 }: {
   params: Promise<{ championId: string }>;
-  searchParams?: Promise<{ role?: string; region?: string; patch?: string }>;
+  searchParams?: Promise<{ role?: string; region?: string; scope?: string; patch?: string }>;
 }) {
   const resolvedParams = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
@@ -97,11 +111,13 @@ export default async function ProBuildsChampionPage({
 
   const roleFilter = normalizeProBuildRole(resolvedSearchParams?.role);
   const regionFilter = activeRegion;
+  const scopeFilter = normalizeProBuildScope(resolvedSearchParams?.scope);
   const patchFilter = normalizeProBuildPatch(resolvedSearchParams?.patch);
 
   const proFilters = buildProBuildFilterParams({
     role: roleFilter,
     region: regionFilter,
+    scope: scopeFilter,
     patch: patchFilter
   });
   const proFilterQuery = proFilters.toString();
@@ -167,11 +183,13 @@ export default async function ProBuildsChampionPage({
   const commonBuilds = proBuilds?.commonBuilds ?? [];
   const roleExtraParams: Record<string, string> = {};
   if (regionFilter !== "ALL") roleExtraParams.region = regionFilter;
+  if (scopeFilter !== "all") roleExtraParams.scope = scopeFilter;
   if (patchFilter) roleExtraParams.patch = patchFilter;
 
   const effectivePatch =
     proBuilds?.patch ?? winrates?.patch ?? patchFilter ?? "Unknown";
   const effectiveRole = proBuilds?.role ?? roleFilter;
+  const effectiveScope = normalizeProBuildScope(proBuilds?.scope ?? scopeFilter);
   const sampleNotice = pickMostSevereAnalyticsSample(
     (proBuilds as { sample?: unknown } | null)?.sample as AnalyticsSampleLike,
     (winrates as { sample?: unknown } | null)?.sample as AnalyticsSampleLike
@@ -200,6 +218,7 @@ export default async function ProBuildsChampionPage({
             Patch {effectivePatch}
           </Badge>
           <Badge>{roleDisplayLabel(effectiveRole)}</Badge>
+          <Badge>{SCOPE_LABEL[effectiveScope]}</Badge>
           <Badge>{activeRegionLabel}</Badge>
           <Badge>{recentMatches.length} matches</Badge>
         </div>
@@ -218,12 +237,31 @@ export default async function ProBuildsChampionPage({
             extraParams={roleExtraParams}
           />
           <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />
+          <div role="group" aria-label="Pro pool scope" className="flex flex-wrap gap-x-3 gap-y-3 sm:gap-x-4 sm:gap-y-2">
+            {SCOPE_OPTIONS.map((option) => (
+              <Link
+                key={option.value}
+                href={buildProBuildPageHref(championId, {
+                  role: roleFilter,
+                  region: regionFilter,
+                  scope: option.value,
+                  patch: patchFilter
+                })}
+                className="control-tab type-ui min-h-11 px-3.5 py-2"
+                data-active={option.value === scopeFilter}
+                aria-current={option.value === scopeFilter ? "page" : undefined}
+              >
+                {option.label}
+              </Link>
+            ))}
+          </div>
           <AnalyticsPatchFilter patches={patchOptions} activePatch={patchFilter} />
           {patchFilter ? (
             <Link
               href={buildProBuildPageHref(championId, {
                 role: roleFilter,
                 region: regionFilter,
+                scope: scopeFilter,
                 patch: null
               })}
               className="control-tab type-ui h-9 px-3"

@@ -197,6 +197,9 @@ Admin diagnostics include:
 - `/admin/audit` for the admin audit log
 - `/admin/api-keys` for AppOnly API key management (list/rotate/revoke)
 - `/admin/pro-summoners` for pro/tracked-roster curation
+
+The pro-summoner CSV importer accepts required `gameName`, `tagLine`, and `platformRegion` columns plus optional `puuid`, `proName`, `teamName`, and `type`. A sourced starter import is available at `docs/seeds/probuild-pro-roster-2026-06-07.csv`.
+
 `/api/auth/logout` revokes the active refresh token server-side and the web logout flow calls it before clearing cookies.
 WebAPI now defaults `Microsoft.EntityFrameworkCore.Database.Command` to `Warning` so operational logs are not dominated by insert/update chatter.
 
@@ -370,6 +373,8 @@ When defer age breaches the threshold, producers open a forced catch-up window a
 - `LowPriorityNonRankedBackfillMaxPages`
 
 High-priority user refresh always executes ranked head sync first, then all-mode sync/backfill. Low-priority ingestion preserves ranked-first behavior and can be preempted by active API-priority refresh demand.
+
+Match-detail preparation is intentionally sequential inside each refresh job because the match service builds EF entity graphs using the job-scoped `DbContext`.
 
 Non-ranked backfill ordering is tracked per summoner with `SummonerIngestionCursors` to ensure monotonic progress across repeated low-priority runs.
 

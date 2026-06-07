@@ -197,9 +197,11 @@ Additional analytics fields:
 `GET /api/lol/analytics/champions/{championId}/pro-builds` supports optional filters:
 - `region` (`ALL` or supported platform-region token such as `NA1|EUW1|EUN1|KR`)
 - `role`
+- `scope`: `pro` (official pros, `IsPro`), `highelo` (auto-discovered Challenger/GM/Master one-tricks, `IsHighEloOtp`), or `all` (either). Defaults to `all`.
 - `patch`
 
 Response includes:
+- `scope`
 - `recentProMatches[]`
 - `topPlayers[]`
 - `commonBuilds[]`

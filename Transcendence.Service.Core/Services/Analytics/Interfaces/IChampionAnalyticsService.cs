@@ -44,6 +44,7 @@ public interface IChampionAnalyticsService
         int championId,
         string? region,
         string? role,
+        string? scope,
         string? patch,
         CancellationToken ct);
 

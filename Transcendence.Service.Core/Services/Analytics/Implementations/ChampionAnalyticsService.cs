@@ -202,6 +202,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         int championId,
         string? region,
         string? role,
+        string? scope,
         string? patch,
         CancellationToken ct)
     {
@@ -209,6 +210,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         var resolvedPatch = patchContext.Patch;
         var normalizedRole = string.IsNullOrWhiteSpace(role) ? "ALL" : role.Trim().ToUpperInvariant();
         var normalizedRegion = string.IsNullOrWhiteSpace(region) ? "ALL" : region.Trim().ToUpperInvariant();
+        var normalizedScope = ChampionAnalyticsComputeService.NormalizeProScope(scope);
 
         if (string.IsNullOrWhiteSpace(resolvedPatch))
             return new ChampionProBuildsResponse(
@@ -216,12 +218,13 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
                 "Unknown",
                 normalizedRole,
                 normalizedRegion,
+                normalizedScope,
                 [],
                 [],
                 [],
                 BuildSampleMetadata(0, patchContext));
 
-        var cacheKey = $"{ProBuildsCacheKeyPrefix}{championId}:{normalizedRegion}:{normalizedRole}:{resolvedPatch}";
+        var cacheKey = $"{ProBuildsCacheKeyPrefix}{championId}:{normalizedRegion}:{normalizedRole}:{normalizedScope}:{resolvedPatch}";
         var tags = new[] { AnalyticsCacheTag, $"patch:{resolvedPatch}", "probuilds" };
 
         var response = await _cache.GetOrCreateAsync(
@@ -230,6 +233,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
                 championId,
                 normalizedRegion,
                 normalizedRole,
+                normalizedScope,
                 resolvedPatch,
                 cancel),
             AnalyticsCacheOptions,

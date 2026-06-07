@@ -9,10 +9,20 @@ export const PRO_BUILD_ROLES = [
 
 export type ProBuildRole = (typeof PRO_BUILD_ROLES)[number];
 
+export const PRO_BUILD_SCOPES = ["all", "pro", "highelo"] as const;
+
+export type ProBuildScope = (typeof PRO_BUILD_SCOPES)[number];
+
 export function normalizeProBuildRole(role: string | undefined | null): ProBuildRole {
   if (!role) return "ALL";
   const upper = role.trim().toUpperCase();
   return PRO_BUILD_ROLES.includes(upper as ProBuildRole) ? (upper as ProBuildRole) : "ALL";
+}
+
+export function normalizeProBuildScope(scope: string | undefined | null): ProBuildScope {
+  if (!scope) return "all";
+  const normalized = scope.trim().toLowerCase();
+  return PRO_BUILD_SCOPES.includes(normalized as ProBuildScope) ? (normalized as ProBuildScope) : "all";
 }
 
 export function normalizeProBuildPatch(patch: string | undefined | null): string | null {
@@ -24,15 +34,18 @@ export function normalizeProBuildPatch(patch: string | undefined | null): string
 export function buildProBuildFilterParams({
   role,
   region,
+  scope,
   patch
 }: {
   role: ProBuildRole;
   region: string;
+  scope?: ProBuildScope;
   patch: string | null;
 }): URLSearchParams {
   const params = new URLSearchParams();
   if (role !== "ALL") params.set("role", role);
   if (region !== "ALL") params.set("region", region);
+  if (scope && scope !== "all") params.set("scope", scope);
   if (patch) params.set("patch", patch);
   return params;
 }
@@ -42,6 +55,7 @@ export function buildProBuildPageHref(
   filters: {
     role: ProBuildRole;
     region: string;
+    scope?: ProBuildScope;
     patch: string | null;
   }
 ): string {

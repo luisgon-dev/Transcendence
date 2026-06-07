@@ -13,7 +13,7 @@ import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { formatDateTimeMs, formatGames, formatRelativeTime } from "@/lib/format";
-import { buildProBuildPageHref } from "@/lib/proBuilds";
+import { buildProBuildPageHref, normalizeProBuildScope, type ProBuildScope } from "@/lib/proBuilds";
 import { encodeRiotIdPath } from "@/lib/riotid";
 import { championIconUrl, fetchChampionMap, fetchItemMap, itemIconUrl } from "@/lib/staticData";
 import { normalizeTierListEntries } from "@/lib/tierlist";
@@ -24,32 +24,25 @@ type ProMatchBuildDto = components["schemas"]["ProMatchBuildDto"];
 type ProChampionPlayrateResponse = components["schemas"]["ProChampionPlayrateResponse"];
 type ProRosterResponse = components["schemas"]["ProRosterResponse"];
 
-type ProScope = "all" | "pro" | "highelo";
-
 const SCOPE_OPTIONS = [
   { value: "all", label: "All" },
   { value: "pro", label: "Pros" },
   { value: "highelo", label: "High-Elo" }
 ] as const;
 
-const SCOPE_TITLE: Record<ProScope, string> = {
+const SCOPE_TITLE: Record<ProBuildScope, string> = {
   all: "Pro & High-Elo",
   pro: "Pro",
   highelo: "High-Elo"
 };
 
-const SCOPE_NOUN: Record<ProScope, string> = {
+const SCOPE_NOUN: Record<ProBuildScope, string> = {
   all: "pros and high-elo one-tricks",
   pro: "pro players",
   highelo: "high-elo one-tricks"
 };
 
 const MAX_PLAYRATE_ROWS = 30;
-
-function normalizeProScope(value: string | undefined): ProScope {
-  const lower = (value ?? "all").toLowerCase();
-  return lower === "pro" || lower === "highelo" ? lower : "all";
-}
 
 function buildProHomeHref({
   scope,
@@ -131,7 +124,7 @@ export default async function ProBuildsIndexPage({
     resolvedSearchParams?.region
   );
   const championQuery = normalizeChampionQuery(resolvedSearchParams?.q);
-  const scope = normalizeProScope(resolvedSearchParams?.scope);
+  const scope = normalizeProBuildScope(resolvedSearchParams?.scope);
   const tierListQuery = new URLSearchParams();
   if (activeRegion !== "ALL") tierListQuery.set("region", activeRegion);
 
@@ -197,7 +190,7 @@ export default async function ProBuildsIndexPage({
     feedChampionIds.map(async (championId) => ({
       championId,
       response: await fetchBackendJson<ChampionProBuildsResponse>(
-        `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/pro-builds?region=${encodeURIComponent(activeRegion)}&role=ALL`,
+        `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/pro-builds?region=${encodeURIComponent(activeRegion)}&role=ALL&scope=${encodeURIComponent(scope)}`,
         { next: { revalidate: 60 * 30 } }
       )
     }))
@@ -332,6 +325,7 @@ export default async function ProBuildsIndexPage({
                           href={buildProBuildPageHref(championId, {
                             role: "ALL",
                             region: activeRegion,
+                            scope,
                             patch: null
                           })}
                           className="flex min-w-0 items-center gap-2.5 hover:underline"
@@ -408,6 +402,7 @@ export default async function ProBuildsIndexPage({
         <h2 className="type-section">Search Champions</h2>
         <form action="/lol/pro-builds" method="get" className="mt-3 flex flex-wrap items-center gap-2">
           {activeRegion !== "ALL" ? <input type="hidden" name="region" value={activeRegion} /> : null}
+          {scope !== "all" ? <input type="hidden" name="scope" value={scope} /> : null}
           <input
             type="text"
             name="q"
@@ -423,7 +418,7 @@ export default async function ProBuildsIndexPage({
           </button>
           {championQuery ? (
             <Link
-              href={`/lol/pro-builds${activeRegion !== "ALL" ? `?region=${encodeURIComponent(activeRegion)}` : ""}`}
+              href={buildProHomeHref({ scope, region: activeRegion, query: null })}
               className="control-tab type-ui h-11 px-4"
             >
               Clear
@@ -443,6 +438,7 @@ export default async function ProBuildsIndexPage({
                 href={buildProBuildPageHref(champion.championId, {
                   role: "ALL",
                   region: activeRegion,
+                  scope,
                   patch: null
                 })}
                 className="surface-subtle rounded-card p-3 transition hover:bg-surface-2/72"
@@ -499,6 +495,7 @@ export default async function ProBuildsIndexPage({
                     href={buildProBuildPageHref(entry.championId, {
                       role: "ALL",
                       region: activeRegion,
+                      scope,
                       patch: null
                     })}
                     className="block border-b border-border/20 px-4 py-3 transition hover:bg-surface-2/40"

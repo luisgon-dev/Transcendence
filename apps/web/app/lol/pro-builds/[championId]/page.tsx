@@ -21,10 +21,9 @@ import {
   buildProBuildFilterParams,
   buildProBuildPageHref,
   normalizeProBuildPatch,
-  normalizeProBuildRole,
-  PRO_BUILD_ROLES
+  normalizeProBuildRole
 } from "@/lib/proBuilds";
-import { roleDisplayLabel } from "@/lib/roles";
+import { LANE_ROLES, roleDisplayLabel } from "@/lib/roles";
 import {
   championIconUrl,
   fetchChampionMap,
@@ -213,7 +212,7 @@ export default async function ProBuildsChampionPage({
         <h2 className="type-section">Filters</h2>
         <div className="mt-3 grid gap-3">
           <RoleFilterTabs
-            roles={PRO_BUILD_ROLES}
+            roles={LANE_ROLES}
             activeRole={roleFilter}
             baseHref={`/lol/pro-builds/${championId}`}
             extraParams={roleExtraParams}

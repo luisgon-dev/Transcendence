@@ -1,7 +1,10 @@
 "use client";
 
+import { useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+import { Spinner } from "@/components/ui/Spinner";
+import { cn } from "@/lib/cn";
 import {
   getVisibleAnalyticsPatches,
   type LolAnalyticsPatchOption
@@ -19,6 +22,7 @@ export function AnalyticsPatchFilter({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [isPending, startTransition] = useTransition();
   const visiblePatches = getVisibleAnalyticsPatches(patches);
   const normalizedActivePatch = activePatch?.trim() ?? "";
   const hasActivePatchOption = visiblePatches.some((option) => option.patch === normalizedActivePatch);
@@ -33,25 +37,32 @@ export function AnalyticsPatchFilter({
     }
 
     const nextUrl = nextParams.toString() ? `${pathname}?${nextParams.toString()}` : pathname;
-    router.push(nextUrl);
+    startTransition(() => {
+      router.push(nextUrl);
+    });
   }
 
   return (
-    <select
-      value={normalizedActivePatch}
-      onChange={handleChange}
-      className={className ?? "control-select min-w-[148px]"}
-      aria-label="Patch"
-    >
-      <option value="">Current Patch</option>
-      {normalizedActivePatch && !hasActivePatchOption ? (
-        <option value={normalizedActivePatch}>Patch {normalizedActivePatch}</option>
+    <span className="relative inline-flex items-center" aria-busy={isPending}>
+      <select
+        value={normalizedActivePatch}
+        onChange={handleChange}
+        className={cn(className ?? "control-select min-w-[148px]", isPending && "opacity-60")}
+        aria-label="Patch"
+      >
+        <option value="">Current Patch</option>
+        {normalizedActivePatch && !hasActivePatchOption ? (
+          <option value={normalizedActivePatch}>Patch {normalizedActivePatch}</option>
+        ) : null}
+        {visiblePatches.map((option) => (
+          <option key={option.patch} value={option.patch}>
+            {option.isActive ? `Current (${option.patch})` : `Patch ${option.patch}`}
+          </option>
+        ))}
+      </select>
+      {isPending ? (
+        <Spinner className="pointer-events-none absolute right-7 top-1/2 -translate-y-1/2" />
       ) : null}
-      {visiblePatches.map((option) => (
-        <option key={option.patch} value={option.patch}>
-          {option.isActive ? `Current (${option.patch})` : `Patch ${option.patch}`}
-        </option>
-      ))}
-    </select>
+    </span>
   );
 }

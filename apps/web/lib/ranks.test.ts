@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   normalizeRankTierParam,
   rankEmblemUrl,
-  rankTierDisplayLabel
+  rankTierDisplayLabel,
+  resolveDefaultedRankTier
 } from "@/lib/ranks";
 
 describe("normalizeRankTierParam", () => {
@@ -16,6 +17,25 @@ describe("normalizeRankTierParam", () => {
   it("treats all/empty as no filter", () => {
     expect(normalizeRankTierParam("all")).toBeNull();
     expect(normalizeRankTierParam(undefined)).toBeNull();
+  });
+});
+
+describe("resolveDefaultedRankTier", () => {
+  it("defaults to Emerald+ when the param is absent", () => {
+    expect(resolveDefaultedRankTier(undefined)).toBe("EMERALD_PLUS");
+    expect(resolveDefaultedRankTier(null)).toBe("EMERALD_PLUS");
+    expect(resolveDefaultedRankTier("")).toBe("EMERALD_PLUS");
+    expect(resolveDefaultedRankTier("   ")).toBe("EMERALD_PLUS");
+  });
+
+  it("treats an explicit 'all' as all-ranks (null), not the default", () => {
+    expect(resolveDefaultedRankTier("all")).toBeNull();
+    expect(resolveDefaultedRankTier("ALL")).toBeNull();
+  });
+
+  it("passes through valid tiers", () => {
+    expect(resolveDefaultedRankTier("diamond")).toBe("DIAMOND");
+    expect(resolveDefaultedRankTier("Emerald+")).toBe("EMERALD_PLUS");
   });
 });
 

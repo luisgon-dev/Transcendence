@@ -1,7 +1,9 @@
 "use client";
 
+import { useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+import { Spinner } from "@/components/ui/Spinner";
 import {
   ANALYTICS_REGION_COOKIE,
   ANALYTICS_REGION_STORAGE_KEY,
@@ -61,6 +63,8 @@ export function AnalyticsRegionFilter({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [isPending, startTransition] = useTransition();
+  const [pendingCode, setPendingCode] = useState<string | null>(null);
 
   function applyRegion(region: string) {
     const nextParams = new URLSearchParams(searchParams.toString());
@@ -74,23 +78,29 @@ export function AnalyticsRegionFilter({
     void syncPreferredRegion(region);
 
     const nextUrl = nextParams.toString() ? `${pathname}?${nextParams.toString()}` : pathname;
-    router.push(nextUrl);
+    setPendingCode(region);
+    startTransition(() => {
+      router.push(nextUrl);
+    });
   }
 
   return (
     <div className={className ?? "flex flex-wrap items-center gap-x-3 gap-y-3 sm:gap-x-4 sm:gap-y-2"}>
       {options.map((option) => {
         const active = option.code === activeRegion;
+        const pending = isPending && pendingCode === option.code;
         return (
           <button
             key={option.code}
             type="button"
             onClick={() => applyRegion(option.code)}
-            className="control-tab type-ui min-h-11 px-3.5 py-2"
+            className="control-tab type-ui inline-flex min-h-11 items-center gap-1.5 px-3.5 py-2"
             data-active={active}
             aria-pressed={active}
+            aria-busy={pending}
           >
             {option.label}
+            {pending ? <Spinner /> : null}
           </button>
         );
       })}

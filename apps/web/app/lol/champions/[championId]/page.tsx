@@ -20,7 +20,7 @@ import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { formatGames, formatPercent } from "@/lib/format";
 import { fetchLolAnalyticsPatches } from "@/lib/lolAnalyticsPatches";
 import { normalizeAnalyticsPatch } from "@/lib/lolPatchFilters";
-import { normalizeRankTierParam, rankTierDisplayLabel } from "@/lib/ranks";
+import { resolveDefaultedRankTier, rankTierDisplayLabel } from "@/lib/ranks";
 import { roleDisplayLabel } from "@/lib/roles";
 import {
   championIconUrl,
@@ -100,7 +100,9 @@ export default async function ChampionDetailPage({
   }
 
   const explicitRole = normalizeRole(resolvedSearchParams?.role);
-  const normalizedRankTier = normalizeRankTierParam(resolvedSearchParams?.rankTier);
+  // Champion pages default to Emerald+ unless a rank is in the URL; an explicit
+  // ?rankTier=all resolves to null (all ranks). See resolveDefaultedRankTier.
+  const normalizedRankTier = resolveDefaultedRankTier(resolvedSearchParams?.rankTier);
   const selectedPatch = normalizeAnalyticsPatch(resolvedSearchParams?.patch);
   const winrateQuery = new URLSearchParams();
   if (normalizedRankTier) winrateQuery.set("rankTier", normalizedRankTier);
@@ -310,6 +312,7 @@ export default async function ChampionDetailPage({
           patchOptions={patchOptions}
           activePatch={selectedPatch}
           extraParams={sharedFilterParams}
+          explicitAllRank
           baseHref={`/lol/champions/${championId}`}
         />
         <div className="mt-3">

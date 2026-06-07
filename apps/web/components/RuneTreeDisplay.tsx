@@ -125,7 +125,7 @@ export function RuneTreeDisplay({
   const keystoneSize = iconSize + 6;
 
   return (
-    <div className={cn("grid gap-4 sm:grid-cols-2", className)}>
+    <div className={cn("grid w-full gap-4 sm:grid-cols-2", className)}>
       {primaryTree ? (
         <div className="surface-subtle rounded-control p-3">
           <StyleHeader styleId={primaryStyleId} styleById={styleById} label="Primary" size={iconSize} />
@@ -134,8 +134,8 @@ export function RuneTreeDisplay({
               <div
                 key={`p-slot-${slotIdx}`}
                 className={cn(
-                  "flex flex-wrap items-center gap-1.5",
-                  slotIdx === 0 && "justify-start gap-2 border-b border-border/30 pb-2.5"
+                  "flex items-center justify-between gap-1.5",
+                  slotIdx === 0 && "gap-2 border-b border-border/30 pb-2.5"
                 )}
               >
                 {slot.runes.map((rune) => (
@@ -161,7 +161,7 @@ export function RuneTreeDisplay({
             <StyleHeader styleId={subStyleId} styleById={styleById} label="Secondary" size={iconSize} />
             <div className="grid gap-2.5">
               {secondaryTree.slots.slice(1).map((slot, slotIdx) => (
-                <div key={`s-slot-${slotIdx}`} className="flex flex-wrap items-center gap-1.5">
+                <div key={`s-slot-${slotIdx}`} className="flex items-center justify-between gap-1.5">
                   {slot.runes.map((rune) => (
                     <RuneNode
                       key={`s-${rune.id}`}
@@ -185,7 +185,7 @@ export function RuneTreeDisplay({
             {STAT_SHARD_ROWS.map((row, rowIdx) => {
               const selectedForRow = statShards[rowIdx];
               return (
-                <div key={`shard-row-${rowIdx}`} className="flex items-center gap-1.5">
+                <div key={`shard-row-${rowIdx}`} className="flex items-center justify-between gap-1.5">
                   {row.map((shardId, colIdx) => (
                     <RuneNode
                       key={`shard-${rowIdx}-${colIdx}-${shardId}`}

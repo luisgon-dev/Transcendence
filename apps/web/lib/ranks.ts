@@ -41,6 +41,24 @@ export function normalizeRankTierParam(value: string | null | undefined): string
   return RANK_DISPLAY_LABELS[normalized] ? normalized : null;
 }
 
+/**
+ * Resolve a `rankTier` URL param for pages that default to Emerald+ (the
+ * champion detail page). Distinguishes an *absent* param (→ Emerald+ default)
+ * from an *explicit* "all" selection (→ null = all ranks):
+ * - undefined / empty  → DEFAULT_TIERLIST_RANK_TIER ("EMERALD_PLUS")
+ * - "all"              → null (explicit all-ranks)
+ * - a valid tier       → that tier
+ *
+ * For "All Ranks" to remain selectable, the rank/role controls on these pages
+ * must emit an explicit `?rankTier=all` (see RankFilterDropdown.emitAllRank).
+ */
+export function resolveDefaultedRankTier(value: string | null | undefined): string | null {
+  if (value === undefined || value === null || value.trim().length === 0) {
+    return DEFAULT_TIERLIST_RANK_TIER;
+  }
+  return normalizeRankTierParam(value);
+}
+
 export function rankTierDisplayLabel(value: string | null | undefined): string {
   if (!value) return RANK_DISPLAY_LABELS.ALL;
   const normalized = normalizeRankToken(value);

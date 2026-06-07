@@ -63,21 +63,21 @@ export function ProfileSidebar({
               return (
                 <div
                   key={label}
-                  className="surface-subtle grid gap-3 rounded-card px-3 py-3 sm:grid-cols-[68px_minmax(0,1fr)] sm:items-center"
+                  className="surface-subtle grid gap-3 rounded-card px-3 py-3 sm:grid-cols-[96px_minmax(0,1fr)] sm:items-center"
                 >
                   {emblem ? (
-                    <div className="flex h-[68px] w-[68px] items-center justify-center rounded-control border border-border/45 bg-surface/65 p-1">
+                    <div className="flex h-24 w-24 items-center justify-center rounded-control border border-border/45 bg-surface/65 p-1.5">
                       <Image
                         src={emblem}
                         alt={`${rankTierDisplayLabel(rank.tier)} emblem`}
-                        width={68}
-                        height={68}
-                        sizes="68px"
+                        width={96}
+                        height={96}
+                        sizes="96px"
                         className="h-full w-full select-none object-contain"
                       />
                     </div>
                   ) : (
-                    <div className="h-[68px] w-[68px] rounded-control border border-border/60 bg-surface/70" />
+                    <div className="h-24 w-24 rounded-control border border-border/60 bg-surface/70" />
                   )}
                   <div className="min-w-0">
                     <p className="type-kicker text-fg/62">{label}</p>

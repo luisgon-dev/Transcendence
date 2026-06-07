@@ -61,6 +61,11 @@ Transcendence is a backend + web monorepo:
   - `/tft/summoners/[region]/[riotId]`
 - Public LoL patch badges now read backend analytics patch status instead of raw Data Dragon latest so web patch labels match the active analytics dataset
 - LoL analytics pages (tier list, champion, pro-builds) carry a historical patch selector (`AnalyticsPatchFilter`, backed by `lib/lolPatchFilters.ts` + `lib/lolAnalyticsPatches.ts`, surfaced via `FilterBar`) that reads `GET /api/lol/analytics/patches` and drives the `patch` query parameter
+- Analytics filter defaults and feedback:
+  - The champion detail page (`/lol/champions/[championId]`) defaults to **Emerald+** when the `rankTier` param is absent (`resolveDefaultedRankTier` in `lib/ranks.ts`). An explicit `?rankTier=all` means all-ranks; to keep that selectable, the page's `FilterBar` runs in `explicitAllRank` mode so the rank dropdown/lane tabs emit and preserve a literal `rankTier=all`. The tier list keeps its own `DEFAULT_TIERLIST_RANK_TIER` handling.
+  - Lane selectors site-wide use `LANE_ROLES` (`lib/roles.ts`) — the five lanes, no "All" tab. Pages that aggregate across lanes (tier list, pro-builds) do so via an absent `role` param (no lane highlighted), not a selectable tab.
+  - Navigation/filter pending feedback uses Next 16 primitives: segment-level `loading.tsx` skeletons (champion, tier list, pro-builds) for instant route fallback + partial prefetch, `useLinkStatus` spinners on lane/role `<Link>` tabs (`components/ui/LinkPendingDot.tsx`), and `useTransition` `isPending` spinners on the rank/region/patch controls.
+  - The unified LoL profile hero backdrop uses the most-played champion's splash; a stable per-summoner skin is only used once its splash art loads (some skin `num`s lack art and would blank the backdrop), otherwise the base `_0` splash.
 
 ### `packages/api-client`
 - Generated OpenAPI TypeScript client artifacts built from the committed spec

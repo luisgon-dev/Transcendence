@@ -4,18 +4,22 @@ import Link from "next/link";
 
 import { cn } from "@/lib/cn";
 import { roleDisplayLabel } from "@/lib/roles";
+import { LinkPendingDot } from "@/components/ui/LinkPendingDot";
 
 export function RoleFilterTabs({
   roles,
   activeRole,
   baseHref,
   extraParams,
+  keepRankAll = false,
   className
 }: {
   roles: readonly string[];
   activeRole: string;
   baseHref: string;
   extraParams?: Record<string, string>;
+  /** Preserve an explicit `rankTier=all` instead of stripping it (Emerald+-default pages). */
+  keepRankAll?: boolean;
   className?: string;
 }) {
   function buildHref(role: string) {
@@ -23,7 +27,7 @@ export function RoleFilterTabs({
     if (role !== "ALL") params.set("role", role);
     if (extraParams) {
       for (const [k, v] of Object.entries(extraParams)) {
-        if (v && v.toLowerCase() !== "all") params.set(k, v);
+        if (v && (v.toLowerCase() !== "all" || (keepRankAll && k === "rankTier"))) params.set(k, v);
       }
     }
     const qs = params.toString();
@@ -46,7 +50,10 @@ export function RoleFilterTabs({
             data-active={active}
             aria-current={active ? "page" : undefined}
           >
-            <span className="relative z-10">{roleDisplayLabel(role)}</span>
+            <span className="relative z-10 inline-flex items-center gap-1.5">
+              {roleDisplayLabel(role)}
+              <LinkPendingDot />
+            </span>
           </Link>
         );
       })}

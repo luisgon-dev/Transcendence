@@ -76,15 +76,27 @@ export function ProfileHeroCard({
   return (
     <Card className="profile-hero-card relative overflow-hidden rounded-hero p-5 md:p-8">
       {backgroundUrl ? (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 opacity-25"
-          style={{
-            backgroundImage: `linear-gradient(to right, var(--t-bg) 12%, color-mix(in oklch, var(--t-bg), transparent 35%) 55%, transparent 100%), url(${backgroundUrl})`,
-            backgroundSize: "cover",
-            backgroundPosition: "top right"
-          }}
-        />
+        <>
+          {/* Most-played champion splash — immersive backdrop. The art sits on
+              its own layer so the scrim above can stay full-strength for text
+              legibility without dimming the image into invisibility. */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 bg-cover opacity-55"
+            style={{
+              backgroundImage: `url(${backgroundUrl})`,
+              backgroundPosition: "center 22%"
+            }}
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                "linear-gradient(to right, var(--t-bg) 4%, color-mix(in oklch, var(--t-bg), transparent 35%) 48%, color-mix(in oklch, var(--t-bg), transparent 62%) 100%)"
+            }}
+          />
+        </>
       ) : null}
       <div className="relative grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.78fr)] xl:items-end">
         <div className="grid gap-5">
@@ -164,7 +176,7 @@ export function ProfileHeroCard({
           ) : null}
         </div>
 
-        <div className="surface-card grid gap-3 rounded-panel p-4">
+        <div className="relative grid gap-3 rounded-panel border border-border bg-surface/80 p-4 shadow-card">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="type-kicker text-muted">Snapshot</p>

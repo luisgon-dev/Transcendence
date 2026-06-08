@@ -49,6 +49,7 @@ type MatchHistorySectionProps = {
   region: string;
   gameName: string;
   tagLine: string;
+  summonerId: string;
   page: number;
   queue: string;
   championFilter: string;
@@ -85,6 +86,7 @@ function MatchHistoryCard({
   region,
   gameName,
   tagLine,
+  summonerId,
   championStatic,
   itemStatic,
   spellStatic,
@@ -99,6 +101,7 @@ function MatchHistoryCard({
   region: string;
   gameName: string;
   tagLine: string;
+  summonerId: string;
   championStatic: ChampionStatic | null;
   itemStatic: ItemStatic | null;
   spellStatic: SpellStatic | null;
@@ -328,6 +331,7 @@ function MatchHistoryCard({
               {detail ? (
                 <MatchScoreboard
                   detail={detail}
+                  summonerId={summonerId}
                   region={region}
                   gameName={gameName}
                   tagLine={tagLine}
@@ -349,6 +353,7 @@ export function MatchHistorySection({
   region,
   gameName,
   tagLine,
+  summonerId,
   page,
   queue,
   championFilter,
@@ -448,6 +453,7 @@ export function MatchHistorySection({
               region={region}
               gameName={gameName}
               tagLine={tagLine}
+              summonerId={summonerId}
               championStatic={championStatic}
               itemStatic={itemStatic}
               spellStatic={spellStatic}

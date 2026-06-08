@@ -3376,6 +3376,79 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/lol/summoners/{summonerId}/matches/{matchId}/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    summonerId: string;
+                    matchId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MatchTimelineDto"];
+                        "application/json": components["schemas"]["MatchTimelineDto"];
+                        "text/json": components["schemas"]["MatchTimelineDto"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tft/analytics/regions": {
         parameters: {
             query?: never;
@@ -4999,6 +5072,12 @@ export interface components {
             /** Format: int32 */
             keystoneId?: number;
         };
+        MatchTimelineDto: {
+            matchId?: string | null;
+            /** Format: int32 */
+            duration?: number;
+            frames?: components["schemas"]["TimelineFrameDto"][] | null;
+        };
         MatchupEntryDto: {
             /** Format: int32 */
             opponentChampionId?: number;
@@ -5576,6 +5655,18 @@ export interface components {
          * @enum {integer}
          */
         TierMovement: 0 | 1 | 2 | 3;
+        TimelineFrameDto: {
+            /** Format: int32 */
+            minuteMark?: number;
+            /** Format: int32 */
+            blueGold?: number;
+            /** Format: int32 */
+            redGold?: number;
+            /** Format: int32 */
+            blueXp?: number;
+            /** Format: int32 */
+            redXp?: number;
+        };
         TrackedProSummonerDto: {
             /** Format: uuid */
             id?: string;

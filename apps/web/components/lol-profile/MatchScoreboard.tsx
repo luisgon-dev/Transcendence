@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 
 import { ParticipantRuneCard } from "@/components/lol-profile/ParticipantRuneCard";
 import { ScoreboardTeamTable } from "@/components/lol-profile/ScoreboardTeamTable";
+import { GoldDiffChart } from "@/components/lol-profile/GoldDiffChart";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { roleDisplayLabel } from "@/lib/roles";
 import { championIconUrl } from "@/lib/staticData";
+import { buildLolPublicSummonerMatchTimelinePath } from "@/lib/lolPublicApi";
 
 import {
   buildAlignedParticipantRows,
@@ -18,6 +20,7 @@ import {
   type MatchDetail,
   type MatchParticipant,
   type MatchTeamObjectives,
+  type MatchTimeline,
   type RuneStatic,
   type SpellStatic
 } from "@/components/lol-profile/shared";
@@ -120,6 +123,7 @@ function ObjectivesStrip({ objectives }: { objectives: MatchTeamObjectives[] }) 
 // scoreboard row's keystone, so a single player can be inspected without leaving Overview.
 export function MatchScoreboard({
   detail,
+  summonerId,
   region,
   gameName,
   tagLine,
@@ -129,6 +133,7 @@ export function MatchScoreboard({
   runeStatic
 }: {
   detail: MatchDetail;
+  summonerId: string;
   region: string;
   gameName: string;
   tagLine: string;
@@ -138,6 +143,28 @@ export function MatchScoreboard({
   runeStatic: RuneStatic | null;
 }) {
   const [tab, setTab] = useState<ScoreboardTab>("overview");
+  const [timeline, setTimeline] = useState<MatchTimeline | null>(null);
+
+  // Lazy-load the gold/xp-diff curve once the scoreboard mounts (i.e. the match is expanded).
+  // Optional decoration — only present for matches with ingested timeline frames.
+  useEffect(() => {
+    if (!summonerId || !detail.matchId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(buildLolPublicSummonerMatchTimelinePath(summonerId, detail.matchId), { cache: "no-store" });
+        if (!res.ok || cancelled) return;
+        const json = (await res.json().catch(() => null)) as MatchTimeline | null;
+        if (!cancelled && json && Array.isArray(json.frames)) setTimeline(json);
+      } catch {
+        // Timeline curve is optional — ignore fetch errors.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [summonerId, detail.matchId]);
+
   const participants = detail.participants ?? [];
   const blue = participants.filter((p) => p.teamId === 100);
   const red = participants.filter((p) => p.teamId === 200);
@@ -161,6 +188,12 @@ export function MatchScoreboard({
         <div className="flex flex-col gap-3">
           {detail.objectives && detail.objectives.length > 0 ? (
             <ObjectivesStrip objectives={detail.objectives} />
+          ) : null}
+          {timeline && timeline.frames.length >= 2 ? (
+            <div className="surface-subtle grid gap-1.5 rounded-control px-3 py-2.5">
+              <p className="type-overline text-muted">Gold lead</p>
+              <GoldDiffChart frames={timeline.frames} />
+            </div>
           ) : null}
           <ScoreboardTeamTable
             participants={blue}

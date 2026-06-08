@@ -94,22 +94,31 @@ public class MatchTimelineIngestionJob(
             if (timeline?.Info?.Frames == null || timeline.Info.Frames.Length == 0)
                 throw new InvalidOperationException("Timeline response did not include frames.");
 
-            var minuteMark = Math.Max(1, jobOptions.MinuteMark);
-            var targetTimestampMs = minuteMark * 60 * 1000;
-            var selectedFrame = SelectFrameForMinuteMark(timeline.Info.Frames, targetTimestampMs);
-
-            if (selectedFrame == null || selectedFrame.ParticipantFrames == null)
-                throw new InvalidOperationException("Timeline frame for minute mark could not be resolved.");
-
             BackfillParticipantIdsFromTimeline(match.Participants, timeline.Info.Participants);
 
-            var qualityFlags = BuildQualityFlags(match, selectedFrame.Timestamp, targetTimestampMs);
-            var snapshots = BuildSnapshots(match, selectedFrame, minuteMark, qualityFlags);
-            if (snapshots.Count == 0)
-                throw new InvalidOperationException("No participant snapshots could be derived from timeline frame.");
+            // Capture a multi-frame curve: a regular cadence up to game length, plus the
+            // analytics anchor mark (kept so champion-analytics gold/xp-diff@N stays intact).
+            var anchorMark = Math.Max(1, jobOptions.MinuteMark);
+            var minuteMarks = BuildMinuteMarks(match.Duration, Math.Max(1, jobOptions.FrameIntervalMinutes), anchorMark);
 
+            var snapshots = new List<MatchParticipantTimelineSnapshot>();
+            foreach (var mark in minuteMarks)
+            {
+                var targetTimestampMs = mark * 60 * 1000;
+                var selectedFrame = SelectFrameForMinuteMark(timeline.Info.Frames, targetTimestampMs);
+                if (selectedFrame?.ParticipantFrames == null)
+                    continue;
+
+                var qualityFlags = BuildQualityFlags(match, selectedFrame.Timestamp, targetTimestampMs);
+                snapshots.AddRange(BuildSnapshots(match, selectedFrame, mark, qualityFlags));
+            }
+
+            if (snapshots.Count == 0)
+                throw new InvalidOperationException("No participant snapshots could be derived from timeline frames.");
+
+            // Replace the whole snapshot set for this match so re-ingestion is idempotent.
             var existingSnapshots = await db.MatchParticipantTimelineSnapshots
-                .Where(x => x.MatchId == match.Id && x.MinuteMark == minuteMark)
+                .Where(x => x.MatchId == match.Id)
                 .ToListAsync(ct);
             if (existingSnapshots.Count > 0)
                 db.MatchParticipantTimelineSnapshots.RemoveRange(existingSnapshots);
@@ -147,6 +156,19 @@ public class MatchTimelineIngestionJob(
                     TimeSpan.FromSeconds(delaySeconds));
             }
         }
+    }
+
+    public static IReadOnlyList<int> BuildMinuteMarks(int durationSeconds, int intervalMinutes, int anchorMark)
+    {
+        var durationMinutes = Math.Max(1, durationSeconds / 60);
+        var interval = Math.Max(1, intervalMinutes);
+        var marks = new SortedSet<int>();
+        for (var mark = interval; mark <= durationMinutes; mark += interval)
+            marks.Add(mark);
+        // The analytics anchor is always captured, even for games shorter than the anchor
+        // (it resolves to the final frame, exactly as the single-frame ingestion did).
+        marks.Add(Math.Max(1, anchorMark));
+        return marks.ToList();
     }
 
     private static FramesTimeLine? SelectFrameForMinuteMark(FramesTimeLine[] frames, int targetTimestampMs)

@@ -25,6 +25,7 @@ public class SummonerStatsService(
     private const string MasteryCacheKeyPrefix = "stats:mastery:";
     private const string RecentMatchesCacheKeyPrefix = "stats:recent:";
     private const string MatchDetailCacheKeyPrefix = "match:detail:";
+    private const string MatchTimelineCacheKeyPrefix = "match:timeline:";
     private const string SummonerStatsCacheTagPrefix = "summoner-stats:";
 
     // Stats cache options: 5min total, 2min L1 (stats change on refresh)
@@ -743,6 +744,52 @@ public class SummonerStatsService(
                 MatchDetailCacheOptions,
                 cancellationToken: token),
             ct);
+    }
+
+    public async Task<MatchTimelineDto?> GetMatchTimelineAsync(string matchId, CancellationToken ct)
+    {
+        var cacheKey = $"{MatchTimelineCacheKeyPrefix}{matchId}";
+        return await ExecuteStatsRequestAsync(
+            "Failed to load match timeline.",
+            async token => await cache.GetOrCreateAsync(
+                cacheKey,
+                async cancel => await ComputeMatchTimelineAsync(matchId, cancel),
+                MatchDetailCacheOptions,
+                cancellationToken: token),
+            ct);
+    }
+
+    private async Task<MatchTimelineDto?> ComputeMatchTimelineAsync(string matchId, CancellationToken ct)
+    {
+        var match = await db.Matches
+            .AsNoTracking()
+            .Where(m => m.MatchId == matchId)
+            .Select(m => new { m.Id, m.Duration })
+            .FirstOrDefaultAsync(ct);
+
+        if (match == null)
+            return null;
+
+        var rows = await (
+            from s in db.MatchParticipantTimelineSnapshots.AsNoTracking()
+            where s.MatchId == match.Id
+            join p in db.MatchParticipants.AsNoTracking()
+                on new { s.MatchId, s.ParticipantId } equals new { p.MatchId, p.ParticipantId }
+            select new { s.MinuteMark, p.TeamId, s.Gold, s.Xp }
+        ).ToListAsync(ct);
+
+        var frames = rows
+            .GroupBy(r => r.MinuteMark)
+            .OrderBy(g => g.Key)
+            .Select(g => new TimelineFrameDto(
+                g.Key,
+                g.Where(x => x.TeamId == 100).Sum(x => x.Gold),
+                g.Where(x => x.TeamId == 200).Sum(x => x.Gold),
+                g.Where(x => x.TeamId == 100).Sum(x => x.Xp),
+                g.Where(x => x.TeamId == 200).Sum(x => x.Xp)))
+            .ToList();
+
+        return new MatchTimelineDto(matchId, match.Duration, frames);
     }
 
     private async Task<MatchDetailDto?> ComputeMatchDetailAsync(string matchId, CancellationToken ct)

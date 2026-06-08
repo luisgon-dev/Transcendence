@@ -200,6 +200,20 @@ export type MatchTeamObjectives = {
   inhibitor: ObjectiveStat;
 };
 
+export type TimelineFrame = {
+  minuteMark: number;
+  blueGold: number;
+  redGold: number;
+  blueXp: number;
+  redXp: number;
+};
+
+export type MatchTimeline = {
+  matchId: string;
+  duration: number;
+  frames: TimelineFrame[];
+};
+
 export type RankHistoryEntry = {
   queueType: string | null;
   tier: string | null;

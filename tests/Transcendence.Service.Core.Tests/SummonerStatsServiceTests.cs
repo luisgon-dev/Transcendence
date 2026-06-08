@@ -418,6 +418,58 @@ public class SummonerStatsServiceTests
     }
 
     [Fact]
+    public async Task GetMatchTimelineAsync_BuildsOrderedPerMinuteTeamGoldXpSeries()
+    {
+        await using var harness = await SummonerStatsHarness.CreateAsync();
+        var summoner = harness.CreateSummoner();
+        var enemy = new Summoner
+        {
+            Id = Guid.NewGuid(), PlatformRegion = "NA1", Region = "americas",
+            Puuid = $"puuid-{Guid.NewGuid():N}", GameName = "Enemy", TagLine = "NA1",
+            GameNameNormalized = "ENEMY", TagLineNormalized = "NA1", SummonerLevel = 100, UpdatedAt = DateTime.UtcNow
+        };
+        harness.Db.Summoners.Add(enemy);
+
+        var match = new Match
+        {
+            Id = Guid.NewGuid(), MatchId = "NA1_tl1", MatchDate = 7000, Duration = 1800, Patch = "14.10",
+            QueueId = QueueCatalog.RankedSoloDuoQueueId, QueueFamily = QueueCatalog.QueueFamilyRankedSoloDuo,
+            QueueType = "RANKED_SOLO_5x5", Status = FetchStatus.Success
+        };
+        harness.Db.MatchParticipants.AddRange(
+            new MatchParticipant { Id = Guid.NewGuid(), Match = match, MatchId = match.Id, Summoner = summoner, SummonerId = summoner.Id, ParticipantId = 1, TeamId = 100, ChampionId = 222, Win = true },
+            new MatchParticipant { Id = Guid.NewGuid(), Match = match, MatchId = match.Id, Summoner = enemy, SummonerId = enemy.Id, ParticipantId = 6, TeamId = 200, ChampionId = 122, Win = false });
+
+        // Two frames (@10, @15) seeded out of order to prove ordering.
+        harness.Db.MatchParticipantTimelineSnapshots.AddRange(
+            new MatchParticipantTimelineSnapshot { Match = match, MatchId = match.Id, ParticipantId = 1, MinuteMark = 15, Gold = 8200, Xp = 9000, Cs = 130, Level = 12, FrameTimestampMs = 900000, DerivedAtUtc = DateTime.UtcNow },
+            new MatchParticipantTimelineSnapshot { Match = match, MatchId = match.Id, ParticipantId = 6, MinuteMark = 15, Gold = 7000, Xp = 8400, Cs = 115, Level = 11, FrameTimestampMs = 900000, DerivedAtUtc = DateTime.UtcNow },
+            new MatchParticipantTimelineSnapshot { Match = match, MatchId = match.Id, ParticipantId = 1, MinuteMark = 10, Gold = 5000, Xp = 6000, Cs = 80, Level = 9, FrameTimestampMs = 600000, DerivedAtUtc = DateTime.UtcNow },
+            new MatchParticipantTimelineSnapshot { Match = match, MatchId = match.Id, ParticipantId = 6, MinuteMark = 10, Gold = 4200, Xp = 5500, Cs = 70, Level = 8, FrameTimestampMs = 600000, DerivedAtUtc = DateTime.UtcNow });
+
+        await harness.Db.SaveChangesAsync();
+
+        var result = await harness.Service.GetMatchTimelineAsync("NA1_tl1", CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result!.Duration.Should().Be(1800);
+        result.Frames.Select(f => f.MinuteMark).Should().Equal([10, 15]); // ordered ascending
+        result.Frames[0].BlueGold.Should().Be(5000);
+        result.Frames[0].RedGold.Should().Be(4200);
+        result.Frames[0].BlueXp.Should().Be(6000);
+        result.Frames[1].BlueGold.Should().Be(8200);
+        result.Frames[1].RedGold.Should().Be(7000);
+    }
+
+    [Fact]
+    public async Task GetMatchTimelineAsync_ReturnsNullForUnknownMatch()
+    {
+        await using var harness = await SummonerStatsHarness.CreateAsync();
+        var result = await harness.Service.GetMatchTimelineAsync("NA1_missing", CancellationToken.None);
+        result.Should().BeNull();
+    }
+
+    [Fact]
     public async Task GetPlayedWithAsync_AggregatesCoParticipantsByGamesAndSameTeamWins()
     {
         await using var harness = await SummonerStatsHarness.CreateAsync();

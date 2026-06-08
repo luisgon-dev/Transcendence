@@ -39,4 +39,10 @@ public interface ISummonerStatsService
     /// <param name="ct">Cancellation token</param>
     /// <returns>Full match details or null if match not found</returns>
     Task<MatchDetailDto?> GetMatchDetailAsync(string matchId, CancellationToken ct);
+
+    /// <summary>
+    /// Gets the per-minute team gold/xp timeline for a match (the gold/xp-diff curve).
+    /// Null if the match is unknown; Frames empty if no timeline snapshots exist.
+    /// </summary>
+    Task<MatchTimelineDto?> GetMatchTimelineAsync(string matchId, CancellationToken ct);
 }

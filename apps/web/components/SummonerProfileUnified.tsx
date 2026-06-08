@@ -472,6 +472,7 @@ export function SummonerProfileClient({
             region={region}
             gameName={gameName}
             tagLine={tagLine}
+            summonerId={profile.summonerId ?? ""}
             page={page}
             queue={queue}
             championFilter={championFilter}

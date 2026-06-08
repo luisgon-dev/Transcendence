@@ -4172,6 +4172,114 @@
         }
       }
     },
+    "/api/lol/summoners/{summonerId}/matches/{matchId}/timeline": {
+      "get": {
+        "tags": [
+          "SummonerStats"
+        ],
+        "parameters": [
+          {
+            "name": "summonerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "matchId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchTimelineDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchTimelineDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchTimelineDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/tft/analytics/regions": {
       "get": {
         "tags": [
@@ -7157,6 +7265,27 @@
         },
         "additionalProperties": false
       },
+      "MatchTimelineDto": {
+        "type": "object",
+        "properties": {
+          "matchId": {
+            "type": "string",
+            "nullable": true
+          },
+          "duration": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "frames": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimelineFrameDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "MatchupEntryDto": {
         "type": "object",
         "properties": {
@@ -8788,6 +8917,32 @@
         ],
         "type": "integer",
         "format": "int32"
+      },
+      "TimelineFrameDto": {
+        "type": "object",
+        "properties": {
+          "minuteMark": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "blueGold": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "redGold": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "blueXp": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "redXp": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
       },
       "TrackedProSummonerDto": {
         "type": "object",

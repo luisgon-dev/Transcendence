@@ -19,6 +19,10 @@ export function buildLolPublicSummonerRankHistoryPath(summonerId: string, queueT
   return queueType ? `${base}?queueType=${encodeURIComponent(queueType)}` : base;
 }
 
+export function buildLolPublicSummonerMatchTimelinePath(summonerId: string, matchId: string) {
+  return `${buildLolPublicSummonerByIdPath(summonerId)}/matches/${encodeURIComponent(matchId)}/timeline`;
+}
+
 export function buildLolPublicSummonerSearchPath(
   region: string,
   query: string,

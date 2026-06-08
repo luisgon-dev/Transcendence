@@ -41,6 +41,24 @@ public record TeamObjectivesDto(
 public record ObjectiveStatDto(int Kills, bool First);
 
 /// <summary>
+/// Per-minute team gold/xp totals for a match, for the gold/xp-diff curve.
+/// Empty Frames when the match has no (or too few) timeline snapshots.
+/// </summary>
+public record MatchTimelineDto(
+    string MatchId,
+    int Duration,
+    IReadOnlyList<TimelineFrameDto> Frames
+);
+
+public record TimelineFrameDto(
+    int MinuteMark,
+    int BlueGold,
+    int RedGold,
+    int BlueXp,
+    int RedXp
+);
+
+/// <summary>
 /// Complete participant data for a match including all stats, items, runes, and spells.
 /// </summary>
 public record ParticipantDetailDto(

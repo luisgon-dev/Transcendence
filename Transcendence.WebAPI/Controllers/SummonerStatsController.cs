@@ -178,4 +178,23 @@ public class SummonerStatsController(ISummonerStatsService statsService) : Contr
 
         return Ok(result);
     }
+
+    /// <summary>
+    ///     Gets the per-minute team gold/xp timeline for a match (the gold/xp-diff curve).
+    /// </summary>
+    [HttpGet("matches/{matchId}/timeline")]
+    [ProducesResponseType(typeof(MatchTimelineDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> GetMatchTimeline(
+        [FromRoute] Guid summonerId,
+        [FromRoute] string matchId,
+        CancellationToken ct = default)
+    {
+        var result = await statsService.GetMatchTimelineAsync(matchId, ct);
+        if (result == null)
+            return NotFound();
+
+        return Ok(result);
+    }
 }

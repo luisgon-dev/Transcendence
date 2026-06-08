@@ -97,7 +97,7 @@ function RuneTrigger({
 function ScoreboardRow({
   participant,
   durationSeconds,
-  teamMaxDamage,
+  maxDamage,
   region,
   gameName,
   tagLine,
@@ -108,7 +108,7 @@ function ScoreboardRow({
 }: {
   participant: MatchParticipant;
   durationSeconds: number;
-  teamMaxDamage: number;
+  maxDamage: number;
   region: string;
   gameName: string;
   tagLine: string;
@@ -126,7 +126,7 @@ function ScoreboardRow({
   const magicDmg = participant.magicDamageDealtToChampions ?? 0;
   const trueDmg = participant.trueDamageDealtToChampions ?? 0;
   const splitSum = physDmg + magicDmg + trueDmg;
-  const damageFillPct = teamMaxDamage > 0 ? Math.min(100, (totalDmg / teamMaxDamage) * 100) : 0;
+  const damageFillPct = maxDamage > 0 ? Math.min(100, (totalDmg / maxDamage) * 100) : 0;
   const itemSlots = Array.from({ length: 7 }, (_, idx) => participant.items?.[idx] ?? 0);
   const displayName = participantDisplayName(participant.gameName, participant.tagLine);
   const canLink = Boolean(participant.gameName && participant.tagLine && !isCurrent);
@@ -272,6 +272,7 @@ export function ScoreboardTeamTable({
   participants,
   teamId,
   durationSeconds,
+  maxDamage,
   bans,
   region,
   gameName,
@@ -284,6 +285,7 @@ export function ScoreboardTeamTable({
   participants: MatchParticipant[];
   teamId: 100 | 200;
   durationSeconds: number;
+  maxDamage: number;
   bans: number[];
   region: string;
   gameName: string;
@@ -299,7 +301,6 @@ export function ScoreboardTeamTable({
   const win = participants[0]?.win ?? false;
   const totalKills = participants.reduce((sum, p) => sum + p.kills, 0);
   const totalGold = participants.reduce((sum, p) => sum + p.goldEarned, 0);
-  const teamMaxDamage = Math.max(1, ...participants.map((p) => p.totalDamageDealtToChampions));
   const isBlue = teamId === 100;
 
   return (
@@ -360,7 +361,7 @@ export function ScoreboardTeamTable({
                 key={`${participant.puuid ?? participant.championId}-${idx}`}
                 participant={participant}
                 durationSeconds={durationSeconds}
-                teamMaxDamage={teamMaxDamage}
+                maxDamage={maxDamage}
                 region={region}
                 gameName={gameName}
                 tagLine={tagLine}

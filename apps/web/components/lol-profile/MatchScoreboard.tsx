@@ -143,6 +143,8 @@ export function MatchScoreboard({
   const red = participants.filter((p) => p.teamId === 200);
   const blueBans = detail.bans?.find((b) => b.teamId === 100)?.bannedChampionIds ?? [];
   const redBans = detail.bans?.find((b) => b.teamId === 200)?.bannedChampionIds ?? [];
+  // Normalize damage bars to the whole lobby's top dealer so the carry reads across both teams.
+  const matchMaxDamage = Math.max(1, ...participants.map((p) => p.totalDamageDealtToChampions));
   const alignedRows = buildAlignedParticipantRows(participants);
 
   return (
@@ -164,6 +166,7 @@ export function MatchScoreboard({
             participants={blue}
             teamId={100}
             durationSeconds={detail.duration}
+            maxDamage={matchMaxDamage}
             bans={blueBans}
             region={region}
             gameName={gameName}
@@ -177,6 +180,7 @@ export function MatchScoreboard({
             participants={red}
             teamId={200}
             durationSeconds={detail.duration}
+            maxDamage={matchMaxDamage}
             bans={redBans}
             region={region}
             gameName={gameName}

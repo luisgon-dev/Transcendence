@@ -19,12 +19,6 @@ import {
   type SummonerProfileResponse
 } from "@/components/lol-profile/shared";
 
-function formatMasteryPoints(points: number): string {
-  if (points >= 1_000_000) return `${(points / 1_000_000).toFixed(1)}M`;
-  if (points >= 1_000) return `${Math.round(points / 1_000)}K`;
-  return String(points);
-}
-
 type RankedEntry = {
   label: string;
   rank: RankInfo;
@@ -173,11 +167,11 @@ export function ProfileSidebar({
                     <p className="truncate text-sm font-medium text-fg group-hover:text-primary">
                       {champion?.name ?? `Champion ${m.championId}`}
                     </p>
-                    <p className="type-caption text-muted tabular-nums">{formatMasteryPoints(m.championPoints)} pts</p>
+                    <p className="type-caption text-muted tabular-nums">{m.championPoints.toLocaleString()} pts</p>
                   </div>
                   <span
-                    className={`type-overline rounded-full border px-2 py-0.5 ${
-                      highMastery ? "border-primary/45 bg-primary/10 text-primary" : "border-border/50 text-fg/75"
+                    className={`type-overline rounded-full border px-2 py-0.5 tabular-nums ${
+                      highMastery ? "border-border-strong bg-surface-2 font-semibold text-fg" : "border-border/50 text-muted"
                     }`}
                   >
                     M{m.championLevel}
@@ -230,7 +224,8 @@ export function ProfileSidebar({
           </div>
           <div className="mt-4 grid gap-2">
             {profile.frequentlyPlayedWith!.map((mate) => {
-              const wr = mate.sameTeamGames > 0 ? (mate.sameTeamWins / mate.sameTeamGames) * 100 : null;
+              // Only show a same-team win-rate once the sample is meaningful (avoids "100% · 1 game" noise).
+              const wr = mate.sameTeamGames >= 2 ? (mate.sameTeamWins / mate.sameTeamGames) * 100 : null;
               return (
                 <Link
                   key={mate.summonerId}

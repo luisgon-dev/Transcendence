@@ -82,14 +82,17 @@ export function ProfileSidebar({
                   className="surface-subtle grid gap-3 rounded-card px-3 py-3 sm:grid-cols-[96px_minmax(0,1fr)] sm:items-center"
                 >
                   {emblem ? (
-                    <div className="flex h-24 w-24 items-center justify-center rounded-control border border-border/45 bg-surface/65 p-1.5">
+                    // The communitydragon ranked emblem sits in a large mostly-transparent
+                    // canvas (~22% content, centered), so we crop the padding by scaling the
+                    // centered crest up inside an overflow-hidden frame.
+                    <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-control border border-border/45 bg-surface/65">
                       <Image
                         src={emblem}
                         alt={`${rankTierDisplayLabel(rank.tier)} emblem`}
-                        width={96}
-                        height={96}
-                        sizes="96px"
-                        className="h-full w-full select-none object-contain"
+                        width={256}
+                        height={256}
+                        sizes="256px"
+                        className="h-full w-full origin-center scale-[3.3] select-none object-contain"
                       />
                     </div>
                   ) : (

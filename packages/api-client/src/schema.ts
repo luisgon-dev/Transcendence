@@ -4768,6 +4768,20 @@ export interface components {
             builds?: components["schemas"]["ChampionBuildDto"][] | null;
             sample?: components["schemas"]["AnalyticsSampleMetadata"];
         };
+        ChampionMasteryStat: {
+            /** Format: int32 */
+            championId?: number;
+            championName?: string | null;
+            /** Format: int32 */
+            championLevel?: number;
+            /** Format: int64 */
+            championPoints?: number;
+            /** Format: int64 */
+            lastPlayTime?: number;
+            chestGranted?: boolean;
+            /** Format: int32 */
+            tokensEarned?: number;
+        };
         ChampionMatchupsResponse: {
             /** Format: int32 */
             championId?: number;
@@ -4882,6 +4896,18 @@ export interface components {
             displayName?: string | null;
             /** Format: date-time */
             createdAtUtc?: string;
+        };
+        FrequentlyPlayedWithStat: {
+            /** Format: uuid */
+            summonerId?: string;
+            gameName?: string | null;
+            tagLine?: string | null;
+            /** Format: int32 */
+            gamesTogether?: number;
+            /** Format: int32 */
+            sameTeamGames?: number;
+            /** Format: int32 */
+            sameTeamWins?: number;
         };
         LiveGameAnalysisDto: {
             /** Format: date-time */
@@ -5395,6 +5421,8 @@ export interface components {
             flexRank?: components["schemas"]["RankInfo"];
             overviewStats?: components["schemas"]["ProfileOverviewStats"];
             topChampions?: components["schemas"]["ProfileChampionStat"][] | null;
+            frequentlyPlayedWith?: components["schemas"]["FrequentlyPlayedWithStat"][] | null;
+            topMastery?: components["schemas"]["ChampionMasteryStat"][] | null;
             profileAge?: components["schemas"]["DataAgeMetadata"];
             rankAge?: components["schemas"]["DataAgeMetadata"];
             statsAge?: components["schemas"]["DataAgeMetadata"];

@@ -24,4 +24,5 @@ public class Summoner
     public ICollection<SummonerIngestionCursor> IngestionCursors { get; } = [];
     public ICollection<Rank> Ranks { get; set; } = new List<Rank>();
     public ICollection<HistoricalRank> HistoricalRanks { get; set; } = new List<HistoricalRank>();
+    public ICollection<ChampionMastery> ChampionMasteries { get; set; } = new List<ChampionMastery>();
 }

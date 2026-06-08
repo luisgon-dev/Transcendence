@@ -6,8 +6,10 @@ import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { DataBar } from "@/components/ui/DataBar";
 import { Sparkline } from "@/components/ui/Sparkline";
+import { championIconUrl } from "@/lib/staticData";
 import { formatPercent, winRateColorClass } from "@/lib/format";
 import { rankEmblemUrl, rankTierDisplayLabel, rankToLadderPoints } from "@/lib/ranks";
+import { encodeRiotIdPath } from "@/lib/riotid";
 
 import {
   rankColorClass,
@@ -16,6 +18,12 @@ import {
   type RankInfo,
   type SummonerProfileResponse
 } from "@/components/lol-profile/shared";
+
+function formatMasteryPoints(points: number): string {
+  if (points >= 1_000_000) return `${(points / 1_000_000).toFixed(1)}M`;
+  if (points >= 1_000) return `${Math.round(points / 1_000)}K`;
+  return String(points);
+}
 
 type RankedEntry = {
   label: string;
@@ -134,6 +142,53 @@ export function ProfileSidebar({
         ) : null}
       </Card>
 
+      {(profile.topMastery?.length ?? 0) > 0 ? (
+        <Card className="profile-section-card p-5">
+          <div>
+            <p className="type-kicker text-muted">Mastery</p>
+            <h2 className="mt-2 type-section">Top mastery</h2>
+          </div>
+          <div className="mt-4 grid gap-2">
+            {profile.topMastery!.map((m) => {
+              const champion = championStatic?.champions[String(m.championId)];
+              const highMastery = m.championLevel >= 7;
+              return (
+                <Link
+                  key={m.championId}
+                  href={`/lol/champions/${m.championId}`}
+                  className="surface-subtle group flex items-center gap-3 rounded-control px-3 py-2.5 transition hover:border-border-strong hover:bg-surface-2/60"
+                >
+                  {champion && championStatic ? (
+                    <Image
+                      src={championIconUrl(championStatic.version, champion.id)}
+                      alt={champion.name}
+                      width={32}
+                      height={32}
+                      className="rounded-lg border border-border/50"
+                    />
+                  ) : (
+                    <div className="h-8 w-8 rounded-lg border border-border/50 bg-surface/70" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-fg group-hover:text-primary">
+                      {champion?.name ?? `Champion ${m.championId}`}
+                    </p>
+                    <p className="type-caption text-muted tabular-nums">{formatMasteryPoints(m.championPoints)} pts</p>
+                  </div>
+                  <span
+                    className={`type-overline rounded-full border px-2 py-0.5 ${
+                      highMastery ? "border-primary/45 bg-primary/10 text-primary" : "border-border/50 text-fg/75"
+                    }`}
+                  >
+                    M{m.championLevel}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </Card>
+      ) : null}
+
       <Card className="profile-section-card p-5">
         <div>
           <p className="type-kicker text-muted">Champion pool</p>
@@ -166,6 +221,39 @@ export function ProfileSidebar({
           })}
         </div>
       </Card>
+
+      {(profile.frequentlyPlayedWith?.length ?? 0) > 0 ? (
+        <Card className="profile-section-card p-5">
+          <div>
+            <p className="type-kicker text-muted">Duo signals</p>
+            <h2 className="mt-2 type-section">Played with</h2>
+          </div>
+          <div className="mt-4 grid gap-2">
+            {profile.frequentlyPlayedWith!.map((mate) => {
+              const wr = mate.sameTeamGames > 0 ? (mate.sameTeamWins / mate.sameTeamGames) * 100 : null;
+              return (
+                <Link
+                  key={mate.summonerId}
+                  href={`/lol/summoners/${region}/${encodeRiotIdPath({ gameName: mate.gameName, tagLine: mate.tagLine })}`}
+                  className="surface-subtle group grid gap-1.5 rounded-control px-3 py-2.5 transition hover:border-border-strong hover:bg-surface-2/60"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="min-w-0 truncate text-sm font-medium text-fg group-hover:text-primary">
+                      {mate.gameName}
+                      <span className="text-muted">#{mate.tagLine}</span>
+                    </p>
+                    {wr != null ? <DataBar value={wr} /> : null}
+                  </div>
+                  <div className="flex items-center justify-between gap-2 text-xs text-fg/64">
+                    <span>{mate.gamesTogether} games together</span>
+                    {mate.sameTeamGames > 0 ? <span>{mate.sameTeamGames} as duo</span> : null}
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </Card>
+      ) : null}
 
       <LiveGameCard region={region} gameName={gameName} tagLine={tagLine} />
     </aside>

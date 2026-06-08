@@ -40,6 +40,25 @@ export type ProfileChampionStat = {
   kdaRatio: number;
 };
 
+export type PlayedWithEntry = {
+  summonerId: string;
+  gameName: string;
+  tagLine: string;
+  gamesTogether: number;
+  sameTeamGames: number;
+  sameTeamWins: number;
+};
+
+export type ChampionMasteryEntry = {
+  championId: number;
+  championName: string;
+  championLevel: number;
+  championPoints: number;
+  lastPlayTime: number;
+  chestGranted: boolean;
+  tokensEarned: number;
+};
+
 export type SummonerProfileResponse = {
   summonerId?: string;
   puuid: string;
@@ -51,6 +70,8 @@ export type SummonerProfileResponse = {
   flexRank?: RankInfo | null;
   overviewStats?: ProfileOverviewStats | null;
   topChampions?: ProfileChampionStat[] | null;
+  frequentlyPlayedWith?: PlayedWithEntry[] | null;
+  topMastery?: ChampionMasteryEntry[] | null;
   profileAge: DataAgeMetadata;
   rankAge: DataAgeMetadata;
   statsAge?: DataAgeMetadata | null;

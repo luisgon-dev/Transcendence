@@ -116,6 +116,8 @@ public class SummonersController(
             var overview = await statsService.GetSummonerOverviewAsync(summoner.Id, 20, ct);
             var champions = await statsService.GetChampionStatsAsync(summoner.Id, 5, ct);
             var recent = await statsService.GetRecentMatchesAsync(summoner.Id, 1, 10, null, null, ct);
+            var playedWith = await statsService.GetPlayedWithAsync(summoner.Id, 100, 6, ct);
+            var mastery = await statsService.GetTopMasteryAsync(summoner.Id, 6, ct);
 
             // Calculate StatsAge from most recent match
             var mostRecentMatchDate = recent.Items.Count > 0 ? recent.Items[0].MatchDate : (long?)null;
@@ -173,6 +175,27 @@ public class SummonersController(
                     Losses = c.Losses,
                     WinRate = c.WinRate,
                     KdaRatio = c.KdaRatio
+                }).ToList(),
+
+                FrequentlyPlayedWith = playedWith.Select(p => new FrequentlyPlayedWithStat
+                {
+                    SummonerId = p.SummonerId,
+                    GameName = p.GameName ?? string.Empty,
+                    TagLine = p.TagLine ?? string.Empty,
+                    GamesTogether = p.GamesTogether,
+                    SameTeamGames = p.SameTeamGames,
+                    SameTeamWins = p.SameTeamWins
+                }).ToList(),
+
+                TopMastery = mastery.Select(m => new ChampionMasteryStat
+                {
+                    ChampionId = m.ChampionId,
+                    ChampionName = ResolveChampionName(m.ChampionId),
+                    ChampionLevel = m.ChampionLevel,
+                    ChampionPoints = m.ChampionPoints,
+                    LastPlayTime = m.LastPlayTime,
+                    ChestGranted = m.ChestGranted,
+                    TokensEarned = m.TokensEarned
                 }).ToList(),
 
                 ProfileAge = new DataAgeMetadata

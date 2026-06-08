@@ -11,6 +11,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMatchRepository, MatchRepository>();
         services.AddScoped<ISummonerRepository, SummonerRepository>();
         services.AddScoped<IRankRepository, RankRepository>();
+        services.AddScoped<IChampionMasteryRepository, ChampionMasteryRepository>();
         services.AddScoped<IRefreshLockRepository, RefreshLockRepository>();
         services.AddScoped<IApiClientKeyRepository, ApiClientKeyRepository>();
         services.AddScoped<ILiveGameSnapshotRepository, LiveGameSnapshotRepository>();

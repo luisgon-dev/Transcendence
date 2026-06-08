@@ -418,6 +418,98 @@ public class SummonerStatsServiceTests
     }
 
     [Fact]
+    public async Task GetPlayedWithAsync_AggregatesCoParticipantsByGamesAndSameTeamWins()
+    {
+        await using var harness = await SummonerStatsHarness.CreateAsync();
+
+        static Summoner NewSummoner(string name) => new()
+        {
+            Id = Guid.NewGuid(),
+            PlatformRegion = "NA1",
+            Region = "americas",
+            Puuid = $"puuid-{Guid.NewGuid():N}",
+            GameName = name,
+            TagLine = "NA1",
+            GameNameNormalized = name.ToUpperInvariant(),
+            TagLineNormalized = "NA1",
+            SummonerLevel = 100,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        var me = NewSummoner("Me");
+        var duo = NewSummoner("Duo");
+        var rival = NewSummoner("Rival");
+        harness.Db.Summoners.AddRange(me, duo, rival);
+
+        var matchNum = 0;
+        void AddCoMatch(Summoner other, bool sameTeam, bool myWin)
+        {
+            matchNum++;
+            var match = new Match
+            {
+                Id = Guid.NewGuid(), MatchId = $"NA1_pw{matchNum}", MatchDate = 1000 + matchNum,
+                Duration = 1800, Patch = "14.2", QueueId = QueueCatalog.RankedSoloDuoQueueId,
+                QueueFamily = QueueCatalog.QueueFamilyRankedSoloDuo, QueueType = "RANKED_SOLO_5x5",
+                Status = FetchStatus.Success
+            };
+            harness.Db.MatchParticipants.Add(new MatchParticipant
+            {
+                Id = Guid.NewGuid(), Match = match, MatchId = match.Id, Summoner = me, SummonerId = me.Id,
+                Puuid = me.Puuid, ParticipantId = 1, TeamId = 100, Win = myWin
+            });
+            harness.Db.MatchParticipants.Add(new MatchParticipant
+            {
+                Id = Guid.NewGuid(), Match = match, MatchId = match.Id, Summoner = other, SummonerId = other.Id,
+                Puuid = other.Puuid, ParticipantId = 2, TeamId = sameTeam ? 100 : 200, Win = sameTeam ? myWin : !myWin
+            });
+        }
+
+        AddCoMatch(duo, sameTeam: true, myWin: true);
+        AddCoMatch(duo, sameTeam: true, myWin: true);
+        AddCoMatch(duo, sameTeam: true, myWin: false);
+        AddCoMatch(rival, sameTeam: false, myWin: true);
+        AddCoMatch(rival, sameTeam: false, myWin: false);
+
+        await harness.Db.SaveChangesAsync();
+
+        var result = await harness.Service.GetPlayedWithAsync(me.Id, recentMatches: 100, topCount: 10, CancellationToken.None);
+
+        result.Should().HaveCount(2);
+        result[0].SummonerId.Should().Be(duo.Id); // ordered by gamesTogether desc
+
+        var duoEntry = result.Single(x => x.SummonerId == duo.Id);
+        duoEntry.GamesTogether.Should().Be(3);
+        duoEntry.SameTeamGames.Should().Be(3);
+        duoEntry.SameTeamWins.Should().Be(2);
+
+        var rivalEntry = result.Single(x => x.SummonerId == rival.Id);
+        rivalEntry.GamesTogether.Should().Be(2);
+        rivalEntry.SameTeamGames.Should().Be(0);
+        rivalEntry.SameTeamWins.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task GetTopMasteryAsync_ReturnsHighestByPoints()
+    {
+        await using var harness = await SummonerStatsHarness.CreateAsync();
+        var summoner = harness.CreateSummoner();
+
+        harness.Db.ChampionMasteries.AddRange(
+            new ChampionMastery { SummonerId = summoner.Id, ChampionId = 1, ChampionLevel = 7, ChampionPoints = 500000, LastPlayTime = 100, ChestGranted = true, TokensEarned = 0 },
+            new ChampionMastery { SummonerId = summoner.Id, ChampionId = 2, ChampionLevel = 5, ChampionPoints = 120000, LastPlayTime = 200, ChestGranted = false, TokensEarned = 2 },
+            new ChampionMastery { SummonerId = summoner.Id, ChampionId = 3, ChampionLevel = 6, ChampionPoints = 300000, LastPlayTime = 300, ChestGranted = true, TokensEarned = 1 });
+
+        await harness.Db.SaveChangesAsync();
+
+        var result = await harness.Service.GetTopMasteryAsync(summoner.Id, top: 2, CancellationToken.None);
+
+        result.Should().HaveCount(2);
+        result.Select(x => x.ChampionId).Should().Equal([1, 3]); // by points desc: 500k, 300k
+        result[0].ChampionLevel.Should().Be(7);
+        result[0].ChampionPoints.Should().Be(500000);
+    }
+
+    [Fact]
     public async Task GetChampionStatsAsync_WrapsUnexpectedException()
     {
         var harness = await SummonerStatsHarness.CreateAsync();

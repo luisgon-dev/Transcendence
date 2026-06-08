@@ -747,11 +747,19 @@ public class SummonerRefreshJobTests
             });
             var timelineOptions = Options.Create(new TimelineIngestionOptions { Enabled = false });
 
+            var championMasteryService = new Mock<IChampionMasteryService>();
+            championMasteryService
+                .Setup(x => x.GetMasteriesAsync(It.IsAny<string>(), It.IsAny<PlatformRoute>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync([]);
+            var championMasteryRepository = new Mock<IChampionMasteryRepository>();
+
             var job = new SummonerRefreshJob(
                 summonerService.Object,
                 summonerRepository.Object,
                 matchRepository.Object,
                 matchService.Object,
+                championMasteryService.Object,
+                championMasteryRepository.Object,
                 db,
                 refreshLockRepository.Object,
                 services.GetRequiredService<ILogger<SummonerRefreshJob>>(),

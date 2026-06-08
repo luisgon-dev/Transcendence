@@ -19,6 +19,12 @@ public class SummonerProfileResponse
     // Top champions by games played
     public List<ProfileChampionStat>? TopChampions { get; set; }
 
+    // Summoners this player most frequently appears in matches with
+    public List<FrequentlyPlayedWithStat>? FrequentlyPlayedWith { get; set; }
+
+    // Highest champion mastery (by points)
+    public List<ChampionMasteryStat>? TopMastery { get; set; }
+
     // Data freshness
     public DataAgeMetadata ProfileAge { get; set; } = new();
     public DataAgeMetadata RankAge { get; set; } = new();
@@ -69,4 +75,31 @@ public class ProfileChampionStat
     public int Losses { get; set; }
     public double WinRate { get; set; }
     public double KdaRatio { get; set; }
+}
+
+/// <summary>
+/// A summoner frequently appearing in the profile owner's matches.
+/// </summary>
+public class FrequentlyPlayedWithStat
+{
+    public Guid SummonerId { get; set; }
+    public string GameName { get; set; } = string.Empty;
+    public string TagLine { get; set; } = string.Empty;
+    public int GamesTogether { get; set; }
+    public int SameTeamGames { get; set; }
+    public int SameTeamWins { get; set; }
+}
+
+/// <summary>
+/// A champion-mastery entry for the profile response.
+/// </summary>
+public class ChampionMasteryStat
+{
+    public int ChampionId { get; set; }
+    public string ChampionName { get; set; } = string.Empty;
+    public int ChampionLevel { get; set; }
+    public long ChampionPoints { get; set; }
+    public long LastPlayTime { get; set; }
+    public bool ChestGranted { get; set; }
+    public int TokensEarned { get; set; }
 }

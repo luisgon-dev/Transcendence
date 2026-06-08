@@ -6476,6 +6476,39 @@
         },
         "additionalProperties": false
       },
+      "ChampionMasteryStat": {
+        "type": "object",
+        "properties": {
+          "championId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "championName": {
+            "type": "string",
+            "nullable": true
+          },
+          "championLevel": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "championPoints": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "lastPlayTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "chestGranted": {
+            "type": "boolean"
+          },
+          "tokensEarned": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
       "ChampionMatchupsResponse": {
         "type": "object",
         "properties": {
@@ -6807,6 +6840,36 @@
           "createdAtUtc": {
             "type": "string",
             "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FrequentlyPlayedWithStat": {
+        "type": "object",
+        "properties": {
+          "summonerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "gameName": {
+            "type": "string",
+            "nullable": true
+          },
+          "tagLine": {
+            "type": "string",
+            "nullable": true
+          },
+          "gamesTogether": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "sameTeamGames": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "sameTeamWins": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -8252,6 +8315,20 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ProfileChampionStat"
+            },
+            "nullable": true
+          },
+          "frequentlyPlayedWith": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FrequentlyPlayedWithStat"
+            },
+            "nullable": true
+          },
+          "topMastery": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChampionMasteryStat"
             },
             "nullable": true
           },

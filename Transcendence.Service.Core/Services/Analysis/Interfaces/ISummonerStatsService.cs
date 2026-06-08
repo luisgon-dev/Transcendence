@@ -14,6 +14,16 @@ public interface ISummonerStatsService
     /// </summary>
     Task<IReadOnlyList<RankHistoryEntry>> GetRankHistoryAsync(Guid summonerId, string? queueType, CancellationToken ct);
 
+    /// <summary>
+    /// Gets the summoners this player most frequently appears in matches with (from recent matches).
+    /// </summary>
+    Task<IReadOnlyList<PlayedWithEntry>> GetPlayedWithAsync(Guid summonerId, int recentMatches, int topCount, CancellationToken ct);
+
+    /// <summary>
+    /// Gets the summoner's highest champion-mastery entries (by points), served from stored data.
+    /// </summary>
+    Task<IReadOnlyList<ChampionMasteryEntry>> GetTopMasteryAsync(Guid summonerId, int top, CancellationToken ct);
+
     Task<PagedResult<RecentMatchSummary>> GetRecentMatchesAsync(
         Guid summonerId,
         int page,

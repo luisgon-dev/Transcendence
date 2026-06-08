@@ -21,6 +21,8 @@ public class SummonerRefreshJob(
     ISummonerRepository summonerRepository,
     IMatchRepository matchRepository,
     IMatchService matchService,
+    IChampionMasteryService championMasteryService,
+    IChampionMasteryRepository championMasteryRepository,
     TranscendenceContext db,
     IRefreshLockRepository refreshLockRepository,
     ILogger<SummonerRefreshJob> logger,
@@ -57,6 +59,9 @@ public class SummonerRefreshJob(
             var summoner = await summonerService.GetSummonerByRiotIdAsync(gameName, tagLine, platformRoute, ct);
             await summonerRepository.AddOrUpdateSummonerAsync(summoner, ct);
             await db.SaveChangesAsync(ct);
+
+            // Enrich with champion mastery (fail-soft — never block a refresh on it).
+            await TryRefreshChampionMasteryAsync(summoner, platformRoute, gameName, tagLine, ct);
 
             var regional = platformRoute.ToRegional();
             var pageSize = Math.Max(1, options.MatchIdsPageSize);
@@ -861,6 +866,31 @@ public class SummonerRefreshJob(
         }
 
         return persisted;
+    }
+
+    private async Task TryRefreshChampionMasteryAsync(Summoner summoner, PlatformRoute platformRoute,
+        string gameName, string tagLine, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(summoner.Puuid))
+            return;
+
+        try
+        {
+            var masteries = await championMasteryService.GetMasteriesAsync(summoner.Puuid, platformRoute, ct);
+            await championMasteryRepository.UpsertAsync(summoner.Id, masteries, ct);
+            await db.SaveChangesAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Mastery is enrichment; never let its failure fail a refresh.
+            logger.LogWarning(ex,
+                "[Refresh] Champion mastery refresh failed for {GameName}#{Tag} on {Platform}; continuing refresh.",
+                gameName, tagLine, platformRoute);
+        }
     }
 
     private async Task InvalidateStatsCacheAsync(Guid summonerId, CancellationToken ct)

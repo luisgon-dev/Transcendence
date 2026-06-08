@@ -65,6 +65,24 @@ public record RankHistoryEntry(
     DateTime DateRecorded
 );
 
+public record PlayedWithEntry(
+    Guid SummonerId,
+    string? GameName,
+    string? TagLine,
+    int GamesTogether,
+    int SameTeamGames,
+    int SameTeamWins
+);
+
+public record ChampionMasteryEntry(
+    int ChampionId,
+    int ChampionLevel,
+    long ChampionPoints,
+    long LastPlayTime,
+    bool ChestGranted,
+    int TokensEarned
+);
+
 public record RecentMatchSummary(
     string MatchId,
     long MatchDate,

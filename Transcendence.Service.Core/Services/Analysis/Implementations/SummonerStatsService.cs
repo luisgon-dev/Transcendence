@@ -642,6 +642,7 @@ public class SummonerStatsService(
             .Include(m => m.Participants)
                 .ThenInclude(p => p.Runes)
             .Include(m => m.Bans)
+            .Include(m => m.TeamObjectives)
             .FirstOrDefaultAsync(m => m.MatchId == matchId, ct);
 
         if (match == null)
@@ -683,6 +684,19 @@ public class SummonerStatsService(
                 g.OrderBy(b => b.PickTurn).Select(b => b.ChampionId).ToList()))
             .ToList();
 
+        var objectives = match.TeamObjectives
+            .OrderBy(o => o.TeamId)
+            .Select(o => new TeamObjectivesDto(
+                o.TeamId,
+                o.FirstBlood,
+                new ObjectiveStatDto(o.BaronKills, o.BaronFirst),
+                new ObjectiveStatDto(o.DragonKills, o.DragonFirst),
+                new ObjectiveStatDto(o.RiftHeraldKills, o.RiftHeraldFirst),
+                new ObjectiveStatDto(o.HordeKills, o.HordeFirst),
+                new ObjectiveStatDto(o.TowerKills, o.TowerFirst),
+                new ObjectiveStatDto(o.InhibitorKills, o.InhibitorFirst)))
+            .ToList();
+
         return new MatchDetailDto(
             match.MatchId ?? string.Empty,
             match.MatchDate,
@@ -693,7 +707,8 @@ public class SummonerStatsService(
                 : QueueCatalog.ResolveQueueLabel(match.QueueId),
             string.IsNullOrWhiteSpace(match.Patch) ? null : match.Patch,
             participants,
-            bans
+            bans,
+            objectives
         );
     }
 
@@ -730,6 +745,9 @@ public class SummonerStatsService(
             p.ChampLevel,
             p.GoldEarned,
             p.TotalDamageDealtToChampions,
+            p.PhysicalDamageDealtToChampions,
+            p.MagicDamageDealtToChampions,
+            p.TrueDamageDealtToChampions,
             p.VisionScore,
             p.TotalMinionsKilled,
             p.NeutralMinionsKilled,

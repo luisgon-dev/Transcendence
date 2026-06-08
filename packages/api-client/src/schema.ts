@@ -4954,6 +4954,7 @@ export interface components {
             patch?: string | null;
             participants?: components["schemas"]["ParticipantDetailDto"][] | null;
             bans?: components["schemas"]["TeamBansDto"][] | null;
+            objectives?: components["schemas"]["TeamObjectivesDto"][] | null;
         };
         MatchRuneDetailDto: {
             /** Format: int32 */
@@ -5078,6 +5079,11 @@ export interface components {
             missingRoles?: string[] | null;
             potentialAutofills?: components["schemas"]["MultiSearchAutofillRisk"][] | null;
         };
+        ObjectiveStatDto: {
+            /** Format: int32 */
+            kills?: number;
+            first?: boolean;
+        };
         ParticipantDetailDto: {
             puuid?: string | null;
             gameName?: string | null;
@@ -5100,6 +5106,12 @@ export interface components {
             goldEarned?: number;
             /** Format: int32 */
             totalDamageDealtToChampions?: number;
+            /** Format: int32 */
+            physicalDamageDealtToChampions?: number;
+            /** Format: int32 */
+            magicDamageDealtToChampions?: number;
+            /** Format: int32 */
+            trueDamageDealtToChampions?: number;
             /** Format: int32 */
             visionScore?: number;
             /** Format: int32 */
@@ -5418,6 +5430,17 @@ export interface components {
             /** Format: int32 */
             teamId?: number;
             bannedChampionIds?: number[] | null;
+        };
+        TeamObjectivesDto: {
+            /** Format: int32 */
+            teamId?: number;
+            firstBlood?: boolean;
+            baron?: components["schemas"]["ObjectiveStatDto"];
+            dragon?: components["schemas"]["ObjectiveStatDto"];
+            riftHerald?: components["schemas"]["ObjectiveStatDto"];
+            horde?: components["schemas"]["ObjectiveStatDto"];
+            tower?: components["schemas"]["ObjectiveStatDto"];
+            inhibitor?: components["schemas"]["ObjectiveStatDto"];
         };
         TftRankDto: {
             queueType?: string | null;

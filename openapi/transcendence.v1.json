@@ -7027,6 +7027,13 @@
               "$ref": "#/components/schemas/TeamBansDto"
             },
             "nullable": true
+          },
+          "objectives": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TeamObjectivesDto"
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -7403,6 +7410,19 @@
         },
         "additionalProperties": false
       },
+      "ObjectiveStatDto": {
+        "type": "object",
+        "properties": {
+          "kills": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "first": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
       "ParticipantDetailDto": {
         "type": "object",
         "properties": {
@@ -7454,6 +7474,18 @@
             "format": "int32"
           },
           "totalDamageDealtToChampions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "physicalDamageDealtToChampions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "magicDamageDealtToChampions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "trueDamageDealtToChampions": {
             "type": "integer",
             "format": "int32"
           },
@@ -8338,6 +8370,37 @@
               "format": "int32"
             },
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "TeamObjectivesDto": {
+        "type": "object",
+        "properties": {
+          "teamId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "firstBlood": {
+            "type": "boolean"
+          },
+          "baron": {
+            "$ref": "#/components/schemas/ObjectiveStatDto"
+          },
+          "dragon": {
+            "$ref": "#/components/schemas/ObjectiveStatDto"
+          },
+          "riftHerald": {
+            "$ref": "#/components/schemas/ObjectiveStatDto"
+          },
+          "horde": {
+            "$ref": "#/components/schemas/ObjectiveStatDto"
+          },
+          "tower": {
+            "$ref": "#/components/schemas/ObjectiveStatDto"
+          },
+          "inhibitor": {
+            "$ref": "#/components/schemas/ObjectiveStatDto"
           }
         },
         "additionalProperties": false

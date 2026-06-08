@@ -151,6 +151,9 @@ export type MatchDetail = {
     champLevel?: number;
     goldEarned: number;
     totalDamageDealtToChampions: number;
+    physicalDamageDealtToChampions?: number;
+    magicDamageDealtToChampions?: number;
+    trueDamageDealtToChampions?: number;
     visionScore: number;
     totalMinionsKilled: number;
     neutralMinionsKilled: number;
@@ -160,6 +163,20 @@ export type MatchDetail = {
     runes: MatchRuneDetail;
   }>;
   bans?: Array<{ teamId: number; bannedChampionIds: number[] }>;
+  objectives?: MatchTeamObjectives[];
+};
+
+export type ObjectiveStat = { kills: number; first: boolean };
+
+export type MatchTeamObjectives = {
+  teamId: number;
+  firstBlood: boolean;
+  baron: ObjectiveStat;
+  dragon: ObjectiveStat;
+  riftHerald: ObjectiveStat;
+  horde: ObjectiveStat;
+  tower: ObjectiveStat;
+  inhibitor: ObjectiveStat;
 };
 
 export type RankHistoryEntry = {

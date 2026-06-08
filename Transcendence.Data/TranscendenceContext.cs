@@ -23,6 +23,7 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<CurrentChampionLoadout> CurrentChampionLoadouts { get; set; }
     public DbSet<MatchParticipant> MatchParticipants { get; set; }
     public DbSet<MatchBan> MatchBans { get; set; }
+    public DbSet<MatchTeamObjective> MatchTeamObjectives { get; set; }
     public DbSet<MatchTimelineFetchState> MatchTimelineFetchStates { get; set; }
     public DbSet<MatchParticipantTimelineSnapshot> MatchParticipantTimelineSnapshots { get; set; }
 
@@ -437,6 +438,18 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
 
         modelBuilder.Entity<MatchBan>()
             .HasQueryFilter(mb => mb.Match.Status != FetchStatus.PermanentlyUnfetchable);
+
+        modelBuilder.Entity<MatchTeamObjective>(entity =>
+        {
+            entity.HasKey(o => new { o.MatchId, o.TeamId });
+            entity.HasOne(o => o.Match)
+                .WithMany(m => m.TeamObjectives)
+                .HasForeignKey(o => o.MatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MatchTeamObjective>()
+            .HasQueryFilter(o => o.Match.Status != FetchStatus.PermanentlyUnfetchable);
 
         modelBuilder.Entity<MatchTimelineFetchState>(entity =>
         {

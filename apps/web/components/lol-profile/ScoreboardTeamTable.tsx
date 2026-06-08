@@ -97,6 +97,7 @@ function RuneTrigger({
 function ScoreboardRow({
   participant,
   durationSeconds,
+  teamMaxDamage,
   region,
   gameName,
   tagLine,
@@ -107,6 +108,7 @@ function ScoreboardRow({
 }: {
   participant: MatchParticipant;
   durationSeconds: number;
+  teamMaxDamage: number;
   region: string;
   gameName: string;
   tagLine: string;
@@ -119,6 +121,12 @@ function ScoreboardRow({
   const champion = championStatic?.champions[String(participant.championId)];
   const cs = participant.totalMinionsKilled + participant.neutralMinionsKilled;
   const csPerMin = durationSeconds > 0 ? cs / (durationSeconds / 60) : 0;
+  const totalDmg = participant.totalDamageDealtToChampions;
+  const physDmg = participant.physicalDamageDealtToChampions ?? 0;
+  const magicDmg = participant.magicDamageDealtToChampions ?? 0;
+  const trueDmg = participant.trueDamageDealtToChampions ?? 0;
+  const splitSum = physDmg + magicDmg + trueDmg;
+  const damageFillPct = teamMaxDamage > 0 ? Math.min(100, (totalDmg / teamMaxDamage) * 100) : 0;
   const itemSlots = Array.from({ length: 7 }, (_, idx) => participant.items?.[idx] ?? 0);
   const displayName = participantDisplayName(participant.gameName, participant.tagLine);
   const canLink = Boolean(participant.gameName && participant.tagLine && !isCurrent);
@@ -199,8 +207,28 @@ function ScoreboardRow({
         <p className="type-caption text-muted tabular-nums">{csPerMin.toFixed(1)}/min</p>
       </Td>
 
-      <Td align="right" className="whitespace-nowrap text-sm tabular-nums text-fg/88">
-        {participant.totalDamageDealtToChampions.toLocaleString()}
+      <Td align="right" className="whitespace-nowrap">
+        <span className="text-sm tabular-nums text-fg/88">{totalDmg.toLocaleString()}</span>
+        {splitSum > 0 ? (
+          <Tooltip
+            side="left"
+            content={
+              <div className="grid gap-0.5 tabular-nums">
+                <span><span className="text-loss">■</span> Physical {physDmg.toLocaleString()}</span>
+                <span><span className="text-team-blue">■</span> Magic {magicDmg.toLocaleString()}</span>
+                <span><span className="text-fg">■</span> True {trueDmg.toLocaleString()}</span>
+              </div>
+            }
+          >
+            <div className="ml-auto mt-1 h-1.5 w-16 overflow-hidden rounded-full bg-surface-2/70">
+              <div className="flex h-full" style={{ width: `${damageFillPct}%` }}>
+                <span className="h-full" style={{ width: `${(physDmg / splitSum) * 100}%`, backgroundColor: "var(--color-loss)" }} />
+                <span className="h-full" style={{ width: `${(magicDmg / splitSum) * 100}%`, backgroundColor: "var(--color-team-blue)" }} />
+                <span className="h-full" style={{ width: `${(trueDmg / splitSum) * 100}%`, backgroundColor: "var(--color-fg)" }} />
+              </div>
+            </div>
+          </Tooltip>
+        ) : null}
       </Td>
 
       <Td align="right" className="hidden whitespace-nowrap text-sm tabular-nums text-fg/82 sm:table-cell">
@@ -271,6 +299,7 @@ export function ScoreboardTeamTable({
   const win = participants[0]?.win ?? false;
   const totalKills = participants.reduce((sum, p) => sum + p.kills, 0);
   const totalGold = participants.reduce((sum, p) => sum + p.goldEarned, 0);
+  const teamMaxDamage = Math.max(1, ...participants.map((p) => p.totalDamageDealtToChampions));
   const isBlue = teamId === 100;
 
   return (
@@ -331,6 +360,7 @@ export function ScoreboardTeamTable({
                 key={`${participant.puuid ?? participant.championId}-${idx}`}
                 participant={participant}
                 durationSeconds={durationSeconds}
+                teamMaxDamage={teamMaxDamage}
                 region={region}
                 gameName={gameName}
                 tagLine={tagLine}

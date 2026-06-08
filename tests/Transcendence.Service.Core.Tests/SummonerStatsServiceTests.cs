@@ -365,6 +365,59 @@ public class SummonerStatsServiceTests
     }
 
     [Fact]
+    public async Task GetMatchDetailAsync_IncludesDamageBreakdownAndTeamObjectives()
+    {
+        await using var harness = await SummonerStatsHarness.CreateAsync();
+        var summoner = harness.CreateSummoner();
+
+        var participant = harness.AddParticipant(
+            summoner,
+            queueId: QueueCatalog.RankedSoloDuoQueueId,
+            queueFamily: QueueCatalog.QueueFamilyRankedSoloDuo,
+            queueType: "RANKED_SOLO_5x5",
+            matchDate: 6000,
+            duration: 1800,
+            kills: 1,
+            deaths: 1,
+            assists: 1);
+        participant.PhysicalDamageDealtToChampions = 12000;
+        participant.MagicDamageDealtToChampions = 5000;
+        participant.TrueDamageDealtToChampions = 1000;
+
+        harness.Db.MatchTeamObjectives.AddRange(
+            new MatchTeamObjective
+            {
+                Match = participant.Match, MatchId = participant.MatchId, TeamId = 100,
+                FirstBlood = true, BaronKills = 1, BaronFirst = true, DragonKills = 3, DragonFirst = true,
+                RiftHeraldKills = 1, TowerKills = 9, InhibitorKills = 2
+            },
+            new MatchTeamObjective
+            {
+                Match = participant.Match, MatchId = participant.MatchId, TeamId = 200,
+                FirstBlood = false, DragonKills = 1, TowerKills = 2
+            });
+
+        await harness.Db.SaveChangesAsync();
+
+        var detail = await harness.Service.GetMatchDetailAsync(participant.Match.MatchId!, CancellationToken.None);
+
+        detail.Should().NotBeNull();
+        var p = detail!.Participants.Single();
+        p.PhysicalDamageDealtToChampions.Should().Be(12000);
+        p.MagicDamageDealtToChampions.Should().Be(5000);
+        p.TrueDamageDealtToChampions.Should().Be(1000);
+
+        detail.Objectives.Should().HaveCount(2);
+        var blue = detail.Objectives.Single(o => o.TeamId == 100);
+        blue.FirstBlood.Should().BeTrue();
+        blue.Baron.Kills.Should().Be(1);
+        blue.Baron.First.Should().BeTrue();
+        blue.Dragon.Kills.Should().Be(3);
+        blue.Tower.Kills.Should().Be(9);
+        detail.Objectives.Single(o => o.TeamId == 200).Dragon.Kills.Should().Be(1);
+    }
+
+    [Fact]
     public async Task GetChampionStatsAsync_WrapsUnexpectedException()
     {
         var harness = await SummonerStatsHarness.CreateAsync();

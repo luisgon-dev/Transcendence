@@ -17,6 +17,7 @@ import {
   type ItemStatic,
   type MatchDetail,
   type MatchParticipant,
+  type MatchTeamObjectives,
   type RuneStatic,
   type SpellStatic
 } from "@/components/lol-profile/shared";
@@ -77,6 +78,42 @@ function RuneTabCell({
   );
 }
 
+function TeamObjectivesSummary({ team, side }: { team: MatchTeamObjectives | undefined; side: "blue" | "red" }) {
+  const items = team
+    ? [
+        team.dragon.kills > 0 ? `${team.dragon.kills} Dragon` : null,
+        team.baron.kills > 0 ? `${team.baron.kills} Baron` : null,
+        team.riftHerald.kills > 0 ? `${team.riftHerald.kills} Herald` : null,
+        team.horde.kills > 0 ? `${team.horde.kills} Grubs` : null,
+        `${team.tower.kills} Towers`,
+        team.inhibitor.kills > 0 ? `${team.inhibitor.kills} Inhib` : null
+      ].filter(Boolean)
+    : [];
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <span className={`type-overline font-semibold ${side === "blue" ? "text-team-blue" : "text-team-red"}`}>
+        {side === "blue" ? "Blue" : "Red"}
+      </span>
+      {team?.firstBlood ? (
+        <span className="surface-chip type-caption rounded-full px-2 py-0.5 text-fg/80">First Blood</span>
+      ) : null}
+      <span className="type-caption text-fg/72 tabular-nums">{items.length > 0 ? items.join(" · ") : "—"}</span>
+    </div>
+  );
+}
+
+function ObjectivesStrip({ objectives }: { objectives: MatchTeamObjectives[] }) {
+  const blue = objectives.find((o) => o.teamId === 100);
+  const red = objectives.find((o) => o.teamId === 200);
+  return (
+    <div className="surface-subtle flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-control px-3 py-2">
+      <TeamObjectivesSummary team={blue} side="blue" />
+      <TeamObjectivesSummary team={red} side="red" />
+    </div>
+  );
+}
+
 // Compact, tabbed post-game view that replaces the old 10-tall-cards detail panel.
 // Overview = two dense team scoreboards (op.gg-style); Runes = role-aligned rune
 // pages for side-by-side comparison. Runes also surface via a hover tooltip on each
@@ -120,6 +157,9 @@ export function MatchScoreboard({
 
       {tab === "overview" ? (
         <div className="flex flex-col gap-3">
+          {detail.objectives && detail.objectives.length > 0 ? (
+            <ObjectivesStrip objectives={detail.objectives} />
+          ) : null}
           <ScoreboardTeamTable
             participants={blue}
             teamId={100}

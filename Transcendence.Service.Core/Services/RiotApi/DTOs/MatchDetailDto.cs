@@ -11,7 +11,8 @@ public record MatchDetailDto(
     string QueueType,
     string? Patch,
     IReadOnlyList<ParticipantDetailDto> Participants,
-    IReadOnlyList<TeamBansDto> Bans
+    IReadOnlyList<TeamBansDto> Bans,
+    IReadOnlyList<TeamObjectivesDto> Objectives
 );
 
 /// <summary>
@@ -21,6 +22,23 @@ public record TeamBansDto(
     int TeamId,
     IReadOnlyList<int> BannedChampionIds
 );
+
+/// <summary>
+/// Objective tallies for one team (kills + who got it first). Populated on new
+/// ingestion only — absent/zero for matches ingested before Phase 3.
+/// </summary>
+public record TeamObjectivesDto(
+    int TeamId,
+    bool FirstBlood,
+    ObjectiveStatDto Baron,
+    ObjectiveStatDto Dragon,
+    ObjectiveStatDto RiftHerald,
+    ObjectiveStatDto Horde,
+    ObjectiveStatDto Tower,
+    ObjectiveStatDto Inhibitor
+);
+
+public record ObjectiveStatDto(int Kills, bool First);
 
 /// <summary>
 /// Complete participant data for a match including all stats, items, runes, and spells.
@@ -39,6 +57,9 @@ public record ParticipantDetailDto(
     int ChampLevel,
     int GoldEarned,
     int TotalDamageDealtToChampions,
+    int PhysicalDamageDealtToChampions,
+    int MagicDamageDealtToChampions,
+    int TrueDamageDealtToChampions,
     int VisionScore,
     int TotalMinionsKilled,
     int NeutralMinionsKilled,

@@ -21,9 +21,11 @@ export function Toolbar({
   className?: string;
 }) {
   return (
-    <div className={cn("toolbar grid gap-3 px-4 py-3.5 sm:px-5", className)}>
+    <div className={cn("toolbar flex flex-col gap-3 px-4 py-3.5 sm:px-5", className)}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="min-w-0 flex-1">
+        {/* basis-full on small screens forces the title onto its own line so the
+            actions wrap below instead of overflowing; flex-1 from sm: up. */}
+        <div className="min-w-0 grow basis-full sm:basis-0">
           {eyebrow ? <p className="type-overline text-muted">{eyebrow}</p> : null}
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h1 className="type-page-title text-fg">{title}</h1>
@@ -34,7 +36,7 @@ export function Toolbar({
             ) : null}
           </div>
         </div>
-        {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+        {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
       {filters ? (
         <div className="flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">

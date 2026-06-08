@@ -57,16 +57,18 @@ function StyleHeader({
   styleId,
   styleById,
   label,
-  size
+  size,
+  dense = false
 }: {
   styleId: number;
   styleById: Record<string, RuneMeta>;
   label: string;
   size: number;
+  dense?: boolean;
 }) {
   const style = styleById[String(styleId)];
   return (
-    <div className="mb-2 flex items-center gap-2">
+    <div className={cn("flex items-center gap-2", dense ? "mb-1.5" : "mb-2")}>
       {style ? (
         <Image
           src={runeIconUrl(style.icon)}
@@ -98,7 +100,10 @@ export function RuneTreeDisplay({
   trees,
   runeById,
   styleById,
-  iconSize = 26,
+  iconSize,
+  density = "default",
+  gridClassName,
+  panelClassName,
   className
 }: {
   primaryStyleId: number;
@@ -110,6 +115,12 @@ export function RuneTreeDisplay({
   runeById: Record<string, RuneMeta>;
   styleById: Record<string, RuneMeta>;
   iconSize?: number;
+  /** "compact" shrinks icons/padding and drops the inner panel chrome for tight contexts (match scoreboard). */
+  density?: "default" | "compact";
+  /** Override the outer grid (e.g. single column inside a participant card). */
+  gridClassName?: string;
+  /** Override the inner tree/shard panel surface (e.g. borderless when nested in an already-bordered shell). */
+  panelClassName?: string;
   className?: string;
 }) {
   const primaryTree = trees.find((tree) => tree.id === primaryStyleId);
@@ -122,20 +133,28 @@ export function RuneTreeDisplay({
     return <p className="type-caption text-muted">Runes unavailable.</p>;
   }
 
-  const keystoneSize = iconSize + 6;
+  const compact = density === "compact";
+  const resolvedIcon = iconSize ?? (compact ? 22 : 26);
+  const keystoneSize = resolvedIcon + 6;
+  const shardSize = Math.max(12, resolvedIcon - (compact ? 6 : 4));
+  const slotGap = compact ? "gap-1" : "gap-2.5";
+  const keystonePad = compact ? "gap-1.5 border-b border-border/30 pb-1.5" : "gap-2 border-b border-border/30 pb-2.5";
+  const colGap = compact ? "gap-2" : "gap-3";
+  const panelCls = panelClassName ?? (compact ? "rounded-control p-2" : "surface-subtle rounded-control p-3");
+  const gridCls = gridClassName ?? "grid w-full gap-4 sm:grid-cols-2";
 
   return (
-    <div className={cn("grid w-full gap-4 sm:grid-cols-2", className)}>
+    <div className={cn(gridCls, className)}>
       {primaryTree ? (
-        <div className="surface-subtle rounded-control p-3">
-          <StyleHeader styleId={primaryStyleId} styleById={styleById} label="Primary" size={iconSize} />
-          <div className="grid gap-2.5">
+        <div className={panelCls}>
+          <StyleHeader styleId={primaryStyleId} styleById={styleById} label="Primary" size={resolvedIcon} dense={compact} />
+          <div className={cn("grid", slotGap)}>
             {primaryTree.slots.map((slot, slotIdx) => (
               <div
                 key={`p-slot-${slotIdx}`}
                 className={cn(
                   "flex items-center justify-between gap-1.5",
-                  slotIdx === 0 && "gap-2 border-b border-border/30 pb-2.5"
+                  slotIdx === 0 && keystonePad
                 )}
               >
                 {slot.runes.map((rune) => (
@@ -146,7 +165,7 @@ export function RuneTreeDisplay({
                     fallbackIcon={rune.icon}
                     runeById={runeById}
                     selected={primarySet.has(rune.id)}
-                    size={slotIdx === 0 ? keystoneSize : iconSize}
+                    size={slotIdx === 0 ? keystoneSize : resolvedIcon}
                   />
                 ))}
               </div>
@@ -155,11 +174,11 @@ export function RuneTreeDisplay({
         </div>
       ) : null}
 
-      <div className="grid gap-3">
+      <div className={cn("grid", colGap)}>
         {secondaryTree ? (
-          <div className="surface-subtle rounded-control p-3">
-            <StyleHeader styleId={subStyleId} styleById={styleById} label="Secondary" size={iconSize} />
-            <div className="grid gap-2.5">
+          <div className={panelCls}>
+            <StyleHeader styleId={subStyleId} styleById={styleById} label="Secondary" size={resolvedIcon} dense={compact} />
+            <div className={cn("grid", slotGap)}>
               {secondaryTree.slots.slice(1).map((slot, slotIdx) => (
                 <div key={`s-slot-${slotIdx}`} className="flex items-center justify-between gap-1.5">
                   {slot.runes.map((rune) => (
@@ -170,7 +189,7 @@ export function RuneTreeDisplay({
                       fallbackIcon={rune.icon}
                       runeById={runeById}
                       selected={subSet.has(rune.id)}
-                      size={iconSize}
+                      size={resolvedIcon}
                     />
                   ))}
                 </div>
@@ -179,9 +198,9 @@ export function RuneTreeDisplay({
           </div>
         ) : null}
 
-        <div className="surface-subtle rounded-control p-3">
+        <div className={panelCls}>
           <span className="type-overline text-muted">Shards</span>
-          <div className="mt-2 grid gap-1.5">
+          <div className={cn("grid", compact ? "mt-1.5 gap-1" : "mt-2 gap-1.5")}>
             {STAT_SHARD_ROWS.map((row, rowIdx) => {
               const selectedForRow = statShards[rowIdx];
               return (
@@ -194,7 +213,7 @@ export function RuneTreeDisplay({
                       fallbackIcon=""
                       runeById={runeById}
                       selected={shardId === selectedForRow}
-                      size={iconSize - 4}
+                      size={shardSize}
                       shape="circle"
                     />
                   ))}

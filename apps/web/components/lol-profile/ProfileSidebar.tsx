@@ -43,7 +43,7 @@ export function ProfileSidebar({
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="type-kicker text-muted">Ranked snapshot</p>
-            <h2 className="mt-2 type-section">Queues and ladder movement</h2>
+            <h2 className="mt-2 type-section">Solo/Duo &amp; Flex</h2>
           </div>
           <Badge className="surface-chip text-fg/72">
             {profile.rankAge?.ageDescription ?? "updated recently"}
@@ -113,7 +113,7 @@ export function ProfileSidebar({
       <Card className="profile-section-card p-5">
         <div>
           <p className="type-kicker text-muted">Champion pool</p>
-          <h2 className="mt-2 type-section">Top picks in recent tracked games</h2>
+          <h2 className="mt-2 type-section">Most played</h2>
         </div>
         <div className="mt-4 grid gap-3">
           {(profile.topChampions ?? []).slice(0, 6).map((championStat, index) => {

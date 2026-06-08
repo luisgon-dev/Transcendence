@@ -1,5 +1,6 @@
 import { formatQueueLabel } from "@/lib/queues";
 import { rankTierColorClass } from "@/lib/ranks";
+import type { RuneTree } from "@/lib/staticData";
 
 export type DataAgeMetadata = {
   fetchedAt?: string;
@@ -88,6 +89,8 @@ export type RuneStatic = {
   runeById: Record<string, { name: string; icon: string }>;
   styleById: Record<string, { name: string; icon: string }>;
   runeSortById: Record<string, number>;
+  /** Full structured trees (style → slots → runes) for rendering a complete rune page. */
+  trees: RuneTree[];
 };
 
 export type MatchRuneDetail = {
@@ -145,8 +148,10 @@ export type MatchDetail = {
     kills: number;
     deaths: number;
     assists: number;
+    champLevel?: number;
     goldEarned: number;
     totalDamageDealtToChampions: number;
+    visionScore: number;
     totalMinionsKilled: number;
     neutralMinionsKilled: number;
     summonerSpell1Id: number;
@@ -254,6 +259,25 @@ export type AlignedParticipantRow = {
   blue: MatchParticipant | null;
   red: MatchParticipant | null;
 };
+
+export function sortRuneSelections(
+  selectionIds: number[],
+  runeSortById: Record<string, number> | undefined
+): number[] {
+  return selectionIds.slice().sort((a, b) => {
+    const aSort = runeSortById?.[String(a)] ?? Number.MAX_SAFE_INTEGER;
+    const bSort = runeSortById?.[String(b)] ?? Number.MAX_SAFE_INTEGER;
+    return aSort - bSort;
+  });
+}
+
+/** The keystone is the lowest-slot primary selection — i.e. first after sorting by rune slot order. */
+export function primaryKeystoneId(
+  runes: MatchRuneDetail | null | undefined,
+  runeStatic: { runeSortById: Record<string, number> } | null
+): number {
+  return sortRuneSelections(runes?.primarySelections ?? [], runeStatic?.runeSortById)[0] ?? 0;
+}
 
 export function hasRunes(runes?: MatchRuneDetail | null): boolean {
   if (!runes) return false;

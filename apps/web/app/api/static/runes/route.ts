@@ -4,10 +4,10 @@ import { fetchRunesReforged } from "@/lib/staticData";
 
 export async function GET() {
   try {
-    const { version, runeById, styleById, runeSortById } = await fetchRunesReforged();
+    const { version, runeById, styleById, runeSortById, trees } = await fetchRunesReforged();
 
     return NextResponse.json(
-      { version, runeById, styleById, runeSortById },
+      { version, runeById, styleById, runeSortById, trees },
       {
         headers: {
           "cache-control": "public, s-maxage=86400, stale-while-revalidate=86400"

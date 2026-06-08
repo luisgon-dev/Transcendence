@@ -10,7 +10,16 @@ public record MatchDetailDto(
     int QueueId,
     string QueueType,
     string? Patch,
-    IReadOnlyList<ParticipantDetailDto> Participants
+    IReadOnlyList<ParticipantDetailDto> Participants,
+    IReadOnlyList<TeamBansDto> Bans
+);
+
+/// <summary>
+/// Champions banned by one team, in pick-turn order.
+/// </summary>
+public record TeamBansDto(
+    int TeamId,
+    IReadOnlyList<int> BannedChampionIds
 );
 
 /// <summary>

@@ -175,21 +175,6 @@ public class SummonersController(
                     KdaRatio = c.KdaRatio
                 }).ToList(),
 
-                // Recent 10 matches
-                RecentMatches = recent.Items.Select(m => new ProfileRecentMatch
-                {
-                    MatchId = m.MatchId,
-                    MatchDate = m.MatchDate,
-                    QueueType = m.QueueType,
-                    Win = m.Win,
-                    ChampionId = m.ChampionId,
-                    ChampionName = ResolveChampionName(m.ChampionId),
-                    Kills = m.Kills,
-                    Deaths = m.Deaths,
-                    Assists = m.Assists,
-                    CsPerMin = m.CsPerMin
-                }).ToList(),
-
                 ProfileAge = new DataAgeMetadata
                 {
                     FetchedAt = summoner.UpdatedAt

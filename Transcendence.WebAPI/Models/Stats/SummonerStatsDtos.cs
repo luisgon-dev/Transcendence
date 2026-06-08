@@ -51,6 +51,16 @@ public record RoleStatDto(
     double WinRate
 );
 
+public record RankHistoryEntryDto(
+    string? QueueType,
+    string? Tier,
+    string? RankNumber,
+    int LeaguePoints,
+    int Wins,
+    int Losses,
+    DateTime DateRecorded
+);
+
 public record RecentMatchSummaryDto(
     string MatchId,
     long MatchDate,

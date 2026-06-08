@@ -9,6 +9,11 @@ public interface ISummonerStatsService
     Task<IReadOnlyList<ChampionStat>> GetChampionStatsAsync(Guid summonerId, int top, CancellationToken ct);
     Task<IReadOnlyList<RoleStat>> GetRoleBreakdownAsync(Guid summonerId, CancellationToken ct);
 
+    /// <summary>
+    /// Gets recorded rank snapshots (LP/tier progression) for a summoner, oldest first.
+    /// </summary>
+    Task<IReadOnlyList<RankHistoryEntry>> GetRankHistoryAsync(Guid summonerId, string? queueType, CancellationToken ct);
+
     Task<PagedResult<RecentMatchSummary>> GetRecentMatchesAsync(
         Guid summonerId,
         int page,

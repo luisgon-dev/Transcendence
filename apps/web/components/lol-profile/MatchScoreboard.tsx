@@ -104,6 +104,8 @@ export function MatchScoreboard({
   const participants = detail.participants ?? [];
   const blue = participants.filter((p) => p.teamId === 100);
   const red = participants.filter((p) => p.teamId === 200);
+  const blueBans = detail.bans?.find((b) => b.teamId === 100)?.bannedChampionIds ?? [];
+  const redBans = detail.bans?.find((b) => b.teamId === 200)?.bannedChampionIds ?? [];
   const alignedRows = buildAlignedParticipantRows(participants);
 
   return (
@@ -122,6 +124,7 @@ export function MatchScoreboard({
             participants={blue}
             teamId={100}
             durationSeconds={detail.duration}
+            bans={blueBans}
             region={region}
             gameName={gameName}
             tagLine={tagLine}
@@ -134,6 +137,7 @@ export function MatchScoreboard({
             participants={red}
             teamId={200}
             durationSeconds={detail.duration}
+            bans={redBans}
             region={region}
             gameName={gameName}
             tagLine={tagLine}

@@ -14,6 +14,11 @@ export function buildLolPublicSummonerByIdPath(summonerId: string) {
   return `${LOL_PUBLIC_SUMMONERS_PREFIX}/${encodeURIComponent(summonerId)}`;
 }
 
+export function buildLolPublicSummonerRankHistoryPath(summonerId: string, queueType?: string) {
+  const base = `${buildLolPublicSummonerByIdPath(summonerId)}/stats/rank-history`;
+  return queueType ? `${base}?queueType=${encodeURIComponent(queueType)}` : base;
+}
+
 export function buildLolPublicSummonerSearchPath(
   region: string,
   query: string,

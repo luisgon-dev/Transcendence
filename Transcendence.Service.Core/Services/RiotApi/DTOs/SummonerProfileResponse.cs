@@ -19,9 +19,6 @@ public class SummonerProfileResponse
     // Top champions by games played
     public List<ProfileChampionStat>? TopChampions { get; set; }
 
-    // Recent match summaries (last 10)
-    public List<ProfileRecentMatch>? RecentMatches { get; set; }
-
     // Data freshness
     public DataAgeMetadata ProfileAge { get; set; } = new();
     public DataAgeMetadata RankAge { get; set; } = new();
@@ -72,21 +69,4 @@ public class ProfileChampionStat
     public int Losses { get; set; }
     public double WinRate { get; set; }
     public double KdaRatio { get; set; }
-}
-
-/// <summary>
-/// Recent match summary for the profile response.
-/// </summary>
-public class ProfileRecentMatch
-{
-    public string MatchId { get; set; } = string.Empty;
-    public long MatchDate { get; set; }
-    public string QueueType { get; set; } = string.Empty;
-    public bool Win { get; set; }
-    public int ChampionId { get; set; }
-    public string ChampionName { get; set; } = string.Empty;
-    public int Kills { get; set; }
-    public int Deaths { get; set; }
-    public int Assists { get; set; }
-    public double CsPerMin { get; set; }
 }

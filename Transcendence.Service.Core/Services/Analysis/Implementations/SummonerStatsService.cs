@@ -20,6 +20,7 @@ public class SummonerStatsService(
     private const string OverviewCacheKeyPrefix = "stats:overview:";
     private const string ChampionsCacheKeyPrefix = "stats:champions:";
     private const string RolesCacheKeyPrefix = "stats:roles:";
+    private const string RankHistoryCacheKeyPrefix = "stats:rank-history:";
     private const string RecentMatchesCacheKeyPrefix = "stats:recent:";
     private const string MatchDetailCacheKeyPrefix = "match:detail:";
     private const string SummonerStatsCacheTagPrefix = "summoner-stats:";
@@ -250,6 +251,47 @@ public class SummonerStatsService(
             .ToList();
 
         return list;
+    }
+
+    public async Task<IReadOnlyList<RankHistoryEntry>> GetRankHistoryAsync(Guid summonerId, string? queueType,
+        CancellationToken ct)
+    {
+        var normalizedQueue = string.IsNullOrWhiteSpace(queueType) ? null : queueType.Trim();
+        var cacheKey = $"{RankHistoryCacheKeyPrefix}{summonerId}:{normalizedQueue ?? "-"}";
+        return await ExecuteStatsRequestAsync(
+            "Failed to load rank history.",
+            async token => await cache.GetOrCreateAsync(
+                cacheKey,
+                async cancel => await ComputeRankHistoryAsync(summonerId, normalizedQueue, cancel),
+                StatsCacheOptions,
+                tags: new[] { BuildSummonerStatsTag(summonerId) },
+                cancellationToken: token),
+            ct);
+    }
+
+    private async Task<IReadOnlyList<RankHistoryEntry>> ComputeRankHistoryAsync(Guid summonerId, string? queueType,
+        CancellationToken ct)
+    {
+        // HistoricalRank uses a shadow FK "SummonerId" (indexed) — query it directly to avoid a Summoner join.
+        var query = db.HistoricalRanks
+            .AsNoTracking()
+            .Where(hr => EF.Property<Guid?>(hr, "SummonerId") == summonerId);
+
+        if (queueType != null)
+            query = query.Where(hr => hr.QueueType == queueType);
+
+        return await query
+            .OrderBy(hr => hr.DateRecorded)
+            .ThenBy(hr => hr.Id)
+            .Select(hr => new RankHistoryEntry(
+                hr.QueueType,
+                hr.Tier,
+                hr.RankNumber,
+                hr.LeaguePoints,
+                hr.Wins,
+                hr.Losses,
+                hr.DateRecorded))
+            .ToListAsync(ct);
     }
 
     public async Task<PagedResult<RecentMatchSummary>> GetRecentMatchesAsync(
@@ -599,6 +641,7 @@ public class SummonerStatsService(
                 .ThenInclude(p => p.Items)
             .Include(m => m.Participants)
                 .ThenInclude(p => p.Runes)
+            .Include(m => m.Bans)
             .FirstOrDefaultAsync(m => m.MatchId == matchId, ct);
 
         if (match == null)
@@ -632,6 +675,14 @@ public class SummonerStatsService(
 
         var participants = match.Participants.Select(p => MapParticipant(p, runeMetadata)).ToList();
 
+        var bans = match.Bans
+            .GroupBy(b => b.TeamId)
+            .OrderBy(g => g.Key)
+            .Select(g => new TeamBansDto(
+                g.Key,
+                g.OrderBy(b => b.PickTurn).Select(b => b.ChampionId).ToList()))
+            .ToList();
+
         return new MatchDetailDto(
             match.MatchId ?? string.Empty,
             match.MatchDate,
@@ -641,7 +692,8 @@ public class SummonerStatsService(
                 ? match.QueueType
                 : QueueCatalog.ResolveQueueLabel(match.QueueId),
             string.IsNullOrWhiteSpace(match.Patch) ? null : match.Patch,
-            participants
+            participants,
+            bans
         );
     }
 

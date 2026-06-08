@@ -295,6 +295,76 @@ public class SummonerStatsServiceTests
     }
 
     [Fact]
+    public async Task GetRankHistoryAsync_FiltersByQueueAndOrdersOldestFirst()
+    {
+        await using var harness = await SummonerStatsHarness.CreateAsync();
+        var summoner = harness.CreateSummoner();
+
+        harness.Db.HistoricalRanks.AddRange(
+            new HistoricalRank
+            {
+                Id = Guid.NewGuid(), Summoner = summoner, QueueType = "RANKED_SOLO_5x5",
+                Tier = "GOLD", RankNumber = "II", LeaguePoints = 40, Wins = 50, Losses = 40,
+                DateRecorded = new DateTime(2024, 1, 2, 0, 0, 0, DateTimeKind.Utc)
+            },
+            new HistoricalRank
+            {
+                Id = Guid.NewGuid(), Summoner = summoner, QueueType = "RANKED_SOLO_5x5",
+                Tier = "SILVER", RankNumber = "I", LeaguePoints = 80, Wins = 30, Losses = 28,
+                DateRecorded = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            },
+            new HistoricalRank
+            {
+                Id = Guid.NewGuid(), Summoner = summoner, QueueType = "RANKED_FLEX_SR",
+                Tier = "BRONZE", RankNumber = "III", LeaguePoints = 10, Wins = 5, Losses = 9,
+                DateRecorded = new DateTime(2024, 1, 3, 0, 0, 0, DateTimeKind.Utc)
+            });
+
+        await harness.Db.SaveChangesAsync();
+
+        var solo = await harness.Service.GetRankHistoryAsync(summoner.Id, "RANKED_SOLO_5x5", CancellationToken.None);
+        solo.Should().HaveCount(2);
+        solo.Should().OnlyContain(x => x.QueueType == "RANKED_SOLO_5x5");
+        solo.Select(x => x.Tier).Should().Equal(["SILVER", "GOLD"]); // oldest first
+
+        var all = await harness.Service.GetRankHistoryAsync(summoner.Id, null, CancellationToken.None);
+        all.Should().HaveCount(3);
+        all.Select(x => x.Tier).Should().Equal(["SILVER", "GOLD", "BRONZE"]); // by DateRecorded asc
+    }
+
+    [Fact]
+    public async Task GetMatchDetailAsync_IncludesBansGroupedByTeamOrderedByPickTurn()
+    {
+        await using var harness = await SummonerStatsHarness.CreateAsync();
+        var summoner = harness.CreateSummoner();
+
+        var participant = harness.AddParticipant(
+            summoner,
+            queueId: QueueCatalog.RankedSoloDuoQueueId,
+            queueFamily: QueueCatalog.QueueFamilyRankedSoloDuo,
+            queueType: "RANKED_SOLO_5x5",
+            matchDate: 5000,
+            duration: 1800,
+            kills: 1,
+            deaths: 1,
+            assists: 1);
+
+        harness.Db.Set<MatchBan>().AddRange(
+            new MatchBan { Match = participant.Match, MatchId = participant.MatchId, TeamId = 200, PickTurn = 4, ChampionId = 222 },
+            new MatchBan { Match = participant.Match, MatchId = participant.MatchId, TeamId = 100, PickTurn = 3, ChampionId = 64 },
+            new MatchBan { Match = participant.Match, MatchId = participant.MatchId, TeamId = 100, PickTurn = 1, ChampionId = 17 });
+
+        await harness.Db.SaveChangesAsync();
+
+        var detail = await harness.Service.GetMatchDetailAsync(participant.Match.MatchId!, CancellationToken.None);
+
+        detail.Should().NotBeNull();
+        detail!.Bans.Should().HaveCount(2);
+        detail.Bans.Single(b => b.TeamId == 100).BannedChampionIds.Should().Equal([17, 64]); // ordered by pick turn
+        detail.Bans.Single(b => b.TeamId == 200).BannedChampionIds.Should().Equal([222]);
+    }
+
+    [Fact]
     public async Task GetChampionStatsAsync_WrapsUnexpectedException()
     {
         var harness = await SummonerStatsHarness.CreateAsync();

@@ -244,6 +244,7 @@ export function ScoreboardTeamTable({
   participants,
   teamId,
   durationSeconds,
+  bans,
   region,
   gameName,
   tagLine,
@@ -255,6 +256,7 @@ export function ScoreboardTeamTable({
   participants: MatchParticipant[];
   teamId: 100 | 200;
   durationSeconds: number;
+  bans: number[];
   region: string;
   gameName: string;
   tagLine: string;
@@ -282,9 +284,31 @@ export function ScoreboardTeamTable({
             {win ? "Victory" : "Defeat"}
           </span>
         </div>
-        <div className="type-caption flex items-center gap-3 text-muted tabular-nums">
-          <span>{totalKills} kills</span>
-          <span>{formatGold(totalGold)} gold</span>
+        <div className="flex items-center gap-3">
+          {bans.length > 0 ? (
+            <div className="flex items-center gap-1" aria-label="Bans" title="Champion bans">
+              {bans.map((championId, idx) => {
+                const champion = championStatic?.champions[String(championId)];
+                return champion && championStatic ? (
+                  <Image
+                    key={`ban-${championId}-${idx}`}
+                    src={championIconUrl(championStatic.version, champion.id)}
+                    alt={`Banned: ${champion.name}`}
+                    title={`Banned: ${champion.name}`}
+                    width={16}
+                    height={16}
+                    className="rounded border border-border/40 opacity-60 grayscale"
+                  />
+                ) : (
+                  <span key={`ban-${championId}-${idx}`} className="h-4 w-4 rounded border border-border/40 bg-surface/60" />
+                );
+              })}
+            </div>
+          ) : null}
+          <div className="type-caption flex items-center gap-3 text-muted tabular-nums">
+            <span>{totalKills} kills</span>
+            <span>{formatGold(totalGold)} gold</span>
+          </div>
         </div>
       </div>
 

@@ -5,12 +5,14 @@ import { LiveGameCard } from "@/components/LiveGameCard";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { DataBar } from "@/components/ui/DataBar";
+import { Sparkline } from "@/components/ui/Sparkline";
 import { formatPercent, winRateColorClass } from "@/lib/format";
-import { rankEmblemUrl, rankTierDisplayLabel } from "@/lib/ranks";
+import { rankEmblemUrl, rankTierDisplayLabel, rankToLadderPoints } from "@/lib/ranks";
 
 import {
   rankColorClass,
   type ChampionStatic,
+  type RankHistoryEntry,
   type RankInfo,
   type SummonerProfileResponse
 } from "@/components/lol-profile/shared";
@@ -25,6 +27,7 @@ export function ProfileSidebar({
   championStatic,
   rankedEntries,
   unrankedQueues,
+  rankHistory,
   region,
   gameName,
   tagLine
@@ -33,10 +36,21 @@ export function ProfileSidebar({
   championStatic: ChampionStatic | null;
   rankedEntries: RankedEntry[];
   unrankedQueues: string[];
+  rankHistory: RankHistoryEntry[] | null;
   region: string;
   gameName: string;
   tagLine: string;
 }) {
+  // Solo/Duo LP progression: recorded snapshots (oldest→newest) + the current rank
+  // appended as the latest point. Sparkline self-hides below 2 points.
+  const soloRank = rankedEntries.find((entry) => entry.label === "Solo/Duo")?.rank;
+  const soloSeries = [
+    ...(rankHistory ?? [])
+      .filter((entry) => (entry.queueType ?? "").toUpperCase().includes("SOLO"))
+      .map((entry) => rankToLadderPoints(entry.tier, entry.rankNumber, entry.leaguePoints)),
+    soloRank ? rankToLadderPoints(soloRank.tier, soloRank.division, soloRank.leaguePoints) : null
+  ].filter((value): value is number => value != null);
+
   return (
     <aside className="grid content-start gap-5 xl:sticky xl:top-24">
       <Card className="profile-section-card p-5">
@@ -99,6 +113,16 @@ export function ProfileSidebar({
             })}
           </div>
         )}
+        {soloSeries.length >= 2 ? (
+          <div className="surface-subtle mt-4 flex items-center justify-between gap-3 rounded-card px-3 py-2.5">
+            <div>
+              <p className="type-overline text-muted">Solo/Duo progression</p>
+              <p className="type-caption text-fg/65">{soloSeries.length} snapshots</p>
+            </div>
+            <Sparkline values={soloSeries} width={104} height={30} />
+          </div>
+        ) : null}
+
         {unrankedQueues.length > 0 ? (
           <div className="mt-3 grid gap-1">
             {unrankedQueues.map((label) => (

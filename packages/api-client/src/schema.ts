@@ -3174,6 +3174,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/lol/summoners/{summonerId}/stats/rank-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    queueType?: string;
+                };
+                header?: never;
+                path: {
+                    summonerId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RankHistoryEntryDto"][];
+                        "application/json": components["schemas"]["RankHistoryEntryDto"][];
+                        "text/json": components["schemas"]["RankHistoryEntryDto"][];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/lol/summoners/{summonerId}/matches/recent": {
         parameters: {
             query?: never;
@@ -4890,6 +4953,7 @@ export interface components {
             queueType?: string | null;
             patch?: string | null;
             participants?: components["schemas"]["ParticipantDetailDto"][] | null;
+            bans?: components["schemas"]["TeamBansDto"][] | null;
         };
         MatchRuneDetailDto: {
             /** Format: int32 */
@@ -5164,23 +5228,18 @@ export interface components {
             /** Format: double */
             avgDamageToChamps?: number;
         };
-        ProfileRecentMatch: {
-            matchId?: string | null;
-            /** Format: int64 */
-            matchDate?: number;
+        RankHistoryEntryDto: {
             queueType?: string | null;
-            win?: boolean;
+            tier?: string | null;
+            rankNumber?: string | null;
             /** Format: int32 */
-            championId?: number;
-            championName?: string | null;
+            leaguePoints?: number;
             /** Format: int32 */
-            kills?: number;
+            wins?: number;
             /** Format: int32 */
-            deaths?: number;
-            /** Format: int32 */
-            assists?: number;
-            /** Format: double */
-            csPerMin?: number;
+            losses?: number;
+            /** Format: date-time */
+            dateRecorded?: string;
         };
         RankInfo: {
             tier?: string | null;
@@ -5324,7 +5383,6 @@ export interface components {
             flexRank?: components["schemas"]["RankInfo"];
             overviewStats?: components["schemas"]["ProfileOverviewStats"];
             topChampions?: components["schemas"]["ProfileChampionStat"][] | null;
-            recentMatches?: components["schemas"]["ProfileRecentMatch"][] | null;
             profileAge?: components["schemas"]["DataAgeMetadata"];
             rankAge?: components["schemas"]["DataAgeMetadata"];
             statsAge?: components["schemas"]["DataAgeMetadata"];
@@ -5355,6 +5413,11 @@ export interface components {
             estimatedWinProbability?: number;
             strengths?: string[] | null;
             weaknesses?: string[] | null;
+        };
+        TeamBansDto: {
+            /** Format: int32 */
+            teamId?: number;
+            bannedChampionIds?: number[] | null;
         };
         TftRankDto: {
             queueType?: string | null;

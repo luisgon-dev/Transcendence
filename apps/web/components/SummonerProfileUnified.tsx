@@ -21,6 +21,7 @@ import {
   type MatchSummary,
   type PagedResultDto,
   type QueueOption,
+  type RankHistoryEntry,
   type RankInfo,
   type RuneStatic,
   type SpellStatic,
@@ -32,7 +33,8 @@ import { computeNextPollDelayMs } from "@/lib/polling";
 import { formatQueueLabel } from "@/lib/queues";
 import {
   buildLolPublicSummonerByIdPath,
-  buildLolPublicSummonerByRiotIdPath
+  buildLolPublicSummonerByRiotIdPath,
+  buildLolPublicSummonerRankHistoryPath
 } from "@/lib/lolPublicApi";
 
 export type { SummonerProfileResponse } from "@/components/lol-profile/shared";
@@ -97,6 +99,7 @@ export function SummonerProfileClient({
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [details, setDetails] = useState<Record<string, MatchDetail | null>>({});
   const [detailBusy, setDetailBusy] = useState<Record<string, boolean>>({});
+  const [rankHistory, setRankHistory] = useState<RankHistoryEntry[] | null>(null);
 
   const queueOptions = useMemo<QueueOption[]>(() => {
     const optionMap = new Map<string, QueueOption>();
@@ -340,6 +343,27 @@ export function SummonerProfileClient({
     };
   }, [page, profile?.summonerId]);
 
+  useEffect(() => {
+    const summonerId = profile?.summonerId;
+    if (!summonerId) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch(buildLolPublicSummonerRankHistoryPath(summonerId), { cache: "no-store" });
+        if (!res.ok || cancelled) return;
+        const json = (await res.json().catch(() => null)) as RankHistoryEntry[] | null;
+        if (!cancelled && Array.isArray(json)) setRankHistory(json);
+      } catch {
+        // Rank progression is optional decoration — ignore fetch errors.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [profile?.summonerId]);
+
   async function queueRefresh() {
     setBusy(true);
     setError(null);
@@ -439,6 +463,7 @@ export function SummonerProfileClient({
             championStatic={championStatic}
             rankedEntries={rankedEntries}
             unrankedQueues={unrankedQueues}
+            rankHistory={rankHistory}
             region={region}
             gameName={gameName}
             tagLine={tagLine}

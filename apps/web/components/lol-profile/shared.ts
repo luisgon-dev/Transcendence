@@ -159,6 +159,17 @@ export type MatchDetail = {
     items: number[];
     runes: MatchRuneDetail;
   }>;
+  bans?: Array<{ teamId: number; bannedChampionIds: number[] }>;
+};
+
+export type RankHistoryEntry = {
+  queueType: string | null;
+  tier: string | null;
+  rankNumber: string | null;
+  leaguePoints: number;
+  wins: number;
+  losses: number;
+  dateRecorded: string;
 };
 
 export type QueueOption = {

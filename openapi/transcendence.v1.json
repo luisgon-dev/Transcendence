@@ -3852,6 +3852,102 @@
         }
       }
     },
+    "/api/lol/summoners/{summonerId}/stats/rank-history": {
+      "get": {
+        "tags": [
+          "SummonerStats"
+        ],
+        "parameters": [
+          {
+            "name": "summonerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "queueType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RankHistoryEntryDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RankHistoryEntryDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RankHistoryEntryDto"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/lol/summoners/{summonerId}/matches/recent": {
       "get": {
         "tags": [
@@ -6924,6 +7020,13 @@
               "$ref": "#/components/schemas/ParticipantDetailDto"
             },
             "nullable": true
+          },
+          "bans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TeamBansDto"
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -7731,47 +7834,36 @@
         },
         "additionalProperties": false
       },
-      "ProfileRecentMatch": {
+      "RankHistoryEntryDto": {
         "type": "object",
         "properties": {
-          "matchId": {
-            "type": "string",
-            "nullable": true
-          },
-          "matchDate": {
-            "type": "integer",
-            "format": "int64"
-          },
           "queueType": {
             "type": "string",
             "nullable": true
           },
-          "win": {
-            "type": "boolean"
-          },
-          "championId": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "championName": {
+          "tier": {
             "type": "string",
             "nullable": true
           },
-          "kills": {
+          "rankNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "leaguePoints": {
             "type": "integer",
             "format": "int32"
           },
-          "deaths": {
+          "wins": {
             "type": "integer",
             "format": "int32"
           },
-          "assists": {
+          "losses": {
             "type": "integer",
             "format": "int32"
           },
-          "csPerMin": {
-            "type": "number",
-            "format": "double"
+          "dateRecorded": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "additionalProperties": false
@@ -8131,13 +8223,6 @@
             },
             "nullable": true
           },
-          "recentMatches": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ProfileRecentMatch"
-            },
-            "nullable": true
-          },
           "profileAge": {
             "$ref": "#/components/schemas/DataAgeMetadata"
           },
@@ -8233,6 +8318,24 @@
             "type": "array",
             "items": {
               "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "TeamBansDto": {
+        "type": "object",
+        "properties": {
+          "teamId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "bannedChampionIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
             },
             "nullable": true
           }

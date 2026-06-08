@@ -18,11 +18,13 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<CurrentDataParameters> CurrentDataParameters { get; set; }
     public DbSet<Rank> Ranks { get; set; }
     public DbSet<HistoricalRank> HistoricalRanks { get; set; }
+    public DbSet<ChampionMastery> ChampionMasteries { get; set; }
     public DbSet<TrackedProSummoner> TrackedProSummoners { get; set; }
     public DbSet<SummonerIngestionCursor> SummonerIngestionCursors { get; set; }
     public DbSet<CurrentChampionLoadout> CurrentChampionLoadouts { get; set; }
     public DbSet<MatchParticipant> MatchParticipants { get; set; }
     public DbSet<MatchBan> MatchBans { get; set; }
+    public DbSet<MatchTeamObjective> MatchTeamObjectives { get; set; }
     public DbSet<MatchTimelineFetchState> MatchTimelineFetchStates { get; set; }
     public DbSet<MatchParticipantTimelineSnapshot> MatchParticipantTimelineSnapshots { get; set; }
 
@@ -437,6 +439,27 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
 
         modelBuilder.Entity<MatchBan>()
             .HasQueryFilter(mb => mb.Match.Status != FetchStatus.PermanentlyUnfetchable);
+
+        modelBuilder.Entity<MatchTeamObjective>(entity =>
+        {
+            entity.HasKey(o => new { o.MatchId, o.TeamId });
+            entity.HasOne(o => o.Match)
+                .WithMany(m => m.TeamObjectives)
+                .HasForeignKey(o => o.MatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MatchTeamObjective>()
+            .HasQueryFilter(o => o.Match.Status != FetchStatus.PermanentlyUnfetchable);
+
+        modelBuilder.Entity<ChampionMastery>(entity =>
+        {
+            entity.HasKey(cm => new { cm.SummonerId, cm.ChampionId });
+            entity.HasOne(cm => cm.Summoner)
+                .WithMany(s => s.ChampionMasteries)
+                .HasForeignKey(cm => cm.SummonerId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
 
         modelBuilder.Entity<MatchTimelineFetchState>(entity =>
         {

@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Transcendence.Data;
@@ -12,9 +13,11 @@ using Transcendence.Data;
 namespace Transcendence.Service.Migrations
 {
     [DbContext(typeof(TranscendenceContext))]
-    partial class ProjectSyndraContextModelSnapshot : ModelSnapshot
+    [Migration("20260608040403_AddMatchDamageBreakdownAndTeamObjectives")]
+    partial class AddMatchDamageBreakdownAndTeamObjectives
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -310,37 +313,6 @@ namespace Transcendence.Service.Migrations
                     b.HasIndex("Puuid", "PlatformRegion", "ObservedAtUtc");
 
                     b.ToTable("LiveGameSnapshots");
-                });
-
-            modelBuilder.Entity("Transcendence.Data.Models.LoL.Account.ChampionMastery", b =>
-                {
-                    b.Property<Guid>("SummonerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("ChampionId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ChampionLevel")
-                        .HasColumnType("integer");
-
-                    b.Property<long>("ChampionPoints")
-                        .HasColumnType("bigint");
-
-                    b.Property<bool>("ChestGranted")
-                        .HasColumnType("boolean");
-
-                    b.Property<long>("LastPlayTime")
-                        .HasColumnType("bigint");
-
-                    b.Property<int>("TokensEarned")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("SummonerId", "ChampionId");
-
-                    b.ToTable("ChampionMasteries");
                 });
 
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Account.HistoricalRank", b =>
@@ -1859,17 +1831,6 @@ namespace Transcendence.Service.Migrations
                     b.Navigation("UserAccount");
                 });
 
-            modelBuilder.Entity("Transcendence.Data.Models.LoL.Account.ChampionMastery", b =>
-                {
-                    b.HasOne("Transcendence.Data.Models.LoL.Account.Summoner", "Summoner")
-                        .WithMany("ChampionMasteries")
-                        .HasForeignKey("SummonerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Summoner");
-                });
-
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Account.HistoricalRank", b =>
                 {
                     b.HasOne("Transcendence.Data.Models.LoL.Account.Summoner", "Summoner")
@@ -2138,8 +2099,6 @@ namespace Transcendence.Service.Migrations
 
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Account.Summoner", b =>
                 {
-                    b.Navigation("ChampionMasteries");
-
                     b.Navigation("HistoricalRanks");
 
                     b.Navigation("IngestionCursors");

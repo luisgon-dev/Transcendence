@@ -10,7 +10,52 @@ public record MatchDetailDto(
     int QueueId,
     string QueueType,
     string? Patch,
-    IReadOnlyList<ParticipantDetailDto> Participants
+    IReadOnlyList<ParticipantDetailDto> Participants,
+    IReadOnlyList<TeamBansDto> Bans,
+    IReadOnlyList<TeamObjectivesDto> Objectives
+);
+
+/// <summary>
+/// Champions banned by one team, in pick-turn order.
+/// </summary>
+public record TeamBansDto(
+    int TeamId,
+    IReadOnlyList<int> BannedChampionIds
+);
+
+/// <summary>
+/// Objective tallies for one team (kills + who got it first). Populated on new
+/// ingestion only — absent/zero for matches ingested before Phase 3.
+/// </summary>
+public record TeamObjectivesDto(
+    int TeamId,
+    bool FirstBlood,
+    ObjectiveStatDto Baron,
+    ObjectiveStatDto Dragon,
+    ObjectiveStatDto RiftHerald,
+    ObjectiveStatDto Horde,
+    ObjectiveStatDto Tower,
+    ObjectiveStatDto Inhibitor
+);
+
+public record ObjectiveStatDto(int Kills, bool First);
+
+/// <summary>
+/// Per-minute team gold/xp totals for a match, for the gold/xp-diff curve.
+/// Empty Frames when the match has no (or too few) timeline snapshots.
+/// </summary>
+public record MatchTimelineDto(
+    string MatchId,
+    int Duration,
+    IReadOnlyList<TimelineFrameDto> Frames
+);
+
+public record TimelineFrameDto(
+    int MinuteMark,
+    int BlueGold,
+    int RedGold,
+    int BlueXp,
+    int RedXp
 );
 
 /// <summary>
@@ -30,6 +75,9 @@ public record ParticipantDetailDto(
     int ChampLevel,
     int GoldEarned,
     int TotalDamageDealtToChampions,
+    int PhysicalDamageDealtToChampions,
+    int MagicDamageDealtToChampions,
+    int TrueDamageDealtToChampions,
     int VisionScore,
     int TotalMinionsKilled,
     int NeutralMinionsKilled,

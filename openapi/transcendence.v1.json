@@ -3852,6 +3852,102 @@
         }
       }
     },
+    "/api/lol/summoners/{summonerId}/stats/rank-history": {
+      "get": {
+        "tags": [
+          "SummonerStats"
+        ],
+        "parameters": [
+          {
+            "name": "summonerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "queueType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RankHistoryEntryDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RankHistoryEntryDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RankHistoryEntryDto"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/lol/summoners/{summonerId}/matches/recent": {
       "get": {
         "tags": [
@@ -4029,6 +4125,114 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MatchDetailDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lol/summoners/{summonerId}/matches/{matchId}/timeline": {
+      "get": {
+        "tags": [
+          "SummonerStats"
+        ],
+        "parameters": [
+          {
+            "name": "summonerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "matchId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchTimelineDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchTimelineDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchTimelineDto"
                 }
               }
             }
@@ -6380,6 +6584,39 @@
         },
         "additionalProperties": false
       },
+      "ChampionMasteryStat": {
+        "type": "object",
+        "properties": {
+          "championId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "championName": {
+            "type": "string",
+            "nullable": true
+          },
+          "championLevel": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "championPoints": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "lastPlayTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "chestGranted": {
+            "type": "boolean"
+          },
+          "tokensEarned": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
       "ChampionMatchupsResponse": {
         "type": "object",
         "properties": {
@@ -6715,6 +6952,36 @@
         },
         "additionalProperties": false
       },
+      "FrequentlyPlayedWithStat": {
+        "type": "object",
+        "properties": {
+          "summonerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "gameName": {
+            "type": "string",
+            "nullable": true
+          },
+          "tagLine": {
+            "type": "string",
+            "nullable": true
+          },
+          "gamesTogether": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "sameTeamGames": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "sameTeamWins": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
       "LiveGameAnalysisDto": {
         "type": "object",
         "properties": {
@@ -6924,6 +7191,20 @@
               "$ref": "#/components/schemas/ParticipantDetailDto"
             },
             "nullable": true
+          },
+          "bans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TeamBansDto"
+            },
+            "nullable": true
+          },
+          "objectives": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TeamObjectivesDto"
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -6980,6 +7261,27 @@
           "keystoneId": {
             "type": "integer",
             "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MatchTimelineDto": {
+        "type": "object",
+        "properties": {
+          "matchId": {
+            "type": "string",
+            "nullable": true
+          },
+          "duration": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "frames": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimelineFrameDto"
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -7300,6 +7602,19 @@
         },
         "additionalProperties": false
       },
+      "ObjectiveStatDto": {
+        "type": "object",
+        "properties": {
+          "kills": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "first": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
       "ParticipantDetailDto": {
         "type": "object",
         "properties": {
@@ -7351,6 +7666,18 @@
             "format": "int32"
           },
           "totalDamageDealtToChampions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "physicalDamageDealtToChampions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "magicDamageDealtToChampions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "trueDamageDealtToChampions": {
             "type": "integer",
             "format": "int32"
           },
@@ -7731,47 +8058,36 @@
         },
         "additionalProperties": false
       },
-      "ProfileRecentMatch": {
+      "RankHistoryEntryDto": {
         "type": "object",
         "properties": {
-          "matchId": {
-            "type": "string",
-            "nullable": true
-          },
-          "matchDate": {
-            "type": "integer",
-            "format": "int64"
-          },
           "queueType": {
             "type": "string",
             "nullable": true
           },
-          "win": {
-            "type": "boolean"
-          },
-          "championId": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "championName": {
+          "tier": {
             "type": "string",
             "nullable": true
           },
-          "kills": {
+          "rankNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "leaguePoints": {
             "type": "integer",
             "format": "int32"
           },
-          "deaths": {
+          "wins": {
             "type": "integer",
             "format": "int32"
           },
-          "assists": {
+          "losses": {
             "type": "integer",
             "format": "int32"
           },
-          "csPerMin": {
-            "type": "number",
-            "format": "double"
+          "dateRecorded": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "additionalProperties": false
@@ -8131,10 +8447,17 @@
             },
             "nullable": true
           },
-          "recentMatches": {
+          "frequentlyPlayedWith": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/ProfileRecentMatch"
+              "$ref": "#/components/schemas/FrequentlyPlayedWithStat"
+            },
+            "nullable": true
+          },
+          "topMastery": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChampionMasteryStat"
             },
             "nullable": true
           },
@@ -8235,6 +8558,55 @@
               "type": "string"
             },
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "TeamBansDto": {
+        "type": "object",
+        "properties": {
+          "teamId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "bannedChampionIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "TeamObjectivesDto": {
+        "type": "object",
+        "properties": {
+          "teamId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "firstBlood": {
+            "type": "boolean"
+          },
+          "baron": {
+            "$ref": "#/components/schemas/ObjectiveStatDto"
+          },
+          "dragon": {
+            "$ref": "#/components/schemas/ObjectiveStatDto"
+          },
+          "riftHerald": {
+            "$ref": "#/components/schemas/ObjectiveStatDto"
+          },
+          "horde": {
+            "$ref": "#/components/schemas/ObjectiveStatDto"
+          },
+          "tower": {
+            "$ref": "#/components/schemas/ObjectiveStatDto"
+          },
+          "inhibitor": {
+            "$ref": "#/components/schemas/ObjectiveStatDto"
           }
         },
         "additionalProperties": false
@@ -8545,6 +8917,32 @@
         ],
         "type": "integer",
         "format": "int32"
+      },
+      "TimelineFrameDto": {
+        "type": "object",
+        "properties": {
+          "minuteMark": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "blueGold": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "redGold": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "blueXp": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "redXp": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
       },
       "TrackedProSummonerDto": {
         "type": "object",

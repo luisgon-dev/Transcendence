@@ -83,6 +83,50 @@ export function rankTierColorClass(tier: string | null | undefined): string {
   return RANK_COLOR_CLASS[tier.toUpperCase()] ?? "text-muted";
 }
 
+const TIER_LADDER_ORDER = [
+  "IRON",
+  "BRONZE",
+  "SILVER",
+  "GOLD",
+  "PLATINUM",
+  "EMERALD",
+  "DIAMOND",
+  "MASTER",
+  "GRANDMASTER",
+  "CHALLENGER"
+];
+
+const DIVISION_RANK: Record<string, number> = {
+  IV: 0,
+  III: 1,
+  II: 2,
+  I: 3,
+  "4": 0,
+  "3": 1,
+  "2": 2,
+  "1": 3
+};
+
+/**
+ * Collapse a tier + division + LP into a single monotonic "ladder points" value
+ * so rank progression can be plotted on a Sparkline (higher = better). Apex
+ * tiers (Master+) have no divisions, so LP stacks directly on the tier band.
+ * Returns null for an unknown/unranked tier.
+ */
+export function rankToLadderPoints(
+  tier: string | null | undefined,
+  division: string | null | undefined,
+  leaguePoints: number
+): number | null {
+  if (!tier) return null;
+  const tierIndex = TIER_LADDER_ORDER.indexOf(tier.toUpperCase());
+  if (tierIndex < 0) return null;
+
+  const isApex = tierIndex >= TIER_LADDER_ORDER.indexOf("MASTER");
+  const divisionPoints = isApex ? 0 : (DIVISION_RANK[(division ?? "").toUpperCase()] ?? 0) * 100;
+  return tierIndex * 400 + divisionPoints + leaguePoints;
+}
+
 export function rankEmblemUrl(tier: string | null | undefined): string | null {
   if (!tier) return null;
   const normalized = normalizeRankToken(tier);

@@ -5,12 +5,16 @@ import { LiveGameCard } from "@/components/LiveGameCard";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { DataBar } from "@/components/ui/DataBar";
+import { Sparkline } from "@/components/ui/Sparkline";
+import { championIconUrl } from "@/lib/staticData";
 import { formatPercent, winRateColorClass } from "@/lib/format";
-import { rankEmblemUrl, rankTierDisplayLabel } from "@/lib/ranks";
+import { rankEmblemUrl, rankTierDisplayLabel, rankToLadderPoints } from "@/lib/ranks";
+import { encodeRiotIdPath } from "@/lib/riotid";
 
 import {
   rankColorClass,
   type ChampionStatic,
+  type RankHistoryEntry,
   type RankInfo,
   type SummonerProfileResponse
 } from "@/components/lol-profile/shared";
@@ -25,6 +29,7 @@ export function ProfileSidebar({
   championStatic,
   rankedEntries,
   unrankedQueues,
+  rankHistory,
   region,
   gameName,
   tagLine
@@ -33,17 +38,28 @@ export function ProfileSidebar({
   championStatic: ChampionStatic | null;
   rankedEntries: RankedEntry[];
   unrankedQueues: string[];
+  rankHistory: RankHistoryEntry[] | null;
   region: string;
   gameName: string;
   tagLine: string;
 }) {
+  // Solo/Duo LP progression: recorded snapshots (oldest→newest) + the current rank
+  // appended as the latest point. Sparkline self-hides below 2 points.
+  const soloRank = rankedEntries.find((entry) => entry.label === "Solo/Duo")?.rank;
+  const soloSeries = [
+    ...(rankHistory ?? [])
+      .filter((entry) => (entry.queueType ?? "").toUpperCase().includes("SOLO"))
+      .map((entry) => rankToLadderPoints(entry.tier, entry.rankNumber, entry.leaguePoints)),
+    soloRank ? rankToLadderPoints(soloRank.tier, soloRank.division, soloRank.leaguePoints) : null
+  ].filter((value): value is number => value != null);
+
   return (
     <aside className="grid content-start gap-5 xl:sticky xl:top-24">
       <Card className="profile-section-card p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="type-kicker text-muted">Ranked snapshot</p>
-            <h2 className="mt-2 type-section">Queues and ladder movement</h2>
+            <h2 className="mt-2 type-section">Solo/Duo &amp; Flex</h2>
           </div>
           <Badge className="surface-chip text-fg/72">
             {profile.rankAge?.ageDescription ?? "updated recently"}
@@ -66,14 +82,17 @@ export function ProfileSidebar({
                   className="surface-subtle grid gap-3 rounded-card px-3 py-3 sm:grid-cols-[96px_minmax(0,1fr)] sm:items-center"
                 >
                   {emblem ? (
-                    <div className="flex h-24 w-24 items-center justify-center rounded-control border border-border/45 bg-surface/65 p-1.5">
+                    // The communitydragon ranked emblem sits in a large mostly-transparent
+                    // canvas (~22% content, centered), so we crop the padding by scaling the
+                    // centered crest up inside an overflow-hidden frame.
+                    <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-control border border-border/45 bg-surface/65">
                       <Image
                         src={emblem}
                         alt={`${rankTierDisplayLabel(rank.tier)} emblem`}
-                        width={96}
-                        height={96}
-                        sizes="96px"
-                        className="h-full w-full select-none object-contain"
+                        width={256}
+                        height={256}
+                        sizes="256px"
+                        className="h-full w-full origin-center scale-[3.3] select-none object-contain"
                       />
                     </div>
                   ) : (
@@ -99,6 +118,16 @@ export function ProfileSidebar({
             })}
           </div>
         )}
+        {soloSeries.length >= 2 ? (
+          <div className="surface-subtle mt-4 flex items-center justify-between gap-3 rounded-card px-3 py-2.5">
+            <div>
+              <p className="type-overline text-muted">Solo/Duo progression</p>
+              <p className="type-caption text-fg/65">{soloSeries.length} snapshots</p>
+            </div>
+            <Sparkline values={soloSeries} width={104} height={30} />
+          </div>
+        ) : null}
+
         {unrankedQueues.length > 0 ? (
           <div className="mt-3 grid gap-1">
             {unrankedQueues.map((label) => (
@@ -110,10 +139,57 @@ export function ProfileSidebar({
         ) : null}
       </Card>
 
+      {(profile.topMastery?.length ?? 0) > 0 ? (
+        <Card className="profile-section-card p-5">
+          <div>
+            <p className="type-kicker text-muted">Mastery</p>
+            <h2 className="mt-2 type-section">Top mastery</h2>
+          </div>
+          <div className="mt-4 grid gap-2">
+            {profile.topMastery!.map((m) => {
+              const champion = championStatic?.champions[String(m.championId)];
+              const highMastery = m.championLevel >= 7;
+              return (
+                <Link
+                  key={m.championId}
+                  href={`/lol/champions/${m.championId}`}
+                  className="surface-subtle group flex items-center gap-3 rounded-control px-3 py-2.5 transition hover:border-border-strong hover:bg-surface-2/60"
+                >
+                  {champion && championStatic ? (
+                    <Image
+                      src={championIconUrl(championStatic.version, champion.id)}
+                      alt={champion.name}
+                      width={32}
+                      height={32}
+                      className="rounded-lg border border-border/50"
+                    />
+                  ) : (
+                    <div className="h-8 w-8 rounded-lg border border-border/50 bg-surface/70" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-fg group-hover:text-primary">
+                      {champion?.name ?? `Champion ${m.championId}`}
+                    </p>
+                    <p className="type-caption text-muted tabular-nums">{m.championPoints.toLocaleString()} pts</p>
+                  </div>
+                  <span
+                    className={`type-overline rounded-full border px-2 py-0.5 tabular-nums ${
+                      highMastery ? "border-border-strong bg-surface-2 font-semibold text-fg" : "border-border/50 text-muted"
+                    }`}
+                  >
+                    M{m.championLevel}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </Card>
+      ) : null}
+
       <Card className="profile-section-card p-5">
         <div>
           <p className="type-kicker text-muted">Champion pool</p>
-          <h2 className="mt-2 type-section">Top picks in recent tracked games</h2>
+          <h2 className="mt-2 type-section">Most played</h2>
         </div>
         <div className="mt-4 grid gap-3">
           {(profile.topChampions ?? []).slice(0, 6).map((championStat, index) => {
@@ -142,6 +218,40 @@ export function ProfileSidebar({
           })}
         </div>
       </Card>
+
+      {(profile.frequentlyPlayedWith?.length ?? 0) > 0 ? (
+        <Card className="profile-section-card p-5">
+          <div>
+            <p className="type-kicker text-muted">Duo signals</p>
+            <h2 className="mt-2 type-section">Played with</h2>
+          </div>
+          <div className="mt-4 grid gap-2">
+            {profile.frequentlyPlayedWith!.map((mate) => {
+              // Only show a same-team win-rate once the sample is meaningful (avoids "100% · 1 game" noise).
+              const wr = mate.sameTeamGames >= 2 ? (mate.sameTeamWins / mate.sameTeamGames) * 100 : null;
+              return (
+                <Link
+                  key={mate.summonerId}
+                  href={`/lol/summoners/${region}/${encodeRiotIdPath({ gameName: mate.gameName, tagLine: mate.tagLine })}`}
+                  className="surface-subtle group grid gap-1.5 rounded-control px-3 py-2.5 transition hover:border-border-strong hover:bg-surface-2/60"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="min-w-0 truncate text-sm font-medium text-fg group-hover:text-primary">
+                      {mate.gameName}
+                      <span className="text-muted">#{mate.tagLine}</span>
+                    </p>
+                    {wr != null ? <DataBar value={wr} /> : null}
+                  </div>
+                  <div className="flex items-center justify-between gap-2 text-xs text-fg/64">
+                    <span>{mate.gamesTogether} games together</span>
+                    {mate.sameTeamGames > 0 ? <span>{mate.sameTeamGames} as duo</span> : null}
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </Card>
+      ) : null}
 
       <LiveGameCard region={region} gameName={gameName} tagLine={tagLine} />
     </aside>

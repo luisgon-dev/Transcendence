@@ -19,8 +19,11 @@ public class SummonerProfileResponse
     // Top champions by games played
     public List<ProfileChampionStat>? TopChampions { get; set; }
 
-    // Recent match summaries (last 10)
-    public List<ProfileRecentMatch>? RecentMatches { get; set; }
+    // Summoners this player most frequently appears in matches with
+    public List<FrequentlyPlayedWithStat>? FrequentlyPlayedWith { get; set; }
+
+    // Highest champion mastery (by points)
+    public List<ChampionMasteryStat>? TopMastery { get; set; }
 
     // Data freshness
     public DataAgeMetadata ProfileAge { get; set; } = new();
@@ -75,18 +78,28 @@ public class ProfileChampionStat
 }
 
 /// <summary>
-/// Recent match summary for the profile response.
+/// A summoner frequently appearing in the profile owner's matches.
 /// </summary>
-public class ProfileRecentMatch
+public class FrequentlyPlayedWithStat
 {
-    public string MatchId { get; set; } = string.Empty;
-    public long MatchDate { get; set; }
-    public string QueueType { get; set; } = string.Empty;
-    public bool Win { get; set; }
+    public Guid SummonerId { get; set; }
+    public string GameName { get; set; } = string.Empty;
+    public string TagLine { get; set; } = string.Empty;
+    public int GamesTogether { get; set; }
+    public int SameTeamGames { get; set; }
+    public int SameTeamWins { get; set; }
+}
+
+/// <summary>
+/// A champion-mastery entry for the profile response.
+/// </summary>
+public class ChampionMasteryStat
+{
     public int ChampionId { get; set; }
     public string ChampionName { get; set; } = string.Empty;
-    public int Kills { get; set; }
-    public int Deaths { get; set; }
-    public int Assists { get; set; }
-    public double CsPerMin { get; set; }
+    public int ChampionLevel { get; set; }
+    public long ChampionPoints { get; set; }
+    public long LastPlayTime { get; set; }
+    public bool ChestGranted { get; set; }
+    public int TokensEarned { get; set; }
 }

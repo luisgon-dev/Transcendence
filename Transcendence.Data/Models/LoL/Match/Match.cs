@@ -34,6 +34,7 @@ public class Match
     public List<Summoner> Summoners { get; set; } = [];
     public ICollection<MatchParticipant> Participants { get; set; } = new List<MatchParticipant>();
     public ICollection<MatchBan> Bans { get; set; } = new List<MatchBan>();
+    public ICollection<MatchTeamObjective> TeamObjectives { get; set; } = new List<MatchTeamObjective>();
     public ICollection<MatchParticipantTimelineSnapshot> TimelineSnapshots { get; set; } =
         new List<MatchParticipantTimelineSnapshot>();
     public MatchTimelineFetchState? TimelineFetchState { get; set; }

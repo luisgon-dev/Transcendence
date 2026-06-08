@@ -32,6 +32,9 @@ public class MatchParticipant
     public int ChampLevel { get; set; }
     public int GoldEarned { get; set; }
     public int TotalDamageDealtToChampions { get; set; }
+    public int PhysicalDamageDealtToChampions { get; set; }
+    public int MagicDamageDealtToChampions { get; set; }
+    public int TrueDamageDealtToChampions { get; set; }
     public int VisionScore { get; set; }
     public int TotalMinionsKilled { get; set; }
     public int NeutralMinionsKilled { get; set; }

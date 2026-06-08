@@ -56,6 +56,7 @@ public class MatchService(
         };
         ApplyQueueMetadata(match, (int)info.QueueId);
         PopulateMatchBans(match, info);
+        PopulateTeamObjectives(match, info);
 
         // Ensure static data for this match patch exists
         await staticDataService.EnsureStaticDataForPatchAsync(match.Patch, cancellationToken);
@@ -128,6 +129,10 @@ public class MatchService(
                 ChampLevel = p.ChampLevel,
                 GoldEarned = p.GoldEarned,
                 TotalDamageDealtToChampions = p.TotalDamageDealtToChampions,
+                // keep the damage split in sync across all 3 participant-mapping blocks
+                PhysicalDamageDealtToChampions = p.PhysicalDamageDealtToChampions,
+                MagicDamageDealtToChampions = p.MagicDamageDealtToChampions,
+                TrueDamageDealtToChampions = p.TrueDamageDealtToChampions,
                 VisionScore = p.VisionScore,
                 TotalMinionsKilled = p.TotalMinionsKilled,
                 NeutralMinionsKilled = p.NeutralMinionsKilled,
@@ -193,6 +198,7 @@ public class MatchService(
         };
         ApplyQueueMetadata(match, (int)info.QueueId);
         PopulateMatchBans(match, info);
+        PopulateTeamObjectives(match, info);
 
         await staticDataService.EnsureStaticDataForPatchAsync(match.Patch, cancellationToken);
 
@@ -299,6 +305,10 @@ public class MatchService(
                 ChampLevel = p.ChampLevel,
                 GoldEarned = p.GoldEarned,
                 TotalDamageDealtToChampions = p.TotalDamageDealtToChampions,
+                // keep the damage split in sync across all 3 participant-mapping blocks
+                PhysicalDamageDealtToChampions = p.PhysicalDamageDealtToChampions,
+                MagicDamageDealtToChampions = p.MagicDamageDealtToChampions,
+                TrueDamageDealtToChampions = p.TrueDamageDealtToChampions,
                 VisionScore = p.VisionScore,
                 TotalMinionsKilled = p.TotalMinionsKilled,
                 NeutralMinionsKilled = p.NeutralMinionsKilled,
@@ -380,6 +390,7 @@ public class MatchService(
             match.PlatformRegion = platformRoute.ToString();
             ApplyQueueMetadata(match, (int)info.QueueId);
             PopulateMatchBans(match, info);
+            PopulateTeamObjectives(match, info);
 
             // Ensure static data for this match patch exists
             await staticDataService.EnsureStaticDataForPatchAsync(match.Patch, cancellationToken);
@@ -450,6 +461,10 @@ public class MatchService(
                     ChampLevel = p.ChampLevel,
                     GoldEarned = p.GoldEarned,
                     TotalDamageDealtToChampions = p.TotalDamageDealtToChampions,
+                    // keep the damage split in sync across all 3 participant-mapping blocks
+                    PhysicalDamageDealtToChampions = p.PhysicalDamageDealtToChampions,
+                    MagicDamageDealtToChampions = p.MagicDamageDealtToChampions,
+                    TrueDamageDealtToChampions = p.TrueDamageDealtToChampions,
                     VisionScore = p.VisionScore,
                     TotalMinionsKilled = p.TotalMinionsKilled,
                     NeutralMinionsKilled = p.NeutralMinionsKilled,
@@ -768,6 +783,37 @@ public class MatchService(
                     ChampionId = (int)ban.ChampionId
                 });
             }
+        }
+    }
+
+    private static void PopulateTeamObjectives(DataMatch match, Info info)
+    {
+        match.TeamObjectives.Clear();
+        var teams = info.Teams?.ToList() ?? [];
+        foreach (var team in teams)
+        {
+            var objectives = team.Objectives;
+            if (objectives == null)
+                continue;
+
+            match.TeamObjectives.Add(new MatchTeamObjective
+            {
+                Match = match,
+                TeamId = (int)team.TeamId,
+                FirstBlood = objectives.Champion?.First ?? false,
+                BaronKills = objectives.Baron?.Kills ?? 0,
+                BaronFirst = objectives.Baron?.First ?? false,
+                DragonKills = objectives.Dragon?.Kills ?? 0,
+                DragonFirst = objectives.Dragon?.First ?? false,
+                RiftHeraldKills = objectives.RiftHerald?.Kills ?? 0,
+                RiftHeraldFirst = objectives.RiftHerald?.First ?? false,
+                HordeKills = objectives.Horde?.Kills ?? 0,
+                HordeFirst = objectives.Horde?.First ?? false,
+                TowerKills = objectives.Tower?.Kills ?? 0,
+                TowerFirst = objectives.Tower?.First ?? false,
+                InhibitorKills = objectives.Inhibitor?.Kills ?? 0,
+                InhibitorFirst = objectives.Inhibitor?.First ?? false
+            });
         }
     }
 

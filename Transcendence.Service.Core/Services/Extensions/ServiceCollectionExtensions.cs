@@ -90,6 +90,7 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<ISummonerService, SummonerService>();
         services.AddScoped<IRankService, RankService>();
+        services.AddScoped<IChampionMasteryService, ChampionMasteryService>();
         services.AddScoped<IMatchService, MatchService>();
         services.AddScoped<IStaticDataService, StaticDataService>();
         services.AddScoped<IRiotMatchIdsClient, RiotMatchIdsClient>();

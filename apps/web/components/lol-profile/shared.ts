@@ -1,5 +1,6 @@
 import { formatQueueLabel } from "@/lib/queues";
 import { rankTierColorClass } from "@/lib/ranks";
+import type { RuneTree } from "@/lib/staticData";
 
 export type DataAgeMetadata = {
   fetchedAt?: string;
@@ -39,6 +40,25 @@ export type ProfileChampionStat = {
   kdaRatio: number;
 };
 
+export type PlayedWithEntry = {
+  summonerId: string;
+  gameName: string;
+  tagLine: string;
+  gamesTogether: number;
+  sameTeamGames: number;
+  sameTeamWins: number;
+};
+
+export type ChampionMasteryEntry = {
+  championId: number;
+  championName: string;
+  championLevel: number;
+  championPoints: number;
+  lastPlayTime: number;
+  chestGranted: boolean;
+  tokensEarned: number;
+};
+
 export type SummonerProfileResponse = {
   summonerId?: string;
   puuid: string;
@@ -50,6 +70,8 @@ export type SummonerProfileResponse = {
   flexRank?: RankInfo | null;
   overviewStats?: ProfileOverviewStats | null;
   topChampions?: ProfileChampionStat[] | null;
+  frequentlyPlayedWith?: PlayedWithEntry[] | null;
+  topMastery?: ChampionMasteryEntry[] | null;
   profileAge: DataAgeMetadata;
   rankAge: DataAgeMetadata;
   statsAge?: DataAgeMetadata | null;
@@ -88,6 +110,8 @@ export type RuneStatic = {
   runeById: Record<string, { name: string; icon: string }>;
   styleById: Record<string, { name: string; icon: string }>;
   runeSortById: Record<string, number>;
+  /** Full structured trees (style → slots → runes) for rendering a complete rune page. */
+  trees: RuneTree[];
 };
 
 export type MatchRuneDetail = {
@@ -145,8 +169,13 @@ export type MatchDetail = {
     kills: number;
     deaths: number;
     assists: number;
+    champLevel?: number;
     goldEarned: number;
     totalDamageDealtToChampions: number;
+    physicalDamageDealtToChampions?: number;
+    magicDamageDealtToChampions?: number;
+    trueDamageDealtToChampions?: number;
+    visionScore: number;
     totalMinionsKilled: number;
     neutralMinionsKilled: number;
     summonerSpell1Id: number;
@@ -154,6 +183,45 @@ export type MatchDetail = {
     items: number[];
     runes: MatchRuneDetail;
   }>;
+  bans?: Array<{ teamId: number; bannedChampionIds: number[] }>;
+  objectives?: MatchTeamObjectives[];
+};
+
+export type ObjectiveStat = { kills: number; first: boolean };
+
+export type MatchTeamObjectives = {
+  teamId: number;
+  firstBlood: boolean;
+  baron: ObjectiveStat;
+  dragon: ObjectiveStat;
+  riftHerald: ObjectiveStat;
+  horde: ObjectiveStat;
+  tower: ObjectiveStat;
+  inhibitor: ObjectiveStat;
+};
+
+export type TimelineFrame = {
+  minuteMark: number;
+  blueGold: number;
+  redGold: number;
+  blueXp: number;
+  redXp: number;
+};
+
+export type MatchTimeline = {
+  matchId: string;
+  duration: number;
+  frames: TimelineFrame[];
+};
+
+export type RankHistoryEntry = {
+  queueType: string | null;
+  tier: string | null;
+  rankNumber: string | null;
+  leaguePoints: number;
+  wins: number;
+  losses: number;
+  dateRecorded: string;
 };
 
 export type QueueOption = {
@@ -254,6 +322,25 @@ export type AlignedParticipantRow = {
   blue: MatchParticipant | null;
   red: MatchParticipant | null;
 };
+
+export function sortRuneSelections(
+  selectionIds: number[],
+  runeSortById: Record<string, number> | undefined
+): number[] {
+  return selectionIds.slice().sort((a, b) => {
+    const aSort = runeSortById?.[String(a)] ?? Number.MAX_SAFE_INTEGER;
+    const bSort = runeSortById?.[String(b)] ?? Number.MAX_SAFE_INTEGER;
+    return aSort - bSort;
+  });
+}
+
+/** The keystone is the lowest-slot primary selection — i.e. first after sorting by rune slot order. */
+export function primaryKeystoneId(
+  runes: MatchRuneDetail | null | undefined,
+  runeStatic: { runeSortById: Record<string, number> } | null
+): number {
+  return sortRuneSelections(runes?.primarySelections ?? [], runeStatic?.runeSortById)[0] ?? 0;
+}
 
 export function hasRunes(runes?: MatchRuneDetail | null): boolean {
   if (!runes) return false;

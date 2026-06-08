@@ -83,6 +83,28 @@ public class SummonerStatsController(ISummonerStatsService statsService) : Contr
     }
 
     /// <summary>
+    ///     Gets recorded rank snapshots (LP/tier progression) for a summoner, oldest first.
+    /// </summary>
+    [HttpGet("stats/rank-history")]
+    [ProducesResponseType(typeof(List<RankHistoryEntryDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> GetRankHistory([FromRoute] Guid summonerId,
+        [FromQuery] string? queueType = null, CancellationToken ct = default)
+    {
+        var result = await statsService.GetRankHistoryAsync(summonerId, queueType, ct);
+        var dto = result.Select(r => new RankHistoryEntryDto(
+            r.QueueType,
+            r.Tier,
+            r.RankNumber,
+            r.LeaguePoints,
+            r.Wins,
+            r.Losses,
+            r.DateRecorded
+        )).ToList();
+        return Ok(dto);
+    }
+
+    /// <summary>
     ///     Gets recent matches for a summoner with pagination.
     /// </summary>
     [HttpGet("matches/recent")]
@@ -151,6 +173,25 @@ public class SummonerStatsController(ISummonerStatsService statsService) : Contr
         CancellationToken ct = default)
     {
         var result = await statsService.GetMatchDetailAsync(matchId, ct);
+        if (result == null)
+            return NotFound();
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    ///     Gets the per-minute team gold/xp timeline for a match (the gold/xp-diff curve).
+    /// </summary>
+    [HttpGet("matches/{matchId}/timeline")]
+    [ProducesResponseType(typeof(MatchTimelineDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> GetMatchTimeline(
+        [FromRoute] Guid summonerId,
+        [FromRoute] string matchId,
+        CancellationToken ct = default)
+    {
+        var result = await statsService.GetMatchTimelineAsync(matchId, ct);
         if (result == null)
             return NotFound();
 

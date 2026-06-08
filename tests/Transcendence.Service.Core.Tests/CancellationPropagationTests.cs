@@ -51,6 +51,8 @@ public class CancellationPropagationTests
             Mock.Of<ISummonerRepository>(),
             Mock.Of<IMatchRepository>(),
             Mock.Of<IMatchService>(),
+            Mock.Of<IChampionMasteryService>(),
+            Mock.Of<IChampionMasteryRepository>(),
             db,
             refreshLockRepository.Object,
             services.GetRequiredService<ILogger<SummonerRefreshJob>>(),

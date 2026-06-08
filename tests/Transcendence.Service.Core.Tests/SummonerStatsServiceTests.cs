@@ -295,6 +295,273 @@ public class SummonerStatsServiceTests
     }
 
     [Fact]
+    public async Task GetRankHistoryAsync_FiltersByQueueAndOrdersOldestFirst()
+    {
+        await using var harness = await SummonerStatsHarness.CreateAsync();
+        var summoner = harness.CreateSummoner();
+
+        harness.Db.HistoricalRanks.AddRange(
+            new HistoricalRank
+            {
+                Id = Guid.NewGuid(), Summoner = summoner, QueueType = "RANKED_SOLO_5x5",
+                Tier = "GOLD", RankNumber = "II", LeaguePoints = 40, Wins = 50, Losses = 40,
+                DateRecorded = new DateTime(2024, 1, 2, 0, 0, 0, DateTimeKind.Utc)
+            },
+            new HistoricalRank
+            {
+                Id = Guid.NewGuid(), Summoner = summoner, QueueType = "RANKED_SOLO_5x5",
+                Tier = "SILVER", RankNumber = "I", LeaguePoints = 80, Wins = 30, Losses = 28,
+                DateRecorded = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            },
+            new HistoricalRank
+            {
+                Id = Guid.NewGuid(), Summoner = summoner, QueueType = "RANKED_FLEX_SR",
+                Tier = "BRONZE", RankNumber = "III", LeaguePoints = 10, Wins = 5, Losses = 9,
+                DateRecorded = new DateTime(2024, 1, 3, 0, 0, 0, DateTimeKind.Utc)
+            });
+
+        await harness.Db.SaveChangesAsync();
+
+        var solo = await harness.Service.GetRankHistoryAsync(summoner.Id, "RANKED_SOLO_5x5", CancellationToken.None);
+        solo.Should().HaveCount(2);
+        solo.Should().OnlyContain(x => x.QueueType == "RANKED_SOLO_5x5");
+        solo.Select(x => x.Tier).Should().Equal(["SILVER", "GOLD"]); // oldest first
+
+        var all = await harness.Service.GetRankHistoryAsync(summoner.Id, null, CancellationToken.None);
+        all.Should().HaveCount(3);
+        all.Select(x => x.Tier).Should().Equal(["SILVER", "GOLD", "BRONZE"]); // by DateRecorded asc
+    }
+
+    [Fact]
+    public async Task GetMatchDetailAsync_IncludesBansGroupedByTeamOrderedByPickTurn()
+    {
+        await using var harness = await SummonerStatsHarness.CreateAsync();
+        var summoner = harness.CreateSummoner();
+
+        var participant = harness.AddParticipant(
+            summoner,
+            queueId: QueueCatalog.RankedSoloDuoQueueId,
+            queueFamily: QueueCatalog.QueueFamilyRankedSoloDuo,
+            queueType: "RANKED_SOLO_5x5",
+            matchDate: 5000,
+            duration: 1800,
+            kills: 1,
+            deaths: 1,
+            assists: 1);
+
+        harness.Db.Set<MatchBan>().AddRange(
+            new MatchBan { Match = participant.Match, MatchId = participant.MatchId, TeamId = 200, PickTurn = 4, ChampionId = 222 },
+            new MatchBan { Match = participant.Match, MatchId = participant.MatchId, TeamId = 100, PickTurn = 3, ChampionId = 64 },
+            new MatchBan { Match = participant.Match, MatchId = participant.MatchId, TeamId = 100, PickTurn = 1, ChampionId = 17 });
+
+        await harness.Db.SaveChangesAsync();
+
+        var detail = await harness.Service.GetMatchDetailAsync(participant.Match.MatchId!, CancellationToken.None);
+
+        detail.Should().NotBeNull();
+        detail!.Bans.Should().HaveCount(2);
+        detail.Bans.Single(b => b.TeamId == 100).BannedChampionIds.Should().Equal([17, 64]); // ordered by pick turn
+        detail.Bans.Single(b => b.TeamId == 200).BannedChampionIds.Should().Equal([222]);
+    }
+
+    [Fact]
+    public async Task GetMatchDetailAsync_IncludesDamageBreakdownAndTeamObjectives()
+    {
+        await using var harness = await SummonerStatsHarness.CreateAsync();
+        var summoner = harness.CreateSummoner();
+
+        var participant = harness.AddParticipant(
+            summoner,
+            queueId: QueueCatalog.RankedSoloDuoQueueId,
+            queueFamily: QueueCatalog.QueueFamilyRankedSoloDuo,
+            queueType: "RANKED_SOLO_5x5",
+            matchDate: 6000,
+            duration: 1800,
+            kills: 1,
+            deaths: 1,
+            assists: 1);
+        participant.PhysicalDamageDealtToChampions = 12000;
+        participant.MagicDamageDealtToChampions = 5000;
+        participant.TrueDamageDealtToChampions = 1000;
+
+        harness.Db.MatchTeamObjectives.AddRange(
+            new MatchTeamObjective
+            {
+                Match = participant.Match, MatchId = participant.MatchId, TeamId = 100,
+                FirstBlood = true, BaronKills = 1, BaronFirst = true, DragonKills = 3, DragonFirst = true,
+                RiftHeraldKills = 1, TowerKills = 9, InhibitorKills = 2
+            },
+            new MatchTeamObjective
+            {
+                Match = participant.Match, MatchId = participant.MatchId, TeamId = 200,
+                FirstBlood = false, DragonKills = 1, TowerKills = 2
+            });
+
+        await harness.Db.SaveChangesAsync();
+
+        var detail = await harness.Service.GetMatchDetailAsync(participant.Match.MatchId!, CancellationToken.None);
+
+        detail.Should().NotBeNull();
+        var p = detail!.Participants.Single();
+        p.PhysicalDamageDealtToChampions.Should().Be(12000);
+        p.MagicDamageDealtToChampions.Should().Be(5000);
+        p.TrueDamageDealtToChampions.Should().Be(1000);
+
+        detail.Objectives.Should().HaveCount(2);
+        var blue = detail.Objectives.Single(o => o.TeamId == 100);
+        blue.FirstBlood.Should().BeTrue();
+        blue.Baron.Kills.Should().Be(1);
+        blue.Baron.First.Should().BeTrue();
+        blue.Dragon.Kills.Should().Be(3);
+        blue.Tower.Kills.Should().Be(9);
+        detail.Objectives.Single(o => o.TeamId == 200).Dragon.Kills.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetMatchTimelineAsync_BuildsOrderedPerMinuteTeamGoldXpSeries()
+    {
+        await using var harness = await SummonerStatsHarness.CreateAsync();
+        var summoner = harness.CreateSummoner();
+        var enemy = new Summoner
+        {
+            Id = Guid.NewGuid(), PlatformRegion = "NA1", Region = "americas",
+            Puuid = $"puuid-{Guid.NewGuid():N}", GameName = "Enemy", TagLine = "NA1",
+            GameNameNormalized = "ENEMY", TagLineNormalized = "NA1", SummonerLevel = 100, UpdatedAt = DateTime.UtcNow
+        };
+        harness.Db.Summoners.Add(enemy);
+
+        var match = new Match
+        {
+            Id = Guid.NewGuid(), MatchId = "NA1_tl1", MatchDate = 7000, Duration = 1800, Patch = "14.10",
+            QueueId = QueueCatalog.RankedSoloDuoQueueId, QueueFamily = QueueCatalog.QueueFamilyRankedSoloDuo,
+            QueueType = "RANKED_SOLO_5x5", Status = FetchStatus.Success
+        };
+        harness.Db.MatchParticipants.AddRange(
+            new MatchParticipant { Id = Guid.NewGuid(), Match = match, MatchId = match.Id, Summoner = summoner, SummonerId = summoner.Id, ParticipantId = 1, TeamId = 100, ChampionId = 222, Win = true },
+            new MatchParticipant { Id = Guid.NewGuid(), Match = match, MatchId = match.Id, Summoner = enemy, SummonerId = enemy.Id, ParticipantId = 6, TeamId = 200, ChampionId = 122, Win = false });
+
+        // Two frames (@10, @15) seeded out of order to prove ordering.
+        harness.Db.MatchParticipantTimelineSnapshots.AddRange(
+            new MatchParticipantTimelineSnapshot { Match = match, MatchId = match.Id, ParticipantId = 1, MinuteMark = 15, Gold = 8200, Xp = 9000, Cs = 130, Level = 12, FrameTimestampMs = 900000, DerivedAtUtc = DateTime.UtcNow },
+            new MatchParticipantTimelineSnapshot { Match = match, MatchId = match.Id, ParticipantId = 6, MinuteMark = 15, Gold = 7000, Xp = 8400, Cs = 115, Level = 11, FrameTimestampMs = 900000, DerivedAtUtc = DateTime.UtcNow },
+            new MatchParticipantTimelineSnapshot { Match = match, MatchId = match.Id, ParticipantId = 1, MinuteMark = 10, Gold = 5000, Xp = 6000, Cs = 80, Level = 9, FrameTimestampMs = 600000, DerivedAtUtc = DateTime.UtcNow },
+            new MatchParticipantTimelineSnapshot { Match = match, MatchId = match.Id, ParticipantId = 6, MinuteMark = 10, Gold = 4200, Xp = 5500, Cs = 70, Level = 8, FrameTimestampMs = 600000, DerivedAtUtc = DateTime.UtcNow });
+
+        await harness.Db.SaveChangesAsync();
+
+        var result = await harness.Service.GetMatchTimelineAsync("NA1_tl1", CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result!.Duration.Should().Be(1800);
+        result.Frames.Select(f => f.MinuteMark).Should().Equal([10, 15]); // ordered ascending
+        result.Frames[0].BlueGold.Should().Be(5000);
+        result.Frames[0].RedGold.Should().Be(4200);
+        result.Frames[0].BlueXp.Should().Be(6000);
+        result.Frames[1].BlueGold.Should().Be(8200);
+        result.Frames[1].RedGold.Should().Be(7000);
+    }
+
+    [Fact]
+    public async Task GetMatchTimelineAsync_ReturnsNullForUnknownMatch()
+    {
+        await using var harness = await SummonerStatsHarness.CreateAsync();
+        var result = await harness.Service.GetMatchTimelineAsync("NA1_missing", CancellationToken.None);
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetPlayedWithAsync_AggregatesCoParticipantsByGamesAndSameTeamWins()
+    {
+        await using var harness = await SummonerStatsHarness.CreateAsync();
+
+        static Summoner NewSummoner(string name) => new()
+        {
+            Id = Guid.NewGuid(),
+            PlatformRegion = "NA1",
+            Region = "americas",
+            Puuid = $"puuid-{Guid.NewGuid():N}",
+            GameName = name,
+            TagLine = "NA1",
+            GameNameNormalized = name.ToUpperInvariant(),
+            TagLineNormalized = "NA1",
+            SummonerLevel = 100,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        var me = NewSummoner("Me");
+        var duo = NewSummoner("Duo");
+        var rival = NewSummoner("Rival");
+        harness.Db.Summoners.AddRange(me, duo, rival);
+
+        var matchNum = 0;
+        void AddCoMatch(Summoner other, bool sameTeam, bool myWin)
+        {
+            matchNum++;
+            var match = new Match
+            {
+                Id = Guid.NewGuid(), MatchId = $"NA1_pw{matchNum}", MatchDate = 1000 + matchNum,
+                Duration = 1800, Patch = "14.2", QueueId = QueueCatalog.RankedSoloDuoQueueId,
+                QueueFamily = QueueCatalog.QueueFamilyRankedSoloDuo, QueueType = "RANKED_SOLO_5x5",
+                Status = FetchStatus.Success
+            };
+            harness.Db.MatchParticipants.Add(new MatchParticipant
+            {
+                Id = Guid.NewGuid(), Match = match, MatchId = match.Id, Summoner = me, SummonerId = me.Id,
+                Puuid = me.Puuid, ParticipantId = 1, TeamId = 100, Win = myWin
+            });
+            harness.Db.MatchParticipants.Add(new MatchParticipant
+            {
+                Id = Guid.NewGuid(), Match = match, MatchId = match.Id, Summoner = other, SummonerId = other.Id,
+                Puuid = other.Puuid, ParticipantId = 2, TeamId = sameTeam ? 100 : 200, Win = sameTeam ? myWin : !myWin
+            });
+        }
+
+        AddCoMatch(duo, sameTeam: true, myWin: true);
+        AddCoMatch(duo, sameTeam: true, myWin: true);
+        AddCoMatch(duo, sameTeam: true, myWin: false);
+        AddCoMatch(rival, sameTeam: false, myWin: true);
+        AddCoMatch(rival, sameTeam: false, myWin: false);
+
+        await harness.Db.SaveChangesAsync();
+
+        var result = await harness.Service.GetPlayedWithAsync(me.Id, recentMatches: 100, topCount: 10, CancellationToken.None);
+
+        result.Should().HaveCount(2);
+        result[0].SummonerId.Should().Be(duo.Id); // ordered by gamesTogether desc
+
+        var duoEntry = result.Single(x => x.SummonerId == duo.Id);
+        duoEntry.GamesTogether.Should().Be(3);
+        duoEntry.SameTeamGames.Should().Be(3);
+        duoEntry.SameTeamWins.Should().Be(2);
+
+        var rivalEntry = result.Single(x => x.SummonerId == rival.Id);
+        rivalEntry.GamesTogether.Should().Be(2);
+        rivalEntry.SameTeamGames.Should().Be(0);
+        rivalEntry.SameTeamWins.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task GetTopMasteryAsync_ReturnsHighestByPoints()
+    {
+        await using var harness = await SummonerStatsHarness.CreateAsync();
+        var summoner = harness.CreateSummoner();
+
+        harness.Db.ChampionMasteries.AddRange(
+            new ChampionMastery { SummonerId = summoner.Id, ChampionId = 1, ChampionLevel = 7, ChampionPoints = 500000, LastPlayTime = 100, ChestGranted = true, TokensEarned = 0 },
+            new ChampionMastery { SummonerId = summoner.Id, ChampionId = 2, ChampionLevel = 5, ChampionPoints = 120000, LastPlayTime = 200, ChestGranted = false, TokensEarned = 2 },
+            new ChampionMastery { SummonerId = summoner.Id, ChampionId = 3, ChampionLevel = 6, ChampionPoints = 300000, LastPlayTime = 300, ChestGranted = true, TokensEarned = 1 });
+
+        await harness.Db.SaveChangesAsync();
+
+        var result = await harness.Service.GetTopMasteryAsync(summoner.Id, top: 2, CancellationToken.None);
+
+        result.Should().HaveCount(2);
+        result.Select(x => x.ChampionId).Should().Equal([1, 3]); // by points desc: 500k, 300k
+        result[0].ChampionLevel.Should().Be(7);
+        result[0].ChampionPoints.Should().Be(500000);
+    }
+
+    [Fact]
     public async Task GetChampionStatsAsync_WrapsUnexpectedException()
     {
         var harness = await SummonerStatsHarness.CreateAsync();

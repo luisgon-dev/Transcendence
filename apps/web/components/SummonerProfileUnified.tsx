@@ -8,9 +8,6 @@ import { MatchHistorySection } from "@/components/lol-profile/MatchHistorySectio
 import { ProfileHeroCard } from "@/components/lol-profile/ProfileHeroCard";
 import { ProfileSidebar } from "@/components/lol-profile/ProfileSidebar";
 import {
-  buildAlignedParticipantRows,
-  buildRuneRowKey,
-  hasRunes,
   matchKdaRatio,
   normalizeInitialQueue,
   normalizeInitialSort,
@@ -20,11 +17,11 @@ import {
   type ChampionStatic,
   type ItemStatic,
   type MatchDetail,
-  type MatchParticipant,
   type MatchSortOption,
   type MatchSummary,
   type PagedResultDto,
   type QueueOption,
+  type RankHistoryEntry,
   type RankInfo,
   type RuneStatic,
   type SpellStatic,
@@ -36,20 +33,15 @@ import { computeNextPollDelayMs } from "@/lib/polling";
 import { formatQueueLabel } from "@/lib/queues";
 import {
   buildLolPublicSummonerByIdPath,
-  buildLolPublicSummonerByRiotIdPath
+  buildLolPublicSummonerByRiotIdPath,
+  buildLolPublicSummonerRankHistoryPath
 } from "@/lib/lolPublicApi";
 
 export type { SummonerProfileResponse } from "@/components/lol-profile/shared";
 
-// Stable hash of a riot id so the hero splash picks the same skin on every render
-// (avoids SSR/hydration drift that Math.random() would cause).
-function hashRiotId(value: string): number {
-  let hash = 0;
-  for (let i = 0; i < value.length; i++) {
-    hash = (hash * 31 + value.charCodeAt(i)) | 0;
-  }
-  return Math.abs(hash);
-}
+// Stop polling the 202→200 refresh loop after this many attempts (~2-3 min with the
+// 1-10s backoff) so a stuck worker degrades to a retry prompt instead of an endless spinner.
+const MAX_POLL_ATTEMPTS = 24;
 
 export function SummonerProfileClient({
   region,
@@ -91,6 +83,7 @@ export function SummonerProfileClient({
   const [busy, setBusy] = useState(false);
   const [polling, setPolling] = useState(initialStatus === 202);
   const [pollDelayMs, setPollDelayMs] = useState(2000);
+  const [pollAttempts, setPollAttempts] = useState(0);
   const [championStatic, setChampionStatic] = useState<ChampionStatic | null>(null);
   const [itemStatic, setItemStatic] = useState<ItemStatic | null>(null);
   const [spellStatic, setSpellStatic] = useState<SpellStatic | null>(null);
@@ -106,8 +99,7 @@ export function SummonerProfileClient({
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [details, setDetails] = useState<Record<string, MatchDetail | null>>({});
   const [detailBusy, setDetailBusy] = useState<Record<string, boolean>>({});
-  const [expandedRunes, setExpandedRunes] = useState<Record<string, boolean>>({});
-  const [heroSkinNum, setHeroSkinNum] = useState(0);
+  const [rankHistory, setRankHistory] = useState<RankHistoryEntry[] | null>(null);
 
   const queueOptions = useMemo<QueueOption[]>(() => {
     const optionMap = new Map<string, QueueOption>();
@@ -283,21 +275,30 @@ export function SummonerProfileClient({
     }
 
     setAccepted(null);
+    setPolling(false);
     setError(pickApiError(res.status, json));
   }, [gameName, region, tagLine]);
 
   useEffect(() => {
     if (!polling) return;
+    if (pollAttempts >= MAX_POLL_ATTEMPTS) {
+      setPolling(false);
+      setAccepted({
+        message: "This update is taking longer than expected — it'll keep processing in the background. Tap Update Now to check again."
+      });
+      return;
+    }
     const timeout = setTimeout(async () => {
       try {
         await fetchProfileOnce();
       } finally {
+        setPollAttempts((n) => n + 1);
         setPollDelayMs((delay) => computeNextPollDelayMs(delay));
       }
     }, pollDelayMs);
 
     return () => clearTimeout(timeout);
-  }, [fetchProfileOnce, pollDelayMs, polling]);
+  }, [fetchProfileOnce, pollAttempts, pollDelayMs, polling]);
 
   useEffect(() => {
     const summonerId = profile?.summonerId;
@@ -342,6 +343,27 @@ export function SummonerProfileClient({
     };
   }, [page, profile?.summonerId]);
 
+  useEffect(() => {
+    const summonerId = profile?.summonerId;
+    if (!summonerId) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch(buildLolPublicSummonerRankHistoryPath(summonerId), { cache: "no-store" });
+        if (!res.ok || cancelled) return;
+        const json = (await res.json().catch(() => null)) as RankHistoryEntry[] | null;
+        if (!cancelled && Array.isArray(json)) setRankHistory(json);
+      } catch {
+        // Rank progression is optional decoration — ignore fetch errors.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [profile?.summonerId]);
+
   async function queueRefresh() {
     setBusy(true);
     setError(null);
@@ -357,6 +379,7 @@ export function SummonerProfileClient({
         return;
       }
       setAccepted(json ?? { message: "Update started." });
+      setPollAttempts(0);
       setPolling(true);
       setPollDelayMs(computeNextPollDelayMs(2000, json?.retryAfterSeconds));
     } catch (e) {
@@ -389,30 +412,6 @@ export function SummonerProfileClient({
     }
   }
 
-  function toggleRuneRow(runeRowKey: string) {
-    setExpandedRunes((state) => ({
-      ...state,
-      [runeRowKey]: !state[runeRowKey]
-    }));
-  }
-
-  function toggleAllRunesForMatch(matchId: string, participants: MatchParticipant[], expanded: boolean) {
-    const updates: Record<string, boolean> = {};
-    const rows = buildAlignedParticipantRows(participants ?? []);
-
-    rows.forEach((row, rowIndex) => {
-      if (row.blue && hasRunes(row.blue.runes)) {
-        updates[buildRuneRowKey(matchId, 100, rowIndex, row.blue)] = expanded;
-      }
-      if (row.red && hasRunes(row.red.runes)) {
-        updates[buildRuneRowKey(matchId, 200, rowIndex, row.red)] = expanded;
-      }
-    });
-
-    if (Object.keys(updates).length === 0) return;
-    setExpandedRunes((state) => ({ ...state, ...updates }));
-  }
-
   const rankedEntries = useMemo(() => {
     const entries: Array<{ label: string; rank: RankInfo }> = [];
     if (profile?.soloRank) entries.push({ label: "Solo/Duo", rank: profile.soloRank });
@@ -428,53 +427,6 @@ export function SummonerProfileClient({
   }, [profile?.flexRank, profile?.soloRank]);
 
   const dataAge = profile?.profileAge?.ageDescription ?? "updated recently";
-  const featuredChampion = (profile?.topChampions ?? [])[0];
-  const featuredChampionName = featuredChampion
-    ? championStatic?.champions[String(featuredChampion.championId)]?.name ?? featuredChampion.championName
-    : null;
-  const featuredSlug = featuredChampion
-    ? championStatic?.champions[String(featuredChampion.championId)]?.id ?? null
-    : null;
-  const staticVersion = championStatic?.version ?? null;
-
-  // Pick a (stable) random skin splash for the most-played champion as the hero backdrop.
-  useEffect(() => {
-    setHeroSkinNum(0);
-    if (!featuredSlug || !staticVersion) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(
-          `https://ddragon.leagueoflegends.com/cdn/${staticVersion}/data/en_US/champion/${featuredSlug}.json`
-        );
-        if (!res.ok || cancelled) return;
-        const data = (await res.json()) as {
-          data?: Record<string, { skins?: Array<{ num: number }> }>;
-        };
-        const skins = data?.data?.[featuredSlug]?.skins ?? [];
-        if (skins.length === 0 || cancelled) return;
-        const picked = skins[hashRiotId(`${gameName}#${tagLine}`) % skins.length]?.num ?? 0;
-        if (picked === 0 || cancelled) return;
-        // Some skin `num`s have no splash art on the (versionless) CDN, which
-        // would leave the backdrop blank. Only upgrade from the base splash
-        // once the chosen skin's art actually loads; otherwise keep `_0`.
-        const probe = new window.Image();
-        probe.onload = () => {
-          if (!cancelled) setHeroSkinNum(picked);
-        };
-        probe.src = `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${featuredSlug}_${picked}.jpg`;
-      } catch {
-        // Keep the base splash on any failure.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [featuredSlug, staticVersion, gameName, tagLine]);
-
-  const heroBackgroundUrl = featuredSlug
-    ? `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${featuredSlug}_${heroSkinNum}.jpg`
-    : null;
   const sortOptions: Array<{ value: MatchSortOption; label: string }> = [
     { value: "DATE_DESC", label: "Most Recent" },
     { value: "KDA_DESC", label: "Best KDA" },
@@ -482,24 +434,20 @@ export function SummonerProfileClient({
   ];
 
   return (
-    <div className="grid gap-8">
+    <div className="grid grid-cols-1 gap-8">
       <ProfileHeroCard
         title={title}
         region={region}
         gameName={gameName}
         tagLine={tagLine}
         profile={profile}
-        backgroundUrl={heroBackgroundUrl}
         championStatic={championStatic}
-        history={history}
         dataAge={dataAge}
         rankedEntries={rankedEntries}
         quickStats={quickStats}
         recentForm={recentForm}
         accepted={accepted}
         error={error}
-        featuredChampion={featuredChampion}
-        featuredChampionName={featuredChampionName}
         busy={busy}
         onRefresh={queueRefresh}
       />
@@ -509,12 +457,13 @@ export function SummonerProfileClient({
           <Skeleton className="h-16 w-full" />
         </Card>
       ) : (
-        <div className="grid gap-6 xl:grid-cols-[minmax(280px,0.32fr)_minmax(0,1fr)] xl:items-start">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(280px,0.32fr)_minmax(0,1fr)] xl:items-start">
           <ProfileSidebar
             profile={profile}
             championStatic={championStatic}
             rankedEntries={rankedEntries}
             unrankedQueues={unrankedQueues}
+            rankHistory={rankHistory}
             region={region}
             gameName={gameName}
             tagLine={tagLine}
@@ -523,6 +472,7 @@ export function SummonerProfileClient({
             region={region}
             gameName={gameName}
             tagLine={tagLine}
+            summonerId={profile.summonerId ?? ""}
             page={page}
             queue={queue}
             championFilter={championFilter}
@@ -537,7 +487,6 @@ export function SummonerProfileClient({
             expandedMatchId={expandedMatchId}
             details={details}
             detailBusy={detailBusy}
-            expandedRunes={expandedRunes}
             championStatic={championStatic}
             itemStatic={itemStatic}
             spellStatic={spellStatic}
@@ -556,8 +505,6 @@ export function SummonerProfileClient({
               setPage(1);
             }}
             onToggleExpanded={toggleExpanded}
-            onToggleRuneRow={toggleRuneRow}
-            onToggleAllRunesForMatch={toggleAllRunesForMatch}
             onPreviousPage={() => setPage((current) => Math.max(1, current - 1))}
             onNextPage={() => setPage((current) => current + 1)}
           />

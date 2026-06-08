@@ -20,8 +20,12 @@ public class SummonerStatsService(
     private const string OverviewCacheKeyPrefix = "stats:overview:";
     private const string ChampionsCacheKeyPrefix = "stats:champions:";
     private const string RolesCacheKeyPrefix = "stats:roles:";
+    private const string RankHistoryCacheKeyPrefix = "stats:rank-history:";
+    private const string PlayedWithCacheKeyPrefix = "stats:played-with:";
+    private const string MasteryCacheKeyPrefix = "stats:mastery:";
     private const string RecentMatchesCacheKeyPrefix = "stats:recent:";
     private const string MatchDetailCacheKeyPrefix = "match:detail:";
+    private const string MatchTimelineCacheKeyPrefix = "match:timeline:";
     private const string SummonerStatsCacheTagPrefix = "summoner-stats:";
 
     // Stats cache options: 5min total, 2min L1 (stats change on refresh)
@@ -250,6 +254,160 @@ public class SummonerStatsService(
             .ToList();
 
         return list;
+    }
+
+    public async Task<IReadOnlyList<RankHistoryEntry>> GetRankHistoryAsync(Guid summonerId, string? queueType,
+        CancellationToken ct)
+    {
+        var normalizedQueue = string.IsNullOrWhiteSpace(queueType) ? null : queueType.Trim();
+        var cacheKey = $"{RankHistoryCacheKeyPrefix}{summonerId}:{normalizedQueue ?? "-"}";
+        return await ExecuteStatsRequestAsync(
+            "Failed to load rank history.",
+            async token => await cache.GetOrCreateAsync(
+                cacheKey,
+                async cancel => await ComputeRankHistoryAsync(summonerId, normalizedQueue, cancel),
+                StatsCacheOptions,
+                tags: new[] { BuildSummonerStatsTag(summonerId) },
+                cancellationToken: token),
+            ct);
+    }
+
+    private async Task<IReadOnlyList<RankHistoryEntry>> ComputeRankHistoryAsync(Guid summonerId, string? queueType,
+        CancellationToken ct)
+    {
+        // HistoricalRank uses a shadow FK "SummonerId" (indexed) — query it directly to avoid a Summoner join.
+        var query = db.HistoricalRanks
+            .AsNoTracking()
+            .Where(hr => EF.Property<Guid?>(hr, "SummonerId") == summonerId);
+
+        if (queueType != null)
+            query = query.Where(hr => hr.QueueType == queueType);
+
+        return await query
+            .OrderBy(hr => hr.DateRecorded)
+            .ThenBy(hr => hr.Id)
+            .Select(hr => new RankHistoryEntry(
+                hr.QueueType,
+                hr.Tier,
+                hr.RankNumber,
+                hr.LeaguePoints,
+                hr.Wins,
+                hr.Losses,
+                hr.DateRecorded))
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<PlayedWithEntry>> GetPlayedWithAsync(Guid summonerId, int recentMatches,
+        int topCount, CancellationToken ct)
+    {
+        recentMatches = Math.Clamp(recentMatches <= 0 ? 100 : recentMatches, 1, 100);
+        topCount = Math.Clamp(topCount <= 0 ? 6 : topCount, 1, 10);
+        var cacheKey = $"{PlayedWithCacheKeyPrefix}{summonerId}:{recentMatches}:{topCount}";
+        return await ExecuteStatsRequestAsync(
+            "Failed to compute recently-played-with.",
+            async token => await cache.GetOrCreateAsync(
+                cacheKey,
+                async cancel => await ComputePlayedWithAsync(summonerId, recentMatches, topCount, cancel),
+                StatsCacheOptions,
+                tags: new[] { BuildSummonerStatsTag(summonerId) },
+                cancellationToken: token),
+            ct);
+    }
+
+    private async Task<IReadOnlyList<PlayedWithEntry>> ComputePlayedWithAsync(Guid summonerId, int recentMatches,
+        int topCount, CancellationToken ct)
+    {
+        // Step 1: anchor on the summoner's own participation in their most recent matches
+        // (carries my team + my result per match). Bounded by recentMatches.
+        var anchor = await db.MatchParticipants
+            .AsNoTracking()
+            .Where(mp => mp.SummonerId == summonerId)
+            .OrderByDescending(mp => mp.Match.MatchDate)
+            .Select(mp => new { mp.MatchId, mp.TeamId, mp.Win })
+            .Take(recentMatches)
+            .ToListAsync(ct);
+
+        if (anchor.Count == 0)
+            return [];
+
+        var anchorByMatch = anchor
+            .GroupBy(a => a.MatchId)
+            .ToDictionary(g => g.Key, g => g.First());
+        var matchIds = anchorByMatch.Keys.ToList();
+
+        // Step 2: co-participants in those matches (excluding self), via the indexed MatchId IN (...).
+        var coRows = await db.MatchParticipants
+            .AsNoTracking()
+            .Where(mp => matchIds.Contains(mp.MatchId) && mp.SummonerId != summonerId)
+            .Select(mp => new
+            {
+                mp.MatchId,
+                mp.SummonerId,
+                mp.TeamId,
+                mp.Summoner.GameName,
+                mp.Summoner.TagLine
+            })
+            .ToListAsync(ct);
+
+        return coRows
+            .GroupBy(r => r.SummonerId)
+            .Select(g =>
+            {
+                var first = g.First();
+                var sameTeamGames = 0;
+                var sameTeamWins = 0;
+                foreach (var row in g)
+                {
+                    if (!anchorByMatch.TryGetValue(row.MatchId, out var me))
+                        continue;
+                    if (row.TeamId == me.TeamId)
+                    {
+                        sameTeamGames++;
+                        if (me.Win) sameTeamWins++;
+                    }
+                }
+
+                return new PlayedWithEntry(g.Key, first.GameName, first.TagLine, g.Count(), sameTeamGames, sameTeamWins);
+            })
+            .Where(e => e.GamesTogether >= 2)
+            .OrderByDescending(e => e.GamesTogether)
+            .ThenByDescending(e => e.SameTeamGames)
+            .Take(topCount)
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<ChampionMasteryEntry>> GetTopMasteryAsync(Guid summonerId, int top,
+        CancellationToken ct)
+    {
+        top = Math.Clamp(top <= 0 ? 6 : top, 1, 20);
+        var cacheKey = $"{MasteryCacheKeyPrefix}{summonerId}:{top}";
+        return await ExecuteStatsRequestAsync(
+            "Failed to load champion mastery.",
+            async token => await cache.GetOrCreateAsync(
+                cacheKey,
+                async cancel => await ComputeTopMasteryAsync(summonerId, top, cancel),
+                StatsCacheOptions,
+                tags: new[] { BuildSummonerStatsTag(summonerId) },
+                cancellationToken: token),
+            ct);
+    }
+
+    private async Task<IReadOnlyList<ChampionMasteryEntry>> ComputeTopMasteryAsync(Guid summonerId, int top,
+        CancellationToken ct)
+    {
+        return await db.ChampionMasteries
+            .AsNoTracking()
+            .Where(cm => cm.SummonerId == summonerId)
+            .OrderByDescending(cm => cm.ChampionPoints)
+            .Take(top)
+            .Select(cm => new ChampionMasteryEntry(
+                cm.ChampionId,
+                cm.ChampionLevel,
+                cm.ChampionPoints,
+                cm.LastPlayTime,
+                cm.ChestGranted,
+                cm.TokensEarned))
+            .ToListAsync(ct);
     }
 
     public async Task<PagedResult<RecentMatchSummary>> GetRecentMatchesAsync(
@@ -588,6 +746,52 @@ public class SummonerStatsService(
             ct);
     }
 
+    public async Task<MatchTimelineDto?> GetMatchTimelineAsync(string matchId, CancellationToken ct)
+    {
+        var cacheKey = $"{MatchTimelineCacheKeyPrefix}{matchId}";
+        return await ExecuteStatsRequestAsync(
+            "Failed to load match timeline.",
+            async token => await cache.GetOrCreateAsync(
+                cacheKey,
+                async cancel => await ComputeMatchTimelineAsync(matchId, cancel),
+                MatchDetailCacheOptions,
+                cancellationToken: token),
+            ct);
+    }
+
+    private async Task<MatchTimelineDto?> ComputeMatchTimelineAsync(string matchId, CancellationToken ct)
+    {
+        var match = await db.Matches
+            .AsNoTracking()
+            .Where(m => m.MatchId == matchId)
+            .Select(m => new { m.Id, m.Duration })
+            .FirstOrDefaultAsync(ct);
+
+        if (match == null)
+            return null;
+
+        var rows = await (
+            from s in db.MatchParticipantTimelineSnapshots.AsNoTracking()
+            where s.MatchId == match.Id
+            join p in db.MatchParticipants.AsNoTracking()
+                on new { s.MatchId, s.ParticipantId } equals new { p.MatchId, p.ParticipantId }
+            select new { s.MinuteMark, p.TeamId, s.Gold, s.Xp }
+        ).ToListAsync(ct);
+
+        var frames = rows
+            .GroupBy(r => r.MinuteMark)
+            .OrderBy(g => g.Key)
+            .Select(g => new TimelineFrameDto(
+                g.Key,
+                g.Where(x => x.TeamId == 100).Sum(x => x.Gold),
+                g.Where(x => x.TeamId == 200).Sum(x => x.Gold),
+                g.Where(x => x.TeamId == 100).Sum(x => x.Xp),
+                g.Where(x => x.TeamId == 200).Sum(x => x.Xp)))
+            .ToList();
+
+        return new MatchTimelineDto(matchId, match.Duration, frames);
+    }
+
     private async Task<MatchDetailDto?> ComputeMatchDetailAsync(string matchId, CancellationToken ct)
     {
         var match = await db.Matches
@@ -599,6 +803,8 @@ public class SummonerStatsService(
                 .ThenInclude(p => p.Items)
             .Include(m => m.Participants)
                 .ThenInclude(p => p.Runes)
+            .Include(m => m.Bans)
+            .Include(m => m.TeamObjectives)
             .FirstOrDefaultAsync(m => m.MatchId == matchId, ct);
 
         if (match == null)
@@ -632,6 +838,27 @@ public class SummonerStatsService(
 
         var participants = match.Participants.Select(p => MapParticipant(p, runeMetadata)).ToList();
 
+        var bans = match.Bans
+            .GroupBy(b => b.TeamId)
+            .OrderBy(g => g.Key)
+            .Select(g => new TeamBansDto(
+                g.Key,
+                g.OrderBy(b => b.PickTurn).Select(b => b.ChampionId).ToList()))
+            .ToList();
+
+        var objectives = match.TeamObjectives
+            .OrderBy(o => o.TeamId)
+            .Select(o => new TeamObjectivesDto(
+                o.TeamId,
+                o.FirstBlood,
+                new ObjectiveStatDto(o.BaronKills, o.BaronFirst),
+                new ObjectiveStatDto(o.DragonKills, o.DragonFirst),
+                new ObjectiveStatDto(o.RiftHeraldKills, o.RiftHeraldFirst),
+                new ObjectiveStatDto(o.HordeKills, o.HordeFirst),
+                new ObjectiveStatDto(o.TowerKills, o.TowerFirst),
+                new ObjectiveStatDto(o.InhibitorKills, o.InhibitorFirst)))
+            .ToList();
+
         return new MatchDetailDto(
             match.MatchId ?? string.Empty,
             match.MatchDate,
@@ -641,7 +868,9 @@ public class SummonerStatsService(
                 ? match.QueueType
                 : QueueCatalog.ResolveQueueLabel(match.QueueId),
             string.IsNullOrWhiteSpace(match.Patch) ? null : match.Patch,
-            participants
+            participants,
+            bans,
+            objectives
         );
     }
 
@@ -678,6 +907,9 @@ public class SummonerStatsService(
             p.ChampLevel,
             p.GoldEarned,
             p.TotalDamageDealtToChampions,
+            p.PhysicalDamageDealtToChampions,
+            p.MagicDamageDealtToChampions,
+            p.TrueDamageDealtToChampions,
             p.VisionScore,
             p.TotalMinionsKilled,
             p.NeutralMinionsKilled,

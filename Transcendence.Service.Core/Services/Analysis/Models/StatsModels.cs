@@ -55,6 +55,34 @@ public record RoleStat(
     double WinRate
 );
 
+public record RankHistoryEntry(
+    string? QueueType,
+    string? Tier,
+    string? RankNumber,
+    int LeaguePoints,
+    int Wins,
+    int Losses,
+    DateTime DateRecorded
+);
+
+public record PlayedWithEntry(
+    Guid SummonerId,
+    string? GameName,
+    string? TagLine,
+    int GamesTogether,
+    int SameTeamGames,
+    int SameTeamWins
+);
+
+public record ChampionMasteryEntry(
+    int ChampionId,
+    int ChampionLevel,
+    long ChampionPoints,
+    long LastPlayTime,
+    bool ChestGranted,
+    int TokensEarned
+);
+
 public record RecentMatchSummary(
     string MatchId,
     long MatchDate,

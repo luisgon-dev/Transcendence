@@ -3174,6 +3174,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/lol/summoners/{summonerId}/stats/rank-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    queueType?: string;
+                };
+                header?: never;
+                path: {
+                    summonerId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RankHistoryEntryDto"][];
+                        "application/json": components["schemas"]["RankHistoryEntryDto"][];
+                        "text/json": components["schemas"]["RankHistoryEntryDto"][];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/lol/summoners/{summonerId}/matches/recent": {
         parameters: {
             query?: never;
@@ -3268,6 +3331,79 @@ export interface paths {
                         "text/plain": components["schemas"]["MatchDetailDto"];
                         "application/json": components["schemas"]["MatchDetailDto"];
                         "text/json": components["schemas"]["MatchDetailDto"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lol/summoners/{summonerId}/matches/{matchId}/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    summonerId: string;
+                    matchId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MatchTimelineDto"];
+                        "application/json": components["schemas"]["MatchTimelineDto"];
+                        "text/json": components["schemas"]["MatchTimelineDto"];
                     };
                 };
                 /** @description Not Found */
@@ -4705,6 +4841,20 @@ export interface components {
             builds?: components["schemas"]["ChampionBuildDto"][] | null;
             sample?: components["schemas"]["AnalyticsSampleMetadata"];
         };
+        ChampionMasteryStat: {
+            /** Format: int32 */
+            championId?: number;
+            championName?: string | null;
+            /** Format: int32 */
+            championLevel?: number;
+            /** Format: int64 */
+            championPoints?: number;
+            /** Format: int64 */
+            lastPlayTime?: number;
+            chestGranted?: boolean;
+            /** Format: int32 */
+            tokensEarned?: number;
+        };
         ChampionMatchupsResponse: {
             /** Format: int32 */
             championId?: number;
@@ -4820,6 +4970,18 @@ export interface components {
             /** Format: date-time */
             createdAtUtc?: string;
         };
+        FrequentlyPlayedWithStat: {
+            /** Format: uuid */
+            summonerId?: string;
+            gameName?: string | null;
+            tagLine?: string | null;
+            /** Format: int32 */
+            gamesTogether?: number;
+            /** Format: int32 */
+            sameTeamGames?: number;
+            /** Format: int32 */
+            sameTeamWins?: number;
+        };
         LiveGameAnalysisDto: {
             /** Format: date-time */
             generatedAtUtc?: string;
@@ -4890,6 +5052,8 @@ export interface components {
             queueType?: string | null;
             patch?: string | null;
             participants?: components["schemas"]["ParticipantDetailDto"][] | null;
+            bans?: components["schemas"]["TeamBansDto"][] | null;
+            objectives?: components["schemas"]["TeamObjectivesDto"][] | null;
         };
         MatchRuneDetailDto: {
             /** Format: int32 */
@@ -4907,6 +5071,12 @@ export interface components {
             subStyleId?: number;
             /** Format: int32 */
             keystoneId?: number;
+        };
+        MatchTimelineDto: {
+            matchId?: string | null;
+            /** Format: int32 */
+            duration?: number;
+            frames?: components["schemas"]["TimelineFrameDto"][] | null;
         };
         MatchupEntryDto: {
             /** Format: int32 */
@@ -5014,6 +5184,11 @@ export interface components {
             missingRoles?: string[] | null;
             potentialAutofills?: components["schemas"]["MultiSearchAutofillRisk"][] | null;
         };
+        ObjectiveStatDto: {
+            /** Format: int32 */
+            kills?: number;
+            first?: boolean;
+        };
         ParticipantDetailDto: {
             puuid?: string | null;
             gameName?: string | null;
@@ -5036,6 +5211,12 @@ export interface components {
             goldEarned?: number;
             /** Format: int32 */
             totalDamageDealtToChampions?: number;
+            /** Format: int32 */
+            physicalDamageDealtToChampions?: number;
+            /** Format: int32 */
+            magicDamageDealtToChampions?: number;
+            /** Format: int32 */
+            trueDamageDealtToChampions?: number;
             /** Format: int32 */
             visionScore?: number;
             /** Format: int32 */
@@ -5164,23 +5345,18 @@ export interface components {
             /** Format: double */
             avgDamageToChamps?: number;
         };
-        ProfileRecentMatch: {
-            matchId?: string | null;
-            /** Format: int64 */
-            matchDate?: number;
+        RankHistoryEntryDto: {
             queueType?: string | null;
-            win?: boolean;
+            tier?: string | null;
+            rankNumber?: string | null;
             /** Format: int32 */
-            championId?: number;
-            championName?: string | null;
+            leaguePoints?: number;
             /** Format: int32 */
-            kills?: number;
+            wins?: number;
             /** Format: int32 */
-            deaths?: number;
-            /** Format: int32 */
-            assists?: number;
-            /** Format: double */
-            csPerMin?: number;
+            losses?: number;
+            /** Format: date-time */
+            dateRecorded?: string;
         };
         RankInfo: {
             tier?: string | null;
@@ -5324,7 +5500,8 @@ export interface components {
             flexRank?: components["schemas"]["RankInfo"];
             overviewStats?: components["schemas"]["ProfileOverviewStats"];
             topChampions?: components["schemas"]["ProfileChampionStat"][] | null;
-            recentMatches?: components["schemas"]["ProfileRecentMatch"][] | null;
+            frequentlyPlayedWith?: components["schemas"]["FrequentlyPlayedWithStat"][] | null;
+            topMastery?: components["schemas"]["ChampionMasteryStat"][] | null;
             profileAge?: components["schemas"]["DataAgeMetadata"];
             rankAge?: components["schemas"]["DataAgeMetadata"];
             statsAge?: components["schemas"]["DataAgeMetadata"];
@@ -5355,6 +5532,22 @@ export interface components {
             estimatedWinProbability?: number;
             strengths?: string[] | null;
             weaknesses?: string[] | null;
+        };
+        TeamBansDto: {
+            /** Format: int32 */
+            teamId?: number;
+            bannedChampionIds?: number[] | null;
+        };
+        TeamObjectivesDto: {
+            /** Format: int32 */
+            teamId?: number;
+            firstBlood?: boolean;
+            baron?: components["schemas"]["ObjectiveStatDto"];
+            dragon?: components["schemas"]["ObjectiveStatDto"];
+            riftHerald?: components["schemas"]["ObjectiveStatDto"];
+            horde?: components["schemas"]["ObjectiveStatDto"];
+            tower?: components["schemas"]["ObjectiveStatDto"];
+            inhibitor?: components["schemas"]["ObjectiveStatDto"];
         };
         TftRankDto: {
             queueType?: string | null;
@@ -5462,6 +5655,18 @@ export interface components {
          * @enum {integer}
          */
         TierMovement: 0 | 1 | 2 | 3;
+        TimelineFrameDto: {
+            /** Format: int32 */
+            minuteMark?: number;
+            /** Format: int32 */
+            blueGold?: number;
+            /** Format: int32 */
+            redGold?: number;
+            /** Format: int32 */
+            blueXp?: number;
+            /** Format: int32 */
+            redXp?: number;
+        };
         TrackedProSummonerDto: {
             /** Format: uuid */
             id?: string;

@@ -134,8 +134,13 @@ builder.Services.AddSwaggerGen(options =>
     options.OperationFilter<AuthPolicyOperationFilter>();
 });
 
-// Infrastructure: DbContext, HTTP, domain services, repositories
-builder.Services.AddDbContextPool<TranscendenceContext>(options =>
+// Infrastructure: DbContext, HTTP, domain services, repositories.
+// Non-pooled (not AddDbContextPool): pooled contexts can be reused by a second request before a
+// cancelled query (e.g. a heavy analytics read that hit the command timeout under load) has fully
+// unwound, surfacing "A second operation was started on this context instance". A fresh per-scope
+// context is disposed at scope end and never reused, eliminating that race. The analytics reads are
+// cache-backed so the lost pooling has negligible throughput impact.
+builder.Services.AddDbContext<TranscendenceContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("MainDatabase"),
         b => b.MigrationsAssembly("Transcendence.Service")));
 builder.Services.AddHealthChecks();

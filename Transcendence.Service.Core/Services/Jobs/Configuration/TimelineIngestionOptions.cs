@@ -10,8 +10,15 @@ public class TimelineIngestionOptions
     /// </summary>
     public int FrameIntervalMinutes { get; set; } = 2;
     public int MaxRetryAttempts { get; set; } = 4;
-    public int BackfillBatchSize { get; set; } = 100;
-    public int BackfillMaxEnqueuesPerRun { get; set; } = 50;
+    public int BackfillBatchSize { get; set; } = 1500;
+    public int BackfillMaxEnqueuesPerRun { get; set; } = 1500;
     public bool BackfillCurrentPatchOnly { get; set; } = true;
     public bool PauseWhenApiPriorityRefreshActive { get; set; } = true;
+
+    /// <summary>
+    /// A match already enqueued by the backfill is not re-selected for this many minutes (it stays
+    /// stale-schema until its ingestion job runs). Without this, a high-throughput backfill re-selects
+    /// still-queued matches every run and re-enqueues them, wasting Riot API budget on duplicates.
+    /// </summary>
+    public int BackfillReattemptCooldownMinutes { get; set; } = 60;
 }

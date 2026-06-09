@@ -24,6 +24,17 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
     private const string ProRosterCacheKeyPrefix = "analytics:proroster:";
     private const string MatchupsCacheKeyPrefix = "analytics:matchups:";
     private const string AnalyticsCacheTag = "analytics";
+    private const string ActivePatchCacheKey = "analytics:active-patch:v1";
+
+    // Active-patch metadata changes ~biweekly; a short cache removes the per-request Patches lookup
+    // that every analytics endpoint runs (cutting DB round-trips so reads degrade less under load).
+    private static readonly HybridCacheEntryOptions ActivePatchCacheOptions = new()
+    {
+        Expiration = TimeSpan.FromMinutes(5),
+        LocalCacheExpiration = TimeSpan.FromMinutes(2)
+    };
+
+    private sealed record ActivePatchInfo(string Version, DateTime ReleaseDate);
 
     // Analytics cache options: 24hr total, 1hr L1 (analytics computed from large datasets)
     private static readonly HybridCacheEntryOptions AnalyticsCacheOptions = new()
@@ -467,11 +478,20 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             return BuildPatchContext(requestedPatchMetadata.Version, requestedPatchMetadata.ReleaseDate);
         }
 
-        var activePatch = await _context.Patches
-            .AsNoTracking()
-            .Where(p => p.IsActive)
-            .Select(p => new { p.Version, p.ReleaseDate })
-            .FirstOrDefaultAsync(ct);
+        var activePatch = await _cache.GetOrCreateAsync(
+            ActivePatchCacheKey,
+            async cancel =>
+            {
+                var row = await _context.Patches
+                    .AsNoTracking()
+                    .Where(p => p.IsActive)
+                    .Select(p => new { p.Version, p.ReleaseDate })
+                    .FirstOrDefaultAsync(cancel);
+                return row == null ? null : new ActivePatchInfo(row.Version, row.ReleaseDate);
+            },
+            ActivePatchCacheOptions,
+            tags: new[] { AnalyticsCacheTag },
+            cancellationToken: ct);
 
         if (activePatch == null || string.IsNullOrWhiteSpace(activePatch.Version))
             return new ActivePatchContext(null, 0, false, AnalyticsPatchPhase.Bootstrap);

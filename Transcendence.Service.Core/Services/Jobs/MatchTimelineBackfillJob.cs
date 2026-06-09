@@ -53,33 +53,40 @@ public class MatchTimelineBackfillJob(
         if (options.BackfillCurrentPatchOnly && !string.IsNullOrWhiteSpace(activePatch))
             query = query.Where(m => m.Patch == activePatch);
 
-        var candidateMatchIds = await query
+        var cooldownThreshold = DateTime.UtcNow.AddMinutes(-Math.Max(0, options.BackfillReattemptCooldownMinutes));
+
+        var candidates = await query
             // Either never ingested (no snapshot at the anchor mark) or ingested under an older
             // schema that predates the ordered build-path tables, so re-ingest once to backfill them.
+            // The cooldown keeps a stale-schema match that was just enqueued (LastAttemptAtUtc stamped
+            // below) out of the candidate set until its ingestion job runs, so a high-throughput
+            // backfill does not re-enqueue still-queued matches and waste Riot API budget on duplicates.
             .Where(m => !db.MatchParticipantTimelineSnapshots.Any(s =>
                             s.MatchId == m.Id &&
                             s.MinuteMark == minuteMark)
                         || db.MatchTimelineFetchStates.Any(s =>
                             s.MatchId == m.Id &&
                             s.Status == MatchTimelineFetchStatus.Success &&
-                            s.SchemaVersion < MatchTimelineIngestionJob.CurrentTimelineSchemaVersion))
+                            s.SchemaVersion < MatchTimelineIngestionJob.CurrentTimelineSchemaVersion &&
+                            (s.LastAttemptAtUtc == null || s.LastAttemptAtUtc < cooldownThreshold)))
             .Where(m => !db.MatchTimelineFetchStates.Any(s =>
                 s.MatchId == m.Id &&
                 s.Status == MatchTimelineFetchStatus.PermanentlyFailed))
             .OrderByDescending(m => m.MatchDate)
             .ThenByDescending(m => m.MatchId)
-            .Select(m => m.MatchId!)
+            .Select(m => new { m.Id, MatchId = m.MatchId! })
             .Take(take)
             .ToListAsync(ct);
 
-        if (candidateMatchIds.Count == 0)
+        if (candidates.Count == 0)
         {
             logger.LogInformation("[TimelineBackfill] No missing ranked timeline rows found in current scope.");
             return;
         }
 
+        var enqueuedMatchGuids = new List<Guid>(Math.Min(candidates.Count, maxEnqueues));
         var enqueued = 0;
-        foreach (var matchId in candidateMatchIds)
+        foreach (var candidate in candidates)
         {
             if (enqueued >= maxEnqueues)
                 break;
@@ -94,14 +101,24 @@ public class MatchTimelineBackfillJob(
             }
 
             backgroundJobClient.Enqueue<MatchTimelineIngestionJob>(
-                job => job.IngestMatchTimelineAsync(matchId, CancellationToken.None));
+                job => job.IngestMatchTimelineAsync(candidate.MatchId, CancellationToken.None));
+            enqueuedMatchGuids.Add(candidate.Id);
             enqueued++;
+        }
+
+        // Stamp the just-enqueued (stale-schema) matches as freshly attempted so the cooldown excludes
+        // them from the next run until their ingestion job runs and advances SchemaVersion.
+        if (enqueuedMatchGuids.Count > 0)
+        {
+            await db.MatchTimelineFetchStates
+                .Where(s => enqueuedMatchGuids.Contains(s.MatchId))
+                .ExecuteUpdateAsync(s => s.SetProperty(x => x.LastAttemptAtUtc, DateTime.UtcNow), ct);
         }
 
         logger.LogInformation(
             "[TimelineBackfill] Enqueued {EnqueuedCount}/{CandidateCount} timeline ingestion jobs (patch scope: {PatchScope}).",
             enqueued,
-            candidateMatchIds.Count,
+            candidates.Count,
             options.BackfillCurrentPatchOnly ? activePatch ?? "current-patch-only(no-active-patch)" : "all-patches");
     }
 }

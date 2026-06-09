@@ -1,197 +1,265 @@
+<div align="center">
+
+<img src="apps/web/public/favicon.svg" alt="Transcendence logo" width="80" height="80" />
+
 # Transcendence
+
+**A command deck for League of Legends &amp; Teamfight Tactics analytics.**
+
+Tier lists, champion builds, pro picks, comps, and live summoner profiles — fast, trustworthy, and unapologetically data-forward.
+
+<!-- hero screenshot goes here — e.g. the LoL tier list or a summoner profile from apps/web -->
 
 [![CI](https://github.com/luisgon-dev/Transcendence/actions/workflows/ci-web-backend.yml/badge.svg)](https://github.com/luisgon-dev/Transcendence/actions/workflows/ci-web-backend.yml)
 [![Docker Images](https://github.com/luisgon-dev/Transcendence/actions/workflows/docker-images.yml/badge.svg)](https://github.com/luisgon-dev/Transcendence/actions/workflows/docker-images.yml)
 [![License](https://img.shields.io/github/license/luisgon-dev/Transcendence)](LICENSE)
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet&logoColor=white)](global.json)
-[![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)](apps/web)
+[![Next.js](https://img.shields.io/badge/Next.js-16.2-000000?logo=nextdotjs&logoColor=white)](apps/web)
 [![pnpm](https://img.shields.io/badge/pnpm-10.22.0-F69220?logo=pnpm&logoColor=white)](package.json)
 
-Transcendence is a Riot analytics monorepo for League of Legends and Teamfight Tactics. It combines a .NET Web API, a Hangfire-powered background worker, a Next.js web frontend, PostgreSQL, Redis, and a generated TypeScript API client in one repository.
+[**Live site →**](https://transcend.kronic.one) &nbsp;·&nbsp; [Sample LoL profile](https://transcend.kronic.one/lol/summoners/na/Kronic-NA1) &nbsp;·&nbsp; [Sample TFT profile](https://transcend.kronic.one/tft/summoners/na/Kronic-NA1)
 
-## What This Project Does
+</div>
 
-Transcendence delivers two game surfaces, `/lol/*` and `/tft/*`, on top of a shared platform:
+---
 
-- A public/authenticated Web API for reads, auth, and refresh requests
-- A background worker that fetches Riot data, ingests matches, and refreshes analytics
-- A Next.js web app that renders SSR pages and proxies backend requests through BFF route handlers
-- A committed OpenAPI contract with a generated TypeScript client for frontend integrations
+## What is it?
 
-At a high level, the user-facing refresh flow works like this:
+Transcendence is a Riot analytics platform built for both the competitive climber and the casual browser. Climbers come for tier lists, matchups, and optimal builds; casual players come to check post-game stats and explore champions. Under the hood it's a single monorepo: a **.NET 10** Web API and background worker feed a **Next.js 16** frontend, with PostgreSQL, Redis, Hangfire, and a generated TypeScript API client wiring it all together.
 
-1. A client requests a summoner profile.
-2. If data already exists, the API returns it immediately.
-3. If data is missing, the API returns `202 Accepted` and enqueues a Hangfire job.
-4. The worker fetches Riot data, stores it in PostgreSQL, and the client polls until the profile is ready.
+The live site redeploys automatically once changes land on `main`.
 
-## Why It Is Useful
+## ✨ Highlights
 
-- LoL and TFT stay isolated at the data and job level while sharing auth, infrastructure, and deployment workflows.
-- The web app keeps tokens in HttpOnly cookies and uses BFF proxy routes instead of exposing backend credentials to browser JavaScript.
-- Docker-based local development gives contributors a repeatable stack with PostgreSQL, Redis, Web API, worker, and optional tooling.
-- The committed OpenAPI spec and generated client reduce frontend/backend drift.
-- Admin routes and APIs provide queue visibility, cache controls, metrics, and operational logs for maintainers.
-- The production worker now prioritizes multi-region ranked solo coverage with high-value/high-elo roster seeding instead of relying on a single slow analytics ingestion loop.
+<table>
+<tr>
+<td width="33%" valign="top">
 
-## Repository Layout
+**🏆 League of Legends**
 
-| Path | Purpose |
+- Tier list rankings
+- Champion analytics — win rates, builds, and matchups by role, with tier / rank / patch filters
+- Pro play insights — top picks and pro rosters by region
+- Summoner profiles — ranked stats, mastery, and match history with detailed post-game analytics
+- Live game detection
+- Search with prefix autosuggest, plus multi-search (up to 5 players) for champ-select — surfacing average rank, role coverage, and autofill risk
+
+</td>
+<td width="33%" valign="top">
+
+**🎲 Teamfight Tactics**
+
+- Composition analytics (meta builds)
+- Unit / champion analytics
+- Trait, item, and augment databases
+- Summoner profiles with recent matches and match detail
+
+LoL and TFT stay isolated at the data and job level while sharing auth, infrastructure, and deployment.
+
+</td>
+<td width="33%" valign="top">
+
+**🛠 Platform**
+
+- Email auth — register, login, token refresh, password reset
+- User preferences + saved favorite summoners
+- Admin dashboard — Hangfire queue visibility, recurring-job controls, audit logs, cache invalidation, service logs, and analysis metrics
+- 80+ endpoints behind a committed OpenAPI contract
+- Per-surface rate limiting and health probes
+
+</td>
+</tr>
+</table>
+
+## 🧱 Tech Stack
+
+| Layer | Technology |
 | --- | --- |
-| `Transcendence.WebAPI` | REST API, auth, health checks, Swagger/OpenAPI export, refresh job enqueueing |
-| `Transcendence.Service` | Hangfire worker for Riot ingestion, refresh jobs, analytics, and maintenance work |
-| `Transcendence.Service.Core` | Shared domain services, DTOs, jobs, integrations, and application logic |
-| `Transcendence.Data` | EF Core models, repositories, DbContext, and database access |
-| `apps/web` | Next.js App Router frontend and BFF route handlers |
-| `packages/api-client` | Generated TypeScript client built from the committed OpenAPI spec |
-| `openapi/transcendence.v1.json` | Source-of-truth API contract committed to the repo |
-| `docs/` | Canonical developer, API, and architecture documentation |
+| **Backend API** | ASP.NET Core (.NET 10), Swagger / OpenAPI, health checks |
+| **Worker** | .NET Worker Service + Hangfire (prioritized job queues) |
+| **Data** | EF Core 10 over PostgreSQL; Redis for caching &amp; data protection |
+| **Frontend** | Next.js 16.2 (App Router), React 19.2, TypeScript |
+| **API contract** | OpenAPI → generated `@transcendence/api-client` (openapi-typescript + tsup) |
+| **Tooling** | pnpm 10.22.0, Node 22, .NET SDK 10.0.102 |
+| **Testing** | xUnit (.NET), Vitest (web), Playwright 1.58 (e2e) |
+| **CI/CD** | GitHub Actions — tests, lint, OpenAPI sync check, Docker image builds |
 
-## Getting Started
+## 🗺 Architecture
 
-### Prerequisites
+```mermaid
+flowchart LR
+  User([Browser])
 
-- Git
-- Docker Desktop or another Docker runtime
-- .NET SDK `10.0.102` from [global.json](global.json)
-- Node.js `22` from [.nvmrc](.nvmrc)
-- Corepack-enabled `pnpm`
+  subgraph Web["apps/web · Next.js"]
+    SSR[SSR pages]
+    BFF[BFF route handlers]
+  end
 
-### Recommended Local Setup
+  subgraph Backend[".NET 10"]
+    API[Transcendence.WebAPI]
+    Worker[Transcendence.Service<br/>Hangfire worker]
+  end
 
-1. Clone the repository and install JavaScript dependencies:
+  PG[(PostgreSQL)]
+  Redis[(Redis)]
+  Riot[[Riot API]]
+
+  User --> SSR
+  User -->|auth via HttpOnly cookies| BFF
+  SSR --> API
+  BFF -->|proxied requests| API
+  API --> PG
+  API --> Redis
+
+  API -.->|202 + enqueue refresh job| Worker
+  Worker --> Riot
+  Riot --> Worker
+  Worker --> PG
+  User -.->|poll until ready| API
+```
+
+**The async refresh flow:** a profile request returns `200` immediately when data is cached. If it's missing, the API returns `202 Accepted`, takes a refresh lock, and enqueues a Hangfire job on a prioritized refresh queue (`refresh-high` for LoL, `tft-refresh-high` for TFT). The worker fetches from the Riot API and ingests matches into PostgreSQL while the client polls the same endpoint until the data appears. The Next.js BFF proxies authenticated requests so tokens stay in HttpOnly cookies — never exposed to browser JavaScript.
+
+## 🚀 Quick Start
+
+> **Prerequisites:** [.NET SDK 10.0.102](global.json) · [Node 22](.nvmrc) · [pnpm 10.22.0](package.json) · Docker (for PostgreSQL &amp; Redis).
+>
+> Run `corepack enable` once and `pnpm` will automatically use the version pinned in `package.json`. Prefer not to enable Corepack? `corepack pnpm <script>` works the same way.
 
 ```bash
+# 1. Clone
 git clone https://github.com/luisgon-dev/Transcendence.git
 cd Transcendence
-corepack enable
-corepack pnpm install
-corepack pnpm hooks:install
-```
 
-2. Copy the backend environment template:
-
-```bash
+# 2. Configure environment
 cp .env.example .env
-```
-
-3. Set the values you need in `.env`.
-
-At minimum, review these variables before a real local run:
-
-- `JWT_SIGNING_KEY`
-- `AUTH_BOOTSTRAP_API_KEY`
-- `WEB_TRN_BACKEND_API_KEY`
-- `RIOT_API_KEY_LOL`
-- `RIOT_API_KEY_TFT`
-
-Notes:
-
-- The Web API can start without Riot API keys for basic reads and Swagger export, but refresh and ingestion flows need valid Riot keys in the worker.
-- `WEB_TRN_BACKEND_API_KEY` must be a valid AppOnly key accepted by the backend. For local bootstrapping, contributors often use the bootstrap key until they create a dedicated key.
-
-4. Copy the web environment template:
-
-```bash
 cp apps/web/.env.example apps/web/.env.local
+
+# 3. Install dependencies + set up the pre-commit hook
+pnpm install
+pnpm hooks:install
+
+# 4. Bring up the full stack (API, worker, web, PostgreSQL, Redis) in the background
+pnpm dev:stack:up
 ```
 
-The default local web settings are already suitable for a Compose-backed backend:
+Then open:
 
-```env
-TRN_BACKEND_BASE_URL=http://localhost:8080
-TRN_BACKEND_API_KEY=trn_bootstrap_dev_key
-```
+| URL | What |
+| --- | --- |
+| http://localhost:3000 | Web app |
+| http://localhost:8080 | Web API |
+| http://localhost:8080/health/ready | Health — readiness |
+| http://localhost:8080/health/live | Health — liveness |
 
-5. Start the backend stack:
+Stop the stack with `pnpm dev:stack:down`.
+
+<details>
+<summary><strong>Optional: run the web app on its own</strong></summary>
+
+If your backend is already running (locally, or pointed at a remote API via `TRN_BACKEND_BASE_URL` in `apps/web/.env.local`), you can iterate on just the frontend:
 
 ```bash
-docker compose up --build
+pnpm web:dev      # Next.js dev server on :3000
+pnpm web:build    # production build
+pnpm web:lint     # ESLint
+pnpm web:test     # Vitest
 ```
 
-6. In a separate terminal, run the web app locally:
+</details>
+
+<details>
+<summary><strong>Optional: developer tooling (pgAdmin, container logs)</strong></summary>
+
+Two extra services ship in `compose.yml` behind profiles:
 
 ```bash
-corepack pnpm web:dev
+docker compose --profile local-tools up   # pgAdmin → http://localhost:5050
+docker compose --profile ops-tools up      # Dozzle (container log viewer) → http://localhost:9999
 ```
 
-### Local URLs
+</details>
 
-- Web app: `http://localhost:3000`
-- Web API: `http://localhost:8080`
-- Live health: `http://localhost:8080/health/live`
-- Ready health: `http://localhost:8080/health/ready`
-- Admin UI: `http://localhost:3000/admin`
-- pgAdmin: `http://localhost:5050` with `docker compose --profile local-tools up`
-- Dozzle (container log viewer): `http://localhost:9999` with `docker compose --profile ops-tools up`
+<details>
+<summary><strong>Optional: backend &amp; solution details</strong></summary>
 
-### Example Usage
-
-Check API health:
+The .NET solution (`Transcendence.sln`) contains four active projects — see [Repository Layout](#-repository-layout). Run the backend test suites with:
 
 ```bash
-curl http://localhost:8080/health/live
+pnpm backend:test
+# runs:
+#   tests/Transcendence.Service.Core.Tests/Transcendence.Service.Core.Tests.csproj
+#   tests/Transcendence.WebAPI.Tests/Transcendence.WebAPI.Tests.csproj
 ```
 
-Queue a TFT summoner refresh:
+> `Transcendence.WebAdminPortal/` is a stale `bin/obj` artifact, not part of the solution — ignore it.
 
-```bash
-curl -X POST http://localhost:8080/api/tft/summoners/na1/<gameName>/<tagLine>/refresh
+</details>
+
+## 📂 Repository Layout
+
+```
+Transcendence/
+├─ Transcendence.WebAPI/         # REST API — auth, Hangfire admin, Swagger, health checks
+├─ Transcendence.Service/        # Hangfire background worker (prioritized job queues)
+├─ Transcendence.Service.Core/   # Shared domain: services, jobs, Riot integrations, analytics
+├─ Transcendence.Data/           # EF Core — DbContext, models, repositories
+├─ apps/web/                     # Next.js 16 frontend + BFF route handlers (TypeScript)
+├─ packages/api-client/          # Generated TS client (@transcendence/api-client)
+├─ openapi/transcendence.v1.json # Committed OpenAPI contract — source of truth
+├─ tests/                        # Backend unit tests (Service.Core, WebAPI)
+├─ e2e/                          # Playwright tests (navigation, smoke, summoner, tft, tierlist)
+├─ docs/                         # DEVELOPMENT.md · API.md · ARCHITECTURE.md
+├─ scripts/                      # OpenAPI export, e2e, and ops helpers
+└─ config/                       # backend.shared.json
 ```
 
-Open the local app:
+## ⚙️ Common Commands
 
-```text
-http://localhost:3000
-```
+All commands run from the repo root via `pnpm <script>`.
 
-### Common Commands
+| Command | Description |
+| --- | --- |
+| `dev:stack:up` / `dev:stack:down` | Start / stop the full Docker Compose stack |
+| `web:dev` | Next.js dev server (`:3000`) |
+| `web:build` · `web:lint` · `web:test` | Build / lint / Vitest for the web app |
+| `backend:test` | Run both .NET test projects |
+| `api:gen` | Export the OpenAPI spec **and** regenerate the TS client |
+| `api:check` | Verify the committed spec &amp; client haven't drifted (used in CI) |
+| `e2e:local` | Run Playwright against `localhost:3000` |
+| `e2e:stack` | Spin up the Docker stack, then run e2e |
+| `hooks:install` | Configure the pre-commit hook |
 
-```bash
-corepack pnpm web:dev
-corepack pnpm web:build
-corepack pnpm web:lint
-corepack pnpm web:test
-corepack pnpm backend:test
-corepack pnpm api:gen
-corepack pnpm api:check
-corepack pnpm e2e:stack
-corepack pnpm e2e:local
-dotnet test tests/Transcendence.Service.Core.Tests
-dotnet test tests/Transcendence.WebAPI.Tests
-```
+## 🔄 The API Contract Loop
 
-### Running Without Docker
+The OpenAPI contract (`openapi/transcendence.v1.json`) is the single source of truth between backend and frontend:
 
-You can run `Transcendence.WebAPI` and `Transcendence.Service` directly with `dotnet run`, but local secrets, connection strings, and migration steps are documented in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Use that path if you need a non-Compose backend workflow.
+1. You change a .NET controller or DTO.
+2. `pnpm api:gen` re-exports the spec and regenerates `@transcendence/api-client`.
+3. The **pre-commit hook** does this automatically when API-relevant files are staged, then runs lint checks — so the spec and client never drift.
+4. CI runs `api:check` on every push and PR to confirm they're in sync.
 
-## Help And Documentation
+## 📚 Documentation
 
-Start with the canonical docs:
+| Doc | Covers |
+| --- | --- |
+| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | Prerequisites, secrets, local run modes, testing, OpenAPI/client generation |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System boundaries, refresh flows, caching, ingestion, BFF behavior |
+| [`docs/API.md`](docs/API.md) | Endpoint areas, auth semantics, status-code expectations, contract notes |
+| [`AGENTS.md`](AGENTS.md) | Quick-reference commands and architecture for coding agents |
 
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for setup, secrets, local run modes, testing, and OpenAPI/client generation
-- [docs/API.md](docs/API.md) for endpoint areas, auth semantics, status-code expectations, and API contract notes
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for system boundaries, refresh flows, caching, ingestion, and BFF behavior
-- [AGENTS.md](AGENTS.md) for repository-specific guidance used by coding agents
+## 🤝 Contributing
 
-For repository support:
+Contributions are welcome. The fast path:
 
-- Open an issue: <https://github.com/luisgon-dev/Transcendence/issues>
-- Review CI workflows: [.github/workflows/ci-web-backend.yml](.github/workflows/ci-web-backend.yml) and [.github/workflows/docker-images.yml](.github/workflows/docker-images.yml)
+1. Fork and branch from `main`.
+2. `pnpm install && pnpm hooks:install`.
+3. Make your change. If you touch the API, let the pre-commit hook regenerate the contract (or run `pnpm api:gen`).
+4. Make sure things pass locally — `pnpm backend:test`, `pnpm web:test`, `pnpm web:lint`, and `pnpm api:check`.
+5. Open a PR. CI runs backend tests (.NET), frontend tests (Vitest), ESLint, builds, and the OpenAPI sync check; `docker-images.yml` builds container images for the `webapi`, `service`, and `web` components with change detection.
 
-## Maintainers And Contributing
+> Don't hand-edit EF migration files — update the EF model first, then generate migrations with `dotnet ef migrations add ...`.
 
-This project is maintained by [luisgon-dev](https://github.com/luisgon-dev).
+## 📄 License
 
-Contributions are welcome through issues and pull requests. Before opening a PR:
-
-- Run the relevant checks locally: `corepack pnpm web:lint`, `corepack pnpm web:test`, `corepack pnpm backend:test`, and `corepack pnpm api:check` when API changes are involved.
-- Update the canonical docs in the same PR when you change API behavior, environment variables, run commands, or architecture.
-- Regenerate the OpenAPI artifacts when backend contract changes affect `openapi/transcendence.v1.json`.
-- Do not hand-edit EF migration files. Update the EF model first, then generate migrations with `dotnet ef migrations add ...`.
-
-If you are not sure where a change belongs, start with [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), then link your PR to the relevant issue or explain the change scope clearly in the description.
-
-## License
-
-Transcendence is licensed under the [GNU General Public License v3.0](LICENSE).
+[GNU General Public License v3](LICENSE) — Copyright © 2026 luisgon-dev.

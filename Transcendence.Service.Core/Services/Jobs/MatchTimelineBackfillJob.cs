@@ -54,9 +54,15 @@ public class MatchTimelineBackfillJob(
             query = query.Where(m => m.Patch == activePatch);
 
         var candidateMatchIds = await query
+            // Either never ingested (no snapshot at the anchor mark) or ingested under an older
+            // schema that predates the ordered build-path tables, so re-ingest once to backfill them.
             .Where(m => !db.MatchParticipantTimelineSnapshots.Any(s =>
-                s.MatchId == m.Id &&
-                s.MinuteMark == minuteMark))
+                            s.MatchId == m.Id &&
+                            s.MinuteMark == minuteMark)
+                        || db.MatchTimelineFetchStates.Any(s =>
+                            s.MatchId == m.Id &&
+                            s.Status == MatchTimelineFetchStatus.Success &&
+                            s.SchemaVersion < MatchTimelineIngestionJob.CurrentTimelineSchemaVersion))
             .Where(m => !db.MatchTimelineFetchStates.Any(s =>
                 s.MatchId == m.Id &&
                 s.Status == MatchTimelineFetchStatus.PermanentlyFailed))

@@ -277,8 +277,12 @@ detail is archived off-box and pruned to keep the database from growing unbounde
 - Ranked solo/duo matches are eligible for timeline ingestion.
 - Timeline backfill is an enrichment path, not the main coverage path for tier lists or champion win-rate/build data.
 - Timeline ingestion persists:
-  - fetch state (`MatchTimelineFetchStates`)
+  - fetch state (`MatchTimelineFetchStates`), versioned by `SchemaVersion` (`MatchTimelineIngestionJob.CurrentTimelineSchemaVersion`) so already-`Success` matches are re-ingested **once** when the job begins deriving new per-match data; `MatchTimelineBackfillJob` re-enqueues stale-schema matches.
   - per-participant snapshots at minute mark 15 (`MatchParticipantTimelineSnapshots`)
+  - per-participant **ordered, build-relevant item purchases** (`MatchParticipantItemPurchases`) parsed from `ITEM_PURCHASED`/`ITEM_UNDO`/`ITEM_SOLD`/`ITEM_DESTROYED` events — net of undo/sell/destroy, categorized `Starter`/`Boots`/`Legendary` via `ItemVersion` metadata, with components/consumables/trinkets dropped (~5–8 rows per participant).
+  - per-participant **skill order** (`MatchParticipantSkillOrders`) parsed from `SKILL_LEVEL_UP` events — the full leveling sequence, opening first-three, and basic-ability max priority (ability evolutions excluded).
+- Event parsing is a pure, unit-tested function (`TimelineBuildParser`); completed-item classification is shared with the analytics compute layer through `BuildItemClassifier` so ingestion and aggregation use one definition.
+- Champion **builds** fold these ordered purchases + skill orders + the summoner spells already stored on `MatchParticipant` into a sectioned, timing-aware path (top spell pairs, dominant skill order, top starter sets, top boots, the per-position dominant core path with average completion minute, and 4th/5th/6th situational options). The builds/pro-builds `HybridCache` key prefixes were versioned to `v2` so stale pre-overhaul payloads are not served.
 - Matchup `avgGoldDiffAt15` and `avgXpDiffAt15` are computed from timeline snapshots (not end-of-game proxies).
 - Matchup responses also expose timeline quality metadata:
   - `timelineCoverageRatio`

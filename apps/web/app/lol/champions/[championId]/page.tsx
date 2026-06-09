@@ -5,6 +5,7 @@ import type { components } from "@transcendence/api-client";
 
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
+import { BuildBreakdown } from "@/components/BuildBreakdown";
 import { ChampionPortrait } from "@/components/ChampionPortrait";
 import { FilterBar } from "@/components/FilterBar";
 import { ItemBuildDisplay } from "@/components/ItemBuildDisplay";
@@ -28,7 +29,8 @@ import {
   championIconUrl,
   fetchChampionMap,
   fetchItemMap,
-  fetchRunesReforged
+  fetchRunesReforged,
+  fetchSummonerSpellMap
 } from "@/lib/staticData";
 import { deriveTier } from "@/lib/tierlist";
 
@@ -102,9 +104,10 @@ const loadChampionData = cache(async (championId: number, sp: ChampionSearchPara
   if (explicitRole) winrateQuery.set("role", explicitRole);
   const profileQuery = winrateQuery.toString() ? `?${winrateQuery.toString()}` : "";
 
-  const [itemStatic, runeStatic, patchOptions, profileRes] = await Promise.all([
+  const [itemStatic, runeStatic, spellStatic, patchOptions, profileRes] = await Promise.all([
     fetchItemMap(),
     fetchRunesReforged(),
+    fetchSummonerSpellMap(),
     fetchLolAnalyticsPatches(),
     fetchBackendJson<ChampionProfileAnalyticsResponse>(
       `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/profile${profileQuery}`,
@@ -121,6 +124,7 @@ const loadChampionData = cache(async (championId: number, sp: ChampionSearchPara
     selectedPatch,
     itemStatic,
     runeStatic,
+    spellStatic,
     patchOptions,
     profileRes
   };
@@ -319,6 +323,7 @@ async function ChampionSections({
     selectedPatch,
     itemStatic,
     runeStatic,
+    spellStatic,
     profileRes
   } = data;
 
@@ -467,6 +472,20 @@ async function ChampionSections({
             <p className="mt-2 text-sm text-fg/75">There are not enough games for this role yet.</p>
           ) : (
             <div className="mt-4 grid gap-4">
+              {/* Sectioned, timing-aware build path (spells, skills, starters, boots, core, situational) */}
+              <BuildBreakdown
+                summonerSpells={builds?.summonerSpells}
+                skillOrder={builds?.skillOrder}
+                startingItems={builds?.startingItems}
+                boots={builds?.boots}
+                coreBuildPath={builds?.coreBuildPath}
+                situationalSlots={builds?.situationalSlots}
+                itemVersion={itemVersion}
+                items={items}
+                spellVersion={spellStatic.version}
+                spells={spellStatic.spells}
+              />
+
               {/* Global Core Items */}
               {globalCoreItems.length > 0 ? (
                 <ItemBuildDisplay

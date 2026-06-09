@@ -16,8 +16,10 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 {
     private const string WinRateCacheKeyPrefix = "analytics:champion:winrates:";
     private const string TierListCacheKeyPrefix = "analytics:tierlist:v2:";
-    private const string BuildsCacheKeyPrefix = "analytics:builds:";
-    private const string ProBuildsCacheKeyPrefix = "analytics:probuilds:";
+    // v2: ordered, timing-aware sectioned builds (Build Analysis Overhaul). Bumped so stale
+    // pre-overhaul payloads are not served from cache.
+    private const string BuildsCacheKeyPrefix = "analytics:builds:v2:";
+    private const string ProBuildsCacheKeyPrefix = "analytics:probuilds:v2:";
     private const string ProPlayrateCacheKeyPrefix = "analytics:proplayrate:";
     private const string ProRosterCacheKeyPrefix = "analytics:proroster:";
     private const string MatchupsCacheKeyPrefix = "analytics:matchups:";

@@ -6580,6 +6580,44 @@
           },
           "sample": {
             "$ref": "#/components/schemas/AnalyticsSampleMetadata"
+          },
+          "summonerSpells": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SummonerSpellPairDto"
+            },
+            "nullable": true
+          },
+          "skillOrder": {
+            "$ref": "#/components/schemas/SkillOrderDto"
+          },
+          "startingItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StarterItemSetDto"
+            },
+            "nullable": true
+          },
+          "boots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ItemChoiceDto"
+            },
+            "nullable": true
+          },
+          "coreBuildPath": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CoreItemStepDto"
+            },
+            "nullable": true
+          },
+          "situationalSlots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationalSlotDto"
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -6906,6 +6944,28 @@
         },
         "additionalProperties": false
       },
+      "CoreItemStepDto": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "winRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "avgCompletionMinute": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
       "DataAgeMetadata": {
         "type": "object",
         "properties": {
@@ -6978,6 +7038,24 @@
           "sameTeamWins": {
             "type": "integer",
             "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ItemChoiceDto": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "winRate": {
+            "type": "number",
+            "format": "double"
           }
         },
         "additionalProperties": false
@@ -7878,6 +7956,17 @@
               "format": "int32"
             },
             "nullable": true
+          },
+          "spell1Id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "spell2Id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "skillOrder": {
+            "$ref": "#/components/schemas/SkillOrderDto"
           }
         },
         "additionalProperties": false
@@ -8317,6 +8406,67 @@
         },
         "additionalProperties": false
       },
+      "SituationalSlotDto": {
+        "type": "object",
+        "properties": {
+          "slot": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ItemChoiceDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SkillOrderDto": {
+        "type": "object",
+        "properties": {
+          "firstThree": {
+            "type": "string",
+            "nullable": true
+          },
+          "maxOrder": {
+            "type": "string",
+            "nullable": true
+          },
+          "games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "winRate": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "StarterItemSetDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "nullable": true
+          },
+          "games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "winRate": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
       "SummonerAcceptedResponse": {
         "type": "object",
         "properties": {
@@ -8514,6 +8664,28 @@
               "$ref": "#/components/schemas/SummonerSearchItem"
             },
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SummonerSpellPairDto": {
+        "type": "object",
+        "properties": {
+          "spell1Id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "spell2Id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "winRate": {
+            "type": "number",
+            "format": "double"
           }
         },
         "additionalProperties": false

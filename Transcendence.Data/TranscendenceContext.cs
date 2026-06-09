@@ -27,6 +27,8 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<MatchTeamObjective> MatchTeamObjectives { get; set; }
     public DbSet<MatchTimelineFetchState> MatchTimelineFetchStates { get; set; }
     public DbSet<MatchParticipantTimelineSnapshot> MatchParticipantTimelineSnapshots { get; set; }
+    public DbSet<MatchParticipantItemPurchase> MatchParticipantItemPurchases { get; set; }
+    public DbSet<MatchParticipantSkillOrder> MatchParticipantSkillOrders { get; set; }
 
     // Versioned static data
     public DbSet<Patch> Patches { get; set; }
@@ -486,6 +488,32 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
         });
 
         modelBuilder.Entity<MatchParticipantTimelineSnapshot>()
+            .HasQueryFilter(x => x.Match.Status != FetchStatus.PermanentlyUnfetchable);
+
+        modelBuilder.Entity<MatchParticipantItemPurchase>(entity =>
+        {
+            // PK (MatchId, ParticipantId, PurchaseIndex) already serves (MatchId) and
+            // (MatchId, ParticipantId) prefix lookups, so no extra secondary index is needed.
+            entity.HasKey(x => new { x.MatchId, x.ParticipantId, x.PurchaseIndex });
+            entity.HasOne(x => x.Match)
+                .WithMany()
+                .HasForeignKey(x => x.MatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MatchParticipantItemPurchase>()
+            .HasQueryFilter(x => x.Match.Status != FetchStatus.PermanentlyUnfetchable);
+
+        modelBuilder.Entity<MatchParticipantSkillOrder>(entity =>
+        {
+            entity.HasKey(x => new { x.MatchId, x.ParticipantId });
+            entity.HasOne(x => x.Match)
+                .WithMany()
+                .HasForeignKey(x => x.MatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MatchParticipantSkillOrder>()
             .HasQueryFilter(x => x.Match.Status != FetchStatus.PermanentlyUnfetchable);
 
         modelBuilder.Entity<MatchParticipantItem>(entity =>

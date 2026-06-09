@@ -17,7 +17,56 @@ public record ChampionBuildDto(
 );
 
 /// <summary>
-/// Response containing top builds for a champion.
+/// A summoner spell pair (normalized so the lower id is first) with usage stats.
+/// </summary>
+public record SummonerSpellPairDto(
+    int Spell1Id,
+    int Spell2Id,
+    int Games,
+    double WinRate
+);
+
+/// <summary>
+/// A starting-item set (sorted item ids) with usage stats.
+/// </summary>
+public record StarterItemSetDto(
+    List<int> Items,
+    int Games,
+    double WinRate
+);
+
+/// <summary>
+/// A single item option (used for boots and situational slots) with usage stats.
+/// </summary>
+public record ItemChoiceDto(
+    int ItemId,
+    int Games,
+    double WinRate
+);
+
+/// <summary>
+/// One step of the ordered core build path, with the average minute the item was completed.
+/// </summary>
+public record CoreItemStepDto(
+    int ItemId,
+    int Games,
+    double WinRate,
+    double AvgCompletionMinute
+);
+
+/// <summary>
+/// A late/situational item slot (4th, 5th, 6th) with the top alternative options.
+/// </summary>
+public record SituationalSlotDto(
+    int Slot,
+    List<ItemChoiceDto> Options
+);
+
+/// <summary>
+/// Response containing top builds for a champion plus the sectioned, timing-aware build path
+/// (summoner spells, skill order, starters, boots, ordered core with completion timing, and
+/// 4th/5th/6th situational options). The sectioned fields are optional and degrade to null when
+/// timeline-derived data is unavailable.
 /// </summary>
 public record ChampionBuildsResponse(
     int ChampionId,
@@ -27,7 +76,13 @@ public record ChampionBuildsResponse(
     string Patch,
     List<int> GlobalCoreItems,    // Items core across ALL builds for this champion
     List<ChampionBuildDto> Builds, // Top 3 builds ordered by (games * winRate)
-    AnalyticsSampleMetadata? Sample = null
+    AnalyticsSampleMetadata? Sample = null,
+    List<SummonerSpellPairDto>? SummonerSpells = null,
+    SkillOrderDto? SkillOrder = null,
+    List<StarterItemSetDto>? StartingItems = null,
+    List<ItemChoiceDto>? Boots = null,
+    List<CoreItemStepDto>? CoreBuildPath = null,
+    List<SituationalSlotDto>? SituationalSlots = null
 );
 
 public record ProMatchBuildDto(
@@ -36,12 +91,15 @@ public record ProMatchBuildDto(
     string? TeamName,
     bool Win,
     long PlayedAt,
-    List<int> Items,
+    List<int> Items,              // Build-relevant items in purchase order (final inventory as fallback)
     int PrimaryStyleId,
     int SubStyleId,
     List<int> PrimaryRunes,
     List<int> SubRunes,
-    List<int> StatShards
+    List<int> StatShards,
+    int Spell1Id = 0,
+    int Spell2Id = 0,
+    SkillOrderDto? SkillOrder = null
 );
 
 public record ProPlayerSummaryDto(
@@ -70,11 +128,12 @@ public record ChampionProBuildsResponse(
 );
 
 /// <summary>
-/// Skill order for ability maxing (requires Timeline API - placeholder for future).
-/// NOTE: Phase 3 does not fetch Timeline data. Skill order will be null until
-/// Timeline API integration is added.
+/// Skill order derived from match-timeline SKILL_LEVEL_UP events: the most common opening
+/// three points and basic-ability max priority, with the usage stats of the dominant priority.
 /// </summary>
 public record SkillOrderDto(
     string FirstThree,            // e.g., "QWE" or "QEW"
-    string MaxOrder               // e.g., "Q>E>W"
+    string MaxOrder,              // e.g., "Q>E>W"
+    int Games = 0,
+    double WinRate = 0
 );

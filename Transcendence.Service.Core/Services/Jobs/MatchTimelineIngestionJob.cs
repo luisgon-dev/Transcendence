@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Match;
+using Transcendence.Service.Core.Services.Analytics;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.RiotApi;
 using DataMatch = Transcendence.Data.Models.LoL.Match.Match;
@@ -20,6 +21,12 @@ public class MatchTimelineIngestionJob(
     IOptions<TimelineIngestionOptions> options,
     ILogger<MatchTimelineIngestionJob> logger)
 {
+    /// <summary>
+    /// Bumped when the timeline job begins deriving new per-match data so already-<c>Success</c>
+    /// matches are re-ingested once. v1 added ordered item purchases + skill orders.
+    /// </summary>
+    public const int CurrentTimelineSchemaVersion = 1;
+
     [Queue("refresh-low")]
     public async Task IngestMatchTimelineAsync(string matchId, CancellationToken ct = default)
     {
@@ -56,7 +63,7 @@ public class MatchTimelineIngestionJob(
         }
 
         var maxRetryAttempts = Math.Max(1, jobOptions.MaxRetryAttempts);
-        if (state.Status == MatchTimelineFetchStatus.Success)
+        if (state.Status == MatchTimelineFetchStatus.Success && state.SchemaVersion >= CurrentTimelineSchemaVersion)
             return;
 
         if (state.Status == MatchTimelineFetchStatus.PermanentlyFailed && state.RetryCount >= maxRetryAttempts)
@@ -125,11 +132,19 @@ public class MatchTimelineIngestionJob(
 
             db.MatchParticipantTimelineSnapshots.AddRange(snapshots);
 
+            // Derive and stage the ordered build path (item purchases + skill orders) from the same
+            // frames; committed atomically with the snapshots by the SaveChangesAsync below.
+            var buildPathCoverageOk = await StageBuildPathRowsAsync(match, timeline.Info.Frames, ct);
+
             state.Status = MatchTimelineFetchStatus.Success;
             state.RetryCount = 0;
             state.LastError = null;
             state.LastSuccessAtUtc = DateTime.UtcNow;
             state.SourcePatch = match.Patch;
+            // Only mark the build-path schema as captured when item metadata was available; otherwise
+            // leave it stale so the backfill re-ingests once metadata exists (snapshots/skills still land).
+            if (buildPathCoverageOk)
+                state.SchemaVersion = CurrentTimelineSchemaVersion;
 
             await db.SaveChangesAsync(ct);
         }
@@ -260,6 +275,154 @@ public class MatchTimelineIngestionJob(
             flags.Add("SHORT_GAME");
 
         return string.Join("|", flags);
+    }
+
+    /// <summary>
+    /// Parses the timeline's purchase/skill events into ordered, build-relevant rows and stages a
+    /// full replace for this match (idempotent re-ingestion), committed by the caller's SaveChanges.
+    /// Returns <c>false</c> when item purchases exist but no <c>ItemVersion</c> metadata is available
+    /// for the patch yet (e.g. the patch-rollover race): the caller then leaves <c>SchemaVersion</c>
+    /// un-advanced so the match is re-ingested once metadata lands instead of baking in an empty path.
+    /// </summary>
+    private async Task<bool> StageBuildPathRowsAsync(DataMatch match, FramesTimeLine[] frames, CancellationToken ct)
+    {
+        var events = ProjectBuildEvents(frames);
+
+        var itemMetadata = events.Count == 0 || string.IsNullOrWhiteSpace(match.Patch)
+            ? new Dictionary<int, BuildItemMetadata>()
+            : await LoadItemMetadataAsync(match.Patch, events, ct);
+
+        var hasPurchaseEvents = events.Any(e =>
+            e.Type == TimelineBuildParser.ItemPurchasedType || e.Type == TimelineBuildParser.ItemUndoType);
+        var coverageOk = !hasPurchaseEvents || string.IsNullOrWhiteSpace(match.Patch) || itemMetadata.Count > 0;
+        if (!coverageOk)
+        {
+            logger.LogInformation(
+                "[Timeline] No item metadata for patch {Patch} on match {MatchId}; persisting skills only and deferring purchase ingestion until metadata lands.",
+                match.Patch, match.MatchId);
+        }
+
+        var purchasePaths = events.Count == 0
+            ? []
+            : TimelineBuildParser.BuildPurchasePaths(
+                events,
+                itemId => itemMetadata.TryGetValue(itemId, out var metadata) ? metadata : (BuildItemMetadata?)null);
+
+        var skillSequences = events.Count == 0
+            ? []
+            : TimelineBuildParser.BuildSkillSequences(events);
+
+        var purchaseRows = new List<MatchParticipantItemPurchase>();
+        foreach (var path in purchasePaths)
+        {
+            for (var index = 0; index < path.Purchases.Count; index++)
+            {
+                var purchase = path.Purchases[index];
+                purchaseRows.Add(new MatchParticipantItemPurchase
+                {
+                    MatchId = match.Id,
+                    Match = match,
+                    ParticipantId = path.ParticipantId,
+                    PurchaseIndex = index,
+                    ItemId = purchase.ItemId,
+                    TimestampMs = purchase.TimestampMs,
+                    Category = purchase.Category
+                });
+            }
+        }
+
+        var skillRows = skillSequences
+            .Select(sequence => new MatchParticipantSkillOrder
+            {
+                MatchId = match.Id,
+                Match = match,
+                ParticipantId = sequence.ParticipantId,
+                Sequence = sequence.Sequence,
+                FirstThree = sequence.FirstThree,
+                MaxOrder = sequence.MaxOrder
+            })
+            .ToList();
+
+        // Replace any prior rows for this match so re-ingestion is idempotent.
+        var existingPurchases = await db.MatchParticipantItemPurchases
+            .Where(x => x.MatchId == match.Id)
+            .ToListAsync(ct);
+        if (existingPurchases.Count > 0)
+            db.MatchParticipantItemPurchases.RemoveRange(existingPurchases);
+        if (purchaseRows.Count > 0)
+            db.MatchParticipantItemPurchases.AddRange(purchaseRows);
+
+        var existingSkillOrders = await db.MatchParticipantSkillOrders
+            .Where(x => x.MatchId == match.Id)
+            .ToListAsync(ct);
+        if (existingSkillOrders.Count > 0)
+            db.MatchParticipantSkillOrders.RemoveRange(existingSkillOrders);
+        if (skillRows.Count > 0)
+            db.MatchParticipantSkillOrders.AddRange(skillRows);
+
+        return coverageOk;
+    }
+
+    private static List<TimelineBuildEvent> ProjectBuildEvents(FramesTimeLine[] frames)
+    {
+        var events = new List<TimelineBuildEvent>();
+        foreach (var frame in frames)
+        {
+            if (frame?.Events == null)
+                continue;
+
+            foreach (var timelineEvent in frame.Events)
+            {
+                if (timelineEvent == null)
+                    continue;
+
+                events.Add(new TimelineBuildEvent(
+                    timelineEvent.Type,
+                    timelineEvent.ParticipantId,
+                    timelineEvent.ItemId,
+                    timelineEvent.SkillSlot,
+                    timelineEvent.LevelUpType,
+                    timelineEvent.Timestamp,
+                    timelineEvent.BeforeId,
+                    timelineEvent.AfterId));
+            }
+        }
+
+        return events;
+    }
+
+    private async Task<Dictionary<int, BuildItemMetadata>> LoadItemMetadataAsync(
+        string patch,
+        List<TimelineBuildEvent> events,
+        CancellationToken ct)
+    {
+        var itemIds = events
+            .Where(e => e.Type == TimelineBuildParser.ItemPurchasedType || e.Type == TimelineBuildParser.ItemUndoType)
+            .SelectMany(e => new[] { e.ItemId, e.AfterId, e.BeforeId })
+            .Where(id => id is > 0)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+
+        if (itemIds.Count == 0)
+            return new Dictionary<int, BuildItemMetadata>();
+
+        return await db.ItemVersions
+            .AsNoTracking()
+            .Where(iv => iv.PatchVersion == patch && itemIds.Contains(iv.ItemId))
+            .Select(iv => new
+            {
+                iv.ItemId,
+                iv.BuildsFrom,
+                iv.BuildsInto,
+                iv.Tags,
+                iv.InStore,
+                iv.PriceTotal
+            })
+            .ToDictionaryAsync(
+                iv => iv.ItemId,
+                iv => new BuildItemMetadata(iv.BuildsFrom, iv.BuildsInto, iv.Tags, iv.InStore, iv.PriceTotal),
+                ct);
     }
 
     private static bool TryResolveRegionalRoute(string matchId, out RegionalRoute regionalRoute)

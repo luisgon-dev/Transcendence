@@ -4840,6 +4840,12 @@ export interface components {
             globalCoreItems?: number[] | null;
             builds?: components["schemas"]["ChampionBuildDto"][] | null;
             sample?: components["schemas"]["AnalyticsSampleMetadata"];
+            summonerSpells?: components["schemas"]["SummonerSpellPairDto"][] | null;
+            skillOrder?: components["schemas"]["SkillOrderDto"];
+            startingItems?: components["schemas"]["StarterItemSetDto"][] | null;
+            boots?: components["schemas"]["ItemChoiceDto"][] | null;
+            coreBuildPath?: components["schemas"]["CoreItemStepDto"][] | null;
+            situationalSlots?: components["schemas"]["SituationalSlotDto"][] | null;
         };
         ChampionMasteryStat: {
             /** Format: int32 */
@@ -4954,6 +4960,16 @@ export interface components {
             /** Format: double */
             winRate?: number;
         };
+        CoreItemStepDto: {
+            /** Format: int32 */
+            itemId?: number;
+            /** Format: int32 */
+            games?: number;
+            /** Format: double */
+            winRate?: number;
+            /** Format: double */
+            avgCompletionMinute?: number;
+        };
         DataAgeMetadata: {
             /** Format: date-time */
             fetchedAt?: string;
@@ -4981,6 +4997,14 @@ export interface components {
             sameTeamGames?: number;
             /** Format: int32 */
             sameTeamWins?: number;
+        };
+        ItemChoiceDto: {
+            /** Format: int32 */
+            itemId?: number;
+            /** Format: int32 */
+            games?: number;
+            /** Format: double */
+            winRate?: number;
         };
         LiveGameAnalysisDto: {
             /** Format: date-time */
@@ -5276,6 +5300,11 @@ export interface components {
             primaryRunes?: number[] | null;
             subRunes?: number[] | null;
             statShards?: number[] | null;
+            /** Format: int32 */
+            spell1Id?: number;
+            /** Format: int32 */
+            spell2Id?: number;
+            skillOrder?: components["schemas"]["SkillOrderDto"];
         };
         ProPlayerDto: {
             proName?: string | null;
@@ -5446,6 +5475,26 @@ export interface components {
             /** Format: double */
             winRate?: number;
         };
+        SituationalSlotDto: {
+            /** Format: int32 */
+            slot?: number;
+            options?: components["schemas"]["ItemChoiceDto"][] | null;
+        };
+        SkillOrderDto: {
+            firstThree?: string | null;
+            maxOrder?: string | null;
+            /** Format: int32 */
+            games?: number;
+            /** Format: double */
+            winRate?: number;
+        };
+        StarterItemSetDto: {
+            items?: number[] | null;
+            /** Format: int32 */
+            games?: number;
+            /** Format: double */
+            winRate?: number;
+        };
         SummonerAcceptedResponse: {
             /** @description Refresh state message. "Refresh queued" when accepted now, "Refresh in process" when contention is detected. */
             message?: string | null;
@@ -5516,6 +5565,16 @@ export interface components {
         };
         SummonerSearchResponse: {
             items?: components["schemas"]["SummonerSearchItem"][] | null;
+        };
+        SummonerSpellPairDto: {
+            /** Format: int32 */
+            spell1Id?: number;
+            /** Format: int32 */
+            spell2Id?: number;
+            /** Format: int32 */
+            games?: number;
+            /** Format: double */
+            winRate?: number;
         };
         TeamAnalysisDto: {
             /** Format: int32 */

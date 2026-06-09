@@ -19,5 +19,12 @@ public class MatchTimelineFetchState
     public string? LastError { get; set; }
     public string? SourcePatch { get; set; }
 
+    /// <summary>
+    /// Ingestion schema the row was last written with. Bumped when the timeline job starts
+    /// deriving new data (ordered item purchases, skill orders) so already-<see cref="MatchTimelineFetchStatus.Success"/>
+    /// matches are re-ingested once to backfill it.
+    /// </summary>
+    public int SchemaVersion { get; set; }
+
     public required Match Match { get; set; }
 }

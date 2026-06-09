@@ -204,6 +204,111 @@ public class ChampionAnalyticsComputeServiceTests
         all.TopPlayers.Select(p => p.PlayerName).Should().BeEquivalentTo(new[] { "Pro", "Otp#NA1" });
     }
 
+    [Fact]
+    public async Task ComputeBuildsAsync_PopulatesSectionedTimingAwareBuildPath()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<TranscendenceContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var db = new SqliteCompatibleTranscendenceContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        db.Patches.Add(new Patch
+        {
+            Version = "15.2",
+            ReleaseDate = DateTime.UtcNow.AddDays(-20),
+            DetectedAt = DateTime.UtcNow.AddDays(-20),
+            IsActive = true
+        });
+        await db.SaveChangesAsync();
+
+        const int championId = 100;
+        const string role = "MIDDLE";
+
+        // Final-inventory items need backing ItemVersion rows (FK + completed-item classification).
+        foreach (var itemId in new[] { 6672, 3031, 3072, 6694 })
+        {
+            db.ItemVersions.Add(new ItemVersion
+            {
+                ItemId = itemId,
+                PatchVersion = "15.2",
+                Name = $"Item {itemId}",
+                Tags = ["Damage"],
+                BuildsFrom = [1038],
+                BuildsInto = [],
+                InStore = true,
+                PriceTotal = 3000
+            });
+        }
+
+        var purchases = new (int ItemId, int TimestampMs, BuildItemCategory Category)[]
+        {
+            (1055, 5_000, BuildItemCategory.Starter),       // Doran's Blade
+            (6672, 600_000, BuildItemCategory.Legendary),   // Kraken Slayer @ 10:00 (1st core)
+            (3006, 700_000, BuildItemCategory.Boots),       // Berserker's Greaves
+            (3031, 900_000, BuildItemCategory.Legendary),   // Infinity Edge (2nd core)
+            (3072, 1_200_000, BuildItemCategory.Legendary), // Bloodthirster (3rd core)
+            (6694, 1_500_000, BuildItemCategory.Legendary)  // Lord Dominik's (4th / situational)
+        };
+
+        for (var i = 0; i < 10; i++)
+        {
+            SeedBuildParticipant(
+                db,
+                patch: "15.2",
+                matchId: $"NA1_BUILD_{i}",
+                championId: championId,
+                role: role,
+                win: i < 6,
+                spell1: 4,
+                spell2: 12,
+                finalItems: [6672, 3031, 3072, 6694],
+                purchases: purchases,
+                firstThree: "QWE",
+                maxOrder: "Q>E>W");
+        }
+
+        await db.SaveChangesAsync();
+
+        var service = CreateComputeService(db);
+
+        var response = await service.ComputeBuildsAsync(championId, role, rankTier: null, region: null, patch: "15.2", CancellationToken.None);
+
+        response.Builds.Should().NotBeEmpty();
+
+        response.SummonerSpells.Should().NotBeNull();
+        response.SummonerSpells!.Should().ContainSingle();
+        response.SummonerSpells![0].Spell1Id.Should().Be(4);
+        response.SummonerSpells![0].Spell2Id.Should().Be(12);
+        response.SummonerSpells![0].Games.Should().Be(10);
+
+        response.SkillOrder.Should().NotBeNull();
+        response.SkillOrder!.FirstThree.Should().Be("QWE");
+        response.SkillOrder!.MaxOrder.Should().Be("Q>E>W");
+        response.SkillOrder!.Games.Should().Be(10);
+        response.SkillOrder!.WinRate.Should().BeApproximately(0.6, 0.0001);
+
+        response.StartingItems.Should().NotBeNull();
+        response.StartingItems!.Should().ContainSingle();
+        response.StartingItems![0].Items.Should().Equal(1055);
+
+        response.Boots.Should().NotBeNull();
+        response.Boots!.Select(b => b.ItemId).Should().Contain(3006);
+
+        response.CoreBuildPath.Should().NotBeNull();
+        response.CoreBuildPath!.Select(c => c.ItemId).Should().Equal(6672, 3031, 3072);
+        response.CoreBuildPath![0].AvgCompletionMinute.Should().BeApproximately(10.0, 0.01);
+
+        response.SituationalSlots.Should().NotBeNull();
+        response.SituationalSlots!.Should().ContainSingle();
+        response.SituationalSlots![0].Slot.Should().Be(4);
+        response.SituationalSlots![0].Options.Select(o => o.ItemId).Should().Contain(6694);
+    }
+
     private static ChampionAnalyticsComputeService CreateComputeService(TranscendenceContext db) =>
         new(
             db,
@@ -332,5 +437,103 @@ public class ChampionAnalyticsComputeServiceTests
         db.Summoners.Add(summoner);
         db.Matches.Add(match);
         db.MatchParticipants.Add(participant);
+    }
+
+    private static void SeedBuildParticipant(
+        TranscendenceContext db,
+        string patch,
+        string matchId,
+        int championId,
+        string role,
+        bool win,
+        int spell1,
+        int spell2,
+        int[] finalItems,
+        (int ItemId, int TimestampMs, BuildItemCategory Category)[] purchases,
+        string firstThree,
+        string maxOrder)
+    {
+        var summoner = new Summoner
+        {
+            Id = Guid.NewGuid(),
+            PlatformRegion = "NA1",
+            Region = "americas",
+            GameName = matchId,
+            TagLine = "NA1",
+            Puuid = Guid.NewGuid().ToString("N"),
+            SummonerName = matchId,
+            RiotSummonerId = Guid.NewGuid().ToString("N")
+        };
+
+        var match = new Transcendence.Data.Models.LoL.Match.Match
+        {
+            Id = Guid.NewGuid(),
+            MatchId = matchId,
+            MatchDate = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            Duration = 1800,
+            Patch = patch,
+            QueueId = 420,
+            QueueFamily = "RANKED_SOLO_DUO",
+            QueueType = "420",
+            Status = FetchStatus.Success,
+            PlatformRegion = "NA1",
+            FetchedAt = DateTime.UtcNow
+        };
+
+        var participant = new MatchParticipant
+        {
+            Id = Guid.NewGuid(),
+            MatchId = match.Id,
+            Match = match,
+            SummonerId = summoner.Id,
+            Summoner = summoner,
+            Puuid = summoner.Puuid,
+            ParticipantId = 1,
+            TeamId = 100,
+            ChampionId = championId,
+            TeamPosition = role,
+            Win = win,
+            SummonerSpell1Id = spell1,
+            SummonerSpell2Id = spell2
+        };
+
+        db.Summoners.Add(summoner);
+        db.Matches.Add(match);
+        db.MatchParticipants.Add(participant);
+
+        for (var slot = 0; slot < finalItems.Length; slot++)
+        {
+            db.MatchParticipantItems.Add(new MatchParticipantItem
+            {
+                MatchParticipantId = participant.Id,
+                SlotIndex = slot,
+                ItemId = finalItems[slot],
+                PatchVersion = patch
+            });
+        }
+
+        for (var index = 0; index < purchases.Length; index++)
+        {
+            db.MatchParticipantItemPurchases.Add(new MatchParticipantItemPurchase
+            {
+                MatchId = match.Id,
+                Match = match,
+                ParticipantId = 1,
+                PurchaseIndex = index,
+                ItemId = purchases[index].ItemId,
+                TimestampMs = purchases[index].TimestampMs,
+                Category = purchases[index].Category
+            });
+        }
+
+        db.MatchParticipantSkillOrders.Add(new MatchParticipantSkillOrder
+        {
+            MatchId = match.Id,
+            Match = match,
+            ParticipantId = 1,
+            Sequence = firstThree,
+            FirstThree = firstThree,
+            MaxOrder = maxOrder
+        });
     }
 }

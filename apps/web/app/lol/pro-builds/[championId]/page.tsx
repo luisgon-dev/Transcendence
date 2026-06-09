@@ -31,7 +31,9 @@ import {
   fetchChampionMap,
   fetchItemMap,
   fetchRunesReforged,
-  itemIconUrl
+  fetchSummonerSpellMap,
+  itemIconUrl,
+  summonerSpellIconUrl
 } from "@/lib/staticData";
 
 type ChampionWinRateSummary = components["schemas"]["ChampionWinRateSummary"];
@@ -92,6 +94,41 @@ function ProItemsRow({
   );
 }
 
+function ProSpellPair({
+  spell1Id,
+  spell2Id,
+  spellVersion,
+  spells
+}: {
+  spell1Id: number;
+  spell2Id: number;
+  spellVersion: string;
+  spells: Record<string, { id: string; name: string }>;
+}) {
+  const ids = [spell1Id, spell2Id].filter((id) => Number.isFinite(id) && id > 0);
+  if (ids.length === 0) return null;
+
+  return (
+    <div className="flex items-center gap-1">
+      {ids.map((id, idx) => {
+        const spell = spells[String(id)];
+        if (!spell) return null;
+        return (
+          <Image
+            key={`${id}-${idx}`}
+            src={summonerSpellIconUrl(spellVersion, spell.id)}
+            alt={spell.name}
+            title={spell.name}
+            width={22}
+            height={22}
+            className="rounded-md border border-border/50"
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 export default async function ProBuildsChampionPage({
   params,
   searchParams
@@ -125,11 +162,20 @@ export default async function ProBuildsChampionPage({
   if (patchFilter) winrateQuery.set("patch", patchFilter);
 
   const verbosity = getErrorVerbosity();
-  const [{ version, champions }, itemStatic, runeStatic, patchOptions, winratesRes, proBuildsRes] =
+  const [
+    { version, champions },
+    itemStatic,
+    runeStatic,
+    spellStatic,
+    patchOptions,
+    winratesRes,
+    proBuildsRes
+  ] =
     await Promise.all([
     fetchChampionMap(),
     fetchItemMap(),
     fetchRunesReforged(),
+    fetchSummonerSpellMap(),
     fetchLolAnalyticsPatches(),
     fetchBackendJson<ChampionWinRateSummary>(
       `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/winrates${winrateQuery.toString() ? `?${winrateQuery.toString()}` : ""}`,
@@ -398,6 +444,24 @@ export default async function ProBuildsChampionPage({
                         itemVersion={itemStatic.version}
                         items={itemStatic.items}
                       />
+                      {(match.spell1Id || match.spell2Id || match.skillOrder?.maxOrder) ? (
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-1">
+                          <ProSpellPair
+                            spell1Id={match.spell1Id ?? 0}
+                            spell2Id={match.spell2Id ?? 0}
+                            spellVersion={spellStatic.version}
+                            spells={spellStatic.spells}
+                          />
+                          {match.skillOrder?.maxOrder ? (
+                            <span className="text-xs text-muted">
+                              Skills:{" "}
+                              <span className="font-medium text-fg/80">
+                                {match.skillOrder.maxOrder}
+                              </span>
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
                     <div className="grid gap-1.5">
                       <p className="text-xs text-muted">Runes</p>

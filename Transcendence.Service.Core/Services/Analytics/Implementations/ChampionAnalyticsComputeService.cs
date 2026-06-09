@@ -493,29 +493,13 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         return Math.Max(0.0, (center - margin) / denominator);
     }
 
-    // Non-build-impact item classes that should not appear in completed build recommendations.
-    private static readonly HashSet<string> ExcludedBuildItemCategories = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Consumable",
-        "Trinket",
-        "Vision"
-    };
-
-    // Used only when item metadata coverage is incomplete for the active patch.
-    private static readonly HashSet<int> LegacyExcludedBuildItems = new()
-    {
-        // Trinkets and wards
-        3340, 3363, 3364, 2055,
-        // Consumables
-        2003, 2010, 2031, 2033, 2138, 2139, 2140,
-        // Starter and component items
-        1001, 1004, 1011, 1018, 1026, 1027, 1028, 1029, 1031, 1033, 1035, 1036, 1037, 1038, 1042, 1043,
-        1052, 1053, 1054, 1055, 1056, 1057, 1058, 1082, 1083, 2420, 2421, 2422, 3024, 3052, 3070
-    };
-
     private const double CoreItemThreshold = 0.70;
     private const int MinBuildSampleSize = 30;
     private const double ItemMetadataCoverageFallbackThreshold = 0.90;
+    private const int CoreBuildPathSlots = 3;
+    private const int MaxBuildPathSlots = 6;
+    private static readonly IReadOnlyDictionary<int, BuildItemMetadata> EmptyItemMetadata =
+        new Dictionary<int, BuildItemMetadata>();
 
     /// <summary>
     /// Computes top 3 builds for a champion with items and runes bundled.
@@ -559,6 +543,10 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             .Select(mp => new
             {
                 mp.Win,
+                MatchGuid = mp.Match.Id,
+                mp.ParticipantId,
+                mp.SummonerSpell1Id,
+                mp.SummonerSpell2Id,
                 Items = mp.Items.Select(i => i.ItemId).ToList(),
                 Runes = mp.Runes.Select(r => new StoredRuneSelection(
                     r.RuneId,
@@ -723,6 +711,16 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             build.WinRate
         )).ToList();
 
+        // Sectioned, timing-aware build path (spells, skill order, starters, boots, ordered core
+        // with completion timing, and 4th/5th/6th situational) from the same participants' timeline data.
+        // baseQuery is reused so the timeline fetches join on (MatchId, ParticipantId) and read only
+        // this champion's purchase/skill rows, not all 10 participants per match.
+        var sections = await ComputeBuildPathSectionsAsync(
+            baseQuery,
+            matchData.Select(m => new BuildPathParticipantInput(
+                m.MatchGuid, m.ParticipantId, m.Win, m.SummonerSpell1Id, m.SummonerSpell2Id)).ToList(),
+            ct);
+
         return new ChampionBuildsResponse(
             championId,
             role,
@@ -730,7 +728,13 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             normalizedRegion,
             patch,
             globalCoreItems,
-            builds
+            builds,
+            SummonerSpells: sections.SummonerSpells,
+            SkillOrder: sections.SkillOrder,
+            StartingItems: sections.StartingItems,
+            Boots: sections.Boots,
+            CoreBuildPath: sections.CoreBuildPath,
+            SituationalSlots: sections.SituationalSlots
         );
     }
 
@@ -813,8 +817,12 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             .Select(mp => new
             {
                 mp.Match.MatchId,
+                MatchGuid = mp.Match.Id,
                 mp.Match.MatchDate,
                 mp.Win,
+                mp.ParticipantId,
+                mp.SummonerSpell1Id,
+                mp.SummonerSpell2Id,
                 mp.Puuid,
                 mp.Summoner.GameName,
                 mp.Summoner.TagLine,
@@ -845,6 +853,30 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             .Select(rv => new { rv.RuneId, rv.RunePathId, rv.Slot })
             .ToDictionaryAsync(rv => rv.RuneId, rv => new RuneMetadata(rv.RunePathId, rv.Slot), ct);
 
+        // Ordered build path + skill orders for the projected pro matches (timeline-derived).
+        var proMatchGuids = rows.Select(r => r.MatchGuid).Distinct().ToList();
+
+        var proPurchasesByParticipant = (await _context.MatchParticipantItemPurchases
+                .AsNoTracking()
+                .Where(p => proMatchGuids.Contains(p.MatchId))
+                .Select(p => new { p.MatchId, p.ParticipantId, p.PurchaseIndex, p.ItemId, p.Category })
+                .ToListAsync(ct))
+            .GroupBy(p => (p.MatchId, p.ParticipantId))
+            .ToDictionary(
+                g => g.Key,
+                g => g.Where(x => x.Category != BuildItemCategory.Starter)
+                    .OrderBy(x => x.PurchaseIndex)
+                    .Select(x => x.ItemId)
+                    .ToList());
+
+        var proSkillByParticipant = (await _context.MatchParticipantSkillOrders
+                .AsNoTracking()
+                .Where(s => proMatchGuids.Contains(s.MatchId))
+                .Select(s => new { s.MatchId, s.ParticipantId, s.FirstThree, s.MaxOrder })
+                .ToListAsync(ct))
+            .GroupBy(s => (s.MatchId, s.ParticipantId))
+            .ToDictionary(g => g.Key, g => g.First());
+
         var projectedRows = rows
             .Select(r =>
             {
@@ -854,6 +886,17 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                     ? roster.ProName
                     : (r.GameName != null && r.TagLine != null ? $"{r.GameName}#{r.TagLine}" : r.GameName);
 
+                // Covered rows use the cleaned, purchase-ordered path; uncovered rows fall back to the
+                // raw inventory cleaned through the same completed-item filter (legacy exclusions) so
+                // both branches yield comparable item sets and don't fragment commonBuilds grouping
+                // during the timeline-backfill window.
+                var orderedItems =
+                    proPurchasesByParticipant.TryGetValue((r.MatchGuid, r.ParticipantId), out var purchasePath) && purchasePath.Count > 0
+                        ? purchasePath
+                        : NormalizeCompletedBuildItems(r.Items, EmptyItemMetadata, useLegacyFallback: true);
+
+                proSkillByParticipant.TryGetValue((r.MatchGuid, r.ParticipantId), out var skill);
+
                 return new
                 {
                     r.MatchId,
@@ -861,7 +904,10 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                     r.Win,
                     PlayerName = playerName,
                     TeamName = roster?.TeamName,
-                    Items = r.Items.Where(i => i != 0).OrderBy(i => i).ToList(),
+                    Items = orderedItems,
+                    Spell1Id = r.SummonerSpell1Id,
+                    Spell2Id = r.SummonerSpell2Id,
+                    SkillOrder = skill is not null ? new SkillOrderDto(skill.FirstThree, skill.MaxOrder) : null,
                     RuneInfo = runeInfo
                 };
             })
@@ -882,7 +928,10 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                 r.RuneInfo.SubStyleId,
                 r.RuneInfo.PrimaryRunes,
                 r.RuneInfo.SubRunes,
-                r.RuneInfo.StatShards))
+                r.RuneInfo.StatShards,
+                r.Spell1Id,
+                r.Spell2Id,
+                r.SkillOrder))
             .ToList();
 
         var topPlayers = projectedRows
@@ -897,8 +946,10 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             .Take(10)
             .ToList();
 
+        // Group by the item set (sorted key) for stable grouping, but display a representative
+        // member's purchase-ordered items.
         var commonBuilds = projectedRows
-            .GroupBy(r => string.Join(",", r.Items))
+            .GroupBy(r => string.Join(",", r.Items.OrderBy(i => i)))
             .Select(g => new CommonProBuildDto(
                 g.First().Items,
                 g.Count(),
@@ -1026,13 +1077,6 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             _ => "all"
         };
 
-    private readonly record struct BuildItemMetadata(
-        IReadOnlyList<int> BuildsFrom,
-        IReadOnlyList<int> BuildsInto,
-        IReadOnlyList<string> Tags,
-        bool InStore,
-        int PriceTotal);
-
     private readonly record struct RankTierScope(
         string CacheToken,
         string? ExactTier,
@@ -1054,7 +1098,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
 
             if (itemMetadataById.TryGetValue(itemId, out var metadata))
             {
-                if (!IsCompletedBuildItem(metadata))
+                if (!BuildItemClassifier.IsCompletedBuildItem(metadata))
                     continue;
 
                 filtered.Add(itemId);
@@ -1064,7 +1108,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             if (!useLegacyFallback)
                 continue;
 
-            if (LegacyExcludedBuildItems.Contains(itemId))
+            if (BuildItemClassifier.LegacyExcludedBuildItems.Contains(itemId))
                 continue;
 
             filtered.Add(itemId);
@@ -1074,21 +1118,262 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         return filtered;
     }
 
-    private static bool IsCompletedBuildItem(BuildItemMetadata metadata)
+    private readonly record struct BuildPathParticipantInput(
+        Guid MatchGuid,
+        int ParticipantId,
+        bool Win,
+        int Spell1Id,
+        int Spell2Id);
+
+    private readonly record struct BuildPurchaseRow(
+        int PurchaseIndex,
+        int ItemId,
+        int TimestampMs,
+        BuildItemCategory Category);
+
+    private sealed record BuildPathSample(
+        bool Win,
+        int Spell1Id,
+        int Spell2Id,
+        IReadOnlyList<BuildPurchaseRow> Purchases,
+        string? SkillFirstThree,
+        string? SkillMaxOrder);
+
+    private sealed record BuildPathSections(
+        List<SummonerSpellPairDto> SummonerSpells,
+        SkillOrderDto? SkillOrder,
+        List<StarterItemSetDto> StartingItems,
+        List<ItemChoiceDto> Boots,
+        List<CoreItemStepDto> CoreBuildPath,
+        List<SituationalSlotDto> SituationalSlots)
     {
-        if (!metadata.InStore)
-            return false;
+        public static BuildPathSections Empty { get; } = new([], null, [], [], [], []);
+    }
 
-        if (metadata.PriceTotal <= 0)
-            return false;
+    /// <summary>
+    /// Loads the ordered timeline purchases + skill orders for the scoped participants and folds them
+    /// into the sectioned, timing-aware build path. Returns empty sections when no timeline data exists.
+    /// The fetches join against <paramref name="scopedParticipants"/> on (MatchId, ParticipantId) so
+    /// only the queried champion's rows are read — not all 10 participants' rows per match.
+    /// </summary>
+    private async Task<BuildPathSections> ComputeBuildPathSectionsAsync(
+        IQueryable<MatchParticipant> scopedParticipants,
+        IReadOnlyList<BuildPathParticipantInput> participants,
+        CancellationToken ct)
+    {
+        if (participants.Count == 0)
+            return BuildPathSections.Empty;
 
-        if (metadata.BuildsInto.Count > 0)
-            return false;
+        var purchaseRows = await scopedParticipants
+            .Join(
+                _context.MatchParticipantItemPurchases.AsNoTracking(),
+                mp => new { mp.MatchId, mp.ParticipantId },
+                p => new { p.MatchId, p.ParticipantId },
+                (mp, p) => new { p.MatchId, p.ParticipantId, p.PurchaseIndex, p.ItemId, p.TimestampMs, p.Category })
+            .ToListAsync(ct);
 
-        if (metadata.BuildsFrom.Count == 0)
-            return false;
+        var skillRows = await scopedParticipants
+            .Join(
+                _context.MatchParticipantSkillOrders.AsNoTracking(),
+                mp => new { mp.MatchId, mp.ParticipantId },
+                s => new { s.MatchId, s.ParticipantId },
+                (mp, s) => new { s.MatchId, s.ParticipantId, s.FirstThree, s.MaxOrder })
+            .ToListAsync(ct);
 
-        return metadata.Tags.All(tag => !ExcludedBuildItemCategories.Contains(tag));
+        if (purchaseRows.Count == 0 && skillRows.Count == 0)
+            return BuildPathSections.Empty;
+
+        var purchasesByParticipant = purchaseRows
+            .GroupBy(p => (p.MatchId, p.ParticipantId))
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<BuildPurchaseRow>)g
+                    .OrderBy(x => x.PurchaseIndex)
+                    .Select(x => new BuildPurchaseRow(x.PurchaseIndex, x.ItemId, x.TimestampMs, x.Category))
+                    .ToList());
+
+        var skillByParticipant = skillRows
+            .GroupBy(s => (s.MatchId, s.ParticipantId))
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var samples = participants
+            .Select(p =>
+            {
+                purchasesByParticipant.TryGetValue((p.MatchGuid, p.ParticipantId), out var purchases);
+                skillByParticipant.TryGetValue((p.MatchGuid, p.ParticipantId), out var skill);
+                return new BuildPathSample(
+                    p.Win,
+                    p.Spell1Id,
+                    p.Spell2Id,
+                    purchases ?? [],
+                    skill?.FirstThree,
+                    skill?.MaxOrder);
+            })
+            .ToList();
+
+        return BuildBuildPathSections(samples);
+    }
+
+    /// <summary>
+    /// Pure aggregation of per-participant build-path samples into the sectioned response: top
+    /// summoner-spell pairs, dominant skill order, top starter sets, top boots, the per-position
+    /// dominant core path with completion timing, and 4th/5th/6th situational options.
+    /// </summary>
+    private static BuildPathSections BuildBuildPathSections(IReadOnlyList<BuildPathSample> samples)
+    {
+        if (samples.Count == 0)
+            return BuildPathSections.Empty;
+
+        // Spells come from every participant; the floor scales to the full pool. Purchase-derived
+        // sections only have data from the timeline-covered subset, so their floor scales to that
+        // subset — otherwise sections are suppressed while the timeline backfill is still rolling out.
+        var minGames = Math.Max(2, (int)Math.Ceiling(samples.Count * 0.03));
+        var coveredCount = samples.Count(s => s.Purchases.Count > 0);
+        var purchaseMinGames = Math.Max(2, (int)Math.Ceiling(coveredCount * 0.03));
+
+        var summonerSpells = samples
+            .Where(s => s.Spell1Id > 0 && s.Spell2Id > 0)
+            .Select(s => new { s.Win, Lo = Math.Min(s.Spell1Id, s.Spell2Id), Hi = Math.Max(s.Spell1Id, s.Spell2Id) })
+            .GroupBy(s => new { s.Lo, s.Hi })
+            .Select(g => new SummonerSpellPairDto(g.Key.Lo, g.Key.Hi, g.Count(), (double)g.Count(x => x.Win) / g.Count()))
+            .Where(p => p.Games >= minGames)
+            .OrderByDescending(p => p.Games)
+            .ThenByDescending(p => p.WinRate)
+            .Take(3)
+            .ToList();
+
+        SkillOrderDto? skillOrder = null;
+        var skillSamples = samples.Where(s => !string.IsNullOrEmpty(s.SkillMaxOrder)).ToList();
+        if (skillSamples.Count > 0)
+        {
+            var dominantMax = skillSamples
+                .GroupBy(s => s.SkillMaxOrder!)
+                .OrderByDescending(g => g.Count())
+                .First();
+            var dominantFirstThree = samples
+                .Where(s => !string.IsNullOrEmpty(s.SkillFirstThree))
+                .GroupBy(s => s.SkillFirstThree!)
+                .OrderByDescending(g => g.Count())
+                .Select(g => g.Key)
+                .FirstOrDefault() ?? string.Empty;
+            skillOrder = new SkillOrderDto(
+                dominantFirstThree,
+                dominantMax.Key,
+                dominantMax.Count(),
+                (double)dominantMax.Count(x => x.Win) / dominantMax.Count());
+        }
+
+        var startingItems = samples
+            .Select(s => new
+            {
+                s.Win,
+                // Distinct item ids so opening potion-count variation ("Doran's + 1 HP" vs "+ 2 HP")
+                // does not fragment the starter set aggregation.
+                Set = s.Purchases
+                    .Where(p => p.Category == BuildItemCategory.Starter)
+                    .Select(p => p.ItemId)
+                    .Distinct()
+                    .OrderBy(i => i)
+                    .ToList()
+            })
+            .Where(x => x.Set.Count > 0)
+            .GroupBy(x => string.Join(",", x.Set))
+            .Select(g => new StarterItemSetDto(g.First().Set, g.Count(), (double)g.Count(x => x.Win) / g.Count()))
+            .Where(x => x.Games >= purchaseMinGames)
+            .OrderByDescending(x => x.Games)
+            .ThenByDescending(x => x.WinRate)
+            .Take(3)
+            .ToList();
+
+        var boots = samples
+            .Select(s => new
+            {
+                s.Win,
+                BootId = s.Purchases
+                    .Where(p => p.Category == BuildItemCategory.Boots)
+                    .OrderBy(p => p.PurchaseIndex)
+                    .Select(p => (int?)p.ItemId)
+                    .FirstOrDefault()
+            })
+            .Where(x => x.BootId.HasValue)
+            .GroupBy(x => x.BootId!.Value)
+            .Select(g => new ItemChoiceDto(g.Key, g.Count(), (double)g.Count(x => x.Win) / g.Count()))
+            .Where(x => x.Games >= purchaseMinGames)
+            .OrderByDescending(x => x.Games)
+            .ThenByDescending(x => x.WinRate)
+            .Take(4)
+            .ToList();
+
+        // Tally each ordered legendary purchase by its position (0-based) across all participants.
+        var positionTally = new Dictionary<int, Dictionary<int, (int Games, int Wins, double SumMinutes)>>();
+        foreach (var sample in samples)
+        {
+            var legendaries = sample.Purchases
+                .Where(p => p.Category == BuildItemCategory.Legendary)
+                .OrderBy(p => p.PurchaseIndex)
+                .ToList();
+
+            for (var position = 0; position < Math.Min(legendaries.Count, MaxBuildPathSlots); position++)
+            {
+                var legendary = legendaries[position];
+                if (!positionTally.TryGetValue(position, out var itemMap))
+                {
+                    itemMap = new Dictionary<int, (int, int, double)>();
+                    positionTally[position] = itemMap;
+                }
+
+                var prior = itemMap.GetValueOrDefault(legendary.ItemId);
+                itemMap[legendary.ItemId] = (
+                    prior.Games + 1,
+                    prior.Wins + (sample.Win ? 1 : 0),
+                    prior.SumMinutes + legendary.TimestampMs / 60_000.0);
+            }
+        }
+
+        var coreBuildPath = new List<CoreItemStepDto>();
+        var usedCoreItems = new HashSet<int>();
+        for (var position = 0; position < CoreBuildPathSlots; position++)
+        {
+            if (!positionTally.TryGetValue(position, out var itemMap))
+                break;
+
+            var pick = itemMap
+                .Where(kvp => !usedCoreItems.Contains(kvp.Key) && kvp.Value.Games >= purchaseMinGames)
+                .OrderByDescending(kvp => kvp.Value.Games)
+                .ThenByDescending(kvp => (double)kvp.Value.Wins / kvp.Value.Games)
+                .Select(kvp => (ItemId: kvp.Key, kvp.Value.Games, kvp.Value.Wins, kvp.Value.SumMinutes))
+                .FirstOrDefault();
+
+            if (pick.Games == 0)
+                break;
+
+            usedCoreItems.Add(pick.ItemId);
+            coreBuildPath.Add(new CoreItemStepDto(
+                pick.ItemId,
+                pick.Games,
+                (double)pick.Wins / pick.Games,
+                pick.SumMinutes / pick.Games));
+        }
+
+        var situationalSlots = new List<SituationalSlotDto>();
+        for (var position = CoreBuildPathSlots; position < MaxBuildPathSlots; position++)
+        {
+            if (!positionTally.TryGetValue(position, out var itemMap))
+                continue;
+
+            var options = itemMap
+                .Where(kvp => kvp.Value.Games >= purchaseMinGames)
+                .OrderByDescending(kvp => kvp.Value.Games)
+                .ThenByDescending(kvp => (double)kvp.Value.Wins / kvp.Value.Games)
+                .Take(4)
+                .Select(kvp => new ItemChoiceDto(kvp.Key, kvp.Value.Games, (double)kvp.Value.Wins / kvp.Value.Games))
+                .ToList();
+
+            if (options.Count > 0)
+                situationalSlots.Add(new SituationalSlotDto(position + 1, options));
+        }
+
+        return new BuildPathSections(summonerSpells, skillOrder, startingItems, boots, coreBuildPath, situationalSlots);
     }
 
     /// <summary>

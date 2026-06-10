@@ -155,12 +155,9 @@ public class WorkerSchedulingPolicyTests
                     JobOverrides = new Dictionary<string, WorkerSchedulingJobOverrideOptions>(StringComparer.OrdinalIgnoreCase)
                     {
                         [WorkerRecurringJobPolicy.RefreshChampionAnalyticsJobId] = new() { Enabled = false },
-                        [WorkerRecurringJobPolicy.RefreshChampionAnalyticsAdaptiveJobId] = new() { Enabled = true, Cron = "*/15 * * * *" },
-                        [WorkerRecurringJobPolicy.RefreshChampionAnalyticsRampJobId] = new() { Enabled = true, Cron = "*/5 * * * *" },
-                        [WorkerRecurringJobPolicy.ChampionAnalyticsIngestionJobId] = new() { Enabled = true, Cron = "*/10 * * * *" },
-                        [WorkerRecurringJobPolicy.ChampionAnalyticsIngestionRampJobId] = new() { Enabled = true, Cron = "*/2 * * * *" },
-                        [WorkerRecurringJobPolicy.SummonerMaintenanceJobId] = new() { Enabled = true, Cron = "*/20 * * * *" },
-                        [WorkerRecurringJobPolicy.SummonerMaintenanceRampJobId] = new() { Enabled = true, Cron = "*/5 * * * *" },
+                        [WorkerRecurringJobPolicy.RefreshChampionAnalyticsAdaptiveJobId] = new() { Enabled = true, Cron = "*/5 * * * *" },
+                        [WorkerRecurringJobPolicy.ChampionAnalyticsIngestionJobId] = new() { Enabled = true, Cron = "*/2 * * * *" },
+                        [WorkerRecurringJobPolicy.SummonerMaintenanceJobId] = new() { Enabled = true, Cron = "*/5 * * * *" },
                         [WorkerRecurringJobPolicy.MatchTimelineBackfillJobId] = new() { Enabled = true, Cron = "0 * * * *" },
                         [WorkerRecurringJobPolicy.RuneSelectionIntegrityBackfillJobId] = new() { Enabled = false },
                         [WorkerRecurringJobPolicy.PollLiveGamesJobId] = new() { Enabled = false },
@@ -188,12 +185,9 @@ public class WorkerSchedulingPolicyTests
         descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.TftStaticDataJobId && x.IsEnabled && x.IsMandatoryBaseline);
 
         descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.RefreshChampionAnalyticsJobId && !x.IsEnabled);
-        descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.RefreshChampionAnalyticsAdaptiveJobId && x.IsEnabled && x.CronExpression == "*/15 * * * *");
-        descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.RefreshChampionAnalyticsRampJobId && x.IsEnabled && x.CronExpression == "*/5 * * * *");
-        descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.ChampionAnalyticsIngestionJobId && x.IsEnabled && x.CronExpression == "*/10 * * * *");
-        descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.ChampionAnalyticsIngestionRampJobId && x.IsEnabled && x.CronExpression == "*/2 * * * *");
-        descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.SummonerMaintenanceJobId && x.IsEnabled && x.CronExpression == "*/20 * * * *");
-        descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.SummonerMaintenanceRampJobId && x.IsEnabled && x.CronExpression == "*/5 * * * *");
+        descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.RefreshChampionAnalyticsAdaptiveJobId && x.IsEnabled && x.CronExpression == "*/5 * * * *");
+        descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.ChampionAnalyticsIngestionJobId && x.IsEnabled && x.CronExpression == "*/2 * * * *");
+        descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.SummonerMaintenanceJobId && x.IsEnabled && x.CronExpression == "*/5 * * * *");
         descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.MatchTimelineBackfillJobId && x.IsEnabled && x.CronExpression == "0 * * * *");
         descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.HighEloProfileRefreshJobId && x.IsEnabled && x.CronExpression == "0 */2 * * *");
         descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.PollLiveGamesJobId && !x.IsEnabled);

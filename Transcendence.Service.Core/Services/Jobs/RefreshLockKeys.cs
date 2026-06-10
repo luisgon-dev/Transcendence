@@ -8,6 +8,7 @@ public static class RefreshLockKeys
     public const string ApiPriorityRefreshPrefix = "refresh-priority:api:";
     public const string StarvationGuardrailCatchUpPrefix = "refresh-priority:guardrail:catchup:";
     public const string StarvationGuardrailCooldownPrefix = "refresh-priority:guardrail:cooldown:";
+    public const string ProducerPacingPrefix = "producer:pacing:";
 
     public static string BuildCanonicalIdentity(PlatformRoute platform, string gameName, string tagLine)
     {
@@ -38,6 +39,15 @@ public static class RefreshLockKeys
     public static string BuildStarvationGuardrailCooldownKey(string producerKey)
     {
         return $"{StarvationGuardrailCooldownPrefix}{NormalizeGuardrailProducerKey(producerKey)}";
+    }
+
+    // Self-pacing slot for a recurring producer: a single heartbeat cron fires the producer often, and
+    // the producer acquires this lock with a TTL equal to its current desired interval (shorter during a
+    // new-patch ramp, longer in steady state). While the lock is held the producer skips, so the JOB —
+    // not a second cron — decides its effective cadence.
+    public static string BuildProducerPacingKey(string producerKey)
+    {
+        return $"{ProducerPacingPrefix}{NormalizeGuardrailProducerKey(producerKey)}";
     }
 
     public static string NormalizePlatform(string platformRegion)

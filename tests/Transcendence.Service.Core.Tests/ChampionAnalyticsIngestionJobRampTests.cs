@@ -54,22 +54,7 @@ public class ChampionAnalyticsIngestionJobRampTests
     }
 
     [Fact]
-    public async Task ExecuteRampAsync_WhenRampWindowInactive_DoesNotQueueRefreshJobs()
-    {
-        await using var harness = await Harness.CreateAsync();
-        harness.SeedActivePatch("15.1", DateTime.UtcNow.AddHours(-100));
-        harness.SeedSummoner("OldPatchOne", "NA1");
-        await harness.Db.SaveChangesAsync();
-
-        await harness.Job.ExecuteRampAsync(CancellationToken.None);
-
-        harness.BackgroundJobClient.Verify(
-            x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()),
-            Times.Never);
-    }
-
-    [Fact]
-    public async Task ExecuteRampAsync_WhenRampWindowActive_UsesRampQueueingLimits()
+    public async Task ExecuteForRegionAsync_WhenRampWindowActive_UsesRampQueueingLimits()
     {
         await using var harness = await Harness.CreateAsync();
         harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
@@ -77,7 +62,7 @@ public class ChampionAnalyticsIngestionJobRampTests
             harness.SeedSummoner($"Ramp{i}", "NA1");
         await harness.Db.SaveChangesAsync();
 
-        await harness.Job.ExecuteRampAsync(CancellationToken.None);
+        await harness.Job.ExecuteForRegionAsync("NA1", CancellationToken.None);
 
         harness.BackgroundJobClient.Verify(
             x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()),
@@ -85,7 +70,7 @@ public class ChampionAnalyticsIngestionJobRampTests
     }
 
     [Fact]
-    public async Task ExecuteRampAsync_WhenCancellationIsSignaledAfterLockAcquire_DoesNotEnqueueAdditionalRefreshJobs()
+    public async Task ExecuteForRegionAsync_WhenCancellationIsSignaledAfterLockAcquire_DoesNotEnqueueAdditionalRefreshJobs()
     {
         await using var harness = await Harness.CreateAsync();
         harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
@@ -102,7 +87,7 @@ public class ChampionAnalyticsIngestionJobRampTests
                 return Task.FromResult(true);
             });
 
-        Func<Task> act = async () => await harness.Job.ExecuteRampAsync(cts.Token);
+        Func<Task> act = async () => await harness.Job.ExecuteForRegionAsync("NA1", cts.Token);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         harness.BackgroundJobClient.Verify(
@@ -114,7 +99,7 @@ public class ChampionAnalyticsIngestionJobRampTests
     }
 
     [Fact]
-    public async Task ExecuteRampAsync_DeduplicatesCandidatesUsingCanonicalLockIdentity()
+    public async Task ExecuteForRegionAsync_DeduplicatesCandidatesUsingCanonicalLockIdentity()
     {
         await using var harness = await Harness.CreateAsync();
         harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
@@ -131,7 +116,7 @@ public class ChampionAnalyticsIngestionJobRampTests
                 return Task.FromResult(true);
             });
 
-        await harness.Job.ExecuteRampAsync(CancellationToken.None);
+        await harness.Job.ExecuteForRegionAsync("NA1", CancellationToken.None);
 
         acquiredKeys.Should().ContainSingle();
         acquiredKeys[0].Should().Be(
@@ -139,7 +124,7 @@ public class ChampionAnalyticsIngestionJobRampTests
     }
 
     [Fact]
-    public async Task ExecuteRampAsync_AppliesScoredOrderBeforeAdaptiveQueueTruncation()
+    public async Task ExecuteForRegionAsync_AppliesScoredOrderBeforeAdaptiveQueueTruncation()
     {
         var fixedBudgetPolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
             AdaptiveThroughputBudgetMode.Balanced,
@@ -163,7 +148,7 @@ public class ChampionAnalyticsIngestionJobRampTests
             .Callback<Job, IState>((job, _) => queuedJobs.Add(job))
             .Returns("job-1");
 
-        await harness.Job.ExecuteRampAsync(CancellationToken.None);
+        await harness.Job.ExecuteForRegionAsync("NA1", CancellationToken.None);
 
         queuedJobs.Should().ContainSingle();
         queuedJobs[0].Args[0].Should().Be("PatchFirst");
@@ -171,7 +156,7 @@ public class ChampionAnalyticsIngestionJobRampTests
     }
 
     [Fact]
-    public async Task ExecuteRampAsync_WhenApiPriorityIsActive_AllowsProgressDuringForcedCatchUpWindow()
+    public async Task ExecuteForRegionAsync_WhenApiPriorityIsActive_AllowsProgressDuringForcedCatchUpWindow()
     {
         var fixedBudgetPolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
             AdaptiveThroughputBudgetMode.HighPressure,
@@ -192,7 +177,7 @@ public class ChampionAnalyticsIngestionJobRampTests
             .Setup(x => x.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
-        var catchUpKey = RefreshLockKeys.BuildStarvationGuardrailCatchUpKey(nameof(ChampionAnalyticsIngestionJob));
+        var catchUpKey = RefreshLockKeys.BuildStarvationGuardrailCatchUpKey($"{nameof(ChampionAnalyticsIngestionJob)}:NA1");
         harness.RefreshLockRepository
             .Setup(x => x.GetAsync(catchUpKey, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new RefreshLock
@@ -209,7 +194,7 @@ public class ChampionAnalyticsIngestionJobRampTests
             .Callback<Job, IState>((job, _) => queuedJobs.Add(job))
             .Returns("job-1");
 
-        await harness.Job.ExecuteRampAsync(CancellationToken.None);
+        await harness.Job.ExecuteForRegionAsync("NA1", CancellationToken.None);
 
         harness.BackgroundJobClient.Verify(
             x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()),
@@ -220,7 +205,7 @@ public class ChampionAnalyticsIngestionJobRampTests
     }
 
     [Fact]
-    public async Task ExecuteRampAsync_WhenApiPriorityIsActiveAndGuardrailIsNotForced_DoesNotQueueRefreshJobs()
+    public async Task ExecuteForRegionAsync_WhenApiPriorityIsActiveAndGuardrailIsNotForced_DoesNotQueueRefreshJobs()
     {
         var fixedBudgetPolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
             AdaptiveThroughputBudgetMode.Balanced,
@@ -234,6 +219,8 @@ public class ChampionAnalyticsIngestionJobRampTests
 
         await using var harness = await Harness.CreateAsync(fixedBudgetPolicy);
         harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        // A patch success suppresses region cold-start so the API-priority pause is what gates queueing.
+        harness.SeedSuccessfulMatch("15.2", "NA1");
         harness.SeedSummoner("PriorityBlockedOne", "NA1", DateTime.UtcNow.AddHours(-8));
         harness.SeedSummoner("PriorityBlockedTwo", "NA1", DateTime.UtcNow.AddHours(-7));
         await harness.Db.SaveChangesAsync();
@@ -242,7 +229,7 @@ public class ChampionAnalyticsIngestionJobRampTests
             .Setup(x => x.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
-        await harness.Job.ExecuteRampAsync(CancellationToken.None);
+        await harness.Job.ExecuteForRegionAsync("NA1", CancellationToken.None);
 
         harness.BackgroundJobClient.Verify(
             x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()),
@@ -250,7 +237,7 @@ public class ChampionAnalyticsIngestionJobRampTests
     }
 
     [Fact]
-    public async Task ExecuteRampAsync_WhenForcedCatchUpWindowIsActive_QueuesOldestCandidateFirst()
+    public async Task ExecuteForRegionAsync_WhenForcedCatchUpWindowIsActive_QueuesOldestCandidateFirst()
     {
         var fixedBudgetPolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
             AdaptiveThroughputBudgetMode.HighPressure,
@@ -271,7 +258,7 @@ public class ChampionAnalyticsIngestionJobRampTests
             .Setup(x => x.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
-        var catchUpKey = RefreshLockKeys.BuildStarvationGuardrailCatchUpKey(nameof(ChampionAnalyticsIngestionJob));
+        var catchUpKey = RefreshLockKeys.BuildStarvationGuardrailCatchUpKey($"{nameof(ChampionAnalyticsIngestionJob)}:NA1");
         harness.RefreshLockRepository
             .Setup(x => x.GetAsync(catchUpKey, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new RefreshLock
@@ -288,7 +275,7 @@ public class ChampionAnalyticsIngestionJobRampTests
             .Callback<Job, IState>((job, _) => queuedJobs.Add(job))
             .Returns("job-1");
 
-        await harness.Job.ExecuteRampAsync(CancellationToken.None);
+        await harness.Job.ExecuteForRegionAsync("NA1", CancellationToken.None);
 
         queuedJobs.Should().ContainSingle();
         queuedJobs[0].Args[0].Should().Be("OldestBacklog");
@@ -346,7 +333,7 @@ public class ChampionAnalyticsIngestionJobRampTests
     }
 
     [Fact]
-    public async Task ExecuteRampAsync_PrioritizesTrackedHighValueRosterCandidates()
+    public async Task ExecuteForRegionAsync_PrioritizesTrackedHighValueRosterCandidates()
     {
         var fixedBudgetPolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
             AdaptiveThroughputBudgetMode.Balanced,
@@ -370,7 +357,7 @@ public class ChampionAnalyticsIngestionJobRampTests
             .Callback<Job, IState>((job, _) => queuedJobs.Add(job))
             .Returns("job-1");
 
-        await harness.Job.ExecuteRampAsync(CancellationToken.None);
+        await harness.Job.ExecuteForRegionAsync("NA1", CancellationToken.None);
 
         queuedJobs.Should().ContainSingle();
         queuedJobs[0].Args[0].Should().Be("TrackedPriority");
@@ -463,6 +450,7 @@ public class ChampionAnalyticsIngestionJobRampTests
                 adaptiveBudgetPolicy,
                 starvationGuardrailPolicy,
                 Mock.Of<IIngestionThroughputTelemetry>(),
+                Mock.Of<IQueueDepthProbe>(),
                 Options.Create(new ChampionAnalyticsIngestionJobOptions
                 {
                     MinimumSuccessfulMatchesForCurrentPatch = 50,
@@ -536,6 +524,21 @@ public class ChampionAnalyticsIngestionJobRampTests
                 TagLineNormalized = tagLine.ToUpperInvariant(),
                 SummonerLevel = 100,
                 UpdatedAt = DateTime.UtcNow.AddHours(-10)
+            });
+        }
+
+        public void SeedSuccessfulMatch(string patch, string platformRegion = "NA1")
+        {
+            Db.Matches.Add(new Transcendence.Data.Models.LoL.Match.Match
+            {
+                Id = Guid.NewGuid(),
+                MatchId = $"{platformRegion}_{Guid.NewGuid():N}",
+                Patch = patch,
+                PlatformRegion = platformRegion,
+                Status = Transcendence.Data.Models.LoL.Match.FetchStatus.Success,
+                FetchedAt = DateTime.UtcNow.AddMinutes(-1),
+                Duration = 1800,
+                QueueId = 420
             });
         }
 

@@ -30,12 +30,9 @@ public sealed class WorkerRecurringJobPolicy(
     public const string RetryFailedMatchesJobId = "retry-failed-matches";
     public const string RefreshChampionAnalyticsJobId = "refresh-champion-analytics";
     public const string RefreshChampionAnalyticsAdaptiveJobId = "refresh-champion-analytics-adaptive";
-    public const string RefreshChampionAnalyticsRampJobId = "refresh-champion-analytics-ramp";
     public const string WarmDefaultChampionProfilesJobId = "warm-default-champion-profiles";
     public const string ChampionAnalyticsIngestionJobId = "champion-analytics-ingestion";
-    public const string ChampionAnalyticsIngestionRampJobId = "champion-analytics-ingestion-ramp";
     public const string SummonerMaintenanceJobId = "summoner-maintenance";
-    public const string SummonerMaintenanceRampJobId = "summoner-maintenance-ramp";
     public const string MatchTimelineBackfillJobId = "match-timeline-backfill";
     public const string RuneSelectionIntegrityBackfillJobId = "rune-selection-integrity-backfill";
     public const string PollLiveGamesJobId = "poll-live-games";
@@ -61,12 +58,9 @@ public sealed class WorkerRecurringJobPolicy(
         RetryFailedMatchesJobId,
         RefreshChampionAnalyticsJobId,
         RefreshChampionAnalyticsAdaptiveJobId,
-        RefreshChampionAnalyticsRampJobId,
         WarmDefaultChampionProfilesJobId,
         ChampionAnalyticsIngestionJobId,
-        ChampionAnalyticsIngestionRampJobId,
         SummonerMaintenanceJobId,
-        SummonerMaintenanceRampJobId,
         MatchTimelineBackfillJobId,
         RuneSelectionIntegrityBackfillJobId,
         PollLiveGamesJobId,
@@ -122,12 +116,6 @@ public sealed class WorkerRecurringJobPolicy(
                 schedule.EnableAdaptiveAnalyticsRefresh,
                 ConfigureRefreshChampionAnalyticsAdaptive),
             CreateDescriptor(
-                RefreshChampionAnalyticsRampJobId,
-                "Jobs:Schedule:RefreshChampionAnalyticsRampCron",
-                schedule.RefreshChampionAnalyticsRampCron,
-                schedule.EnableAdaptiveAnalyticsRefresh && schedule.EnableNewPatchRamp,
-                ConfigureRefreshChampionAnalyticsRamp),
-            CreateDescriptor(
                 WarmDefaultChampionProfilesJobId,
                 "Jobs:Schedule:WarmDefaultChampionProfilesCron",
                 schedule.WarmDefaultChampionProfilesCron,
@@ -140,23 +128,11 @@ public sealed class WorkerRecurringJobPolicy(
                 schedule.EnableChampionAnalyticsIngestion,
                 ConfigureChampionAnalyticsIngestion),
             CreateDescriptor(
-                ChampionAnalyticsIngestionRampJobId,
-                "Jobs:Schedule:ChampionAnalyticsIngestionRampCron",
-                schedule.ChampionAnalyticsIngestionRampCron,
-                schedule.EnableChampionAnalyticsIngestion && schedule.EnableNewPatchRamp,
-                ConfigureChampionAnalyticsIngestionRamp),
-            CreateDescriptor(
                 SummonerMaintenanceJobId,
                 "Jobs:Schedule:SummonerMaintenanceCron",
                 schedule.SummonerMaintenanceCron,
                 schedule.EnableSummonerMaintenance,
                 ConfigureSummonerMaintenance),
-            CreateDescriptor(
-                SummonerMaintenanceRampJobId,
-                "Jobs:Schedule:SummonerMaintenanceRampCron",
-                schedule.SummonerMaintenanceRampCron,
-                schedule.EnableSummonerMaintenance && schedule.EnableNewPatchRamp,
-                ConfigureSummonerMaintenanceRamp),
             CreateDescriptor(
                 MatchTimelineBackfillJobId,
                 "Jobs:Schedule:MatchTimelineBackfillCron",
@@ -290,15 +266,6 @@ public sealed class WorkerRecurringJobPolicy(
             cronExpression,
             new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
 
-    private static void ConfigureRefreshChampionAnalyticsRamp(
-        IRecurringJobManager recurringJobManager,
-        string cronExpression) =>
-        recurringJobManager.AddOrUpdate<RefreshChampionAnalyticsJob>(
-            RefreshChampionAnalyticsRampJobId,
-            job => job.ExecuteRampAsync(CancellationToken.None),
-            cronExpression,
-            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
-
     private static void ConfigureWarmDefaultChampionProfiles(
         IRecurringJobManager recurringJobManager,
         string cronExpression) =>
@@ -317,30 +284,12 @@ public sealed class WorkerRecurringJobPolicy(
             cronExpression,
             new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
 
-    private static void ConfigureChampionAnalyticsIngestionRamp(
-        IRecurringJobManager recurringJobManager,
-        string cronExpression) =>
-        recurringJobManager.AddOrUpdate<ChampionAnalyticsIngestionJob>(
-            ChampionAnalyticsIngestionRampJobId,
-            job => job.ExecuteRampAsync(CancellationToken.None),
-            cronExpression,
-            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
-
     private static void ConfigureSummonerMaintenance(
         IRecurringJobManager recurringJobManager,
         string cronExpression) =>
         recurringJobManager.AddOrUpdate<SummonerMaintenanceJob>(
             SummonerMaintenanceJobId,
             job => job.ExecuteAsync(CancellationToken.None),
-            cronExpression,
-            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
-
-    private static void ConfigureSummonerMaintenanceRamp(
-        IRecurringJobManager recurringJobManager,
-        string cronExpression) =>
-        recurringJobManager.AddOrUpdate<SummonerMaintenanceJob>(
-            SummonerMaintenanceRampJobId,
-            job => job.ExecuteRampAsync(CancellationToken.None),
             cronExpression,
             new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
 

@@ -23,6 +23,7 @@ public class SummonerMaintenanceJob(
     IAdaptiveThroughputBudgetPolicy adaptiveThroughputBudgetPolicy,
     IStarvationGuardrailPolicy starvationGuardrailPolicy,
     IIngestionThroughputTelemetry ingestionThroughputTelemetry,
+    IQueueDepthProbe queueDepthProbe,
     IOptions<SummonerMaintenanceJobOptions> options,
     IOptions<ChampionAnalyticsIngestionJobOptions> analyticsOptions,
     IOptions<MultiRegionIngestionOptions> multiRegionOptions,
@@ -43,6 +44,11 @@ public class SummonerMaintenanceJob(
     [Queue("refresh-low")]
     public async Task ExecuteAsync(CancellationToken ct = default)
     {
+        // Self-pacing: one fast heartbeat cron fires this dispatcher; the pacing slot decides whether
+        // this tick actually fans out (tighter cadence during a new-patch ramp, looser in steady state).
+        if (!await TryAcquirePacingSlotAsync(ct))
+            return;
+
         var multiRegion = multiRegionOptions.Value;
 
         if (multiRegion.Enabled && multiRegion.Regions.Count > 0)
@@ -60,45 +66,57 @@ public class SummonerMaintenanceJob(
             return;
         }
 
-        await ExecuteForRegionInternalAsync(region: null, rampOnly: false, ct);
-    }
-
-    [Queue("refresh-low")]
-    public async Task ExecuteRampAsync(CancellationToken ct = default)
-    {
-        var multiRegion = multiRegionOptions.Value;
-
-        if (multiRegion.Enabled && multiRegion.Regions.Count > 0)
-        {
-            var enabledRegions = GetConfiguredEnabledRegions(multiRegion);
-            foreach (var region in enabledRegions)
-            {
-                backgroundJobClient.Enqueue<SummonerMaintenanceJob>(
-                    job => job.ExecuteForRegionRampAsync(region, CancellationToken.None));
-            }
-
-            logger.LogInformation(
-                "[Maintenance] Ramp fan-out: enqueued {Count} per-region jobs.",
-                enabledRegions.Count);
-            return;
-        }
-
-        await ExecuteForRegionInternalAsync(region: null, rampOnly: true, ct);
+        await ExecuteForRegionInternalAsync(region: null, ct);
     }
 
     [Queue(HangfireQueues.Discovery)]
     public async Task ExecuteForRegionAsync(string region, CancellationToken ct = default)
     {
-        await ExecuteForRegionInternalAsync(region, rampOnly: false, ct);
+        await ExecuteForRegionInternalAsync(region, ct);
     }
 
-    [Queue(HangfireQueues.Discovery)]
-    public async Task ExecuteForRegionRampAsync(string region, CancellationToken ct = default)
+    // Acquires the producer's self-pacing slot. Returns false (skip) while a prior run's slot is still
+    // held. TTL is the ramp interval within NewPatchRampHours of the active patch release, else the
+    // steady interval — so cadence tightens automatically on a fresh patch and relaxes after.
+    private async Task<bool> TryAcquirePacingSlotAsync(CancellationToken ct)
     {
-        await ExecuteForRegionInternalAsync(region, rampOnly: true, ct);
+        var jobOptions = options.Value;
+        var activePatch = await db.Patches
+            .AsNoTracking()
+            .Where(p => p.IsActive)
+            .Select(p => new { p.ReleaseDate })
+            .FirstOrDefaultAsync(ct);
+
+        var isRampActive = false;
+        if (activePatch != null)
+        {
+            var releaseUtc = activePatch.ReleaseDate.Kind == DateTimeKind.Utc
+                ? activePatch.ReleaseDate
+                : DateTime.SpecifyKind(activePatch.ReleaseDate, DateTimeKind.Utc);
+            var rampHours = Math.Max(1, jobOptions.NewPatchRampHours);
+            isRampActive = DateTime.UtcNow < releaseUtc.AddHours(rampHours);
+        }
+
+        var intervalMinutes = Math.Max(1, isRampActive
+            ? jobOptions.SelfPaceRampIntervalMinutes
+            : jobOptions.SelfPaceSteadyIntervalMinutes);
+        // Expire ~30s before the next same-interval heartbeat so the next eligible tick reliably acquires.
+        var ttl = TimeSpan.FromSeconds(Math.Max(30, intervalMinutes * 60 - 30));
+        var pacingKey = RefreshLockKeys.BuildProducerPacingKey(ProducerKeyBase);
+
+        var acquired = await refreshLockRepository.TryAcquireAsync(pacingKey, ttl, ct);
+        if (!acquired)
+        {
+            logger.LogDebug(
+                "[Maintenance] Paced-skip: within {Interval}m self-pace interval (ramp={Ramp}).",
+                intervalMinutes,
+                isRampActive);
+        }
+
+        return acquired;
     }
 
-    private async Task ExecuteForRegionInternalAsync(string? region, bool rampOnly, CancellationToken ct = default)
+    private async Task ExecuteForRegionInternalAsync(string? region, CancellationToken ct = default)
     {
         var producerKey = region != null ? $"{ProducerKeyBase}:{region}" : ProducerKeyBase;
         var telemetrySource = region != null ? $"{TelemetrySource}:{region}" : TelemetrySource;
@@ -125,11 +143,6 @@ public class SummonerMaintenanceJob(
             : DateTime.SpecifyKind(activePatch.ReleaseDate, DateTimeKind.Utc);
         var rampHours = Math.Max(1, jobOptions.NewPatchRampHours);
         var isRampActive = evaluationUtc < releaseUtc.AddHours(rampHours);
-        if (rampOnly && !isRampActive)
-        {
-            logger.LogDebug("[Maintenance] Ramp run skipped: ramp window inactive. region={Region}", region);
-            return;
-        }
 
         var patchStartEpoch = new DateTimeOffset(activePatch.ReleaseDate, TimeSpan.Zero).ToUnixTimeSeconds();
 
@@ -206,6 +219,48 @@ public class SummonerMaintenanceJob(
         {
             maxQueued = Math.Max(maxQueued, 1);
             maxCandidates = Math.Max(maxCandidates, maxQueued);
+        }
+
+        // Discovery-lane backpressure (final ceiling, overrides forced catch-up and cold-start): if the
+        // discovery queue is already deep, the discovery workers are the bottleneck, so adding more
+        // refresh jobs is waste and risks unbounded regrowth. Scale the target down by current depth.
+        var discoveryQueueDepth = queueDepthProbe.GetEnqueuedCount(HangfireQueues.Discovery);
+        var backpressuredQueued = QueueBackpressure.Apply(
+            maxQueued,
+            discoveryQueueDepth,
+            analyticsOptions.Value.DiscoveryQueueBackpressureSoftCap,
+            analyticsOptions.Value.DiscoveryQueueBackpressureHardCap);
+        if (backpressuredQueued < maxQueued)
+        {
+            if (backpressuredQueued <= 0)
+            {
+                ingestionThroughputTelemetry.RecordQueueTargetOutput(
+                    producerKey,
+                    maxQueued,
+                    queuedCount: 0,
+                    maxCandidates,
+                    budget.Mode,
+                    guardrailDecision.Outcome,
+                    forcedCatchUpActive,
+                    "skipped_queue_backpressure",
+                    telemetrySource);
+                logger.LogInformation(
+                    "[Maintenance] Skipped: discovery queue depth {Depth} at/above backpressure hard cap {HardCap} (region={Region}). Waiting for workers to drain.",
+                    discoveryQueueDepth,
+                    analyticsOptions.Value.DiscoveryQueueBackpressureHardCap,
+                    region);
+                return;
+            }
+
+            logger.LogInformation(
+                "[Maintenance] Throttled by discovery backpressure: queue target {Original} -> {Throttled} (depth {Depth}, soft {Soft}, hard {Hard}, region={Region}).",
+                maxQueued,
+                backpressuredQueued,
+                discoveryQueueDepth,
+                analyticsOptions.Value.DiscoveryQueueBackpressureSoftCap,
+                analyticsOptions.Value.DiscoveryQueueBackpressureHardCap,
+                region);
+            maxQueued = backpressuredQueued;
         }
 
         if (maxQueued <= 0)

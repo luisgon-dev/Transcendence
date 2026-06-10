@@ -79,7 +79,7 @@ public class CancellationPropagationTests
     }
 
     [Fact]
-    public async Task ExecuteRampAsync_WithPreCanceledToken_PropagatesCancellationWithoutQueueing()
+    public async Task ExecuteForRegionAsync_WithPreCanceledToken_PropagatesCancellationWithoutQueueing()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -125,6 +125,7 @@ public class CancellationPropagationTests
                 MaxEligibleDeferAgeMinutes = 50_000
             })),
             Mock.Of<IIngestionThroughputTelemetry>(),
+            Mock.Of<IQueueDepthProbe>(),
             Options.Create(new ChampionAnalyticsIngestionJobOptions()),
             Options.Create(new MultiRegionIngestionOptions()),
             Mock.Of<ILogger<ChampionAnalyticsIngestionJob>>());
@@ -132,7 +133,7 @@ public class CancellationPropagationTests
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        Func<Task> act = async () => await job.ExecuteRampAsync(cts.Token);
+        Func<Task> act = async () => await job.ExecuteForRegionAsync("NA1", cts.Token);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         backgroundJobs.Verify(x => x.Create(It.IsAny<Job>(), It.IsAny<Hangfire.States.IState>()), Times.Never);

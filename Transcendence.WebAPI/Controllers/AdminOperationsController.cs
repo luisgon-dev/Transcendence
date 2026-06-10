@@ -47,9 +47,7 @@ public class AdminOperationsController(
     private static readonly HashSet<string> PausableRecurringJobIds =
     [
         WorkerRecurringJobPolicy.ChampionAnalyticsIngestionJobId,
-        WorkerRecurringJobPolicy.ChampionAnalyticsIngestionRampJobId,
         WorkerRecurringJobPolicy.SummonerMaintenanceJobId,
-        WorkerRecurringJobPolicy.SummonerMaintenanceRampJobId,
         WorkerRecurringJobPolicy.MatchTimelineBackfillJobId,
         WorkerRecurringJobPolicy.RetryFailedMatchesJobId
     ];

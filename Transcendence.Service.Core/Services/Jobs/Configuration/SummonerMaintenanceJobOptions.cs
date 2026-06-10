@@ -11,6 +11,13 @@ public class SummonerMaintenanceJobOptions
     public bool PrioritizeRankedHighEloSummoners { get; set; } = true;
     public bool PauseWhenApiPriorityRefreshActive { get; set; } = true;
     public int NewPatchRampHours { get; set; } = 48;
+
+    // Self-pacing intervals for the single self-paced recurring registration (see
+    // ChampionAnalyticsIngestionJobOptions for the mechanism). Maintenance runs less aggressively than
+    // ingestion, so its steady cadence is longer.
+    public int SelfPaceRampIntervalMinutes { get; set; } = 5;
+    public int SelfPaceSteadyIntervalMinutes { get; set; } = 10;
+
     public int RampMaxCandidateSummonersPerRun { get; set; } = 250;
     public int RampMaxRefreshJobsToQueuePerRun { get; set; } = 12;
     public int RampDataStaleAfterMinutes { get; set; } = 30;

@@ -275,7 +275,7 @@ Key worker settings live under `Jobs:*` in `Transcendence.Service/appsettings.js
 The public Web API also consumes `Jobs:MultiRegionIngestion` from `Transcendence.WebAPI/appsettings.json` so `/api/analytics/regions` and region-filter normalization stay aligned with the ingestion regions exposed to the frontend.
 
 Production defaults in `Transcendence.Service/appsettings.json` are coverage-first for LoL:
-- `stable` keeps adaptive refresh, ramp refresh, champion analytics ingestion, summoner maintenance, high-elo profile refresh, and low-frequency timeline backfill enabled.
+- `stable` keeps adaptive refresh (self-paced, ramp-aware), champion analytics ingestion, summoner maintenance, high-elo profile refresh, and low-frequency timeline backfill enabled.
 - `high-elo-profile-refresh` keeps the tracked high-value roster populated for analytics ingestion.
 - `match-timeline-backfill` is intentionally slower than ingestion because tier lists and core champion stats do not require timeline rows.
 - `Jobs:Schedule:PurgeBacklogOnPatchRolloverOnStartup` is disabled and startup rollover logic preserves queued current-patch catch-up work.
@@ -289,7 +289,7 @@ Which recurring jobs are active is determined by:
 - the per-job `Enable*` flags under `Jobs:Schedule` (for example `EnableChampionAnalyticsIngestion`, `EnableMatchTimelineBackfill`), and
 - the resolved **scheduling profile** (`Jobs:Schedule:Profile`, falling back to `DefaultProfile`, default `stable`), whose `Jobs:SchedulingProfiles:Profiles:<name>:JobOverrides` can flip a job's `Enabled`/`Cron`/`MandatoryBaseline`. Profile overrides win over the descriptor defaults, and `poll-live-games` is disabled by default.
 
-The base `appsettings.json` ships `Jobs:Schedule:Profile = "stable"` (there is no `appsettings.Development.json`), so a local worker resolves the **same `stable` profile as production** unless you override `Jobs:Schedule:Profile` (or individual `Enable*` / `JobOverrides` values) via user-secrets or environment variables. Under `stable` the enabled jobs are the LoL analytics-coverage set (adaptive analytics refresh + ramp, champion-analytics ingestion + ramp, summoner maintenance + ramp, match-timeline backfill, high-elo profile refresh), the full TFT set (`tft-static-data-refresh`, `tft-analytics-refresh`, `tft-analytics-ingestion`, `tft-summoner-maintenance`), plus the baseline jobs (`detect-patch`, `retry-failed-matches`, `refresh-lock-lifecycle-cleanup`); `poll-live-games`, `rune-selection-integrity-backfill`, and the daily `refresh-champion-analytics` are disabled. The TFT analytics jobs were enabled in the `stable` profile when the TFT frontend went live; they run on the isolated `tft-*` queues using the separate `RiotApi:Tft:ApiKey`, so TFT demand never competes with LoL refresh throughput. TFT comps and player profiles stay empty until these jobs have ingested data, which requires a valid TFT Riot key and some ramp-up time after deploy.
+The base `appsettings.json` ships `Jobs:Schedule:Profile = "stable"` (there is no `appsettings.Development.json`), so a local worker resolves the **same `stable` profile as production** unless you override `Jobs:Schedule:Profile` (or individual `Enable*` / `JobOverrides` values) via user-secrets or environment variables. Under `stable` the enabled jobs are the LoL analytics-coverage set (adaptive analytics refresh, champion-analytics ingestion, summoner maintenance — each a single self-pacing job that tightens cadence during the new-patch ramp window — plus match-timeline backfill and high-elo profile refresh), the full TFT set (`tft-static-data-refresh`, `tft-analytics-refresh`, `tft-analytics-ingestion`, `tft-summoner-maintenance`), plus the baseline jobs (`detect-patch`, `retry-failed-matches`, `refresh-lock-lifecycle-cleanup`); `poll-live-games`, `rune-selection-integrity-backfill`, and the daily `refresh-champion-analytics` are disabled. The TFT analytics jobs were enabled in the `stable` profile when the TFT frontend went live; they run on the isolated `tft-*` queues using the separate `RiotApi:Tft:ApiKey`, so TFT demand never competes with LoL refresh throughput. TFT comps and player profiles stay empty until these jobs have ingested data, which requires a valid TFT Riot key and some ramp-up time after deploy.
 
 `DevelopmentWorker`'s only environment-specific startup actions are: removing legacy/invalid recurring jobs (old `cache-warmup*` ids), an optional full Hangfire purge when `Jobs:Schedule:CleanupOnStartup=true` (default `false`), and a startup integrity check that fail-fasts on mandatory-baseline job failures. It does **not** run the production startup bootstrap described below.
 
@@ -518,14 +518,13 @@ Timeline ingestion persists ranked @15 snapshots and fetch status for matchup de
 
 - `RuneSelectionIntegrityBackfillCron`
 - `EnableRuneSelectionIntegrityBackfill`
-- `SummonerMaintenanceCron`
-- `SummonerMaintenanceRampCron`
+- `SummonerMaintenanceCron` (heartbeat cadence; the job self-paces — see below)
 - `EnableSummonerMaintenance`
 - `MatchTimelineBackfillCron`
 - `EnableMatchTimelineBackfill`
-- `RefreshChampionAnalyticsRampCron`
-- `ChampionAnalyticsIngestionRampCron`
-- `EnableNewPatchRamp`
+- `ChampionAnalyticsIngestionCron` / `RefreshChampionAnalyticsAdaptiveCron` (heartbeat cadences)
+
+> The separate `*-ramp` recurring jobs (`refresh-champion-analytics-ramp`, `champion-analytics-ingestion-ramp`, `summoner-maintenance-ramp`) and the `EnableNewPatchRamp` / `*RampCron` schedule keys were removed: new-patch ramp behavior is now folded into the base jobs, which self-pace from patch age (`SelfPaceRampIntervalMinutes` / `SelfPaceSteadyIntervalMinutes` on the producer options) and self-select ramp budget params from the existing `Ramp*` option values. See ARCHITECTURE.md → "Self-pacing (no separate ramp jobs)".
 
 `Jobs:RuneSelectionIntegrityBackfill` supports:
 

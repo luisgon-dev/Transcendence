@@ -76,7 +76,11 @@ public class DevelopmentWorker(
                 [
                     "cache-warmup",
                     "cache-warmup-analytics",
-                    "analytics-cache-warmup"
+                    "analytics-cache-warmup",
+                    // Removed when the per-patch ramp variants were folded into the self-pacing base jobs.
+                    "refresh-champion-analytics-ramp",
+                    "champion-analytics-ingestion-ramp",
+                    "summoner-maintenance-ramp"
                 ],
                 legacyTypeNameFragments:
                 [

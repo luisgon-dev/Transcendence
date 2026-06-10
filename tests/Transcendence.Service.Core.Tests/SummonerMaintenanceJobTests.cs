@@ -64,7 +64,7 @@ public class SummonerMaintenanceJobTests
     }
 
     [Fact]
-    public async Task ExecuteRampAsync_UsesPatchFirstScoringOrderBeforeAdaptiveQueueTruncation()
+    public async Task ExecuteForRegionAsync_UsesPatchFirstScoringOrderBeforeAdaptiveQueueTruncation()
     {
         var adaptivePolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
             AdaptiveThroughputBudgetMode.Balanced,
@@ -88,7 +88,7 @@ public class SummonerMaintenanceJobTests
             .Callback<Job, IState>((job, _) => queuedJobs.Add(job))
             .Returns("job-1");
 
-        await harness.Job.ExecuteRampAsync(CancellationToken.None);
+        await harness.Job.ExecuteForRegionAsync("NA1", CancellationToken.None);
 
         queuedJobs.Should().ContainSingle();
         queuedJobs[0].Args[0].Should().Be("PatchFirst");
@@ -96,7 +96,7 @@ public class SummonerMaintenanceJobTests
     }
 
     [Fact]
-    public async Task ExecuteRampAsync_WhenAdaptivePolicyReturnsZeroQueueTarget_DoesNotQueueRefreshJobs()
+    public async Task ExecuteForRegionAsync_WhenAdaptivePolicyReturnsZeroQueueTarget_DoesNotQueueRefreshJobs()
     {
         var adaptivePolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
             AdaptiveThroughputBudgetMode.HighPressure,
@@ -110,10 +110,12 @@ public class SummonerMaintenanceJobTests
 
         await using var harness = await Harness.CreateAsync(adaptivePolicy);
         harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        // A patch success suppresses region cold-start so the zero queue target is what gates queueing.
+        harness.SeedSuccessfulMatch("15.2", "NA1");
         harness.SeedSummoner("QueuedNever", "NA1", DateTime.UtcNow.AddHours(-6));
         await harness.Db.SaveChangesAsync();
 
-        await harness.Job.ExecuteRampAsync(CancellationToken.None);
+        await harness.Job.ExecuteForRegionAsync("NA1", CancellationToken.None);
 
         harness.BackgroundJobClient.Verify(
             x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()),
@@ -121,7 +123,7 @@ public class SummonerMaintenanceJobTests
     }
 
     [Fact]
-    public async Task ExecuteRampAsync_WhenApiPriorityIsActive_AllowsProgressDuringForcedCatchUpWindow()
+    public async Task ExecuteForRegionAsync_WhenApiPriorityIsActive_AllowsProgressDuringForcedCatchUpWindow()
     {
         var adaptivePolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
             AdaptiveThroughputBudgetMode.HighPressure,
@@ -138,7 +140,7 @@ public class SummonerMaintenanceJobTests
         harness.SeedSummoner("MaintenanceCatchUp", "NA1", DateTime.UtcNow.AddHours(-12));
         await harness.Db.SaveChangesAsync();
 
-        var catchUpKey = RefreshLockKeys.BuildStarvationGuardrailCatchUpKey(nameof(SummonerMaintenanceJob));
+        var catchUpKey = RefreshLockKeys.BuildStarvationGuardrailCatchUpKey($"{nameof(SummonerMaintenanceJob)}:NA1");
         harness.RefreshLockRepository
             .Setup(x => x.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
@@ -158,7 +160,7 @@ public class SummonerMaintenanceJobTests
             .Callback<Job, IState>((job, _) => queuedJobs.Add(job))
             .Returns("job-1");
 
-        await harness.Job.ExecuteRampAsync(CancellationToken.None);
+        await harness.Job.ExecuteForRegionAsync("NA1", CancellationToken.None);
 
         harness.BackgroundJobClient.Verify(
             x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()),
@@ -169,7 +171,7 @@ public class SummonerMaintenanceJobTests
     }
 
     [Fact]
-    public async Task ExecuteRampAsync_WhenApiPriorityIsActiveAndGuardrailIsNotForced_DoesNotQueueRefreshJobs()
+    public async Task ExecuteForRegionAsync_WhenApiPriorityIsActiveAndGuardrailIsNotForced_DoesNotQueueRefreshJobs()
     {
         var adaptivePolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
             AdaptiveThroughputBudgetMode.Balanced,
@@ -183,6 +185,8 @@ public class SummonerMaintenanceJobTests
 
         await using var harness = await Harness.CreateAsync(adaptivePolicy);
         harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        // A patch success suppresses region cold-start so the API-priority pause is what gates queueing.
+        harness.SeedSuccessfulMatch("15.2", "NA1");
         harness.SeedSummoner("MaintenanceBlockedOne", "NA1", DateTime.UtcNow.AddHours(-12));
         harness.SeedSummoner("MaintenanceBlockedTwo", "NA1", DateTime.UtcNow.AddHours(-11));
         await harness.Db.SaveChangesAsync();
@@ -191,7 +195,7 @@ public class SummonerMaintenanceJobTests
             .Setup(x => x.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
-        await harness.Job.ExecuteRampAsync(CancellationToken.None);
+        await harness.Job.ExecuteForRegionAsync("NA1", CancellationToken.None);
 
         harness.BackgroundJobClient.Verify(
             x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()),
@@ -295,6 +299,7 @@ public class SummonerMaintenanceJobTests
                 adaptiveBudgetPolicy,
                 starvationGuardrailPolicy,
                 Mock.Of<IIngestionThroughputTelemetry>(),
+                Mock.Of<IQueueDepthProbe>(),
                 Options.Create(new SummonerMaintenanceJobOptions
                 {
                     MaxCandidateSummonersPerRun = 10,
@@ -351,6 +356,21 @@ public class SummonerMaintenanceJobTests
                 TagLineNormalized = tagLine.ToUpperInvariant(),
                 SummonerLevel = 100,
                 UpdatedAt = updatedAtUtc
+            });
+        }
+
+        public void SeedSuccessfulMatch(string patch, string platformRegion = "NA1")
+        {
+            Db.Matches.Add(new Transcendence.Data.Models.LoL.Match.Match
+            {
+                Id = Guid.NewGuid(),
+                MatchId = $"{platformRegion}_{Guid.NewGuid():N}",
+                Patch = patch,
+                PlatformRegion = platformRegion,
+                Status = Transcendence.Data.Models.LoL.Match.FetchStatus.Success,
+                FetchedAt = DateTime.UtcNow.AddMinutes(-1),
+                Duration = 1800,
+                QueueId = 420
             });
         }
 

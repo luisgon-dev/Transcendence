@@ -15,10 +15,28 @@ public class ChampionAnalyticsIngestionJobOptions
     public bool FallbackToTrackedSummoners { get; set; } = true;
     public bool PauseWhenApiPriorityRefreshActive { get; set; } = true;
     public int NewPatchRampHours { get; set; } = 48;
+
+    // Self-pacing: the single recurring registration fires at a fast heartbeat; the dispatcher acquires a
+    // pacing lock with a TTL of the interval below (ramp while within NewPatchRampHours of a patch
+    // release, steady otherwise) and skips the fan-out while it is held. This replaces the old separate
+    // steady + ramp recurring jobs with one self-paced job that tightens cadence on a fresh patch.
+    public int SelfPaceRampIntervalMinutes { get; set; } = 2;
+    public int SelfPaceSteadyIntervalMinutes { get; set; } = 5;
+
     public int RampDataStaleAfterMinutes { get; set; } = 30;
     public int RampMaxCandidateSummonersPerRun { get; set; } = 250;
     public int RampMinRefreshJobsToQueuePerRun { get; set; } = 6;
     public int RampMaxRefreshJobsToQueuePerRun { get; set; } = 20;
+
+    // Discovery-lane backpressure. The producers fan refresh consumers onto the discovery queue; if the
+    // queue is already deep, the 10 discovery workers — not producer output — are the bottleneck, so
+    // enqueuing more is waste and risks the unbounded regrowth that caused the original ~100k clog. Above
+    // the soft cap the per-run queue target scales linearly toward zero; at/above the hard cap the
+    // producer enqueues nothing this cycle and waits for the workers to drain. A generous hard cap still
+    // leaves the 10 workers ~hours of runway, so a legitimate new-patch ramp is never throttled early.
+    public int DiscoveryQueueBackpressureSoftCap { get; set; } = 5000;
+    public int DiscoveryQueueBackpressureHardCap { get; set; } = 10000;
+
     public List<string> HighEloTiers { get; set; } =
     [
         "CHALLENGER",

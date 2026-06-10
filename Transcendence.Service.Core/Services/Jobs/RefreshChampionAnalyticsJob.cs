@@ -44,19 +44,6 @@ public class RefreshChampionAnalyticsJob(
     }
 
     [Queue(HangfireQueues.AnalyticsWarm)]
-    public async Task ExecuteRampAsync(CancellationToken ct)
-    {
-        var patchState = await GetCurrentPatchStateAsync(ct);
-        if (!patchState.IsRampActive)
-        {
-            logger.LogDebug("New-patch analytics ramp refresh skipped: ramp window inactive.");
-            return;
-        }
-
-        await ExecuteAdaptiveAsync(ct);
-    }
-
-    [Queue(HangfireQueues.AnalyticsWarm)]
     public async Task ExecuteAdaptiveAsync(CancellationToken ct)
     {
         var patchState = await GetCurrentPatchStateAsync(ct);

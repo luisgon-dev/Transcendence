@@ -86,13 +86,13 @@ public class SummonerMaintenanceJob(
         await ExecuteForRegionInternalAsync(region: null, rampOnly: true, ct);
     }
 
-    [Queue("refresh-low")]
+    [Queue(HangfireQueues.Discovery)]
     public async Task ExecuteForRegionAsync(string region, CancellationToken ct = default)
     {
         await ExecuteForRegionInternalAsync(region, rampOnly: false, ct);
     }
 
-    [Queue("refresh-low")]
+    [Queue(HangfireQueues.Discovery)]
     public async Task ExecuteForRegionRampAsync(string region, CancellationToken ct = default)
     {
         await ExecuteForRegionInternalAsync(region, rampOnly: true, ct);

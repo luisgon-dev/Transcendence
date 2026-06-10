@@ -23,4 +23,13 @@ public static class HangfireQueues
     /// larger) shared <c>refresh-low</c> backlog — and without the timeline jobs starving it in turn.
     /// </summary>
     public const string TimelineIngest = "timeline-ingest";
+
+    /// <summary>
+    /// Reserved lane for match discovery: the per-region champion-analytics ingestion + summoner
+    /// maintenance producers and the analytics summoner-refresh consumers they enqueue. Served by its
+    /// own dedicated pool so discovery (which actually fetches new current-patch matches) is never
+    /// starved behind the broad <c>refresh-low</c> maintenance backlog. This is the heaviest pipeline
+    /// and was previously the only one without an isolated lane.
+    /// </summary>
+    public const string Discovery = "discovery";
 }

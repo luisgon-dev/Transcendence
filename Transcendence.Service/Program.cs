@@ -68,6 +68,18 @@ builder.Services.AddHangfireServer(options =>
     options.WorkerCount = 8;
 });
 
+// Dedicated worker pool for match DISCOVERY (the heaviest pipeline): the per-region champion-analytics
+// ingestion / summoner-maintenance producers and the analytics summoner-refresh consumers they enqueue.
+// Previously these shared refresh-low and got buried under the broad maintenance backlog, so the
+// producers couldn't even run to enqueue the refreshes that fetch new current-patch matches. A reserved
+// lane guarantees discovery always has workers; bounded so it shares Riot capacity fairly with the rest.
+builder.Services.AddHangfireServer(options =>
+{
+    options.ServerName = HangfireQueues.Discovery;
+    options.Queues = [HangfireQueues.Discovery];
+    options.WorkerCount = 10;
+});
+
 builder.Services.AddHttpClient();
 
 // Configure Redis distributed cache

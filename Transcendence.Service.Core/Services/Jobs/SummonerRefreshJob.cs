@@ -152,7 +152,7 @@ public class SummonerRefreshJob(
         }
     }
 
-    [Queue("refresh-low")]
+    [Queue(HangfireQueues.Discovery)]
     public async Task RefreshForAnalytics(string gameName, string tagLine, PlatformRoute platformRoute, string lockKey,
         long startTimeEpochSeconds, string currentPatch, bool includeAllModes, CancellationToken ct = default)
     {

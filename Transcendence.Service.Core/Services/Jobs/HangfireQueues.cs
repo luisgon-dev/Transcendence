@@ -16,4 +16,11 @@ public static class HangfireQueues
     /// always have free workers no matter how backed up the shared refresh queues get.
     /// </summary>
     public const string AnalyticsWarm = "analytics-warm";
+
+    /// <summary>
+    /// Reserved lane for per-match timeline ingestion. Served by its own dedicated worker pool so a
+    /// large re-ingestion backlog drains at the Riot rate limit without being starved by the (much
+    /// larger) shared <c>refresh-low</c> backlog — and without the timeline jobs starving it in turn.
+    /// </summary>
+    public const string TimelineIngest = "timeline-ingest";
 }

@@ -56,6 +56,18 @@ builder.Services.AddHangfireServer(options =>
     options.WorkerCount = 4;
 });
 
+// Dedicated worker pool for per-match timeline ingestion. The main pool's shared refresh-low queue
+// carries a very large background backlog (champion-analytics ingestion, summoner maintenance, …),
+// so timeline jobs sharing it get starved FIFO. A reserved lane with its own bounded pool drains the
+// re-ingestion backlog steadily at the Riot rate limit without competing with — or starving — that
+// backlog. Bounded (not the main 24) so it never monopolises Riot capacity from user-driven refreshes.
+builder.Services.AddHangfireServer(options =>
+{
+    options.ServerName = HangfireQueues.TimelineIngest;
+    options.Queues = [HangfireQueues.TimelineIngest];
+    options.WorkerCount = 8;
+});
+
 builder.Services.AddHttpClient();
 
 // Configure Redis distributed cache

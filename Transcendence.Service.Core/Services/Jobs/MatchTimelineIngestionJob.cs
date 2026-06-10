@@ -31,7 +31,7 @@ public class MatchTimelineIngestionJob(
     /// </summary>
     public const int CurrentTimelineSchemaVersion = 1;
 
-    [Queue("refresh-low")]
+    [Queue(HangfireQueues.TimelineIngest)]
     public async Task IngestMatchTimelineAsync(string matchId, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(matchId))

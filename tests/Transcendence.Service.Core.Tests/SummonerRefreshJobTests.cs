@@ -337,7 +337,9 @@ public class SummonerRefreshJobTests
                 It.IsAny<int>(),
                 It.IsAny<long?>(),
                 Queue.SUMMONERS_RIFT_5V5_RANKED_SOLO,
-                0,
+                // startTime is clamped to a recent window (now - AnalyticsRecentWindowDays), not the
+                // passed-through 0, so it discovers only recent games instead of re-scanning all history.
+                It.IsAny<long?>(),
                 0,
                 "ranked",
                 It.IsAny<CancellationToken>()),

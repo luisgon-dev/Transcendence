@@ -77,7 +77,11 @@ builder.Services.AddHangfireServer(options =>
 {
     options.ServerName = HangfireQueues.Discovery;
     options.Queues = [HangfireQueues.Discovery];
-    options.WorkerCount = 10;
+    // Discovery is the throughput-critical lane (summoner refresh consumers are I/O-bound on the Riot
+    // API, throttled per-region by Camille), so a higher worker count keeps more summoners in flight.
+    // Bounded to stay within Postgres max_connections alongside the other pools (main 24 + warm 4 +
+    // timeline 10 + discovery 16 = 54) and the WebAPI's pool.
+    options.WorkerCount = 16;
 });
 
 builder.Services.AddHttpClient();
@@ -117,6 +121,7 @@ builder.Services.Configure<StarvationGuardrailOptions>(
 builder.Services.Configure<IngestionPriorityPolicyOptions>(
     builder.Configuration.GetSection("Jobs:IngestionPriorityPolicy"));
 builder.Services.Configure<MatchIngestionOptions>(builder.Configuration.GetSection("Jobs:MatchIngestion"));
+builder.Services.Configure<PatchPromotionOptions>(builder.Configuration.GetSection("Jobs:PatchPromotion"));
 builder.Services.Configure<TimelineIngestionOptions>(builder.Configuration.GetSection("Jobs:TimelineIngestion"));
 builder.Services.Configure<RuneSelectionIntegrityBackfillJobOptions>(
     builder.Configuration.GetSection("Jobs:RuneSelectionIntegrityBackfill"));

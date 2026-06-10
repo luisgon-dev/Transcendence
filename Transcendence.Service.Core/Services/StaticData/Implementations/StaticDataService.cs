@@ -1,9 +1,12 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using System.Net;
 using System.Text.Json;
 using Transcendence.Data;
+using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Models.LoL.Static;
 using Transcendence.Service.Core.Services.Cache;
+using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.StaticData.DTOs;
 using Transcendence.Service.Core.Services.StaticData.Interfaces;
 
@@ -13,6 +16,7 @@ public class StaticDataService(
     TranscendenceContext context,
     IHttpClientFactory httpClientFactory,
     ICacheService cacheService,
+    IOptions<PatchPromotionOptions> patchPromotionOptions,
     ILogger<StaticDataService> logger)
     : IStaticDataService
 {
@@ -47,24 +51,86 @@ public class StaticDataService(
         if (currentPatch != null && currentPatch.Version == latestPatch)
             return;
 
-        if (currentPatch != null)
-            currentPatch.IsActive = false;
+        // Record the new patch + fetch its static assets immediately so it's ready when promoted, but
+        // do NOT promote it yet — Data Dragon updates ahead of the game-build rollout (see
+        // PatchPromotionOptions). Promotion is gated below on observed match volume across regions.
+        await EnsureStaticDataForPatchAsync(latestPatch, cancellationToken);
 
-        context.Patches.Add(new Patch
+        if (currentPatch == null)
         {
-            Version = latestPatch,
-            ReleaseDate = DateTime.UtcNow,
-            DetectedAt = DateTime.UtcNow,
-            IsActive = true
-        });
+            // Bootstrap: no active patch yet, so promote immediately to get analytics running.
+            await PromotePatchAsync(latestPatch, previous: null, cancellationToken);
+            logger.LogInformation("Promoted patch {Latest} to active (bootstrap — no prior active patch).", latestPatch);
+            return;
+        }
 
+        var newPatchRow = await context.Patches
+            .FirstOrDefaultAsync(p => p.Version == latestPatch, cancellationToken);
+        var detectedAtUtc = EnsureUtc(newPatchRow?.DetectedAt ?? DateTime.UtcNow);
+        var ageHours = (DateTime.UtcNow - detectedAtUtc).TotalHours;
+
+        var promotion = patchPromotionOptions.Value;
+        var minPerRegion = Math.Max(1, promotion.MinMatchesPerRegionToCount);
+        var regionsRolledOut = await context.Matches
+            .AsNoTracking()
+            .Where(m => m.Status == FetchStatus.Success && m.Patch == latestPatch && m.PlatformRegion != null)
+            .GroupBy(m => m.PlatformRegion!)
+            .Select(g => new { Region = g.Key, Count = g.Count() })
+            .Where(x => x.Count >= minPerRegion)
+            .CountAsync(cancellationToken);
+
+        var rolledOut = regionsRolledOut >= Math.Max(1, promotion.MinRegionsRolledOut);
+        var forcedByAge = ageHours >= Math.Max(1, promotion.MaxWaitHoursBeforeForcePromote);
+
+        if (!rolledOut && !forcedByAge)
+        {
+            logger.LogInformation(
+                "Patch {Latest} detected but NOT promoted: only {Regions}/{MinRegions} regions have >= {MinPerRegion} matches on this build (age {Age:F1}h/{MaxAge}h). Keeping {Active} active until the game build rolls out.",
+                latestPatch,
+                regionsRolledOut,
+                promotion.MinRegionsRolledOut,
+                minPerRegion,
+                ageHours,
+                promotion.MaxWaitHoursBeforeForcePromote,
+                currentPatch.Version);
+            return;
+        }
+
+        await PromotePatchAsync(latestPatch, previous: currentPatch, cancellationToken);
+        logger.LogInformation(
+            "Promoted patch {Latest} to active ({Regions} regions rolled out, age {Age:F1}h, forcedByAge={Forced}).",
+            latestPatch,
+            regionsRolledOut,
+            ageHours,
+            forcedByAge && !rolledOut);
+    }
+
+    private async Task PromotePatchAsync(string version, Patch? previous, CancellationToken cancellationToken)
+    {
+        if (previous != null)
+            previous.IsActive = false;
+
+        var row = await context.Patches.FirstOrDefaultAsync(p => p.Version == version, cancellationToken);
+        if (row == null)
+        {
+            row = new Patch
+            {
+                Version = version,
+                ReleaseDate = DateTime.UtcNow,
+                DetectedAt = DateTime.UtcNow
+            };
+            context.Patches.Add(row);
+        }
+
+        row.IsActive = true;
         await context.SaveChangesAsync(cancellationToken);
 
-        if (currentPatch != null)
-            await cacheService.RemoveByTagAsync($"patch-{currentPatch.Version}", cancellationToken);
-
-        await EnsureStaticDataForPatchAsync(latestPatch, cancellationToken);
+        if (previous != null)
+            await cacheService.RemoveByTagAsync($"patch-{previous.Version}", cancellationToken);
     }
+
+    private static DateTime EnsureUtc(DateTime value) =>
+        value.Kind == DateTimeKind.Utc ? value : DateTime.SpecifyKind(value, DateTimeKind.Utc);
 
     public async Task EnsureStaticDataForPatchAsync(string patchVersion, CancellationToken cancellationToken = default)
     {

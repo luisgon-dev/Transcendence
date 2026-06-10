@@ -78,7 +78,7 @@ public class SummonerRefreshJob(
                 "ranked",
                 startTimeEpochSeconds: null,
                 endTimeEpochSeconds: null,
-                requiredPatch: null,
+                acceptablePatches: null,
                 lightweight: false,
                 matchFilter: match => QueueCatalog.IsRankedAnalyticsQueue(match.QueueId),
                 shouldStop: null,
@@ -96,7 +96,7 @@ public class SummonerRefreshJob(
                 type: null,
                 startTimeEpochSeconds: null,
                 endTimeEpochSeconds: null,
-                requiredPatch: null,
+                acceptablePatches: null,
                 lightweight: false,
                 matchFilter: match => QueueCatalog.IsInDefaultHistoryScope(match.QueueId),
                 shouldStop: null,
@@ -196,6 +196,17 @@ public class SummonerRefreshJob(
                 return await refreshLockRepository.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, ct);
             }
 
+            // Persist matches on the active patch AND any newer patch pending promotion (game build
+            // mid-rollout). A new patch's match gameVersion lags the Data Dragon label, so during a
+            // rollover the games players actually generate are still tagged the previous patch; accepting
+            // both keeps ingestion productive and lets the new patch accumulate for data-driven promotion.
+            var ingestiblePatches = await GetIngestiblePatchesAsync(ct);
+            // Only the recent window is needed to discover NEW games; older matches are already persisted,
+            // so don't re-scan weeks of history when the active patch is old.
+            var windowStartEpoch = DateTimeOffset.UtcNow
+                .AddDays(-Math.Max(1, options.AnalyticsRecentWindowDays)).ToUnixTimeSeconds();
+            var effectiveStartTime = Math.Max(startTimeEpochSeconds, windowStartEpoch);
+
             var rankedHeadPersisted = await SyncMatchWindowAsync(
                 gameName,
                 tagLine,
@@ -206,9 +217,9 @@ public class SummonerRefreshJob(
                 Math.Max(1, options.LowPriorityRankedPages),
                 Queue.SUMMONERS_RIFT_5V5_RANKED_SOLO,
                 "ranked",
-                startTimeEpochSeconds,
+                effectiveStartTime,
                 endTimeEpochSeconds: null,
-                requiredPatch: currentPatch,
+                acceptablePatches: ingestiblePatches,
                 lightweight: true,
                 matchFilter: match => QueueCatalog.IsRankedAnalyticsQueue(match.QueueId),
                 shouldStop: ShouldStopAsync,
@@ -231,7 +242,7 @@ public class SummonerRefreshJob(
                     type: null,
                     startTimeEpochSeconds: null,
                     endTimeEpochSeconds: null,
-                    requiredPatch: null,
+                    acceptablePatches: null,
                     lightweight: true,
                     matchFilter: match => QueueCatalog.IsInDefaultHistoryScope(match.QueueId),
                     shouldStop: ShouldStopAsync,
@@ -302,7 +313,7 @@ public class SummonerRefreshJob(
         string? type,
         long? startTimeEpochSeconds,
         long? endTimeEpochSeconds,
-        string? requiredPatch,
+        IReadOnlySet<string>? acceptablePatches,
         bool lightweight,
         Func<DataMatch, bool> matchFilter,
         Func<Task<bool>>? shouldStop,
@@ -386,8 +397,8 @@ public class SummonerRefreshJob(
                         continue;
                     }
 
-                    if (!string.IsNullOrWhiteSpace(requiredPatch) &&
-                        !string.Equals(match.Patch, requiredPatch, StringComparison.OrdinalIgnoreCase))
+                    if (acceptablePatches is { Count: > 0 } &&
+                        !acceptablePatches.Contains(match.Patch ?? string.Empty))
                     {
                         continue;
                     }
@@ -698,6 +709,40 @@ public class SummonerRefreshJob(
         }
 
         await db.SaveChangesAsync(ct);
+    }
+
+    // The active patch plus the most-recently-detected patch (the Data Dragon latest, which may be
+    // pending promotion while its game build rolls out). Persisting matches on either keeps analytics
+    // ingestion productive during a rollover and lets the new patch accumulate match volume so
+    // StaticDataService can promote it data-driven. The Patches table is tiny, so the per-run cost is
+    // two trivial indexed reads.
+    private async Task<IReadOnlySet<string>> GetIngestiblePatchesAsync(CancellationToken ct)
+    {
+        var activeVersions = await db.Patches
+            .AsNoTracking()
+            .Where(p => p.IsActive)
+            .Select(p => p.Version)
+            .ToListAsync(ct);
+
+        // Most-recently-detected patch = the Data Dragon latest (pending promotion). DetectedAt is
+        // nullable, so coalesce to the non-null ReleaseDate and add deterministic tiebreaks — otherwise a
+        // legacy row with a null/tied DetectedAt could be returned as "latest" and pollute the set.
+        var latestVersion = await db.Patches
+            .AsNoTracking()
+            .OrderByDescending(p => p.DetectedAt ?? p.ReleaseDate)
+            .ThenByDescending(p => p.ReleaseDate)
+            .ThenByDescending(p => p.Version)
+            .Select(p => p.Version)
+            .FirstOrDefaultAsync(ct);
+
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var version in activeVersions)
+            if (!string.IsNullOrWhiteSpace(version))
+                set.Add(version);
+        if (!string.IsNullOrWhiteSpace(latestVersion))
+            set.Add(latestVersion);
+
+        return set;
     }
 
     private Task EnqueueTimelineForRankedMatchesAsync(IReadOnlyList<DataMatch> matches, CancellationToken ct)

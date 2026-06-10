@@ -13,7 +13,11 @@ using DataMatch = Transcendence.Data.Models.LoL.Match.Match;
 
 namespace Transcendence.Service.Core.Services.Jobs;
 
-[DisableConcurrentExecution(timeoutInSeconds: 5 * 60)]
+// No [DisableConcurrentExecution]: that attribute takes a single global lock keyed on the job
+// method, serializing ALL timeline ingestion to one match at a time across every worker — under a
+// high-throughput backfill the other workers just fail on the distributed-lock timeout. Each match
+// is independent and the per-match write is idempotent (delete-then-AddRange), and the backfill's
+// re-attempt cooldown prevents the same match being enqueued twice, so full worker parallelism is safe.
 public class MatchTimelineIngestionJob(
     TranscendenceContext db,
     LeagueRiotApiContext riotApiContext,

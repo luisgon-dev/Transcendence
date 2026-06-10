@@ -9,6 +9,9 @@ using Transcendence.Service.Core.Services.RiotApi;
 
 namespace Transcendence.Service.Core.Services.Jobs;
 
+// No automatic retry: this job enqueues ingestion jobs as a side effect, so a retry after a mid-run
+// failure would re-enqueue the same matches as duplicates. A failed run simply waits for the next cron.
+[AutomaticRetry(Attempts = 0)]
 [DisableConcurrentExecution(timeoutInSeconds: 10 * 60)]
 public class MatchTimelineBackfillJob(
     TranscendenceContext db,
@@ -108,9 +111,13 @@ public class MatchTimelineBackfillJob(
 
         // Stamp the just-enqueued (stale-schema) matches as freshly attempted so the cooldown excludes
         // them from the next run until their ingestion job runs and advances SchemaVersion.
+        // IgnoreQueryFilters: ExecuteUpdate cannot translate this entity's navigation-based query filter
+        // (Match.Status) into a bulk UPDATE join, and would throw — failing the backfill after it has
+        // already enqueued, which would retry and re-enqueue the same (un-stamped) matches as duplicates.
         if (enqueuedMatchGuids.Count > 0)
         {
             await db.MatchTimelineFetchStates
+                .IgnoreQueryFilters()
                 .Where(s => enqueuedMatchGuids.Contains(s.MatchId))
                 .ExecuteUpdateAsync(s => s.SetProperty(x => x.LastAttemptAtUtc, DateTime.UtcNow), ct);
         }

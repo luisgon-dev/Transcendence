@@ -21,7 +21,9 @@ public class MatchTimelineBackfillJob(
     IRefreshLockRepository refreshLockRepository,
     ILogger<MatchTimelineBackfillJob> logger)
 {
-    [Queue("refresh-low")]
+    // Runs on the dedicated timeline lane (not the shared refresh-low backlog) so the feeder itself
+    // isn't starved behind ~100k other refresh-low jobs and can keep the ingestion workers fed.
+    [Queue(HangfireQueues.TimelineIngest)]
     public async Task ExecuteAsync(CancellationToken ct = default)
     {
         var options = timelineOptions.Value;

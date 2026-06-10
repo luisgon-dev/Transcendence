@@ -374,9 +374,8 @@ public class SummonerRefreshJobTests
             .SetupSequence(
                 x => x.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, It.IsAny<CancellationToken>()))
             .ReturnsAsync(false) // initial guard
-            .ReturnsAsync(false) // shouldStop at ranked page start
-            .ReturnsAsync(false) // shouldStop before ranked match fetch
-            .ReturnsAsync(true); // includeAllModes gate
+            .ReturnsAsync(false) // shouldStop at ranked page start (fetches happen per-page now)
+            .ReturnsAsync(true); // includeAllModes gate — demand appears, so all-modes is preempted
 
         harness.SummonerRepository
             .Setup(x => x.FindByRiotIdAsync(
@@ -700,6 +699,33 @@ public class SummonerRefreshJobTests
             var riotMatchIdsClient = new Mock<IRiotMatchIdsClient>();
             var backgroundJobClient = new Mock<IBackgroundJobClient>();
             var lockTelemetry = new Mock<IRefreshLockLifecycleTelemetry>();
+
+            // SyncMatchWindowAsync now fetches matches through the batch API. Delegate the batch to the
+            // existing per-id GetMatchDetails* mocks so each test's per-match setups (and the "only ranked
+            // head was fetched" assertions) stay meaningful — the batch simply fans out to the same path,
+            // preserving input order with a null entry where a per-id mock has no match.
+            matchService
+                .Setup(x => x.GetMatchDetailsBatchAsync(
+                    It.IsAny<IReadOnlyList<string>>(),
+                    It.IsAny<RegionalRoute>(),
+                    It.IsAny<PlatformRoute>(),
+                    It.IsAny<bool>(),
+                    It.IsAny<int>(),
+                    It.IsAny<CancellationToken>()))
+                .Returns(async (IReadOnlyList<string> matchIds, RegionalRoute regional, PlatformRoute platform,
+                    bool lightweight, int _, CancellationToken token) =>
+                {
+                    var results = new List<MatchEntity?>(matchIds.Count);
+                    foreach (var matchId in matchIds)
+                    {
+                        var match = lightweight
+                            ? await matchService.Object.GetMatchDetailsLightweightAsync(matchId, regional, platform, token)
+                            : await matchService.Object.GetMatchDetailsAsync(matchId, regional, platform, token);
+                        results.Add(match);
+                    }
+
+                    return results;
+                });
 
             refreshLockRepository
                 .Setup(x => x.ReleaseAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))

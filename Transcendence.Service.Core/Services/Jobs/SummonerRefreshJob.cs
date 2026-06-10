@@ -325,8 +325,6 @@ public class SummonerRefreshJob(
         var persistedCount = 0;
         var seenIds = new HashSet<string>(StringComparer.Ordinal);
         var nullFetchCount = 0;
-        var fetchExceptionCount = 0;
-        Exception? firstFetchException = null;
         var fetchFailureSamples = new List<string>(5);
 
         for (var page = 0; page < maxPages; page++)
@@ -372,54 +370,41 @@ public class SummonerRefreshJob(
                 continue;
             }
 
+            // Overlap the per-match Riot fetches in parallel (bounded), then build the EF entity graphs
+            // sequentially. GetMatchDetailsBatchAsync parallelizes ONLY the pure-I/O Riot fetch; every
+            // DbContext-touching build runs single-threaded inside it. Stop-check moved BEFORE the batch
+            // so granularity is per-page (not per-match) now that fetches are batched.
+            var built = await matchService.GetMatchDetailsBatchAsync(
+                pendingIds,
+                regional,
+                platformRoute,
+                lightweight,
+                ingestionOptions.Value.MaxParallelMatchFetches,
+                ct);
+
             var matchesToPersist = new List<DataMatch>(pendingIds.Count);
-            // Keep match preparation sequential. IMatchService builds EF entity graphs with this
-            // job's scoped DbContext; parallel calls would share that context and EF contexts are
-            // not thread-safe.
-            foreach (var matchId in pendingIds)
+            for (var i = 0; i < built.Count; i++)
             {
-                ct.ThrowIfCancellationRequested();
-                if (shouldStop != null && await shouldStop())
-                    break;
-
-                try
+                var match = built[i];
+                if (match == null)
                 {
-                    var match = lightweight
-                        ? await matchService.GetMatchDetailsLightweightAsync(matchId, regional, platformRoute, ct)
-                        : await matchService.GetMatchDetailsAsync(matchId, regional, platformRoute, ct);
-
-                    if (match == null)
-                    {
-                        nullFetchCount++;
-                        AddSample(fetchFailureSamples, matchId);
-                        logger.LogDebug("[Refresh] Match {MatchId} failed to fetch for {GameName}#{Tag}",
-                            matchId, gameName, tagLine);
-                        continue;
-                    }
-
-                    if (acceptablePatches is { Count: > 0 } &&
-                        !acceptablePatches.Contains(match.Patch ?? string.Empty))
-                    {
-                        continue;
-                    }
-
-                    if (!matchFilter(match))
-                        continue;
-
-                    matchesToPersist.Add(match);
+                    nullFetchCount++;
+                    AddSample(fetchFailureSamples, pendingIds[i]);
+                    logger.LogDebug("[Refresh] Match {MatchId} failed to fetch for {GameName}#{Tag}",
+                        pendingIds[i], gameName, tagLine);
+                    continue;
                 }
-                catch (OperationCanceledException)
+
+                if (acceptablePatches is { Count: > 0 } &&
+                    !acceptablePatches.Contains(match.Patch ?? string.Empty))
                 {
-                    throw;
+                    continue;
                 }
-                catch (Exception ex)
-                {
-                    fetchExceptionCount++;
-                    firstFetchException ??= ex;
-                    AddSample(fetchFailureSamples, matchId);
-                    logger.LogDebug(ex, "[Refresh] Error fetching match {MatchId} for {GameName}#{Tag}",
-                        matchId, gameName, tagLine);
-                }
+
+                if (!matchFilter(match))
+                    continue;
+
+                matchesToPersist.Add(match);
             }
 
             if (matchesToPersist.Count > 0)
@@ -433,32 +418,18 @@ public class SummonerRefreshJob(
                 break;
         }
 
-        if (nullFetchCount > 0 || fetchExceptionCount > 0)
+        if (nullFetchCount > 0)
         {
-            if (firstFetchException != null)
-            {
-                logger.LogError(
-                    firstFetchException,
-                    "[Refresh] Match window fetch completed with issues for {GameName}#{Tag} on {Platform}. persisted={PersistedCount}, nullFetches={NullFetchCount}, exceptionFetches={ExceptionFetchCount}, sampleMatchIds={SampleMatchIds}.",
-                    gameName,
-                    tagLine,
-                    platformRoute,
-                    persistedCount,
-                    nullFetchCount,
-                    fetchExceptionCount,
-                    fetchFailureSamples.ToArray());
-            }
-            else
-            {
-                logger.LogWarning(
-                    "[Refresh] Match window fetch completed with null responses for {GameName}#{Tag} on {Platform}. persisted={PersistedCount}, nullFetches={NullFetchCount}, sampleMatchIds={SampleMatchIds}.",
-                    gameName,
-                    tagLine,
-                    platformRoute,
-                    persistedCount,
-                    nullFetchCount,
-                    fetchFailureSamples.ToArray());
-            }
+            // GetMatchDetailsBatchAsync logs the underlying fetch/build exception (if any) at Warning;
+            // here we summarize the count of matches that came back unbuildable for this window.
+            logger.LogWarning(
+                "[Refresh] Match window fetch completed with null responses for {GameName}#{Tag} on {Platform}. persisted={PersistedCount}, nullFetches={NullFetchCount}, sampleMatchIds={SampleMatchIds}.",
+                gameName,
+                tagLine,
+                platformRoute,
+                persistedCount,
+                nullFetchCount,
+                fetchFailureSamples.ToArray());
         }
 
         return persistedCount;

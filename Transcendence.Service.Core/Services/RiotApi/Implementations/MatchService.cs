@@ -30,7 +30,118 @@ public class MatchService(
         PlatformRoute platformRoute,
         CancellationToken cancellationToken = default)
     {
-        // Fetch match from Riot
+        var matchDto = await FetchMatchDtoAsync(matchId, regionalRoute, cancellationToken);
+        if (matchDto == null)
+            return null;
+
+        return await BuildMatchDetailsFromDtoAsync(matchDto, platformRoute, cancellationToken);
+    }
+
+    public async Task<DataMatch?> GetMatchDetailsLightweightAsync(
+        string matchId,
+        RegionalRoute regionalRoute,
+        PlatformRoute platformRoute,
+        CancellationToken cancellationToken = default)
+    {
+        var matchDto = await FetchMatchDtoAsync(matchId, regionalRoute, cancellationToken);
+        if (matchDto == null)
+            return null;
+
+        return await BuildMatchDetailsLightweightFromDtoAsync(matchDto, platformRoute, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<DataMatch?>> GetMatchDetailsBatchAsync(
+        IReadOnlyList<string> matchIds,
+        RegionalRoute regionalRoute,
+        PlatformRoute platformRoute,
+        bool lightweight,
+        int maxParallelFetches,
+        CancellationToken cancellationToken = default)
+    {
+        if (matchIds.Count == 0)
+            return [];
+
+        // Stage 1 (PARALLEL, I/O only): fetch every match DTO from Riot. This touches NO DbContext —
+        // Camille's API client is thread-safe and GetMatchAsync is pure I/O. A bounded SemaphoreSlim
+        // overlaps request latency without flooding Camille's per-region rate-limit queue. Results are
+        // index-aligned with matchIds; a failure (or null) yields a null DTO for that id, never failing
+        // the whole batch (cancellation is rethrown).
+        var dtos = new Camille.RiotGames.MatchV5.Match?[matchIds.Count];
+        using (var gate = new SemaphoreSlim(Math.Max(1, maxParallelFetches)))
+        {
+            var fetchTasks = new Task[matchIds.Count];
+            for (var i = 0; i < matchIds.Count; i++)
+            {
+                var index = i;
+                var matchId = matchIds[index];
+                fetchTasks[index] = Task.Run(async () =>
+                {
+                    await gate.WaitAsync(cancellationToken);
+                    try
+                    {
+                        dtos[index] = await FetchMatchDtoAsync(matchId, regionalRoute, cancellationToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        // One bad fetch must not fail the batch; treat as a null DTO for this id.
+                        dtos[index] = null;
+                        logger.LogWarning(ex, "Failed to fetch match {MatchId} during batch fetch.", matchId);
+                    }
+                    finally
+                    {
+                        gate.Release();
+                    }
+                }, cancellationToken);
+            }
+
+            await Task.WhenAll(fetchTasks);
+        }
+
+        // Stage 2 (SEQUENTIAL, single-threaded): build EF entity graphs from the fetched DTOs. EVERYTHING
+        // here touches the (non-thread-safe) DbContext, so it runs strictly one at a time, in input order.
+        var results = new List<DataMatch?>(matchIds.Count);
+        for (var i = 0; i < matchIds.Count; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var dto = dtos[i];
+            if (dto == null)
+            {
+                results.Add(null);
+                continue;
+            }
+
+            try
+            {
+                var match = lightweight
+                    ? await BuildMatchDetailsLightweightFromDtoAsync(dto, platformRoute, cancellationToken)
+                    : await BuildMatchDetailsFromDtoAsync(dto, platformRoute, cancellationToken);
+                results.Add(match);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                results.Add(null);
+                logger.LogWarning(ex, "Failed to build match {MatchId} during batch build.", matchIds[i]);
+            }
+        }
+
+        return results;
+    }
+
+    private async Task<Camille.RiotGames.MatchV5.Match?> FetchMatchDtoAsync(
+        string matchId,
+        RegionalRoute regionalRoute,
+        CancellationToken cancellationToken)
+    {
+        // Pure I/O: fetch the match from Riot. No DbContext access — safe to invoke concurrently.
         var matchDto = await riotApiContext.Api.MatchV5()
             .GetMatchAsync(regionalRoute, matchId, cancellationToken);
         if (matchDto == null)
@@ -39,8 +150,17 @@ public class MatchService(
             return null;
         }
 
+        return matchDto;
+    }
+
+    private async Task<DataMatch?> BuildMatchDetailsFromDtoAsync(
+        Camille.RiotGames.MatchV5.Match matchDto,
+        PlatformRoute platformRoute,
+        CancellationToken cancellationToken)
+    {
         var info = matchDto.Info;
         var metadata = matchDto.Metadata;
+        var matchId = metadata.MatchId;
 
         // Build match entity (do not persist here; caller handles persistence)
         var match = new DataMatch
@@ -168,22 +288,14 @@ public class MatchService(
         return match;
     }
 
-    public async Task<DataMatch?> GetMatchDetailsLightweightAsync(
-        string matchId,
-        RegionalRoute regionalRoute,
+    private async Task<DataMatch?> BuildMatchDetailsLightweightFromDtoAsync(
+        Camille.RiotGames.MatchV5.Match matchDto,
         PlatformRoute platformRoute,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
     {
-        var matchDto = await riotApiContext.Api.MatchV5()
-            .GetMatchAsync(regionalRoute, matchId, cancellationToken);
-        if (matchDto == null)
-        {
-            logger.LogWarning("[Lightweight] Riot API returned null for match {MatchId}", matchId);
-            return null;
-        }
-
         var info = matchDto.Info;
         var metadata = matchDto.Metadata;
+        var matchId = metadata.MatchId;
 
         var match = new DataMatch
         {

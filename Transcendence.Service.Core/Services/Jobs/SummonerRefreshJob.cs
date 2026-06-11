@@ -328,6 +328,13 @@ public class SummonerRefreshJob(
         var fetchExceptionCount = 0;
         Exception? firstFetchException = null;
         var fetchFailureSamples = new List<string>(5);
+        // Early-stop guard for analytics ingestion on a personal-tier Riot key: when a patch filter is in
+        // effect, the NEWEST ranked match reveals the region's current game build. If it is not on an
+        // acceptable patch, the region has not rolled out yet — every recent game is old-patch and would
+        // be discarded, so we skip the rest of this summoner rather than burn the scarce Riot rate budget
+        // fetching matches we will throw away.
+        var rolledOutPatchChecked = false;
+        var regionNotOnAcceptablePatch = false;
 
         for (var page = 0; page < maxPages; page++)
         {
@@ -397,6 +404,21 @@ public class SummonerRefreshJob(
                         continue;
                     }
 
+                    // Newest-first: the first ranked match decides whether this region has rolled out to
+                    // an acceptable patch. If not, skip the whole summoner instead of fetching the rest.
+                    if (!rolledOutPatchChecked && acceptablePatches is { Count: > 0 } && matchFilter(match))
+                    {
+                        rolledOutPatchChecked = true;
+                        if (!acceptablePatches.Contains(match.Patch ?? string.Empty))
+                        {
+                            regionNotOnAcceptablePatch = true;
+                            logger.LogDebug(
+                                "[Refresh] Skipping {GameName}#{Tag}: region not on an acceptable patch (newest ranked match is {Patch}).",
+                                gameName, tagLine, match.Patch);
+                            break;
+                        }
+                    }
+
                     if (acceptablePatches is { Count: > 0 } &&
                         !acceptablePatches.Contains(match.Patch ?? string.Empty))
                     {
@@ -428,6 +450,10 @@ public class SummonerRefreshJob(
                 persistedCount += persistedMatches.Count;
                 await EnqueueTimelineForRankedMatchesAsync(persistedMatches, ct);
             }
+
+            // Region not on an acceptable patch (not yet rolled out): stop paging — the rest is old-patch.
+            if (regionNotOnAcceptablePatch)
+                break;
 
             if (pageIds.Count < pageSize)
                 break;

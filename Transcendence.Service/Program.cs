@@ -123,6 +123,7 @@ builder.Services.Configure<IngestionPriorityPolicyOptions>(
     builder.Configuration.GetSection("Jobs:IngestionPriorityPolicy"));
 builder.Services.Configure<MatchIngestionOptions>(builder.Configuration.GetSection("Jobs:MatchIngestion"));
 builder.Services.Configure<PatchPromotionOptions>(builder.Configuration.GetSection("Jobs:PatchPromotion"));
+builder.Services.Configure<RiotRateGateOptions>(builder.Configuration.GetSection("Jobs:RiotRateGate"));
 builder.Services.Configure<TimelineIngestionOptions>(builder.Configuration.GetSection("Jobs:TimelineIngestion"));
 builder.Services.Configure<RuneSelectionIntegrityBackfillJobOptions>(
     builder.Configuration.GetSection("Jobs:RuneSelectionIntegrityBackfill"));

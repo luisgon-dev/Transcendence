@@ -22,6 +22,7 @@ public class MatchTimelineIngestionJob(
     TranscendenceContext db,
     LeagueRiotApiContext riotApiContext,
     IBackgroundJobClient backgroundJobClient,
+    IRiotRateGate rateGate,
     IOptions<TimelineIngestionOptions> options,
     ILogger<MatchTimelineIngestionJob> logger)
 {
@@ -97,6 +98,14 @@ public class MatchTimelineIngestionJob(
 
         try
         {
+            // Pace under the per-region Riot budget; if it's exhausted, leave this match for the next
+            // sweep rather than consuming budget the analytics match-fetch needs more.
+            if (!await rateGate.AcquireAsync(regionalRoute.ToString(), ct))
+            {
+                logger.LogDebug("Riot rate gate skipped timeline for {MatchId} ({Region}); will retry later.", matchId, regionalRoute);
+                return;
+            }
+
             state.LastAttemptAtUtc = DateTime.UtcNow;
 
             var timeline = await riotApiContext.Api.MatchV5()

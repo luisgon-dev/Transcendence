@@ -88,6 +88,9 @@ public static class ServiceCollectionExtensions
         }
 
         services.AddSingleton(_ => new LeagueRiotApiContext(Camille.RiotGames.RiotGamesApi.NewInstance(riotApiKey)));
+        // Per-region request-rate gate paces outbound Riot calls under the key's per-region budget so
+        // Camille's limiter never saturates. Singleton (holds per-region token buckets + refill timers).
+        services.AddSingleton<IRiotRateGate, RiotRateGate>();
 
         services.AddScoped<ISummonerService, SummonerService>();
         services.AddScoped<IRankService, RankService>();

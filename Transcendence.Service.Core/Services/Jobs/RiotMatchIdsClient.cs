@@ -5,7 +5,7 @@ using Transcendence.Service.Core.Services.Jobs.Interfaces;
 
 namespace Transcendence.Service.Core.Services.Jobs;
 
-public sealed class RiotMatchIdsClient(LeagueRiotApiContext riotApiContext) : IRiotMatchIdsClient
+public sealed class RiotMatchIdsClient(LeagueRiotApiContext riotApiContext, IRiotRateGate rateGate) : IRiotMatchIdsClient
 {
     public async Task<IReadOnlyList<string>> GetMatchIdsByPuuidAsync(
         RegionalRoute regionalRoute,
@@ -18,6 +18,11 @@ public sealed class RiotMatchIdsClient(LeagueRiotApiContext riotApiContext) : IR
         string? type,
         CancellationToken ct = default)
     {
+        // Pace under the per-region Riot budget. An empty list means "no new ids this run" to the caller,
+        // which simply ends paging — safe to return when the region's budget is momentarily exhausted.
+        if (!await rateGate.AcquireAsync(regionalRoute.ToString(), ct))
+            return [];
+
         return await riotApiContext.Api.MatchV5()
             .GetMatchIdsByPUUIDAsync(
                 regionalRoute,

@@ -22,6 +22,7 @@ public class MatchService(
     ISummonerService summonerService,
     ISummonerRepository summonerRepository,
     IStaticDataService staticDataService,
+    IRiotRateGate rateGate,
     ILogger<MatchService> logger) : IMatchService
 {
     public async Task<DataMatch?> GetMatchDetailsAsync(
@@ -30,6 +31,14 @@ public class MatchService(
         PlatformRoute platformRoute,
         CancellationToken cancellationToken = default)
     {
+        // Pace under the per-region Riot budget so Camille never saturates; skip (retry later) rather than
+        // park this worker if the region's budget stays exhausted past the gate's max wait.
+        if (!await rateGate.AcquireAsync(regionalRoute.ToString(), cancellationToken))
+        {
+            logger.LogDebug("Riot rate gate skipped match {MatchId} ({Region}); will retry later.", matchId, regionalRoute);
+            return null;
+        }
+
         // Fetch match from Riot
         var matchDto = await riotApiContext.Api.MatchV5()
             .GetMatchAsync(regionalRoute, matchId, cancellationToken);
@@ -174,6 +183,12 @@ public class MatchService(
         PlatformRoute platformRoute,
         CancellationToken cancellationToken = default)
     {
+        if (!await rateGate.AcquireAsync(regionalRoute.ToString(), cancellationToken))
+        {
+            logger.LogDebug("[Lightweight] Riot rate gate skipped match {MatchId} ({Region}); will retry later.", matchId, regionalRoute);
+            return null;
+        }
+
         var matchDto = await riotApiContext.Api.MatchV5()
             .GetMatchAsync(regionalRoute, matchId, cancellationToken);
         if (matchDto == null)
@@ -371,6 +386,8 @@ public class MatchService(
                 throw new ArgumentException($"Unsupported region '{region}' for match retry.", nameof(region));
 
             var platformRoute = ResolvePlatformRoute(matchId, regionalRoute);
+            if (!await rateGate.AcquireAsync(regionalRoute.ToString(), cancellationToken))
+                throw new InvalidOperationException($"Riot rate gate exhausted for match {matchId} ({regionalRoute}); retry later.");
             var matchDto = await riotApiContext.Api.MatchV5().GetMatchAsync(regionalRoute, matchId, cancellationToken);
 
             if (matchDto == null)

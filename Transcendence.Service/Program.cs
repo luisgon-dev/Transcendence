@@ -77,11 +77,12 @@ builder.Services.AddHangfireServer(options =>
 {
     options.ServerName = HangfireQueues.Discovery;
     options.Queues = [HangfireQueues.Discovery];
-    // Discovery is the throughput-critical lane (summoner refresh consumers are I/O-bound on the Riot
-    // API, throttled per-region by Camille), so a higher worker count keeps more summoners in flight.
-    // Bounded to stay within Postgres max_connections alongside the other pools (main 24 + warm 4 +
-    // timeline 10 + discovery 16 = 54) and the WebAPI's pool.
-    options.WorkerCount = 16;
+    // Discovery consumers are I/O-bound on the Riot API. Concurrency here = concurrent Riot requests,
+    // which is capped by the prod key's rate limit, NOT by CPU/connections. Setting this too high makes
+    // consumers generate requests faster than the key allows, so Camille's rate limiter parks them and
+    // every Riot-calling job stalls (observed outage). Keep it modest so the steady request rate fits
+    // the key; raise only if the key's tier genuinely supports more sustained throughput.
+    options.WorkerCount = 8;
 });
 
 builder.Services.AddHttpClient();

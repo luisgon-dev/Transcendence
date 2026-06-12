@@ -436,9 +436,6 @@ namespace Transcendence.Service.Migrations
                     b.Property<string>("GameNameNormalized")
                         .HasColumnType("text");
 
-                    b.Property<DateTime?>("LastActiveAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<string>("PlatformRegion")
                         .HasColumnType("text");
 
@@ -476,9 +473,6 @@ namespace Transcendence.Service.Migrations
 
                     b.HasIndex("Puuid")
                         .IsUnique();
-
-                    b.HasIndex("PlatformRegion", "UpdatedAt")
-                        .HasDatabaseName("IX_Summoners_Region_UpdatedAt");
 
                     b.HasIndex("PlatformRegion", "GameNameNormalized", "TagLineNormalized")
                         .HasDatabaseName("IX_Summoners_SearchPrefix")

@@ -167,11 +167,11 @@ Operational implication:
 
 - Champion analytics ingestion now runs continuously in low-priority mode to keep growing current-patch data.
 - Summoner maintenance runs continuously in low-priority mode to refresh stale summoners when no high-priority API refresh demand is active.
-- The production ingestion strategy is region-aware and **yield-first** (see "Candidate selection strategy" below):
+- The production ingestion strategy is region-aware and high-elo-first:
   - enabled regions fan out independently
   - per-region coverage targets scale with configured region weights
-  - the **snowball frontier** (never-refreshed players discovered in freshly-ingested matches) is preferred over the already-covered core, after the small tracked-pro roster
-  - a per-summoner **coverage cooldown** keeps already-covered summoners out of every run, and activity-aware scoring prefers recently-active players
+  - tracked high-value roster candidates are considered before the generic stale summoner pool
+  - ranked Emerald+ candidates are preferred ahead of lower-value fallback rows
 - Ingestion scales queued refresh count based on:
   - current patch coverage vs target
   - staleness of recent successful fetches
@@ -191,17 +191,6 @@ Operational implication:
   - `RefreshChampionAnalyticsJob.ExecuteAdaptiveAsync` self-paces via its own refresh cooldown (`Ramp/MinimumRefreshIntervalMinutes`), so polling it at the heartbeat cadence honors the shorter ramp cooldown without a separate ramp job.
 - **Discovery reserved lane.** The per-region producers and the analytics summoner-refresh consumers they enqueue run on a dedicated `HangfireQueues.Discovery` (`"discovery"`) queue with its own `BackgroundJobServer` worker pool (`Transcendence.Service/Program.cs`), so this heaviest pipeline is never buried behind the broad `refresh-low` maintenance backlog (the failure that previously left a new patch starved of match discovery). Because `RefreshForAnalytics` is enqueued via `ISummonerRefreshJob`, its `[Queue("discovery")]` lives on the **interface** method (Hangfire resolves the queue from the enqueued interface, not the implementation).
 - **Queue-depth backpressure.** Before fanning out refresh consumers, each producer reads the discovery queue depth (`IQueueDepthProbe`) and scales its per-run queue target down between `DiscoveryQueueBackpressureSoftCap`/`HardCap` (default 5000/10000), to zero at/above the hard cap. This is a final ceiling that overrides forced catch-up and cold-start: when the discovery workers are the bottleneck, adding more is waste and risks the unbounded regrowth that caused the original ~100k clog. The probe fails open (no backpressure) so a monitoring hiccup never stalls ingestion.
-
-#### Candidate selection strategy (yield-first breadth)
-
-The discovery producers (`ChampionAnalyticsIngestionJob`, `SummonerMaintenanceJob`) decide *which* summoners to refresh each run. Selection is biased toward **new matches per refresh** rather than re-refreshing a static, already-covered set — the lever that lifts throughput when the per-region Riot budget sits mostly idle but yield is low (most refreshes persisting `rankedHead=0`).
-
-- **Snowball frontier (primary lever).** Every ingested match's participants are persisted as `Summoner` rows; `MatchService.GetMatchDetailsLightweightAsync` mints a stub for each *unseen* participant with `UpdatedAt = DateTime.MinValue` (no extra Riot call). These never-refreshed stubs are guaranteed-active and uncovered, so refreshing them almost always yields new matches. A dedicated candidate source selects them (`UpdatedAt <=` a year-2000 sentinel) and `GetPriorityBucket` ranks them in their own bucket **above** the ranked high-elo pool — previously they fell to the lowest bucket and were never reached behind the (then unfiltered) high-elo set, so the productive frontier was starved. This is a self-sustaining crawl (ingest a match → its participants become candidates → ingest their matches → repeat). Toggle: `Jobs:*:PrioritizeSnowballFrontier` (default on).
-- **Coverage cooldown.** `SummonerRefreshJob.RefreshForAnalytics` stamps `Summoner.UpdatedAt = now` on every completion, so `UpdatedAt` doubles as the per-summoner "last analytics refresh" timestamp. All non-frontier candidate sources filter `UpdatedAt <= staleCutoff` (`Jobs:*:{Ramp,}DataStaleAfterMinutes`), so a summoner covered within the window is excluded from every run instead of being re-churned at 0 yield (`SummonerMaintenanceJob` already did this; `ChampionAnalyticsIngestionJob` now does too). During **cold start** — a region with no current-patch coverage yet (newly seeded, or just after a patch rollover) — the cooldown is bypassed so freshly-bootstrapped summoners (`SummonerBootstrapService` stamps `UpdatedAt = now`) remain eligible; the frontier is always eligible regardless.
-- **Activity-aware scoring.** `Summoner.LastActiveAtUtc` records the most recent game-creation time across a summoner's ingested matches (maintained in `MatchService`, monotonic max — EF writes only when it advances). `IngestionPriorityScoringPolicy` adds an activity-recency term (`Jobs:IngestionPriorityPolicy:ActivityWeight` / `ActivitySaturationMinutes`) so that among equally-stale candidates the recently-active ones — likeliest to have new games — rank first. This separates "stale" from "inactive": an old `UpdatedAt` does not mean the player is still playing.
-- **Long-tail rotation.** The fallback (stale, non-frontier) pool uses a bounded random starting offset (`Jobs:*:FallbackRotationMaxOffset`, default 50000; 0 disables) so successive runs walk different slices instead of re-selecting the same stalest head.
-- **Supporting index.** `IX_Summoners_Region_UpdatedAt` (`PlatformRegion, UpdatedAt`) backs the frontier scan, the cooldown/staleness filter, and the oldest-eligible probe. In prod it is built with `CREATE INDEX CONCURRENTLY` so the large live `Summoners` table is not write-locked.
-- **Discovery concurrency.** Now that each refresh is productive, the discovery worker pool (`Transcendence.Service/Program.cs`) is sized at `12`. Outbound Riot calls stay bounded by `IRiotRateGate`, so worker count governs queue-drain / DB-persist parallelism, not the Riot request rate. Raising the gate's `TokensPerPeriod` toward the per-region budget is a separate, measured step taken only after observing the yield lift in prod.
 
 #### Patch detection: data-driven promotion (not Data Dragon timing)
 

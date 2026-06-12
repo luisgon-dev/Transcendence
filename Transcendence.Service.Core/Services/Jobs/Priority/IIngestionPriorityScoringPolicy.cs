@@ -3,12 +3,7 @@ namespace Transcendence.Service.Core.Services.Jobs.Priority;
 public readonly record struct IngestionPriorityCandidate(
     string CanonicalIdentity,
     DateTime UpdatedAtUtc,
-    bool IsFavorite)
-{
-    // Most recent game-creation time across the summoner's ingested matches (Summoner.LastActiveAtUtc).
-    // Null when unknown — yields a zero activity signal, so callers that don't supply it are unaffected.
-    public DateTime? LastActiveAtUtc { get; init; }
-}
+    bool IsFavorite);
 
 public readonly record struct IngestionPriorityContext(
     DateTime PatchReleaseUtc,

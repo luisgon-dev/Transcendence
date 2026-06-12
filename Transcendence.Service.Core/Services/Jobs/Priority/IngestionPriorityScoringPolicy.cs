@@ -19,21 +19,9 @@ public class IngestionPriorityScoringPolicy(IOptions<IngestionPriorityPolicyOpti
         var stalenessSignal = Math.Clamp(stalenessMinutes / saturationMinutes, 0d, 1d);
         var favoriteSignal = candidate.IsFavorite ? 1d : 0d;
 
-        // Activity recency: recently-active summoners are far likelier to have new games, so prefer
-        // them over merely-stale (possibly inactive) ones. Decays linearly to 0 at the saturation
-        // horizon; unknown LastActiveAtUtc contributes nothing (keeps non-activity-aware callers neutral).
-        var activitySignal = 0d;
-        if (candidate.LastActiveAtUtc is { } lastActive)
-        {
-            var activitySaturationMinutes = Math.Max(1, config.ActivitySaturationMinutes);
-            var recencyMinutes = Math.Max(0d, (evaluationUtc - EnsureUtc(lastActive)).TotalMinutes);
-            activitySignal = Math.Clamp(1d - recencyMinutes / activitySaturationMinutes, 0d, 1d);
-        }
-
         return patchSignal * Math.Max(0d, config.PatchRelevanceWeight)
                + stalenessSignal * Math.Max(0d, config.StalenessWeight)
-               + favoriteSignal * Math.Max(0d, config.FavoriteWeight)
-               + activitySignal * Math.Max(0d, config.ActivityWeight);
+               + favoriteSignal * Math.Max(0d, config.FavoriteWeight);
     }
 
     public IReadOnlyList<TCandidate> RankCandidates<TCandidate>(

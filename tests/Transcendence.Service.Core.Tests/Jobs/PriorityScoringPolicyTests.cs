@@ -109,45 +109,6 @@ public class PriorityScoringPolicyTests
         ranked[0].UpdatedAtUtc.Should().Be(now.AddHours(-3));
     }
 
-    [Fact]
-    public void RankCandidates_RecentlyActiveCandidate_RanksAheadOfInactiveAtEqualStaleness()
-    {
-        var now = new DateTime(2026, 3, 5, 18, 0, 0, DateTimeKind.Utc);
-        var patchRelease = now.AddHours(-5);
-        var updatedAt = now.AddHours(-3);
-        var candidates = new[]
-        {
-            new TestCandidate("na1:inactive:one", updatedAt, false, now.AddDays(-30)),
-            new TestCandidate("na1:active:two", updatedAt, false, now.AddMinutes(-30))
-        };
-
-        var ranked = Rank(candidates, patchRelease, now);
-
-        ranked.Select(candidate => candidate.CanonicalIdentity)
-            .Should()
-            .Equal("na1:active:two", "na1:inactive:one");
-    }
-
-    [Fact]
-    public void ComputeScore_RecentActivity_IncreasesScoreOverUnknownActivity()
-    {
-        var now = new DateTime(2026, 3, 5, 18, 0, 0, DateTimeKind.Utc);
-        var context = new IngestionPriorityContext(now.AddHours(-5), now);
-        var policy = new IngestionPriorityScoringPolicy(Options.Create(new IngestionPriorityPolicyOptions()));
-        var updatedAt = now.AddHours(-2);
-
-        var unknownActivity = new IngestionPriorityCandidate("na1:unknown:one", updatedAt, false);
-        var recentActivity = new IngestionPriorityCandidate("na1:recent:two", updatedAt, false)
-        {
-            LastActiveAtUtc = now.AddMinutes(-10)
-        };
-
-        // Unknown (null) activity contributes nothing; a recent activity strictly raises the score.
-        policy.ComputeScore(recentActivity, context)
-            .Should()
-            .BeGreaterThan(policy.ComputeScore(unknownActivity, context));
-    }
-
     private static IReadOnlyList<TestCandidate> Rank(
         IEnumerable<TestCandidate> candidates,
         DateTime patchReleaseUtc,
@@ -160,17 +121,10 @@ public class PriorityScoringPolicyTests
             candidate => new IngestionPriorityCandidate(
                 candidate.CanonicalIdentity,
                 candidate.UpdatedAtUtc,
-                candidate.IsFavorite)
-            {
-                LastActiveAtUtc = candidate.LastActiveAtUtc
-            },
+                candidate.IsFavorite),
             new IngestionPriorityContext(patchReleaseUtc, evaluationUtc),
             maxCandidates: 10);
     }
 
-    private sealed record TestCandidate(
-        string CanonicalIdentity,
-        DateTime UpdatedAtUtc,
-        bool IsFavorite,
-        DateTime? LastActiveAtUtc = null);
+    private sealed record TestCandidate(string CanonicalIdentity, DateTime UpdatedAtUtc, bool IsFavorite);
 }

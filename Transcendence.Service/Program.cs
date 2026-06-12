@@ -85,13 +85,12 @@ builder.Services.AddHangfireServer(options =>
 {
     options.ServerName = HangfireQueues.Discovery;
     options.Queues = [HangfireQueues.Discovery];
-    // Discovery consumers are I/O-bound on the Riot API. Outbound Riot calls are now bounded by the
-    // per-region IRiotRateGate (not by worker count), so extra workers no longer outrun the key — they
-    // just wait on the gate (or skip and retry) and meanwhile parallelize the non-Riot work (match-id
-    // dedup, EF entity build, DB persist, queue drain). Now that each refresh is productive (frontier +
-    // coverage cooldown + activity scoring), a modest bump fills the idle budget faster. Still bounded so
-    // it shares Riot capacity fairly; raise the gate's TokensPerPeriod only after measuring yield in prod.
-    options.WorkerCount = 12;
+    // Discovery consumers are I/O-bound on the Riot API. Concurrency here = concurrent Riot requests,
+    // which is capped by the prod key's rate limit, NOT by CPU/connections. Setting this too high makes
+    // consumers generate requests faster than the key allows, so Camille's rate limiter parks them and
+    // every Riot-calling job stalls (observed outage). Keep it modest so the steady request rate fits
+    // the key; raise only if the key's tier genuinely supports more sustained throughput.
+    options.WorkerCount = 8;
 });
 
 builder.Services.AddHttpClient();

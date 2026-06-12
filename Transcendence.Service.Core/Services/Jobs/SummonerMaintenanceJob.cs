@@ -32,11 +32,6 @@ public class SummonerMaintenanceJob(
     private const string ProducerKeyBase = nameof(SummonerMaintenanceJob);
     private const string TelemetrySource = "summoner-maintenance-job";
 
-    // Snowball-frontier marker: MatchService mints never-refreshed participant stubs with
-    // UpdatedAt = DateTime.MinValue; any summoner older than this sentinel is an unrefreshed stub.
-    private static readonly DateTime SnowballFrontierUpdatedAtCutoffUtc =
-        new(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-
     private sealed record CandidateSummoner(
         string PlatformRegion,
         string GameName,
@@ -44,9 +39,7 @@ public class SummonerMaintenanceJob(
         DateTime UpdatedAt,
         bool IsFavorite,
         bool IsTrackedHighValue,
-        string? RankTier,
-        bool IsSnowballFrontier,
-        DateTime? LastActiveAtUtc);
+        string? RankTier);
 
     [Queue("refresh-low")]
     public async Task ExecuteAsync(CancellationToken ct = default)
@@ -475,35 +468,6 @@ public class SummonerMaintenanceJob(
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
-        // Snowball frontier: never-refreshed stubs minted from freshly-ingested match participants
-        // (UpdatedAt = MinValue) — guaranteed-active and uncovered. Ranked into their own high bucket.
-        if (options.PrioritizeSnowballFrontier)
-        {
-            var frontierQuery = db.Summoners.AsNoTracking()
-                .Where(s => s.GameName != null && s.TagLine != null && s.PlatformRegion != null)
-                .Where(s => s.UpdatedAt <= SnowballFrontierUpdatedAtCutoffUtc);
-
-            if (region != null)
-                frontierQuery = frontierQuery.Where(s => s.PlatformRegion == region);
-
-            var frontierCandidates = await frontierQuery
-                .OrderBy(s => s.UpdatedAt)
-                .Take(maxCandidates * 3)
-                .Select(s => new CandidateSummoner(
-                    s.PlatformRegion!,
-                    s.GameName!,
-                    s.TagLine!,
-                    s.UpdatedAt,
-                    IsFavorite: false,
-                    IsTrackedHighValue: false,
-                    RankTier: null,
-                    IsSnowballFrontier: true,
-                    s.LastActiveAtUtc))
-                .ToListAsync(ct);
-
-            combined.AddRange(frontierCandidates);
-        }
-
         if (options.PrioritizeTrackedHighValueSummoners)
         {
             var trackedQuery =
@@ -527,7 +491,6 @@ public class SummonerMaintenanceJob(
                     tracked.GameName,
                     tracked.TagLine,
                     UpdatedAt = effectiveUpdatedAt,
-                    LastActiveAtUtc = summoner != null ? summoner.LastActiveAtUtc : (DateTime?)null,
                     RankTier = rank != null ? rank.Tier : null
                 };
 
@@ -543,9 +506,7 @@ public class SummonerMaintenanceJob(
                 x.UpdatedAt,
                 IsFavorite: false,
                 IsTrackedHighValue: true,
-                x.RankTier,
-                IsSnowballFrontier: false,
-                x.LastActiveAtUtc)));
+                x.RankTier)));
         }
 
         if (options.PrioritizeFavoriteSummoners)
@@ -571,9 +532,7 @@ public class SummonerMaintenanceJob(
                     s.UpdatedAt,
                     IsFavorite: true,
                     IsTrackedHighValue: false,
-                    RankTier: null,
-                    IsSnowballFrontier: false,
-                    s.LastActiveAtUtc))
+                    RankTier: null))
                 .ToListAsync(ct);
 
             combined.AddRange(favoriteCandidates);
@@ -596,7 +555,6 @@ public class SummonerMaintenanceJob(
                     s.GameName,
                     s.TagLine,
                     s.UpdatedAt,
-                    s.LastActiveAtUtc,
                     RankTier = r.Tier
                 };
 
@@ -612,28 +570,20 @@ public class SummonerMaintenanceJob(
                 x.UpdatedAt,
                 IsFavorite: false,
                 IsTrackedHighValue: false,
-                x.RankTier,
-                IsSnowballFrontier: false,
-                x.LastActiveAtUtc)));
+                x.RankTier)));
         }
 
-        // Long tail: the stale pool excluding the frontier (handled above), with a bounded random
-        // starting offset so successive runs spread across the pool instead of re-picking the same head.
         var trackedSummonerQuery = db.Summoners
             .AsNoTracking()
             .Where(s => s.GameName != null && s.TagLine != null && s.PlatformRegion != null)
-            .Where(s => s.UpdatedAt > SnowballFrontierUpdatedAtCutoffUtc && s.UpdatedAt <= staleCutoffUtc);
+            .Where(s => s.UpdatedAt <= staleCutoffUtc);
 
         if (region != null)
             trackedSummonerQuery = trackedSummonerQuery.Where(s => s.PlatformRegion == region);
 
-        var take = maxCandidates * 3;
-        var offset = await ComputeFallbackRotationOffsetAsync(trackedSummonerQuery, take, options.FallbackRotationMaxOffset, ct);
-
         var trackedCandidates = await trackedSummonerQuery
             .OrderBy(s => s.UpdatedAt)
-            .Skip(offset)
-            .Take(take)
+            .Take(maxCandidates * 3)
             .Select(s => new CandidateSummoner(
                 s.PlatformRegion!,
                 s.GameName!,
@@ -641,9 +591,7 @@ public class SummonerMaintenanceJob(
                 s.UpdatedAt,
                 IsFavorite: false,
                 IsTrackedHighValue: false,
-                RankTier: null,
-                IsSnowballFrontier: false,
-                s.LastActiveAtUtc))
+                RankTier: null))
             .ToListAsync(ct);
 
         combined.AddRange(trackedCandidates);
@@ -651,26 +599,6 @@ public class SummonerMaintenanceJob(
         var rankedCandidates = RankCandidates(combined, patchReleaseUtc, evaluationUtc, maxCandidates);
 
         return rankedCandidates.ToList();
-    }
-
-    // Bounded random offset for the long-tail fallback so runs walk different slices of the stale pool;
-    // capped to keep the Skip cheap on the (PlatformRegion, UpdatedAt) index and never past (pool - take).
-    private static async Task<int> ComputeFallbackRotationOffsetAsync(
-        IQueryable<Summoner> fallbackPool,
-        int take,
-        int maxOffset,
-        CancellationToken ct)
-    {
-        if (maxOffset <= 0)
-            return 0;
-
-        var poolCount = await fallbackPool.CountAsync(ct);
-        var rotatable = poolCount - Math.Max(0, take);
-        if (rotatable <= 0)
-            return 0;
-
-        var upperBound = Math.Min(rotatable, maxOffset);
-        return Random.Shared.Next(0, upperBound + 1);
     }
 
     private IReadOnlyList<CandidateSummoner> RankCandidates(
@@ -698,10 +626,7 @@ public class SummonerMaintenanceJob(
                             candidate.GameName,
                             candidate.TagLine),
                         candidate.UpdatedAt,
-                        candidate.IsFavorite)
-                    {
-                        LastActiveAtUtc = candidate.LastActiveAtUtc
-                    },
+                        candidate.IsFavorite),
                     new IngestionPriorityContext(patchReleaseUtc, evaluationUtc))
             })
             .OrderBy(x => x.Bucket)
@@ -715,24 +640,18 @@ public class SummonerMaintenanceJob(
             .ToList();
     }
 
-    // Bucket order (lower = higher priority): tracked pros, snowball frontier, ranked high-elo,
-    // favorites, long-tail fallback. The frontier sits above high-elo so the productive uncovered set
-    // is reached before re-refreshing the (cooldown-filtered) covered pool.
     private static int GetPriorityBucket(CandidateSummoner candidate)
     {
         if (candidate.IsTrackedHighValue)
             return 0;
 
-        if (candidate.IsSnowballFrontier)
+        if (GetTierPriority(candidate.RankTier) < 5)
             return 1;
 
-        if (GetTierPriority(candidate.RankTier) < 5)
+        if (candidate.IsFavorite)
             return 2;
 
-        if (candidate.IsFavorite)
-            return 3;
-
-        return 4;
+        return 3;
     }
 
     private static int GetTierPriority(string? rankTier)

@@ -18,11 +18,7 @@ public class Summoner
     public string? AccountId { get; set; }
     public required string? PlatformRegion { get; set; }
     public required string? Region { get; set; }
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;  // When summoner profile was last fetched (also the analytics coverage timestamp)
-    // Most recent game-creation time across this summoner's ingested matches — a true activity
-    // signal for candidate selection (distinct from UpdatedAt, which is fetch/coverage recency).
-    // Null until the summoner next appears in an ingested match. Maintained in MatchService.
-    public DateTime? LastActiveAtUtc { get; set; }
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;  // When summoner profile was last fetched
     public List<Match.Match> Matches { get; } = [];
     public ICollection<MatchParticipant> MatchParticipants { get; } = [];
     public ICollection<SummonerIngestionCursor> IngestionCursors { get; } = [];

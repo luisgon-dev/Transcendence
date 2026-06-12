@@ -14,6 +14,14 @@ using Transcendence.Service.Core.Services.Tft.Configuration;
 using Transcendence.Service.Workers;
 using Transcendence.Service.Workers.Startup;
 
+// Pre-warm the thread pool. This worker runs ~46 Hangfire workers of async I/O-bound jobs whose
+// continuations, CancellationTokenSource.CancelAfter timers, and the per-region rate-limiter refill
+// timers (Camille's and our RiotRateGate) all need pool threads. The default min pool (= CPU count) grows
+// only ~1 thread/sec, so a burst of jobs starves it — timer callbacks don't fire, the rate limiters never
+// refill, and consumers park forever on an empty token bucket while CPU sits idle (the ingestion stall).
+// A high floor keeps timers responsive so the limiters always replenish.
+ThreadPool.SetMinThreads(200, 200);
+
 var builder = Host.CreateApplicationBuilder(args);
 ConfigureSharedBackendConfiguration(builder.Configuration, builder.Environment);
 builder.Logging.AddOperationalFileLogger(builder.Configuration, defaultServiceName: "service");

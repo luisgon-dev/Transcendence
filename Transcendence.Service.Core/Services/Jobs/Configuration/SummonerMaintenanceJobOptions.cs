@@ -10,6 +10,15 @@ public class SummonerMaintenanceJobOptions
     public bool PrioritizeTrackedHighValueSummoners { get; set; } = true;
     public bool PrioritizeRankedHighEloSummoners { get; set; } = true;
     public bool PauseWhenApiPriorityRefreshActive { get; set; } = true;
+
+    // Snowball frontier: prefer never-refreshed summoners discovered as match participants (stub rows
+    // minted by MatchService with UpdatedAt = MinValue) — guaranteed-active and uncovered. See
+    // ChampionAnalyticsIngestionJobOptions for the rationale.
+    public bool PrioritizeSnowballFrontier { get; set; } = true;
+
+    // Random starting offset into the stale fallback pool so runs walk different slices. Bounded so the
+    // Skip stays cheap on the (PlatformRegion, UpdatedAt) index. 0 disables rotation.
+    public int FallbackRotationMaxOffset { get; set; } = 50000;
     public int NewPatchRampHours { get; set; } = 48;
 
     // Self-pacing intervals for the single self-paced recurring registration (see

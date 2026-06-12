@@ -316,6 +316,8 @@ When `Transcendence.Service` runs in non-development environments, the `Producti
 - `PrioritizeTrackedHighValueSummoners`
 - `PrioritizeRankedHighEloSummoners`
 - `FallbackToTrackedSummoners`
+- `PrioritizeSnowballFrontier` (default `true`) — prefer never-refreshed players discovered in freshly-ingested matches
+- `FallbackRotationMaxOffset` (default `50000`; `0` disables) — bounded random offset that rotates the long-tail fallback pool
 - `PauseWhenApiPriorityRefreshActive`
 - `NewPatchRampHours`
 - `RampDataStaleAfterMinutes`
@@ -324,7 +326,7 @@ When `Transcendence.Service` runs in non-development environments, the `Producti
 - `RampMaxRefreshJobsToQueuePerRun`
 - `HighEloTiers`
 
-This job now prefers tracked high-value roster entries and Emerald+ ranked candidates before it falls back to the broad stale summoner pool. Region coverage targets scale with `Jobs:MultiRegionIngestion:Regions[*]:Weight`.
+This job is **yield-first**: it prefers the snowball frontier (never-refreshed, guaranteed-active players) after the small tracked-pro roster, applies a per-summoner coverage cooldown (`DataStaleAfterMinutes`) so already-covered summoners are skipped, and scores remaining candidates by activity recency. See `docs/ARCHITECTURE.md` → "Candidate selection strategy". Region coverage targets scale with `Jobs:MultiRegionIngestion:Regions[*]:Weight`.
 
 ### Adaptive Throughput Budget Policy
 
@@ -389,6 +391,8 @@ Non-ranked backfill ordering is tracked per summoner with `SummonerIngestionCurs
 - `PrioritizeFavoriteSummoners`
 - `PrioritizeTrackedHighValueSummoners`
 - `PrioritizeRankedHighEloSummoners`
+- `PrioritizeSnowballFrontier` (default `true`)
+- `FallbackRotationMaxOffset` (default `50000`; `0` disables)
 - `HighEloTiers`
 - `PauseWhenApiPriorityRefreshActive`
 - `NewPatchRampHours`
@@ -396,7 +400,18 @@ Non-ranked backfill ordering is tracked per summoner with `SummonerIngestionCurs
 - `RampMaxRefreshJobsToQueuePerRun`
 - `RampDataStaleAfterMinutes`
 
-This recurring job refreshes stale summoners in low-priority mode when no active high-priority API refresh lock exists.
+This recurring job refreshes stale summoners in low-priority mode when no active high-priority API refresh lock exists. It shares the same yield-first candidate selection as champion-analytics ingestion (snowball frontier + coverage cooldown + activity scoring).
+
+### Ingestion Priority Scoring
+
+`Jobs:IngestionPriorityPolicy` scores candidate summoners (higher = refreshed sooner within a priority bucket):
+
+- `PatchRelevanceWeight` (default `8`) — summoner last refreshed before the active patch released
+- `StalenessWeight` (default `4`) — how long since last refresh, saturating at `StalenessSaturationMinutes`
+- `StalenessSaturationMinutes` (default `180`)
+- `FavoriteWeight` (default `2`) — user-favorited summoner
+- `ActivityWeight` (default `6`) — recency of `Summoner.LastActiveAtUtc` (most recent ingested-match time); the heaviest weight, since recent play best predicts new matches
+- `ActivitySaturationMinutes` (default `1440`) — activity signal decays to 0 at this age
 
 ### TFT Worker Jobs
 

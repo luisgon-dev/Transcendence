@@ -105,6 +105,7 @@ public class MatchService(
         foreach (var p in info.Participants)
         {
             var summoner = summonersByPuuid[p.Puuid!];
+            TouchLastActive(summoner, match.MatchDate);
 
             // Link summoner to this match (many-to-many)
             if (match.Summoners.All(s => s.Id != summoner.Id)) match.Summoners.Add(summoner);
@@ -290,6 +291,8 @@ public class MatchService(
                 existingSummoners[p.Puuid] = summoner;
             }
 
+            TouchLastActive(summoner, match.MatchDate);
+
             if (match.Summoners.All(s => s.Id != summoner.Id)) match.Summoners.Add(summoner);
 
             if (!seenLightweightSummonerIds.Add(summoner.Id) || !seenLightweightParticipantIds.Add(p.ParticipantId))
@@ -447,6 +450,7 @@ public class MatchService(
             foreach (var p in info.Participants)
             {
                 var summoner = summonersByPuuid[p.Puuid!];
+                TouchLastActive(summoner, match.MatchDate);
 
                 if (match.Summoners.All(s => s.Id != summoner.Id)) match.Summoners.Add(summoner);
 
@@ -837,5 +841,19 @@ public class MatchService(
     private static string? NormalizeForLookup(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToUpperInvariant();
+    }
+
+    // Records the summoner's most recent game-creation time (a true activity signal used by ingestion
+    // candidate selection). Monotonic max — EF only writes when it actually advances, so re-processing
+    // older matches costs nothing. The summoner is already tracked by this scope's context; the value
+    // flushes with the caller's match persist.
+    private static void TouchLastActive(Data.Models.LoL.Account.Summoner summoner, long matchDateEpochMs)
+    {
+        if (matchDateEpochMs <= 0)
+            return;
+
+        var matchCreatedUtc = DateTimeOffset.FromUnixTimeMilliseconds(matchDateEpochMs).UtcDateTime;
+        if (!summoner.LastActiveAtUtc.HasValue || matchCreatedUtc > summoner.LastActiveAtUtc.Value)
+            summoner.LastActiveAtUtc = matchCreatedUtc;
     }
 }

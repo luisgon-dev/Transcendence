@@ -363,6 +363,72 @@ public class ChampionAnalyticsIngestionJobRampTests
         queuedJobs[0].Args[0].Should().Be("TrackedPriority");
     }
 
+    [Fact]
+    public async Task ExecuteForRegionAsync_PrioritizesSnowballFrontierAheadOfCoveredFallbackPool()
+    {
+        var fixedBudgetPolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
+            AdaptiveThroughputBudgetMode.Balanced,
+            MaxCandidates: 10,
+            QueueTarget: 1,
+            IncludeAllModes: false,
+            CoverageRatio: 0.2d,
+            BacklogAgeMinutes: 120d,
+            RecentVelocityPerHour: 2d,
+            CandidatePressureRatio: 2d));
+
+        await using var harness = await Harness.CreateAsync(fixedBudgetPolicy);
+        harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        // A known, stale-but-covered summoner — an eligible long-tail fallback candidate.
+        harness.SeedSummoner("CoveredFallback", "NA1", DateTime.UtcNow.AddHours(-24));
+        // A never-refreshed snowball-frontier stub (UpdatedAt = MinValue), as minted by MatchService for
+        // freshly-discovered match participants. It must rank ahead of the covered fallback pool.
+        harness.SeedSummoner("FrontierStub", "NA1", DateTime.MinValue);
+        await harness.Db.SaveChangesAsync();
+
+        var queuedJobs = new List<Job>();
+        harness.BackgroundJobClient
+            .Setup(x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()))
+            .Callback<Job, IState>((job, _) => queuedJobs.Add(job))
+            .Returns("job-1");
+
+        await harness.Job.ExecuteForRegionAsync("NA1", CancellationToken.None);
+
+        queuedJobs.Should().NotBeEmpty();
+        queuedJobs[0].Args[0].Should().Be("FrontierStub");
+    }
+
+    [Fact]
+    public async Task ExecuteForRegionAsync_DuringColdStart_StillSelectsFreshlySeededSummonersDespiteCoverageCooldown()
+    {
+        var fixedBudgetPolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
+            AdaptiveThroughputBudgetMode.Balanced,
+            MaxCandidates: 10,
+            QueueTarget: 1,
+            IncludeAllModes: false,
+            CoverageRatio: 0d,
+            BacklogAgeMinutes: 0d,
+            RecentVelocityPerHour: 0d,
+            CandidatePressureRatio: 1d));
+
+        await using var harness = await Harness.CreateAsync(fixedBudgetPolicy);
+        harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        // Region has no current-patch coverage yet and the summoner was just bootstrapped (UpdatedAt = now),
+        // so the coverage cooldown would normally exclude it. Cold start must bypass the cooldown.
+        harness.SeedSummoner("FreshlySeeded", "NA1", DateTime.UtcNow);
+        await harness.Db.SaveChangesAsync();
+
+        var queuedJobs = new List<Job>();
+        harness.BackgroundJobClient
+            .Setup(x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()))
+            .Callback<Job, IState>((job, _) => queuedJobs.Add(job))
+            .Returns("job-1");
+
+        await harness.Job.ExecuteForRegionAsync("NA1", CancellationToken.None);
+
+        queuedJobs.Should().NotBeEmpty();
+        queuedJobs.Select(job => job.Args[0]).Should().Contain("FreshlySeeded");
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;

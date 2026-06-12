@@ -13,6 +13,16 @@ public class ChampionAnalyticsIngestionJobOptions
     public bool PrioritizeTrackedHighValueSummoners { get; set; } = true;
     public bool PrioritizeRankedHighEloSummoners { get; set; } = true;
     public bool FallbackToTrackedSummoners { get; set; } = true;
+
+    // Snowball frontier: prefer never-refreshed summoners discovered as participants of freshly-ingested
+    // matches (stub rows minted by MatchService with UpdatedAt = MinValue). They are guaranteed-active and
+    // uncovered, so they maximize new matches per refresh. This is the primary breadth lever.
+    public bool PrioritizeSnowballFrontier { get; set; } = true;
+
+    // Long-tail rotation: random starting offset into the stale fallback pool so successive runs walk
+    // different slices instead of re-selecting the same stalest head. Bounded so the Skip stays cheap on
+    // the (PlatformRegion, UpdatedAt) index. 0 disables rotation (deterministic stalest-first).
+    public int FallbackRotationMaxOffset { get; set; } = 50000;
     public bool PauseWhenApiPriorityRefreshActive { get; set; } = true;
     public int NewPatchRampHours { get; set; } = 48;
 

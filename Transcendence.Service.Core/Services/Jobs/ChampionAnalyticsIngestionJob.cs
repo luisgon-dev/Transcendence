@@ -33,6 +33,11 @@ public class ChampionAnalyticsIngestionJob(
     private const string ProducerKeyBase = nameof(ChampionAnalyticsIngestionJob);
     private const string TelemetrySource = "champion-analytics-ingestion-job";
 
+    // Snowball-frontier marker: MatchService mints never-refreshed participant stubs with
+    // UpdatedAt = DateTime.MinValue; any summoner older than this sentinel is an unrefreshed stub.
+    private static readonly DateTime SnowballFrontierUpdatedAtCutoffUtc =
+        new(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
     private sealed record CandidateSummoner(
         string PlatformRegion,
         string GameName,
@@ -40,7 +45,9 @@ public class ChampionAnalyticsIngestionJob(
         DateTime UpdatedAt,
         bool IsFavorite,
         bool IsTrackedHighValue,
-        string? RankTier);
+        string? RankTier,
+        bool IsSnowballFrontier,
+        DateTime? LastActiveAtUtc);
 
     public async Task ExecuteAsync(CancellationToken ct = default)
     {
@@ -334,7 +341,12 @@ public class ChampionAnalyticsIngestionJob(
         var lockTtl = TimeSpan.FromMinutes(Math.Max(2, jobOptions.RefreshLockMinutes));
         var includeAllModes = false;
 
-        var candidates = await GetCandidatesAsync(region, maxCandidates, jobOptions, releaseUtc, evaluationUtc, ct);
+        // During cold start (no current-patch coverage yet, e.g. a newly-seeded or just-rolled-over
+        // region) bypass the coverage cooldown so freshly-bootstrapped summoners — stamped UpdatedAt=now —
+        // remain eligible; otherwise the region would find no candidates until its seeds age past the
+        // staleness window. The snowball frontier is always eligible regardless of this cutoff.
+        var candidateStaleCutoffUtc = successfulMatchesForPatch == 0 ? evaluationUtc : staleCutoffUtc;
+        var candidates = await GetCandidatesAsync(region, maxCandidates, candidateStaleCutoffUtc, jobOptions, releaseUtc, evaluationUtc, ct);
         if (candidates.Count == 0)
         {
             ingestionThroughputTelemetry.RecordQueueTargetOutput(
@@ -503,6 +515,7 @@ public class ChampionAnalyticsIngestionJob(
     private async Task<List<CandidateSummoner>> GetCandidatesAsync(
         string? region,
         int maxCandidates,
+        DateTime staleCutoffUtc,
         ChampionAnalyticsIngestionJobOptions jobOptions,
         DateTime patchReleaseUtc,
         DateTime evaluationUtc,
@@ -515,8 +528,40 @@ public class ChampionAnalyticsIngestionJob(
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
+        // Snowball frontier: never-refreshed stubs minted from freshly-ingested match participants
+        // (UpdatedAt = MinValue). They are guaranteed-active and uncovered, so they maximize new
+        // matches per refresh — the primary breadth lever. Ranked into their own high bucket below.
+        if (jobOptions.PrioritizeSnowballFrontier)
+        {
+            var frontierQuery = db.Summoners.AsNoTracking()
+                .Where(s => s.GameName != null && s.TagLine != null && s.PlatformRegion != null)
+                .Where(s => s.UpdatedAt <= SnowballFrontierUpdatedAtCutoffUtc);
+
+            if (region != null)
+                frontierQuery = frontierQuery.Where(s => s.PlatformRegion == region);
+
+            var frontierCandidates = await frontierQuery
+                .OrderBy(s => s.UpdatedAt)
+                .Take(maxCandidates * 3)
+                .Select(s => new CandidateSummoner(
+                    s.PlatformRegion!,
+                    s.GameName!,
+                    s.TagLine!,
+                    s.UpdatedAt,
+                    IsFavorite: false,
+                    IsTrackedHighValue: false,
+                    RankTier: null,
+                    IsSnowballFrontier: true,
+                    s.LastActiveAtUtc))
+                .ToListAsync(ct);
+
+            combined.AddRange(frontierCandidates);
+        }
+
         if (jobOptions.PrioritizeTrackedHighValueSummoners)
         {
+            // Coverage cooldown: skip summoners refreshed within the staleness window — UpdatedAt is
+            // stamped to now on every analytics refresh, so a recent UpdatedAt means already-covered.
             var trackedQuery =
                 from tracked in db.TrackedProSummoners.AsNoTracking()
                 where tracked.IsActive
@@ -530,12 +575,15 @@ public class ChampionAnalyticsIngestionJob(
                 join rank in db.Ranks.AsNoTracking().Where(r => r.QueueType == "RANKED_SOLO_5x5")
                     on summoner.Id equals rank.SummonerId into rankGroup
                 from rank in rankGroup.DefaultIfEmpty()
+                let effectiveUpdatedAt = summoner != null ? summoner.UpdatedAt : tracked.UpdatedAtUtc
+                where effectiveUpdatedAt <= staleCutoffUtc
                 select new
                 {
                     tracked.PlatformRegion,
                     tracked.GameName,
                     tracked.TagLine,
-                    UpdatedAt = summoner != null ? summoner.UpdatedAt : tracked.UpdatedAtUtc,
+                    UpdatedAt = effectiveUpdatedAt,
+                    LastActiveAtUtc = summoner != null ? summoner.LastActiveAtUtc : (DateTime?)null,
                     RankTier = rank != null ? rank.Tier : null
                 };
 
@@ -552,7 +600,9 @@ public class ChampionAnalyticsIngestionJob(
                 x.UpdatedAt,
                 IsFavorite: false,
                 IsTrackedHighValue: true,
-                x.RankTier)));
+                x.RankTier,
+                IsSnowballFrontier: false,
+                x.LastActiveAtUtc)));
         }
 
         if (jobOptions.PrioritizeFavoriteSummoners)
@@ -564,6 +614,7 @@ public class ChampionAnalyticsIngestionJob(
                 where s.GameName != null
                       && s.TagLine != null
                       && s.PlatformRegion != null
+                      && s.UpdatedAt <= staleCutoffUtc
                 select s;
 
             if (region != null)
@@ -577,7 +628,9 @@ public class ChampionAnalyticsIngestionJob(
                     s.UpdatedAt,
                     IsFavorite: true,
                     IsTrackedHighValue: false,
-                    RankTier: null))
+                    RankTier: null,
+                    IsSnowballFrontier: false,
+                    s.LastActiveAtUtc))
                 .ToListAsync(ct);
 
             combined.AddRange(favoriteCandidates);
@@ -592,6 +645,7 @@ public class ChampionAnalyticsIngestionJob(
                 where s.GameName != null
                       && s.TagLine != null
                       && s.PlatformRegion != null
+                      && s.UpdatedAt <= staleCutoffUtc
                       && highEloTiers.Contains((r.Tier ?? string.Empty).ToUpper())
                 select new
                 {
@@ -599,6 +653,7 @@ public class ChampionAnalyticsIngestionJob(
                     s.GameName,
                     s.TagLine,
                     s.UpdatedAt,
+                    s.LastActiveAtUtc,
                     RankTier = r.Tier
                 };
 
@@ -612,6 +667,7 @@ public class ChampionAnalyticsIngestionJob(
                     x.GameName,
                     x.TagLine,
                     x.UpdatedAt,
+                    x.LastActiveAtUtc,
                     x.RankTier
                 })
                 .ToListAsync(ct);
@@ -623,21 +679,30 @@ public class ChampionAnalyticsIngestionJob(
                 x.UpdatedAt,
                 IsFavorite: false,
                 IsTrackedHighValue: false,
-                x.RankTier)));
+                x.RankTier,
+                IsSnowballFrontier: false,
+                x.LastActiveAtUtc)));
         }
 
         if (jobOptions.FallbackToTrackedSummoners)
         {
+            // Long tail: covered-cooldown stale pool (excluding the frontier, handled above). A random
+            // starting offset spreads coverage across the pool instead of re-selecting the same head.
             var fallbackQuery = db.Summoners
                 .AsNoTracking()
-                .Where(s => s.GameName != null && s.TagLine != null && s.PlatformRegion != null);
+                .Where(s => s.GameName != null && s.TagLine != null && s.PlatformRegion != null)
+                .Where(s => s.UpdatedAt > SnowballFrontierUpdatedAtCutoffUtc && s.UpdatedAt <= staleCutoffUtc);
 
             if (region != null)
                 fallbackQuery = fallbackQuery.Where(s => s.PlatformRegion == region);
 
+            var take = maxCandidates * 3;
+            var offset = await ComputeFallbackRotationOffsetAsync(fallbackQuery, take, jobOptions.FallbackRotationMaxOffset, ct);
+
             var fallbackCandidates = await fallbackQuery
                 .OrderBy(s => s.UpdatedAt)
-                .Take(maxCandidates * 3)
+                .Skip(offset)
+                .Take(take)
                 .Select(s => new CandidateSummoner(
                     s.PlatformRegion!,
                     s.GameName!,
@@ -645,7 +710,9 @@ public class ChampionAnalyticsIngestionJob(
                     s.UpdatedAt,
                     IsFavorite: false,
                     IsTrackedHighValue: false,
-                    RankTier: null))
+                    RankTier: null,
+                    IsSnowballFrontier: false,
+                    s.LastActiveAtUtc))
                 .ToListAsync(ct);
 
             combined.AddRange(fallbackCandidates);
@@ -654,6 +721,27 @@ public class ChampionAnalyticsIngestionJob(
         var rankedCandidates = RankCandidates(combined, patchReleaseUtc, evaluationUtc, maxCandidates);
 
         return rankedCandidates.ToList();
+    }
+
+    // Random starting offset for the long-tail fallback so successive runs walk different slices of the
+    // stale pool. Bounded by FallbackRotationMaxOffset to keep the Skip cheap on the (PlatformRegion,
+    // UpdatedAt) index, and never past (pool - take) so a run still returns a full page. 0 => deterministic.
+    private static async Task<int> ComputeFallbackRotationOffsetAsync(
+        IQueryable<Summoner> fallbackPool,
+        int take,
+        int maxOffset,
+        CancellationToken ct)
+    {
+        if (maxOffset <= 0)
+            return 0;
+
+        var poolCount = await fallbackPool.CountAsync(ct);
+        var rotatable = poolCount - Math.Max(0, take);
+        if (rotatable <= 0)
+            return 0;
+
+        var upperBound = Math.Min(rotatable, maxOffset);
+        return Random.Shared.Next(0, upperBound + 1);
     }
 
     private IReadOnlyList<CandidateSummoner> RankCandidates(
@@ -681,7 +769,10 @@ public class ChampionAnalyticsIngestionJob(
                             candidate.GameName,
                             candidate.TagLine),
                         candidate.UpdatedAt,
-                        candidate.IsFavorite),
+                        candidate.IsFavorite)
+                    {
+                        LastActiveAtUtc = candidate.LastActiveAtUtc
+                    },
                     new IngestionPriorityContext(patchReleaseUtc, evaluationUtc))
             })
             .OrderBy(x => x.Bucket)
@@ -695,18 +786,25 @@ public class ChampionAnalyticsIngestionJob(
             .ToList();
     }
 
+    // Bucket order (lower = higher priority): tracked pros first (small, high-value), then the snowball
+    // frontier (the productive uncovered set), then ranked high-elo, favorites, and the long-tail fallback.
+    // Promoting the frontier above high-elo is the core fix: previously it fell to the lowest bucket and
+    // was never reached behind the (then unfiltered) high-elo pool.
     private static int GetPriorityBucket(CandidateSummoner candidate)
     {
         if (candidate.IsTrackedHighValue)
             return 0;
 
-        if (GetTierPriority(candidate.RankTier) < 5)
+        if (candidate.IsSnowballFrontier)
             return 1;
 
-        if (candidate.IsFavorite)
+        if (GetTierPriority(candidate.RankTier) < 5)
             return 2;
 
-        return 3;
+        if (candidate.IsFavorite)
+            return 3;
+
+        return 4;
     }
 
     private static int GetTierPriority(string? rankTier)

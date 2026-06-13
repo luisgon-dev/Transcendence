@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Transcendence.Data;
@@ -12,9 +13,11 @@ using Transcendence.Data;
 namespace Transcendence.Service.Migrations
 {
     [DbContext(typeof(TranscendenceContext))]
-    partial class ProjectSyndraContextModelSnapshot : ModelSnapshot
+    [Migration("20260612054925_AddSummonerLastActiveAtUtc")]
+    partial class AddSummonerLastActiveAtUtc
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -476,9 +479,6 @@ namespace Transcendence.Service.Migrations
 
                     b.HasIndex("Puuid")
                         .IsUnique();
-
-                    b.HasIndex("PlatformRegion", "UpdatedAt")
-                        .HasDatabaseName("IX_Summoners_Region_UpdatedAt");
 
                     b.HasIndex("PlatformRegion", "GameNameNormalized", "TagLineNormalized")
                         .HasDatabaseName("IX_Summoners_SearchPrefix")

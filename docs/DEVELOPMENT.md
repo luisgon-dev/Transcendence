@@ -350,7 +350,7 @@ These settings determine per-run producer mode (`HighPressure`, `Balanced`, `Cat
 
 `Jobs:StarvationGuardrail` supports:
 
-- `Enabled` (default `true`)
+- `Enabled` (default **`false`**)
 - `MaxEligibleDeferAgeMinutes` (default `360`)
 - `CatchUpWindowMinutes` (default `12`)
 - `CatchUpCooldownMinutes` (default `20`)
@@ -358,7 +358,7 @@ These settings determine per-run producer mode (`HighPressure`, `Balanced`, `Cat
 - `ForcedCatchUpCandidateBurstMultiplier` (default `1.5`)
 - `ForcedCatchUpMaxCandidateHardCap` (default `500`)
 
-When defer age breaches the threshold, producers open a forced catch-up window and can continue low-priority progress even when API-priority demand is present.
+**Disabled by default.** The defer-age signal (oldest eligible summoner's `UpdatedAt` age ≥ `MaxEligibleDeferAgeMinutes`) is structurally unsatisfiable on the yield-limited personal key — ~4.1M summoners, only a few thousand <6h fresh — so it fired forced catch-up perpetually (bypassing the API-priority pause and driving the all-modes ancient-history grind). The adaptive throughput budget's coverage/velocity `CatchUp` mode and the cold-start override remain the legitimate bursting mechanisms. Re-enable only with a delta/growth-based defer signal, not absolute age. See `docs/ARCHITECTURE.md` → "Low-priority ingestion is ranked-head-only; defer-age guardrail retired".
 
 ### Match Ingestion Windows
 
@@ -389,6 +389,7 @@ Non-ranked backfill ordering is tracked per summoner with `SummonerIngestionCurs
 - `PrioritizeFavoriteSummoners`
 - `PrioritizeTrackedHighValueSummoners`
 - `PrioritizeRankedHighEloSummoners`
+- `EnableAllModesWidening` (default **`false`**) — when off, low-priority maintenance refreshes are current-patch ranked-head-only; when on, they may widen into all-modes-head + non-ranked backfill if the adaptive budget reports `IncludeAllModes`. Off by default because the widening grinds an uncovered summoner's ancient history through the rate gate and saturates the discovery lane. `ChampionAnalyticsIngestionJob` is always ranked-head-only.
 - `HighEloTiers`
 - `PauseWhenApiPriorityRefreshActive`
 - `NewPatchRampHours`

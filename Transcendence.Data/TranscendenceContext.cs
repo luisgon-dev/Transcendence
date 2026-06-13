@@ -107,6 +107,15 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             .HasDatabaseName("IX_Summoners_SearchPrefix")
             .HasFilter("\"GameNameNormalized\" IS NOT NULL AND \"TagLineNormalized\" IS NOT NULL");
 
+        // Drives per-region ingestion candidate selection: the coverage-cooldown / staleness filter
+        // (UpdatedAt <= cutoff, ordered by UpdatedAt) and the oldest-eligible MinAsync(UpdatedAt) the
+        // producers run each tick. Previously unindexed → sequential scans over the whole Summoners table.
+        // NOTE: in prod this is built with CREATE INDEX CONCURRENTLY (applied via psql, then the
+        // migration is recorded as applied) so the large live table is not write-locked.
+        modelBuilder.Entity<Summoner>()
+            .HasIndex(s => new { s.PlatformRegion, s.UpdatedAt })
+            .HasDatabaseName("IX_Summoners_Region_UpdatedAt");
+
         // Global query filter to exclude unfetchable matches from normal queries
         modelBuilder.Entity<Match>()
             .HasQueryFilter(m => m.Status != FetchStatus.PermanentlyUnfetchable);

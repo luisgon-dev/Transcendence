@@ -10,6 +10,14 @@ public class SummonerMaintenanceJobOptions
     public bool PrioritizeTrackedHighValueSummoners { get; set; } = true;
     public bool PrioritizeRankedHighEloSummoners { get; set; } = true;
     public bool PauseWhenApiPriorityRefreshActive { get; set; } = true;
+
+    // Whether low-priority maintenance refreshes may widen past current-patch ranked-head into all-modes
+    // head + non-ranked backfill when the adaptive budget reports IncludeAllModes. DEFAULT OFF: on the
+    // yield-limited personal Riot key, an uncovered summoner's all-modes/non-ranked backfill pulls its
+    // entire ancient match history through the rate gate (~20+ min, old-patch yield), which can saturate
+    // the discovery lane. Non-ranked profile backfill is handled on-demand by the high-priority
+    // RefreshByRiotId path instead. Re-enable only when the key budget genuinely supports it.
+    public bool EnableAllModesWidening { get; set; }
     public int NewPatchRampHours { get; set; } = 48;
 
     // Self-pacing intervals for the single self-paced recurring registration (see

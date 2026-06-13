@@ -310,7 +310,10 @@ public class SummonerMaintenanceJob(
             return;
         }
 
-        var includeAllModes = budget.IncludeAllModes;
+        // Low-priority analytics ingestion stays ranked-head-only unless widening is explicitly enabled:
+        // all-modes/non-ranked backfill on uncovered summoners is the budget bomb that saturated discovery
+        // (see EnableAllModesWidening). ChampionAnalyticsIngestionJob is already hardcoded ranked-head-only.
+        var includeAllModes = jobOptions.EnableAllModesWidening && budget.IncludeAllModes;
         var lockTtl = TimeSpan.FromMinutes(Math.Max(2, jobOptions.RefreshLockMinutes));
 
         var candidates = await GetCandidatesAsync(region, staleCutoffUtc, maxCandidates, releaseUtc, evaluationUtc, jobOptions, ct);

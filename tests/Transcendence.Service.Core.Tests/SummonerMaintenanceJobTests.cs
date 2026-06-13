@@ -96,6 +96,40 @@ public class SummonerMaintenanceJobTests
     }
 
     [Fact]
+    public async Task ExecuteForRegionAsync_StaysRankedHeadOnly_WhenBudgetWantsAllModesButWideningDisabled()
+    {
+        // Budget reports IncludeAllModes=true, but EnableAllModesWidening defaults off (the harness leaves
+        // it unset) — so low-priority maintenance must NOT widen into all-modes/non-ranked backfill, i.e.
+        // the enqueued RefreshForAnalytics includeAllModes arg (index 6) stays false. This is the budget-bomb
+        // defuse: an uncovered summoner's all-modes backfill grinds ancient history and saturates discovery.
+        var adaptivePolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
+            AdaptiveThroughputBudgetMode.Balanced,
+            MaxCandidates: 10,
+            QueueTarget: 1,
+            IncludeAllModes: true,
+            CoverageRatio: 0.9d,
+            BacklogAgeMinutes: 30d,
+            RecentVelocityPerHour: 5d,
+            CandidatePressureRatio: 1d));
+
+        await using var harness = await Harness.CreateAsync(adaptivePolicy);
+        harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        harness.SeedSummoner("WideCandidate", "NA1", DateTime.UtcNow.AddHours(-6));
+        await harness.Db.SaveChangesAsync();
+
+        var queuedJobs = new List<Job>();
+        harness.BackgroundJobClient
+            .Setup(x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()))
+            .Callback<Job, IState>((job, _) => queuedJobs.Add(job))
+            .Returns("job-1");
+
+        await harness.Job.ExecuteForRegionAsync("NA1", CancellationToken.None);
+
+        queuedJobs.Should().ContainSingle();
+        queuedJobs[0].Args[6].Should().Be(false);
+    }
+
+    [Fact]
     public async Task ExecuteForRegionAsync_WhenAdaptivePolicyReturnsZeroQueueTarget_DoesNotQueueRefreshJobs()
     {
         var adaptivePolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(

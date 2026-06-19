@@ -28,13 +28,13 @@ Compose reads local backend credentials from the repo-root [`.env.example`](../.
 2. Install JS dependencies:
 
 ```bash
-corepack pnpm install
+pnpm install
 ```
 
 3. Install repo Git hooks (recommended once per clone):
 
 ```bash
-corepack pnpm hooks:install
+pnpm hooks:install
 ```
 
 4. Configure the web app:
@@ -59,7 +59,7 @@ Optional:
 5. Run the web app:
 
 ```bash
-corepack pnpm web:dev
+pnpm web:dev
 ```
 
 Web: `http://localhost:3000`
@@ -74,7 +74,7 @@ Use full Compose when you want the simplest end-to-end path and you need the wor
 
 ```bash
 cp .env.example .env
-corepack pnpm e2e:stack
+pnpm e2e:stack
 ```
 
 That script:
@@ -89,12 +89,12 @@ For a faster frontend loop, keep backend services in Compose and run Next locall
 ```bash
 docker compose up --build -d postgres redis webapi service
 cp apps/web/.env.example apps/web/.env.local
-corepack pnpm web:dev
-corepack pnpm e2e:local
+pnpm web:dev
+pnpm e2e:local
 ```
 
 Rule of thumb:
-- Use `corepack pnpm e2e:stack` for true local E2E and TFT/worker verification.
+- Use `pnpm e2e:stack` for true local E2E and TFT/worker verification.
 - Use the hybrid mode for day-to-day UI changes when you want faster frontend rebuilds.
 
 ## Run Without Docker (Backend)
@@ -231,13 +231,13 @@ Compose env contract:
 From repo root:
 
 ```bash
-corepack pnpm backend:test
-corepack pnpm hooks:install
-corepack pnpm precommit:check
-corepack pnpm web:dev
-corepack pnpm web:test
-corepack pnpm web:lint
-corepack pnpm web:build
+pnpm backend:test
+pnpm hooks:install
+pnpm precommit:check
+pnpm web:dev
+pnpm web:test
+pnpm web:lint
+pnpm web:build
 ```
 
 ## Backend Tests
@@ -261,11 +261,11 @@ Note:
 Source of truth: `openapi/transcendence.v1.json` (committed). The generated client schema is rebuilt locally from that spec and is not committed.
 
 ```bash
-corepack pnpm api:gen
-corepack pnpm api:check
+pnpm api:gen
+pnpm api:check
 ```
 
-If hooks are installed (`corepack pnpm hooks:install`), pre-commit runs path-aware checks automatically before each commit:
+If hooks are installed (`pnpm hooks:install`), pre-commit runs path-aware checks automatically before each commit:
 - `pnpm precommit:api-sync` runs only when staged files touch API-relevant paths (`Transcendence.WebAPI/`, `Transcendence.Service.Core/`, `Transcendence.Data/`, `scripts/openapi/export.sh`, committed OpenAPI spec), regenerates the client locally, and stages the refreshed spec.
 - `pnpm precommit:check` runs `git diff --cached --check` to catch staged whitespace issues.
 

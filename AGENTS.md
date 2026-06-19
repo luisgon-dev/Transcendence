@@ -6,29 +6,29 @@ Instructions for coding agents working in this repository.
 
 ```bash
 # Frontend (Next.js)
-corepack pnpm web:dev          # dev server
-corepack pnpm web:build        # production build
-corepack pnpm web:test         # Vitest
-corepack pnpm web:lint         # ESLint
+pnpm web:dev          # dev server
+pnpm web:build        # production build
+pnpm web:test         # Vitest
+pnpm web:lint         # ESLint
 
 # Backend (.NET)
-corepack pnpm backend:test     # run all .NET test projects
+pnpm backend:test     # run all .NET test projects
 dotnet test tests/Transcendence.Service.Core.Tests   # single project
 dotnet test tests/Transcendence.WebAPI.Tests          # single project
 
 # API client generation
-corepack pnpm api:gen          # generate TS client from OpenAPI spec
-corepack pnpm api:check        # verify spec is in sync
+pnpm api:gen          # generate TS client from OpenAPI spec
+pnpm api:check        # verify spec is in sync
 
 # Docker
 docker compose up --build      # full stack (API + worker + web + Postgres + Redis)
 
 # E2E
-corepack pnpm e2e:stack        # start stack for E2E tests
-corepack pnpm e2e:local        # run Playwright E2E tests locally
+pnpm e2e:stack        # start stack for E2E tests
+pnpm e2e:local        # run Playwright E2E tests locally
 
 # Git hooks
-corepack pnpm hooks:install    # configure git core.hooksPath to .githooks
+pnpm hooks:install    # configure git core.hooksPath to .githooks
 
 # EF Migrations (run from repo root)
 dotnet ef migrations add <Name> --project Transcendence.Service --startup-project Transcendence.Service

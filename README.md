@@ -124,7 +124,7 @@ flowchart LR
 
 > **Prerequisites:** [.NET SDK 10.0.102](global.json) · [Node 22](.nvmrc) · [pnpm 10.22.0](package.json) · Docker (for PostgreSQL &amp; Redis).
 >
-> Run `corepack enable` once and `pnpm` will automatically use the version pinned in `package.json`. Prefer not to enable Corepack? `corepack pnpm <script>` works the same way.
+> Install [pnpm](https://pnpm.io/installation) (the repo pins `pnpm@10.22.0` via the `packageManager` field), then run any script with `pnpm <script>`. Already a Corepack user? `corepack enable` picks up the pinned version automatically — both work.
 
 ```bash
 # 1. Clone

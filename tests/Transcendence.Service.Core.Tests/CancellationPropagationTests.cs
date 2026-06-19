@@ -128,6 +128,7 @@ public class CancellationPropagationTests
             Mock.Of<IQueueDepthProbe>(),
             Options.Create(new ChampionAnalyticsIngestionJobOptions()),
             Options.Create(new MultiRegionIngestionOptions()),
+            Mock.Of<IWorkerHeartbeat>(),
             Mock.Of<ILogger<ChampionAnalyticsIngestionJob>>());
 
         using var cts = new CancellationTokenSource();

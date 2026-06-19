@@ -27,6 +27,7 @@ public class ChampionAnalyticsIngestionJob(
     IQueueDepthProbe queueDepthProbe,
     IOptions<ChampionAnalyticsIngestionJobOptions> options,
     IOptions<MultiRegionIngestionOptions> multiRegionOptions,
+    IWorkerHeartbeat workerHeartbeat,
     ILogger<ChampionAnalyticsIngestionJob> logger)
 {
     private static readonly TimeSpan QueueFailureLockReleaseTimeout = TimeSpan.FromSeconds(5);
@@ -44,6 +45,10 @@ public class ChampionAnalyticsIngestionJob(
 
     public async Task ExecuteAsync(CancellationToken ct = default)
     {
+        // Liveness beat for the worker watchdog — recorded on every dispatcher fire, before the
+        // pacing gate, so a hung worker (no dispatcher fires at all) goes stale even in steady state.
+        await workerHeartbeat.BeatAsync(ct);
+
         // Self-pacing: one fast heartbeat cron fires this dispatcher; the pacing slot decides whether
         // this tick actually fans out (tighter cadence during a new-patch ramp, looser in steady state).
         if (!await TryAcquirePacingSlotAsync(ct))

@@ -88,6 +88,9 @@ jobs:
       - name: Model/snapshot drift check
         run: |
           dotnet tool restore
-          dotnet restore Transcendence.sln
+          # Build the whole solution (a clean standalone build of Transcendence.Service
+          # trips MSB3552 on the resx glob; the solution build is the known-good path the
+          # backend job uses), then run EF against that output with --no-build.
+          dotnet build Transcendence.sln -c Debug
           dotnet ef migrations has-pending-model-changes \
-            --project Transcendence.Service --startup-project Transcendence.Service
+            --project Transcendence.Service --startup-project Transcendence.Service --no-build

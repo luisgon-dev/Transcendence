@@ -20,4 +20,9 @@ RUN dotnet publish "Transcendence.Service.csproj" -c $BUILD_CONFIGURATION -o /ap
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
+# Liveness: the worker writes /tmp/worker-heartbeat on every producer tick. Mark the container
+# unhealthy when that file is missing or older than 10 min (the in-process watchdog exits on the
+# same condition to trigger a restart; this gives docker ps / monitoring visibility). coreutils only.
+HEALTHCHECK --interval=60s --timeout=10s --start-period=240s --retries=3 \
+    CMD test -f /tmp/worker-heartbeat && test $(( $(date +%s) - $(stat -c %Y /tmp/worker-heartbeat) )) -lt 600
 ENTRYPOINT ["dotnet", "Transcendence.Service.dll"]

@@ -148,6 +148,39 @@ dotnet ef database update --project Transcendence.Service --startup-project Tran
 Migration policy:
 - Do not hand-author or hand-edit EF migration files.
 - Generate migrations only via EF CLI (for example: `dotnet ef migrations add <Name> --project Transcendence.Service --startup-project Transcendence.Service`).
+- **Hot-table index/DDL is applied out-of-band, not via `database update`** — see the recipe below. CI (the migration-safety check) fails a PR that adds a non-concurrent `CreateIndex` or a defaulted `AddColumn` on `Summoners` / `Matches` / `MatchParticipants` and points back here.
+
+#### Applying index migrations to hot tables
+
+`Summoners` (~4M+ rows), `Matches`, and `MatchParticipants` are large and continuously written by ingestion. EF's generated `CreateIndex` emits a plain `CREATE INDEX`, which holds a `SHARE` lock for the entire build and blocks ingestion writes for its duration. **Do not** apply such a migration with `dotnet ef database update`. Split the apply instead:
+
+1. Isolate the index in its own migration (don't bundle it with other DDL) so the steps below stay clean.
+2. Read the index name / table / columns from the generated migration's `Up()`.
+3. Build it without a lock, directly in psql. `CONCURRENTLY` cannot run inside a transaction, so run it as a standalone statement:
+
+   ```sql
+   CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_Summoners_Region_UpdatedAt"
+     ON "Summoners" ("PlatformRegion", "UpdatedAt");
+   ```
+
+4. Verify the build succeeded — a failed concurrent build leaves an INVALID index that serves nothing and must be dropped and rebuilt:
+
+   ```sql
+   SELECT indexrelid::regclass AS index, indisvalid
+   FROM pg_index WHERE indrelid = '"Summoners"'::regclass;
+   -- indisvalid must be 't'. If 'f':  DROP INDEX CONCURRENTLY "<name>";  then redo step 3.
+   ```
+
+5. Record the migration as applied so EF treats it as done and never emits the locking `CREATE INDEX`:
+
+   ```sql
+   INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+   VALUES ('20260612055024_AddSummonerRegionUpdatedAtIndex', '10.0.2');
+   ```
+
+   Use the migration's full id (`<timestamp>_<Name>`) and the EF Core product version from the migration's `.Designer.cs` `ProductVersion` annotation. Afterward, `dotnet ef migrations has-pending-model-changes` must report no drift.
+
+Prod precedent: `IX_Summoners_Region_UpdatedAt` was applied exactly this way — see the note on the `HasIndex(PlatformRegion, UpdatedAt)` call in `Transcendence.Data/TranscendenceContext.cs`.
 
 ### Run services
 

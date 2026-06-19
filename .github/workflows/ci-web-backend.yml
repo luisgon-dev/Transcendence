@@ -60,3 +60,33 @@ jobs:
 
       - name: Build
         run: pnpm --filter web build
+
+  migration-safety:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # Fails the PR if a newly-added migration write-locks/rewrites a hot table
+      # (Summoners/Matches/MatchParticipants). See docs/DEVELOPMENT.md.
+      - name: Hot-table DDL lint (newly-added migrations)
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+        run: bash scripts/ci/check-migrations.sh
+
+      # Fails if the EF model and the latest migration snapshot have drifted
+      # (an entity changed without a migration → deployed code expects columns
+      # that prod, which never auto-migrates, does not have).
+      - name: Model/snapshot drift check
+        run: |
+          dotnet tool restore
+          dotnet ef migrations has-pending-model-changes \
+            --project Transcendence.Service --startup-project Transcendence.Service

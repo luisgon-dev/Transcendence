@@ -59,7 +59,7 @@ services:
       - "${WEB_PORT:-3000}:3000"
     depends_on:
       webapi:
-        condition: service_started
+        condition: service_healthy
     networks:
       - transcendence-net
 

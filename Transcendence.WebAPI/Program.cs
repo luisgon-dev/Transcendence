@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using StackExchange.Redis;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration.Json;
@@ -13,6 +14,7 @@ using System.Threading.RateLimiting;
 using System.Text;
 using Transcendence.Data;
 using Transcendence.Data.Extensions;
+using Transcendence.WebAPI.Health;
 using Transcendence.Service.Core.Services.Auth.Implementations;
 using Transcendence.Service.Core.Services.Auth.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Models;
@@ -143,7 +145,15 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddDbContext<TranscendenceContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("MainDatabase"),
         b => b.MigrationsAssembly("Transcendence.Service")));
-builder.Services.AddHealthChecks();
+// Readiness checks (tagged "ready") back /health/ready; /health/live stays shallow
+// (process-up only). Redis check is registered only when Redis is configured so the
+// keyless OpenAPI export / api:check boot (no Redis) does not fail.
+var healthChecks = builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseReadinessHealthCheck>("postgres", tags: new[] { "ready" });
+if (!string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("Redis")))
+{
+    healthChecks.AddCheck<RedisReadinessHealthCheck>("redis", tags: new[] { "ready" });
+}
 
 builder.Services.AddHttpClient();
 
@@ -154,21 +164,25 @@ builder.Services.AddStackExchangeRedisCache(options =>
     options.InstanceName = "Transcendence_";
 });
 
-// Persist DataProtection keys to Redis so antiforgery/auth cookies survive container
-// redeploys. The default ephemeral container key-ring is regenerated on every deploy
-// (logging users out and emitting a startup warning). No-op when Redis isn't configured.
+// Shared Redis multiplexer — registered as a singleton and reused for both DataProtection
+// key persistence and the readiness health check, so the host holds one connection rather
+// than several. AbortOnConnectFail=false so the host still starts when Redis is briefly
+// unreachable (CI/OpenAPI-export has no Redis; prod startup shouldn't hard-fail on a Redis
+// blip). No-op when Redis isn't configured.
 var dataProtectionRedis = builder.Configuration.GetConnectionString("Redis");
 if (!string.IsNullOrWhiteSpace(dataProtectionRedis))
 {
-    // AbortOnConnectFail=false so the host still starts when Redis is briefly unreachable
-    // (CI/OpenAPI-export has no Redis; prod startup shouldn't hard-fail on a Redis blip).
-    var dataProtectionRedisOptions = ConfigurationOptions.Parse(dataProtectionRedis);
-    dataProtectionRedisOptions.AbortOnConnectFail = false;
+    var redisOptions = ConfigurationOptions.Parse(dataProtectionRedis);
+    redisOptions.AbortOnConnectFail = false;
+    var redisMultiplexer = ConnectionMultiplexer.Connect(redisOptions);
+    builder.Services.AddSingleton<IConnectionMultiplexer>(redisMultiplexer);
+
+    // Persist DataProtection keys to Redis so antiforgery/auth cookies survive container
+    // redeploys (the default ephemeral key-ring is regenerated on every deploy, logging
+    // users out and emitting a startup warning).
     builder.Services.AddDataProtection()
         .SetApplicationName("Transcendence")
-        .PersistKeysToStackExchangeRedis(
-            ConnectionMultiplexer.Connect(dataProtectionRedisOptions),
-            "Transcendence:DataProtection:Keys");
+        .PersistKeysToStackExchangeRedis(redisMultiplexer, "Transcendence:DataProtection:Keys");
 }
 
 // Configure HybridCache with L1/L2 TTL relationship
@@ -281,8 +295,10 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapHealthChecks("/health/live");
-app.MapHealthChecks("/health/ready");
+// Liveness: process is up and can serve HTTP — no dependency checks run.
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
+// Readiness: dependencies (PostgreSQL, Redis) reachable — gates traffic / deploy readiness.
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
 
 using (var scope = app.Services.CreateScope())
 {

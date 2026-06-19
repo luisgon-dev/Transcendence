@@ -88,5 +88,6 @@ jobs:
       - name: Model/snapshot drift check
         run: |
           dotnet tool restore
+          dotnet restore Transcendence.sln
           dotnet ef migrations has-pending-model-changes \
             --project Transcendence.Service --startup-project Transcendence.Service

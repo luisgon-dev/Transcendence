@@ -22,6 +22,7 @@ public sealed class IngestionHealthAlertJob(
     ILogger<IngestionHealthAlertJob> logger)
 {
     private const string PrevSucceededKey = "alert:prevSucceeded";
+    private const string PrevFailedKey = "alert:prevFailed";
     private const string CooldownKeyPrefix = "alert:cooldown:";
 
     public async Task ExecuteAsync(CancellationToken ct = default)
@@ -31,15 +32,21 @@ public sealed class IngestionHealthAlertJob(
         var discoveryDepth = queueDepthProbe.GetEnqueuedCount(HangfireQueues.Discovery);
 
         long? prevSucceeded = null;
-        var prevRaw = await cache.GetStringAsync(PrevSucceededKey, ct).ConfigureAwait(false);
-        if (long.TryParse(prevRaw, out var parsed))
+        if (long.TryParse(await cache.GetStringAsync(PrevSucceededKey, ct).ConfigureAwait(false), out var ps))
         {
-            prevSucceeded = parsed;
+            prevSucceeded = ps;
         }
         await cache.SetStringAsync(PrevSucceededKey, stats.Succeeded.ToString(), ct).ConfigureAwait(false);
 
+        long? prevFailed = null;
+        if (long.TryParse(await cache.GetStringAsync(PrevFailedKey, ct).ConfigureAwait(false), out var pf))
+        {
+            prevFailed = pf;
+        }
+        await cache.SetStringAsync(PrevFailedKey, stats.Failed.ToString(), ct).ConfigureAwait(false);
+
         var conditions = EvaluateConditions(
-            stats.Failed, stats.Succeeded, prevSucceeded, stats.Enqueued, discoveryDepth, opts);
+            stats.Failed, prevFailed, stats.Succeeded, prevSucceeded, stats.Enqueued, discoveryDepth, opts);
 
         foreach (var (key, message) in conditions)
         {
@@ -63,6 +70,7 @@ public sealed class IngestionHealthAlertJob(
     /// <summary>Pure condition evaluation, separated for testability.</summary>
     public static IReadOnlyList<(string Key, string Message)> EvaluateConditions(
         long failed,
+        long? prevFailed,
         long succeeded,
         long? prevSucceeded,
         long enqueued,
@@ -71,10 +79,12 @@ public sealed class IngestionHealthAlertJob(
     {
         var result = new List<(string, string)>();
 
-        if (failed > opts.FailedJobThreshold)
+        // Spike, not cumulative: Hangfire retains old failures, so alert on NEW failures this interval.
+        if (prevFailed.HasValue && (failed - prevFailed.Value) > opts.FailedJobSpikeThreshold)
         {
+            var newFailures = failed - prevFailed.Value;
             result.Add(("failed-jobs",
-                $"{failed} failed Hangfire jobs (threshold {opts.FailedJobThreshold})."));
+                $"{newFailures} new failed Hangfire jobs since the last check (spike threshold {opts.FailedJobSpikeThreshold}; {failed} total retained)."));
         }
 
         if (discoveryDepth > opts.DiscoveryQueueDepthThreshold)

@@ -8,8 +8,10 @@ public sealed class AlertOptions
 {
     public AlertWebhookOptions Webhook { get; set; } = new();
 
-    /// <summary>Failed-job count above which a failed-jobs alert fires.</summary>
-    public int FailedJobThreshold { get; set; } = 200;
+    /// <summary>New failed jobs within one poll interval above which a failed-jobs spike alert fires.
+    /// A delta, not a cumulative count — Hangfire retains old failures, so the absolute count is
+    /// meaningless (it only ever climbs).</summary>
+    public int FailedJobSpikeThreshold { get; set; } = 50;
 
     /// <summary>Discovery queue depth above which a stuck-backlog alert fires.</summary>
     public long DiscoveryQueueDepthThreshold { get; set; } = 10_000;

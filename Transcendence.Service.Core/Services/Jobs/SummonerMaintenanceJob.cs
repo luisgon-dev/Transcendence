@@ -594,6 +594,10 @@ public class SummonerMaintenanceJob(
         if (region != null)
             trackedSummonerQuery = trackedSummonerQuery.Where(s => s.PlatformRegion == region);
 
+        // Activity selection: skip the inert tail so maintenance refreshes recently-active players.
+        if (multiRegionOptions.Value.PreferActiveSummoners)
+            trackedSummonerQuery = trackedSummonerQuery.Where(s => s.LastActiveAtUtc != null);
+
         var trackedCandidates = await trackedSummonerQuery
             .OrderBy(s => s.UpdatedAt)
             .Take(maxCandidates * 3)

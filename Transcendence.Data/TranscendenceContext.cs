@@ -116,6 +116,14 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             .HasIndex(s => new { s.PlatformRegion, s.UpdatedAt })
             .HasDatabaseName("IX_Summoners_Region_UpdatedAt");
 
+        // Partial index over only ACTIVE summoners (LastActiveAtUtc set), supporting activity-aware
+        // candidate selection (PreferActiveSummoners): WHERE PlatformRegion=@r AND LastActiveAtUtc IS
+        // NOT NULL ORDER BY UpdatedAt. Excludes the large inert tail, so the ordered scan never pages
+        // through the MinValue stubs. NOTE: built with CREATE INDEX CONCURRENTLY out-of-band in prod.
+        modelBuilder.Entity<Summoner>()
+            .HasIndex(s => new { s.PlatformRegion, s.UpdatedAt }, "IX_Summoners_Region_UpdatedAt_Active")
+            .HasFilter("\"LastActiveAtUtc\" IS NOT NULL");
+
         // Global query filter to exclude unfetchable matches from normal queries
         modelBuilder.Entity<Match>()
             .HasQueryFilter(m => m.Status != FetchStatus.PermanentlyUnfetchable);

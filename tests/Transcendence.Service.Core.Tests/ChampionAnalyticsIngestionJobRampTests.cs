@@ -156,6 +156,39 @@ public class ChampionAnalyticsIngestionJobRampTests
     }
 
     [Fact]
+    public async Task ExecuteForRegionAsync_WhenPreferActiveSummoners_SkipsNeverActiveCandidatesInFavorOfActiveOnes()
+    {
+        var fixedBudgetPolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
+            AdaptiveThroughputBudgetMode.Balanced,
+            MaxCandidates: 10,
+            QueueTarget: 1,
+            IncludeAllModes: false,
+            CoverageRatio: 0.2d,
+            BacklogAgeMinutes: 120d,
+            RecentVelocityPerHour: 2d,
+            CandidatePressureRatio: 2d));
+
+        await using var harness = await Harness.CreateAsync(fixedBudgetPolicy);
+        harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        // The never-active stub is the stalest candidate (would win on staleness scoring) yet must
+        // be skipped, in favour of the active summoner that was refreshed far more recently.
+        harness.SeedInactiveSummoner("NeverActiveStub", "NA1", DateTime.UtcNow.AddHours(-72));
+        harness.SeedSummoner("ActivePlayer", "NA1", DateTime.UtcNow.AddHours(-6));
+        await harness.Db.SaveChangesAsync();
+
+        var queuedJobs = new List<Job>();
+        harness.BackgroundJobClient
+            .Setup(x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()))
+            .Callback<Job, IState>((job, _) => queuedJobs.Add(job))
+            .Returns("job-1");
+
+        await harness.Job.ExecuteForRegionAsync("NA1", CancellationToken.None);
+
+        queuedJobs.Should().ContainSingle();
+        queuedJobs[0].Args[0].Should().Be("ActivePlayer");
+    }
+
+    [Fact]
     public async Task ExecuteForRegionAsync_WhenApiPriorityIsActive_AllowsProgressDuringForcedCatchUpWindow()
     {
         var fixedBudgetPolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
@@ -507,7 +540,32 @@ public class ChampionAnalyticsIngestionJobRampTests
                 GameNameNormalized = gameName.ToUpperInvariant(),
                 TagLineNormalized = tagLine.ToUpperInvariant(),
                 SummonerLevel = 100,
-                UpdatedAt = updatedAtUtc
+                UpdatedAt = updatedAtUtc,
+                LastActiveAtUtc = updatedAtUtc
+            });
+        }
+
+        // Seeds a summoner that has never been seen active (LastActiveAtUtc == null) — the case the
+        // PreferActiveSummoners filter is meant to skip (stub rows from snowball discovery).
+        public void SeedInactiveSummoner(
+            string gameName,
+            string tagLine,
+            DateTime updatedAtUtc,
+            string platformRegion = "NA1")
+        {
+            Db.Summoners.Add(new Summoner
+            {
+                Id = Guid.NewGuid(),
+                PlatformRegion = platformRegion,
+                Region = platformRegion is "EUW1" or "EUN1" ? "europe" : platformRegion is "KR" ? "asia" : "americas",
+                Puuid = $"puuid-{Guid.NewGuid():N}",
+                GameName = gameName,
+                TagLine = tagLine,
+                GameNameNormalized = gameName.ToUpperInvariant(),
+                TagLineNormalized = tagLine.ToUpperInvariant(),
+                SummonerLevel = 100,
+                UpdatedAt = updatedAtUtc,
+                LastActiveAtUtc = null
             });
         }
 
@@ -524,7 +582,8 @@ public class ChampionAnalyticsIngestionJobRampTests
                 GameNameNormalized = gameName.ToUpperInvariant(),
                 TagLineNormalized = tagLine.ToUpperInvariant(),
                 SummonerLevel = 100,
-                UpdatedAt = DateTime.UtcNow.AddHours(-10)
+                UpdatedAt = DateTime.UtcNow.AddHours(-10),
+                LastActiveAtUtc = DateTime.UtcNow.AddHours(-10)
             });
         }
 

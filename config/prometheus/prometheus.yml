@@ -1,0 +1,23 @@
+# Prometheus scrape config for the Transcendence stack.
+# Targets use compose service names, resolved over the `transcendence-net` Docker network — so this
+# same file works locally (repo compose) and in prod (Portainer stack), which share those names.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # WebAPI exposes /metrics via the ASP.NET Core Prometheus exporter.
+  - job_name: transcendence-webapi
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["webapi:8080"]
+
+  # The worker has no HTTP server, so it exposes /metrics via a standalone Prometheus HttpListener.
+  - job_name: transcendence-worker
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["service:9464"]

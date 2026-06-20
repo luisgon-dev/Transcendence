@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using Microsoft.Extensions.Options;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 
@@ -21,18 +22,23 @@ public interface IRiotRateGate
 /// timer at the sustained rate. Each region's bucket is independent, so the regions' budgets are used in
 /// parallel. Registered as a singleton; injected into the Riot client wrappers.
 /// </summary>
-public sealed class RiotRateGate(IOptions<RiotRateGateOptions> options) : IRiotRateGate, IDisposable
+public sealed class RiotRateGate(
+    IOptions<RiotRateGateOptions> options,
+    RiotRateGateTelemetry? telemetry = null) : IRiotRateGate, IDisposable
 {
     private readonly RiotRateGateOptions _options = options.Value;
     private readonly ConcurrentDictionary<string, Bucket> _buckets = new(StringComparer.OrdinalIgnoreCase);
 
-    public Task<bool> AcquireAsync(string routingKey, CancellationToken ct = default)
+    public async Task<bool> AcquireAsync(string routingKey, CancellationToken ct = default)
     {
         if (!_options.Enabled)
-            return Task.FromResult(true);
+            return true;
 
         var key = string.IsNullOrWhiteSpace(routingKey) ? "default" : routingKey.Trim().ToUpperInvariant();
-        return _buckets.GetOrAdd(key, _ => new Bucket(_options)).AcquireAsync(ct);
+        var startTimestamp = telemetry is null ? 0 : Stopwatch.GetTimestamp();
+        var acquired = await _buckets.GetOrAdd(key, _ => new Bucket(_options)).AcquireAsync(ct);
+        telemetry?.RecordAcquire(key, acquired, Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds);
+        return acquired;
     }
 
     public void Dispose()

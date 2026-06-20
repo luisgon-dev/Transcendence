@@ -148,11 +148,28 @@ services:
     networks:
       - transcendence-net
 
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    container_name: transcendence-prometheus
+    restart: unless-stopped
+    profiles: ["ops-tools"]
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    networks:
+      - transcendence-net
+
 volumes:
   postgres_data:
   redis_data:
   pgadmin_data:
   operational_logs:
+  prometheus_data:
 
 networks:
   transcendence-net:

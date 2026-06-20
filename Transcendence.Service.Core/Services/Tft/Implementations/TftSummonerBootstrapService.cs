@@ -18,6 +18,7 @@ public class TftSummonerBootstrapService(
     ITftSummonerRepository summonerRepository,
     IRefreshLockRepository refreshLockRepository,
     IOptions<MultiRegionIngestionOptions> multiRegionOptions,
+    IRiotRateGate rateGate,
     ILogger<TftSummonerBootstrapService> logger) : ITftSummonerBootstrapService
 {
     private const string RankedTftQueue = "RANKED_TFT";
@@ -53,8 +54,21 @@ public class TftSummonerBootstrapService(
 
         try
         {
+            // Pace each league pull under the per-region Riot budget (shared gate with the LoL vertical),
+            // keyed by the platform's regional route. If the budget stays exhausted past the gate's max wait,
+            // skip seeding this platform this run — it is idempotent and lock-guarded, so a later run retries.
+            var routingKey = platform.ToRegional().ToString();
+
+            if (!await rateGate.AcquireAsync(routingKey, ct))
+                return;
             var challengerLeague = await riotApiContext.Api.TftLeagueV1().GetChallengerLeagueAsync(platform, RankedTftQueue, ct);
+
+            if (!await rateGate.AcquireAsync(routingKey, ct))
+                return;
             var grandmasterLeague = await riotApiContext.Api.TftLeagueV1().GetGrandmasterLeagueAsync(platform, RankedTftQueue, ct);
+
+            if (!await rateGate.AcquireAsync(routingKey, ct))
+                return;
             var masterLeague = await riotApiContext.Api.TftLeagueV1().GetMasterLeagueAsync(platform, RankedTftQueue, ct);
 
             var puuids = challengerLeague.Entries.Select(entry => entry.Puuid)

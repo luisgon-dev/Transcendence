@@ -389,7 +389,11 @@ public class SummonerMaintenanceJobTests
                 GameNameNormalized = gameName.ToUpperInvariant(),
                 TagLineNormalized = tagLine.ToUpperInvariant(),
                 SummonerLevel = 100,
-                UpdatedAt = updatedAtUtc
+                UpdatedAt = updatedAtUtc,
+                // Seeded summoners represent real tracked players, which in production carry a
+                // LastActiveAtUtc stamp (written by MatchService on detail ingest). Default them
+                // active so the activity filter (PreferActiveSummoners) keeps selecting them.
+                LastActiveAtUtc = updatedAtUtc
             });
         }
 

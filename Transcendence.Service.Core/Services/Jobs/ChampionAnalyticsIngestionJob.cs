@@ -649,6 +649,12 @@ public class ChampionAnalyticsIngestionJob(
             if (region != null)
                 fallbackQuery = fallbackQuery.Where(s => s.PlatformRegion == region);
 
+            // Activity selection: skip the inert tail (summoners never seen active — the ~4.1M
+            // MinValue stubs) so the producer refreshes recently-active players instead of paging the
+            // stubs oldest-first. Backed by the IX_Summoners_Region_UpdatedAt_Active partial index.
+            if (multiRegionOptions.Value.PreferActiveSummoners)
+                fallbackQuery = fallbackQuery.Where(s => s.LastActiveAtUtc != null);
+
             var fallbackCandidates = await fallbackQuery
                 .OrderBy(s => s.UpdatedAt)
                 .Take(maxCandidates * 3)

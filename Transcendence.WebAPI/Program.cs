@@ -6,6 +6,9 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
+using OpenTelemetry;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
 using StackExchange.Redis;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration.Json;
@@ -157,6 +160,17 @@ if (!string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("Redis"
 }
 
 builder.Services.AddHttpClient();
+
+// Metrics → Prometheus, scraped at /metrics. Exports ASP.NET request, outbound HTTP, .NET runtime
+// (GC / thread pool), and HybridCache instrumentation for the read API.
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService("transcendence-webapi"))
+    .WithMetrics(metrics => metrics
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddRuntimeInstrumentation()
+        .AddMeter("Microsoft.Extensions.Caching.Hybrid")
+        .AddPrometheusExporter());
 
 // Configure Redis distributed cache
 builder.Services.AddStackExchangeRedisCache(options =>
@@ -317,6 +331,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapPrometheusScrapingEndpoint(); // Prometheus scrape at /metrics (internal network only)
 // Liveness: process is up and can serve HTTP — no dependency checks run.
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
 // Readiness: dependencies (PostgreSQL, Redis) reachable — gates traffic / deploy readiness.

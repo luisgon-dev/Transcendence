@@ -6,6 +6,9 @@ using Transcendence.Data;
 using Transcendence.Data.Extensions;
 using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Diagnostics;
+using OpenTelemetry;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
 using Transcendence.Service.Core.Services.Extensions;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
@@ -159,6 +162,26 @@ builder.Services.AddHostedService<WorkerWatchdogService>();
 // stall). Posts to Alerts:Webhook:Url; logs only when unset, so this ships without a secret.
 builder.Services.Configure<AlertOptions>(builder.Configuration.GetSection("Alerts"));
 builder.Services.AddSingleton<IAlertNotifier, WebhookAlertNotifier>();
+
+// Worker metrics → Prometheus via a standalone HttpListener on :9464 (the worker has no HTTP server).
+// Exports the ingestion-throughput + refresh-lock meters, the rate-gate telemetry, plus .NET runtime
+// (GC / thread pool), outbound HTTP (Riot API), and HybridCache instrumentation. Gated so a
+// listener/binding problem can be disabled via env (Telemetry__Enabled=false) without a rollback.
+if (builder.Configuration.GetValue("Telemetry:Enabled", true))
+{
+    var metricsPort = builder.Configuration.GetValue("Telemetry:PrometheusPort", 9464);
+    builder.Services.AddSingleton<Transcendence.Service.Core.Services.RiotApi.RiotRateGateTelemetry>();
+    builder.Services.AddOpenTelemetry()
+        .ConfigureResource(resource => resource.AddService("transcendence-worker"))
+        .WithMetrics(metrics => metrics
+            .AddMeter("Transcendence.IngestionThroughput")
+            .AddMeter("Transcendence.RefreshLocks")
+            .AddMeter(Transcendence.Service.Core.Services.RiotApi.RiotRateGateTelemetry.MeterName)
+            .AddMeter("Microsoft.Extensions.Caching.Hybrid")
+            .AddRuntimeInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddPrometheusHttpListener(o => o.UriPrefixes = new[] { $"http://+:{metricsPort}/" }));
+}
 
 // worker that initiates services
 if (builder.Environment.IsDevelopment())

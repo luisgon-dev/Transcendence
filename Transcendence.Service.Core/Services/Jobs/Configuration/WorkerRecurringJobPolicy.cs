@@ -38,6 +38,7 @@ public sealed class WorkerRecurringJobPolicy(
     public const string PollLiveGamesJobId = "poll-live-games";
     public const string HighEloProfileRefreshJobId = "high-elo-profile-refresh";
     public const string RefreshLockLifecycleCleanupJobId = "refresh-lock-lifecycle-cleanup";
+    public const string IngestionHealthAlertJobId = "ingestion-health-alert";
     public const string TftStaticDataJobId = "tft-static-data-refresh";
     public const string TftAnalyticsRefreshJobId = "tft-analytics-refresh";
     public const string TftAnalyticsIngestionJobId = "tft-analytics-ingestion";
@@ -66,6 +67,7 @@ public sealed class WorkerRecurringJobPolicy(
         PollLiveGamesJobId,
         HighEloProfileRefreshJobId,
         RefreshLockLifecycleCleanupJobId,
+        IngestionHealthAlertJobId,
         TftStaticDataJobId,
         TftAnalyticsRefreshJobId,
         TftAnalyticsIngestionJobId,
@@ -163,6 +165,12 @@ public sealed class WorkerRecurringJobPolicy(
                 schedule.RefreshLockLifecycleCleanupCron,
                 schedule.EnableRefreshLockLifecycleCleanup,
                 ConfigureRefreshLockLifecycleCleanup),
+            CreateDescriptor(
+                IngestionHealthAlertJobId,
+                "Jobs:Schedule:IngestionHealthAlertCron",
+                schedule.IngestionHealthAlertCron,
+                schedule.EnableIngestionHealthAlert,
+                ConfigureIngestionHealthAlert),
             CreateDescriptor(
                 TftStaticDataJobId,
                 "Jobs:Schedule:TftStaticDataCron",
@@ -332,6 +340,15 @@ public sealed class WorkerRecurringJobPolicy(
         string cronExpression) =>
         recurringJobManager.AddOrUpdate<RefreshLockLifecycleJob>(
             RefreshLockLifecycleCleanupJobId,
+            job => job.ExecuteAsync(CancellationToken.None),
+            cronExpression,
+            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
+    private static void ConfigureIngestionHealthAlert(
+        IRecurringJobManager recurringJobManager,
+        string cronExpression) =>
+        recurringJobManager.AddOrUpdate<IngestionHealthAlertJob>(
+            IngestionHealthAlertJobId,
             job => job.ExecuteAsync(CancellationToken.None),
             cronExpression,
             new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });

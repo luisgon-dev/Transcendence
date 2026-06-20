@@ -70,6 +70,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<RefreshTftAnalyticsJob>();
         services.AddScoped<TftAnalyticsIngestionJob>();
         services.AddScoped<TftSummonerMaintenanceJob>();
+        services.AddScoped<IngestionHealthAlertJob>();
         services.AddScoped<IIngestionPriorityScoringPolicy, IngestionPriorityScoringPolicy>();
         services.AddSingleton<IQueueDepthProbe, HangfireQueueDepthProbe>();
 

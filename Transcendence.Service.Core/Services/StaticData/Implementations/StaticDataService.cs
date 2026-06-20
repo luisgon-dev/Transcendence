@@ -126,7 +126,7 @@ public class StaticDataService(
         await context.SaveChangesAsync(cancellationToken);
 
         if (previous != null)
-            await cacheService.RemoveByTagAsync($"patch-{previous.Version}", cancellationToken);
+            await cacheService.RemoveByTagAsync(CacheTags.ForPatch(previous.Version), cancellationToken);
     }
 
     private static DateTime EnsureUtc(DateTime value) =>
@@ -172,7 +172,7 @@ public class StaticDataService(
                 fetchAndStore,
                 expiration: TimeSpan.FromDays(30),
                 localExpiration: TimeSpan.FromMinutes(5),
-                tags: [$"patch-{patchVersion}"],
+                tags: [CacheTags.ForPatch(patchVersion)],
                 cancellationToken: cancellationToken);
         }
         catch (NonCacheablePatchFallbackException ex)

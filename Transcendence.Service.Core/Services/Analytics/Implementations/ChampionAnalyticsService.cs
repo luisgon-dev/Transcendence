@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
+using Transcendence.Service.Core.Services.Cache;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 
 namespace Transcendence.Service.Core.Services.Analytics.Implementations;
@@ -97,7 +98,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             cacheKey,
             async cancel => await _computeService.ComputeWinRatesAsync(championId, normalizedFilter, currentPatch, cancel),
             AnalyticsCacheOptions,
-            tags: new[] { AnalyticsCacheTag, $"champion:{championId}", $"patch:{currentPatch}" },
+            tags: new[] { AnalyticsCacheTag, $"champion:{championId}", CacheTags.ForPatch(currentPatch) },
             cancellationToken: ct
         );
 
@@ -139,7 +140,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 
         // Build cache key
         var cacheKey = $"{TierListCacheKeyPrefix}{normalizedRole}:{normalizedTier}:{normalizedRegion}:{currentPatch}";
-        var tags = new[] { AnalyticsCacheTag, $"patch:{currentPatch}", "tierlist" };
+        var tags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(currentPatch), "tierlist" };
 
         // Get or compute tier list with caching
         var entries = await _cache.GetOrCreateAsync(
@@ -193,7 +194,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         var selectedPatch = patchContext.Patch!;
 
         var cacheKey = $"{BuildsCacheKeyPrefix}{championId}:{normalizedRole}:{normalizedTier}:{normalizedRegion}:{selectedPatch}";
-        var tags = new[] { AnalyticsCacheTag, $"patch:{selectedPatch}", "builds" };
+        var tags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(selectedPatch), "builds" };
 
         var response = await _cache.GetOrCreateAsync(
             cacheKey,
@@ -238,7 +239,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
                 BuildSampleMetadata(0, patchContext));
 
         var cacheKey = $"{ProBuildsCacheKeyPrefix}{championId}:{normalizedRegion}:{normalizedRole}:{normalizedScope}:{resolvedPatch}";
-        var tags = new[] { AnalyticsCacheTag, $"patch:{resolvedPatch}", "probuilds" };
+        var tags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(resolvedPatch), "probuilds" };
 
         var response = await _cache.GetOrCreateAsync(
             cacheKey,
@@ -278,7 +279,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 
         var resolvedPatch = patchContext.Patch!;
         var cacheKey = $"{ProPlayrateCacheKeyPrefix}{normalizedScope}:{normalizedRegion}:{resolvedPatch}";
-        var tags = new[] { AnalyticsCacheTag, $"patch:{resolvedPatch}", "proplayrate" };
+        var tags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(resolvedPatch), "proplayrate" };
 
         var response = await _cache.GetOrCreateAsync(
             cacheKey,
@@ -343,7 +344,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 
         var selectedPatch = patchContext.Patch!;
         var cacheKey = $"{MatchupsCacheKeyPrefix}{championId}:{normalizedRole}:{normalizedTier}:{normalizedRegion}:{selectedPatch}";
-        var tags = new[] { AnalyticsCacheTag, $"patch:{selectedPatch}", "matchups" };
+        var tags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(selectedPatch), "matchups" };
 
         var response = await _cache.GetOrCreateAsync(
             cacheKey,
@@ -374,7 +375,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             return;
         }
 
-        await _cache.RemoveByTagAsync($"patch:{patch.Trim()}", ct);
+        await _cache.RemoveByTagAsync(CacheTags.ForPatch(patch), ct);
     }
 
     public async Task<string?> RefreshDefaultProfileCacheAsync(
@@ -402,7 +403,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             Role: null,
             Patch: currentPatch);
         var winKey = BuildCacheKey(championId, winFilter, currentPatch);
-        var winTags = new[] { AnalyticsCacheTag, $"champion:{championId}", $"patch:{currentPatch}" };
+        var winTags = new[] { AnalyticsCacheTag, $"champion:{championId}", CacheTags.ForPatch(currentPatch) };
         var winRates = await _computeService.ComputeWinRatesAsync(championId, winFilter, currentPatch, ct);
         await _cache.SetAsync(winKey, winRates, AnalyticsCacheOptions, winTags, ct);
 
@@ -428,13 +429,13 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 
         // ── Builds + matchups for the resolved lane (region=ALL, given tier) ──
         var buildsKey = $"{BuildsCacheKeyPrefix}{championId}:{effectiveRole}:{normalizedTier}:{normalizedRegion}:{currentPatch}";
-        var buildsTags = new[] { AnalyticsCacheTag, $"patch:{currentPatch}", "builds" };
+        var buildsTags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(currentPatch), "builds" };
         var builds = await _computeService.ComputeBuildsAsync(
             championId, effectiveRole, tierForCompute, normalizedRegion, currentPatch, ct);
         await _cache.SetAsync(buildsKey, builds, AnalyticsCacheOptions, buildsTags, ct);
 
         var matchupsKey = $"{MatchupsCacheKeyPrefix}{championId}:{effectiveRole}:{normalizedTier}:{normalizedRegion}:{currentPatch}";
-        var matchupsTags = new[] { AnalyticsCacheTag, $"patch:{currentPatch}", "matchups" };
+        var matchupsTags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(currentPatch), "matchups" };
         var matchups = await _computeService.ComputeMatchupsAsync(
             championId, effectiveRole, tierForCompute, normalizedRegion, currentPatch, ct);
         await _cache.SetAsync(matchupsKey, matchups, AnalyticsCacheOptions, matchupsTags, ct);
@@ -445,7 +446,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             var proScope = ChampionAnalyticsComputeService.NormalizeProScope(null); // "all"
             const string proRegion = "ALL";
             var proKey = $"{ProBuildsCacheKeyPrefix}{championId}:{proRegion}:{effectiveRole}:{proScope}:{currentPatch}";
-            var proTags = new[] { AnalyticsCacheTag, $"patch:{currentPatch}", "probuilds" };
+            var proTags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(currentPatch), "probuilds" };
             var proBuilds = await _computeService.ComputeProBuildsAsync(
                 championId, proRegion, effectiveRole, proScope, currentPatch, ct);
             await _cache.SetAsync(proKey, proBuilds, AnalyticsCacheOptions, proTags, ct);
@@ -518,7 +519,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         var keyParts = new List<string>
         {
             $"{WinRateCacheKeyPrefix}{championId}",
-            $"patch:{patch}"
+            CacheTags.ForPatch(patch)
         };
 
         if (!string.IsNullOrEmpty(filter.RankTier))

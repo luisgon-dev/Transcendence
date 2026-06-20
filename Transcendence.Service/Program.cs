@@ -110,6 +110,9 @@ builder.Services.AddHybridCache(options =>
         Expiration = TimeSpan.FromHours(1),           // L2 Redis TTL
         LocalCacheExpiration = TimeSpan.FromMinutes(5) // L1 Memory TTL (shorter than L2)
     };
+    // Raise from the ~1 MiB default so large match-timeline DTOs still serialize to L2 (Redis)
+    // instead of being silently dropped, which re-runs DB-bound compute on every cold read.
+    options.MaximumPayloadBytes = 8 * 1024 * 1024; // 8 MiB
 });
 
 builder.Services.Configure<WorkerJobScheduleOptions>(builder.Configuration.GetSection("Jobs:Schedule"));

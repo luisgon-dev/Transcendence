@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HttpOverrides;
 using StackExchange.Redis;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration.Json;
@@ -268,7 +269,25 @@ builder.Services.AddHangfire(config =>
         .UsePostgreSqlStorage(options =>
             options.UseNpgsqlConnection(builder.Configuration.GetConnectionString("MainDatabase"))));
 
+// Behind nginx + the Next.js BFF (which forwards X-Forwarded-For verbatim), honor the forwarded
+// headers so RemoteIpAddress is the real client rather than the proxy — this is what restores
+// per-IP partitioning on the auth rate limiters (login/register/refresh). ForwardLimit bounds how
+// many hops are trusted (client -> nginx -> BFF) so a forged longer chain can't walk past it. The
+// WebAPI :8080 is only reachable via the proxy chain on a private network, never directly by
+// untrusted clients, so the upstream chain is trusted (KnownProxies/Networks cleared). If the real
+// proxy-hop count differs, adjust ForwardLimit and confirm RemoteIpAddress reflects the true client.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.ForwardLimit = 2;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 var app = builder.Build();
+
+// Must run before UseRateLimiter so the limiter partitions on the corrected client IP.
+app.UseForwardedHeaders();
 var enableSwagger = app.Environment.IsDevelopment()
     || ParseBool(app.Configuration["Swagger:Enable"], false);
 

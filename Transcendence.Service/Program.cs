@@ -152,6 +152,11 @@ builder.Services.Configure<WorkerWatchdogOptions>(builder.Configuration.GetSecti
 builder.Services.AddSingleton<IWorkerHeartbeat, WorkerHeartbeat>();
 builder.Services.AddHostedService<WorkerWatchdogService>();
 
+// Poll-based ingestion-health alerts (failed-job spike / stuck discovery backlog / throughput
+// stall). Posts to Alerts:Webhook:Url; logs only when unset, so this ships without a secret.
+builder.Services.Configure<AlertOptions>(builder.Configuration.GetSection("Alerts"));
+builder.Services.AddSingleton<IAlertNotifier, WebhookAlertNotifier>();
+
 // worker that initiates services
 if (builder.Environment.IsDevelopment())
     // development worker directly enqueues and cleans up jobs for development

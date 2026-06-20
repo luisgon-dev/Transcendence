@@ -17,6 +17,8 @@ public class WorkerJobScheduleOptions
     public string RuneSelectionIntegrityBackfillCron { get; set; } = "*/15 * * * *";
     public string LiveGamePollingCron { get; set; } = "*/2 * * * *";
     public string RefreshLockLifecycleCleanupCron { get; set; } = "*/5 * * * *";
+    public string IngestionHealthAlertCron { get; set; } = "*/5 * * * *";
+    public bool EnableIngestionHealthAlert { get; set; } = true;
     public string TftStaticDataCron { get; set; } = "15 */6 * * *";
     public string TftAnalyticsRefreshCron { get; set; } = "15 */2 * * *";
     public string TftAnalyticsIngestionCron { get; set; } = "*/30 * * * *";

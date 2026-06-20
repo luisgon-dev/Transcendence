@@ -11,11 +11,17 @@ namespace Transcendence.Service.Core.Services.Tft.Implementations;
 
 public class TftMatchService(
     TftRiotApiContext riotApiContext,
-    ITftSummonerRepository summonerRepository) : ITftMatchService
+    ITftSummonerRepository summonerRepository,
+    IRiotRateGate rateGate) : ITftMatchService
 {
     public async Task<TftMatch?> GetMatchDetailsAsync(string matchId, RegionalRoute regionalRoute, PlatformRoute platformRoute,
         CancellationToken ct = default)
     {
+        // Pace under the per-region Riot budget (shared gate with the LoL vertical); skip (retry later)
+        // rather than park this worker if the region's budget stays exhausted past the gate's max wait.
+        if (!await rateGate.AcquireAsync(regionalRoute.ToString(), ct))
+            return null;
+
         var matchDto = await riotApiContext.Api.TftMatchV1().GetMatchAsync(regionalRoute, matchId, ct);
         if (matchDto == null)
             return null;

@@ -31,5 +31,9 @@ public enum StarvationGuardrailOutcome
 
 public interface IStarvationGuardrailPolicy
 {
+    /// <summary>Whether the guardrail is enabled. When false, callers can skip computing its
+    /// (expensive) inputs since Evaluate returns Disabled regardless of them.</summary>
+    bool Enabled { get; }
+
     StarvationGuardrailDecision Evaluate(StarvationGuardrailInput input);
 }

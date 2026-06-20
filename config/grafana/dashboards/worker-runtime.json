@@ -1,0 +1,102 @@
+{
+  "uid": "trn-worker",
+  "title": "Transcendence — Worker Runtime / Hang Watch",
+  "tags": ["transcendence"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-3h", "to": "now" },
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Thread Pool — Queue Length vs Thread Count (sustained queue growth = the hang)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] } },
+      "targets": [
+        { "refId": "A", "expr": "dotnet_thread_pool_queue_length_total{job=\"transcendence-worker\"}", "legendFormat": "queue length", "datasource": { "type": "prometheus", "uid": "prometheus" } },
+        { "refId": "B", "expr": "dotnet_thread_pool_thread_count_total{job=\"transcendence-worker\"}", "legendFormat": "thread count", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Thread Pool — Work Items Completed/s",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] } },
+      "targets": [
+        { "refId": "A", "expr": "rate(dotnet_thread_pool_work_item_count_total{job=\"transcendence-worker\"}[5m])", "legendFormat": "work items/s", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "GC — Collections/s + Pause s/s",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] } },
+      "targets": [
+        { "refId": "A", "expr": "sum by (gc_heap_generation) (rate(dotnet_gc_collections_total{job=\"transcendence-worker\"}[5m]))", "legendFormat": "collections/s gen {{gc_heap_generation}}", "datasource": { "type": "prometheus", "uid": "prometheus" } },
+        { "refId": "B", "expr": "rate(dotnet_gc_pause_time_seconds_total{job=\"transcendence-worker\"}[5m])", "legendFormat": "pause s/s", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "GC Heap — Last Collection Size",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] } },
+      "targets": [
+        { "refId": "A", "expr": "dotnet_gc_last_collection_heap_size_bytes{job=\"transcendence-worker\"}", "legendFormat": "heap last size {{gc_heap_generation}}", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "GC — Allocation Rate",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "Bps", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] } },
+      "targets": [
+        { "refId": "A", "expr": "rate(dotnet_gc_heap_total_allocated_bytes_total{job=\"transcendence-worker\"}[5m])", "legendFormat": "alloc bytes/s", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Exceptions/s + Lock Contention/s",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] } },
+      "targets": [
+        { "refId": "A", "expr": "rate(dotnet_exceptions_total{job=\"transcendence-worker\"}[5m])", "legendFormat": "exceptions/s", "datasource": { "type": "prometheus", "uid": "prometheus" } },
+        { "refId": "B", "expr": "rate(dotnet_monitor_lock_contentions_total{job=\"transcendence-worker\"}[5m])", "legendFormat": "lock contentions/s", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Process — CPU Cores + Working Set",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [{ "matcher": { "id": "byName", "options": "working set" }, "properties": [{ "id": "unit", "value": "bytes" }] }] },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] } },
+      "targets": [
+        { "refId": "A", "expr": "rate(dotnet_process_cpu_time_seconds_total{job=\"transcendence-worker\"}[5m])", "legendFormat": "cpu cores", "datasource": { "type": "prometheus", "uid": "prometheus" } },
+        { "refId": "B", "expr": "dotnet_process_memory_working_set_bytes{job=\"transcendence-worker\"}", "legendFormat": "working set", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ]
+    }
+  ]
+}

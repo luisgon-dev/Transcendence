@@ -498,6 +498,12 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
     private const double ItemMetadataCoverageFallbackThreshold = 0.90;
     private const int CoreBuildPathSlots = 3;
     private const int MaxBuildPathSlots = 6;
+    // Top builds are grouped on the first N core legendaries rather than the full 6-item set so a
+    // single situational-slot difference does not fragment otherwise-identical builds below the
+    // sample floor. The completed-item set is sorted ascending, so we cannot recover purchase order
+    // here — we use the global-core membership (items appearing in >= CoreItemThreshold of games) as
+    // the core signal, which is the same core notion surfaced by globalCoreItems.
+    private const int BuildGroupingCoreSlots = 4;
     private static readonly IReadOnlyDictionary<int, BuildItemMetadata> EmptyItemMetadata =
         new Dictionary<int, BuildItemMetadata>();
 
@@ -653,7 +659,8 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             .Select(m => new
             {
                 m.Win,
-                ItemKey = string.Join(",", m.Items),
+                // Group on the first N core legendaries, not the full 6-item set (see BuildGroupingKey).
+                ItemKey = BuildGroupingKey(m.Items, globalCoreItems),
                 // Build rune structure
                 RuneInfo = BuildRuneInfo(m.Runes, runeMetadata),
                 Items = m.Items
@@ -678,7 +685,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                 .Select(m => new
                 {
                     m.Win,
-                    ItemKey = string.Join(",", m.Items),
+                    ItemKey = BuildGroupingKey(m.Items, globalCoreItems),
                     RuneInfo = BuildRuneInfo(m.Runes, runeMetadata),
                     Items = m.Items
                 })
@@ -1116,6 +1123,25 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
 
         filtered.Sort();
         return filtered;
+    }
+
+    /// <summary>
+    /// Builds the grouping key for a completed build. Collapses builds that share the same core
+    /// legendaries (the first <see cref="BuildGroupingCoreSlots"/> items that are global-core) so a
+    /// differing situational slot does not fragment the group. Builds with no detectable core items
+    /// fall back to their full item set so they still group by exact match rather than collapsing
+    /// into a single empty-key bucket.
+    /// </summary>
+    private static string BuildGroupingKey(IReadOnlyList<int> sortedBuildItems, IReadOnlyCollection<int> globalCoreItems)
+    {
+        var coreItems = sortedBuildItems
+            .Where(globalCoreItems.Contains)
+            .Take(BuildGroupingCoreSlots)
+            .ToList();
+
+        return coreItems.Count > 0
+            ? string.Join(",", coreItems)
+            : string.Join(",", sortedBuildItems);
     }
 
     private readonly record struct BuildPathParticipantInput(

@@ -26,8 +26,11 @@ public class TftAnalyticsService(
 
     public async Task<IReadOnlyList<TftCompListItemDto>> GetCompListAsync(string? rankTier, string? region, CancellationToken ct = default)
     {
+        // Set token in the key so a TFT set rollover invalidates stale comps immediately instead of
+        // serving them until the 6h cache entry expires.
+        var setToken = await ResolveSetTokenAsync(ct);
         return await cache.GetOrCreateAsync(
-            $"tft:analytics:comps:{NormalizeRankTier(rankTier)}:{NormalizeRegion(region)}",
+            $"tft:analytics:comps:{setToken}:{NormalizeRankTier(rankTier)}:{NormalizeRegion(region)}",
             async cancel => await computeService.ComputeCompListAsync(rankTier, region, cancel),
             CacheOptions,
             tags: ["tft-analytics", "tft-comps"],
@@ -36,12 +39,21 @@ public class TftAnalyticsService(
 
     public async Task<TftCompDetailDto?> GetCompDetailAsync(string compSlug, string? rankTier, string? region, CancellationToken ct = default)
     {
+        var setToken = await ResolveSetTokenAsync(ct);
         return await cache.GetOrCreateAsync(
-            $"tft:analytics:comp:{compSlug}:{NormalizeRankTier(rankTier)}:{NormalizeRegion(region)}",
+            $"tft:analytics:comp:{setToken}:{compSlug}:{NormalizeRankTier(rankTier)}:{NormalizeRegion(region)}",
             async cancel => await computeService.ComputeCompDetailAsync(compSlug, rankTier, region, cancel),
             CacheOptions,
             tags: ["tft-analytics", "tft-comps"],
             cancellationToken: ct);
+    }
+
+    // Active TFT set as a cache-key token. Resolved the same way as the static-data catalogs
+    // (ITftStaticDataService.GetActiveSetNumberAsync); falls back to "set?" when none is active yet.
+    private async Task<string> ResolveSetTokenAsync(CancellationToken ct)
+    {
+        var activeSet = await staticDataService.GetActiveSetNumberAsync(ct);
+        return activeSet is { } set ? $"set{set}" : "set?";
     }
 
     public Task<IReadOnlyList<TftStaticEntityDto>> GetChampionsAsync(CancellationToken ct = default) => staticDataService.GetChampionCatalogAsync(ct);

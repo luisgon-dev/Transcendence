@@ -5,6 +5,8 @@ namespace Transcendence.Service.Core.Services.Jobs.Priority;
 
 public class StarvationGuardrailPolicy(IOptions<StarvationGuardrailOptions> options) : IStarvationGuardrailPolicy
 {
+    public bool Enabled => options.Value.Enabled;
+
     public StarvationGuardrailDecision Evaluate(StarvationGuardrailInput input)
     {
         var config = options.Value;

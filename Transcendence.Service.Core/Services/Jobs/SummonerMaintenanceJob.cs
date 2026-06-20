@@ -500,7 +500,12 @@ public class SummonerMaintenanceJob(
             if (region != null)
                 trackedQuery = trackedQuery.Where(x => x.PlatformRegion == region);
 
-            var trackedHighValueCandidates = await trackedQuery.ToListAsync(ct);
+            // Bound the high-value sub-queries: only the top `maxCandidates` (most stale) are ever
+            // selected after ranking, so materializing whole rosters across regions is pure waste.
+            var trackedHighValueCandidates = await trackedQuery
+                .OrderBy(x => x.UpdatedAt)
+                .Take(maxCandidates)
+                .ToListAsync(ct);
 
             combined.AddRange(trackedHighValueCandidates.Select(x => new CandidateSummoner(
                 x.PlatformRegion!,
@@ -528,6 +533,8 @@ public class SummonerMaintenanceJob(
                 query = query.Where(s => s.PlatformRegion == region);
 
             var favoriteCandidates = await query
+                .OrderBy(s => s.UpdatedAt)
+                .Take(maxCandidates)
                 .Select(s => new CandidateSummoner(
                     s.PlatformRegion!,
                     s.GameName!,
@@ -564,7 +571,10 @@ public class SummonerMaintenanceJob(
             if (region != null)
                 highEloQuery = highEloQuery.Where(x => x.PlatformRegion == region);
 
-            var highEloCandidates = await highEloQuery.ToListAsync(ct);
+            var highEloCandidates = await highEloQuery
+                .OrderBy(x => x.UpdatedAt)
+                .Take(maxCandidates)
+                .ToListAsync(ct);
 
             combined.AddRange(highEloCandidates.Select(x => new CandidateSummoner(
                 x.PlatformRegion!,

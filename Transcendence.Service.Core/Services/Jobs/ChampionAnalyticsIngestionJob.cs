@@ -547,7 +547,12 @@ public class ChampionAnalyticsIngestionJob(
             if (region != null)
                 trackedQuery = trackedQuery.Where(x => x.PlatformRegion == region);
 
+            // Bound the high-value sub-queries: only the top `maxCandidates` (most stale) are ever
+            // selected after ranking, so materializing the entire tracked/favorite/high-elo rosters
+            // (which grow unbounded across regions) is pure waste.
             var trackedCandidates = await trackedQuery
+                .OrderBy(x => x.UpdatedAt)
+                .Take(maxCandidates)
                 .ToListAsync(ct);
 
             combined.AddRange(trackedCandidates.Select(x => new CandidateSummoner(
@@ -575,6 +580,8 @@ public class ChampionAnalyticsIngestionJob(
                 query = query.Where(s => s.PlatformRegion == region);
 
             var favoriteCandidates = await query
+                .OrderBy(s => s.UpdatedAt)
+                .Take(maxCandidates)
                 .Select(s => new CandidateSummoner(
                     s.PlatformRegion!,
                     s.GameName!,
@@ -611,6 +618,8 @@ public class ChampionAnalyticsIngestionJob(
                 highEloQuery = highEloQuery.Where(x => x.PlatformRegion == region);
 
             var highEloCandidates = await highEloQuery
+                .OrderBy(x => x.UpdatedAt)
+                .Take(maxCandidates)
                 .Select(x => new
                 {
                     x.PlatformRegion,
@@ -750,7 +759,12 @@ public class ChampionAnalyticsIngestionJob(
     {
         var catchUpWindowKey = RefreshLockKeys.BuildStarvationGuardrailCatchUpKey(producerKey);
         var catchUpCooldownKey = RefreshLockKeys.BuildStarvationGuardrailCooldownKey(producerKey);
-        var maxDeferAgeMinutes = await EstimateMaxEligibleDeferAgeMinutesAsync(region, evaluationUtc, ct);
+        // Skip the full MIN(UpdatedAt) scan over Summoners when the guardrail is disabled — its
+        // Evaluate() returns Disabled without using the value, so the scan would be pure wasted
+        // load (per region × per producer × heartbeat).
+        var maxDeferAgeMinutes = starvationGuardrailPolicy.Enabled
+            ? await EstimateMaxEligibleDeferAgeMinutesAsync(region, evaluationUtc, ct)
+            : (double?)null;
         var telemetrySource = region != null ? $"{TelemetrySource}:{region}" : TelemetrySource;
 
         var catchUpWindowState = await refreshLockRepository.GetAsync(catchUpWindowKey, ct);

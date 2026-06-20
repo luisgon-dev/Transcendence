@@ -165,7 +165,9 @@ services:
       - transcendence-net
 
   grafana:
-    image: grafana/grafana:11.4.0
+    # 11.4.0 fails to start on SQLite ("unified storage data migration failed: playlists
+    # migration: no such column p.uid"); 11.3.1 is the build verified working on prod.
+    image: grafana/grafana:11.3.1
     container_name: transcendence-grafana
     restart: unless-stopped
     profiles: ["ops-tools"]

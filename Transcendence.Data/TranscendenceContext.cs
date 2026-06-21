@@ -158,6 +158,17 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             // Common filter/index fields
             entity.HasIndex(p => p.SummonerId);
             entity.HasIndex(p => p.ChampionId);
+            // Covering index for the dominant champion-analytics query
+            // (ChampionAnalyticsComputeService.ComputeWinRatesAsync): seek by ChampionId and read
+            // the join + aggregate payload (MatchId for the Match join, SummonerId for the Ranks
+            // join, TeamPosition + Win for the grouping) straight from the index leaf — turning the
+            // ~48k-block heap fetch into an index-only scan (prod EXPLAIN: the MatchParticipants
+            // access dropped from ~150ms to ~16ms). The INCLUDE columns are Npgsql-specific and this
+            // project references only EF.Relational, so they live in the raw-SQL migration; the model
+            // declares the bare (ChampionId) shape under the same name. Built CONCURRENTLY on the hot
+            // MatchParticipants table out-of-band — see docs/DEVELOPMENT.md "Applying index migrations
+            // to hot tables". The named overload keeps the plain ChampionId index alongside it.
+            entity.HasIndex(p => p.ChampionId, "IX_MatchParticipants_ChampionId_Covering");
             entity.HasIndex(p => new
             {
                 p.ChampionId,

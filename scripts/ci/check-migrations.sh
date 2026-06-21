@@ -15,7 +15,7 @@ set -euo pipefail
 
 BASE_REF="${BASE_REF:-origin/main}"
 MIG_DIR='Transcendence.Service/Migrations'
-HOT_TABLES='Summoners|Matches|MatchParticipants'
+HOT_TABLES='Summoners|Matches|MatchParticipants|MatchParticipantTimelineSnapshots'
 
 if ! git rev-parse --verify -q "${BASE_REF}^{commit}" >/dev/null 2>&1; then
   echo "check-migrations: base ref '${BASE_REF}' not found; skipping hot-table lint."

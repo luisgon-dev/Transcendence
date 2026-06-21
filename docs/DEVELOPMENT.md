@@ -148,11 +148,11 @@ dotnet ef database update --project Transcendence.Service --startup-project Tran
 Migration policy:
 - Do not hand-author or hand-edit EF migration files.
 - Generate migrations only via EF CLI (for example: `dotnet ef migrations add <Name> --project Transcendence.Service --startup-project Transcendence.Service`).
-- **Hot-table index/DDL is applied out-of-band, not via `database update`** — see the recipe below. CI (the migration-safety check) fails a PR that adds a non-concurrent `CreateIndex` or a defaulted `AddColumn` on `Summoners` / `Matches` / `MatchParticipants` and points back here.
+- **Hot-table index/DDL is applied out-of-band, not via `database update`** — see the recipe below. CI (the migration-safety check) fails a PR that adds a non-concurrent `CreateIndex` or a defaulted `AddColumn` on `Summoners` / `Matches` / `MatchParticipants` / `MatchParticipantTimelineSnapshots` and points back here.
 
 #### Applying index migrations to hot tables
 
-`Summoners` (~4M+ rows), `Matches`, and `MatchParticipants` are large and continuously written by ingestion. EF's generated `CreateIndex` emits a plain `CREATE INDEX`, which holds a `SHARE` lock for the entire build and blocks ingestion writes for its duration. **Do not** apply such a migration with `dotnet ef database update`. Split the apply instead:
+`Summoners` (~4M+ rows), `Matches`, `MatchParticipants`, and `MatchParticipantTimelineSnapshots` (~22.5M rows) are large and continuously written by ingestion. EF's generated `CreateIndex` emits a plain `CREATE INDEX`, which holds a `SHARE` lock for the entire build and blocks ingestion writes for its duration. **Do not** apply such a migration with `dotnet ef database update`. Split the apply instead:
 
 1. Isolate the index in its own migration (don't bundle it with other DDL) so the steps below stay clean.
 2. Read the index name / table / columns from the generated migration's `Up()`.

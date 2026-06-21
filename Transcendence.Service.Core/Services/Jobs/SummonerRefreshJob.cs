@@ -55,9 +55,17 @@ public class SummonerRefreshJob(
             ct.ThrowIfCancellationRequested();
             var options = ingestionOptions.Value;
 
-            // Fetch/update summoner first.
+            // Fetch/update summoner first. Reassign to the PERSISTED, change-tracked summoner the repo
+            // returns: the Riot-sourced instance from GetSummonerByRiotIdAsync always carries
+            // Id == Guid.Empty (the summoner Id is generated server-side by the raw-SQL upsert and is
+            // never written back to this instance). Using that empty Id downstream is what made champion
+            // mastery refresh fail — UpsertAsync stamped SummonerId = Guid.Empty on new rows and EF threw
+            // "SummonerId is unknown" (the FK is part of the key, so the empty value is the unset-key
+            // sentinel and no principal Summoner is tracked) — and also keyed the ingestion cursors and
+            // the post-refresh stats-cache invalidation to Guid.Empty. (MatchService already captures
+            // this return value; this path did not.)
             var summoner = await summonerService.GetSummonerByRiotIdAsync(gameName, tagLine, platformRoute, ct);
-            await summonerRepository.AddOrUpdateSummonerAsync(summoner, ct);
+            summoner = await summonerRepository.AddOrUpdateSummonerAsync(summoner, ct);
             await db.SaveChangesAsync(ct);
 
             // Enrich with champion mastery (fail-soft — never block a refresh on it).

@@ -1,0 +1,10 @@
+[Unit]
+Description=Transcendence pull-based deploy (poll ghcr :main, recreate changed app services)
+Documentation=https://github.com/luisgon-dev/Transcendence/blob/main/scripts/ops/README.md
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/root/deploy/poll-deploy.sh
+# Journald captures stdout; inspect with: journalctl -u transcendence-deploy.service

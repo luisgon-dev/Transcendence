@@ -1,0 +1,13 @@
+[Unit]
+Description=Run Transcendence poll-deploy every minute (replaces wud auto-update)
+
+[Timer]
+# First run shortly after boot, then every 60s while active. ~60s deploy latency
+# after an image is pushed to ghcr :main, matching the old wud cadence.
+OnBootSec=90s
+OnUnitActiveSec=60s
+AccuracySec=10s
+Unit=transcendence-deploy.service
+
+[Install]
+WantedBy=timers.target

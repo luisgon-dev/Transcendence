@@ -513,6 +513,22 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
                 .HasForeignKey(x => x.MatchId)
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(x => new { x.MinuteMark, x.MatchId });
+            // Covering index for the matchup gold/xp-diff-at-15 join
+            // (ChampionAnalyticsComputeService.ComputeMatchupsAsync). That query LEFT-joins this
+            // 22.5M-row table twice — championTimeline and opponentTimeline — on
+            // (MatchId, ParticipantId) with MinuteMark == 15. The key columns mirror the PK, so the
+            // join key was already seekable; the win is the INCLUDE payload, which lets both scans run
+            // index-only instead of heap-fetching Gold/Xp (both sides) and DerivedAtUtc (champion side,
+            // for LatestTimelineAtUtc) per row. On the HDD-backed prod DB that heap fetch pushed the
+            // matchup query to ~28s and tripped the 30s command timeout, failing WarmDefaultChampion-
+            // ProfilesJob every cycle. INCLUDE (Gold, Xp, DerivedAtUtc) is Npgsql-specific and this
+            // project references only EF.Relational, so it lives in the raw-SQL migration; the model
+            // declares the bare (MatchId, ParticipantId, MinuteMark) shape under the same name. Built
+            // CONCURRENTLY out-of-band on the hot table — see docs/DEVELOPMENT.md "Applying index
+            // migrations to hot tables".
+            entity.HasIndex(
+                x => new { x.MatchId, x.ParticipantId, x.MinuteMark },
+                "IX_MatchParticipantTimelineSnapshots_Matchup");
         });
 
         modelBuilder.Entity<MatchParticipantTimelineSnapshot>()

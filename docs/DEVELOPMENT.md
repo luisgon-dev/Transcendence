@@ -182,6 +182,22 @@ Migration policy:
 
 Prod precedent: `IX_Summoners_Region_UpdatedAt` was applied exactly this way — see the note on the `HasIndex(PlatformRegion, UpdatedAt)` call in `Transcendence.Data/TranscendenceContext.cs`.
 
+#### Troubleshooting: `MSB3552` / `CS2001` on `**/*.cs` or `**/*.resx`
+
+If a **single-project** build or a `dotnet ef` design-time build of `Transcendence.Service` fails with the SDK default item glob shown *literally* —
+
+```
+error MSB3552: Resource file "**/*.resx" cannot be found.
+error CS2001: Source file '**/*.cs' could not be found.
+```
+
+— the project directory has a stray folder whose **name contains a backslash**, typically `bin\Debug` (one literal path component, not `bin/Debug`), left behind by an external tool that wrote a Windows-style path on macOS/Linux. MSBuild treats `\` as a path separator, so this entry corrupts the recursive `**` enumeration and `FileMatcher` falls back to returning the glob unexpanded. A plain `rm -rf bin obj` does **not** remove it (that only matches the folder named `bin`), and the whole-solution build masks it — which is why CI (`dotnet build Transcendence.sln`) stays green while `dotnet build Transcendence.Service/Transcendence.Service.csproj` (and `dotnet ef … --no-build` against it) break. Remove it explicitly:
+
+```bash
+rm -rf 'Transcendence.Service/bin\Debug'   # quote the backslash; it is part of the name
+# nuke-from-orbit equivalent: git clean -dfx -- Transcendence.Service
+```
+
 ### Run services
 
 ```bash

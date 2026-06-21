@@ -139,6 +139,55 @@ public class SummonerRefreshJobTests
     }
 
     [Fact]
+    public async Task RefreshByRiotId_RefreshesMasteryWithPersistedSummonerId_NotEmptyRiotInstanceId()
+    {
+        // Regression for the "ChampionMastery refresh fails with FK 'SummonerId is unknown'" bug:
+        // GetSummonerByRiotIdAsync returns a Riot-sourced summoner whose Id is Guid.Empty (the Id is
+        // generated server-side by the raw-SQL upsert and never written back to this instance), while
+        // AddOrUpdateSummonerAsync returns the PERSISTED summoner with the real Id. The job must refresh
+        // mastery against the persisted Id — not the empty Id of the throwaway Riot instance, which made
+        // the mastery upsert stamp SummonerId = Guid.Empty and EF throw.
+        await using var harness = await SummonerRefreshJobHarness.CreateAsync();
+
+        var persisted = harness.SeedSummoner("name", "tag", "puuid-mastery");
+        await harness.Db.SaveChangesAsync();
+        persisted.Id.Should().NotBe(Guid.Empty);
+
+        // Mirrors SummonerService.CreateSummonerAsync: a fresh entity with no Id assigned.
+        var riotSourced = new Summoner
+        {
+            PlatformRegion = "NA1",
+            Region = "AMERICAS",
+            GameName = "name",
+            TagLine = "tag",
+            Puuid = "puuid-mastery",
+            SummonerLevel = 200
+        };
+        riotSourced.Id.Should().Be(Guid.Empty);
+
+        harness.SummonerService
+            .Setup(x => x.GetSummonerByRiotIdAsync("name", "tag", PlatformRoute.NA1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(riotSourced);
+
+        harness.SummonerRepository
+            .Setup(x => x.AddOrUpdateSummonerAsync(riotSourced, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(persisted);
+
+        harness.ChampionMasteryService
+            .Setup(x => x.GetMasteriesAsync("puuid-mastery", PlatformRoute.NA1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new ChampionMastery { ChampionId = 1, ChampionLevel = 7, ChampionPoints = 100_000 }]);
+
+        await harness.Job.RefreshByRiotId("name", "tag", PlatformRoute.NA1, "lock:main", "lock:priority");
+
+        harness.ChampionMasteryRepository.Verify(
+            x => x.UpsertAsync(persisted.Id, It.IsAny<List<ChampionMastery>>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        harness.ChampionMasteryRepository.Verify(
+            x => x.UpsertAsync(Guid.Empty, It.IsAny<List<ChampionMastery>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task RefreshForAnalytics_ExitsEarly_WhenApiPriorityDemandIsActive()
     {
         await using var harness = await SummonerRefreshJobHarness.CreateAsync();
@@ -647,7 +696,9 @@ public class SummonerRefreshJobTests
             Mock<IRefreshLockRepository> refreshLockRepository,
             Mock<IRiotMatchIdsClient> riotMatchIdsClient,
             Mock<IBackgroundJobClient> backgroundJobClient,
-            Mock<IRefreshLockLifecycleTelemetry> lockTelemetry)
+            Mock<IRefreshLockLifecycleTelemetry> lockTelemetry,
+            Mock<IChampionMasteryService> championMasteryService,
+            Mock<IChampionMasteryRepository> championMasteryRepository)
         {
             _connection = connection;
             Db = db;
@@ -661,6 +712,8 @@ public class SummonerRefreshJobTests
             RiotMatchIdsClient = riotMatchIdsClient;
             BackgroundJobClient = backgroundJobClient;
             LockTelemetry = lockTelemetry;
+            ChampionMasteryService = championMasteryService;
+            ChampionMasteryRepository = championMasteryRepository;
         }
 
         public SqliteCompatibleTranscendenceContext Db { get; }
@@ -674,6 +727,8 @@ public class SummonerRefreshJobTests
         public Mock<IRiotMatchIdsClient> RiotMatchIdsClient { get; }
         public Mock<IBackgroundJobClient> BackgroundJobClient { get; }
         public Mock<IRefreshLockLifecycleTelemetry> LockTelemetry { get; }
+        public Mock<IChampionMasteryService> ChampionMasteryService { get; }
+        public Mock<IChampionMasteryRepository> ChampionMasteryRepository { get; }
 
         public static async Task<SummonerRefreshJobHarness> CreateAsync()
         {
@@ -784,7 +839,9 @@ public class SummonerRefreshJobTests
                 refreshLockRepository,
                 riotMatchIdsClient,
                 backgroundJobClient,
-                lockTelemetry);
+                lockTelemetry,
+                championMasteryService,
+                championMasteryRepository);
         }
 
         public Summoner SeedSummoner(string gameName, string tagLine, string puuid)

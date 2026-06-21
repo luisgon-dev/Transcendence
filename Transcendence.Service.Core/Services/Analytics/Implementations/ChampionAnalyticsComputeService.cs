@@ -97,25 +97,25 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                 .Where(pr => pr.RankTier == rankTierScope.ExactTier);
         }
 
-        var participantRankRows = await participantRanks.ToListAsync(ct);
-        var totalGames = participantRankRows.Count;
+        // P5.2: total games + the per-(role, tier) aggregation are computed in SQL instead of
+        // materialising every participant row (~tens of thousands for a popular champion) and
+        // grouping in memory. Only the handful of grouped rows come back.
+        var totalGames = await participantRanks.CountAsync(ct);
         if (totalGames == 0)
             return [];
 
         var effectiveMinimumGames = ResolveEffectiveSampleSize(minimumGamesRequired, totalGames, floor: 3);
 
-        // Group by role and rank tier, calculate win rates
-        var groupedData = participantRankRows
+        var groupedData = await participantRanks
             .GroupBy(pr => new { pr.TeamPosition, pr.RankTier })
             .Select(g => new
             {
                 Role = g.Key.TeamPosition!,
                 RankTier = g.Key.RankTier,
                 Games = g.Count(),
-                Wins = g.Sum(pr => pr.Win ? 1 : 0),
-                MatchIds = g.Select(pr => pr.MatchId).Distinct().ToList()
+                Wins = g.Sum(pr => pr.Win ? 1 : 0)
             })
-            .ToList();
+            .ToListAsync(ct);
 
         var winRateData = groupedData
             .Where(x => x.Games >= effectiveMinimumGames)
@@ -129,25 +129,27 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                 .ToList();
         }
 
-        // Convert to DTOs
-        var scopedMatchIds = participantRankRows
-            .Select(pr => pr.MatchId)
-            .Distinct()
-            .ToList();
-        var bannedMatchIds = scopedMatchIds.Count == 0
-            ? new HashSet<Guid>()
-            : (await _context.MatchBans
-                    .AsNoTracking()
-                    .Where(b => b.ChampionId == championId && scopedMatchIds.Contains(b.MatchId))
-                    .Select(b => b.MatchId)
-                    .Distinct()
-                    .ToListAsync(ct))
-                .ToHashSet();
+        // P7.1: champion-level ban rate over the rank-scoped match population (all champions),
+        // matching ComputeTierListAsync — distinct matches in scope where this champion was banned
+        // over total distinct matches in scope, uniform across the role rows. The previous code
+        // intersected each group's *played* matches with this champion's *banned* matches, which is
+        // structurally ~0 (a banned champion is never picked in that match), so ban rate always read
+        // as 0. Stays in SQL: a subquery COUNT plus a Contains-subquery, no id set is materialised.
+        var scopedMatchIds = BuildScopedMatchIdQuery(patch, filter.Region, rankTierScope);
+        var totalMatchesInScope = await scopedMatchIds.CountAsync(ct);
+        var bannedMatches = totalMatchesInScope == 0
+            ? 0
+            : await _context.MatchBans
+                .AsNoTracking()
+                .Where(b => b.ChampionId == championId && scopedMatchIds.Contains(b.MatchId))
+                .Select(b => b.MatchId)
+                .Distinct()
+                .CountAsync(ct);
+        var banRate = totalMatchesInScope > 0 ? (double)bannedMatches / totalMatchesInScope : 0.0;
 
         var result = new List<ChampionWinRateDto>(winRateData.Count);
         foreach (var data in winRateData)
         {
-            var rowBanCount = data.MatchIds.Count(matchId => bannedMatchIds.Contains(matchId));
             var roleRank = await ComputeRoleRankAsync(
                 championId,
                 data.Role,
@@ -164,18 +166,16 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                 Wins: data.Wins,
                 WinRate: data.Games > 0 ? (double)data.Wins / data.Games : 0.0,
                 PickRate: totalGames > 0 ? (double)data.Games / totalGames : 0.0,
-                BanRate: data.MatchIds.Count > 0 ? (double)rowBanCount / data.MatchIds.Count : 0.0,
+                BanRate: banRate,
                 RoleRank: roleRank.RoleRank,
                 RolePopulation: roleRank.RolePopulation,
                 Patch: patch
             ));
         }
 
-        result = result
+        return result
             .OrderByDescending(x => x.Games)
             .ToList();
-
-        return result;
     }
 
     /// <summary>
@@ -404,6 +404,28 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             r.QueueType == "RANKED_SOLO_5x5" &&
             r.SummonerId == mp.SummonerId &&
             r.Tier == scope.ExactTier));
+    }
+
+    // Distinct match IDs for the full (all-champion) rank-scoped ranked-solo population in a
+    // patch/region — the denominator population for champion-level ban rate. Returned as IQueryable
+    // so callers compose CountAsync / Contains in SQL without materialising the (large) id set.
+    private IQueryable<Guid> BuildScopedMatchIdQuery(string patch, string? region, RankTierScope rankTierScope)
+    {
+        var scope = _context.MatchParticipants
+            .AsNoTracking()
+            .Where(mp => mp.Match.Patch == patch)
+            .Where(mp => mp.Match.Status == FetchStatus.Success)
+            .Where(mp => mp.Match.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
+                         (mp.Match.QueueId == 0 &&
+                          mp.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString()))
+            .Where(mp => mp.TeamPosition != null && mp.TeamPosition != "");
+
+        if (!string.IsNullOrEmpty(region))
+            scope = scope.Where(mp => mp.Summoner.PlatformRegion == region);
+
+        scope = ApplyRankTierScopeToParticipants(scope, rankTierScope, _context.Ranks.AsNoTracking());
+
+        return scope.Select(mp => mp.MatchId).Distinct();
     }
 
     private static HashSet<string> ResolvePlatformsForRegion(string region)

@@ -69,6 +69,74 @@ public class ChampionAnalyticsComputeServiceTests
     }
 
     [Fact]
+    public async Task ComputeWinRatesAsync_AggregatesInSqlAndComputesChampionLevelBanRate()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<TranscendenceContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var db = new SqliteCompatibleTranscendenceContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        db.Patches.Add(new Patch
+        {
+            Version = "15.2",
+            ReleaseDate = DateTime.UtcNow.AddDays(-2),
+            DetectedAt = DateTime.UtcNow.AddDays(-2),
+            IsActive = true
+        });
+
+        // Champion 266 played TOP twice (1 win, 1 loss)...
+        SeedMatch(db, "15.2", "NA1_A", summonerName: "PlayerA", championId: 266, role: "TOP", win: true);
+        SeedMatch(db, "15.2", "NA1_B", summonerName: "PlayerB", championId: 266, role: "TOP", win: false);
+        // ...and banned in a third, in-scope match (a different champion was actually played there).
+        SeedMatch(db, "15.2", "NA1_C", summonerName: "PlayerC", championId: 64, role: "JUNGLE", win: true);
+        await db.SaveChangesAsync();
+
+        var bannedMatch = db.Matches.Single(m => m.MatchId == "NA1_C");
+        db.MatchBans.Add(new MatchBan
+        {
+            MatchId = bannedMatch.Id,
+            Match = bannedMatch,
+            TeamId = 100,
+            PickTurn = 1,
+            ChampionId = 266
+        });
+        await db.SaveChangesAsync();
+
+        var service = new ChampionAnalyticsComputeService(
+            db,
+            Options.Create(new ChampionAnalyticsComputeOptions
+            {
+                MinimumGamesRequired = 1,
+                EarlyPatchMinimumGamesRequired = 1,
+                BootstrapPatchMinimumGamesRequired = 1,
+                BootstrapWindowHours = 24,
+                ProvisionalWindowHours = 96,
+                MaturingWindowHours = 240
+            }),
+            NullLogger<ChampionAnalyticsComputeService>.Instance);
+
+        var result = await service.ComputeWinRatesAsync(
+            266, new ChampionAnalyticsFilter(), "15.2", CancellationToken.None);
+
+        // The (role, tier) aggregation is now done in SQL; only the grouped row comes back.
+        result.Should().ContainSingle();
+        var row = result[0];
+        row.Role.Should().Be("TOP");
+        row.Games.Should().Be(2);
+        row.Wins.Should().Be(1);
+        row.WinRate.Should().BeApproximately(0.5, 0.0001);
+        row.PickRate.Should().BeApproximately(1.0, 0.0001);
+        // P7.1: champion-level ban rate = 1 banned match / 3 matches in scope. The old per-group
+        // played-and-banned intersection was structurally ~0, so this asserts the fix (non-zero).
+        row.BanRate.Should().BeApproximately(1.0 / 3.0, 0.0001);
+    }
+
+    [Fact]
     public async Task ComputeProChampionPlayrateAsync_RanksChampionsAndHonorsScope()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");

@@ -56,6 +56,7 @@ jobs:
               - 'global.json'
               - 'Transcendence.sln'
               - 'Transcendence.WebAPI/Dockerfile'
+              - '.github/workflows/docker-images.yml'
             service:
               - 'Transcendence.Service/**'
               - 'Transcendence.Service.Core/**'
@@ -63,6 +64,7 @@ jobs:
               - 'global.json'
               - 'Transcendence.sln'
               - 'Transcendence.Service/Dockerfile'
+              - '.github/workflows/docker-images.yml'
             web:
               - 'apps/web/**'
               - 'openapi/**'
@@ -72,6 +74,7 @@ jobs:
               - 'pnpm-workspace.yaml'
               - '.nvmrc'
               - 'apps/web/Dockerfile'
+              - '.github/workflows/docker-images.yml'
 
       - name: Plan component build
         id: plan
@@ -151,6 +154,14 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           file: ${{ matrix.dockerfile }}
+          # Publish a plain single-arch manifest, NOT an OCI image index. Buildx defaults
+          # provenance/SBOM attestations ON, which wraps even a single-platform image in an
+          # index with an `unknown/unknown` attestation sub-manifest. That breaks wud's
+          # local-vs-remote digest comparison on the moving `:main` tag (it resolves the new
+          # remote digest correctly but reports updateAvailable=false), so pushes silently
+          # fail to auto-deploy and require a manual `compose up`. See docs + task P1.3b.
+          provenance: false
+          sbom: false
 
       - name: Sign the published Docker image
         if: steps.plan.outputs.run == 'true' && github.event_name != 'pull_request'

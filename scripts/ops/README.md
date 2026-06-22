@@ -84,3 +84,42 @@ tail -f /root/trn-archive.log                                # run history
 incident** — the `COPY` of millions of rows saturates the HDD. Restore instructions are
 in each script's header. Deleted rows free pages for reuse inside Postgres; the file does
 not shrink without `VACUUM FULL` (intentionally avoided — it locks the table).
+
+## Postgres memory tuning (declarative)
+
+The 2026-06-21 DB-saturation incident was resolved by retuning Postgres
+(`shared_buffers` 128MB→4GB, `work_mem`→24MB, `effective_cache_size`→12GB,
+`maintenance_work_mem`→512MB) via `ALTER SYSTEM`, which writes `postgresql.auto.conf`
+**inside the `postgres_data` volume** — so it survives a restart but is lost if the volume
+is rebuilt, and is not version-controlled (#71).
+
+`compose.yml` now passes these as `postgres -c` flags sourced from env vars that default to
+Postgres's out-of-box values (local dev is unaffected — do **not** raise them on a small
+Docker VM). To make the tuning durable on **prod** (the 16GB host), set the values in the
+Portainer stack's `stack.env` (the canonical values are listed in `.env.example`):
+
+```sh
+# in the Portainer stack env (alongside POSTGRES_PASSWORD etc.)
+POSTGRES_SHARED_BUFFERS=4GB
+POSTGRES_WORK_MEM=24MB
+POSTGRES_EFFECTIVE_CACHE_SIZE=12GB
+POSTGRES_MAINTENANCE_WORK_MEM=512MB
+POSTGRES_SHM_SIZE=1gb
+```
+
+Then recreate **only** the postgres container in a quiet window (a restart drops all
+connections, ~seconds of downtime):
+
+```bash
+COMPOSE_DIR=/var/lib/docker/volumes/portainer_data/_data/compose/2   # poll-deploy.sh COMPOSE_DIR
+docker compose -p transcendence --env-file "$COMPOSE_DIR/stack.env" \
+  -f "$COMPOSE_DIR/docker-compose.yml" up -d postgres                # picks up the new -c flags + shm_size
+# verify:
+docker exec transcendence-postgres psql -U postgres -c 'SHOW shared_buffers; SHOW work_mem;'
+```
+
+`stack.env` lives in the Portainer compose dir (not the `postgres_data` volume), so the
+tuning now survives a DB volume rebuild. Command-line `-c` flags take precedence over
+`postgresql.auto.conf`; once verified, drop the old override so there is a single source of
+truth: `ALTER SYSTEM RESET shared_buffers; … RESET work_mem; …` then reload. `poll-deploy.sh`
+only redeploys the app containers, so it never touches postgres — this is a one-time manual step.

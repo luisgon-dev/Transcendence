@@ -11,6 +11,23 @@ services:
     image: postgres:16-alpine
     container_name: transcendence-postgres
     restart: unless-stopped
+    # Memory tuning is declarative here so it survives a postgres_data volume rebuild and is
+    # version-controlled, rather than living only in ALTER SYSTEM / postgresql.auto.conf inside the
+    # volume (the 2026-06-21 DB-saturation incident fix). Defaults match Postgres/Docker out-of-box, so
+    # local `docker compose up` is unchanged; prod sets the tuned values in its stack.env — see
+    # .env.example and scripts/ops/README.md ("Postgres memory tuning"). Command-line -c options take
+    # precedence over postgresql.auto.conf, so these are authoritative once auto.conf is reset on prod.
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=${POSTGRES_SHARED_BUFFERS:-128MB}"
+      - "-c"
+      - "work_mem=${POSTGRES_WORK_MEM:-4MB}"
+      - "-c"
+      - "effective_cache_size=${POSTGRES_EFFECTIVE_CACHE_SIZE:-4GB}"
+      - "-c"
+      - "maintenance_work_mem=${POSTGRES_MAINTENANCE_WORK_MEM:-64MB}"
+    shm_size: "${POSTGRES_SHM_SIZE:-64mb}"
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}

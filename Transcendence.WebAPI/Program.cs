@@ -45,7 +45,11 @@ if (bootstrapApiKeyDevOnly && !builder.Environment.IsDevelopment() && !string.Is
 
 // Add services to the container.
 
-builder.Services.AddControllers();
+builder.Services.AddControllers(options =>
+    // Normalize body-carrying error responses (e.g. BadRequest("...")) to ProblemDetails — see
+    // ProblemDetailsErrorBodyFilter. Empty-body 4xx/5xx + model validation are already ProblemDetails
+    // via [ApiController]; unhandled exceptions via ApiExceptionHandler.
+    options.Filters.Add<ProblemDetailsErrorBodyFilter>());
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddRateLimiter(options =>

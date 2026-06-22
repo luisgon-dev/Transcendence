@@ -111,13 +111,17 @@ export default async function SummonerProfilePage({
   let initialBody: unknown = result.body;
 
   if (!result.ok && initialStatus !== 202) {
-    const messageFromBackend =
-      isRecord(result.body) &&
-      (typeof result.body.message === "string" || typeof result.body.title === "string")
-        ? (typeof result.body.message === "string"
+    // Backend errors are ProblemDetails (RFC 7807): `detail` is the specific message, `title` the
+    // generic one. Some admin-style bodies use `message`. Prefer the most specific available.
+    const messageFromBackend = isRecord(result.body)
+      ? (typeof result.body.detail === "string"
+          ? result.body.detail
+          : typeof result.body.message === "string"
             ? result.body.message
-            : result.body.title) as string
-        : null;
+            : typeof result.body.title === "string"
+              ? result.body.title
+              : null)
+      : null;
 
     const message =
       messageFromBackend ??

@@ -368,7 +368,13 @@ async function ChampionSections({
   const matchups = profile.matchups ?? null;
   const effectiveRole =
     normalizeRole(profile.effectiveRole) ?? explicitRole ?? pickMostPlayedRole(winrates) ?? "MIDDLE";
-  const winrateRows = winrates?.byRoleTier ?? [];
+  // Show only the active role's win rates (broken down by rank) so the table stays compact and
+  // doesn't dominate the page — other roles are reachable via the role filter. When a role is in the
+  // URL the backend already returns just that role, so this is a no-op there; on the default view it
+  // narrows the multi-role result to the most-played role (effectiveRole).
+  const winrateRows = (winrates?.byRoleTier ?? []).filter(
+    (w) => (w.role ?? "").toUpperCase() === effectiveRole.toUpperCase()
+  );
   const buildRows = builds?.builds ?? [];
   const globalCoreItems = builds?.globalCoreItems ?? [];
   const counters = matchups?.counters ?? [];
@@ -403,7 +409,8 @@ async function ChampionSections({
       {/* ── Win Rates Table ── */}
       <Card className="p-5">
         <h2 className="type-section">
-          Win Rates
+          Win Rate by Rank
+          <span className="ml-2 type-overline text-muted">{roleDisplayLabel(effectiveRole)}</span>
         </h2>
         {!winrates ? (
           <div className="mt-2">
@@ -417,7 +424,6 @@ async function ChampionSections({
             <table className="w-full text-left text-sm">
               <thead className="type-overline text-muted">
                 <tr className="border-b border-border/30">
-                  <th className="py-2 pr-4">Role</th>
                   <th className="py-2 pr-4">Tier</th>
                   <th className="py-2 pr-4 text-right">Win Rate</th>
                   <th className="py-2 pr-4 text-right">Pick Rate</th>
@@ -433,10 +439,7 @@ async function ChampionSections({
                       key={`${w.role ?? "ALL"}-${w.rankTier ?? "all"}`}
                       className="border-t border-border/40 transition hover:bg-surface-2/40"
                     >
-                      <td className="py-2.5 pr-4 font-medium">
-                        {roleDisplayLabel(w.role ?? "ALL")}
-                      </td>
-                      <td className="py-2.5 pr-4 text-muted">
+                      <td className="py-2.5 pr-4 font-medium text-muted">
                         {rankTierDisplayLabel(w.rankTier ?? "all")}
                       </td>
                       <td className="py-2.5 pr-4 text-right">

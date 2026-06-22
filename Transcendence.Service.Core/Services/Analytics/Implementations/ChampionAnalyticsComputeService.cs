@@ -165,7 +165,12 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
                 Games: data.Games,
                 Wins: data.Wins,
                 WinRate: data.Games > 0 ? (double)data.Wins / data.Games : 0.0,
-                PickRate: totalGames > 0 ? (double)data.Games / totalGames : 0.0,
+                // P7.1: true pick rate — this champion's games in the (role, tier) over ALL champions'
+                // games in that same (role, tier) scope (roleRank.RoleTotalGames), matching
+                // ComputeTierListAsync's Games/totalParticipants. The previous denominator was this
+                // champion's OWN total games across roles, so the value was a role-distribution share
+                // (a one-role champ read ~100%), not a pick rate.
+                PickRate: roleRank.RoleTotalGames > 0 ? (double)data.Games / roleRank.RoleTotalGames : 0.0,
                 BanRate: banRate,
                 RoleRank: roleRank.RoleRank,
                 RolePopulation: roleRank.RolePopulation,
@@ -441,7 +446,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         };
     }
 
-    private async Task<(int? RoleRank, int? RolePopulation)> ComputeRoleRankAsync(
+    private async Task<(int? RoleRank, int? RolePopulation, int RoleTotalGames)> ComputeRoleRankAsync(
         int championId,
         string role,
         string rankTier,
@@ -449,8 +454,14 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         string? region,
         CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(role) || string.Equals(rankTier, "UNRANKED", StringComparison.OrdinalIgnoreCase))
-            return (null, null);
+        // RoleTotalGames is the sum of every champion's games in this exact (role, tier) scope — the
+        // true pick-rate denominator, derived for free from the same standings we build for the role
+        // rank (no extra query). The (role, tier) population is the same one the per-row query already
+        // scans, so this only reuses work.
+        if (string.IsNullOrWhiteSpace(role))
+            return (null, null, 0);
+
+        var isUnranked = string.Equals(rankTier, "UNRANKED", StringComparison.OrdinalIgnoreCase);
 
         var roleQuery = _context.MatchParticipants
             .AsNoTracking()
@@ -464,10 +475,17 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         if (!string.IsNullOrWhiteSpace(region))
             roleQuery = roleQuery.Where(mp => mp.Summoner.PlatformRegion == region);
 
-        roleQuery = roleQuery.Where(mp => _context.Ranks.Any(r =>
-            r.QueueType == "RANKED_SOLO_5x5" &&
-            r.SummonerId == mp.SummonerId &&
-            r.Tier == rankTier));
+        // Match participantRanks' UNRANKED bucket = participants with no solo-queue rank, so the pick-rate
+        // denominator is well-defined for unranked rows too (e.g. the all-ranks view). The default
+        // Emerald+ view never produces UNRANKED rows, so the anti-join cost stays off the hot path.
+        roleQuery = isUnranked
+            ? roleQuery.Where(mp => !_context.Ranks.Any(r =>
+                r.QueueType == "RANKED_SOLO_5x5" &&
+                r.SummonerId == mp.SummonerId))
+            : roleQuery.Where(mp => _context.Ranks.Any(r =>
+                r.QueueType == "RANKED_SOLO_5x5" &&
+                r.SummonerId == mp.SummonerId &&
+                r.Tier == rankTier));
 
         var standings = await roleQuery
             .GroupBy(mp => mp.ChampionId)
@@ -483,11 +501,20 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             .ToListAsync(ct);
 
         if (standings.Count == 0)
-            return (null, null);
+            return (null, null, 0);
+
+        var roleTotalGames = standings.Sum(s => s.Games);
+
+        // Don't assign a competitive role rank within the UNRANKED bucket (preserves prior behaviour);
+        // the pick-rate denominator is still meaningful, so return it.
+        if (isUnranked)
+            return (null, null, roleTotalGames);
 
         var rolePopulation = standings.Count;
         var rank = standings.FindIndex(s => s.ChampionId == championId);
-        return rank >= 0 ? (rank + 1, rolePopulation) : (null, rolePopulation);
+        return rank >= 0
+            ? (rank + 1, rolePopulation, roleTotalGames)
+            : (null, rolePopulation, roleTotalGames);
     }
 
     private static int ResolveEffectiveSampleSize(int configuredMinimum, int availableGames, int floor)

@@ -137,6 +137,64 @@ public class ChampionAnalyticsComputeServiceTests
     }
 
     [Fact]
+    public async Task ComputeWinRatesAsync_PickRateIsShareOfAllPicksInRoleTier_NotChampionRoleShare()
+    {
+        // P7.1: pick rate must be this champion's games in a (role, tier) over ALL champions' games in
+        // that same (role, tier) — not the champion's own role distribution. Seed two TOP champions so
+        // the two semantics diverge: champ 266 plays TOP twice, champ 999 plays TOP eight times. The
+        // true pick rate for 266 is 2/10 = 0.2; the old role-share denominator (266's own 2 games)
+        // would have read 2/2 = 1.0.
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<TranscendenceContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var db = new SqliteCompatibleTranscendenceContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        db.Patches.Add(new Patch
+        {
+            Version = "15.2",
+            ReleaseDate = DateTime.UtcNow.AddDays(-2),
+            DetectedAt = DateTime.UtcNow.AddDays(-2),
+            IsActive = true
+        });
+
+        SeedMatch(db, "15.2", "NA1_266_1", summonerName: "P266a", championId: 266, role: "TOP", win: true);
+        SeedMatch(db, "15.2", "NA1_266_2", summonerName: "P266b", championId: 266, role: "TOP", win: false);
+        for (var i = 0; i < 8; i++)
+        {
+            SeedMatch(db, "15.2", $"NA1_999_{i}", summonerName: $"P999_{i}", championId: 999, role: "TOP", win: i % 2 == 0);
+        }
+        await db.SaveChangesAsync();
+
+        var service = new ChampionAnalyticsComputeService(
+            db,
+            Options.Create(new ChampionAnalyticsComputeOptions
+            {
+                MinimumGamesRequired = 1,
+                EarlyPatchMinimumGamesRequired = 1,
+                BootstrapPatchMinimumGamesRequired = 1,
+                BootstrapWindowHours = 24,
+                ProvisionalWindowHours = 96,
+                MaturingWindowHours = 240
+            }),
+            NullLogger<ChampionAnalyticsComputeService>.Instance);
+
+        var result = await service.ComputeWinRatesAsync(
+            266, new ChampionAnalyticsFilter(), "15.2", CancellationToken.None);
+
+        result.Should().ContainSingle();
+        var row = result[0];
+        row.Role.Should().Be("TOP");
+        row.Games.Should().Be(2);
+        // 2 of the 10 TOP picks in scope — a true pick rate, not the champion's own role share (1.0).
+        row.PickRate.Should().BeApproximately(0.2, 0.0001);
+    }
+
+    [Fact]
     public async Task ComputeProChampionPlayrateAsync_RanksChampionsAndHonorsScope()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");

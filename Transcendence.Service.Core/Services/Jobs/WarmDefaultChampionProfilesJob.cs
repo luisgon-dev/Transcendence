@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Match;
+using Transcendence.Service.Core.Queries;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 
@@ -48,9 +49,9 @@ public class WarmDefaultChampionProfilesJob(
         var minGames = Math.Max(1, opts.MinimumGamesToWarm);
         var champions = await db.MatchParticipants
             .AsNoTracking()
-            .Where(mp => mp.Match.Patch == patch
-                      && mp.Match.Status == FetchStatus.Success
-                      && mp.TeamPosition != null)
+            .OnPatch(patch)
+            .FromSuccessfulMatches()
+            .Where(mp => mp.TeamPosition != null)
             .GroupBy(mp => mp.ChampionId)
             .Select(g => new { ChampionId = g.Key, Games = g.Count() })
             .Where(x => x.Games >= minGames)

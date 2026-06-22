@@ -76,8 +76,31 @@ public class UserAuthService(
             return null;
 
         var tokenHash = jwtService.HashRefreshToken(request.RefreshToken);
-        var currentToken = await userAccountRepository.GetActiveRefreshTokenAsync(tokenHash, ct);
+        var currentToken = await userAccountRepository.GetRefreshTokenByHashAsync(tokenHash, ct);
         if (currentToken == null) return null;
+
+        if (currentToken.RevokedAtUtc != null)
+        {
+            // Refresh-token reuse detection: a token that was already ROTATED (revoked with a successor)
+            // is being presented again — the legitimate client would be using the successor, so this
+            // signals the token was stolen. Revoke the whole family so neither the attacker nor a
+            // possibly-compromised client can keep refreshing; the user must re-authenticate. A token
+            // revoked by logout (no successor) is just replayed/stale — fail without nuking a fresh session.
+            if (currentToken.ReplacedByTokenHash != null)
+            {
+                var revokedCount = await userAccountRepository
+                    .RevokeAllActiveRefreshTokensForUserAsync(currentToken.UserAccountId, ct);
+                await userAccountRepository.SaveChangesAsync(ct);
+                logger.LogWarning(
+                    "Refresh-token reuse detected for user {UserAccountId}; revoked {Count} active token(s) in the family.",
+                    currentToken.UserAccountId, revokedCount);
+            }
+
+            return null;
+        }
+
+        if (currentToken.ExpiresAtUtc <= DateTime.UtcNow)
+            return null;
 
         var user = currentToken.UserAccount;
         var newRefreshToken = jwtService.GenerateRefreshToken();

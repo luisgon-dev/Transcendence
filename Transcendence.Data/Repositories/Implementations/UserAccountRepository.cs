@@ -71,11 +71,32 @@ public class UserAccountRepository(TranscendenceContext db) : IUserAccountReposi
                 x.ExpiresAtUtc > now, ct);
     }
 
+    public Task<UserRefreshToken?> GetRefreshTokenByHashAsync(string tokenHash, CancellationToken ct = default)
+    {
+        // Any state — revoked/expired included — so the refresh flow can distinguish "never existed"
+        // from "already rotated" (reuse). Includes the account + roles so an active hit can mint tokens.
+        return db.Set<UserRefreshToken>()
+            .Include(x => x.UserAccount)
+            .ThenInclude(x => x.Roles)
+            .FirstOrDefaultAsync(x => x.TokenHash == tokenHash, ct);
+    }
+
     public Task RevokeRefreshTokenAsync(UserRefreshToken token, string? replacedByTokenHash, CancellationToken ct = default)
     {
         token.RevokedAtUtc = DateTime.UtcNow;
         token.ReplacedByTokenHash = replacedByTokenHash;
         return Task.CompletedTask;
+    }
+
+    public async Task<int> RevokeAllActiveRefreshTokensForUserAsync(Guid userAccountId, CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow;
+        var tokens = await db.Set<UserRefreshToken>()
+            .Where(x => x.UserAccountId == userAccountId && x.RevokedAtUtc == null)
+            .ToListAsync(ct);
+        foreach (var token in tokens)
+            token.RevokedAtUtc = now;
+        return tokens.Count;
     }
 
     public async Task<bool> RevokeActiveRefreshTokenByHashAsync(string tokenHash, CancellationToken ct = default)

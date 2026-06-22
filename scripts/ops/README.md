@@ -93,33 +93,41 @@ The 2026-06-21 DB-saturation incident was resolved by retuning Postgres
 **inside the `postgres_data` volume** — so it survives a restart but is lost if the volume
 is rebuilt, and is not version-controlled (#71).
 
-`compose.yml` now passes these as `postgres -c` flags sourced from env vars that default to
-Postgres's out-of-box values (local dev is unaffected — do **not** raise them on a small
-Docker VM). To make the tuning durable on **prod** (the 16GB host), set the values in the
-Portainer stack's `stack.env` (the canonical values are listed in `.env.example`):
+The repo `compose.yml` passes these as `postgres -c` flags sourced from env vars that default
+to Postgres's out-of-box values (local dev is unaffected — do **not** raise them on a small
+Docker VM). The values live in the compose file / stack env, which sit outside the
+`postgres_data` volume, so the tuning survives a DB volume rebuild.
 
-```sh
-# in the Portainer stack env (alongside POSTGRES_PASSWORD etc.)
-POSTGRES_SHARED_BUFFERS=4GB
-POSTGRES_WORK_MEM=24MB
-POSTGRES_EFFECTIVE_CACHE_SIZE=12GB
-POSTGRES_MAINTENANCE_WORK_MEM=512MB
-POSTGRES_SHM_SIZE=1gb
+**Current prod state (applied 2026-06-21, zero downtime).** The **Portainer** compose's
+`postgres` service now hardcodes the values directly in its `command` (failsafe — they can't
+silently fall back to the 128MB default), added without restarting the container:
+
+```yaml
+# in <COMPOSE_DIR>/docker-compose.yml, postgres service
+command: ["postgres","-c","shared_buffers=4GB","-c","work_mem=24MB","-c","effective_cache_size=12GB","-c","maintenance_work_mem=512MB"]
 ```
 
-Then recreate **only** the postgres container in a quiet window (a restart drops all
-connections, ~seconds of downtime):
+The running container was **not** restarted: the values are already live via `postgresql.auto.conf`,
+and the new `-c` flags take effect on the next deliberate postgres restart (and on a fresh volume).
+After that restart, single-source them by dropping the auto.conf override — do **not** do this
+before the restart, since the reloadable params would drop live:
+
+```bash
+docker exec transcendence-postgres psql -U postgres -d transcendence \
+  -c "ALTER SYSTEM RESET shared_buffers;  ALTER SYSTEM RESET work_mem;" \
+  -c "ALTER SYSTEM RESET effective_cache_size; ALTER SYSTEM RESET maintenance_work_mem;"
+docker exec transcendence-postgres psql -U postgres -c 'SHOW shared_buffers; SHOW work_mem;'  # verify
+```
+
+To recreate postgres deliberately (a restart drops connections, ~seconds of downtime):
 
 ```bash
 COMPOSE_DIR=/var/lib/docker/volumes/portainer_data/_data/compose/2   # poll-deploy.sh COMPOSE_DIR
 docker compose -p transcendence --env-file "$COMPOSE_DIR/stack.env" \
-  -f "$COMPOSE_DIR/docker-compose.yml" up -d postgres                # picks up the new -c flags + shm_size
-# verify:
-docker exec transcendence-postgres psql -U postgres -c 'SHOW shared_buffers; SHOW work_mem;'
+  -f "$COMPOSE_DIR/docker-compose.yml" up -d postgres
 ```
 
-`stack.env` lives in the Portainer compose dir (not the `postgres_data` volume), so the
-tuning now survives a DB volume rebuild. Command-line `-c` flags take precedence over
-`postgresql.auto.conf`; once verified, drop the old override so there is a single source of
-truth: `ALTER SYSTEM RESET shared_buffers; … RESET work_mem; …` then reload. `poll-deploy.sh`
-only redeploys the app containers, so it never touches postgres — this is a one-time manual step.
+`poll-deploy.sh` only redeploys the app containers, so it never touches postgres — this is a
+one-time manual step. **Note:** prod postgres is `pgautoupgrade/pgautoupgrade:18.3-alpine` (PG 18),
+data volume mounted at `/var/lib/postgresql` (PGDATA under `/var/lib/postgresql/18/docker`); the
+repo `compose.yml` mirrors this so it's a safe deploy source.

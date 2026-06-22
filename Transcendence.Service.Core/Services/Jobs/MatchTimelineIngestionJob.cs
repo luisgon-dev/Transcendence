@@ -53,19 +53,23 @@ public class MatchTimelineIngestionJob(
             return;
         }
 
+        // Race-safe get-or-create. The ingestion and backfill paths can target the same match
+        // concurrently; both would find no row and Add one, colliding on PK_MatchTimelineFetchStates
+        // (23505) at SaveChanges and burning a Hangfire retry. Insert idempotently first
+        // (ON CONFLICT DO NOTHING) so the row is guaranteed to exist, then load it tracked and fall
+        // through to the normal update path — the later field writes become last-writer-wins UPDATEs
+        // (benign) instead of a PK INSERT collision. The seeded columns are the non-nullable ones with
+        // no DB default; their values match `new MatchTimelineFetchState{}` (Unfetched / 0 / 0).
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+             INSERT INTO "MatchTimelineFetchStates" ("MatchId", "Status", "RetryCount", "SchemaVersion")
+             VALUES ({match.Id}, 0, 0, 0)
+             ON CONFLICT ("MatchId") DO NOTHING
+             """, ct);
+
         var state = await db.MatchTimelineFetchStates
             .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(x => x.MatchId == match.Id, ct);
-
-        if (state == null)
-        {
-            state = new MatchTimelineFetchState
-            {
-                MatchId = match.Id,
-                Match = match
-            };
-            db.MatchTimelineFetchStates.Add(state);
-        }
+            .FirstAsync(x => x.MatchId == match.Id, ct);
 
         var maxRetryAttempts = Math.Max(1, jobOptions.MaxRetryAttempts);
         if (state.Status == MatchTimelineFetchStatus.Success && state.SchemaVersion >= CurrentTimelineSchemaVersion)

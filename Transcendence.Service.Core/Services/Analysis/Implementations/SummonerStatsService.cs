@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
 using Transcendence.Data;
+using Transcendence.Service.Core.Queries;
 using Transcendence.Service.Core.Services.Analysis.Exceptions;
 using Transcendence.Service.Core.Services.Analysis.Interfaces;
 using Transcendence.Service.Core.Services.Analysis.Models;
@@ -64,9 +65,7 @@ public class SummonerStatsService(
         var baseQuery = db.MatchParticipants
             .AsNoTracking()
             .Where(mp => mp.SummonerId == summonerId)
-            .Where(mp => mp.Match.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
-                         (mp.Match.QueueId == 0 &&
-                          mp.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString()))
+            .InRankedSoloQueue()
             .Select(mp => new
             {
                 mp.Win,
@@ -104,9 +103,7 @@ public class SummonerStatsService(
         var recent = await db.MatchParticipants
             .AsNoTracking()
             .Where(mp => mp.SummonerId == summonerId)
-            .Where(mp => mp.Match.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
-                         (mp.Match.QueueId == 0 &&
-                          mp.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString()))
+            .InRankedSoloQueue()
             .OrderByDescending(mp => mp.Match.MatchDate)
             .ThenByDescending(mp => mp.Match.MatchId)
             .Select(mp => new RecentPerformancePoint(
@@ -163,9 +160,7 @@ public class SummonerStatsService(
         var games = await db.MatchParticipants
             .AsNoTracking()
             .Where(mp => mp.SummonerId == summonerId)
-            .Where(mp => mp.Match.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
-                         (mp.Match.QueueId == 0 &&
-                          mp.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString()))
+            .InRankedSoloQueue()
             .Select(mp => new
             {
                 mp.ChampionId,
@@ -230,9 +225,7 @@ public class SummonerStatsService(
         var rows = await db.MatchParticipants
             .AsNoTracking()
             .Where(mp => mp.SummonerId == summonerId)
-            .Where(mp => mp.Match.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
-                         (mp.Match.QueueId == 0 &&
-                          mp.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString()))
+            .InRankedSoloQueue()
             .Select(mp => new { mp.TeamPosition, mp.Win })
             .ToListAsync(ct);
 

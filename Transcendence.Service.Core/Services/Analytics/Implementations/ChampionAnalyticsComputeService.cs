@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Match;
+using Transcendence.Service.Core.Queries;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.RiotApi;
@@ -47,18 +48,13 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         var baseQuery = _context.MatchParticipants
             .AsNoTracking()
             .Where(mp => mp.ChampionId == championId)
-            .Where(mp => mp.Match.Patch == patch)
-            .Where(mp => mp.Match.Status == FetchStatus.Success)
-            .Where(mp => mp.Match.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
-                         (mp.Match.QueueId == 0 &&
-                          mp.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString()))
-            .Where(mp => mp.TeamPosition != null && mp.TeamPosition != "");
+            .OnPatch(patch)
+            .FromSuccessfulMatches()
+            .InRankedSoloQueue()
+            .WithAssignedRole();
 
         // Apply region filter if specified
-        if (!string.IsNullOrEmpty(filter.Region))
-        {
-            baseQuery = baseQuery.Where(mp => mp.Summoner.PlatformRegion == filter.Region);
-        }
+        baseQuery = baseQuery.InPlatformRegion(filter.Region);
 
         // Apply role filter if specified
         if (!string.IsNullOrEmpty(filter.Role))
@@ -203,12 +199,10 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
         // Step 1: Build base query for match participants in this patch
         var baseQuery = _context.MatchParticipants
             .AsNoTracking()
-            .Where(mp => mp.Match.Patch == patch)
-            .Where(mp => mp.Match.Status == FetchStatus.Success)
-            .Where(mp => mp.Match.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
-                         (mp.Match.QueueId == 0 &&
-                          mp.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString()))
-            .Where(mp => mp.TeamPosition != null && mp.TeamPosition != "");
+            .OnPatch(patch)
+            .FromSuccessfulMatches()
+            .InRankedSoloQueue()
+            .WithAssignedRole();
 
         // Apply role filter (if not unified "ALL")
         if (!isUnifiedRole)
@@ -216,10 +210,7 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             baseQuery = baseQuery.Where(mp => mp.TeamPosition == normalizedRole);
         }
 
-        if (!string.IsNullOrWhiteSpace(regionFilter))
-        {
-            baseQuery = baseQuery.Where(mp => mp.Summoner.PlatformRegion == regionFilter);
-        }
+        baseQuery = baseQuery.InPlatformRegion(regionFilter);
 
         // Only apply rank join semantics when a tier filter is requested.
         // Unfiltered views intentionally keep unranked participants.
@@ -418,15 +409,12 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
     {
         var scope = _context.MatchParticipants
             .AsNoTracking()
-            .Where(mp => mp.Match.Patch == patch)
-            .Where(mp => mp.Match.Status == FetchStatus.Success)
-            .Where(mp => mp.Match.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
-                         (mp.Match.QueueId == 0 &&
-                          mp.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString()))
-            .Where(mp => mp.TeamPosition != null && mp.TeamPosition != "");
+            .OnPatch(patch)
+            .FromSuccessfulMatches()
+            .InRankedSoloQueue()
+            .WithAssignedRole();
 
-        if (!string.IsNullOrEmpty(region))
-            scope = scope.Where(mp => mp.Summoner.PlatformRegion == region);
+        scope = scope.InPlatformRegion(region);
 
         scope = ApplyRankTierScopeToParticipants(scope, rankTierScope, _context.Ranks.AsNoTracking());
 
@@ -465,15 +453,12 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
 
         var roleQuery = _context.MatchParticipants
             .AsNoTracking()
-            .Where(mp => mp.Match.Patch == patch)
-            .Where(mp => mp.Match.Status == FetchStatus.Success)
-            .Where(mp => mp.Match.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
-                         (mp.Match.QueueId == 0 &&
-                          mp.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString()))
+            .OnPatch(patch)
+            .FromSuccessfulMatches()
+            .InRankedSoloQueue()
             .Where(mp => mp.TeamPosition == role);
 
-        if (!string.IsNullOrWhiteSpace(region))
-            roleQuery = roleQuery.Where(mp => mp.Summoner.PlatformRegion == region);
+        roleQuery = roleQuery.InPlatformRegion(region);
 
         // Match participantRanks' UNRANKED bucket = participants with no solo-queue rank, so the pick-rate
         // denominator is well-defined for unranked rows too (e.g. the all-ranks view). The default
@@ -579,18 +564,12 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             .AsSplitQuery()
             .Include(mp => mp.Items)
             .Include(mp => mp.Runes)
-            .Where(mp => mp.ChampionId == championId
-                      && mp.Match.Patch == patch
-                      && mp.Match.Status == FetchStatus.Success
-                      && (mp.Match.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
-                          (mp.Match.QueueId == 0 &&
-                           mp.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString()))
-                      && mp.TeamPosition == role);
+            .Where(mp => mp.ChampionId == championId && mp.TeamPosition == role)
+            .OnPatch(patch)
+            .FromSuccessfulMatches()
+            .InRankedSoloQueue();
 
-        if (!string.IsNullOrWhiteSpace(regionFilter))
-        {
-            baseQuery = baseQuery.Where(mp => mp.Summoner.PlatformRegion == regionFilter);
-        }
+        baseQuery = baseQuery.InPlatformRegion(regionFilter);
 
         baseQuery = ApplyRankTierScopeToParticipants(baseQuery, rankTierScope, _context.Ranks.AsNoTracking());
 
@@ -851,11 +830,9 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             .Include(mp => mp.Runes)
             .Include(mp => mp.Summoner)
             .Where(mp => mp.ChampionId == championId)
-            .Where(mp => mp.Match.Patch == patch)
-            .Where(mp => mp.Match.Status == FetchStatus.Success)
-            .Where(mp => mp.Match.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
-                         (mp.Match.QueueId == 0 &&
-                          mp.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString()))
+            .OnPatch(patch)
+            .FromSuccessfulMatches()
+            .InRankedSoloQueue()
             .Where(mp => mp.Puuid != null && trackedPuuids.Contains(mp.Puuid));
 
         if (!string.Equals(normalizedRole, "ALL", StringComparison.Ordinal))
@@ -1066,11 +1043,9 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
 
         var rows = await _context.MatchParticipants
             .AsNoTracking()
-            .Where(mp => mp.Match.Patch == patch)
-            .Where(mp => mp.Match.Status == FetchStatus.Success)
-            .Where(mp => mp.Match.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
-                         (mp.Match.QueueId == 0 &&
-                          mp.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString()))
+            .OnPatch(patch)
+            .FromSuccessfulMatches()
+            .InRankedSoloQueue()
             .Where(mp => mp.Puuid != null && trackedPuuids.Contains(mp.Puuid))
             .Select(mp => new { mp.ChampionId, mp.Win, mp.Puuid })
             .ToListAsync(ct);
@@ -1614,18 +1589,12 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
 
         var championQuery = _context.MatchParticipants
             .AsNoTracking()
-            .Where(mp => mp.ChampionId == championId
-                      && mp.TeamPosition == role
-                      && mp.Match.Patch == patch
-                      && mp.Match.Status == FetchStatus.Success
-                      && (mp.Match.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
-                          (mp.Match.QueueId == 0 &&
-                           mp.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString())));
+            .Where(mp => mp.ChampionId == championId && mp.TeamPosition == role)
+            .OnPatch(patch)
+            .FromSuccessfulMatches()
+            .InRankedSoloQueue();
 
-        if (!string.IsNullOrWhiteSpace(regionFilter))
-        {
-            championQuery = championQuery.Where(mp => mp.Summoner.PlatformRegion == regionFilter);
-        }
+        championQuery = championQuery.InPlatformRegion(regionFilter);
 
         // Apply rank tier filter if specified
         championQuery = ApplyRankTierScopeToParticipants(

@@ -1,0 +1,45 @@
+using Transcendence.Data.Models.LoL.Match;
+using Transcendence.Service.Core.Services.RiotApi;
+
+namespace Transcendence.Service.Core.Queries;
+
+/// <summary>
+/// Composable query-objects for the LoL analytics read surface — see the "Data access" policy in
+/// docs/ARCHITECTURE.md. Reusable predicates over <see cref="MatchParticipant"/> live here once and are
+/// chained onto an <see cref="IQueryable{T}"/>, instead of being copy-pasted across the analytics/stats
+/// services (the ranked-queue filter alone was duplicated 20+ times). Each method is a pure
+/// <c>Where(...)</c> that EF Core folds into a single SQL <c>WHERE</c>, so they commute and compose freely.
+/// </summary>
+public static class MatchParticipantQueries
+{
+    /// <summary>
+    /// Ranked Solo/Duo only. Tolerant of legacy rows that carry the queue as
+    /// (<c>QueueId == 0</c>, <c>QueueType == "420"</c>) rather than a populated <c>QueueId</c>.
+    /// </summary>
+    public static IQueryable<MatchParticipant> InRankedSoloQueue(this IQueryable<MatchParticipant> participants) =>
+        participants.Where(mp =>
+            mp.Match.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
+            (mp.Match.QueueId == 0 &&
+             mp.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString()));
+
+    /// <summary>Participants whose match is on the given patch.</summary>
+    public static IQueryable<MatchParticipant> OnPatch(this IQueryable<MatchParticipant> participants, string patch) =>
+        participants.Where(mp => mp.Match.Patch == patch);
+
+    /// <summary>Participants whose match was fully fetched (<see cref="FetchStatus.Success"/>).</summary>
+    public static IQueryable<MatchParticipant> FromSuccessfulMatches(this IQueryable<MatchParticipant> participants) =>
+        participants.Where(mp => mp.Match.Status == FetchStatus.Success);
+
+    /// <summary>
+    /// Restricts to a platform region (e.g. "NA1"). A null/blank region is a no-op — callers pass the
+    /// already-normalized region filter, so this absorbs the per-site "if region is set" guard.
+    /// </summary>
+    public static IQueryable<MatchParticipant> InPlatformRegion(this IQueryable<MatchParticipant> participants, string? platformRegion) =>
+        string.IsNullOrWhiteSpace(platformRegion)
+            ? participants
+            : participants.Where(mp => mp.Summoner.PlatformRegion == platformRegion);
+
+    /// <summary>Participants with an assigned lane/role (non-empty <c>TeamPosition</c>).</summary>
+    public static IQueryable<MatchParticipant> WithAssignedRole(this IQueryable<MatchParticipant> participants) =>
+        participants.Where(mp => mp.TeamPosition != null && mp.TeamPosition != "");
+}

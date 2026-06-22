@@ -432,6 +432,32 @@ Backend uses a layered approach (see source and README):
 - Persistent storage (PostgreSQL) for canonical match/summoner data
 - Summoner stats cache entries are tagged per summoner (`summoner-stats:{summonerId}`) so refresh jobs can invalidate all related stats keys in one operation
 
+## Data Access
+
+The codebase deliberately does **not** route all persistence through a repository layer. EF Core's
+`DbContext` is already a unit-of-work + repository, and testability is provided by substituting the
+provider (`SqliteCompatibleTranscendenceContext` backs the analytics/service tests against a real
+in-memory schema, not repository mocks). The policy is therefore:
+
+1. **Direct EF Core by default.** Services and jobs query `TranscendenceContext` directly. Don't wrap
+   reads in a repository for its own sake — a generic `GetById`/`Add` CRUD wrapper adds indirection
+   without value.
+2. **Reusable read predicates are composable query-objects**, not copy-paste. A `Where(...)` clause used
+   in more than one place becomes an `IQueryable<T>` extension under `Transcendence.Service.Core/Queries`
+   — e.g. `MatchParticipantQueries`: `participants.InRankedSoloQueue().OnPatch(patch).FromSuccessfulMatches()`.
+   Each is a pure `Where` that EF folds into one SQL `WHERE`, so they commute and compose. (This replaced
+   the ranked-solo-queue predicate that had been duplicated 20+ times across the analytics/stats services.)
+   A genuinely single-use predicate stays inline — query-objects are for *reuse*, not premature abstraction.
+3. **Repositories wrap write operations that carry real logic** — e.g. `SummonerRepository`'s raw-SQL
+   upsert with unique-violation recovery, `UserAccountRepository`'s refresh-token rotation + family
+   revocation, `MatchRepository`. A repository must earn its place with behaviour beyond CRUD.
+4. **Testability comes from the substitutable `DbContext`**, so reads do not need a repository seam to be
+   testable; the write repositories are tested by mocking their interface where the surrounding logic
+   matters (e.g. `UserAuthServiceTests`).
+
+Rule of thumb: *query-object for a reused read predicate · repository for a write with logic · direct
+`DbContext` for everything else.*
+
 ## Change Tracking
 
 Future implementation work should live in GitHub issues or pull requests rather than long-lived planning docs committed under `docs/`.

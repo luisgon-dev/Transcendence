@@ -8,15 +8,23 @@ x-app-env: &app-env
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # Mirrors the prod stack so this file is a safe deploy source: pgautoupgrade (runs pg_upgrade across
+    # major versions in place) on Postgres 18, with the data volume mounted at /var/lib/postgresql —
+    # pgautoupgrade keeps PGDATA under /var/lib/postgresql/<major>/docker, NOT /var/lib/postgresql/data
+    # like the stock postgres image, so the mount path must match the image. NOTE: an existing local
+    # postgres:16 volume won't auto-migrate cleanly across this image+mount change — remove it first
+    # (`docker compose down -v`, or `docker volume rm transcendence_postgres_data`) for a clean PG18 init.
+    image: pgautoupgrade/pgautoupgrade:18.3-alpine
     container_name: transcendence-postgres
     restart: unless-stopped
-    # Memory tuning is declarative here so it survives a postgres_data volume rebuild and is
-    # version-controlled, rather than living only in ALTER SYSTEM / postgresql.auto.conf inside the
-    # volume (the 2026-06-21 DB-saturation incident fix). Defaults match Postgres/Docker out-of-box, so
-    # local `docker compose up` is unchanged; prod sets the tuned values in its stack.env — see
-    # .env.example and scripts/ops/README.md ("Postgres memory tuning"). Command-line -c options take
-    # precedence over postgresql.auto.conf, so these are authoritative once auto.conf is reset on prod.
+    # Memory tuning is declarative (passed as `postgres -c`) so it survives a postgres_data volume
+    # rebuild and is version-controlled, rather than living only in ALTER SYSTEM / postgresql.auto.conf
+    # inside the volume (the 2026-06-21 DB-saturation incident fix). Defaults match Postgres/Docker
+    # out-of-box, so local `docker compose up` is unchanged — do NOT raise them for a local DB on a small
+    # Docker VM. The prod stack pins the real values (shared_buffers=4GB etc.) directly in its Portainer
+    # compose command as a failsafe; a deploy of THIS file must set the POSTGRES_* vars (.env.example) or
+    # it falls back to Postgres defaults. See scripts/ops/README.md ("Postgres memory tuning"). -c options
+    # take precedence over postgresql.auto.conf, so they're authoritative once auto.conf is reset on prod.
     command:
       - "postgres"
       - "-c"
@@ -35,7 +43,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s

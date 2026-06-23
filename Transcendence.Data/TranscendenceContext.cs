@@ -157,7 +157,6 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
 
             // Common filter/index fields
             entity.HasIndex(p => p.SummonerId);
-            entity.HasIndex(p => p.ChampionId);
             // Covering index for the dominant champion-analytics query
             // (ChampionAnalyticsComputeService.ComputeWinRatesAsync): seek by ChampionId and read
             // the join + aggregate payload (MatchId for the Match join, SummonerId for the Ranks
@@ -167,14 +166,21 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             // project references only EF.Relational, so they live in the raw-SQL migration; the model
             // declares the bare (ChampionId) shape under the same name. Built CONCURRENTLY on the hot
             // MatchParticipants table out-of-band — see docs/DEVELOPMENT.md "Applying index migrations
-            // to hot tables". The named overload keeps the plain ChampionId index alongside it.
+            // to hot tables". This also covers a plain (ChampionId) seek, so no separate index is kept.
             entity.HasIndex(p => p.ChampionId, "IX_MatchParticipants_ChampionId_Covering");
-            entity.HasIndex(p => new
-            {
-                p.ChampionId,
-                p.TeamPosition
-            });
-            entity.HasIndex(p => p.MatchId);
+            // Covering index for the champion-side scan of the matchup query
+            // (ChampionAnalyticsComputeService.ComputeMatchupsAsync): seek by (ChampionId, TeamPosition)
+            // and read MatchId/ParticipantId/Win/TeamId from the leaf so the scan is index-only (prod
+            // EXPLAIN: it was a ~50k-cost bitmap heap scan). Bare shape in the model; INCLUDE in the
+            // raw-SQL migration. Replaces the plain non-covering (ChampionId, TeamPosition) index.
+            entity.HasIndex(p => new { p.ChampionId, p.TeamPosition },
+                "IX_MatchParticipants_ChampionId_TeamPosition_Covering");
+            // Covering index for the lane-pairs self-join of the matchup query (the opponent lookup):
+            // seek by MatchId and read TeamPosition/TeamId/ChampionId/ParticipantId from the leaf so the
+            // self-join is index-only (prod EXPLAIN: the single biggest cost, ~+72k of heap fetches).
+            // Also serves the MatchId FK and every MatchId lookup (the hottest index, ~131M scans/day).
+            // Bare (MatchId) shape in the model; INCLUDE in the raw-SQL migration. Replaces the plain index.
+            entity.HasIndex(p => p.MatchId, "IX_MatchParticipants_MatchId_Covering");
             entity.HasIndex(p => new { p.MatchId, p.ParticipantId });
         });
 

@@ -195,6 +195,58 @@ public class ChampionAnalyticsComputeServiceTests
     }
 
     [Fact]
+    public async Task ComputeWinRatesAsync_RoleRankAndPopulation_RankChampionsByWinRate()
+    {
+        // Role rank/population is computed for every (role, tier) in one batched query (was an N+1 that
+        // re-scanned the whole (role, tier) population per result row). Three EMERALD TOP champions with
+        // distinct win rates (100% > 67% > 33%) → the queried champion (200, 67%) ranks #2 of 3.
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<TranscendenceContext>().UseSqlite(connection).Options;
+        await using var db = new SqliteCompatibleTranscendenceContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        db.Patches.Add(new Patch
+        {
+            Version = "15.2",
+            ReleaseDate = DateTime.UtcNow.AddDays(-2),
+            DetectedAt = DateTime.UtcNow.AddDays(-2),
+            IsActive = true
+        });
+
+        void SeedRanked(int champ, int idx, bool win) =>
+            SeedMatch(db, "15.2", $"NA1_{champ}_{idx}", summonerName: $"P{champ}_{idx}",
+                championId: champ, role: "TOP", win: win, rankTier: "EMERALD");
+
+        // 100: 3-0 (100%), 200: 2-1 (67%), 300: 1-2 (33%)
+        SeedRanked(100, 0, true); SeedRanked(100, 1, true); SeedRanked(100, 2, true);
+        SeedRanked(200, 0, true); SeedRanked(200, 1, true); SeedRanked(200, 2, false);
+        SeedRanked(300, 0, true); SeedRanked(300, 1, false); SeedRanked(300, 2, false);
+        await db.SaveChangesAsync();
+
+        var service = new ChampionAnalyticsComputeService(
+            db,
+            Options.Create(new ChampionAnalyticsComputeOptions
+            {
+                MinimumGamesRequired = 1,
+                EarlyPatchMinimumGamesRequired = 1,
+                BootstrapPatchMinimumGamesRequired = 1,
+                BootstrapWindowHours = 24,
+                ProvisionalWindowHours = 96,
+                MaturingWindowHours = 240
+            }),
+            NullLogger<ChampionAnalyticsComputeService>.Instance);
+
+        var result = await service.ComputeWinRatesAsync(
+            200, new ChampionAnalyticsFilter { RankTier = "EMERALD_PLUS" }, "15.2", CancellationToken.None);
+
+        var row = result.Single(r => r is { Role: "TOP", RankTier: "EMERALD" });
+        row.RoleRank.Should().Be(2);        // 2nd of 3 by win rate
+        row.RolePopulation.Should().Be(3);
+        row.WinRate.Should().BeApproximately(2.0 / 3.0, 0.0001);
+    }
+
+    [Fact]
     public async Task ComputeProChampionPlayrateAsync_RanksChampionsAndHonorsScope()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -516,7 +568,8 @@ public class ChampionAnalyticsComputeServiceTests
         string summonerName,
         int championId,
         string role,
-        bool win)
+        bool win,
+        string? rankTier = null)
     {
         var summoner = new Summoner
         {
@@ -529,6 +582,17 @@ public class ChampionAnalyticsComputeServiceTests
             SummonerName = summonerName,
             RiotSummonerId = Guid.NewGuid().ToString("N")
         };
+
+        if (rankTier != null)
+        {
+            db.Ranks.Add(new Rank
+            {
+                Id = Guid.NewGuid(),
+                SummonerId = summoner.Id,
+                QueueType = "RANKED_SOLO_5x5",
+                Tier = rankTier
+            });
+        }
 
         var match = new Transcendence.Data.Models.LoL.Match.Match
         {

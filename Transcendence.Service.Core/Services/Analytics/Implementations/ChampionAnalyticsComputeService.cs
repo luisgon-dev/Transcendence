@@ -13,7 +13,7 @@ namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 /// <summary>
 /// Raw computation service for champion analytics using EF Core aggregation.
 /// </summary>
-public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
+public partial class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
 {
     private const int MinMatchupSampleSize = 30;
     private const int MatchupsToShow = 5;
@@ -236,6 +236,8 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
 
         return result
             .OrderByDescending(x => x.Games)
+            .ThenBy(x => x.Role, StringComparer.Ordinal)
+            .ThenBy(x => x.RankTier, StringComparer.Ordinal)
             .ToList();
     }
 
@@ -365,7 +367,10 @@ public class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
             // Composite: conservative win rate lower bound (70%) + pick rate (30%).
             CompositeScore = (c.ConservativeWinRate * 0.70) + (c.PickRate * 0.30)
         })
+        // Deterministic tie-break: tiering is positional (percentile by index), so a stable order among
+        // equal composite scores is required for reproducible grades and to match the stats-backed path.
         .OrderByDescending(x => x.CompositeScore)
+        .ThenBy(x => x.ChampionId)
         .ToList();
 
         // Step 5: Assign percentile-based tiers.

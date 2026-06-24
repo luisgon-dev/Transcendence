@@ -93,10 +93,11 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         // Build cache key based on normalized filter parameters
         var cacheKey = BuildCacheKey(championId, normalizedFilter, currentPatch);
 
-        // Get or compute win rates with caching
+        // Serve from the precomputed aggregate tables (fast indexed scope roll-up; falls back to the raw
+        // compute for any patch without aggregates yet). HybridCache stays the hot tier in front.
         var winRates = await _cache.GetOrCreateAsync(
             cacheKey,
-            async cancel => await _computeService.ComputeWinRatesAsync(championId, normalizedFilter, currentPatch, cancel),
+            async cancel => await _computeService.ComputeWinRatesFromStatsAsync(championId, normalizedFilter, currentPatch, cancel),
             AnalyticsCacheOptions,
             tags: new[] { AnalyticsCacheTag, $"champion:{championId}", CacheTags.ForPatch(currentPatch) },
             cancellationToken: ct
@@ -142,10 +143,11 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         var cacheKey = $"{TierListCacheKeyPrefix}{normalizedRole}:{normalizedTier}:{normalizedRegion}:{currentPatch}";
         var tags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(currentPatch), "tierlist" };
 
-        // Get or compute tier list with caching
+        // Serve from the precomputed aggregate tables (falls back to the raw compute until a patch's
+        // aggregates exist). HybridCache stays the hot tier in front.
         var entries = await _cache.GetOrCreateAsync(
             cacheKey,
-            async cancel => await _computeService.ComputeTierListAsync(
+            async cancel => await _computeService.ComputeTierListFromStatsAsync(
                 normalizedRole,
                 tierFilter,
                 normalizedRegion,
@@ -404,7 +406,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             Patch: currentPatch);
         var winKey = BuildCacheKey(championId, winFilter, currentPatch);
         var winTags = new[] { AnalyticsCacheTag, $"champion:{championId}", CacheTags.ForPatch(currentPatch) };
-        var winRates = await _computeService.ComputeWinRatesAsync(championId, winFilter, currentPatch, ct);
+        var winRates = await _computeService.ComputeWinRatesFromStatsAsync(championId, winFilter, currentPatch, ct);
         await _cache.SetAsync(winKey, winRates, AnalyticsCacheOptions, winTags, ct);
 
         // Resolve the most-played lane EXACTLY like ChampionAnalyticsController.GetProfile so the
@@ -420,7 +422,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
                 Role: null,
                 Patch: currentPatch);
             var fallbackKey = BuildCacheKey(championId, fallbackFilter, currentPatch);
-            var fallbackWinRates = await _computeService.ComputeWinRatesAsync(championId, fallbackFilter, currentPatch, ct);
+            var fallbackWinRates = await _computeService.ComputeWinRatesFromStatsAsync(championId, fallbackFilter, currentPatch, ct);
             await _cache.SetAsync(fallbackKey, fallbackWinRates, AnalyticsCacheOptions, winTags, ct);
             effectiveRole = PickMostPlayedLane(fallbackWinRates);
         }

@@ -30,6 +30,30 @@ public interface IChampionAnalyticsComputeService
         CancellationToken ct);
 
     /// <summary>
+    /// Win rates served from the precomputed <c>ChampionRoleTierStat</c>/ban aggregate tables (a fast
+    /// indexed scope roll-up instead of a raw-match scan), falling back to <see cref="ComputeWinRatesAsync"/>
+    /// when no aggregates exist for the patch yet. Produces DTOs identical to the raw path.
+    /// </summary>
+    Task<List<ChampionWinRateDto>> ComputeWinRatesFromStatsAsync(
+        int championId,
+        ChampionAnalyticsFilter filter,
+        string patch,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Tier list served from the precomputed aggregate tables, falling back to
+    /// <see cref="ComputeTierListAsync"/> when no aggregates exist for the patch yet. Tiering/ordering and
+    /// win/pick rates are identical to the raw path; ban rate is role-independent (a deliberate consistency
+    /// fix — see <c>ScopeMatchCountStat</c>) so it matches the unified tier list and the win-rate page.
+    /// </summary>
+    Task<List<TierListEntry>> ComputeTierListFromStatsAsync(
+        string? role,
+        string? rankTier,
+        string? region,
+        string patch,
+        CancellationToken ct);
+
+    /// <summary>
     /// Computes top 3 builds for a champion with items and runes bundled.
     /// Core items (70%+ appearance) distinguished from situational.
     /// Uses only completed, build-impact items for build quality calculations.

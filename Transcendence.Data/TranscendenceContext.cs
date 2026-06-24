@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Transcendence.Data.Models.Auth;
 using Transcendence.Data.Models.LiveGame;
 using Transcendence.Data.Models.LoL.Account;
+using Transcendence.Data.Models.LoL.Analytics;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Models.LoL.Static;
 using Transcendence.Data.Models.Service;
@@ -29,6 +30,11 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<MatchParticipantTimelineSnapshot> MatchParticipantTimelineSnapshots { get; set; }
     public DbSet<MatchParticipantItemPurchase> MatchParticipantItemPurchases { get; set; }
     public DbSet<MatchParticipantSkillOrder> MatchParticipantSkillOrders { get; set; }
+
+    // Precomputed analytics aggregates (refreshed on a cadence; the read path rolls these up by scope)
+    public DbSet<ChampionRoleTierStat> ChampionRoleTierStats { get; set; }
+    public DbSet<ScopeMatchCountStat> ScopeMatchCountStats { get; set; }
+    public DbSet<ChampionBanScopeStat> ChampionBanScopeStats { get; set; }
 
     // Versioned static data
     public DbSet<Patch> Patches { get; set; }
@@ -613,6 +619,33 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
                 .HasForeignKey(x => x.SummonerId)
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(x => x.UpdatedAtUtc);
+        });
+
+        // Precomputed analytics aggregates. Keys double as the UPSERT conflict target and the read
+        // lookup; the secondary indexes serve the two read shapes (per-champion vs across-all-champions).
+        modelBuilder.Entity<ChampionRoleTierStat>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.Patch, x.PlatformRegion, x.RankTier, x.ChampionId, x.Role })
+                .IsUnique();
+            // Win-rate read: a single champion across its roles/tiers/regions.
+            entity.HasIndex(x => new { x.Patch, x.ChampionId, x.Role });
+            // Tier-list + role-rank/pick-rate population read: every champion in a role/tier/region scope.
+            entity.HasIndex(x => new { x.Patch, x.Role, x.RankTier });
+        });
+
+        modelBuilder.Entity<ScopeMatchCountStat>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.Patch, x.PlatformRegion, x.RankScope }).IsUnique();
+        });
+
+        modelBuilder.Entity<ChampionBanScopeStat>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            // Doubles as the UPSERT target and the point-lookup: a specific (region|"ALL", scope, champion).
+            // Its (Patch, PlatformRegion, RankScope) prefix also serves the tier-list all-champions read.
+            entity.HasIndex(x => new { x.Patch, x.PlatformRegion, x.RankScope, x.ChampionId }).IsUnique();
         });
     }
 }

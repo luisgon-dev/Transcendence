@@ -255,7 +255,7 @@ public class ChampionAnalyticsServiceTests
             .Setup(x => x.ComputeBuildsAsync(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChampionBuildsResponse(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", [], []));
         harness.ComputeService
-            .Setup(x => x.ComputeMatchupsAsync(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", It.IsAny<CancellationToken>()))
+            .Setup(x => x.ComputeMatchupsFromStatsAsync(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChampionMatchupsResponse
             {
                 ChampionId = 103,
@@ -287,7 +287,7 @@ public class ChampionAnalyticsServiceTests
             x => x.ComputeBuildsAsync(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", It.IsAny<CancellationToken>()),
             Times.Once);
         harness.ComputeService.Verify(
-            x => x.ComputeMatchupsAsync(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", It.IsAny<CancellationToken>()),
+            x => x.ComputeMatchupsFromStatsAsync(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", It.IsAny<CancellationToken>()),
             Times.Once);
         harness.ComputeService.Verify(
             x => x.ComputeProBuildsAsync(103, "ALL", "MIDDLE", "all", "15.1", It.IsAny<CancellationToken>()),

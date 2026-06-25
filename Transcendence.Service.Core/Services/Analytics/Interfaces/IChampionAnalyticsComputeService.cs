@@ -102,4 +102,17 @@ public interface IChampionAnalyticsComputeService
         string? region,
         string patch,
         CancellationToken ct);
+
+    /// <summary>
+    /// Matchups served from the precomputed <c>ChampionMatchupStat</c> aggregates (all-region scope), rolled
+    /// up to the requested rank scope. Falls back to <see cref="ComputeMatchupsAsync"/> for a specific region
+    /// (only the all-region scope is precomputed) or a patch without aggregates yet. Identical DTOs otherwise.
+    /// </summary>
+    Task<ChampionMatchupsResponse> ComputeMatchupsFromStatsAsync(
+        int championId,
+        string role,
+        string? rankTier,
+        string? region,
+        string patch,
+        CancellationToken ct);
 }

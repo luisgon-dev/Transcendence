@@ -73,6 +73,125 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
         return new PrecomputedAnalyticsRefreshResult(roleTierRows.Count, scopeMatchRows.Count, banRows.Count);
     }
 
+    // ---- ChampionMatchupStat: all-region lane-pair aggregates per (champion-tier, champion, role, opponent) ----
+
+    public async Task<int> RefreshMatchupsAsync(string patch, CancellationToken ct)
+    {
+        const int minuteMark = 15;
+        var computedAt = DateTime.UtcNow;
+
+        // Champion side: every ranked-solo participant with an assigned role, tagged with its current solo
+        // tier (LEFT JOIN -> "UNRANKED"). Mirrors ComputeMatchupsAsync's champion side, aggregated over all
+        // champions/roles at once. EF global query filters (Match/MatchParticipant/TimelineSnapshot status)
+        // apply via the DbSets, matching the live read.
+        var championSide =
+            from mp in BaseParticipants(patch)
+            join rank in _context.Ranks.AsNoTracking().Where(r => r.QueueType == RankedSoloQueueType)
+                on mp.SummonerId equals rank.SummonerId into rankGroup
+            from soloRank in rankGroup.DefaultIfEmpty()
+            select new
+            {
+                mp.MatchId,
+                mp.Win,
+                mp.ChampionId,
+                Role = mp.TeamPosition!,
+                mp.TeamId,
+                mp.ParticipantId,
+                Tier = soloRank != null ? soloRank.Tier : RankTierCatalog.Unranked
+            };
+
+        // Lane pair: same lane (TeamPosition), opposite team. Opponent side is unfiltered (it inherits
+        // patch/status/queue transitively via the shared MatchId).
+        var lanePairs =
+            from champion in championSide
+            join opponent in _context.MatchParticipants.AsNoTracking()
+                on champion.MatchId equals opponent.MatchId
+            where champion.Role == opponent.TeamPosition && champion.TeamId != opponent.TeamId
+            select new
+            {
+                champion.MatchId,
+                champion.Win,
+                champion.ChampionId,
+                champion.Role,
+                champion.Tier,
+                ChampionParticipantId = champion.ParticipantId,
+                OpponentChampionId = opponent.ChampionId,
+                OpponentParticipantId = opponent.ParticipantId
+            };
+
+        var timeline = _context.MatchParticipantTimelineSnapshots.AsNoTracking()
+            .Where(s => s.MinuteMark == minuteMark);
+
+        var grouped = await (
+            from pair in lanePairs
+            join championTimelineRow in timeline
+                on new { pair.MatchId, ParticipantId = pair.ChampionParticipantId }
+                equals new { championTimelineRow.MatchId, championTimelineRow.ParticipantId }
+                into championTimelineRows
+            from championTimeline in championTimelineRows.DefaultIfEmpty()
+            join opponentTimelineRow in timeline
+                on new { pair.MatchId, ParticipantId = pair.OpponentParticipantId }
+                equals new { opponentTimelineRow.MatchId, opponentTimelineRow.ParticipantId }
+                into opponentTimelineRows
+            from opponentTimeline in opponentTimelineRows.DefaultIfEmpty()
+            group new { pair, championTimeline, opponentTimeline } by new
+            {
+                pair.Tier,
+                pair.ChampionId,
+                pair.Role,
+                pair.OpponentChampionId
+            }
+            into g
+            select new
+            {
+                g.Key.Tier,
+                g.Key.ChampionId,
+                g.Key.Role,
+                g.Key.OpponentChampionId,
+                Games = g.Count(),
+                Wins = g.Sum(x => x.pair.Win ? 1 : 0),
+                TimelineGames = g.Count(x => x.championTimeline != null && x.opponentTimeline != null),
+                SumGoldDiffAt15 = g
+                    .Where(x => x.championTimeline != null && x.opponentTimeline != null)
+                    .Select(x => (long)(x.championTimeline!.Gold - x.opponentTimeline!.Gold))
+                    .Sum(),
+                SumXpDiffAt15 = g
+                    .Where(x => x.championTimeline != null && x.opponentTimeline != null)
+                    .Select(x => (long)(x.championTimeline!.Xp - x.opponentTimeline!.Xp))
+                    .Sum(),
+                LatestTimelineAtUtc = g
+                    .Where(x => x.championTimeline != null)
+                    .Select(x => (DateTime?)x.championTimeline!.DerivedAtUtc)
+                    .Max()
+            })
+            .ToListAsync(ct);
+
+        var rows = grouped.Select(g => new ChampionMatchupStat
+        {
+            Patch = patch,
+            RankTier = g.Tier,
+            ChampionId = g.ChampionId,
+            Role = g.Role,
+            OpponentChampionId = g.OpponentChampionId,
+            Games = g.Games,
+            Wins = g.Wins,
+            TimelineGames = g.TimelineGames,
+            SumGoldDiffAt15 = g.SumGoldDiffAt15,
+            SumXpDiffAt15 = g.SumXpDiffAt15,
+            LatestTimelineAtUtc = g.LatestTimelineAtUtc,
+            ComputedAtUtc = computedAt
+        }).ToList();
+
+        await using var tx = await _context.Database.BeginTransactionAsync(ct);
+        await _context.ChampionMatchupStats.Where(x => x.Patch == patch).ExecuteDeleteAsync(ct);
+        _context.ChampionMatchupStats.AddRange(rows);
+        await _context.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+
+        _logger.LogInformation("Precompute refresh (matchups) patch {Patch}: {Rows} rows", patch, rows.Count);
+        return rows.Count;
+    }
+
     // ---- ChampionRoleTierStat: per (region, current-tier, champion, role) Games/Wins (additive) ----
 
     private async Task<List<ChampionRoleTierStat>> BuildRoleTierStatsAsync(

@@ -14,6 +14,13 @@ public interface IPrecomputedAnalyticsRefresher
     /// reads never observe a partially-written patch.
     /// </summary>
     Task<PrecomputedAnalyticsRefreshResult> RefreshTabularCoreAsync(string patch, CancellationToken ct);
+
+    /// <summary>
+    /// Rebuilds the all-region lane-matchup aggregates (<c>ChampionMatchupStat</c>) for
+    /// <paramref name="patch"/> — one big lane-pair self-join + timeline-diff aggregation grouped over every
+    /// champion at once — replacing the patch's rows transactionally. Returns the row count written.
+    /// </summary>
+    Task<int> RefreshMatchupsAsync(string patch, CancellationToken ct);
 }
 
 /// <summary>Row counts written per table, for logging/observability.</summary>

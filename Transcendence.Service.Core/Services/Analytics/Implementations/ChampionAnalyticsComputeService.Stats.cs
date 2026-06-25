@@ -327,6 +327,14 @@ public partial class ChampionAnalyticsComputeService
         return await ComputeBuildsAsync(championId, role, rankTier, region, patch, ct);
     }
 
+    public Task<DateTime?> GetAnalyticsComputedAtAsync(string patch, CancellationToken ct) =>
+        _context.ChampionRoleTierStats
+            .AsNoTracking()
+            .Where(x => x.Patch == patch)
+            .OrderByDescending(x => x.ComputedAtUtc)
+            .Select(x => (DateTime?)x.ComputedAtUtc)
+            .FirstOrDefaultAsync(ct);
+
     // ---- shared helpers for the stats path ----
 
     private Task<bool> HasStatsAsync(string patch, CancellationToken ct) =>

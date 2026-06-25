@@ -103,6 +103,21 @@ public class ChampionAnalyticsStatsEquivalenceTests
         statsTl.Should().BeEquivalentTo(rawTl, o => o.WithStrictOrdering());
     }
 
+    [Fact]
+    public async Task GetAnalyticsComputedAt_ReturnsRefreshTimestamp_OrNullWhenNoAggregates()
+    {
+        await using var ctx = await SeededAsync();
+        var before = DateTime.UtcNow;
+        await Refresh(ctx.Db);
+        var svc = Service(ctx.Db);
+
+        var computedAt = await svc.GetAnalyticsComputedAtAsync(Patch, CancellationToken.None);
+        computedAt.Should().NotBeNull();
+        computedAt!.Value.Should().BeOnOrAfter(before.AddSeconds(-5));
+
+        (await svc.GetAnalyticsComputedAtAsync("99.9", CancellationToken.None)).Should().BeNull();
+    }
+
     // ---- harness ----
 
     private static ChampionAnalyticsComputeService Service(TranscendenceContext db) =>

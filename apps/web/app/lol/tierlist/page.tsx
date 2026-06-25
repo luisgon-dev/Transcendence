@@ -1,5 +1,3 @@
-import type { components } from "@transcendence/api-client";
-
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { TierListFilterBar } from "@/components/TierListFilterBar";
@@ -24,9 +22,10 @@ import {
 } from "@/lib/ranks";
 import { roleDisplayLabel } from "@/lib/roles";
 import { fetchChampionMap } from "@/lib/staticData";
-import { normalizeTierListEntries } from "@/lib/tierlist";
+import { normalizeTierListEntries, type TierListResponseLike } from "@/lib/tierlist";
+import { UpdatedAgo } from "@/components/UpdatedAgo";
 
-type TierListResponse = components["schemas"]["TierListResponse"];
+type TierListResponse = TierListResponseLike;
 
 export default async function TierListPage({
   searchParams
@@ -133,6 +132,12 @@ export default async function TierListPage({
             <span>{rankTierDisplayLabel(rankTierValue ?? "all")}</span>
             <span aria-hidden="true">·</span>
             <span className="type-tabular tabular-nums">{normalizedEntries.length} champions</span>
+            {tierlist.computedAtUtc ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <UpdatedAgo timestamp={tierlist.computedAtUtc} />
+              </>
+            ) : null}
           </>
         }
         filters={

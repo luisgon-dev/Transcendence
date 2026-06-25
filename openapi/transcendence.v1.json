@@ -6918,6 +6918,11 @@
           },
           "sample": {
             "$ref": "#/components/schemas/AnalyticsSampleMetadata"
+          },
+          "computedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -9076,6 +9081,11 @@
           },
           "sample": {
             "$ref": "#/components/schemas/AnalyticsSampleMetadata"
+          },
+          "computedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           }
         },
         "additionalProperties": false

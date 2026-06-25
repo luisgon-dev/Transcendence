@@ -53,5 +53,7 @@ public record TierListResponse(
     string? RankTier,         // "all" for all ranks, or scope token (e.g., "EMERALD_PLUS")
     string Region,
     List<TierListEntry> Entries,
-    AnalyticsSampleMetadata? Sample = null
+    AnalyticsSampleMetadata? Sample = null,
+    // When the precomputed analytics for this patch were last refreshed (null while serving live compute).
+    DateTime? ComputedAtUtc = null
 );

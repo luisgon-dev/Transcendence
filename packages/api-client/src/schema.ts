@@ -4952,6 +4952,8 @@ export interface components {
             patch?: string | null;
             byRoleTier?: components["schemas"]["ChampionWinRateDto"][] | null;
             sample?: components["schemas"]["AnalyticsSampleMetadata"];
+            /** Format: date-time */
+            computedAtUtc?: string | null;
         };
         CommonProBuildDto: {
             items?: number[] | null;
@@ -5708,6 +5710,8 @@ export interface components {
             region?: string | null;
             entries?: components["schemas"]["TierListEntry"][] | null;
             sample?: components["schemas"]["AnalyticsSampleMetadata"];
+            /** Format: date-time */
+            computedAtUtc?: string | null;
         };
         /**
          * Format: int32

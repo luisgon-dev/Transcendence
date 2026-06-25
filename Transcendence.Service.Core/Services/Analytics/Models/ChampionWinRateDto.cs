@@ -24,5 +24,7 @@ public record ChampionWinRateSummary(
     int ChampionId,
     string Patch,
     List<ChampionWinRateDto> ByRoleTier,
-    AnalyticsSampleMetadata? Sample = null
+    AnalyticsSampleMetadata? Sample = null,
+    // When the precomputed analytics for this patch were last refreshed (null while serving live compute).
+    DateTime? ComputedAtUtc = null
 );

@@ -348,9 +348,11 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         var cacheKey = $"{MatchupsCacheKeyPrefix}{championId}:{normalizedRole}:{normalizedTier}:{normalizedRegion}:{selectedPatch}";
         var tags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(selectedPatch), "matchups" };
 
+        // Serve from the precomputed matchup aggregates (all-region scope; falls back to the raw self-join
+        // for a specific region or an un-refreshed patch). HybridCache stays the hot tier in front.
         var response = await _cache.GetOrCreateAsync(
             cacheKey,
-            async cancel => await _computeService.ComputeMatchupsAsync(
+            async cancel => await _computeService.ComputeMatchupsFromStatsAsync(
                 championId,
                 normalizedRole,
                 normalizedTier == "all" ? null : normalizedTier,
@@ -438,7 +440,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 
         var matchupsKey = $"{MatchupsCacheKeyPrefix}{championId}:{effectiveRole}:{normalizedTier}:{normalizedRegion}:{currentPatch}";
         var matchupsTags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(currentPatch), "matchups" };
-        var matchups = await _computeService.ComputeMatchupsAsync(
+        var matchups = await _computeService.ComputeMatchupsFromStatsAsync(
             championId, effectiveRole, tierForCompute, normalizedRegion, currentPatch, ct);
         await _cache.SetAsync(matchupsKey, matchups, AnalyticsCacheOptions, matchupsTags, ct);
 

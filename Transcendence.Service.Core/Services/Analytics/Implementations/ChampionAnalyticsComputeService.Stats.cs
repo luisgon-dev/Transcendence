@@ -240,10 +240,68 @@ public partial class ChampionAnalyticsComputeService
         }).ToList();
     }
 
+    public async Task<ChampionMatchupsResponse> ComputeMatchupsFromStatsAsync(
+        int championId,
+        string role,
+        string? rankTier,
+        string? region,
+        string patch,
+        CancellationToken ct)
+    {
+        var regionFilter = AnalyticsRegionCatalog.NormalizeToFilter(region);
+        // Only the all-region scope is precomputed; a specific region or an un-refreshed patch falls back
+        // to the raw self-join compute.
+        if (regionFilter != null || !await HasMatchupStatsAsync(patch, ct))
+            return await ComputeMatchupsAsync(championId, role, rankTier, region, patch, ct);
+
+        var rankTierScope = ParseRankTierScope(rankTier);
+        var scopeToken = ScopeTokenOf(rankTierScope);
+        var tierFilter = RankTierCatalog.ResolveScopeTiers(scopeToken);
+        var normalizedRegion = AnalyticsRegionCatalog.NormalizeOrDefault(region);
+
+        var query = _context.ChampionMatchupStats.AsNoTracking()
+            .Where(x => x.Patch == patch && x.ChampionId == championId && x.Role == role);
+        if (tierFilter != null)
+            query = query.Where(x => tierFilter.Contains(x.RankTier));
+
+        // Roll the champion-tier atoms up to the requested rank scope (SUM the additive measures; MAX the
+        // timeline freshness). Avg diffs are derived from the summed diff and the timeline-pair count.
+        var rolled = await query
+            .GroupBy(x => x.OpponentChampionId)
+            .Select(g => new
+            {
+                OpponentChampionId = g.Key,
+                Games = g.Sum(x => x.Games),
+                Wins = g.Sum(x => x.Wins),
+                TimelineGames = g.Sum(x => x.TimelineGames),
+                SumGoldDiff = g.Sum(x => x.SumGoldDiffAt15),
+                SumXpDiff = g.Sum(x => x.SumXpDiffAt15),
+                LatestTimelineAtUtc = g.Max(x => x.LatestTimelineAtUtc)
+            })
+            .ToListAsync(ct);
+
+        var aggregates = rolled
+            .Select(m => new MatchupAggregate(
+                m.OpponentChampionId,
+                m.Games,
+                m.Wins,
+                m.Games - m.Wins,
+                m.TimelineGames,
+                m.TimelineGames > 0 ? (double?)((double)m.SumGoldDiff / m.TimelineGames) : null,
+                m.TimelineGames > 0 ? (double?)((double)m.SumXpDiff / m.TimelineGames) : null,
+                m.LatestTimelineAtUtc))
+            .ToList();
+
+        return BuildMatchupsResponse(championId, role, rankTierScope, normalizedRegion, patch, aggregates);
+    }
+
     // ---- shared helpers for the stats path ----
 
     private Task<bool> HasStatsAsync(string patch, CancellationToken ct) =>
         _context.ChampionRoleTierStats.AsNoTracking().AnyAsync(x => x.Patch == patch, ct);
+
+    private Task<bool> HasMatchupStatsAsync(string patch, CancellationToken ct) =>
+        _context.ChampionMatchupStats.AsNoTracking().AnyAsync(x => x.Patch == patch, ct);
 
     /// <summary>Applies the region (null = ALL → sum every platform) + tier-scope (null = all tiers) filters.</summary>
     private static IQueryable<ChampionRoleTierStat> ApplyStatScope(

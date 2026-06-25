@@ -39,9 +39,10 @@ public class RefreshPrecomputedAnalyticsJob(
         }
 
         var result = await refresher.RefreshTabularCoreAsync(patch, ct);
+        var matchupRows = await refresher.RefreshMatchupsAsync(patch, ct);
 
         logger.LogInformation(
-            "Precompute refresh patch {Patch} completed in {ElapsedMs}ms: {RoleTier} role-tier, {ScopeMatch} scope-match, {Ban} ban rows.",
-            patch, stopwatch.ElapsedMilliseconds, result.RoleTierRows, result.ScopeMatchCountRows, result.BanScopeRows);
+            "Precompute refresh patch {Patch} completed in {ElapsedMs}ms: {RoleTier} role-tier, {ScopeMatch} scope-match, {Ban} ban, {Matchup} matchup rows.",
+            patch, stopwatch.ElapsedMilliseconds, result.RoleTierRows, result.ScopeMatchCountRows, result.BanScopeRows, matchupRows);
     }
 }

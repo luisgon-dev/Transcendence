@@ -35,6 +35,7 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<ChampionRoleTierStat> ChampionRoleTierStats { get; set; }
     public DbSet<ScopeMatchCountStat> ScopeMatchCountStats { get; set; }
     public DbSet<ChampionBanScopeStat> ChampionBanScopeStats { get; set; }
+    public DbSet<ChampionMatchupStat> ChampionMatchupStats { get; set; }
 
     // Versioned static data
     public DbSet<Patch> Patches { get; set; }
@@ -646,6 +647,15 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             // Doubles as the UPSERT target and the point-lookup: a specific (region|"ALL", scope, champion).
             // Its (Patch, PlatformRegion, RankScope) prefix also serves the tier-list all-champions read.
             entity.HasIndex(x => new { x.Patch, x.PlatformRegion, x.RankScope, x.ChampionId }).IsUnique();
+        });
+
+        modelBuilder.Entity<ChampionMatchupStat>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.Patch, x.RankTier, x.ChampionId, x.Role, x.OpponentChampionId })
+                .IsUnique();
+            // Matchup read: one champion+role, rolled up over the tiers in scope.
+            entity.HasIndex(x => new { x.Patch, x.ChampionId, x.Role });
         });
     }
 }

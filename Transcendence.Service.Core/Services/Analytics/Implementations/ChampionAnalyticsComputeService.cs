@@ -1651,6 +1651,43 @@ public partial class ChampionAnalyticsComputeService : IChampionAnalyticsCompute
                 })
             .ToListAsync(ct);
 
+        var aggregates = matchupData
+            .Select(m => new MatchupAggregate(
+                m.OpponentChampionId, m.Games, m.Wins, m.Losses, m.TimelineGames,
+                m.AvgGoldDiffAt15, m.AvgXpDiffAt15, m.LatestTimelineAtUtc))
+            .ToList();
+
+        return BuildMatchupsResponse(championId, role, rankTierScope, normalizedRegion, patch, aggregates);
+    }
+
+    /// <summary>Per-opponent matchup aggregate — the shared shape both the raw self-join and the stats roll-up
+    /// feed into <see cref="BuildMatchupsResponse"/>. <c>AvgGoldDiffAt15</c>/<c>AvgXpDiffAt15</c> are null when
+    /// no both-present timeline pairs contributed.</summary>
+    internal readonly record struct MatchupAggregate(
+        int OpponentChampionId,
+        int Games,
+        int Wins,
+        int Losses,
+        int TimelineGames,
+        double? AvgGoldDiffAt15,
+        double? AvgXpDiffAt15,
+        DateTime? LatestTimelineAtUtc);
+
+    /// <summary>
+    /// Shared post-aggregation for matchups (threshold + graceful degradation, counters/favorable selection,
+    /// ordering, response assembly). Used by BOTH <see cref="ComputeMatchupsAsync"/> (raw self-join) and
+    /// <see cref="ComputeMatchupsFromStatsAsync"/> (precomputed roll-up), so the two produce identical DTOs.
+    /// Counters/favorable carry a <c>ThenBy(OpponentChampionId)</c> tie-break so the selected five are
+    /// deterministic under equal win rates.
+    /// </summary>
+    private static ChampionMatchupsResponse BuildMatchupsResponse(
+        int championId,
+        string role,
+        RankTierScope rankTierScope,
+        string normalizedRegion,
+        string patch,
+        List<MatchupAggregate> matchupData)
+    {
         var totalMatchupGames = matchupData.Sum(m => m.Games);
         var totalTimelineGames = matchupData.Sum(m => m.TimelineGames);
         var timelineCoverage = totalMatchupGames > 0
@@ -1663,44 +1700,27 @@ public partial class ChampionAnalyticsComputeService : IChampionAnalyticsCompute
 
         var effectiveMatchupSampleSize = ResolveEffectiveSampleSize(MinMatchupSampleSize, totalMatchupGames, floor: 2);
 
+        static MatchupEntryDto ToEntry(MatchupAggregate m) => new()
+        {
+            OpponentChampionId = m.OpponentChampionId,
+            Games = m.Games,
+            Wins = m.Wins,
+            Losses = m.Losses,
+            WinRate = m.Games > 0 ? (double)m.Wins / m.Games : 0.0,
+            AvgGoldDiffAt15 = m.AvgGoldDiffAt15,
+            AvgXpDiffAt15 = m.AvgXpDiffAt15
+        };
+
         var matchups = matchupData
             .Where(m => m.Games >= effectiveMatchupSampleSize)
-            .Select(g => new
-            {
-                g.OpponentChampionId,
-                g.Games,
-                g.Wins,
-                g.Losses,
-                WinRate = g.Games > 0 ? (double)g.Wins / g.Games : 0.0,
-                g.AvgGoldDiffAt15,
-                g.AvgXpDiffAt15
-            })
-            .Select(m => new MatchupEntryDto
-            {
-                OpponentChampionId = m.OpponentChampionId,
-                Games = m.Games,
-                Wins = m.Wins,
-                Losses = m.Losses,
-                WinRate = m.Games > 0 ? (double)m.Wins / m.Games : 0.0,
-                AvgGoldDiffAt15 = m.AvgGoldDiffAt15,
-                AvgXpDiffAt15 = m.AvgXpDiffAt15
-            })
+            .Select(ToEntry)
             .ToList();
 
         if (matchups.Count == 0)
         {
             matchups = matchupData
                 .Where(m => m.Games >= 1)
-                .Select(m => new MatchupEntryDto
-                {
-                    OpponentChampionId = m.OpponentChampionId,
-                    Games = m.Games,
-                    Wins = m.Wins,
-                    Losses = m.Losses,
-                    WinRate = m.Games > 0 ? (double)m.Wins / m.Games : 0.0,
-                    AvgGoldDiffAt15 = m.AvgGoldDiffAt15,
-                    AvgXpDiffAt15 = m.AvgXpDiffAt15
-                })
+                .Select(ToEntry)
                 .ToList();
         }
 
@@ -1710,16 +1730,19 @@ public partial class ChampionAnalyticsComputeService : IChampionAnalyticsCompute
             .ThenBy(m => m.OpponentChampionId)
             .ToList();
 
-        // Separate counters (low win rate) and favorable (high win rate)
+        // Separate counters (low win rate) and favorable (high win rate). The ThenBy(OpponentChampionId)
+        // tie-break makes the Take(5) deterministic when opponents share a win rate.
         var counters = matchups
             .Where(m => m.WinRate < 0.48)
             .OrderBy(m => m.WinRate)
+            .ThenBy(m => m.OpponentChampionId)
             .Take(MatchupsToShow)
             .ToList();
 
         var favorable = matchups
             .Where(m => m.WinRate > 0.52)
             .OrderByDescending(m => m.WinRate)
+            .ThenBy(m => m.OpponentChampionId)
             .Take(MatchupsToShow)
             .ToList();
 

@@ -36,6 +36,7 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<ScopeMatchCountStat> ScopeMatchCountStats { get; set; }
     public DbSet<ChampionBanScopeStat> ChampionBanScopeStats { get; set; }
     public DbSet<ChampionMatchupStat> ChampionMatchupStats { get; set; }
+    public DbSet<ChampionBuildSnapshot> ChampionBuildSnapshots { get; set; }
 
     // Versioned static data
     public DbSet<Patch> Patches { get; set; }
@@ -656,6 +657,13 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
                 .IsUnique();
             // Matchup read: one champion+role, rolled up over the tiers in scope.
             entity.HasIndex(x => new { x.Patch, x.ChampionId, x.Role });
+        });
+
+        modelBuilder.Entity<ChampionBuildSnapshot>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            // Doubles as the UPSERT target and the read point-lookup.
+            entity.HasIndex(x => new { x.Patch, x.ChampionId, x.Role, x.RankScope }).IsUnique();
         });
     }
 }

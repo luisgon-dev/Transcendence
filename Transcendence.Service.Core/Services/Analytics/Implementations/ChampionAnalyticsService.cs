@@ -200,7 +200,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 
         var response = await _cache.GetOrCreateAsync(
             cacheKey,
-            async cancel => await _computeService.ComputeBuildsAsync(
+            async cancel => await _computeService.ComputeBuildsFromStatsAsync(
                 championId,
                 normalizedRole,
                 normalizedTier == "all" ? null : normalizedTier,
@@ -434,7 +434,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         // ── Builds + matchups for the resolved lane (region=ALL, given tier) ──
         var buildsKey = $"{BuildsCacheKeyPrefix}{championId}:{effectiveRole}:{normalizedTier}:{normalizedRegion}:{currentPatch}";
         var buildsTags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(currentPatch), "builds" };
-        var builds = await _computeService.ComputeBuildsAsync(
+        var builds = await _computeService.ComputeBuildsFromStatsAsync(
             championId, effectiveRole, tierForCompute, normalizedRegion, currentPatch, ct);
         await _cache.SetAsync(buildsKey, builds, AnalyticsCacheOptions, buildsTags, ct);
 

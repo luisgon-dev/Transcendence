@@ -2,10 +2,12 @@ using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Service.Core.Services.Analytics.Implementations;
+using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Tests.Support;
 
 namespace Transcendence.Service.Core.Tests;
@@ -137,7 +139,11 @@ public class PrecomputedAnalyticsRefresherTests
 
     private static async Task Refresh(TranscendenceContext db)
     {
-        var refresher = new PrecomputedAnalyticsRefresher(db, NullLogger<PrecomputedAnalyticsRefresher>.Instance);
+        var compute = new ChampionAnalyticsComputeService(
+            db,
+            Options.Create(new ChampionAnalyticsComputeOptions { MinimumGamesRequired = 1 }),
+            NullLogger<ChampionAnalyticsComputeService>.Instance);
+        var refresher = new PrecomputedAnalyticsRefresher(db, compute, NullLogger<PrecomputedAnalyticsRefresher>.Instance);
         await refresher.RefreshTabularCoreAsync(Patch, CancellationToken.None);
     }
 

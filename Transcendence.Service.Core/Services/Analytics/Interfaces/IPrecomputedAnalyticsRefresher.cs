@@ -21,6 +21,14 @@ public interface IPrecomputedAnalyticsRefresher
     /// champion at once — replacing the patch's rows transactionally. Returns the row count written.
     /// </summary>
     Task<int> RefreshMatchupsAsync(string patch, CancellationToken ct);
+
+    /// <summary>
+    /// Recomputes + persists the durable build responses (<c>ChampionBuildSnapshot</c>) for
+    /// <paramref name="patch"/>: the live <c>ComputeBuildsAsync</c> for each played (champion, role) at the
+    /// common rank scopes (all-region), serialized so cold reads are a lookup instead of a raw scan.
+    /// Returns the snapshot count written.
+    /// </summary>
+    Task<int> RefreshBuildsAsync(string patch, CancellationToken ct);
 }
 
 /// <summary>Row counts written per table, for logging/observability.</summary>

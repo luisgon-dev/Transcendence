@@ -252,7 +252,7 @@ public class ChampionAnalyticsServiceTests
                 new ChampionWinRateDto(103, "TOP", "EMERALD_PLUS", 40, 18, 0.45, 0.05, 0.02, 12, 50, "15.1")
             ]);
         harness.ComputeService
-            .Setup(x => x.ComputeBuildsAsync(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", It.IsAny<CancellationToken>()))
+            .Setup(x => x.ComputeBuildsFromStatsAsync(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChampionBuildsResponse(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", [], []));
         harness.ComputeService
             .Setup(x => x.ComputeMatchupsFromStatsAsync(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", It.IsAny<CancellationToken>()))
@@ -284,7 +284,7 @@ public class ChampionAnalyticsServiceTests
             x => x.ComputeWinRatesFromStatsAsync(103, It.IsAny<ChampionAnalyticsFilter>(), "15.1", It.IsAny<CancellationToken>()),
             Times.Once);
         harness.ComputeService.Verify(
-            x => x.ComputeBuildsAsync(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", It.IsAny<CancellationToken>()),
+            x => x.ComputeBuildsFromStatsAsync(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", It.IsAny<CancellationToken>()),
             Times.Once);
         harness.ComputeService.Verify(
             x => x.ComputeMatchupsFromStatsAsync(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", It.IsAny<CancellationToken>()),

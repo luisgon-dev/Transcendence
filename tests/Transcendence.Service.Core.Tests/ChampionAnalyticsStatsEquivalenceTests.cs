@@ -119,7 +119,7 @@ public class ChampionAnalyticsStatsEquivalenceTests
             NullLogger<ChampionAnalyticsComputeService>.Instance);
 
     private static async Task Refresh(TranscendenceContext db) =>
-        await new PrecomputedAnalyticsRefresher(db, NullLogger<PrecomputedAnalyticsRefresher>.Instance)
+        await new PrecomputedAnalyticsRefresher(db, Service(db), NullLogger<PrecomputedAnalyticsRefresher>.Instance)
             .RefreshTabularCoreAsync(Patch, CancellationToken.None);
 
     private static async Task<SeededContext> SeededAsync()

@@ -33,14 +33,24 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
 
     private const string RankedSoloQueueType = "RANKED_SOLO_5x5";
 
+    /// <summary>Minimum (champion, role) games on a patch before a build snapshot is computed (mirrors the build sample floor).</summary>
+    private const int MinBuildGames = 30;
+
+    /// <summary>The rank scopes precomputed for builds: the page default + all-ranks. Specific tiers fall back to raw.</summary>
+    private static readonly (string Scope, string? RankTier)[] BuildScopes =
+        [(RankTierCatalog.EmeraldPlusScope, RankTierCatalog.EmeraldPlusScope), (RankTierCatalog.AllScope, null)];
+
     private readonly TranscendenceContext _context;
+    private readonly IChampionAnalyticsComputeService _computeService;
     private readonly ILogger<PrecomputedAnalyticsRefresher> _logger;
 
     public PrecomputedAnalyticsRefresher(
         TranscendenceContext context,
+        IChampionAnalyticsComputeService computeService,
         ILogger<PrecomputedAnalyticsRefresher> logger)
     {
         _context = context;
+        _computeService = computeService;
         _logger = logger;
     }
 
@@ -189,6 +199,53 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
         await tx.CommitAsync(ct);
 
         _logger.LogInformation("Precompute refresh (matchups) patch {Patch}: {Rows} rows", patch, rows.Count);
+        return rows.Count;
+    }
+
+    // ---- ChampionBuildSnapshot: durable per-(champion, role, scope) build response (all-region) ----
+
+    public async Task<int> RefreshBuildsAsync(string patch, CancellationToken ct)
+    {
+        var computedAt = DateTime.UtcNow;
+
+        // Played (champion, role) pairs with enough games to produce a build (mirrors the build sample floor).
+        var pairs = await _context.ChampionRoleTierStats
+            .AsNoTracking()
+            .Where(x => x.Patch == patch)
+            .GroupBy(x => new { x.ChampionId, x.Role })
+            .Select(g => new { g.Key.ChampionId, g.Key.Role, Games = g.Sum(x => x.Games) })
+            .Where(x => x.Games >= MinBuildGames)
+            .ToListAsync(ct);
+
+        // Compute every (pair, scope) response first (reads), then replace the patch's rows transactionally.
+        var rows = new List<ChampionBuildSnapshot>(pairs.Count * BuildScopes.Length);
+        foreach (var pair in pairs)
+        {
+            foreach (var (scope, rankTier) in BuildScopes)
+            {
+                var response = await _computeService.ComputeBuildsAsync(
+                    pair.ChampionId, pair.Role, rankTier, region: null, patch, ct);
+
+                rows.Add(new ChampionBuildSnapshot
+                {
+                    Patch = patch,
+                    ChampionId = pair.ChampionId,
+                    Role = pair.Role,
+                    RankScope = scope,
+                    Payload = BuildSnapshotSerialization.Serialize(response),
+                    ComputedAtUtc = computedAt
+                });
+            }
+        }
+
+        await using var tx = await _context.Database.BeginTransactionAsync(ct);
+        await _context.ChampionBuildSnapshots.Where(x => x.Patch == patch).ExecuteDeleteAsync(ct);
+        _context.ChampionBuildSnapshots.AddRange(rows);
+        await _context.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+
+        _logger.LogInformation("Precompute refresh (builds) patch {Patch}: {Rows} snapshots ({Pairs} champion-roles)",
+            patch, rows.Count, pairs.Count);
         return rows.Count;
     }
 

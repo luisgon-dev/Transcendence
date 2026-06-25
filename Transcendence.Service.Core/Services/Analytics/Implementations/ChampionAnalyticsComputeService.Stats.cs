@@ -295,6 +295,38 @@ public partial class ChampionAnalyticsComputeService
         return BuildMatchupsResponse(championId, role, rankTierScope, normalizedRegion, patch, aggregates);
     }
 
+    public async Task<ChampionBuildsResponse> ComputeBuildsFromStatsAsync(
+        int championId,
+        string role,
+        string? rankTier,
+        string? region,
+        string patch,
+        CancellationToken ct)
+    {
+        var regionFilter = AnalyticsRegionCatalog.NormalizeToFilter(region);
+        var scopeToken = ScopeTokenOf(ParseRankTierScope(rankTier));
+
+        // Only EMERALD_PLUS + ALL are precomputed, at the all-region scope; a specific tier/region (or a
+        // missing/un-refreshed snapshot) falls back to the live build compute.
+        if (regionFilter == null &&
+            (scopeToken == RankTierCatalog.EmeraldPlusScope || scopeToken == RankTierCatalog.AllScope))
+        {
+            var payload = await _context.ChampionBuildSnapshots.AsNoTracking()
+                .Where(x => x.Patch == patch && x.ChampionId == championId && x.Role == role && x.RankScope == scopeToken)
+                .Select(x => x.Payload)
+                .FirstOrDefaultAsync(ct);
+
+            if (payload != null)
+            {
+                var cached = BuildSnapshotSerialization.Deserialize(payload);
+                if (cached != null)
+                    return cached;
+            }
+        }
+
+        return await ComputeBuildsAsync(championId, role, rankTier, region, patch, ct);
+    }
+
     // ---- shared helpers for the stats path ----
 
     private Task<bool> HasStatsAsync(string patch, CancellationToken ct) =>

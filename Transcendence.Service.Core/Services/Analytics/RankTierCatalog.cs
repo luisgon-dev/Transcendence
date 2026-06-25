@@ -12,9 +12,9 @@ public static class RankTierCatalog
     public static readonly IReadOnlyList<string> EmeraldPlusTiers =
         ["EMERALD", "DIAMOND", "MASTER", "GRANDMASTER", "CHALLENGER"];
 
-    /// <summary>All individual competitive solo-queue tiers, low → high.</summary>
+    /// <summary>All individual competitive solo-queue tiers, low → high (the modern ladder includes PLATINUM).</summary>
     public static readonly IReadOnlyList<string> AllTiers =
-        ["IRON", "BRONZE", "SILVER", "GOLD", "EMERALD", "DIAMOND", "MASTER", "GRANDMASTER", "CHALLENGER"];
+        ["IRON", "BRONZE", "SILVER", "GOLD", "PLATINUM", "EMERALD", "DIAMOND", "MASTER", "GRANDMASTER", "CHALLENGER"];
 
     /// <summary>Sentinel <c>RankTier</c> for a participant with no current solo-queue rank row.</summary>
     public const string Unranked = "UNRANKED";

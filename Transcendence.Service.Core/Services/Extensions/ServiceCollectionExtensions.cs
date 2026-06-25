@@ -61,6 +61,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ChampionAnalyticsIngestionJob>();
         services.AddScoped<RefreshChampionAnalyticsJob>();
         services.AddScoped<WarmDefaultChampionProfilesJob>();
+        services.AddScoped<RefreshPrecomputedAnalyticsJob>();
         services.AddScoped<LiveGamePollingJob>();
         services.AddScoped<RuneSelectionIntegrityBackfillJob>();
         services.AddScoped<MatchTimelineBackfillJob>();

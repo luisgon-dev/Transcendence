@@ -39,6 +39,7 @@ public sealed class WorkerRecurringJobPolicy(
     public const string HighEloProfileRefreshJobId = "high-elo-profile-refresh";
     public const string RefreshLockLifecycleCleanupJobId = "refresh-lock-lifecycle-cleanup";
     public const string IngestionHealthAlertJobId = "ingestion-health-alert";
+    public const string RefreshPrecomputedAnalyticsJobId = "refresh-precomputed-analytics";
     public const string TftStaticDataJobId = "tft-static-data-refresh";
     public const string TftAnalyticsRefreshJobId = "tft-analytics-refresh";
     public const string TftAnalyticsIngestionJobId = "tft-analytics-ingestion";
@@ -68,6 +69,7 @@ public sealed class WorkerRecurringJobPolicy(
         HighEloProfileRefreshJobId,
         RefreshLockLifecycleCleanupJobId,
         IngestionHealthAlertJobId,
+        RefreshPrecomputedAnalyticsJobId,
         TftStaticDataJobId,
         TftAnalyticsRefreshJobId,
         TftAnalyticsIngestionJobId,
@@ -123,6 +125,12 @@ public sealed class WorkerRecurringJobPolicy(
                 schedule.WarmDefaultChampionProfilesCron,
                 schedule.EnableWarmDefaultChampionProfiles,
                 ConfigureWarmDefaultChampionProfiles),
+            CreateDescriptor(
+                RefreshPrecomputedAnalyticsJobId,
+                "Jobs:Schedule:RefreshPrecomputedAnalyticsCron",
+                schedule.RefreshPrecomputedAnalyticsCron,
+                schedule.EnableRefreshPrecomputedAnalytics,
+                ConfigureRefreshPrecomputedAnalytics),
             CreateDescriptor(
                 ChampionAnalyticsIngestionJobId,
                 "Jobs:Schedule:ChampionAnalyticsIngestionCron",
@@ -279,6 +287,15 @@ public sealed class WorkerRecurringJobPolicy(
         string cronExpression) =>
         recurringJobManager.AddOrUpdate<WarmDefaultChampionProfilesJob>(
             WarmDefaultChampionProfilesJobId,
+            job => job.ExecuteAsync(CancellationToken.None),
+            cronExpression,
+            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
+    private static void ConfigureRefreshPrecomputedAnalytics(
+        IRecurringJobManager recurringJobManager,
+        string cronExpression) =>
+        recurringJobManager.AddOrUpdate<RefreshPrecomputedAnalyticsJob>(
+            RefreshPrecomputedAnalyticsJobId,
             job => job.ExecuteAsync(CancellationToken.None),
             cronExpression,
             new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });

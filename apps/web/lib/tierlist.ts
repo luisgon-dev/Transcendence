@@ -27,6 +27,13 @@ export type TierListSummary = {
 
 type ApiTierListEntry = components["schemas"]["TierListEntry"];
 
+// Mirrors the tier-list response with the fields we read off it. `computedAtUtc`
+// is the ISO-8601 UTC timestamp (or null) of when the precomputed analytics for
+// the patch were last refreshed; it powers the "Updated N min ago" indicator.
+export type TierListResponseLike = components["schemas"]["TierListResponse"] & {
+  computedAtUtc?: string | null;
+};
+
 export const TIER_ORDER: UITierGrade[] = ["S", "A", "B", "C", "D"];
 
 export function decodeTierGrade(

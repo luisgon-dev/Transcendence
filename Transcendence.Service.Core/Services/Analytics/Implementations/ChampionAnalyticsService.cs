@@ -64,6 +64,19 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         _multiRegionOptions = multiRegionOptions.Value;
     }
 
+    /// <summary>
+    /// When the precomputed analytics for <paramref name="patch"/> were last refreshed (the "updated N ago"
+    /// signal), cached briefly per patch since it only advances on the hourly refresh. Null while a patch is
+    /// still served by live compute (no aggregates yet).
+    /// </summary>
+    private async Task<DateTime?> ResolveAnalyticsFreshnessAsync(string patch, CancellationToken ct) =>
+        await _cache.GetOrCreateAsync(
+            $"analytics:freshness:v1:{patch}",
+            async cancel => await _computeService.GetAnalyticsComputedAtAsync(patch, cancel),
+            ActivePatchCacheOptions,
+            tags: new[] { AnalyticsCacheTag, CacheTags.ForPatch(patch) },
+            cancellationToken: ct);
+
     public async Task<ChampionWinRateSummary> GetWinRatesAsync(
         int championId,
         ChampionAnalyticsFilter filter,
@@ -108,7 +121,8 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             ChampionId: championId,
             Patch: currentPatch,
             ByRoleTier: winRates,
-            Sample: BuildSampleMetadata(sampleSize, patchContext)
+            Sample: BuildSampleMetadata(sampleSize, patchContext),
+            ComputedAtUtc: await ResolveAnalyticsFreshnessAsync(currentPatch, ct)
         );
     }
 
@@ -165,7 +179,8 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             RankTier: normalizedTier,
             Region: normalizedRegion,
             Entries: entries,
-            Sample: BuildSampleMetadata(sampleSize, patchContext)
+            Sample: BuildSampleMetadata(sampleSize, patchContext),
+            ComputedAtUtc: await ResolveAnalyticsFreshnessAsync(currentPatch, ct)
         );
     }
 

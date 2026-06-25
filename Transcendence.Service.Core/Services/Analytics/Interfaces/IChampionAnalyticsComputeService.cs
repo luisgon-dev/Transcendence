@@ -30,6 +30,13 @@ public interface IChampionAnalyticsComputeService
         CancellationToken ct);
 
     /// <summary>
+    /// When the precomputed analytics aggregates for <paramref name="patch"/> were last rebuilt (all rows of
+    /// a refresh share one timestamp), or null if the patch has no aggregates yet. Surfaced as the
+    /// "updated N ago" freshness signal.
+    /// </summary>
+    Task<DateTime?> GetAnalyticsComputedAtAsync(string patch, CancellationToken ct);
+
+    /// <summary>
     /// Win rates served from the precomputed <c>ChampionRoleTierStat</c>/ban aggregate tables (a fast
     /// indexed scope roll-up instead of a raw-match scan), falling back to <see cref="ComputeWinRatesAsync"/>
     /// when no aggregates exist for the patch yet. Produces DTOs identical to the raw path.

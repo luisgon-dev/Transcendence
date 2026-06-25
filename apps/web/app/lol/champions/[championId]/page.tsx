@@ -12,6 +12,7 @@ import { ItemBuildDisplay } from "@/components/ItemBuildDisplay";
 import { RuneTreeDisplay } from "@/components/RuneTreeDisplay";
 import { StatsBar } from "@/components/StatsBar";
 import { TierBadge } from "@/components/TierBadge";
+import { UpdatedAgo } from "@/components/UpdatedAgo";
 import { WinRateText } from "@/components/WinRateText";
 import { Card } from "@/components/ui/Card";
 import { DataBar } from "@/components/ui/DataBar";
@@ -35,7 +36,11 @@ import {
 import { deriveTier } from "@/lib/tierlist";
 
 type ChampionWinRateDto = components["schemas"]["ChampionWinRateDto"];
-type ChampionWinRateSummary = components["schemas"]["ChampionWinRateSummary"];
+// `computedAtUtc` is the ISO-8601 UTC timestamp (or null) of when the precomputed
+// analytics for the patch were last refreshed; powers the "Updated N min ago" label.
+type ChampionWinRateSummary = components["schemas"]["ChampionWinRateSummary"] & {
+  computedAtUtc?: string | null;
+};
 type ChampionProfileAnalyticsResponse = components["schemas"]["ChampionProfileAnalyticsResponse"];
 type MatchupEntryDto = components["schemas"]["MatchupEntryDto"];
 
@@ -257,6 +262,12 @@ async function ChampionHeroMeta({
         <p className="text-sm text-muted">
           {roleDisplayLabel(effectiveRole)} &middot; {rankTierDisplayLabel(normalizedRankTier ?? "all")} &middot; {activeRegionLabel}
         </p>
+        {(winrates as ChampionWinRateSummary | null)?.computedAtUtc ? (
+          <UpdatedAgo
+            className="text-xs"
+            timestamp={(winrates as ChampionWinRateSummary | null)?.computedAtUtc}
+          />
+        ) : null}
       </div>
       <div className="-mt-2 flex flex-wrap items-center gap-2 text-xs">
         <Link

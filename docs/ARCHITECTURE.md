@@ -375,6 +375,7 @@ The web app never exposes backend tokens to browser JS:
 - Backend never receives browser cookies (explicitly stripped in proxy)
 - Catch-all proxy routes reject invalid path segments (`.`/`..`) to avoid path normalization escapes.
 - AppOnly proxy route `/api/trn/app/*` is explicitly allowlisted for approved paths (not a generic arbitrary AppOnly relay).
+- Anonymous public proxy route `/api/trn/public/*` is explicitly allowlisted (`lib/publicProxyAllowlist.ts`): only LoL/TFT summoner reads (`{lol,tft}/summoners/**` GET) and the on-demand refresh POST (`.../refresh`) are relayed; anything else (admin, user, auth, analytics writes, arbitrary paths, `PUT`/`DELETE`) is rejected `404`. It forwards no credentials, so it is a narrow read surface, not a generic anonymous relay. (Per-IP partitioning of public read limits is a separate follow-up — P8.2.)
 - Logout flow revokes refresh tokens server-side via `POST /api/auth/logout` before cookie clear.
 
 ## Admin Surface and Security

@@ -24,8 +24,8 @@ public partial class ChampionAnalyticsComputeService
             return await ComputeWinRatesAsync(championId, filter, patch, ct);
 
         var minimumGamesRequired = await GetAdaptiveMinimumGamesRequiredAsync(patch, ct);
-        var rankTierScope = ParseRankTierScope(filter.RankTier);
-        var scopeToken = ScopeTokenOf(rankTierScope);
+        var rankTierScope = AnalyticsScopeMath.ParseRankTierScope(filter.RankTier);
+        var scopeToken = AnalyticsScopeMath.ScopeTokenOf(rankTierScope);
         var tierFilter = RankTierCatalog.ResolveScopeTiers(scopeToken);
         var region = filter.Region;                                  // already normalized to a platform or null (ALL)
         var roleFilter = string.IsNullOrEmpty(filter.Role) ? null : filter.Role;
@@ -46,7 +46,7 @@ public partial class ChampionAnalyticsComputeService
         if (totalGames == 0)
             return [];
 
-        var effectiveMinimumGames = ResolveEffectiveSampleSize(minimumGamesRequired, totalGames, floor: 3);
+        var effectiveMinimumGames = AnalyticsScopeMath.ResolveEffectiveSampleSize(minimumGamesRequired, totalGames, floor: 3);
         var winRateData = champRows.Where(x => x.Games >= effectiveMinimumGames).ToList();
         if (winRateData.Count == 0)
             winRateData = champRows.Where(x => x.Games >= 1).ToList();
@@ -130,8 +130,8 @@ public partial class ChampionAnalyticsComputeService
 
         var normalizedRole = string.IsNullOrWhiteSpace(role) ? "ALL" : role.ToUpperInvariant();
         var isUnifiedRole = normalizedRole == "ALL";
-        var rankTierScope = ParseRankTierScope(rankTier);
-        var scopeToken = ScopeTokenOf(rankTierScope);
+        var rankTierScope = AnalyticsScopeMath.ParseRankTierScope(rankTier);
+        var scopeToken = AnalyticsScopeMath.ScopeTokenOf(rankTierScope);
         var tierFilter = RankTierCatalog.ResolveScopeTiers(scopeToken);
         var minimumGamesRequired = await GetAdaptiveMinimumGamesRequiredAsync(patch, ct);
         var regionFilter = AnalyticsRegionCatalog.NormalizeToFilter(region);
@@ -167,7 +167,7 @@ public partial class ChampionAnalyticsComputeService
         if (totalParticipants == 0)
             return [];
 
-        var effectiveMinimumGames = ResolveEffectiveSampleSize(minimumGamesRequired, totalParticipants, floor: 5);
+        var effectiveMinimumGames = AnalyticsScopeMath.ResolveEffectiveSampleSize(minimumGamesRequired, totalParticipants, floor: 5);
         var championStats = aggregated.Where(x => x.Games >= effectiveMinimumGames).ToList();
         if (championStats.Count == 0)
             championStats = aggregated.Where(x => x.Games >= 1).ToList();
@@ -192,7 +192,7 @@ public partial class ChampionAnalyticsComputeService
             c.TeamPosition,
             c.Games,
             WinRate = c.Games > 0 ? (double)c.Wins / c.Games : 0.0,
-            ConservativeWinRate = ComputeWilsonLowerBound(c.Wins, c.Games),
+            ConservativeWinRate = AnalyticsScopeMath.ComputeWilsonLowerBound(c.Wins, c.Games),
             PickRate = totalParticipants > 0 ? (double)c.Games / totalParticipants : 0.0,
             BanRate = totalMatchesInScope > 0
                 ? (double)banCountsByChampion.GetValueOrDefault(c.ChampionId) / totalMatchesInScope
@@ -254,8 +254,8 @@ public partial class ChampionAnalyticsComputeService
         if (regionFilter != null || !await HasMatchupStatsAsync(patch, ct))
             return await ComputeMatchupsAsync(championId, role, rankTier, region, patch, ct);
 
-        var rankTierScope = ParseRankTierScope(rankTier);
-        var scopeToken = ScopeTokenOf(rankTierScope);
+        var rankTierScope = AnalyticsScopeMath.ParseRankTierScope(rankTier);
+        var scopeToken = AnalyticsScopeMath.ScopeTokenOf(rankTierScope);
         var tierFilter = RankTierCatalog.ResolveScopeTiers(scopeToken);
         var normalizedRegion = AnalyticsRegionCatalog.NormalizeOrDefault(region);
 
@@ -304,7 +304,7 @@ public partial class ChampionAnalyticsComputeService
         CancellationToken ct)
     {
         var regionFilter = AnalyticsRegionCatalog.NormalizeToFilter(region);
-        var scopeToken = ScopeTokenOf(ParseRankTierScope(rankTier));
+        var scopeToken = AnalyticsScopeMath.ScopeTokenOf(AnalyticsScopeMath.ParseRankTierScope(rankTier));
 
         // Only EMERALD_PLUS + ALL are precomputed, at the all-region scope; a specific tier/region (or a
         // missing/un-refreshed snapshot) falls back to the live build compute.
@@ -430,10 +430,4 @@ public partial class ChampionAnalyticsComputeService
             .FirstOrDefaultAsync(ct) ?? 0;
         return (double)bannedMatches / totalMatchesInScope;
     }
-
-    /// <summary>The rank-scope token for the ban tables, derived from the parsed scope (see ParseRankTierScope).</summary>
-    private static string ScopeTokenOf(RankTierScope scope) =>
-        scope.IsEmeraldPlus
-            ? RankTierCatalog.EmeraldPlusScope
-            : string.IsNullOrWhiteSpace(scope.ExactTier) ? RankTierCatalog.AllScope : scope.ExactTier!;
 }

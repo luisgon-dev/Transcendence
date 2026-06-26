@@ -249,6 +249,74 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
         return rows.Count;
     }
 
+    // ---- AnalyticsResponseSnapshot: durable pro-builds + pro-playrate responses (all-region) ----
+
+    public async Task<int> RefreshProSurfacesAsync(string patch, CancellationToken ct)
+    {
+        var computedAt = DateTime.UtcNow;
+        var rows = new List<AnalyticsResponseSnapshot>();
+
+        // Pro-playrate: one response per roster scope, all-region.
+        foreach (var scope in AnalyticsSnapshotSerialization.ProScopes)
+        {
+            var response = await _computeService.ComputeProChampionPlayrateAsync(region: null, scope, patch, ct);
+            rows.Add(new AnalyticsResponseSnapshot
+            {
+                Feature = AnalyticsSnapshotSerialization.ProPlayrateFeature,
+                ScopeKey = scope,
+                Patch = patch,
+                Payload = AnalyticsSnapshotSerialization.Serialize(response),
+                ComputedAtUtc = computedAt
+            });
+        }
+
+        // Pro-builds: per pro-played (champion, role) x roster scope, all-region. Enumerate the (champion,
+        // role) pairs the active roster (pro OR high-elo) actually plays — much smaller than the general
+        // population — and precompute each scope's response (pro/highelo subsets may be empty; that's fine).
+        var rosterPuuids = await _context.TrackedProSummoners
+            .AsNoTracking()
+            .Where(x => x.IsActive && (x.IsPro || x.IsHighEloOtp))
+            .Select(x => x.Puuid)
+            .Where(p => p != null && p != "")
+            .Distinct()
+            .ToListAsync(ct);
+
+        var pairs = rosterPuuids.Count == 0
+            ? []
+            : await BaseParticipants(patch)
+                .Where(mp => mp.Puuid != null && rosterPuuids.Contains(mp.Puuid))
+                .Select(mp => new { mp.ChampionId, Role = mp.TeamPosition! })
+                .Distinct()
+                .ToListAsync(ct);
+
+        foreach (var pair in pairs)
+        {
+            foreach (var scope in AnalyticsSnapshotSerialization.ProScopes)
+            {
+                var response = await _computeService.ComputeProBuildsAsync(
+                    pair.ChampionId, region: null, pair.Role, scope, patch, ct);
+                rows.Add(new AnalyticsResponseSnapshot
+                {
+                    Feature = AnalyticsSnapshotSerialization.ProBuildsFeature,
+                    ScopeKey = $"{pair.ChampionId}:{pair.Role}:{scope}",
+                    Patch = patch,
+                    Payload = AnalyticsSnapshotSerialization.Serialize(response),
+                    ComputedAtUtc = computedAt
+                });
+            }
+        }
+
+        await using var tx = await _context.Database.BeginTransactionAsync(ct);
+        await _context.AnalyticsResponseSnapshots.Where(x => x.Patch == patch).ExecuteDeleteAsync(ct);
+        _context.AnalyticsResponseSnapshots.AddRange(rows);
+        await _context.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+
+        _logger.LogInformation("Precompute refresh (pro surfaces) patch {Patch}: {Rows} snapshots ({Pairs} pro champion-roles)",
+            patch, rows.Count, pairs.Count);
+        return rows.Count;
+    }
+
     // ---- ChampionRoleTierStat: per (region, current-tier, champion, role) Games/Wins (additive) ----
 
     private async Task<List<ChampionRoleTierStat>> BuildRoleTierStatsAsync(

@@ -37,6 +37,7 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<ChampionBanScopeStat> ChampionBanScopeStats { get; set; }
     public DbSet<ChampionMatchupStat> ChampionMatchupStats { get; set; }
     public DbSet<ChampionBuildSnapshot> ChampionBuildSnapshots { get; set; }
+    public DbSet<AnalyticsResponseSnapshot> AnalyticsResponseSnapshots { get; set; }
 
     // Versioned static data
     public DbSet<Patch> Patches { get; set; }
@@ -664,6 +665,13 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             entity.HasKey(x => x.Id);
             // Doubles as the UPSERT target and the read point-lookup.
             entity.HasIndex(x => new { x.Patch, x.ChampionId, x.Role, x.RankScope }).IsUnique();
+        });
+
+        modelBuilder.Entity<AnalyticsResponseSnapshot>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            // Doubles as the UPSERT target and the read point-lookup.
+            entity.HasIndex(x => new { x.Feature, x.ScopeKey, x.Patch }).IsUnique();
         });
     }
 }

@@ -265,7 +265,7 @@ public class ChampionAnalyticsServiceTests
                 Patch = "15.1"
             });
         harness.ComputeService
-            .Setup(x => x.ComputeProBuildsAsync(103, "ALL", "MIDDLE", "all", "15.1", It.IsAny<CancellationToken>()))
+            .Setup(x => x.ComputeProBuildsFromStatsAsync(103, "ALL", "MIDDLE", "all", "15.1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChampionProBuildsResponse(103, "15.1", "MIDDLE", "ALL", "all", [], [], []));
         await harness.Db.SaveChangesAsync();
 
@@ -290,7 +290,7 @@ public class ChampionAnalyticsServiceTests
             x => x.ComputeMatchupsFromStatsAsync(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", It.IsAny<CancellationToken>()),
             Times.Once);
         harness.ComputeService.Verify(
-            x => x.ComputeProBuildsAsync(103, "ALL", "MIDDLE", "all", "15.1", It.IsAny<CancellationToken>()),
+            x => x.ComputeProBuildsFromStatsAsync(103, "ALL", "MIDDLE", "all", "15.1", It.IsAny<CancellationToken>()),
             Times.Once);
     }
 

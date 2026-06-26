@@ -260,7 +260,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 
         var response = await _cache.GetOrCreateAsync(
             cacheKey,
-            async cancel => await _computeService.ComputeProBuildsAsync(
+            async cancel => await _computeService.ComputeProBuildsFromStatsAsync(
                 championId,
                 normalizedRegion,
                 normalizedRole,
@@ -300,7 +300,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 
         var response = await _cache.GetOrCreateAsync(
             cacheKey,
-            async cancel => await _computeService.ComputeProChampionPlayrateAsync(
+            async cancel => await _computeService.ComputeProChampionPlayrateFromStatsAsync(
                 normalizedRegion,
                 normalizedScope,
                 resolvedPatch,
@@ -466,7 +466,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             const string proRegion = "ALL";
             var proKey = $"{ProBuildsCacheKeyPrefix}{championId}:{proRegion}:{effectiveRole}:{proScope}:{currentPatch}";
             var proTags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(currentPatch), "probuilds" };
-            var proBuilds = await _computeService.ComputeProBuildsAsync(
+            var proBuilds = await _computeService.ComputeProBuildsFromStatsAsync(
                 championId, proRegion, effectiveRole, proScope, currentPatch, ct);
             await _cache.SetAsync(proKey, proBuilds, AnalyticsCacheOptions, proTags, ct);
         }

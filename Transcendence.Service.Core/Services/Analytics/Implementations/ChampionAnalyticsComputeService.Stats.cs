@@ -335,6 +335,65 @@ public partial class ChampionAnalyticsComputeService
             .Select(x => (DateTime?)x.ComputedAtUtc)
             .FirstOrDefaultAsync(ct);
 
+    public async Task<ChampionProBuildsResponse> ComputeProBuildsFromStatsAsync(
+        int championId,
+        string? region,
+        string? role,
+        string scope,
+        string patch,
+        CancellationToken ct)
+    {
+        var normalizedRegion = string.IsNullOrWhiteSpace(region) ? "ALL" : region.Trim().ToUpperInvariant();
+        var normalizedRole = string.IsNullOrWhiteSpace(role) ? "ALL" : role.Trim().ToUpperInvariant();
+        var normalizedScope = NormalizeProScope(scope);
+
+        // Precomputed only at the all-region scope for a specific role; everything else falls back to live.
+        if (normalizedRegion == "ALL" && normalizedRole != "ALL")
+        {
+            var key = $"{championId}:{normalizedRole}:{normalizedScope}";
+            var payload = await _context.AnalyticsResponseSnapshots.AsNoTracking()
+                .Where(x => x.Feature == AnalyticsSnapshotSerialization.ProBuildsFeature && x.ScopeKey == key && x.Patch == patch)
+                .Select(x => x.Payload)
+                .FirstOrDefaultAsync(ct);
+
+            if (payload != null)
+            {
+                var cached = AnalyticsSnapshotSerialization.Deserialize<ChampionProBuildsResponse>(payload);
+                if (cached != null)
+                    return cached;
+            }
+        }
+
+        return await ComputeProBuildsAsync(championId, region, role, scope, patch, ct);
+    }
+
+    public async Task<ProChampionPlayrateResponse> ComputeProChampionPlayrateFromStatsAsync(
+        string? region,
+        string scope,
+        string patch,
+        CancellationToken ct)
+    {
+        var normalizedRegion = string.IsNullOrWhiteSpace(region) ? "ALL" : region.Trim().ToUpperInvariant();
+        var normalizedScope = NormalizeProScope(scope);
+
+        if (normalizedRegion == "ALL")
+        {
+            var payload = await _context.AnalyticsResponseSnapshots.AsNoTracking()
+                .Where(x => x.Feature == AnalyticsSnapshotSerialization.ProPlayrateFeature && x.ScopeKey == normalizedScope && x.Patch == patch)
+                .Select(x => x.Payload)
+                .FirstOrDefaultAsync(ct);
+
+            if (payload != null)
+            {
+                var cached = AnalyticsSnapshotSerialization.Deserialize<ProChampionPlayrateResponse>(payload);
+                if (cached != null)
+                    return cached;
+            }
+        }
+
+        return await ComputeProChampionPlayrateAsync(region, scope, patch, ct);
+    }
+
     // ---- shared helpers for the stats path ----
 
     private Task<bool> HasStatsAsync(string patch, CancellationToken ct) =>

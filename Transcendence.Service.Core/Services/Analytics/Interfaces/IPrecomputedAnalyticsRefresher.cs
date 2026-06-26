@@ -29,6 +29,13 @@ public interface IPrecomputedAnalyticsRefresher
     /// Returns the snapshot count written.
     /// </summary>
     Task<int> RefreshBuildsAsync(string patch, CancellationToken ct);
+
+    /// <summary>
+    /// Recomputes + persists the durable pro-surface responses (<c>AnalyticsResponseSnapshot</c>) for
+    /// <paramref name="patch"/>: pro-playrate per roster scope, and pro-builds for each pro-played
+    /// (champion, role) x roster scope, all-region. Returns the snapshot count written.
+    /// </summary>
+    Task<int> RefreshProSurfacesAsync(string patch, CancellationToken ct);
 }
 
 /// <summary>Row counts written per table, for logging/observability.</summary>

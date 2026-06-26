@@ -42,7 +42,7 @@ public partial class ChampionAnalyticsComputeService : IChampionAnalyticsCompute
         CancellationToken ct)
     {
         var minimumGamesRequired = await GetAdaptiveMinimumGamesRequiredAsync(patch, ct);
-        var rankTierScope = ParseRankTierScope(filter.RankTier);
+        var rankTierScope = AnalyticsScopeMath.ParseRankTierScope(filter.RankTier);
 
         // Base query: Match participants for this champion in this patch
         var baseQuery = _context.MatchParticipants
@@ -95,7 +95,7 @@ public partial class ChampionAnalyticsComputeService : IChampionAnalyticsCompute
         if (totalGames == 0)
             return [];
 
-        var effectiveMinimumGames = ResolveEffectiveSampleSize(minimumGamesRequired, totalGames, floor: 3);
+        var effectiveMinimumGames = AnalyticsScopeMath.ResolveEffectiveSampleSize(minimumGamesRequired, totalGames, floor: 3);
 
         var groupedData = await participantRanks
             .GroupBy(pr => new { pr.TeamPosition, pr.RankTier })
@@ -254,7 +254,7 @@ public partial class ChampionAnalyticsComputeService : IChampionAnalyticsCompute
     {
         var normalizedRole = string.IsNullOrWhiteSpace(role) ? "ALL" : role.ToUpperInvariant();
         var isUnifiedRole = normalizedRole == "ALL";
-        var rankTierScope = ParseRankTierScope(rankTier);
+        var rankTierScope = AnalyticsScopeMath.ParseRankTierScope(rankTier);
         var minimumGamesRequired = await GetAdaptiveMinimumGamesRequiredAsync(patch, ct);
         var regionFilter = AnalyticsRegionCatalog.NormalizeToFilter(region);
 
@@ -276,7 +276,7 @@ public partial class ChampionAnalyticsComputeService : IChampionAnalyticsCompute
 
         // Only apply rank join semantics when a tier filter is requested.
         // Unfiltered views intentionally keep unranked participants.
-        baseQuery = ApplyRankTierScopeToParticipants(baseQuery, rankTierScope, _context.Ranks.AsNoTracking());
+        baseQuery = AnalyticsScopeMath.ApplyRankTierScopeToParticipants(baseQuery, rankTierScope, _context.Ranks.AsNoTracking());
 
         var query = baseQuery.Select(mp => new { mp.ChampionId, mp.TeamPosition, mp.Win, mp.MatchId });
         var totalParticipants = await query.CountAsync(ct);
@@ -301,7 +301,7 @@ public partial class ChampionAnalyticsComputeService : IChampionAnalyticsCompute
                 })
                 .ToDictionaryAsync(x => x.ChampionId, x => x.BannedMatches, ct);
 
-        var effectiveMinimumGames = ResolveEffectiveSampleSize(minimumGamesRequired, totalParticipants, floor: 5);
+        var effectiveMinimumGames = AnalyticsScopeMath.ResolveEffectiveSampleSize(minimumGamesRequired, totalParticipants, floor: 5);
 
         // Step 2: Aggregate champion stats
         var aggregatedChampionStats = isUnifiedRole
@@ -349,7 +349,7 @@ public partial class ChampionAnalyticsComputeService : IChampionAnalyticsCompute
             c.Games,
             c.Wins,
             WinRate = c.Games > 0 ? (double)c.Wins / c.Games : 0.0,
-            ConservativeWinRate = ComputeWilsonLowerBound(c.Wins, c.Games),
+            ConservativeWinRate = AnalyticsScopeMath.ComputeWilsonLowerBound(c.Wins, c.Games),
             PickRate = totalParticipants > 0 ? (double)c.Games / totalParticipants : 0.0,
             BanRate = totalMatchesInScope > 0
                 ? (double)banCountsByChampion.GetValueOrDefault(c.ChampionId) / totalMatchesInScope
@@ -426,47 +426,10 @@ public partial class ChampionAnalyticsComputeService : IChampionAnalyticsCompute
         return AnalyticsPatchPhaseCalculator.RecommendedSampleSize(patchPhase, _options);
     }
 
-    private static RankTierScope ParseRankTierScope(string? rankTier)
-    {
-        if (string.IsNullOrWhiteSpace(rankTier))
-            return new RankTierScope("all", null, false);
-
-        var normalized = rankTier.Trim().ToUpperInvariant().Replace("+", "_PLUS");
-        if (normalized == "ALL")
-            return new RankTierScope("all", null, false);
-
-        if (normalized == "EMERALD_PLUS")
-            return new RankTierScope("EMERALD_PLUS", null, true);
-
-        return new RankTierScope(normalized, normalized, false);
-    }
-
-    private static IQueryable<Data.Models.LoL.Match.MatchParticipant> ApplyRankTierScopeToParticipants(
-        IQueryable<Data.Models.LoL.Match.MatchParticipant> query,
-        RankTierScope scope,
-        IQueryable<Data.Models.LoL.Account.Rank> ranks)
-    {
-        if (!scope.HasFilter)
-            return query;
-
-        if (scope.IsEmeraldPlus)
-        {
-            return query.Where(mp => ranks.Any(r =>
-                r.QueueType == "RANKED_SOLO_5x5" &&
-                r.SummonerId == mp.SummonerId &&
-                RankTierCatalog.EmeraldPlusTiers.Contains(r.Tier)));
-        }
-
-        return query.Where(mp => ranks.Any(r =>
-            r.QueueType == "RANKED_SOLO_5x5" &&
-            r.SummonerId == mp.SummonerId &&
-            r.Tier == scope.ExactTier));
-    }
-
     // Distinct match IDs for the full (all-champion) rank-scoped ranked-solo population in a
     // patch/region — the denominator population for champion-level ban rate. Returned as IQueryable
     // so callers compose CountAsync / Contains in SQL without materialising the (large) id set.
-    private IQueryable<Guid> BuildScopedMatchIdQuery(string patch, string? region, RankTierScope rankTierScope)
+    private IQueryable<Guid> BuildScopedMatchIdQuery(string patch, string? region, AnalyticsScopeMath.RankTierScope rankTierScope)
     {
         var scope = _context.MatchParticipants
             .AsNoTracking()
@@ -477,47 +440,9 @@ public partial class ChampionAnalyticsComputeService : IChampionAnalyticsCompute
 
         scope = scope.InPlatformRegion(region);
 
-        scope = ApplyRankTierScopeToParticipants(scope, rankTierScope, _context.Ranks.AsNoTracking());
+        scope = AnalyticsScopeMath.ApplyRankTierScopeToParticipants(scope, rankTierScope, _context.Ranks.AsNoTracking());
 
         return scope.Select(mp => mp.MatchId).Distinct();
-    }
-
-    private static HashSet<string> ResolvePlatformsForRegion(string region)
-    {
-        return region switch
-        {
-            "NA" => ["NA1"],
-            "EUW" => ["EUW1"],
-            "KR" => ["KR"],
-            "CN" => ["CN1", "CN2"],
-            "ALL" => [],
-            _ => [region]
-        };
-    }
-
-    private static int ResolveEffectiveSampleSize(int configuredMinimum, int availableGames, int floor)
-    {
-        if (availableGames <= 0)
-            return int.MaxValue;
-
-        var safeConfiguredMinimum = Math.Max(1, configuredMinimum);
-        var safeFloor = Math.Max(1, floor);
-        var proportionalMinimum = (int)Math.Ceiling(availableGames * 0.15);
-        var boundedFloor = Math.Min(availableGames, Math.Max(safeFloor, proportionalMinimum));
-        return Math.Max(1, Math.Min(safeConfiguredMinimum, boundedFloor));
-    }
-
-    private static double ComputeWilsonLowerBound(int wins, int games, double z = 1.96)
-    {
-        if (games <= 0)
-            return 0.0;
-
-        var p = (double)wins / games;
-        var zSquared = z * z;
-        var denominator = 1 + zSquared / games;
-        var center = p + zSquared / (2 * games);
-        var margin = z * Math.Sqrt((p * (1 - p) + zSquared / (4 * games)) / games);
-        return Math.Max(0.0, (center - margin) / denominator);
     }
 
     private const double CoreItemThreshold = 0.70;
@@ -537,7 +462,7 @@ public partial class ChampionAnalyticsComputeService : IChampionAnalyticsCompute
         CancellationToken ct)
     {
         var minimumGamesRequired = await GetAdaptiveMinimumGamesRequiredAsync(patch, ct);
-        var rankTierScope = ParseRankTierScope(rankTier);
+        var rankTierScope = AnalyticsScopeMath.ParseRankTierScope(rankTier);
         var normalizedRegion = AnalyticsRegionCatalog.NormalizeOrDefault(region);
         var regionFilter = AnalyticsRegionCatalog.NormalizeToFilter(region);
 
@@ -554,7 +479,7 @@ public partial class ChampionAnalyticsComputeService : IChampionAnalyticsCompute
 
         baseQuery = baseQuery.InPlatformRegion(regionFilter);
 
-        baseQuery = ApplyRankTierScopeToParticipants(baseQuery, rankTierScope, _context.Ranks.AsNoTracking());
+        baseQuery = AnalyticsScopeMath.ApplyRankTierScopeToParticipants(baseQuery, rankTierScope, _context.Ranks.AsNoTracking());
 
         var matchData = await baseQuery
             .Select(mp => new
@@ -636,7 +561,7 @@ public partial class ChampionAnalyticsComputeService : IChampionAnalyticsCompute
             .Where(m => m.Items.Count > 0)
             .ToList();
 
-        var effectiveMinimumGames = ResolveEffectiveSampleSize(minimumGamesRequired, buildEligibleMatches.Count, floor: 3);
+        var effectiveMinimumGames = AnalyticsScopeMath.ResolveEffectiveSampleSize(minimumGamesRequired, buildEligibleMatches.Count, floor: 3);
         if (buildEligibleMatches.Count < effectiveMinimumGames)
             return new ChampionBuildsResponse(championId, role, rankTierScope.CacheToken, normalizedRegion, patch,
                 new List<int>(), new List<ChampionBuildDto>());
@@ -665,7 +590,7 @@ public partial class ChampionAnalyticsComputeService : IChampionAnalyticsCompute
             .ToDictionaryAsync(rv => rv.RuneId, rv => new ChampionBuildPathBuilder.RuneMetadata(rv.RunePathId, rv.Slot), ct);
 
         // Step 4: Group by build (items + runes as key)
-        var effectiveBuildSampleSize = ResolveEffectiveSampleSize(MinBuildSampleSize, totalGames, floor: 2);
+        var effectiveBuildSampleSize = AnalyticsScopeMath.ResolveEffectiveSampleSize(MinBuildSampleSize, totalGames, floor: 2);
         var buildGroups = buildEligibleMatches
             .Select(m => new
             {
@@ -781,7 +706,7 @@ public partial class ChampionAnalyticsComputeService : IChampionAnalyticsCompute
 
         if (!string.Equals(normalizedRegion, "ALL", StringComparison.Ordinal))
         {
-            var platforms = ResolvePlatformsForRegion(normalizedRegion);
+            var platforms = AnalyticsScopeMath.ResolvePlatformsForRegion(normalizedRegion);
             proQuery = proQuery.Where(x => platforms.Contains(x.PlatformRegion.ToUpper()));
         }
 
@@ -1008,7 +933,7 @@ public partial class ChampionAnalyticsComputeService : IChampionAnalyticsCompute
 
         if (!string.Equals(normalizedRegion, "ALL", StringComparison.Ordinal))
         {
-            var platforms = ResolvePlatformsForRegion(normalizedRegion);
+            var platforms = AnalyticsScopeMath.ResolvePlatformsForRegion(normalizedRegion);
             rosterQuery = rosterQuery.Where(x => platforms.Contains(x.PlatformRegion.ToUpper()));
         }
 
@@ -1068,7 +993,7 @@ public partial class ChampionAnalyticsComputeService : IChampionAnalyticsCompute
 
         if (!string.Equals(normalizedRegion, "ALL", StringComparison.Ordinal))
         {
-            var platforms = ResolvePlatformsForRegion(normalizedRegion);
+            var platforms = AnalyticsScopeMath.ResolvePlatformsForRegion(normalizedRegion);
             query = query.Where(x => platforms.Contains(x.PlatformRegion.ToUpper()));
         }
 
@@ -1091,14 +1016,6 @@ public partial class ChampionAnalyticsComputeService : IChampionAnalyticsCompute
             _ => "all"
         };
 
-    private readonly record struct RankTierScope(
-        string CacheToken,
-        string? ExactTier,
-        bool IsEmeraldPlus)
-    {
-        public bool HasFilter => IsEmeraldPlus || !string.IsNullOrWhiteSpace(ExactTier);
-    }
-
     /// <summary>
     /// Computes matchup data showing counters (bad matchups) and favorable matchups.
     /// Uses lane-specific self-join: same role, different team.
@@ -1111,7 +1028,7 @@ public partial class ChampionAnalyticsComputeService : IChampionAnalyticsCompute
         string patch,
         CancellationToken ct)
     {
-        var rankTierScope = ParseRankTierScope(rankTier);
+        var rankTierScope = AnalyticsScopeMath.ParseRankTierScope(rankTier);
         const int minuteMark = 15;
         var normalizedRegion = AnalyticsRegionCatalog.NormalizeOrDefault(region);
         var regionFilter = AnalyticsRegionCatalog.NormalizeToFilter(region);
@@ -1126,7 +1043,7 @@ public partial class ChampionAnalyticsComputeService : IChampionAnalyticsCompute
         championQuery = championQuery.InPlatformRegion(regionFilter);
 
         // Apply rank tier filter if specified
-        championQuery = ApplyRankTierScopeToParticipants(
+        championQuery = AnalyticsScopeMath.ApplyRankTierScopeToParticipants(
             championQuery,
             rankTierScope,
             _context.Ranks.AsNoTracking());
@@ -1219,7 +1136,7 @@ public partial class ChampionAnalyticsComputeService : IChampionAnalyticsCompute
     private static ChampionMatchupsResponse BuildMatchupsResponse(
         int championId,
         string role,
-        RankTierScope rankTierScope,
+        AnalyticsScopeMath.RankTierScope rankTierScope,
         string normalizedRegion,
         string patch,
         List<MatchupAggregate> matchupData)
@@ -1234,7 +1151,7 @@ public partial class ChampionAnalyticsComputeService : IChampionAnalyticsCompute
             .Select(x => x.LatestTimelineAtUtc)
             .Max();
 
-        var effectiveMatchupSampleSize = ResolveEffectiveSampleSize(MinMatchupSampleSize, totalMatchupGames, floor: 2);
+        var effectiveMatchupSampleSize = AnalyticsScopeMath.ResolveEffectiveSampleSize(MinMatchupSampleSize, totalMatchupGames, floor: 2);
 
         static MatchupEntryDto ToEntry(MatchupAggregate m) => new()
         {

@@ -13,6 +13,7 @@ using Moq;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Models.LoL.Static;
+using Transcendence.Service.Core.Services.Admin.Implementations;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Interfaces;
 using Transcendence.Service.Core.Services.Diagnostics;
@@ -354,24 +355,35 @@ public class AdminOperationsControllerTests
             .Build();
 
         var recurringPolicy = new WorkerRecurringJobPolicy(Options.Create(new WorkerSchedulingProfileOptions()));
+        var workerScheduleOptions = Options.Create(new WorkerJobScheduleOptions());
+        var ingestionOptions = Options.Create(new ChampionAnalyticsIngestionJobOptions());
+        var multiRegionOptions = Options.Create(new MultiRegionIngestionOptions
+        {
+            Enabled = true,
+            Regions =
+            [
+                new() { Region = "NA1", Enabled = true },
+                new() { Region = "EUW1", Enabled = true }
+            ]
+        });
+
+        var jobsFacade = new AdminJobsFacade(
+            storage.Object,
+            workerScheduleOptions,
+            multiRegionOptions,
+            Mock.Of<IRecurringJobManager>(),
+            recurringPolicy);
+        var overviewFacade = new AdminOverviewFacade(
+            storage.Object,
+            ingestionOptions,
+            multiRegionOptions,
+            db);
+        var logsFacade = new AdminLogsFacade(configuration);
 
         return new AdminOperationsController(
-            storage.Object,
-            configuration,
-            Options.Create(new WorkerJobScheduleOptions()),
-            Options.Create(new ChampionAnalyticsIngestionJobOptions()),
-            Options.Create(new MultiRegionIngestionOptions
-            {
-                Enabled = true,
-                Regions =
-                [
-                    new() { Region = "NA1", Enabled = true },
-                    new() { Region = "EUW1", Enabled = true }
-                ]
-            }),
-            Mock.Of<IRecurringJobManager>(),
-            recurringPolicy,
-            db,
+            jobsFacade,
+            overviewFacade,
+            logsFacade,
             Mock.Of<IChampionAnalyticsService>(),
             Mock.Of<IAdminAuditService>())
         {

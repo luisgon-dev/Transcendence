@@ -47,6 +47,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
     private readonly TranscendenceContext _context;
     private readonly HybridCache _cache;
     private readonly IChampionAnalyticsComputeService _computeService;
+    private readonly IChampionWinRateComputeService _winRateService;
     private readonly ChampionAnalyticsComputeOptions _computeOptions;
     private readonly MultiRegionIngestionOptions _multiRegionOptions;
 
@@ -54,12 +55,14 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         TranscendenceContext context,
         HybridCache cache,
         IChampionAnalyticsComputeService computeService,
+        IChampionWinRateComputeService winRateService,
         IOptions<ChampionAnalyticsComputeOptions> computeOptions,
         IOptions<MultiRegionIngestionOptions> multiRegionOptions)
     {
         _context = context;
         _cache = cache;
         _computeService = computeService;
+        _winRateService = winRateService;
         _computeOptions = computeOptions.Value;
         _multiRegionOptions = multiRegionOptions.Value;
     }
@@ -72,7 +75,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
     private async Task<DateTime?> ResolveAnalyticsFreshnessAsync(string patch, CancellationToken ct) =>
         await _cache.GetOrCreateAsync(
             $"analytics:freshness:v1:{patch}",
-            async cancel => await _computeService.GetAnalyticsComputedAtAsync(patch, cancel),
+            async cancel => await _winRateService.GetAnalyticsComputedAtAsync(patch, cancel),
             ActivePatchCacheOptions,
             tags: new[] { AnalyticsCacheTag, CacheTags.ForPatch(patch) },
             cancellationToken: ct);
@@ -110,7 +113,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         // compute for any patch without aggregates yet). HybridCache stays the hot tier in front.
         var winRates = await _cache.GetOrCreateAsync(
             cacheKey,
-            async cancel => await _computeService.ComputeWinRatesFromStatsAsync(championId, normalizedFilter, currentPatch, cancel),
+            async cancel => await _winRateService.ComputeWinRatesFromStatsAsync(championId, normalizedFilter, currentPatch, cancel),
             AnalyticsCacheOptions,
             tags: new[] { AnalyticsCacheTag, $"champion:{championId}", CacheTags.ForPatch(currentPatch) },
             cancellationToken: ct
@@ -161,7 +164,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         // aggregates exist). HybridCache stays the hot tier in front.
         var entries = await _cache.GetOrCreateAsync(
             cacheKey,
-            async cancel => await _computeService.ComputeTierListFromStatsAsync(
+            async cancel => await _winRateService.ComputeTierListFromStatsAsync(
                 normalizedRole,
                 tierFilter,
                 normalizedRegion,
@@ -423,7 +426,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             Patch: currentPatch);
         var winKey = BuildCacheKey(championId, winFilter, currentPatch);
         var winTags = new[] { AnalyticsCacheTag, $"champion:{championId}", CacheTags.ForPatch(currentPatch) };
-        var winRates = await _computeService.ComputeWinRatesFromStatsAsync(championId, winFilter, currentPatch, ct);
+        var winRates = await _winRateService.ComputeWinRatesFromStatsAsync(championId, winFilter, currentPatch, ct);
         await _cache.SetAsync(winKey, winRates, AnalyticsCacheOptions, winTags, ct);
 
         // Resolve the most-played lane EXACTLY like ChampionAnalyticsController.GetProfile so the
@@ -439,7 +442,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
                 Role: null,
                 Patch: currentPatch);
             var fallbackKey = BuildCacheKey(championId, fallbackFilter, currentPatch);
-            var fallbackWinRates = await _computeService.ComputeWinRatesFromStatsAsync(championId, fallbackFilter, currentPatch, ct);
+            var fallbackWinRates = await _winRateService.ComputeWinRatesFromStatsAsync(championId, fallbackFilter, currentPatch, ct);
             await _cache.SetAsync(fallbackKey, fallbackWinRates, AnalyticsCacheOptions, winTags, ct);
             effectiveRole = PickMostPlayedLane(fallbackWinRates);
         }

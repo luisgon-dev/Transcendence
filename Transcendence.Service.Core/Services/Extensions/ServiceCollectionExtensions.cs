@@ -42,6 +42,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IIngestionThroughputTelemetry, IngestionThroughputTelemetry>();
 
         // Analytics services
+        services.AddScoped<IChampionWinRateComputeService, ChampionWinRateComputeService>();
         services.AddScoped<IChampionAnalyticsComputeService, ChampionAnalyticsComputeService>();
         services.AddScoped<IChampionAnalyticsService, ChampionAnalyticsService>();
         services.AddScoped<IPrecomputedAnalyticsRefresher, PrecomputedAnalyticsRefresher>();

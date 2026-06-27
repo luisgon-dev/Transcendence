@@ -14,6 +14,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration.Json;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using System.Net;
+using System.Net.Sockets;
 using System.Threading.RateLimiting;
 using System.Text;
 using Transcendence.Data;
@@ -55,27 +57,13 @@ builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.AddFixedWindowLimiter("expensive-read", limiter =>
-    {
-        limiter.PermitLimit = 120;
-        limiter.Window = TimeSpan.FromMinutes(1);
-        limiter.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-        limiter.QueueLimit = 0;
-    });
-    options.AddFixedWindowLimiter("search-read", limiter =>
-    {
-        limiter.PermitLimit = 600;
-        limiter.Window = TimeSpan.FromMinutes(1);
-        limiter.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-        limiter.QueueLimit = 0;
-    });
-    options.AddFixedWindowLimiter("multisearch-read", limiter =>
-    {
-        limiter.PermitLimit = 60;
-        limiter.Window = TimeSpan.FromMinutes(1);
-        limiter.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-        limiter.QueueLimit = 0;
-    });
+    // Public read limiters are partitioned PER CLIENT IP (not one global window), so a single client
+    // cannot exhaust everyone's budget. Internal/SSR traffic is exempt — the web frontend's server-side
+    // fetches reach the API directly (no X-Forwarded-For → a private/loopback address), and would
+    // otherwise all collapse into one shared partition. See BuildIpReadPartition.
+    options.AddPolicy("expensive-read", httpContext => BuildIpReadPartition(httpContext, permitLimit: 120));
+    options.AddPolicy("search-read", httpContext => BuildIpReadPartition(httpContext, permitLimit: 600));
+    options.AddPolicy("multisearch-read", httpContext => BuildIpReadPartition(httpContext, permitLimit: 60));
     options.AddFixedWindowLimiter("admin-write", limiter =>
     {
         limiter.PermitLimit = 30;
@@ -397,4 +385,51 @@ static string BuildAuthRateLimitPartitionKey(HttpContext context)
 {
     var clientIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown-ip";
     return $"ip:{clientIp}";
+}
+
+// Per-IP fixed-window partition for the public read limiters. Internal/SSR traffic (the web container's
+// server-side fetches, health probes, other backend services) reaches the API directly with a
+// private/loopback source address — it is our own trusted traffic and is NOT throttled (otherwise every
+// SSR request would share one partition and starve under a single cap). Only public, forwarded client IPs
+// (restored by UseForwardedHeaders, the same mechanism the auth limiters rely on) get a per-IP budget.
+static RateLimitPartition<string> BuildIpReadPartition(HttpContext context, int permitLimit)
+{
+    var ip = context.Connection.RemoteIpAddress;
+    if (ip is not null && ip.IsIPv4MappedToIPv6)
+        ip = ip.MapToIPv4();
+
+    if (ip is null || IsInternalAddress(ip))
+        return RateLimitPartition.GetNoLimiter("internal");
+
+    return RateLimitPartition.GetFixedWindowLimiter(
+        $"ip:{ip}",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = permitLimit,
+            Window = TimeSpan.FromMinutes(1),
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 0
+        });
+}
+
+static bool IsInternalAddress(IPAddress ip)
+{
+    if (IPAddress.IsLoopback(ip))
+        return true;
+
+    var bytes = ip.GetAddressBytes();
+    if (ip.AddressFamily == AddressFamily.InterNetwork && bytes.Length == 4)
+    {
+        return bytes[0] == 10                                        // 10.0.0.0/8
+            || (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) // 172.16.0.0/12
+            || (bytes[0] == 192 && bytes[1] == 168)                  // 192.168.0.0/16
+            || (bytes[0] == 169 && bytes[1] == 254);                 // 169.254.0.0/16 link-local
+    }
+    if (ip.AddressFamily == AddressFamily.InterNetworkV6)
+    {
+        return ip.IsIPv6LinkLocal
+            || ip.IsIPv6SiteLocal
+            || (bytes.Length == 16 && (bytes[0] & 0xFE) == 0xFC);    // fc00::/7 unique-local
+    }
+    return false;
 }

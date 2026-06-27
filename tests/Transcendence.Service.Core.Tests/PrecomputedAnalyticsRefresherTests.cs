@@ -139,15 +139,14 @@ public class PrecomputedAnalyticsRefresherTests
 
     private static async Task Refresh(TranscendenceContext db)
     {
-        var compute = new ChampionAnalyticsComputeService(
-            db,
-            Options.Create(new ChampionAnalyticsComputeOptions { MinimumGamesRequired = 1 }),
-            NullLogger<ChampionAnalyticsComputeService>.Instance);
         var build = new ChampionBuildComputeService(
             db,
             Options.Create(new ChampionAnalyticsComputeOptions { MinimumGamesRequired = 1 }),
             NullLogger<ChampionBuildComputeService>.Instance);
-        var refresher = new PrecomputedAnalyticsRefresher(db, compute, build, NullLogger<PrecomputedAnalyticsRefresher>.Instance);
+        var pro = new ChampionProComputeService(
+            db,
+            Options.Create(new ChampionAnalyticsComputeOptions { MinimumGamesRequired = 1 }));
+        var refresher = new PrecomputedAnalyticsRefresher(db, build, pro, NullLogger<PrecomputedAnalyticsRefresher>.Instance);
         await refresher.RefreshTabularCoreAsync(Patch, CancellationToken.None);
     }
 

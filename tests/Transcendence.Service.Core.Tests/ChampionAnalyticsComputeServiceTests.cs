@@ -293,7 +293,7 @@ public class ChampionAnalyticsComputeServiceTests
         SeedParticipantMatch(db, "15.2", "NA1_3", otp, championId: 64, role: "JUNGLE", win: true);
         await db.SaveChangesAsync();
 
-        var service = CreateComputeService(db);
+        var service = CreateProService(db);
 
         var proOnly = await service.ComputeProChampionPlayrateAsync(null, "pro", "15.2", CancellationToken.None);
         proOnly.Champions.Should().ContainSingle();
@@ -360,7 +360,7 @@ public class ChampionAnalyticsComputeServiceTests
         SeedParticipantMatch(db, "15.2", "NA1_2", otp, championId: 266, role: "TOP", win: true);
         await db.SaveChangesAsync();
 
-        var service = CreateComputeService(db);
+        var service = CreateProService(db);
 
         var proOnly = await service.ComputeProBuildsAsync(266, null, "TOP", "pro", "15.2", CancellationToken.None);
         proOnly.Scope.Should().Be("pro");
@@ -483,7 +483,7 @@ public class ChampionAnalyticsComputeServiceTests
         response.SituationalSlots![0].Options.Select(o => o.ItemId).Should().Contain(6694);
     }
 
-    private static ChampionAnalyticsComputeService CreateComputeService(TranscendenceContext db) =>
+    private static ChampionProComputeService CreateProService(TranscendenceContext db) =>
         new(
             db,
             Options.Create(new ChampionAnalyticsComputeOptions
@@ -494,8 +494,7 @@ public class ChampionAnalyticsComputeServiceTests
                 BootstrapWindowHours = 24,
                 ProvisionalWindowHours = 96,
                 MaturingWindowHours = 240
-            }),
-            NullLogger<ChampionAnalyticsComputeService>.Instance);
+            }));
 
     private static ChampionBuildComputeService CreateBuildService(TranscendenceContext db) =>
         new(

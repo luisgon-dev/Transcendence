@@ -26,8 +26,8 @@ public class ProSurfaceSnapshotTests
     public async Task ProSurfacesFromStats_EqualLiveCompute_AndFallBackForSpecificRegion()
     {
         await using var ctx = await SeededAsync();
-        var svc = Service(ctx.Db);
-        var refresher = new PrecomputedAnalyticsRefresher(ctx.Db, svc, BuildService(ctx.Db), NullLogger<PrecomputedAnalyticsRefresher>.Instance);
+        var pro = ProService(ctx.Db);
+        var refresher = new PrecomputedAnalyticsRefresher(ctx.Db, BuildService(ctx.Db), pro, NullLogger<PrecomputedAnalyticsRefresher>.Instance);
 
         var snapshots = await refresher.RefreshProSurfacesAsync(Patch, CancellationToken.None);
         // pro-playrate (3 scopes) + pro-builds for (266, TOP) x 3 scopes.
@@ -36,26 +36,26 @@ public class ProSurfaceSnapshotTests
         // pro-playrate: snapshot read == live compute, for each scope.
         foreach (var scope in new[] { "all", "pro", "highelo" })
         {
-            var raw = await svc.ComputeProChampionPlayrateAsync(null, scope, Patch, CancellationToken.None);
-            var stats = await svc.ComputeProChampionPlayrateFromStatsAsync(null, scope, Patch, CancellationToken.None);
+            var raw = await pro.ComputeProChampionPlayrateAsync(null, scope, Patch, CancellationToken.None);
+            var stats = await pro.ComputeProChampionPlayrateFromStatsAsync(null, scope, Patch, CancellationToken.None);
             stats.Should().BeEquivalentTo(raw, $"pro-playrate scope={scope}");
         }
 
         // pro-builds: snapshot read == live compute, for each scope.
         foreach (var scope in new[] { "all", "pro", "highelo" })
         {
-            var raw = await svc.ComputeProBuildsAsync(266, null, "TOP", scope, Patch, CancellationToken.None);
-            var stats = await svc.ComputeProBuildsFromStatsAsync(266, null, "TOP", scope, Patch, CancellationToken.None);
+            var raw = await pro.ComputeProBuildsAsync(266, null, "TOP", scope, Patch, CancellationToken.None);
+            var stats = await pro.ComputeProBuildsFromStatsAsync(266, null, "TOP", scope, Patch, CancellationToken.None);
             stats.Should().BeEquivalentTo(raw, $"pro-builds scope={scope}");
         }
 
         // A specific region is not precomputed → falls back to live compute.
-        var rawNa = await svc.ComputeProBuildsAsync(266, "NA1", "TOP", "all", Patch, CancellationToken.None);
-        var statsNa = await svc.ComputeProBuildsFromStatsAsync(266, "NA1", "TOP", "all", Patch, CancellationToken.None);
+        var rawNa = await pro.ComputeProBuildsAsync(266, "NA1", "TOP", "all", Patch, CancellationToken.None);
+        var statsNa = await pro.ComputeProBuildsFromStatsAsync(266, "NA1", "TOP", "all", Patch, CancellationToken.None);
         statsNa.Should().BeEquivalentTo(rawNa);
 
-        var rawPlNa = await svc.ComputeProChampionPlayrateAsync("NA1", "all", Patch, CancellationToken.None);
-        var statsPlNa = await svc.ComputeProChampionPlayrateFromStatsAsync("NA1", "all", Patch, CancellationToken.None);
+        var rawPlNa = await pro.ComputeProChampionPlayrateAsync("NA1", "all", Patch, CancellationToken.None);
+        var statsPlNa = await pro.ComputeProChampionPlayrateFromStatsAsync("NA1", "all", Patch, CancellationToken.None);
         statsPlNa.Should().BeEquivalentTo(rawPlNa);
     }
 
@@ -63,14 +63,14 @@ public class ProSurfaceSnapshotTests
     public async Task ProSurfacesFromStats_FallBackToLive_WhenNoSnapshot()
     {
         await using var ctx = await SeededAsync();
-        var svc = Service(ctx.Db);
+        var pro = ProService(ctx.Db);
         // No refresh → no snapshots.
-        var raw = await svc.ComputeProBuildsAsync(266, null, "TOP", "all", Patch, CancellationToken.None);
-        var stats = await svc.ComputeProBuildsFromStatsAsync(266, null, "TOP", "all", Patch, CancellationToken.None);
+        var raw = await pro.ComputeProBuildsAsync(266, null, "TOP", "all", Patch, CancellationToken.None);
+        var stats = await pro.ComputeProBuildsFromStatsAsync(266, null, "TOP", "all", Patch, CancellationToken.None);
         stats.Should().BeEquivalentTo(raw);
     }
 
-    private static ChampionAnalyticsComputeService Service(TranscendenceContext db) =>
+    private static ChampionProComputeService ProService(TranscendenceContext db) =>
         new(db,
             Options.Create(new ChampionAnalyticsComputeOptions
             {
@@ -80,8 +80,7 @@ public class ProSurfaceSnapshotTests
                 BootstrapWindowHours = 24,
                 ProvisionalWindowHours = 96,
                 MaturingWindowHours = 240
-            }),
-            NullLogger<ChampionAnalyticsComputeService>.Instance);
+            }));
 
     private static ChampionBuildComputeService BuildService(TranscendenceContext db) =>
         new(db,

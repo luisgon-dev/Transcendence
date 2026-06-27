@@ -4,11 +4,11 @@ using Transcendence.Service.Core.Services.Analytics.Models;
 namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 
 /// <summary>
-/// Stats-backed read path for matchups and pro builds/playrate: serves them from the durable
-/// snapshot/aggregate tables (<c>ChampionMatchupStat</c>, <c>AnalyticsResponseSnapshot</c>) — rolled up in
-/// SQL or read back as a stored response — instead of recomputing from raw matches, falling back to the
-/// live compute for any scope/patch without a snapshot yet so reads are always safe. (Win-rate and
-/// tier-list stats live in <c>ChampionWinRateComputeService</c>; builds in <c>ChampionBuildComputeService</c>.)
+/// Stats-backed read path for matchups: serves them from the precomputed <c>ChampionMatchupStat</c>
+/// aggregates — rolled up in SQL to the requested rank scope — instead of recomputing from raw matches,
+/// falling back to the live compute for any scope/patch without aggregates yet so reads are always safe.
+/// (Win-rate and tier-list stats live in <c>ChampionWinRateComputeService</c>; builds in
+/// <c>ChampionBuildComputeService</c>; the pro surfaces in <c>ChampionProComputeService</c>.)
 /// </summary>
 public partial class ChampionAnalyticsComputeService
 {
@@ -66,65 +66,6 @@ public partial class ChampionAnalyticsComputeService
             .ToList();
 
         return BuildMatchupsResponse(championId, role, rankTierScope, normalizedRegion, patch, aggregates);
-    }
-
-    public async Task<ChampionProBuildsResponse> ComputeProBuildsFromStatsAsync(
-        int championId,
-        string? region,
-        string? role,
-        string scope,
-        string patch,
-        CancellationToken ct)
-    {
-        var normalizedRegion = string.IsNullOrWhiteSpace(region) ? "ALL" : region.Trim().ToUpperInvariant();
-        var normalizedRole = string.IsNullOrWhiteSpace(role) ? "ALL" : role.Trim().ToUpperInvariant();
-        var normalizedScope = NormalizeProScope(scope);
-
-        // Precomputed only at the all-region scope for a specific role; everything else falls back to live.
-        if (normalizedRegion == "ALL" && normalizedRole != "ALL")
-        {
-            var key = $"{championId}:{normalizedRole}:{normalizedScope}";
-            var payload = await _context.AnalyticsResponseSnapshots.AsNoTracking()
-                .Where(x => x.Feature == AnalyticsSnapshotSerialization.ProBuildsFeature && x.ScopeKey == key && x.Patch == patch)
-                .Select(x => x.Payload)
-                .FirstOrDefaultAsync(ct);
-
-            if (payload != null)
-            {
-                var cached = AnalyticsSnapshotSerialization.Deserialize<ChampionProBuildsResponse>(payload);
-                if (cached != null)
-                    return cached;
-            }
-        }
-
-        return await ComputeProBuildsAsync(championId, region, role, scope, patch, ct);
-    }
-
-    public async Task<ProChampionPlayrateResponse> ComputeProChampionPlayrateFromStatsAsync(
-        string? region,
-        string scope,
-        string patch,
-        CancellationToken ct)
-    {
-        var normalizedRegion = string.IsNullOrWhiteSpace(region) ? "ALL" : region.Trim().ToUpperInvariant();
-        var normalizedScope = NormalizeProScope(scope);
-
-        if (normalizedRegion == "ALL")
-        {
-            var payload = await _context.AnalyticsResponseSnapshots.AsNoTracking()
-                .Where(x => x.Feature == AnalyticsSnapshotSerialization.ProPlayrateFeature && x.ScopeKey == normalizedScope && x.Patch == patch)
-                .Select(x => x.Payload)
-                .FirstOrDefaultAsync(ct);
-
-            if (payload != null)
-            {
-                var cached = AnalyticsSnapshotSerialization.Deserialize<ProChampionPlayrateResponse>(payload);
-                if (cached != null)
-                    return cached;
-            }
-        }
-
-        return await ComputeProChampionPlayrateAsync(region, scope, patch, ct);
     }
 
     // ---- shared helpers for the stats path ----

@@ -145,8 +145,21 @@ public class ChampionAnalyticsStatsEquivalenceTests
             }),
             NullLogger<ChampionAnalyticsComputeService>.Instance);
 
+    private static ChampionBuildComputeService BuildService(TranscendenceContext db) =>
+        new(db,
+            Options.Create(new ChampionAnalyticsComputeOptions
+            {
+                MinimumGamesRequired = 1,
+                EarlyPatchMinimumGamesRequired = 1,
+                BootstrapPatchMinimumGamesRequired = 1,
+                BootstrapWindowHours = 24,
+                ProvisionalWindowHours = 96,
+                MaturingWindowHours = 240
+            }),
+            NullLogger<ChampionBuildComputeService>.Instance);
+
     private static async Task Refresh(TranscendenceContext db) =>
-        await new PrecomputedAnalyticsRefresher(db, ComputeService(db), NullLogger<PrecomputedAnalyticsRefresher>.Instance)
+        await new PrecomputedAnalyticsRefresher(db, ComputeService(db), BuildService(db), NullLogger<PrecomputedAnalyticsRefresher>.Instance)
             .RefreshTabularCoreAsync(Patch, CancellationToken.None);
 
     private static async Task<SeededContext> SeededAsync()

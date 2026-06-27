@@ -30,7 +30,7 @@ public class ChampionBuildSnapshotTests
     {
         await using var ctx = await SeededAsync();
         var svc = Service(ctx.Db);
-        var refresher = new PrecomputedAnalyticsRefresher(ctx.Db, svc, NullLogger<PrecomputedAnalyticsRefresher>.Instance);
+        var refresher = new PrecomputedAnalyticsRefresher(ctx.Db, ComputeService(ctx.Db), svc, NullLogger<PrecomputedAnalyticsRefresher>.Instance);
 
         await refresher.RefreshTabularCoreAsync(Patch, CancellationToken.None);
         var snapshots = await refresher.RefreshBuildsAsync(Patch, CancellationToken.None);
@@ -71,7 +71,20 @@ public class ChampionBuildSnapshotTests
         stats.Should().BeEquivalentTo(raw);
     }
 
-    private static ChampionAnalyticsComputeService Service(TranscendenceContext db) =>
+    private static ChampionBuildComputeService Service(TranscendenceContext db) =>
+        new(db,
+            Options.Create(new ChampionAnalyticsComputeOptions
+            {
+                MinimumGamesRequired = 1,
+                EarlyPatchMinimumGamesRequired = 1,
+                BootstrapPatchMinimumGamesRequired = 1,
+                BootstrapWindowHours = 24,
+                ProvisionalWindowHours = 96,
+                MaturingWindowHours = 240
+            }),
+            NullLogger<ChampionBuildComputeService>.Instance);
+
+    private static ChampionAnalyticsComputeService ComputeService(TranscendenceContext db) =>
         new(db,
             Options.Create(new ChampionAnalyticsComputeOptions
             {

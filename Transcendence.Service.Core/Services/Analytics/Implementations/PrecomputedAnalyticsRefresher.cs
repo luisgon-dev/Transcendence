@@ -42,15 +42,18 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
 
     private readonly TranscendenceContext _context;
     private readonly IChampionAnalyticsComputeService _computeService;
+    private readonly IChampionBuildComputeService _buildService;
     private readonly ILogger<PrecomputedAnalyticsRefresher> _logger;
 
     public PrecomputedAnalyticsRefresher(
         TranscendenceContext context,
         IChampionAnalyticsComputeService computeService,
+        IChampionBuildComputeService buildService,
         ILogger<PrecomputedAnalyticsRefresher> logger)
     {
         _context = context;
         _computeService = computeService;
+        _buildService = buildService;
         _logger = logger;
     }
 
@@ -223,7 +226,7 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
         {
             foreach (var (scope, rankTier) in BuildScopes)
             {
-                var response = await _computeService.ComputeBuildsAsync(
+                var response = await _buildService.ComputeBuildsAsync(
                     pair.ChampionId, pair.Role, rankTier, region: null, patch, ct);
 
                 rows.Add(new ChampionBuildSnapshot

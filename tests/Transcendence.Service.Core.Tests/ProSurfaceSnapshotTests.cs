@@ -27,7 +27,7 @@ public class ProSurfaceSnapshotTests
     {
         await using var ctx = await SeededAsync();
         var svc = Service(ctx.Db);
-        var refresher = new PrecomputedAnalyticsRefresher(ctx.Db, svc, NullLogger<PrecomputedAnalyticsRefresher>.Instance);
+        var refresher = new PrecomputedAnalyticsRefresher(ctx.Db, svc, BuildService(ctx.Db), NullLogger<PrecomputedAnalyticsRefresher>.Instance);
 
         var snapshots = await refresher.RefreshProSurfacesAsync(Patch, CancellationToken.None);
         // pro-playrate (3 scopes) + pro-builds for (266, TOP) x 3 scopes.
@@ -82,6 +82,19 @@ public class ProSurfaceSnapshotTests
                 MaturingWindowHours = 240
             }),
             NullLogger<ChampionAnalyticsComputeService>.Instance);
+
+    private static ChampionBuildComputeService BuildService(TranscendenceContext db) =>
+        new(db,
+            Options.Create(new ChampionAnalyticsComputeOptions
+            {
+                MinimumGamesRequired = 1,
+                EarlyPatchMinimumGamesRequired = 1,
+                BootstrapPatchMinimumGamesRequired = 1,
+                BootstrapWindowHours = 24,
+                ProvisionalWindowHours = 96,
+                MaturingWindowHours = 240
+            }),
+            NullLogger<ChampionBuildComputeService>.Instance);
 
     private static async Task<SeededContext> SeededAsync()
     {

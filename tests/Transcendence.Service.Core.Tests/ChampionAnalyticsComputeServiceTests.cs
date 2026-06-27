@@ -448,7 +448,7 @@ public class ChampionAnalyticsComputeServiceTests
 
         await db.SaveChangesAsync();
 
-        var service = CreateComputeService(db);
+        var service = CreateBuildService(db);
 
         var response = await service.ComputeBuildsAsync(championId, role, rankTier: null, region: null, patch: "15.2", CancellationToken.None);
 
@@ -496,6 +496,20 @@ public class ChampionAnalyticsComputeServiceTests
                 MaturingWindowHours = 240
             }),
             NullLogger<ChampionAnalyticsComputeService>.Instance);
+
+    private static ChampionBuildComputeService CreateBuildService(TranscendenceContext db) =>
+        new(
+            db,
+            Options.Create(new ChampionAnalyticsComputeOptions
+            {
+                MinimumGamesRequired = 1,
+                EarlyPatchMinimumGamesRequired = 1,
+                BootstrapPatchMinimumGamesRequired = 1,
+                BootstrapWindowHours = 24,
+                ProvisionalWindowHours = 96,
+                MaturingWindowHours = 240
+            }),
+            NullLogger<ChampionBuildComputeService>.Instance);
 
     private static Summoner SeedProSummoner(TranscendenceContext db, string puuid, string name, string platform = "NA1")
     {

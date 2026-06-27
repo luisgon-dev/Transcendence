@@ -143,7 +143,11 @@ public class PrecomputedAnalyticsRefresherTests
             db,
             Options.Create(new ChampionAnalyticsComputeOptions { MinimumGamesRequired = 1 }),
             NullLogger<ChampionAnalyticsComputeService>.Instance);
-        var refresher = new PrecomputedAnalyticsRefresher(db, compute, NullLogger<PrecomputedAnalyticsRefresher>.Instance);
+        var build = new ChampionBuildComputeService(
+            db,
+            Options.Create(new ChampionAnalyticsComputeOptions { MinimumGamesRequired = 1 }),
+            NullLogger<ChampionBuildComputeService>.Instance);
+        var refresher = new PrecomputedAnalyticsRefresher(db, compute, build, NullLogger<PrecomputedAnalyticsRefresher>.Instance);
         await refresher.RefreshTabularCoreAsync(Patch, CancellationToken.None);
     }
 

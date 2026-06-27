@@ -4,11 +4,11 @@ using Transcendence.Service.Core.Services.Analytics.Models;
 namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 
 /// <summary>
-/// Stats-backed read path for matchups, builds, and pro builds/playrate: serves them from the durable
-/// snapshot/aggregate tables (<c>ChampionMatchupStat</c>, <c>ChampionBuildSnapshot</c>,
-/// <c>AnalyticsResponseSnapshot</c>) — rolled up in SQL or read back as a stored response — instead of
-/// recomputing from raw matches, falling back to the live compute for any scope/patch without a snapshot
-/// yet so reads are always safe. (Win-rate and tier-list stats live in <c>ChampionWinRateComputeService</c>.)
+/// Stats-backed read path for matchups and pro builds/playrate: serves them from the durable
+/// snapshot/aggregate tables (<c>ChampionMatchupStat</c>, <c>AnalyticsResponseSnapshot</c>) — rolled up in
+/// SQL or read back as a stored response — instead of recomputing from raw matches, falling back to the
+/// live compute for any scope/patch without a snapshot yet so reads are always safe. (Win-rate and
+/// tier-list stats live in <c>ChampionWinRateComputeService</c>; builds in <c>ChampionBuildComputeService</c>.)
 /// </summary>
 public partial class ChampionAnalyticsComputeService
 {
@@ -67,39 +67,6 @@ public partial class ChampionAnalyticsComputeService
 
         return BuildMatchupsResponse(championId, role, rankTierScope, normalizedRegion, patch, aggregates);
     }
-
-    public async Task<ChampionBuildsResponse> ComputeBuildsFromStatsAsync(
-        int championId,
-        string role,
-        string? rankTier,
-        string? region,
-        string patch,
-        CancellationToken ct)
-    {
-        var regionFilter = AnalyticsRegionCatalog.NormalizeToFilter(region);
-        var scopeToken = AnalyticsScopeMath.ScopeTokenOf(AnalyticsScopeMath.ParseRankTierScope(rankTier));
-
-        // Only EMERALD_PLUS + ALL are precomputed, at the all-region scope; a specific tier/region (or a
-        // missing/un-refreshed snapshot) falls back to the live build compute.
-        if (regionFilter == null &&
-            (scopeToken == RankTierCatalog.EmeraldPlusScope || scopeToken == RankTierCatalog.AllScope))
-        {
-            var payload = await _context.ChampionBuildSnapshots.AsNoTracking()
-                .Where(x => x.Patch == patch && x.ChampionId == championId && x.Role == role && x.RankScope == scopeToken)
-                .Select(x => x.Payload)
-                .FirstOrDefaultAsync(ct);
-
-            if (payload != null)
-            {
-                var cached = BuildSnapshotSerialization.Deserialize(payload);
-                if (cached != null)
-                    return cached;
-            }
-        }
-
-        return await ComputeBuildsAsync(championId, role, rankTier, region, patch, ct);
-    }
-
 
     public async Task<ChampionProBuildsResponse> ComputeProBuildsFromStatsAsync(
         int championId,

@@ -48,6 +48,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
     private readonly HybridCache _cache;
     private readonly IChampionAnalyticsComputeService _computeService;
     private readonly IChampionWinRateComputeService _winRateService;
+    private readonly IChampionBuildComputeService _buildService;
     private readonly ChampionAnalyticsComputeOptions _computeOptions;
     private readonly MultiRegionIngestionOptions _multiRegionOptions;
 
@@ -56,6 +57,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         HybridCache cache,
         IChampionAnalyticsComputeService computeService,
         IChampionWinRateComputeService winRateService,
+        IChampionBuildComputeService buildService,
         IOptions<ChampionAnalyticsComputeOptions> computeOptions,
         IOptions<MultiRegionIngestionOptions> multiRegionOptions)
     {
@@ -63,6 +65,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         _cache = cache;
         _computeService = computeService;
         _winRateService = winRateService;
+        _buildService = buildService;
         _computeOptions = computeOptions.Value;
         _multiRegionOptions = multiRegionOptions.Value;
     }
@@ -218,7 +221,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 
         var response = await _cache.GetOrCreateAsync(
             cacheKey,
-            async cancel => await _computeService.ComputeBuildsFromStatsAsync(
+            async cancel => await _buildService.ComputeBuildsFromStatsAsync(
                 championId,
                 normalizedRole,
                 normalizedTier == "all" ? null : normalizedTier,
@@ -452,7 +455,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         // ── Builds + matchups for the resolved lane (region=ALL, given tier) ──
         var buildsKey = $"{BuildsCacheKeyPrefix}{championId}:{effectiveRole}:{normalizedTier}:{normalizedRegion}:{currentPatch}";
         var buildsTags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(currentPatch), "builds" };
-        var builds = await _computeService.ComputeBuildsFromStatsAsync(
+        var builds = await _buildService.ComputeBuildsFromStatsAsync(
             championId, effectiveRole, tierForCompute, normalizedRegion, currentPatch, ct);
         await _cache.SetAsync(buildsKey, builds, AnalyticsCacheOptions, buildsTags, ct);
 

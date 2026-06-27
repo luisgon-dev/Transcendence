@@ -27,7 +27,7 @@ public class ChampionMatchupStatsEquivalenceTests
     public async Task Matchups_StatsPath_EqualsRawCompute_AcrossRankScopes()
     {
         await using var ctx = await SeededAsync();
-        await new PrecomputedAnalyticsRefresher(ctx.Db, Service(ctx.Db), NullLogger<PrecomputedAnalyticsRefresher>.Instance)
+        await new PrecomputedAnalyticsRefresher(ctx.Db, Service(ctx.Db), BuildService(ctx.Db), NullLogger<PrecomputedAnalyticsRefresher>.Instance)
             .RefreshMatchupsAsync(Patch, CancellationToken.None);
         var svc = Service(ctx.Db);
 
@@ -46,7 +46,7 @@ public class ChampionMatchupStatsEquivalenceTests
     public async Task Matchups_SpecificRegion_FallsBackToRawCompute()
     {
         await using var ctx = await SeededAsync();
-        await new PrecomputedAnalyticsRefresher(ctx.Db, Service(ctx.Db), NullLogger<PrecomputedAnalyticsRefresher>.Instance)
+        await new PrecomputedAnalyticsRefresher(ctx.Db, Service(ctx.Db), BuildService(ctx.Db), NullLogger<PrecomputedAnalyticsRefresher>.Instance)
             .RefreshMatchupsAsync(Patch, CancellationToken.None);
         var svc = Service(ctx.Db);
 
@@ -68,6 +68,19 @@ public class ChampionMatchupStatsEquivalenceTests
                 MaturingWindowHours = 240
             }),
             NullLogger<ChampionAnalyticsComputeService>.Instance);
+
+    private static ChampionBuildComputeService BuildService(TranscendenceContext db) =>
+        new(db,
+            Options.Create(new ChampionAnalyticsComputeOptions
+            {
+                MinimumGamesRequired = 1,
+                EarlyPatchMinimumGamesRequired = 1,
+                BootstrapPatchMinimumGamesRequired = 1,
+                BootstrapWindowHours = 24,
+                ProvisionalWindowHours = 96,
+                MaturingWindowHours = 240
+            }),
+            NullLogger<ChampionBuildComputeService>.Instance);
 
     private static async Task<SeededContext> SeededAsync()
     {

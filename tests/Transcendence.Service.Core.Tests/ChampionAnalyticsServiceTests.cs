@@ -50,7 +50,7 @@ public class ChampionAnalyticsServiceTests
     {
         await using var harness = await Harness.CreateAsync();
         harness.SetActivePatch("15.1", DateTime.UtcNow.AddHours(-2));
-        harness.ComputeService
+        harness.WinRateService
             .Setup(x => x.ComputeWinRatesFromStatsAsync(
                 103,
                 It.IsAny<ChampionAnalyticsFilter>(),
@@ -81,7 +81,7 @@ public class ChampionAnalyticsServiceTests
     {
         await using var harness = await Harness.CreateAsync();
         harness.SetActivePatch("15.1", DateTime.UtcNow.AddHours(-300));
-        harness.ComputeService
+        harness.WinRateService
             .Setup(x => x.ComputeWinRatesFromStatsAsync(
                 266,
                 It.IsAny<ChampionAnalyticsFilter>(),
@@ -111,7 +111,7 @@ public class ChampionAnalyticsServiceTests
     {
         await using var harness = await Harness.CreateAsync();
         harness.SetActivePatch("15.2", DateTime.UtcNow.AddHours(-180));
-        harness.ComputeService
+        harness.WinRateService
             .Setup(x => x.ComputeWinRatesFromStatsAsync(
                 103,
                 It.IsAny<ChampionAnalyticsFilter>(),
@@ -141,7 +141,7 @@ public class ChampionAnalyticsServiceTests
         await using var harness = await Harness.CreateAsync();
         harness.SetActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
         harness.SetInactivePatch("15.1", DateTime.UtcNow.AddHours(-400));
-        harness.ComputeService
+        harness.WinRateService
             .Setup(x => x.ComputeWinRatesFromStatsAsync(
                 103,
                 It.Is<ChampionAnalyticsFilter>(filter => filter.Patch == "15.1"),
@@ -163,7 +163,7 @@ public class ChampionAnalyticsServiceTests
         result.Sample!.PatchPhase.Should().Be(AnalyticsPatchPhase.Steady);
         result.Sample.IsProvisional.Should().BeFalse();
         result.Sample.IsEarlyPatchWindow.Should().BeFalse();
-        harness.ComputeService.Verify(x => x.ComputeWinRatesFromStatsAsync(
+        harness.WinRateService.Verify(x => x.ComputeWinRatesFromStatsAsync(
             103,
             It.Is<ChampionAnalyticsFilter>(filter => filter.Patch == "15.1"),
             "15.1",
@@ -176,7 +176,7 @@ public class ChampionAnalyticsServiceTests
         await using var harness = await Harness.CreateAsync();
         harness.SetActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
         harness.SetInactivePatch("15.1", DateTime.UtcNow.AddHours(-400));
-        harness.ComputeService
+        harness.WinRateService
             .Setup(x => x.ComputeWinRatesFromStatsAsync(
                 103,
                 It.IsAny<ChampionAnalyticsFilter>(),
@@ -186,7 +186,7 @@ public class ChampionAnalyticsServiceTests
             [
                 new ChampionWinRateDto(103, "MIDDLE", "EMERALD_PLUS", 5, 3, 0.6, 0.12, 0.01, 1, 40, "15.2")
             ]);
-        harness.ComputeService
+        harness.WinRateService
             .Setup(x => x.ComputeWinRatesFromStatsAsync(
                 103,
                 It.IsAny<ChampionAnalyticsFilter>(),
@@ -209,12 +209,12 @@ public class ChampionAnalyticsServiceTests
 
         activeResult.Patch.Should().Be("15.2");
         historicalResult.Patch.Should().Be("15.1");
-        harness.ComputeService.Verify(x => x.ComputeWinRatesFromStatsAsync(
+        harness.WinRateService.Verify(x => x.ComputeWinRatesFromStatsAsync(
             103,
             It.IsAny<ChampionAnalyticsFilter>(),
             "15.2",
             It.IsAny<CancellationToken>()), Times.Once);
-        harness.ComputeService.Verify(x => x.ComputeWinRatesFromStatsAsync(
+        harness.WinRateService.Verify(x => x.ComputeWinRatesFromStatsAsync(
             103,
             It.IsAny<ChampionAnalyticsFilter>(),
             "15.1",
@@ -230,7 +230,7 @@ public class ChampionAnalyticsServiceTests
 
         await harness.Service.GetTierListAsync("ALL", null, "OCE1", null, CancellationToken.None);
 
-        harness.ComputeService.Verify(x => x.ComputeTierListFromStatsAsync(
+        harness.WinRateService.Verify(x => x.ComputeTierListFromStatsAsync(
             "ALL",
             null,
             "ALL",
@@ -244,7 +244,7 @@ public class ChampionAnalyticsServiceTests
         await using var harness = await Harness.CreateAsync();
         harness.SetActivePatch("15.1", DateTime.UtcNow.AddHours(-300));
 
-        harness.ComputeService
+        harness.WinRateService
             .Setup(x => x.ComputeWinRatesFromStatsAsync(103, It.IsAny<ChampionAnalyticsFilter>(), "15.1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(
             [
@@ -280,7 +280,7 @@ public class ChampionAnalyticsServiceTests
         await harness.Service.GetMatchupsAsync(103, "MIDDLE", "EMERALD_PLUS", null, null, CancellationToken.None);
         await harness.Service.GetProBuildsAsync(103, null, "MIDDLE", null, null, CancellationToken.None);
 
-        harness.ComputeService.Verify(
+        harness.WinRateService.Verify(
             x => x.ComputeWinRatesFromStatsAsync(103, It.IsAny<ChampionAnalyticsFilter>(), "15.1", It.IsAny<CancellationToken>()),
             Times.Once);
         harness.ComputeService.Verify(
@@ -304,17 +304,20 @@ public class ChampionAnalyticsServiceTests
             SqliteCompatibleTranscendenceContext db,
             ServiceProvider services,
             Mock<IChampionAnalyticsComputeService> computeService,
+            Mock<IChampionWinRateComputeService> winRateService,
             ChampionAnalyticsService service)
         {
             _connection = connection;
             Db = db;
             _services = services;
             ComputeService = computeService;
+            WinRateService = winRateService;
             Service = service;
         }
 
         public SqliteCompatibleTranscendenceContext Db { get; }
         public Mock<IChampionAnalyticsComputeService> ComputeService { get; }
+        public Mock<IChampionWinRateComputeService> WinRateService { get; }
         public ChampionAnalyticsService Service { get; }
 
         public static async Task<Harness> CreateAsync()
@@ -335,8 +338,9 @@ public class ChampionAnalyticsServiceTests
             var services = serviceCollection.BuildServiceProvider();
 
             var compute = new Mock<IChampionAnalyticsComputeService>();
-            compute
-            .Setup(x => x.ComputeTierListFromStatsAsync(
+            var winRate = new Mock<IChampionWinRateComputeService>();
+            winRate
+                .Setup(x => x.ComputeTierListFromStatsAsync(
                     It.IsAny<string>(),
                     It.IsAny<string?>(),
                     It.IsAny<string?>(),
@@ -348,6 +352,7 @@ public class ChampionAnalyticsServiceTests
                 db,
                 services.GetRequiredService<HybridCache>(),
                 compute.Object,
+                winRate.Object,
                 Options.Create(new ChampionAnalyticsComputeOptions
                 {
                     MinimumGamesRequired = 100,
@@ -368,7 +373,7 @@ public class ChampionAnalyticsServiceTests
                     ]
                 }));
 
-            return new Harness(connection, db, services, compute, service);
+            return new Harness(connection, db, services, compute, winRate, service);
         }
 
         public void SetActivePatch(string version, DateTime releaseUtc)

@@ -48,7 +48,7 @@ public class ChampionAnalyticsComputeServiceTests
         SeedMatch(db, "15.2", "NA1_2", summonerName: "CurrentPatch", championId: 266, role: "TOP", win: true);
         await db.SaveChangesAsync();
 
-        var service = new ChampionAnalyticsComputeService(
+        var service = new ChampionWinRateComputeService(
             db,
             Options.Create(new ChampionAnalyticsComputeOptions
             {
@@ -58,8 +58,7 @@ public class ChampionAnalyticsComputeServiceTests
                 BootstrapWindowHours = 24,
                 ProvisionalWindowHours = 96,
                 MaturingWindowHours = 240
-            }),
-            NullLogger<ChampionAnalyticsComputeService>.Instance);
+            }));
 
         var result = await service.ComputeTierListAsync("TOP", null, null, "15.2", CancellationToken.None);
 
@@ -107,7 +106,7 @@ public class ChampionAnalyticsComputeServiceTests
         });
         await db.SaveChangesAsync();
 
-        var service = new ChampionAnalyticsComputeService(
+        var service = new ChampionWinRateComputeService(
             db,
             Options.Create(new ChampionAnalyticsComputeOptions
             {
@@ -117,8 +116,7 @@ public class ChampionAnalyticsComputeServiceTests
                 BootstrapWindowHours = 24,
                 ProvisionalWindowHours = 96,
                 MaturingWindowHours = 240
-            }),
-            NullLogger<ChampionAnalyticsComputeService>.Instance);
+            }));
 
         var result = await service.ComputeWinRatesAsync(
             266, new ChampionAnalyticsFilter(), "15.2", CancellationToken.None);
@@ -170,7 +168,7 @@ public class ChampionAnalyticsComputeServiceTests
         }
         await db.SaveChangesAsync();
 
-        var service = new ChampionAnalyticsComputeService(
+        var service = new ChampionWinRateComputeService(
             db,
             Options.Create(new ChampionAnalyticsComputeOptions
             {
@@ -180,8 +178,7 @@ public class ChampionAnalyticsComputeServiceTests
                 BootstrapWindowHours = 24,
                 ProvisionalWindowHours = 96,
                 MaturingWindowHours = 240
-            }),
-            NullLogger<ChampionAnalyticsComputeService>.Instance);
+            }));
 
         var result = await service.ComputeWinRatesAsync(
             266, new ChampionAnalyticsFilter(), "15.2", CancellationToken.None);
@@ -224,7 +221,7 @@ public class ChampionAnalyticsComputeServiceTests
         SeedRanked(300, 0, true); SeedRanked(300, 1, false); SeedRanked(300, 2, false);
         await db.SaveChangesAsync();
 
-        var service = new ChampionAnalyticsComputeService(
+        var service = new ChampionWinRateComputeService(
             db,
             Options.Create(new ChampionAnalyticsComputeOptions
             {
@@ -234,8 +231,7 @@ public class ChampionAnalyticsComputeServiceTests
                 BootstrapWindowHours = 24,
                 ProvisionalWindowHours = 96,
                 MaturingWindowHours = 240
-            }),
-            NullLogger<ChampionAnalyticsComputeService>.Instance);
+            }));
 
         var result = await service.ComputeWinRatesAsync(
             200, new ChampionAnalyticsFilter { RankTier = "EMERALD_PLUS" }, "15.2", CancellationToken.None);

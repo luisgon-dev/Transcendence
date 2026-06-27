@@ -3,59 +3,11 @@ using Transcendence.Service.Core.Services.Analytics.Models;
 namespace Transcendence.Service.Core.Services.Analytics.Interfaces;
 
 /// <summary>
-/// Raw computation service for champion analytics.
-/// Performs EF Core aggregation queries without caching.
+/// Raw computation service for champion matchups. Performs EF Core aggregation queries without caching.
+/// Win rates / tier lists, builds, and the pro surfaces have their own compute services (P10.1).
 /// </summary>
 public interface IChampionAnalyticsComputeService
 {
-    Task<ChampionProBuildsResponse> ComputeProBuildsAsync(
-        int championId,
-        string? region,
-        string? role,
-        string scope,
-        string patch,
-        CancellationToken ct);
-
-    /// <summary>
-    /// Computes champions ranked by pick/play frequency among tracked pro / high-elo players.
-    /// Scope selects the roster: "pro" (IsPro), "highelo" (IsHighEloOtp), or "all" (either).
-    /// </summary>
-    Task<ProChampionPlayrateResponse> ComputeProChampionPlayrateAsync(
-        string? region,
-        string scope,
-        string patch,
-        CancellationToken ct);
-
-    /// <summary>
-    /// Pro builds served from the durable <c>AnalyticsResponseSnapshot</c> (the persisted live response),
-    /// falling back to <see cref="ComputeProBuildsAsync"/> for a specific region, an all-roles request, or a
-    /// patch without a snapshot. The stored value is the live compute's own output, so it's identical.
-    /// </summary>
-    Task<ChampionProBuildsResponse> ComputeProBuildsFromStatsAsync(
-        int championId,
-        string? region,
-        string? role,
-        string scope,
-        string patch,
-        CancellationToken ct);
-
-    /// <summary>
-    /// Pro champion playrate served from the durable snapshot, falling back to
-    /// <see cref="ComputeProChampionPlayrateAsync"/> for a specific region or a patch without a snapshot.
-    /// </summary>
-    Task<ProChampionPlayrateResponse> ComputeProChampionPlayrateFromStatsAsync(
-        string? region,
-        string scope,
-        string patch,
-        CancellationToken ct);
-
-    /// <summary>
-    /// Returns the public roster of tracked pro players (IsActive &amp;&amp; IsPro).
-    /// </summary>
-    Task<List<ProPlayerDto>> ComputeProRosterAsync(
-        string? region,
-        CancellationToken ct);
-
     /// <summary>
     /// Computes matchup data (counters and favorable matchups) for a champion.
     /// Matchups are lane-specific (Mid vs Mid, Top vs Top, etc.).

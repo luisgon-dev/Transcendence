@@ -41,19 +41,19 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
         [(RankTierCatalog.EmeraldPlusScope, RankTierCatalog.EmeraldPlusScope), (RankTierCatalog.AllScope, null)];
 
     private readonly TranscendenceContext _context;
-    private readonly IChampionAnalyticsComputeService _computeService;
     private readonly IChampionBuildComputeService _buildService;
+    private readonly IChampionProComputeService _proService;
     private readonly ILogger<PrecomputedAnalyticsRefresher> _logger;
 
     public PrecomputedAnalyticsRefresher(
         TranscendenceContext context,
-        IChampionAnalyticsComputeService computeService,
         IChampionBuildComputeService buildService,
+        IChampionProComputeService proService,
         ILogger<PrecomputedAnalyticsRefresher> logger)
     {
         _context = context;
-        _computeService = computeService;
         _buildService = buildService;
+        _proService = proService;
         _logger = logger;
     }
 
@@ -262,7 +262,7 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
         // Pro-playrate: one response per roster scope, all-region.
         foreach (var scope in AnalyticsSnapshotSerialization.ProScopes)
         {
-            var response = await _computeService.ComputeProChampionPlayrateAsync(region: null, scope, patch, ct);
+            var response = await _proService.ComputeProChampionPlayrateAsync(region: null, scope, patch, ct);
             rows.Add(new AnalyticsResponseSnapshot
             {
                 Feature = AnalyticsSnapshotSerialization.ProPlayrateFeature,
@@ -296,7 +296,7 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
         {
             foreach (var scope in AnalyticsSnapshotSerialization.ProScopes)
             {
-                var response = await _computeService.ComputeProBuildsAsync(
+                var response = await _proService.ComputeProBuildsAsync(
                     pair.ChampionId, region: null, pair.Role, scope, patch, ct);
                 rows.Add(new AnalyticsResponseSnapshot
                 {

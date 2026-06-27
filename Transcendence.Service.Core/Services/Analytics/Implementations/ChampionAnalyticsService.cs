@@ -49,6 +49,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
     private readonly IChampionAnalyticsComputeService _computeService;
     private readonly IChampionWinRateComputeService _winRateService;
     private readonly IChampionBuildComputeService _buildService;
+    private readonly IChampionProComputeService _proService;
     private readonly ChampionAnalyticsComputeOptions _computeOptions;
     private readonly MultiRegionIngestionOptions _multiRegionOptions;
 
@@ -58,6 +59,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         IChampionAnalyticsComputeService computeService,
         IChampionWinRateComputeService winRateService,
         IChampionBuildComputeService buildService,
+        IChampionProComputeService proService,
         IOptions<ChampionAnalyticsComputeOptions> computeOptions,
         IOptions<MultiRegionIngestionOptions> multiRegionOptions)
     {
@@ -66,6 +68,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         _computeService = computeService;
         _winRateService = winRateService;
         _buildService = buildService;
+        _proService = proService;
         _computeOptions = computeOptions.Value;
         _multiRegionOptions = multiRegionOptions.Value;
     }
@@ -247,7 +250,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         var resolvedPatch = patchContext.Patch;
         var normalizedRole = string.IsNullOrWhiteSpace(role) ? "ALL" : role.Trim().ToUpperInvariant();
         var normalizedRegion = string.IsNullOrWhiteSpace(region) ? "ALL" : region.Trim().ToUpperInvariant();
-        var normalizedScope = ChampionAnalyticsComputeService.NormalizeProScope(scope);
+        var normalizedScope = ChampionProComputeService.NormalizeProScope(scope);
 
         if (string.IsNullOrWhiteSpace(resolvedPatch))
             return new ChampionProBuildsResponse(
@@ -266,7 +269,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 
         var response = await _cache.GetOrCreateAsync(
             cacheKey,
-            async cancel => await _computeService.ComputeProBuildsFromStatsAsync(
+            async cancel => await _proService.ComputeProBuildsFromStatsAsync(
                 championId,
                 normalizedRegion,
                 normalizedRole,
@@ -290,7 +293,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
     {
         var patchContext = await ResolvePatchContextAsync(patch, ct);
         var normalizedRegion = string.IsNullOrWhiteSpace(region) ? "ALL" : region.Trim().ToUpperInvariant();
-        var normalizedScope = ChampionAnalyticsComputeService.NormalizeProScope(scope);
+        var normalizedScope = ChampionProComputeService.NormalizeProScope(scope);
 
         if (string.IsNullOrWhiteSpace(patchContext.Patch))
             return new ProChampionPlayrateResponse(
@@ -306,7 +309,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 
         var response = await _cache.GetOrCreateAsync(
             cacheKey,
-            async cancel => await _computeService.ComputeProChampionPlayrateFromStatsAsync(
+            async cancel => await _proService.ComputeProChampionPlayrateFromStatsAsync(
                 normalizedRegion,
                 normalizedScope,
                 resolvedPatch,
@@ -328,7 +331,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 
         var players = await _cache.GetOrCreateAsync(
             cacheKey,
-            async cancel => await _computeService.ComputeProRosterAsync(normalizedRegion, cancel),
+            async cancel => await _proService.ComputeProRosterAsync(normalizedRegion, cancel),
             AnalyticsCacheOptions,
             tags,
             cancellationToken: ct);
@@ -468,11 +471,11 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         // ── Pro-builds default (most-played lane, region=ALL, scope=all) ──
         if (includeProBuilds)
         {
-            var proScope = ChampionAnalyticsComputeService.NormalizeProScope(null); // "all"
+            var proScope = ChampionProComputeService.NormalizeProScope(null); // "all"
             const string proRegion = "ALL";
             var proKey = $"{ProBuildsCacheKeyPrefix}{championId}:{proRegion}:{effectiveRole}:{proScope}:{currentPatch}";
             var proTags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(currentPatch), "probuilds" };
-            var proBuilds = await _computeService.ComputeProBuildsFromStatsAsync(
+            var proBuilds = await _proService.ComputeProBuildsFromStatsAsync(
                 championId, proRegion, effectiveRole, proScope, currentPatch, ct);
             await _cache.SetAsync(proKey, proBuilds, AnalyticsCacheOptions, proTags, ct);
         }

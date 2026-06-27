@@ -264,7 +264,7 @@ public class ChampionAnalyticsServiceTests
                 Region = "ALL",
                 Patch = "15.1"
             });
-        harness.ComputeService
+        harness.ProService
             .Setup(x => x.ComputeProBuildsFromStatsAsync(103, "ALL", "MIDDLE", "all", "15.1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChampionProBuildsResponse(103, "15.1", "MIDDLE", "ALL", "all", [], [], []));
         await harness.Db.SaveChangesAsync();
@@ -289,7 +289,7 @@ public class ChampionAnalyticsServiceTests
         harness.ComputeService.Verify(
             x => x.ComputeMatchupsFromStatsAsync(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", It.IsAny<CancellationToken>()),
             Times.Once);
-        harness.ComputeService.Verify(
+        harness.ProService.Verify(
             x => x.ComputeProBuildsFromStatsAsync(103, "ALL", "MIDDLE", "all", "15.1", It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -306,6 +306,7 @@ public class ChampionAnalyticsServiceTests
             Mock<IChampionAnalyticsComputeService> computeService,
             Mock<IChampionWinRateComputeService> winRateService,
             Mock<IChampionBuildComputeService> buildService,
+            Mock<IChampionProComputeService> proService,
             ChampionAnalyticsService service)
         {
             _connection = connection;
@@ -314,6 +315,7 @@ public class ChampionAnalyticsServiceTests
             ComputeService = computeService;
             WinRateService = winRateService;
             BuildService = buildService;
+            ProService = proService;
             Service = service;
         }
 
@@ -321,6 +323,7 @@ public class ChampionAnalyticsServiceTests
         public Mock<IChampionAnalyticsComputeService> ComputeService { get; }
         public Mock<IChampionWinRateComputeService> WinRateService { get; }
         public Mock<IChampionBuildComputeService> BuildService { get; }
+        public Mock<IChampionProComputeService> ProService { get; }
         public ChampionAnalyticsService Service { get; }
 
         public static async Task<Harness> CreateAsync()
@@ -343,6 +346,7 @@ public class ChampionAnalyticsServiceTests
             var compute = new Mock<IChampionAnalyticsComputeService>();
             var winRate = new Mock<IChampionWinRateComputeService>();
             var build = new Mock<IChampionBuildComputeService>();
+            var pro = new Mock<IChampionProComputeService>();
             winRate
                 .Setup(x => x.ComputeTierListFromStatsAsync(
                     It.IsAny<string>(),
@@ -358,6 +362,7 @@ public class ChampionAnalyticsServiceTests
                 compute.Object,
                 winRate.Object,
                 build.Object,
+                pro.Object,
                 Options.Create(new ChampionAnalyticsComputeOptions
                 {
                     MinimumGamesRequired = 100,
@@ -378,7 +383,7 @@ public class ChampionAnalyticsServiceTests
                     ]
                 }));
 
-            return new Harness(connection, db, services, compute, winRate, build, service);
+            return new Harness(connection, db, services, compute, winRate, build, pro, service);
         }
 
         public void SetActivePatch(string version, DateTime releaseUtc)

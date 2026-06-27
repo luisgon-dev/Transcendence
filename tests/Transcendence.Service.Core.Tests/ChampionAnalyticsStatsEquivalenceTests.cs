@@ -132,7 +132,7 @@ public class ChampionAnalyticsStatsEquivalenceTests
                 MaturingWindowHours = 240
             }));
 
-    private static ChampionAnalyticsComputeService ComputeService(TranscendenceContext db) =>
+    private static ChampionProComputeService ProService(TranscendenceContext db) =>
         new(db,
             Options.Create(new ChampionAnalyticsComputeOptions
             {
@@ -142,8 +142,7 @@ public class ChampionAnalyticsStatsEquivalenceTests
                 BootstrapWindowHours = 24,
                 ProvisionalWindowHours = 96,
                 MaturingWindowHours = 240
-            }),
-            NullLogger<ChampionAnalyticsComputeService>.Instance);
+            }));
 
     private static ChampionBuildComputeService BuildService(TranscendenceContext db) =>
         new(db,
@@ -159,7 +158,7 @@ public class ChampionAnalyticsStatsEquivalenceTests
             NullLogger<ChampionBuildComputeService>.Instance);
 
     private static async Task Refresh(TranscendenceContext db) =>
-        await new PrecomputedAnalyticsRefresher(db, ComputeService(db), BuildService(db), NullLogger<PrecomputedAnalyticsRefresher>.Instance)
+        await new PrecomputedAnalyticsRefresher(db, BuildService(db), ProService(db), NullLogger<PrecomputedAnalyticsRefresher>.Instance)
             .RefreshTabularCoreAsync(Patch, CancellationToken.None);
 
     private static async Task<SeededContext> SeededAsync()

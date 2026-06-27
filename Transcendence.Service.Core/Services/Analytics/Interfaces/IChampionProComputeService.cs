@@ -4,9 +4,10 @@ namespace Transcendence.Service.Core.Services.Analytics.Interfaces;
 
 /// <summary>
 /// Raw + stats-backed computation for the pro / high-elo surfaces (pro builds, pro champion playrate, and
-/// the public pro roster). Extracted from <see cref="IChampionAnalyticsComputeService"/> (P10.1) so this
-/// domain is a focused unit; win rates / tier lists and builds live in their own services, and matchups
-/// remain on the original. Performs EF Core aggregation without caching.
+/// the public pro roster). Extracted from the original analytics compute contract (P10.1) so this domain
+/// is a focused unit; win rates / tier lists, builds, and matchups
+/// (<see cref="IChampionMatchupComputeService"/>) each live in their own service. Performs EF Core
+/// aggregation without caching.
 /// </summary>
 public interface IChampionProComputeService
 {

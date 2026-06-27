@@ -167,7 +167,7 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             // Common filter/index fields
             entity.HasIndex(p => p.SummonerId);
             // Covering index for the dominant champion-analytics query
-            // (ChampionAnalyticsComputeService.ComputeWinRatesAsync): seek by ChampionId and read
+            // (ChampionWinRateComputeService.ComputeWinRatesAsync): seek by ChampionId and read
             // the join + aggregate payload (MatchId for the Match join, SummonerId for the Ranks
             // join, TeamPosition + Win for the grouping) straight from the index leaf — turning the
             // ~48k-block heap fetch into an index-only scan (prod EXPLAIN: the MatchParticipants
@@ -178,7 +178,7 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             // to hot tables". This also covers a plain (ChampionId) seek, so no separate index is kept.
             entity.HasIndex(p => p.ChampionId, "IX_MatchParticipants_ChampionId_Covering");
             // Covering index for the champion-side scan of the matchup query
-            // (ChampionAnalyticsComputeService.ComputeMatchupsAsync): seek by (ChampionId, TeamPosition)
+            // (ChampionMatchupComputeService.ComputeMatchupsAsync): seek by (ChampionId, TeamPosition)
             // and read MatchId/ParticipantId/Win/TeamId from the leaf so the scan is index-only (prod
             // EXPLAIN: it was a ~50k-cost bitmap heap scan). Bare shape in the model; INCLUDE in the
             // raw-SQL migration. Replaces the plain non-covering (ChampionId, TeamPosition) index.
@@ -529,7 +529,7 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(x => new { x.MinuteMark, x.MatchId });
             // Covering index for the matchup gold/xp-diff-at-15 join
-            // (ChampionAnalyticsComputeService.ComputeMatchupsAsync). That query LEFT-joins this
+            // (ChampionMatchupComputeService.ComputeMatchupsAsync). That query LEFT-joins this
             // 22.5M-row table twice — championTimeline and opponentTimeline — on
             // (MatchId, ParticipantId) with MinuteMark == 15. The key columns mirror the PK, so the
             // join key was already seekable; the win is the INCLUDE payload, which lets both scans run

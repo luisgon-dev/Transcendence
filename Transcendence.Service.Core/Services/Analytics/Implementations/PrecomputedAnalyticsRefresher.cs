@@ -12,7 +12,7 @@ namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 /// <summary>
 /// Rebuilds the tabular-core precomputed analytics aggregates from raw match data. See
 /// <see cref="IPrecomputedAnalyticsRefresher"/>. Every aggregation mirrors the filters of the live
-/// compute (<c>ChampionAnalyticsComputeService</c>) so the read path can roll these atoms up to the exact
+/// compute (the <c>Champion{WinRate,Build,Pro,Matchup}ComputeService</c> services) so the read path can roll these atoms up to the exact
 /// same numbers:
 /// <list type="bullet">
 /// <item><c>ChampionRoleTierStat</c>: a LEFT JOIN to the current solo rank gives each participant a tier

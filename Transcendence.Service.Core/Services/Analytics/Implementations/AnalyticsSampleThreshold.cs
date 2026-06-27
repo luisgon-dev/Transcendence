@@ -7,7 +7,7 @@ namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 /// <summary>
 /// Shared adaptive sample-size threshold for champion analytics: the minimum games a (role, tier)
 /// must have before its win rate is trusted, scaled down during the new-patch ramp so early-patch
-/// pages still render. Extracted from <see cref="ChampionAnalyticsComputeService"/> so the win-rate /
+/// pages still render. Extracted from the original analytics compute service (P10.1) so the win-rate /
 /// tier-list path (<see cref="ChampionWinRateComputeService"/>) and the builds path share one rule
 /// instead of duplicating it (a divergence would silently make the two surfaces disagree on what
 /// counts as enough data). Static + all inputs passed in, so it adds no new injected dependency.

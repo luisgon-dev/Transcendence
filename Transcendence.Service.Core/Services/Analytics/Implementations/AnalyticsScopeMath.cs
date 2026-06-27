@@ -4,8 +4,10 @@ namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 
 /// <summary>
 /// Shared, stateless rank-tier-scope parsing/application + sample-size math for champion analytics.
-/// Extracted from <see cref="ChampionAnalyticsComputeService"/> so the raw and stats-backed read paths
-/// share one focused, pure implementation. All members are pure functions of their parameters.
+/// Extracted from the original analytics compute service (P10.1) so the raw and stats-backed read paths
+/// across <see cref="ChampionWinRateComputeService"/>, <see cref="ChampionBuildComputeService"/>,
+/// <see cref="ChampionProComputeService"/>, and <see cref="ChampionMatchupComputeService"/> share one
+/// focused, pure implementation. All members are pure functions of their parameters.
 /// </summary>
 internal static class AnalyticsScopeMath
 {

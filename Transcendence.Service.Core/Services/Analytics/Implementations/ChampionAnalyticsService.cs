@@ -46,7 +46,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 
     private readonly TranscendenceContext _context;
     private readonly HybridCache _cache;
-    private readonly IChampionAnalyticsComputeService _computeService;
+    private readonly IChampionMatchupComputeService _matchupService;
     private readonly IChampionWinRateComputeService _winRateService;
     private readonly IChampionBuildComputeService _buildService;
     private readonly IChampionProComputeService _proService;
@@ -56,7 +56,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
     public ChampionAnalyticsService(
         TranscendenceContext context,
         HybridCache cache,
-        IChampionAnalyticsComputeService computeService,
+        IChampionMatchupComputeService matchupService,
         IChampionWinRateComputeService winRateService,
         IChampionBuildComputeService buildService,
         IChampionProComputeService proService,
@@ -65,7 +65,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
     {
         _context = context;
         _cache = cache;
-        _computeService = computeService;
+        _matchupService = matchupService;
         _winRateService = winRateService;
         _buildService = buildService;
         _proService = proService;
@@ -376,7 +376,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         // for a specific region or an un-refreshed patch). HybridCache stays the hot tier in front.
         var response = await _cache.GetOrCreateAsync(
             cacheKey,
-            async cancel => await _computeService.ComputeMatchupsFromStatsAsync(
+            async cancel => await _matchupService.ComputeMatchupsFromStatsAsync(
                 championId,
                 normalizedRole,
                 normalizedTier == "all" ? null : normalizedTier,
@@ -464,7 +464,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 
         var matchupsKey = $"{MatchupsCacheKeyPrefix}{championId}:{effectiveRole}:{normalizedTier}:{normalizedRegion}:{currentPatch}";
         var matchupsTags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(currentPatch), "matchups" };
-        var matchups = await _computeService.ComputeMatchupsFromStatsAsync(
+        var matchups = await _matchupService.ComputeMatchupsFromStatsAsync(
             championId, effectiveRole, tierForCompute, normalizedRegion, currentPatch, ct);
         await _cache.SetAsync(matchupsKey, matchups, AnalyticsCacheOptions, matchupsTags, ct);
 

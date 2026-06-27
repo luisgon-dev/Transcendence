@@ -3,7 +3,7 @@ namespace Transcendence.Service.Core.Services.Analytics;
 /// <summary>
 /// Canonical rank-tier groupings shared across LoL + TFT analytics. The Emerald+ set is the default
 /// "high-elo" analytics scope; it was previously copy-pasted as an inline <c>|| </c>-chain in several
-/// places (ChampionAnalyticsComputeService, TftAnalyticsComputeService). Exposed as a list so EF Core
+/// places (the LoL analytics compute services, TftAnalyticsComputeService). Exposed as a list so EF Core
 /// translates <c>EmeraldPlusTiers.Contains(tier)</c> to a SQL <c>IN (...)</c> — equivalent to the chain.
 /// </summary>
 public static class RankTierCatalog
@@ -29,7 +29,7 @@ public static class RankTierCatalog
     /// Rank-scope tokens the analytics surface can request — and that the refresh job precomputes the
     /// distinct-match (ban-rate) denominators for: the unfiltered <see cref="AllScope"/>, the high-elo
     /// <see cref="EmeraldPlusScope"/> composite, and every exact tier. Mirrors <c>ParseRankTierScope</c>
-    /// in ChampionAnalyticsComputeService (which normalizes "EMERALD+" → "EMERALD_PLUS").
+    /// in <c>AnalyticsScopeMath</c> (which normalizes "EMERALD+" → "EMERALD_PLUS").
     /// </summary>
     public static readonly IReadOnlyList<string> RankScopeTokens =
         [AllScope, EmeraldPlusScope, .. AllTiers];

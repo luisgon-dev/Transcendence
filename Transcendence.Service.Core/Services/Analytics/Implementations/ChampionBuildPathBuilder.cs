@@ -7,7 +7,7 @@ namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 
 /// <summary>
 /// Composes the sectioned, timing-aware build path (and the shared item/rune normalisation helpers)
-/// for champion builds. Extracted verbatim from <see cref="ChampionAnalyticsComputeService"/> so the
+/// for champion builds. Extracted verbatim from <see cref="ChampionBuildComputeService"/> so the
 /// build-path composition logic lives on its own; behaviour is unchanged.
 /// </summary>
 internal sealed class ChampionBuildPathBuilder

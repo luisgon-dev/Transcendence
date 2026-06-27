@@ -10,10 +10,10 @@ namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 
 /// <summary>
 /// Raw + stats-backed computation for the pro / high-elo surfaces (pro builds, pro champion playrate, and
-/// the public pro roster). Extracted from <see cref="ChampionAnalyticsComputeService"/> (P10.1) so this
-/// domain is a focused unit; win rates / tier lists and builds have their own services, and matchups stay
-/// on that service. Behavior is identical to the pre-extraction code — the analytics test suite (raw +
-/// raw-vs-stats pro-surface equivalence) is the gate.
+/// the public pro roster). Extracted from the original analytics compute service (P10.1) so this domain is
+/// a focused unit; win rates / tier lists, builds, and matchups (<see cref="ChampionMatchupComputeService"/>)
+/// each have their own service. Behavior is identical to the pre-extraction code — the analytics test suite
+/// (raw + raw-vs-stats pro-surface equivalence) is the gate.
 /// </summary>
 public sealed class ChampionProComputeService : IChampionProComputeService
 {

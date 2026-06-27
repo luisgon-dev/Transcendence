@@ -4,9 +4,10 @@ namespace Transcendence.Service.Core.Services.Analytics.Interfaces;
 
 /// <summary>
 /// Raw computation service for champion matchups. Performs EF Core aggregation queries without caching.
-/// Win rates / tier lists, builds, and the pro surfaces have their own compute services (P10.1).
+/// The matchups-only contract left after the analytics god-file was decomposed (P10.1); win rates /
+/// tier lists, builds, and the pro surfaces each have their own compute-service interface.
 /// </summary>
-public interface IChampionAnalyticsComputeService
+public interface IChampionMatchupComputeService
 {
     /// <summary>
     /// Computes matchup data (counters and favorable matchups) for a champion.

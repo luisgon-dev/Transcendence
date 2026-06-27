@@ -45,7 +45,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IChampionWinRateComputeService, ChampionWinRateComputeService>();
         services.AddScoped<IChampionBuildComputeService, ChampionBuildComputeService>();
         services.AddScoped<IChampionProComputeService, ChampionProComputeService>();
-        services.AddScoped<IChampionAnalyticsComputeService, ChampionAnalyticsComputeService>();
+        services.AddScoped<IChampionMatchupComputeService, ChampionMatchupComputeService>();
         services.AddScoped<IChampionAnalyticsService, ChampionAnalyticsService>();
         services.AddScoped<IPrecomputedAnalyticsRefresher, PrecomputedAnalyticsRefresher>();
         services.AddScoped<ITftSummonerReadService, TftSummonerReadService>();

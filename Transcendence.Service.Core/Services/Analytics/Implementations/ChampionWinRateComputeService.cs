@@ -9,10 +9,10 @@ using Transcendence.Service.Core.Services.Analytics.Models;
 namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 
 /// <summary>
-/// Raw + stats-backed computation for champion win rates and the tier list. Extracted from
-/// <see cref="ChampionAnalyticsComputeService"/> (P10.1) so this domain is a focused unit; builds,
-/// pro builds/playrate, and matchups stay on that service. Behavior is identical to the pre-extraction
-/// code — the analytics test suite (raw + raw-vs-stats equivalence) is the gate.
+/// Raw + stats-backed computation for champion win rates and the tier list. Extracted from the original
+/// analytics compute service (P10.1) so this domain is a focused unit; builds, pro builds/playrate, and
+/// matchups (<see cref="ChampionMatchupComputeService"/>) live in their own services. Behavior is identical
+/// to the pre-extraction code — the analytics test suite (raw + raw-vs-stats equivalence) is the gate.
 /// </summary>
 public sealed class ChampionWinRateComputeService : IChampionWinRateComputeService
 {

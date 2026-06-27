@@ -254,7 +254,7 @@ public class ChampionAnalyticsServiceTests
         harness.BuildService
             .Setup(x => x.ComputeBuildsFromStatsAsync(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChampionBuildsResponse(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", [], []));
-        harness.ComputeService
+        harness.MatchupService
             .Setup(x => x.ComputeMatchupsFromStatsAsync(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChampionMatchupsResponse
             {
@@ -286,7 +286,7 @@ public class ChampionAnalyticsServiceTests
         harness.BuildService.Verify(
             x => x.ComputeBuildsFromStatsAsync(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", It.IsAny<CancellationToken>()),
             Times.Once);
-        harness.ComputeService.Verify(
+        harness.MatchupService.Verify(
             x => x.ComputeMatchupsFromStatsAsync(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", It.IsAny<CancellationToken>()),
             Times.Once);
         harness.ProService.Verify(
@@ -303,7 +303,7 @@ public class ChampionAnalyticsServiceTests
             SqliteConnection connection,
             SqliteCompatibleTranscendenceContext db,
             ServiceProvider services,
-            Mock<IChampionAnalyticsComputeService> computeService,
+            Mock<IChampionMatchupComputeService> matchupService,
             Mock<IChampionWinRateComputeService> winRateService,
             Mock<IChampionBuildComputeService> buildService,
             Mock<IChampionProComputeService> proService,
@@ -312,7 +312,7 @@ public class ChampionAnalyticsServiceTests
             _connection = connection;
             Db = db;
             _services = services;
-            ComputeService = computeService;
+            MatchupService = matchupService;
             WinRateService = winRateService;
             BuildService = buildService;
             ProService = proService;
@@ -320,7 +320,7 @@ public class ChampionAnalyticsServiceTests
         }
 
         public SqliteCompatibleTranscendenceContext Db { get; }
-        public Mock<IChampionAnalyticsComputeService> ComputeService { get; }
+        public Mock<IChampionMatchupComputeService> MatchupService { get; }
         public Mock<IChampionWinRateComputeService> WinRateService { get; }
         public Mock<IChampionBuildComputeService> BuildService { get; }
         public Mock<IChampionProComputeService> ProService { get; }
@@ -343,7 +343,7 @@ public class ChampionAnalyticsServiceTests
             serviceCollection.AddHybridCache();
             var services = serviceCollection.BuildServiceProvider();
 
-            var compute = new Mock<IChampionAnalyticsComputeService>();
+            var matchup = new Mock<IChampionMatchupComputeService>();
             var winRate = new Mock<IChampionWinRateComputeService>();
             var build = new Mock<IChampionBuildComputeService>();
             var pro = new Mock<IChampionProComputeService>();
@@ -359,7 +359,7 @@ public class ChampionAnalyticsServiceTests
             var service = new ChampionAnalyticsService(
                 db,
                 services.GetRequiredService<HybridCache>(),
-                compute.Object,
+                matchup.Object,
                 winRate.Object,
                 build.Object,
                 pro.Object,
@@ -383,7 +383,7 @@ public class ChampionAnalyticsServiceTests
                     ]
                 }));
 
-            return new Harness(connection, db, services, compute, winRate, build, pro, service);
+            return new Harness(connection, db, services, matchup, winRate, build, pro, service);
         }
 
         public void SetActivePatch(string version, DateTime releaseUtc)

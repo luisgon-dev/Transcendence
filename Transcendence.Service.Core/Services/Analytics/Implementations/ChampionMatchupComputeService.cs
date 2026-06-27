@@ -7,16 +7,17 @@ using Transcendence.Service.Core.Services.Analytics.Models;
 namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 
 /// <summary>
-/// Raw computation service for champion matchups using EF Core aggregation. Win rates / tier lists, builds,
-/// and the pro surfaces have been extracted to their own services (P10.1); this service owns matchups only.
+/// Raw computation service for champion matchups using EF Core aggregation. This is the matchups-only
+/// service that remained after the analytics god-file was decomposed (P10.1) — win rates / tier lists,
+/// builds, and the pro surfaces each live in their own <c>Champion{WinRate,Build,Pro}ComputeService</c>.
 /// </summary>
-public partial class ChampionAnalyticsComputeService : IChampionAnalyticsComputeService
+public partial class ChampionMatchupComputeService : IChampionMatchupComputeService
 {
     private const int MinMatchupSampleSize = 30;
     private const int MatchupsToShow = 5;
     private readonly TranscendenceContext _context;
 
-    public ChampionAnalyticsComputeService(TranscendenceContext context)
+    public ChampionMatchupComputeService(TranscendenceContext context)
     {
         _context = context;
     }

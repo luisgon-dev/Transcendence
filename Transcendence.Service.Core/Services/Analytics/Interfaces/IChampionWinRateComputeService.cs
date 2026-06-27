@@ -4,9 +4,10 @@ namespace Transcendence.Service.Core.Services.Analytics.Interfaces;
 
 /// <summary>
 /// Raw computation service for champion win-rate and tier-list analytics (and their stats-backed
-/// fast paths). Extracted from <see cref="IChampionAnalyticsComputeService"/> so the win-rate / tier-list
-/// domain is a focused unit; builds, pro builds/playrate, and matchups remain on that service.
-/// Performs EF Core aggregation without caching.
+/// fast paths). Extracted from the original analytics compute contract (P10.1) so the win-rate / tier-list
+/// domain is a focused unit; builds, pro builds/playrate, and matchups
+/// (<see cref="IChampionMatchupComputeService"/>) live in their own services. Performs EF Core aggregation
+/// without caching.
 /// </summary>
 public interface IChampionWinRateComputeService
 {

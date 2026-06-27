@@ -10,7 +10,7 @@ namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 /// (Win-rate and tier-list stats live in <c>ChampionWinRateComputeService</c>; builds in
 /// <c>ChampionBuildComputeService</c>; the pro surfaces in <c>ChampionProComputeService</c>.)
 /// </summary>
-public partial class ChampionAnalyticsComputeService
+public partial class ChampionMatchupComputeService
 {
 
     public async Task<ChampionMatchupsResponse> ComputeMatchupsFromStatsAsync(

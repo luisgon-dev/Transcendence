@@ -56,7 +56,7 @@ public class ChampionMatchupStatsEquivalenceTests
         stats.Should().BeEquivalentTo(raw, o => o.WithStrictOrdering());
     }
 
-    private static ChampionAnalyticsComputeService Service(TranscendenceContext db) =>
+    private static ChampionMatchupComputeService Service(TranscendenceContext db) =>
         new(db);
 
     private static ChampionProComputeService ProService(TranscendenceContext db) =>

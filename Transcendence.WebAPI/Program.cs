@@ -217,6 +217,7 @@ builder.Services.Configure<WorkerJobScheduleOptions>(builder.Configuration.GetSe
 builder.Services.Configure<WorkerSchedulingProfileOptions>(builder.Configuration.GetSection("Jobs:SchedulingProfiles"));
 builder.Services.Configure<AdminBootstrapOptions>(builder.Configuration.GetSection("Auth:AdminBootstrap"));
 builder.Services.AddSingleton<IWorkerRecurringJobPolicy, WorkerRecurringJobPolicy>();
+builder.Services.AddAdminOperationsFacades();
 builder.Services.AddSingleton<IAdaptiveThroughputBudgetPolicy, AdaptiveThroughputBudgetPolicy>();
 builder.Services.AddSingleton<IStarvationGuardrailPolicy, StarvationGuardrailPolicy>();
 

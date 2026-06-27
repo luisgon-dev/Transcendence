@@ -1,3 +1,5 @@
+using Transcendence.Service.Core.Services.Admin.Implementations;
+using Transcendence.Service.Core.Services.Admin.Interfaces;
 using Transcendence.Service.Core.Services.Analysis.Implementations;
 using Transcendence.Service.Core.Services.Analysis.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Implementations;
@@ -52,6 +54,20 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITftStaticDataService, TftStaticDataService>();
         services.AddScoped<ITftAnalyticsComputeService, TftAnalyticsComputeService>();
         services.AddScoped<ITftAnalyticsService, TftAnalyticsService>();
+
+        return services;
+    }
+
+    // Admin-operations facades that decompose AdminOperationsController (P10.1). Registered
+    // separately from AddTranscendenceCore because they depend on the Hangfire job-storage graph
+    // (JobStorage, IRecurringJobManager, IWorkerRecurringJobPolicy) which only the WebAPI host
+    // configures; keeping them out of AddTranscendenceCore preserves that method's Hangfire-free
+    // DI-validation contract.
+    public static IServiceCollection AddAdminOperationsFacades(this IServiceCollection services)
+    {
+        services.AddScoped<IAdminJobsFacade, AdminJobsFacade>();
+        services.AddScoped<IAdminOverviewFacade, AdminOverviewFacade>();
+        services.AddScoped<IAdminLogsFacade, AdminLogsFacade>();
 
         return services;
     }

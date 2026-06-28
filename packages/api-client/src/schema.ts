@@ -5714,7 +5714,7 @@ export interface components {
             role?: string | null;
             tier?: components["schemas"]["TierGrade"];
             /** Format: double */
-            compositeScore?: number;
+            strengthScore?: number;
             /** Format: double */
             winRate?: number;
             /** Format: double */
@@ -5725,8 +5725,6 @@ export interface components {
             games?: number;
             movement?: components["schemas"]["TierMovement"];
             previousTier?: components["schemas"]["TierGrade"];
-            /** Format: double */
-            strengthScore?: number;
             /** Format: double */
             contestedScore?: number;
             /** Format: double */

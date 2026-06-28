@@ -37,14 +37,13 @@ public record TierListEntry(
     int ChampionId,
     string Role,
     TierGrade Tier,
-    double CompositeScore,     // Back-compat alias of StrengthScore (the signed win-rate delta). Slated for removal.
+    double StrengthScore,      // Signed win-rate delta vs the role baseline — the value tiers are cut on
     double WinRate,            // 0.0 to 1.0
     double PickRate,           // 0.0 to 1.0 (within-role pick share)
     double BanRate,            // 0.0 to 1.0
     int Games,                 // Sample size
     TierMovement? Movement,    // Compared to previous patch (persisted region=ALL grades only)
     TierGrade? PreviousTier,   // Null if NEW
-    double StrengthScore = 0,  // Signed win-rate delta vs the role baseline — the value tiers are cut on
     double ContestedScore = 0, // Popularity / meta-presence index (kept separate from strength)
     double RoleBaseline = 0,   // The role's baseline win rate this delta was measured against
     bool IsLowSample = false   // Below the games floor → capped at B, never S/A

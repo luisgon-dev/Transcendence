@@ -10,9 +10,29 @@ export type UITierListEntry = {
   compositeScore: number;
   winRate: number;
   pickRate: number;
+  banRate: number;
   games: number;
   movement: UITierMovement;
   previousTier: UITierGrade | null;
+  strengthScore: number;
+  contestedScore: number;
+};
+
+// The champion's grade for a specific (role, scope) — the SAME grade the tier list shows. Decoded from the
+// profile endpoint's ChampionGradeDto so the champion detail hero renders one consistent grade.
+export type UIChampionGrade = {
+  tier: UITierGrade;
+  strengthScore: number;
+  winRate: number;
+  pickRate: number;
+  banRate: number;
+  contestedScore: number;
+  games: number;
+  roleBaseline: number;
+  isLowSample: boolean;
+  movement: UITierMovement;
+  previousTier: UITierGrade | null;
+  role: string;
 };
 
 export type TierListChampionMap = Record<string, { name: string; id: string; title?: string }>;
@@ -115,13 +135,53 @@ export function normalizeTierListEntries(
       compositeScore: asFiniteNumber(raw.compositeScore, 0),
       winRate: asFiniteNumber(raw.winRate, 0),
       pickRate: asFiniteNumber(raw.pickRate, 0),
+      banRate: asFiniteNumber(raw.banRate, 0),
       games: asNonNegativeInteger(raw.games, 0),
       movement: decodeTierMovement(raw.movement),
-      previousTier: decodeTierGrade(raw.previousTier)
+      previousTier: decodeTierGrade(raw.previousTier),
+      strengthScore: asFiniteNumber(raw.strengthScore, 0),
+      contestedScore: asFiniteNumber(raw.contestedScore, 0)
     });
   }
 
   return entries;
+}
+
+type ApiChampionGrade = components["schemas"]["ChampionGradeDto"];
+
+/**
+ * Decodes the profile endpoint's grade payload into the UI shape. Returns null when there is no grade
+ * (champion not graded in scope) or the tier won't decode — callers render an "unrated" affordance.
+ */
+export function decodeGrade(raw: ApiChampionGrade | null | undefined): UIChampionGrade | null {
+  if (!raw) return null;
+  const tier = decodeTierGrade(raw.tier);
+  if (!tier) return null;
+
+  return {
+    tier,
+    strengthScore: asFiniteNumber(raw.strengthScore, 0),
+    winRate: asFiniteNumber(raw.winRate, 0),
+    pickRate: asFiniteNumber(raw.pickRate, 0),
+    banRate: asFiniteNumber(raw.banRate, 0),
+    contestedScore: asFiniteNumber(raw.contestedScore, 0),
+    games: asNonNegativeInteger(raw.games, 0),
+    roleBaseline: asFiniteNumber(raw.roleBaseline, 0),
+    isLowSample: raw.isLowSample === true,
+    movement: decodeTierMovement(raw.movement),
+    previousTier: decodeTierGrade(raw.previousTier),
+    role: typeof raw.role === "string" && raw.role ? raw.role : "ALL"
+  };
+}
+
+/**
+ * Formats a strength delta (signed fraction vs the role baseline, e.g. 0.032) as a signed percentage
+ * string like "+3.2%". This is the value the tiers are cut on.
+ */
+export function formatStrengthDelta(strengthScore: number, decimals = 1): string {
+  const pct = (Number.isFinite(strengthScore) ? strengthScore : 0) * 100;
+  const sign = pct > 0 ? "+" : pct < 0 ? "−" : "";
+  return `${sign}${Math.abs(pct).toFixed(decimals)}%`;
 }
 
 export function movementLabel(movement: UITierMovement): string {
@@ -280,12 +340,3 @@ export function summarizeTierListEntries(entries: UITierListEntry[]): TierListSu
   };
 }
 
-export function deriveTier(winRate: number | null | undefined): UITierGrade {
-  if (winRate == null || !Number.isFinite(winRate)) return "C";
-  const pct = Math.abs(winRate) >= 1.5 ? winRate : winRate * 100;
-  if (pct >= 53) return "S";
-  if (pct >= 51) return "A";
-  if (pct >= 49) return "B";
-  if (pct >= 47) return "C";
-  return "D";
-}

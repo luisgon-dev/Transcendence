@@ -19,8 +19,9 @@ public enum TierMovement
 }
 
 /// <summary>
-/// Tier grade for champion based on percentile ranking.
-/// S = Top 10%, A = 10-30%, B = 30-60%, C = 60-85%, D = 85%+
+/// Champion tier grade. Assigned by absolute cutoffs on the win-rate delta vs the role baseline
+/// (see <c>ChampionTierScorer</c>) — S is a real, sample-resolvable edge, not a fixed top-N percentile,
+/// so S can legitimately be empty on a balanced patch.
 /// </summary>
 public enum TierGrade
 {
@@ -28,20 +29,25 @@ public enum TierGrade
 }
 
 /// <summary>
-/// Single champion entry in tier list. Patch movement is optional and may be materialized
-/// separately from the hot tier-list compute path.
+/// Single champion entry in tier list. For the unified ("All Roles") view each entry is the champion at its
+/// primary role; <see cref="Role"/> carries that graded role. Movement is only populated for the persisted
+/// region=ALL default scopes.
 /// </summary>
 public record TierListEntry(
     int ChampionId,
     string Role,
     TierGrade Tier,
-    double CompositeScore,    // 0.0 to 1.0 (70% win rate + 30% pick rate)
-    double WinRate,           // 0.0 to 1.0
-    double PickRate,          // 0.0 to 1.0
-    double BanRate,           // 0.0 to 1.0
-    int Games,                // Sample size
-    TierMovement? Movement,   // Compared to previous patch when materialized
-    TierGrade? PreviousTier   // Null if NEW
+    double CompositeScore,     // Back-compat alias of StrengthScore (the signed win-rate delta). Slated for removal.
+    double WinRate,            // 0.0 to 1.0
+    double PickRate,           // 0.0 to 1.0 (within-role pick share)
+    double BanRate,            // 0.0 to 1.0
+    int Games,                 // Sample size
+    TierMovement? Movement,    // Compared to previous patch (persisted region=ALL grades only)
+    TierGrade? PreviousTier,   // Null if NEW
+    double StrengthScore = 0,  // Signed win-rate delta vs the role baseline — the value tiers are cut on
+    double ContestedScore = 0, // Popularity / meta-presence index (kept separate from strength)
+    double RoleBaseline = 0,   // The role's baseline win rate this delta was measured against
+    bool IsLowSample = false   // Below the games floor → capped at B, never S/A
 );
 
 /// <summary>

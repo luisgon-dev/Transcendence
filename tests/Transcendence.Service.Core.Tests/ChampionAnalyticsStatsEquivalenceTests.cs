@@ -59,8 +59,11 @@ public class ChampionAnalyticsStatsEquivalenceTests
             var raw = await svc.ComputeTierListAsync(null, tier, region, Patch, CancellationToken.None);
             var stats = await svc.ComputeTierListFromStatsAsync(null, tier, region, Patch, CancellationToken.None);
 
-            // Unified tier list: live's ban denominator is also role-independent, so EVERYTHING matches.
-            stats.Should().BeEquivalentTo(raw, o => o.WithStrictOrdering(),
+            // Unified tier list: strength/tier/win/pick/ban/contested all match. Movement/PreviousTier exist
+            // only on the persisted region=ALL grades (the raw hot path never materializes them), so they are
+            // excluded — the stats fast path reports NEW vs the raw path's null.
+            stats.Should().BeEquivalentTo(raw, o => o.WithStrictOrdering()
+                    .Excluding(e => e.Movement).Excluding(e => e.PreviousTier),
                 $"unified tier list tier={tier ?? "ALL"} region={region ?? "ALL"}");
         }
     }
@@ -79,9 +82,14 @@ public class ChampionAnalyticsStatsEquivalenceTests
             var raw = await svc.ComputeTierListAsync(role, tier, region, Patch, CancellationToken.None);
             var stats = await svc.ComputeTierListFromStatsAsync(role, tier, region, Patch, CancellationToken.None);
 
-            // Tiering/ordering/win/pick rates match exactly; BanRate is deliberately role-independent now
-            // (it no longer role-scopes the denominator), so it is excluded from the equivalence assertion.
-            stats.Should().BeEquivalentTo(raw, o => o.WithStrictOrdering().Excluding(e => e.BanRate),
+            // Tiering/ordering/win/pick rates match exactly. BanRate AND ContestedScore are excluded: the raw
+            // role-filtered path scopes its distinct-match denominator and cross-role presence to the role,
+            // while the persisted/atom denominators are role-independent. Movement is persisted-only.
+            stats.Should().BeEquivalentTo(raw, o => o.WithStrictOrdering()
+                    .Excluding(e => e.BanRate)
+                    .Excluding(e => e.ContestedScore)
+                    .Excluding(e => e.Movement)
+                    .Excluding(e => e.PreviousTier),
                 $"role-filtered tier list role={role} tier={tier ?? "ALL"} region={region ?? "ALL"}");
         }
     }
@@ -130,7 +138,8 @@ public class ChampionAnalyticsStatsEquivalenceTests
                 BootstrapWindowHours = 24,
                 ProvisionalWindowHours = 96,
                 MaturingWindowHours = 240
-            }));
+            }),
+            Options.Create(new TieringOptions()));
 
     private static ChampionProComputeService ProService(TranscendenceContext db) =>
         new(db,
@@ -158,7 +167,7 @@ public class ChampionAnalyticsStatsEquivalenceTests
             NullLogger<ChampionBuildComputeService>.Instance);
 
     private static async Task Refresh(TranscendenceContext db) =>
-        await new PrecomputedAnalyticsRefresher(db, BuildService(db), ProService(db), NullLogger<PrecomputedAnalyticsRefresher>.Instance)
+        await new PrecomputedAnalyticsRefresher(db, BuildService(db), ProService(db), Options.Create(new TieringOptions()), NullLogger<PrecomputedAnalyticsRefresher>.Instance)
             .RefreshTabularCoreAsync(Patch, CancellationToken.None);
 
     private static async Task<SeededContext> SeededAsync()

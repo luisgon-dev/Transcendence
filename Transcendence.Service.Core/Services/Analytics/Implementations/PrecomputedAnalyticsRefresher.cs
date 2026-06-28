@@ -1,11 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Models.LoL.Analytics;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Service.Core.Queries;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
+using Transcendence.Service.Core.Services.Analytics.Models;
 
 namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 
@@ -40,20 +42,30 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
     private static readonly (string Scope, string? RankTier)[] BuildScopes =
         [(RankTierCatalog.EmeraldPlusScope, RankTierCatalog.EmeraldPlusScope), (RankTierCatalog.AllScope, null)];
 
+    /// <summary>Rank scopes the tier grade is persisted for (region=ALL) — the scopes every web surface
+    /// defaults to. Specific tiers (and specific regions) compute on read via the same scorer.</summary>
+    private static readonly string[] GradedScopes = [RankTierCatalog.AllScope, RankTierCatalog.EmeraldPlusScope];
+
+    /// <summary>Role partition key for the primary-role "All Roles" overview grade rows.</summary>
+    private const string OverviewRole = "ALL";
+
     private readonly TranscendenceContext _context;
     private readonly IChampionBuildComputeService _buildService;
     private readonly IChampionProComputeService _proService;
+    private readonly TieringOptions _tieringOptions;
     private readonly ILogger<PrecomputedAnalyticsRefresher> _logger;
 
     public PrecomputedAnalyticsRefresher(
         TranscendenceContext context,
         IChampionBuildComputeService buildService,
         IChampionProComputeService proService,
+        IOptions<TieringOptions> tieringOptions,
         ILogger<PrecomputedAnalyticsRefresher> logger)
     {
         _context = context;
         _buildService = buildService;
         _proService = proService;
+        _tieringOptions = tieringOptions.Value;
         _logger = logger;
     }
 
@@ -63,6 +75,9 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
 
         var roleTierRows = await BuildRoleTierStatsAsync(patch, computedAt, ct);
         var (scopeMatchRows, banRows) = await BuildScopeStatsAsync(patch, computedAt, ct);
+        // Tier grades are scored from the atoms just built (no extra DB round-trip) and persisted in the same
+        // transaction so a region=ALL read never sees new atoms paired with a stale/absent grade.
+        var gradeRows = await BuildScopeGradeStatsAsync(patch, computedAt, roleTierRows, scopeMatchRows, banRows, ct);
 
         await using var tx = await _context.Database.BeginTransactionAsync(ct);
 
@@ -71,19 +86,21 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
         await _context.ChampionRoleTierStats.Where(x => x.Patch == patch).ExecuteDeleteAsync(ct);
         await _context.ScopeMatchCountStats.Where(x => x.Patch == patch).ExecuteDeleteAsync(ct);
         await _context.ChampionBanScopeStats.Where(x => x.Patch == patch).ExecuteDeleteAsync(ct);
+        await _context.ChampionScopeGradeStats.Where(x => x.Patch == patch).ExecuteDeleteAsync(ct);
 
         _context.ChampionRoleTierStats.AddRange(roleTierRows);
         _context.ScopeMatchCountStats.AddRange(scopeMatchRows);
         _context.ChampionBanScopeStats.AddRange(banRows);
+        _context.ChampionScopeGradeStats.AddRange(gradeRows);
         await _context.SaveChangesAsync(ct);
 
         await tx.CommitAsync(ct);
 
         _logger.LogInformation(
-            "Precompute refresh (tabular core) patch {Patch}: {RoleTier} role-tier, {ScopeMatch} scope-match, {Ban} ban rows",
-            patch, roleTierRows.Count, scopeMatchRows.Count, banRows.Count);
+            "Precompute refresh (tabular core) patch {Patch}: {RoleTier} role-tier, {ScopeMatch} scope-match, {Ban} ban, {Grade} grade rows",
+            patch, roleTierRows.Count, scopeMatchRows.Count, banRows.Count, gradeRows.Count);
 
-        return new PrecomputedAnalyticsRefreshResult(roleTierRows.Count, scopeMatchRows.Count, banRows.Count);
+        return new PrecomputedAnalyticsRefreshResult(roleTierRows.Count, scopeMatchRows.Count, banRows.Count, gradeRows.Count);
     }
 
     // ---- ChampionMatchupStat: all-region lane-pair aggregates per (champion-tier, champion, role, opponent) ----
@@ -467,6 +484,130 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
 
         return (scopeMatchRows, banRows);
     }
+
+    // ---- ChampionScopeGradeStat: the persisted single-source-of-truth tier grade (region=ALL) ----
+
+    /// <summary>
+    /// Scores the region=ALL tier grade for the persisted scopes from the atoms just built (rolled up over
+    /// all platform regions and the tiers in scope), via the shared <see cref="ChampionTierScorer"/> — the
+    /// same scorer the live read path uses, so persisted grades equal on-read grades. Emits per-role rows
+    /// plus a primary-role overview row (<c>Role = "ALL"</c>), with movement vs the previous patch.
+    /// </summary>
+    private async Task<List<ChampionScopeGradeStat>> BuildScopeGradeStatsAsync(
+        string patch,
+        DateTime computedAt,
+        List<ChampionRoleTierStat> roleTierRows,
+        List<ScopeMatchCountStat> scopeMatchRows,
+        List<ChampionBanScopeStat> banRows,
+        CancellationToken ct)
+    {
+        var previousGrades = await LoadPreviousPatchGradesAsync(patch, ct);
+        var gradeRows = new List<ChampionScopeGradeStat>();
+
+        foreach (var scope in GradedScopes)
+        {
+            var tiersInScope = RankTierCatalog.ResolveScopeTiers(scope); // null => all tiers (includes UNRANKED)
+
+            // region=ALL aggregate: sum atoms across every platform region and the tiers in scope.
+            var aggregated = roleTierRows
+                .Where(r => tiersInScope == null || tiersInScope.Contains(r.RankTier))
+                .GroupBy(r => new { r.ChampionId, r.Role })
+                .Select(g => new ChampionTierScorer.RoleGames(
+                    g.Key.ChampionId, g.Key.Role, g.Sum(x => x.Games), g.Sum(x => x.Wins)))
+                .ToList();
+            if (aggregated.Count == 0)
+                continue;
+
+            var totalScopeMatches = scopeMatchRows
+                .Where(x => x.PlatformRegion == AllRegion && x.RankScope == scope)
+                .Select(x => x.TotalMatches)
+                .FirstOrDefault();
+
+            var banByChampion = banRows
+                .Where(x => x.PlatformRegion == AllRegion && x.RankScope == scope)
+                .GroupBy(x => x.ChampionId)
+                .ToDictionary(g => g.Key, g => g.First().BannedMatches);
+
+            var score = ChampionTierScorer.ScoreScope(aggregated, banByChampion, totalScopeMatches, _tieringOptions);
+
+            foreach (var s in score.PerRole)
+                gradeRows.Add(MapGrade(patch, scope, s.Role, s, computedAt, previousGrades));
+            foreach (var s in score.Overview)
+                gradeRows.Add(MapGrade(patch, scope, OverviewRole, s, computedAt, previousGrades));
+        }
+
+        return gradeRows;
+    }
+
+    /// <summary>Previous patch (by release date) grade tiers keyed by (scope, role, champion), for movement.</summary>
+    private async Task<Dictionary<(string Scope, string Role, int ChampionId), int>> LoadPreviousPatchGradesAsync(
+        string patch, CancellationToken ct)
+    {
+        var currentReleaseDate = await _context.Patches.AsNoTracking()
+            .Where(p => p.Version == patch)
+            .Select(p => (DateTime?)p.ReleaseDate)
+            .FirstOrDefaultAsync(ct);
+        if (currentReleaseDate is null)
+            return [];
+
+        var previousPatch = await _context.Patches.AsNoTracking()
+            .Where(p => p.ReleaseDate < currentReleaseDate.Value)
+            .OrderByDescending(p => p.ReleaseDate)
+            .Select(p => p.Version)
+            .FirstOrDefaultAsync(ct);
+        if (string.IsNullOrEmpty(previousPatch))
+            return [];
+
+        var rows = await _context.ChampionScopeGradeStats.AsNoTracking()
+            .Where(x => x.Patch == previousPatch && x.PlatformRegion == AllRegion)
+            .Select(x => new { x.RankScope, x.Role, x.ChampionId, x.Tier })
+            .ToListAsync(ct);
+
+        var map = new Dictionary<(string, string, int), int>(rows.Count);
+        foreach (var r in rows)
+            map[(r.RankScope, r.Role, r.ChampionId)] = r.Tier;
+        return map;
+    }
+
+    private static ChampionScopeGradeStat MapGrade(
+        string patch, string scope, string roleKey, ChampionTierScorer.ScoredChampion s,
+        DateTime computedAt, IReadOnlyDictionary<(string Scope, string Role, int ChampionId), int> previousGrades)
+    {
+        int? previousTier = previousGrades.TryGetValue((scope, roleKey, s.ChampionId), out var pt) ? pt : null;
+        var movement = previousTier.HasValue
+            ? (int)ResolveMovement((int)s.Tier, previousTier.Value)
+            : (int)TierMovement.NEW;
+
+        return new ChampionScopeGradeStat
+        {
+            Patch = patch,
+            PlatformRegion = AllRegion,
+            RankScope = scope,
+            Role = roleKey,
+            ChampionId = s.ChampionId,
+            PrimaryRole = s.Role,
+            Tier = (int)s.Tier,
+            StrengthScore = s.StrengthScore,
+            WinRate = s.WinRate,
+            Games = s.Games,
+            Wins = s.Wins,
+            PickRate = s.PickRate,
+            BanRate = s.BanRate,
+            ContestedScore = s.ContestedScore,
+            RoleBaseline = s.RoleBaseline,
+            PriorStrength = s.PriorStrength,
+            IsLowSample = s.IsLowSample,
+            Movement = movement,
+            PreviousTier = previousTier,
+            ComputedAtUtc = computedAt
+        };
+    }
+
+    // TierGrade ints are best→worst (S=0 … D=4), so a smaller new tier means the champion moved UP.
+    private static TierMovement ResolveMovement(int newTier, int previousTier) =>
+        newTier < previousTier ? TierMovement.UP :
+        newTier > previousTier ? TierMovement.DOWN :
+        TierMovement.SAME;
 
     private IQueryable<MatchParticipant> BaseParticipants(string patch) =>
         _context.MatchParticipants

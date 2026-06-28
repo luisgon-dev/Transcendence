@@ -29,6 +29,19 @@ public interface IChampionAnalyticsService
         CancellationToken ct);
 
     /// <summary>
+    /// Gets the champion's tier grade for a specific role (and rank/region/patch scope) — the same grade the
+    /// tier list shows. Reads the cached per-role tier list and projects this champion's entry, so the detail
+    /// page hero stays consistent with the list. Returns null when the champion is not graded in that scope.
+    /// </summary>
+    Task<ChampionGradeDto?> GetGradeAsync(
+        int championId,
+        string role,
+        string? rankTier,
+        string? region,
+        string? patch,
+        CancellationToken ct);
+
+    /// <summary>
     /// Gets top 3 builds for a champion in a role with caching.
     /// Data is cached for 24 hours.
     /// </summary>

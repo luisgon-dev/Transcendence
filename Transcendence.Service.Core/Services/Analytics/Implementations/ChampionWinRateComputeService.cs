@@ -18,13 +18,16 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
 {
     private readonly TranscendenceContext _context;
     private readonly ChampionAnalyticsComputeOptions _options;
+    private readonly TieringOptions _tieringOptions;
 
     public ChampionWinRateComputeService(
         TranscendenceContext context,
-        IOptions<ChampionAnalyticsComputeOptions> options)
+        IOptions<ChampionAnalyticsComputeOptions> options,
+        IOptions<TieringOptions> tieringOptions)
     {
         _context = context;
         _options = options.Value;
+        _tieringOptions = tieringOptions.Value;
     }
 
     /// <summary>
@@ -251,7 +254,6 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
         var normalizedRole = string.IsNullOrWhiteSpace(role) ? "ALL" : role.ToUpperInvariant();
         var isUnifiedRole = normalizedRole == "ALL";
         var rankTierScope = AnalyticsScopeMath.ParseRankTierScope(rankTier);
-        var minimumGamesRequired = await AnalyticsSampleThreshold.ResolveAsync(_context, _options, patch, ct);
         var regionFilter = AnalyticsRegionCatalog.NormalizeToFilter(region);
 
         // Step 1: Build base query for match participants in this patch
@@ -297,109 +299,66 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
                 })
                 .ToDictionaryAsync(x => x.ChampionId, x => x.BannedMatches, ct);
 
-        var effectiveMinimumGames = AnalyticsScopeMath.ResolveEffectiveSampleSize(minimumGamesRequired, totalParticipants, floor: 5);
+        // Always aggregate per (champion, role); per-role-first scoring needs role-resolved rows even for
+        // the unified ("ALL") request, which the shared scorer then collapses to a primary-role overview.
+        var aggregatedChampionStats = await query
+            .GroupBy(x => new { x.ChampionId, x.TeamPosition })
+            .Select(g => new
+            {
+                g.Key.ChampionId,
+                TeamPosition = g.Key.TeamPosition!,
+                Games = g.Count(),
+                Wins = g.Count(x => x.Win)
+            })
+            .ToListAsync(ct);
 
-        // Step 2: Aggregate champion stats
-        var aggregatedChampionStats = isUnifiedRole
-            ? await query
-                .GroupBy(x => x.ChampionId)
-                .Select(g => new
-                {
-                    ChampionId = g.Key,
-                    TeamPosition = "ALL",
-                    Games = g.Count(),
-                    Wins = g.Count(x => x.Win)
-                })
-                .ToListAsync(ct)
-            : await query
-                .GroupBy(x => new { x.ChampionId, x.TeamPosition })
-                .Select(g => new
-                {
-                    g.Key.ChampionId,
-                    TeamPosition = g.Key.TeamPosition!,
-                    Games = g.Count(),
-                    Wins = g.Count(x => x.Win)
-                })
-                .ToListAsync(ct);
-
-        var championStats = aggregatedChampionStats
-            .Where(x => x.Games >= effectiveMinimumGames)
+        var aggregated = aggregatedChampionStats
+            .Select(x => new ChampionTierScorer.RoleGames(x.ChampionId, x.TeamPosition, x.Games, x.Wins))
             .ToList();
 
-        if (championStats.Count == 0)
-        {
-            // Degrade gracefully so tier lists still render while patch data is ramping.
-            championStats = aggregatedChampionStats
-                .Where(x => x.Games >= 1)
-                .ToList();
-        }
-
-        if (championStats.Count == 0)
-            return new List<TierListEntry>();
-
-        // Step 3: Calculate composite scores
-        var withScores = championStats.Select(c => new
-        {
-            c.ChampionId,
-            c.TeamPosition,
-            c.Games,
-            c.Wins,
-            WinRate = c.Games > 0 ? (double)c.Wins / c.Games : 0.0,
-            ConservativeWinRate = AnalyticsScopeMath.ComputeWilsonLowerBound(c.Wins, c.Games),
-            PickRate = totalParticipants > 0 ? (double)c.Games / totalParticipants : 0.0,
-            BanRate = totalMatchesInScope > 0
-                ? (double)banCountsByChampion.GetValueOrDefault(c.ChampionId) / totalMatchesInScope
-                : 0.0
-        })
-        .Select(c => new
-        {
-            c.ChampionId,
-            c.TeamPosition,
-            c.Games,
-            c.WinRate,
-            c.ConservativeWinRate,
-            c.PickRate,
-            c.BanRate,
-            // Composite: conservative win rate lower bound (70%) + pick rate (30%).
-            CompositeScore = (c.ConservativeWinRate * 0.70) + (c.PickRate * 0.30)
-        })
-        // Deterministic tie-break: tiering is positional (percentile by index), so a stable order among
-        // equal composite scores is required for reproducible grades and to match the stats-backed path.
-        .OrderByDescending(x => x.CompositeScore)
-        .ThenBy(x => x.ChampionId)
-        .ToList();
-
-        // Step 5: Assign percentile-based tiers.
-        // Previous-patch movement is intentionally omitted from the hot path so
-        // current-patch tier lists are not blocked by recursive recomputation.
-        // Top 10% = S, 10-30% = A, 30-60% = B, 60-85% = C, 85%+ = D
-        var total = withScores.Count;
-        return withScores.Select((entry, index) =>
-        {
-            var percentile = (double)index / total;
-            var tier = percentile switch
-            {
-                < 0.10 => TierGrade.S,
-                < 0.30 => TierGrade.A,
-                < 0.60 => TierGrade.B,
-                < 0.85 => TierGrade.C,
-                _ => TierGrade.D
-            };
-
-            return new TierListEntry(
-                entry.ChampionId,
-                entry.TeamPosition,
-                tier,
-                entry.CompositeScore,
-                entry.WinRate,
-                entry.PickRate,
-                entry.BanRate,
-                entry.Games,
-                null,
-                null
-            );
-        }).ToList();
+        // Raw/live path: previous-patch movement is intentionally omitted (it lives only on the persisted
+        // region=ALL grades). Empirical-Bayes shrinkage + absolute cutoffs are applied by the shared scorer.
+        return ScoreToEntries(isUnifiedRole, aggregated, banCountsByChampion, totalMatchesInScope);
     }
+
+    // ---- shared scorer plumbing (used by the raw path and the stats fallback) ----
+
+    /// <summary>
+    /// Scores a whole scope's per-(champion, role) aggregates through <see cref="ChampionTierScorer"/> and
+    /// maps to <see cref="TierListEntry"/> rows: the primary-role overview for a unified request, otherwise
+    /// the requested role's rows. Movement is null here (only the persisted region=ALL grades carry it).
+    /// </summary>
+    private List<TierListEntry> ScoreToEntries(
+        bool isUnifiedRole,
+        IReadOnlyList<ChampionTierScorer.RoleGames> aggregated,
+        IReadOnlyDictionary<int, int> banByChampion,
+        int totalMatchesInScope)
+    {
+        if (aggregated.Count == 0)
+            return [];
+
+        var score = ChampionTierScorer.ScoreScope(aggregated, banByChampion, totalMatchesInScope, _tieringOptions);
+        var rows = isUnifiedRole ? score.Overview : score.PerRole;
+        return rows.Select(s => MapScoredToEntry(s, movement: null, previousTier: null)).ToList();
+    }
+
+    private static TierListEntry MapScoredToEntry(
+        ChampionTierScorer.ScoredChampion s, TierMovement? movement, TierGrade? previousTier) =>
+        new(
+            ChampionId: s.ChampionId,
+            Role: s.Role,
+            Tier: s.Tier,
+            CompositeScore: s.StrengthScore,
+            WinRate: s.WinRate,
+            PickRate: s.PickRate,
+            BanRate: s.BanRate,
+            Games: s.Games,
+            Movement: movement,
+            PreviousTier: previousTier,
+            StrengthScore: s.StrengthScore,
+            ContestedScore: s.ContestedScore,
+            RoleBaseline: s.RoleBaseline,
+            IsLowSample: s.IsLowSample);
 
     // Distinct match IDs for the full (all-champion) rank-scoped ranked-solo population in a
     // patch/region — the denominator population for champion-level ban rate. Returned as IQueryable
@@ -539,48 +498,32 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
         var rankTierScope = AnalyticsScopeMath.ParseRankTierScope(rankTier);
         var scopeToken = AnalyticsScopeMath.ScopeTokenOf(rankTierScope);
         var tierFilter = RankTierCatalog.ResolveScopeTiers(scopeToken);
-        var minimumGamesRequired = await AnalyticsSampleThreshold.ResolveAsync(_context, _options, patch, ct);
         var regionFilter = AnalyticsRegionCatalog.NormalizeToFilter(region);
 
+        // Fast path: the persisted grade table is the single source of truth for the default scopes
+        // (region=ALL with scope ALL or EMERALD_PLUS) and the only place patch-over-patch movement exists.
+        var isPersistedScope = regionFilter == null
+            && (scopeToken == RankTierCatalog.AllScope || scopeToken == RankTierCatalog.EmeraldPlusScope);
+        if (isPersistedScope && await HasGradesAsync(patch, scopeToken, ct))
+            return await ReadGradeTableAsync(patch, scopeToken, isUnifiedRole ? "ALL" : normalizedRole, ct);
+
+        // Fallback (specific region or exact tier — or a patch not yet graded): roll the atoms up to the
+        // requested scope and score live through the same scorer (no movement).
         var query = ApplyStatScope(
             _context.ChampionRoleTierStats.AsNoTracking().Where(x => x.Patch == patch),
             regionFilter, tierFilter);
         if (!isUnifiedRole)
             query = query.Where(x => x.Role == normalizedRole);
 
-        // Aggregate per champion (unified) or per (champion, role), summed over the tiers/regions in scope.
-        List<(int ChampionId, string TeamPosition, int Games, int Wins)> aggregated;
-        if (isUnifiedRole)
-        {
-            aggregated = (await query
-                .GroupBy(x => x.ChampionId)
-                .Select(g => new { ChampionId = g.Key, Games = g.Sum(x => x.Games), Wins = g.Sum(x => x.Wins) })
-                .ToListAsync(ct))
-                .Select(g => (g.ChampionId, "ALL", g.Games, g.Wins))
-                .ToList();
-        }
-        else
-        {
-            aggregated = (await query
-                .GroupBy(x => new { x.ChampionId, x.Role })
-                .Select(g => new { g.Key.ChampionId, g.Key.Role, Games = g.Sum(x => x.Games), Wins = g.Sum(x => x.Wins) })
-                .ToListAsync(ct))
-                .Select(g => (g.ChampionId, g.Role, g.Games, g.Wins))
-                .ToList();
-        }
-
-        var totalParticipants = aggregated.Sum(x => x.Games);
-        if (totalParticipants == 0)
+        var aggregated = (await query
+            .GroupBy(x => new { x.ChampionId, x.Role })
+            .Select(g => new { g.Key.ChampionId, g.Key.Role, Games = g.Sum(x => x.Games), Wins = g.Sum(x => x.Wins) })
+            .ToListAsync(ct))
+            .Select(x => new ChampionTierScorer.RoleGames(x.ChampionId, x.Role, x.Games, x.Wins))
+            .ToList();
+        if (aggregated.Count == 0)
             return [];
 
-        var effectiveMinimumGames = AnalyticsScopeMath.ResolveEffectiveSampleSize(minimumGamesRequired, totalParticipants, floor: 5);
-        var championStats = aggregated.Where(x => x.Games >= effectiveMinimumGames).ToList();
-        if (championStats.Count == 0)
-            championStats = aggregated.Where(x => x.Games >= 1).ToList();
-        if (championStats.Count == 0)
-            return [];
-
-        // Ban counts by champion — role-independent point lookup (consistent with the win-rate page).
         var regionKey = regionFilter ?? PrecomputedAnalyticsRefresher.AllRegion;
         var totalMatchesInScope = await _context.ScopeMatchCountStats.AsNoTracking()
             .Where(x => x.Patch == patch && x.PlatformRegion == regionKey && x.RankScope == scopeToken)
@@ -592,58 +535,46 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
                 .Where(x => x.Patch == patch && x.PlatformRegion == regionKey && x.RankScope == scopeToken)
                 .ToDictionaryAsync(x => x.ChampionId, x => x.BannedMatches, ct);
 
-        var withScores = championStats.Select(c => new
-        {
-            c.ChampionId,
-            c.TeamPosition,
-            c.Games,
-            WinRate = c.Games > 0 ? (double)c.Wins / c.Games : 0.0,
-            ConservativeWinRate = AnalyticsScopeMath.ComputeWilsonLowerBound(c.Wins, c.Games),
-            PickRate = totalParticipants > 0 ? (double)c.Games / totalParticipants : 0.0,
-            BanRate = totalMatchesInScope > 0
-                ? (double)banCountsByChampion.GetValueOrDefault(c.ChampionId) / totalMatchesInScope
-                : 0.0
-        })
-        .Select(c => new
-        {
-            c.ChampionId,
-            c.TeamPosition,
-            c.Games,
-            c.WinRate,
-            c.ConservativeWinRate,
-            c.PickRate,
-            c.BanRate,
-            CompositeScore = (c.ConservativeWinRate * 0.70) + (c.PickRate * 0.30)
-        })
-        .OrderByDescending(x => x.CompositeScore)
-        .ThenBy(x => x.ChampionId)
-        .ToList();
+        return ScoreToEntries(isUnifiedRole, aggregated, banCountsByChampion, totalMatchesInScope);
+    }
 
-        var total = withScores.Count;
-        return withScores.Select((entry, index) =>
-        {
-            var percentile = (double)index / total;
-            var tier = percentile switch
-            {
-                < 0.10 => TierGrade.S,
-                < 0.30 => TierGrade.A,
-                < 0.60 => TierGrade.B,
-                < 0.85 => TierGrade.C,
-                _ => TierGrade.D
-            };
+    private Task<bool> HasGradesAsync(string patch, string scopeToken, CancellationToken ct) =>
+        _context.ChampionScopeGradeStats.AsNoTracking()
+            .AnyAsync(x => x.Patch == patch
+                && x.PlatformRegion == PrecomputedAnalyticsRefresher.AllRegion
+                && x.RankScope == scopeToken, ct);
 
-            return new TierListEntry(
-                entry.ChampionId,
-                entry.TeamPosition,
-                tier,
-                entry.CompositeScore,
-                entry.WinRate,
-                entry.PickRate,
-                entry.BanRate,
-                entry.Games,
-                null,
-                null);
-        }).ToList();
+    private async Task<List<TierListEntry>> ReadGradeTableAsync(
+        string patch, string scopeToken, string roleKey, CancellationToken ct)
+    {
+        var rows = await _context.ChampionScopeGradeStats.AsNoTracking()
+            .Where(x => x.Patch == patch
+                && x.PlatformRegion == PrecomputedAnalyticsRefresher.AllRegion
+                && x.RankScope == scopeToken
+                && x.Role == roleKey)
+            .ToListAsync(ct);
+
+        // Match the scorer's ordering (strength desc, games desc, championId asc).
+        return rows
+            .OrderByDescending(x => x.StrengthScore)
+            .ThenByDescending(x => x.Games)
+            .ThenBy(x => x.ChampionId)
+            .Select(x => new TierListEntry(
+                ChampionId: x.ChampionId,
+                Role: x.PrimaryRole,
+                Tier: (TierGrade)x.Tier,
+                CompositeScore: x.StrengthScore,
+                WinRate: x.WinRate,
+                PickRate: x.PickRate,
+                BanRate: x.BanRate,
+                Games: x.Games,
+                Movement: x.Movement.HasValue ? (TierMovement)x.Movement.Value : null,
+                PreviousTier: x.PreviousTier.HasValue ? (TierGrade)x.PreviousTier.Value : null,
+                StrengthScore: x.StrengthScore,
+                ContestedScore: x.ContestedScore,
+                RoleBaseline: x.RoleBaseline,
+                IsLowSample: x.IsLowSample))
+            .ToList();
     }
 
     public Task<DateTime?> GetAnalyticsComputedAtAsync(string patch, CancellationToken ct) =>

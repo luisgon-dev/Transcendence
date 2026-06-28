@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration.Json;
 using Transcendence.Data;
 using Transcendence.Data.Extensions;
 using Transcendence.Service.Core.Services.Analytics.Models;
+using Transcendence.Service.Core.Services.Database;
 using Transcendence.Service.Core.Services.Diagnostics;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
@@ -202,6 +203,14 @@ builder.Services.Configure<TftAnalyticsComputeOptions>(builder.Configuration.Get
 builder.Services.AddProjectSyndraRepositories();
 
 var host = builder.Build();
+
+// Apply pending EF migrations before the worker starts (gated by Database:AutoMigrate). EF Core's migration
+// lock makes this safe even though the WebAPI host runs the same step on a simultaneous deploy.
+await DatabaseMigrator.MigrateIfEnabledAsync(
+    host.Services,
+    builder.Configuration.GetValue("Database:AutoMigrate", false),
+    host.Services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(DatabaseMigrator)));
+
 host.Run();
 
 static void ConfigureSharedBackendConfiguration(ConfigurationManager configuration, IHostEnvironment environment)

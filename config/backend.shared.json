@@ -3,6 +3,9 @@
     "MainDatabase": "Host=localhost;Port=5432;Database=transcendence;Username=postgres;Password=changme",
     "Redis": "localhost:6379"
   },
+  "Database": {
+    "AutoMigrate": true
+  },
   "RiotApi": {
     "League": {
       "ApiKey": "RGAPI-00000000-0000-0000-0000-000000000000"

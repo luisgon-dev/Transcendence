@@ -27,7 +27,7 @@ public class ChampionMatchupStatsEquivalenceTests
     public async Task Matchups_StatsPath_EqualsRawCompute_AcrossRankScopes()
     {
         await using var ctx = await SeededAsync();
-        await new PrecomputedAnalyticsRefresher(ctx.Db, BuildService(ctx.Db), ProService(ctx.Db), NullLogger<PrecomputedAnalyticsRefresher>.Instance)
+        await new PrecomputedAnalyticsRefresher(ctx.Db, BuildService(ctx.Db), ProService(ctx.Db), Options.Create(new TieringOptions()), NullLogger<PrecomputedAnalyticsRefresher>.Instance)
             .RefreshMatchupsAsync(Patch, CancellationToken.None);
         var svc = Service(ctx.Db);
 
@@ -46,7 +46,7 @@ public class ChampionMatchupStatsEquivalenceTests
     public async Task Matchups_SpecificRegion_FallsBackToRawCompute()
     {
         await using var ctx = await SeededAsync();
-        await new PrecomputedAnalyticsRefresher(ctx.Db, BuildService(ctx.Db), ProService(ctx.Db), NullLogger<PrecomputedAnalyticsRefresher>.Instance)
+        await new PrecomputedAnalyticsRefresher(ctx.Db, BuildService(ctx.Db), ProService(ctx.Db), Options.Create(new TieringOptions()), NullLogger<PrecomputedAnalyticsRefresher>.Instance)
             .RefreshMatchupsAsync(Patch, CancellationToken.None);
         var svc = Service(ctx.Db);
 

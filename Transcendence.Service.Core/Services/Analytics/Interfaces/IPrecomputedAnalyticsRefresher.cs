@@ -42,4 +42,5 @@ public interface IPrecomputedAnalyticsRefresher
 public sealed record PrecomputedAnalyticsRefreshResult(
     int RoleTierRows,
     int ScopeMatchCountRows,
-    int BanScopeRows);
+    int BanScopeRows,
+    int GradeRows);

@@ -5,8 +5,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Account;
+using Transcendence.Data.Models.LoL.Analytics;
 using Transcendence.Data.Models.LoL.Match;
+using Transcendence.Data.Models.LoL.Static;
+using Transcendence.Service.Core.Services.Analytics;
 using Transcendence.Service.Core.Services.Analytics.Implementations;
+using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Tests.Support;
 
@@ -126,18 +130,167 @@ public class PrecomputedAnalyticsRefresherTests
         await Refresh(ctx.Db);
         var firstRoleTier = await ctx.Db.ChampionRoleTierStats.AsNoTracking().CountAsync();
         var firstBans = await ctx.Db.ChampionBanScopeStats.AsNoTracking().CountAsync();
+        var firstGrades = await ctx.Db.ChampionScopeGradeStats.AsNoTracking().CountAsync();
 
         await Refresh(ctx.Db);
         var secondRoleTier = await ctx.Db.ChampionRoleTierStats.AsNoTracking().CountAsync();
         var secondBans = await ctx.Db.ChampionBanScopeStats.AsNoTracking().CountAsync();
+        var secondGrades = await ctx.Db.ChampionScopeGradeStats.AsNoTracking().CountAsync();
 
         secondRoleTier.Should().Be(firstRoleTier);
         secondBans.Should().Be(firstBans);
+        firstGrades.Should().BeGreaterThan(0);
+        secondGrades.Should().Be(firstGrades); // the grade table is replaced per patch, not duplicated
+    }
+
+    [Fact]
+    public async Task RefreshTabularCore_ScopeGradeStats_PersistsPerRoleAndPrimaryRoleOverviewRows_ForGlobalDefaultScopes()
+    {
+        await using var ctx = await SeededAsync();
+        var result = await Refresh(ctx.Db);
+
+        var grades = await ctx.Db.ChampionScopeGradeStats.AsNoTracking().ToListAsync();
+
+        // Grades are persisted only for the synthetic global region and the two web-default scopes.
+        grades.Should().OnlyContain(g => g.PlatformRegion == "ALL");
+        grades.Should().OnlyContain(g => g.Patch == Patch);
+        grades.Select(g => g.RankScope).Distinct().Should().BeEquivalentTo(new[] { "ALL", "EMERALD_PLUS" });
+
+        foreach (var scope in new[] { "ALL", "EMERALD_PLUS" })
+        {
+            var scoped = grades.Where(g => g.RankScope == scope).ToList();
+
+            // One row per played (champion, lane).
+            scoped.Should().Contain(g => g.Role == "TOP" && g.ChampionId == 100);
+            scoped.Should().Contain(g => g.Role == "TOP" && g.ChampionId == 200);
+            scoped.Should().Contain(g => g.Role == "MIDDLE" && g.ChampionId == 100);
+
+            // Plus a synthetic Role="ALL" overview row carrying the champion's most-played lane.
+            var overview100 = scoped.Single(g => g.Role == "ALL" && g.ChampionId == 100);
+            overview100.PrimaryRole.Should().Be("TOP"); // 100 plays TOP more than MIDDLE in every scope
+            scoped.Should().Contain(g => g.Role == "ALL" && g.ChampionId == 200);
+        }
+
+        // No Patch rows were seeded → no previous patch resolvable → every grade is NEW with no previous tier.
+        grades.Should().OnlyContain(g => g.Movement == (int)TierMovement.NEW);
+        grades.Should().OnlyContain(g => g.PreviousTier == null);
+
+        // 3 per-role + 2 overview rows per scope, two scopes.
+        result.GradeRows.Should().Be(10);
+        result.GradeRows.Should().Be(grades.Count);
+    }
+
+    [Fact]
+    public async Task RefreshTabularCore_PersistedGrades_EqualTheSharedScorerOverTheSameAtoms()
+    {
+        await using var ctx = await SeededAsync();
+        await Refresh(ctx.Db);
+
+        var roleTier = await ctx.Db.ChampionRoleTierStats.AsNoTracking().ToListAsync();
+        var scopeMatches = await ctx.Db.ScopeMatchCountStats.AsNoTracking().ToListAsync();
+        var bans = await ctx.Db.ChampionBanScopeStats.AsNoTracking().ToListAsync();
+        var grades = await ctx.Db.ChampionScopeGradeStats.AsNoTracking().ToListAsync();
+
+        var options = new TieringOptions();
+
+        foreach (var scope in new[] { "ALL", "EMERALD_PLUS" })
+        {
+            var tiersInScope = RankTierCatalog.ResolveScopeTiers(scope);
+
+            // region=ALL aggregate: sum atoms across every region and the tiers in scope (mirrors the refresher).
+            var aggregated = roleTier
+                .Where(r => tiersInScope == null || tiersInScope.Contains(r.RankTier))
+                .GroupBy(r => new { r.ChampionId, r.Role })
+                .Select(g => new ChampionTierScorer.RoleGames(
+                    g.Key.ChampionId, g.Key.Role, g.Sum(x => x.Games), g.Sum(x => x.Wins)))
+                .ToList();
+
+            var totalScopeMatches = scopeMatches
+                .Where(x => x.PlatformRegion == "ALL" && x.RankScope == scope)
+                .Select(x => x.TotalMatches)
+                .FirstOrDefault();
+
+            var banByChampion = bans
+                .Where(x => x.PlatformRegion == "ALL" && x.RankScope == scope)
+                .GroupBy(x => x.ChampionId)
+                .ToDictionary(g => g.Key, g => g.First().BannedMatches);
+
+            var score = ChampionTierScorer.ScoreScope(aggregated, banByChampion, totalScopeMatches, options);
+
+            foreach (var s in score.PerRole)
+            {
+                var persisted = grades.Single(g => g.RankScope == scope && g.Role == s.Role && g.ChampionId == s.ChampionId);
+                persisted.Tier.Should().Be((int)s.Tier);
+                persisted.StrengthScore.Should().BeApproximately(s.StrengthScore, 1e-9);
+                persisted.WinRate.Should().BeApproximately(s.WinRate, 1e-9);
+                persisted.PickRate.Should().BeApproximately(s.PickRate, 1e-9);
+                persisted.BanRate.Should().BeApproximately(s.BanRate, 1e-9);
+                persisted.ContestedScore.Should().BeApproximately(s.ContestedScore, 1e-9);
+                persisted.RoleBaseline.Should().BeApproximately(s.RoleBaseline, 1e-9);
+                persisted.PriorStrength.Should().BeApproximately(s.PriorStrength, 1e-9);
+                persisted.Games.Should().Be(s.Games);
+                persisted.Wins.Should().Be(s.Wins);
+                persisted.IsLowSample.Should().Be(s.IsLowSample);
+            }
+
+            foreach (var s in score.Overview)
+            {
+                var persisted = grades.Single(g => g.RankScope == scope && g.Role == "ALL" && g.ChampionId == s.ChampionId);
+                persisted.Tier.Should().Be((int)s.Tier);
+                persisted.StrengthScore.Should().BeApproximately(s.StrengthScore, 1e-9);
+                persisted.PrimaryRole.Should().Be(s.Role); // the overview carries the graded (primary) role
+            }
+        }
+    }
+
+    [Fact]
+    public async Task RefreshTabularCore_Movement_IsResolvedAgainstThePreviousPatchGrades()
+    {
+        await using var ctx = await SeededAsync();
+
+        // A previous patch (earlier release) and the current patch, so movement is resolvable.
+        ctx.Db.Patches.AddRange(
+            new Patch { Version = "15.1", ReleaseDate = DateTime.UtcNow.AddDays(-21), DetectedAt = DateTime.UtcNow.AddDays(-21), IsActive = false },
+            new Patch { Version = Patch, ReleaseDate = DateTime.UtcNow.AddDays(-2), DetectedAt = DateTime.UtcNow.AddDays(-2), IsActive = true });
+
+        // Previous-patch grades for the region=ALL / scope=ALL rows that all land at Tier B this patch:
+        //   (TOP,100) was C → moves UP; (MIDDLE,100) was B → SAME; (TOP,200) was S → moves DOWN.
+        SeedPreviousGrade(ctx.Db, "15.1", "ALL", "TOP", champ: 100, tier: TierGrade.C);
+        SeedPreviousGrade(ctx.Db, "15.1", "ALL", "MIDDLE", champ: 100, tier: TierGrade.B);
+        SeedPreviousGrade(ctx.Db, "15.1", "ALL", "TOP", champ: 200, tier: TierGrade.S);
+        await ctx.Db.SaveChangesAsync();
+
+        await Refresh(ctx.Db);
+
+        var grades = await ctx.Db.ChampionScopeGradeStats.AsNoTracking()
+            .Where(g => g.Patch == Patch && g.RankScope == "ALL")
+            .ToListAsync();
+
+        var top100 = grades.Single(g => g.Role == "TOP" && g.ChampionId == 100);
+        top100.Tier.Should().Be((int)TierGrade.B);
+        top100.PreviousTier.Should().Be((int)TierGrade.C);
+        top100.Movement.Should().Be((int)TierMovement.UP);   // B (2) is better than C (3)
+
+        var mid100 = grades.Single(g => g.Role == "MIDDLE" && g.ChampionId == 100);
+        mid100.Tier.Should().Be((int)TierGrade.B);
+        mid100.PreviousTier.Should().Be((int)TierGrade.B);
+        mid100.Movement.Should().Be((int)TierMovement.SAME);
+
+        var top200 = grades.Single(g => g.Role == "TOP" && g.ChampionId == 200);
+        top200.Tier.Should().Be((int)TierGrade.B);
+        top200.PreviousTier.Should().Be((int)TierGrade.S);
+        top200.Movement.Should().Be((int)TierMovement.DOWN); // B (2) is worse than S (0)
+
+        // The EMERALD_PLUS scope had no prior grades seeded → its rows are all still NEW.
+        var emeraldPlus = await ctx.Db.ChampionScopeGradeStats.AsNoTracking()
+            .Where(g => g.Patch == Patch && g.RankScope == "EMERALD_PLUS")
+            .ToListAsync();
+        emeraldPlus.Should().OnlyContain(g => g.Movement == (int)TierMovement.NEW && g.PreviousTier == null);
     }
 
     // ---- helpers ----
 
-    private static async Task Refresh(TranscendenceContext db)
+    private static async Task<PrecomputedAnalyticsRefreshResult> Refresh(TranscendenceContext db, string patch = Patch)
     {
         var build = new ChampionBuildComputeService(
             db,
@@ -146,9 +299,24 @@ public class PrecomputedAnalyticsRefresherTests
         var pro = new ChampionProComputeService(
             db,
             Options.Create(new ChampionAnalyticsComputeOptions { MinimumGamesRequired = 1 }));
-        var refresher = new PrecomputedAnalyticsRefresher(db, build, pro, NullLogger<PrecomputedAnalyticsRefresher>.Instance);
-        await refresher.RefreshTabularCoreAsync(Patch, CancellationToken.None);
+        var refresher = new PrecomputedAnalyticsRefresher(db, build, pro, Options.Create(new TieringOptions()), NullLogger<PrecomputedAnalyticsRefresher>.Instance);
+        return await refresher.RefreshTabularCoreAsync(patch, CancellationToken.None);
     }
+
+    private static void SeedPreviousGrade(
+        TranscendenceContext db, string patch, string scope, string role, int champ, TierGrade tier) =>
+        db.ChampionScopeGradeStats.Add(new ChampionScopeGradeStat
+        {
+            Id = Guid.NewGuid(),
+            Patch = patch,
+            PlatformRegion = "ALL",
+            RankScope = scope,
+            Role = role,
+            ChampionId = champ,
+            PrimaryRole = role,
+            Tier = (int)tier,
+            ComputedAtUtc = DateTime.UtcNow
+        });
 
     private static (int Games, int Wins) Stat(IEnumerable<Transcendence.Data.Models.LoL.Analytics.ChampionRoleTierStat> rows,
         string region, string tier, int champ, string role)

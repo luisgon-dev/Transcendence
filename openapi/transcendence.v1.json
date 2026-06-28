@@ -6622,6 +6622,60 @@
         },
         "additionalProperties": false
       },
+      "ChampionGradeDto": {
+        "type": "object",
+        "properties": {
+          "tier": {
+            "$ref": "#/components/schemas/TierGrade"
+          },
+          "strengthScore": {
+            "type": "number",
+            "format": "double"
+          },
+          "winRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "pickRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "banRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "contestedScore": {
+            "type": "number",
+            "format": "double"
+          },
+          "games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "roleBaseline": {
+            "type": "number",
+            "format": "double"
+          },
+          "isLowSample": {
+            "type": "boolean"
+          },
+          "movement": {
+            "$ref": "#/components/schemas/TierMovement"
+          },
+          "previousTier": {
+            "$ref": "#/components/schemas/TierGrade"
+          },
+          "role": {
+            "type": "string",
+            "nullable": true
+          },
+          "rankScope": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "ChampionMasteryStat": {
         "type": "object",
         "properties": {
@@ -6788,6 +6842,9 @@
           },
           "matchups": {
             "$ref": "#/components/schemas/ChampionMatchupsResponse"
+          },
+          "grade": {
+            "$ref": "#/components/schemas/ChampionGradeDto"
           }
         },
         "additionalProperties": false
@@ -9049,6 +9106,21 @@
           },
           "previousTier": {
             "$ref": "#/components/schemas/TierGrade"
+          },
+          "strengthScore": {
+            "type": "number",
+            "format": "double"
+          },
+          "contestedScore": {
+            "type": "number",
+            "format": "double"
+          },
+          "roleBaseline": {
+            "type": "number",
+            "format": "double"
+          },
+          "isLowSample": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false

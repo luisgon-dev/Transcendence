@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { components } from "@transcendence/api-client";
 
 import {
+  decodeGrade,
   decodeTierGrade,
   decodeTierMovement,
   filterTierListEntries,
+  formatStrengthDelta,
   normalizeTierListEntries,
   summarizeTierListEntries
 } from "@/lib/tierlist";
@@ -66,12 +68,17 @@ describe("normalizeTierListEntries", () => {
         championId: 266,
         role: "TOP",
         tier: 0,
-        compositeScore: 0.71,
+        compositeScore: 0.032,
         winRate: 0.52,
         pickRate: 0.13,
+        banRate: 0.05,
         games: 1240,
         movement: 1,
-        previousTier: 1
+        previousTier: 1,
+        strengthScore: 0.032,
+        contestedScore: 0.21,
+        roleBaseline: 0.5,
+        isLowSample: false
       }
     ];
 
@@ -80,26 +87,28 @@ describe("normalizeTierListEntries", () => {
         championId: 266,
         role: "TOP",
         tier: "S",
-        compositeScore: 0.71,
+        compositeScore: 0.032,
         winRate: 0.52,
         pickRate: 0.13,
+        banRate: 0.05,
         games: 1240,
         movement: "UP",
-        previousTier: "A"
+        previousTier: "A",
+        strengthScore: 0.032,
+        contestedScore: 0.21
       }
     ]);
   });
 
-  it("supports string enum payloads for compatibility", () => {
+  it("supports string enum payloads for compatibility and defaults missing fields", () => {
     const payload = [
       {
         championId: 103,
         role: "MIDDLE",
         tier: "A",
-        compositeScore: 0.64,
+        compositeScore: 0.014,
         winRate: 0.5,
         pickRate: 0.08,
-        games: 987,
         movement: "DOWN",
         previousTier: "S"
       }
@@ -110,12 +119,15 @@ describe("normalizeTierListEntries", () => {
         championId: 103,
         role: "MIDDLE",
         tier: "A",
-        compositeScore: 0.64,
+        compositeScore: 0.014,
         winRate: 0.5,
         pickRate: 0.08,
-        games: 987,
+        banRate: 0,
+        games: 0,
         movement: "DOWN",
-        previousTier: "S"
+        previousTier: "S",
+        strengthScore: 0,
+        contestedScore: 0
       }
     ]);
   });
@@ -238,5 +250,56 @@ describe("summarizeTierListEntries", () => {
         D: 0
       }
     });
+  });
+});
+
+describe("decodeGrade", () => {
+  it("decodes a full grade payload", () => {
+    const grade = decodeGrade({
+      tier: 0,
+      strengthScore: 0.034,
+      winRate: 0.531,
+      pickRate: 0.12,
+      banRate: 0.04,
+      contestedScore: 0.16,
+      games: 24000,
+      roleBaseline: 0.5,
+      isLowSample: false,
+      movement: 1,
+      previousTier: 1,
+      role: "BOTTOM",
+      rankScope: "EMERALD_PLUS"
+    });
+
+    expect(grade).toEqual({
+      tier: "S",
+      strengthScore: 0.034,
+      winRate: 0.531,
+      pickRate: 0.12,
+      banRate: 0.04,
+      contestedScore: 0.16,
+      games: 24000,
+      roleBaseline: 0.5,
+      isLowSample: false,
+      movement: "UP",
+      previousTier: "A",
+      role: "BOTTOM"
+    });
+  });
+
+  it("returns null when there is no grade or the tier won't decode", () => {
+    expect(decodeGrade(null)).toBeNull();
+    expect(decodeGrade(undefined)).toBeNull();
+    expect(
+      decodeGrade({ tier: 99 } as unknown as components["schemas"]["ChampionGradeDto"])
+    ).toBeNull();
+  });
+});
+
+describe("formatStrengthDelta", () => {
+  it("formats a signed win-rate delta", () => {
+    expect(formatStrengthDelta(0.032)).toBe("+3.2%");
+    expect(formatStrengthDelta(-0.018)).toBe("−1.8%");
+    expect(formatStrengthDelta(0)).toBe("0.0%");
   });
 });

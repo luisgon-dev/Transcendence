@@ -11,7 +11,9 @@ import { AnalyticsPatchFilter } from "./AnalyticsPatchFilter";
 import { AnalyticsRegionFilter } from "./AnalyticsRegionFilter";
 import { RankFilterDropdown } from "./RankFilterDropdown";
 
-const DEFAULT_ROLES = LANE_ROLES;
+// Lead with an explicit "All" tab so the unified (per-role-first → primary-role overview) view is a
+// selectable affordance, not just the absence of a ?role param — you can always get back to it.
+const DEFAULT_ROLES = ["ALL", ...LANE_ROLES] as const;
 const DEFAULT_RANKS = RANK_TIER_FILTERS;
 
 /**

@@ -8,5 +8,6 @@ public record ChampionProfileAnalyticsResponse(
     string EffectiveRole,
     ChampionWinRateSummary WinRates,
     ChampionBuildsResponse Builds,
-    ChampionMatchupsResponse Matchups
+    ChampionMatchupsResponse Matchups,
+    ChampionGradeDto? Grade = null
 );

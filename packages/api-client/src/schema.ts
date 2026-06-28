@@ -4847,6 +4847,28 @@ export interface components {
             coreBuildPath?: components["schemas"]["CoreItemStepDto"][] | null;
             situationalSlots?: components["schemas"]["SituationalSlotDto"][] | null;
         };
+        ChampionGradeDto: {
+            tier?: components["schemas"]["TierGrade"];
+            /** Format: double */
+            strengthScore?: number;
+            /** Format: double */
+            winRate?: number;
+            /** Format: double */
+            pickRate?: number;
+            /** Format: double */
+            banRate?: number;
+            /** Format: double */
+            contestedScore?: number;
+            /** Format: int32 */
+            games?: number;
+            /** Format: double */
+            roleBaseline?: number;
+            isLowSample?: boolean;
+            movement?: components["schemas"]["TierMovement"];
+            previousTier?: components["schemas"]["TierGrade"];
+            role?: string | null;
+            rankScope?: string | null;
+        };
         ChampionMasteryStat: {
             /** Format: int32 */
             championId?: number;
@@ -4898,6 +4920,7 @@ export interface components {
             winRates?: components["schemas"]["ChampionWinRateSummary"];
             builds?: components["schemas"]["ChampionBuildsResponse"];
             matchups?: components["schemas"]["ChampionMatchupsResponse"];
+            grade?: components["schemas"]["ChampionGradeDto"];
         };
         ChampionStatDto: {
             /** Format: int32 */
@@ -5702,6 +5725,13 @@ export interface components {
             games?: number;
             movement?: components["schemas"]["TierMovement"];
             previousTier?: components["schemas"]["TierGrade"];
+            /** Format: double */
+            strengthScore?: number;
+            /** Format: double */
+            contestedScore?: number;
+            /** Format: double */
+            roleBaseline?: number;
+            isLowSample?: boolean;
         };
         TierListResponse: {
             patch?: string | null;

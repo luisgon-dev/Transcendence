@@ -144,6 +144,7 @@ builder.Services.Configure<RuneSelectionIntegrityBackfillJobOptions>(
 builder.Services.Configure<SummonerBootstrapOptions>(builder.Configuration.GetSection("Jobs:SummonerBootstrap"));
 builder.Services.Configure<MultiRegionIngestionOptions>(builder.Configuration.GetSection("Jobs:MultiRegionIngestion"));
 builder.Services.Configure<ChampionAnalyticsComputeOptions>(builder.Configuration.GetSection("Analytics:Compute"));
+builder.Services.Configure<TieringOptions>(builder.Configuration.GetSection("Analytics:Tiering"));
 builder.Services.AddSingleton<IWorkerRecurringJobPolicy, WorkerRecurringJobPolicy>();
 builder.Services.AddSingleton<WorkerStartupIntegrityState>();
 builder.Services.AddSingleton<IWorkerStartupIntegrityService, WorkerStartupIntegrityService>();

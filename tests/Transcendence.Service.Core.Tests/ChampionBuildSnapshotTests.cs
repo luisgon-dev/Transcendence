@@ -30,7 +30,7 @@ public class ChampionBuildSnapshotTests
     {
         await using var ctx = await SeededAsync();
         var svc = Service(ctx.Db);
-        var refresher = new PrecomputedAnalyticsRefresher(ctx.Db, svc, ProService(ctx.Db), NullLogger<PrecomputedAnalyticsRefresher>.Instance);
+        var refresher = new PrecomputedAnalyticsRefresher(ctx.Db, svc, ProService(ctx.Db), Options.Create(new TieringOptions()), NullLogger<PrecomputedAnalyticsRefresher>.Instance);
 
         await refresher.RefreshTabularCoreAsync(Patch, CancellationToken.None);
         var snapshots = await refresher.RefreshBuildsAsync(Patch, CancellationToken.None);

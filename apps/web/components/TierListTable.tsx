@@ -16,6 +16,7 @@ import { formatGames, formatPercent } from "@/lib/format";
 import { roleDisplayLabel } from "@/lib/roles";
 import { championIconUrl } from "@/lib/staticData";
 import {
+  formatStrengthDelta,
   movementClass,
   movementIcon,
   movementLabel,
@@ -29,7 +30,7 @@ import {
   type UITierListEntry
 } from "@/lib/tierlist";
 
-type SortColumn = "rank" | "winRate" | "pickRate" | "games";
+type SortColumn = "rank" | "winRate" | "pickRate" | "banRate" | "games" | "contestedScore";
 type SortDir = "asc" | "desc";
 type RowEntry = UITierListEntry & { rank: number };
 
@@ -50,7 +51,11 @@ const COLUMNS: {
   { label: "Champion", className: "px-2 md:px-3" },
   { label: "Lane", className: "hidden px-2 sm:table-cell md:px-3" },
   { label: "Win Rate", sortKey: "winRate", className: "px-2 text-right md:px-3" },
+  // Strength = win-rate delta vs the role average — the value the tiers are cut on. Default order (rank) is
+  // already strength-descending, so this column is display-only.
+  { label: "Strength", className: "hidden px-3 text-right md:table-cell" },
   { label: "Pick Rate", sortKey: "pickRate", className: "hidden px-3 text-right lg:table-cell" },
+  { label: "Ban Rate", sortKey: "banRate", className: "hidden px-3 text-right lg:table-cell" },
   { label: "Games", sortKey: "games", className: "px-2 text-right md:px-3" },
   { label: "Trend", className: "hidden w-14 px-3 text-center lg:table-cell" },
   { label: "Analyze", className: "hidden px-3 text-right md:table-cell" }
@@ -311,8 +316,25 @@ export function TierListTable({
         <td className="px-2 py-2.5 text-right md:px-3">
           <DataBar value={entry.winRate} decimals={2} className="justify-end" />
         </td>
+        <td className="hidden px-3 py-2.5 text-right md:table-cell">
+          <span
+            className={cn(
+              "type-tabular tabular-nums text-xs font-medium",
+              entry.strengthScore > 0.0001
+                ? "text-wr-high"
+                : entry.strengthScore < -0.0001
+                  ? "text-wr-low"
+                  : "text-muted"
+            )}
+          >
+            {formatStrengthDelta(entry.strengthScore)}
+          </span>
+        </td>
         <td className="hidden px-3 py-2.5 text-right text-fg/70 lg:table-cell">
           {formatPercent(entry.pickRate, { decimals: 1 })}
+        </td>
+        <td className="hidden px-3 py-2.5 text-right text-fg/70 lg:table-cell">
+          {formatPercent(entry.banRate, { decimals: 1 })}
         </td>
         <td className="type-tabular px-2 py-2.5 text-right tabular-nums text-fg/70 md:px-3">
           {formatGames(entry.games)}
@@ -382,8 +404,18 @@ export function TierListTable({
               Avg WR {formatPercent(summary.averageWinRate, { decimals: 2 })}
             </span>
           ) : null}
+          <Button
+            variant={sortCol === "contestedScore" ? "outline" : "ghost"}
+            size="sm"
+            onClick={() => applySort("contestedScore")}
+            className="ml-1 h-8 px-3"
+            aria-pressed={sortCol === "contestedScore"}
+            title="Sort by meta presence (pick + ban), separate from strength"
+          >
+            Most contested
+          </Button>
           {isFilteredView ? (
-            <Button variant="ghost" size="sm" onClick={resetView} className="ml-1 h-8 px-3">
+            <Button variant="ghost" size="sm" onClick={resetView} className="h-8 px-3">
               Reset
             </Button>
           ) : null}

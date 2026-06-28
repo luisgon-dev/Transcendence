@@ -209,6 +209,7 @@ builder.Services.AddHybridCache(options =>
 builder.Services.AddTranscendenceCore();
 builder.Services.AddProjectSyndraRepositories();
 builder.Services.Configure<ChampionAnalyticsComputeOptions>(builder.Configuration.GetSection("Analytics:Compute"));
+builder.Services.Configure<TieringOptions>(builder.Configuration.GetSection("Analytics:Tiering"));
 builder.Services.Configure<TftAnalyticsComputeOptions>(builder.Configuration.GetSection("Analytics:TftCompute"));
 builder.Services.Configure<ChampionAnalyticsIngestionJobOptions>(
     builder.Configuration.GetSection("Jobs:ChampionAnalyticsIngestion"));

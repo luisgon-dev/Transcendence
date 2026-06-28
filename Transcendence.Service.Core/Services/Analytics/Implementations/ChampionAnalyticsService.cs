@@ -16,7 +16,9 @@ namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 public class ChampionAnalyticsService : IChampionAnalyticsService
 {
     private const string WinRateCacheKeyPrefix = "analytics:champion:winrates:";
-    private const string TierListCacheKeyPrefix = "analytics:tierlist:v2:";
+    // v3: per-role-first empirical-Bayes tiering (strength delta + absolute cutoffs + new entry fields).
+    // Bumped so stale v2 percentile-composite payloads are not served from cache.
+    private const string TierListCacheKeyPrefix = "analytics:tierlist:v3:";
     // v2: ordered, timing-aware sectioned builds (Build Analysis Overhaul). Bumped so stale
     // pre-overhaul payloads are not served from cache.
     private const string BuildsCacheKeyPrefix = "analytics:builds:v2:";
@@ -191,6 +193,40 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             Sample: BuildSampleMetadata(sampleSize, patchContext),
             ComputedAtUtc: await ResolveAnalyticsFreshnessAsync(currentPatch, ct)
         );
+    }
+
+    public async Task<ChampionGradeDto?> GetGradeAsync(
+        int championId,
+        string role,
+        string? rankTier,
+        string? region,
+        string? patch,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(role))
+            return null;
+
+        // The grade IS the champion's entry in the per-role tier list — reuse its cache so the detail-page
+        // hero is guaranteed to match the list (and carries the persisted region=ALL movement).
+        var tierList = await GetTierListAsync(role, rankTier, region, patch, ct);
+        var entry = tierList.Entries.FirstOrDefault(e => e.ChampionId == championId);
+        if (entry == null)
+            return null;
+
+        return new ChampionGradeDto(
+            Tier: entry.Tier,
+            StrengthScore: entry.StrengthScore,
+            WinRate: entry.WinRate,
+            PickRate: entry.PickRate,
+            BanRate: entry.BanRate,
+            ContestedScore: entry.ContestedScore,
+            Games: entry.Games,
+            RoleBaseline: entry.RoleBaseline,
+            IsLowSample: entry.IsLowSample,
+            Movement: entry.Movement,
+            PreviousTier: entry.PreviousTier,
+            Role: entry.Role,
+            RankScope: tierList.RankTier ?? "all");
     }
 
     public async Task<ChampionBuildsResponse> GetBuildsAsync(

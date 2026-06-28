@@ -27,7 +27,7 @@ public class ProSurfaceSnapshotTests
     {
         await using var ctx = await SeededAsync();
         var pro = ProService(ctx.Db);
-        var refresher = new PrecomputedAnalyticsRefresher(ctx.Db, BuildService(ctx.Db), pro, NullLogger<PrecomputedAnalyticsRefresher>.Instance);
+        var refresher = new PrecomputedAnalyticsRefresher(ctx.Db, BuildService(ctx.Db), pro, Options.Create(new TieringOptions()), NullLogger<PrecomputedAnalyticsRefresher>.Instance);
 
         var snapshots = await refresher.RefreshProSurfacesAsync(Patch, CancellationToken.None);
         // pro-playrate (3 scopes) + pro-builds for (266, TOP) x 3 scopes.

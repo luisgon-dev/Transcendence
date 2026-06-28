@@ -593,6 +593,21 @@ Analytics sampling thresholds are configurable in both API and worker hosts:
 - `Analytics:Compute:ProvisionalWindowHours`
 - `Analytics:Compute:MaturingWindowHours`
 
+### Champion Tier Methodology (`Analytics:Tiering`)
+
+Tuning knobs for the per-role-first, empirical-Bayes champion tier scorer (`ChampionTierScorer`), bound in both hosts. Defaults are baked in (no config required to run); these are expected to get one calibration pass against a live patch before `S`/`D` are trusted. All values are overridable without a logic redeploy:
+
+- `Analytics:Tiering:Cutoffs:SMin` (default `0.03`) — strength-delta (win rate vs role baseline) floor for `S`
+- `Analytics:Tiering:Cutoffs:AMin` (default `0.015`) — floor for `A`
+- `Analytics:Tiering:Cutoffs:BMin` (default `-0.015`) — floor for `B`
+- `Analytics:Tiering:Cutoffs:CMin` (default `-0.03`) — floor for `C` (below → `D`)
+- `Analytics:Tiering:PriorStrengthMin` / `PriorStrengthMax` (default `50` / `2000`) — clamp on the empirical-Bayes prior strength `k`
+- `Analytics:Tiering:PriorFitMinGames` (default `200`) — minimum games for a champion to participate in the Beta prior fit
+- `Analytics:Tiering:GradeMinGamesFloor` (default `500`) — below this a champion is flagged low-sample and capped at `B`
+- `Analytics:Tiering:ContestPickWeight` / `ContestBanWeight` (default `1` / `1`) — weights in the `contestedScore` popularity index
+
+The computed grade is persisted in the `ChampionScopeGradeStats` table (added by the `AddChampionScopeGradeStat` migration). Because grades are recomputed on read (and re-persisted hourly), changing any of these knobs takes effect on the next refresh — no re-ingestion or backfill.
+
 ### Analytics Response Sampling
 
 - Analytics APIs now expose sample metadata fields (`sampleStatus`, `sampleSize`, `minimumRecommendedSampleSize`, `patchAgeHours`, `isEarlyPatchWindow`, `patchPhase`, `isProvisional`).

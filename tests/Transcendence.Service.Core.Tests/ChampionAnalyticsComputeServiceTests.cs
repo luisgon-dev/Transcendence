@@ -58,7 +58,8 @@ public class ChampionAnalyticsComputeServiceTests
                 BootstrapWindowHours = 24,
                 ProvisionalWindowHours = 96,
                 MaturingWindowHours = 240
-            }));
+            }),
+            Options.Create(new TieringOptions()));
 
         var result = await service.ComputeTierListAsync("TOP", null, null, "15.2", CancellationToken.None);
 
@@ -116,7 +117,8 @@ public class ChampionAnalyticsComputeServiceTests
                 BootstrapWindowHours = 24,
                 ProvisionalWindowHours = 96,
                 MaturingWindowHours = 240
-            }));
+            }),
+            Options.Create(new TieringOptions()));
 
         var result = await service.ComputeWinRatesAsync(
             266, new ChampionAnalyticsFilter(), "15.2", CancellationToken.None);
@@ -178,7 +180,8 @@ public class ChampionAnalyticsComputeServiceTests
                 BootstrapWindowHours = 24,
                 ProvisionalWindowHours = 96,
                 MaturingWindowHours = 240
-            }));
+            }),
+            Options.Create(new TieringOptions()));
 
         var result = await service.ComputeWinRatesAsync(
             266, new ChampionAnalyticsFilter(), "15.2", CancellationToken.None);
@@ -231,7 +234,8 @@ public class ChampionAnalyticsComputeServiceTests
                 BootstrapWindowHours = 24,
                 ProvisionalWindowHours = 96,
                 MaturingWindowHours = 240
-            }));
+            }),
+            Options.Create(new TieringOptions()));
 
         var result = await service.ComputeWinRatesAsync(
             200, new ChampionAnalyticsFilter { RankTier = "EMERALD_PLUS" }, "15.2", CancellationToken.None);

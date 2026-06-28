@@ -33,7 +33,7 @@ import {
   fetchRunesReforged,
   fetchSummonerSpellMap
 } from "@/lib/staticData";
-import { deriveTier } from "@/lib/tierlist";
+import { decodeGrade, formatStrengthDelta } from "@/lib/tierlist";
 
 type ChampionWinRateDto = components["schemas"]["ChampionWinRateDto"];
 // `computedAtUtc` is the ISO-8601 UTC timestamp (or null) of when the precomputed
@@ -242,7 +242,10 @@ async function ChampionHeroMeta({
   const effectiveRole =
     normalizeRole(profile.effectiveRole) ?? explicitRole ?? pickMostPlayedRole(winrates) ?? "MIDDLE";
   const heroEntry = pickBestEntry(winrates, effectiveRole);
-  const heroTier = deriveTier(heroEntry?.winRate);
+  // The hero grade is the SAME grade the tier list shows (read off the profile payload), not a locally
+  // re-derived one — so a champion reads identically on the list and on its own page.
+  const heroGrade = decodeGrade(profile.grade);
+  const heroTier = heroGrade?.tier ?? null;
   const sampleNotice = pickMostSevereAnalyticsSample(
     (winrates as { sample?: unknown } | null)?.sample as AnalyticsSampleLike,
     (builds as { sample?: unknown } | null)?.sample as AnalyticsSampleLike,
@@ -258,7 +261,24 @@ async function ChampionHeroMeta({
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        <TierBadge tier={heroTier} size="md" />
+        {heroTier ? (
+          <span className="flex items-center gap-2">
+            <TierBadge tier={heroTier} size="md" />
+            {heroGrade ? (
+              <span
+                className="type-tabular tabular-nums text-xs text-muted"
+                title="Win rate vs the role average — the value the tier is based on"
+              >
+                {formatStrengthDelta(heroGrade.strengthScore)}
+                {heroGrade.isLowSample ? " · low sample" : ""}
+              </span>
+            ) : null}
+          </span>
+        ) : (
+          <span className="rounded-control border border-border/60 px-2 py-1 text-xs font-medium text-muted">
+            Unrated
+          </span>
+        )}
         <p className="text-sm text-muted">
           {roleDisplayLabel(effectiveRole)} &middot; {rankTierDisplayLabel(normalizedRankTier ?? "all")} &middot; {activeRegionLabel}
         </p>
@@ -287,9 +307,9 @@ async function ChampionHeroMeta({
       {/* ── Stats Bar ── */}
       <StatsBar
         tier={heroTier}
-        winRate={heroEntry?.winRate}
-        pickRate={heroEntry?.pickRate}
-        games={heroEntry?.games}
+        winRate={heroGrade?.winRate ?? heroEntry?.winRate}
+        pickRate={heroGrade?.pickRate ?? heroEntry?.pickRate}
+        games={heroGrade?.games ?? heroEntry?.games}
       />
 
       {/* ── Filters ── */}

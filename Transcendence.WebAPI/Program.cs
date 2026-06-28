@@ -25,6 +25,7 @@ using Transcendence.Service.Core.Services.Auth.Implementations;
 using Transcendence.Service.Core.Services.Auth.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Models;
 using Transcendence.Service.Core.Services.Analytics.Models;
+using Transcendence.Service.Core.Services.Database;
 using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Extensions;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
@@ -342,6 +343,13 @@ using (var scope = app.Services.CreateScope())
     else
         bootstrapLogger.LogInformation("Admin bootstrap: no new grants.");
 }
+
+// Apply pending EF migrations before serving (gated by Database:AutoMigrate). EF Core's migration lock makes
+// this safe even though the worker host runs the same step on a simultaneous deploy.
+await DatabaseMigrator.MigrateIfEnabledAsync(
+    app.Services,
+    builder.Configuration.GetValue("Database:AutoMigrate", false),
+    app.Services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(DatabaseMigrator)));
 
 app.Run();
 

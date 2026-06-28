@@ -150,6 +150,11 @@ Migration policy:
 - Generate migrations only via EF CLI (for example: `dotnet ef migrations add <Name> --project Transcendence.Service --startup-project Transcendence.Service`).
 - **Hot-table index/DDL is applied out-of-band, not via `database update`** — see the recipe below. CI (the migration-safety check) fails a PR that adds a non-concurrent `CreateIndex` or a defaulted `AddColumn` on `Summoners` / `Matches` / `MatchParticipants` / `MatchParticipantTimelineSnapshots` and points back here.
 
+Automatic migrations on startup (`Database:AutoMigrate`):
+- Both hosts apply pending migrations on startup when `Database:AutoMigrate` is `true` (set in `config/backend.shared.json`, so it ships baked into the image). EF Core 9+ takes a database-wide migration lock, so the WebAPI and worker applying concurrently on the same deploy is safe — one applies, the other finds nothing pending. This removes the manual post-deploy `dotnet ef database update` step that a migration-bearing release used to require.
+- Locally, `dotnet run` with the shared config also auto-migrates your dev DB, so the manual `database update` above is optional; override with `Database:AutoMigrate=false` (user-secrets / `appsettings.Development.json`) if you want manual control. The OpenAPI export host force-disables it (`--Database:AutoMigrate=false`) since it boots against a throwaway connection.
+- **Hot-table index migrations are the exception** — auto-migrate would run them as a blocking `CREATE INDEX`. Apply them via the out-of-band recipe below (create the index concurrently, then record the migration in `__EFMigrationsHistory`) **before** the deploy so the migration is already applied and auto-migrate skips it. The migration-safety CI gate failing your PR is the signal to use the recipe.
+
 #### Applying index migrations to hot tables
 
 `Summoners` (~4M+ rows), `Matches`, `MatchParticipants`, and `MatchParticipantTimelineSnapshots` (~22.5M rows) are large and continuously written by ingestion. EF's generated `CreateIndex` emits a plain `CREATE INDEX`, which holds a `SHARE` lock for the entire build and blocks ingestion writes for its duration. **Do not** apply such a migration with `dotnet ef database update`. Split the apply instead:

@@ -44,6 +44,8 @@ APP_ARGS=(
   "--ConnectionStrings:Redis=$ConnectionStrings__Redis"
   "--Auth:Jwt:Key=$Auth__Jwt__Key"
   "--Swagger:Enable=$Swagger__Enable"
+  # The export only boots the API to dump swagger against a throwaway connection — never migrate.
+  "--Database:AutoMigrate=false"
 )
 
 SWAGGER_URL="${SWAGGER_URL:-http://127.0.0.1:5057/swagger/v1/swagger.json}"

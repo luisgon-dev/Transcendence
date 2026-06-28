@@ -7,7 +7,6 @@ export type UITierListEntry = {
   championId: number;
   role: string;
   tier: UITierGrade;
-  compositeScore: number;
   winRate: number;
   pickRate: number;
   banRate: number;
@@ -132,7 +131,6 @@ export function normalizeTierListEntries(
       championId,
       role: typeof raw.role === "string" && raw.role ? raw.role : "ALL",
       tier,
-      compositeScore: asFiniteNumber(raw.compositeScore, 0),
       winRate: asFiniteNumber(raw.winRate, 0),
       pickRate: asFiniteNumber(raw.pickRate, 0),
       banRate: asFiniteNumber(raw.banRate, 0),

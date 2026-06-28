@@ -9081,7 +9081,7 @@
           "tier": {
             "$ref": "#/components/schemas/TierGrade"
           },
-          "compositeScore": {
+          "strengthScore": {
             "type": "number",
             "format": "double"
           },
@@ -9106,10 +9106,6 @@
           },
           "previousTier": {
             "$ref": "#/components/schemas/TierGrade"
-          },
-          "strengthScore": {
-            "type": "number",
-            "format": "double"
           },
           "contestedScore": {
             "type": "number",

@@ -8,10 +8,13 @@ import Link from "next/link";
 import { TierBadge } from "@/components/TierBadge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { ConfidenceBadge } from "@/components/ui/Confidence";
 import { DataBar } from "@/components/ui/DataBar";
 import { LaneIcon } from "@/components/ui/LaneIcon";
 import { TierSpine } from "@/components/ui/TierSpine";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/cn";
+import { formatEbStory } from "@/lib/confidence";
 import { formatGames, formatPercent } from "@/lib/format";
 import { roleDisplayLabel } from "@/lib/roles";
 import { championIconUrl } from "@/lib/staticData";
@@ -32,7 +35,10 @@ import {
 
 type SortColumn = "rank" | "winRate" | "pickRate" | "banRate" | "games" | "contestedScore";
 type SortDir = "asc" | "desc";
-type RowEntry = UITierListEntry & { rank: number };
+// roleBaseline (role-average win rate) is threaded in from the page so the EB trust
+// hover can name the role average; it is not part of the normalized UI entry.
+type TierListTableEntry = UITierListEntry & { roleBaseline?: number };
+type RowEntry = TierListTableEntry & { rank: number };
 
 type DocumentWithViewTransition = Document & {
   startViewTransition?: typeof startTransition;
@@ -88,14 +94,17 @@ export function TierListTable({
   version,
   rankTierValue,
   activeRegion,
-  activePatch
+  activePatch,
+  minGames
 }: {
-  entries: UITierListEntry[];
+  entries: TierListTableEntry[];
   champions: TierListChampionMap;
   version: string;
   rankTierValue: string | null;
   activeRegion: string;
   activePatch?: string | null;
+  /** Games floor at which a row reads as a "Stable" sample (from the response sample). */
+  minGames?: number;
 }) {
   const [sortCol, setSortCol] = useState<SortColumn>("rank");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -283,7 +292,10 @@ export function TierListTable({
     return (
       <tr
         key={`${entry.tier}-${entry.role}-${entry.championId}`}
-        className="tierlist-row border-b border-border/40 text-sm last:border-0"
+        className={cn(
+          "tierlist-row border-b border-border/40 text-sm last:border-0",
+          entry.isLowSample && "opacity-70"
+        )}
       >
         <td className="px-2 py-2.5 text-center md:px-3">
           <span className={cn("type-tabular tabular-nums text-xs font-semibold", tierColorClass(entry.tier))}>
@@ -294,28 +306,38 @@ export function TierListTable({
           <TierBadge tier={entry.tier} />
         </td>
         <td className="px-2 py-2.5 md:px-3">
-          <Link
-            href={`/lol/champions/${entry.championId}?${rowQuery}`}
-            className="group flex items-center gap-2.5"
-          >
-            <Image
-              src={championIconUrl(version, championSlug)}
-              alt={championName}
-              width={30}
-              height={30}
-              className="rounded-md ring-1 ring-border/60"
-            />
-            <span className="min-w-0">
-              <span className="block truncate font-semibold text-fg group-hover:text-primary">
-                {championName}
-              </span>
-              {championSubtitle ? (
-                <span className="type-caption hidden truncate text-muted md:block">
-                  {championSubtitle}
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/lol/champions/${entry.championId}?${rowQuery}`}
+              className="group flex min-w-0 items-center gap-2.5"
+            >
+              <Image
+                src={championIconUrl(version, championSlug)}
+                alt={championName}
+                width={30}
+                height={30}
+                className="rounded-md ring-1 ring-border/60"
+              />
+              <span className="min-w-0">
+                <span className="block truncate font-semibold text-fg group-hover:text-primary">
+                  {championName}
                 </span>
-              ) : null}
-            </span>
-          </Link>
+                {championSubtitle ? (
+                  <span className="type-caption hidden truncate text-muted md:block">
+                    {championSubtitle}
+                  </span>
+                ) : null}
+              </span>
+            </Link>
+            {entry.isLowSample ? (
+              <ConfidenceBadge
+                games={entry.games}
+                isLowSample={entry.isLowSample}
+                minGames={minGames}
+                className="shrink-0"
+              />
+            ) : null}
+          </div>
         </td>
         <td className="hidden px-2 py-2.5 sm:table-cell md:px-3">
           <span className="inline-flex items-center gap-1.5 text-xs text-muted">
@@ -324,21 +346,30 @@ export function TierListTable({
           </span>
         </td>
         <td className="px-2 py-2.5 text-right md:px-3">
-          <DataBar value={entry.winRate} decimals={2} className="justify-end" />
+          <DataBar value={entry.winRate} games={entry.games} decimals={2} className="justify-end" />
         </td>
         <td className="hidden px-3 py-2.5 text-right md:table-cell">
-          <span
-            className={cn(
-              "type-tabular tabular-nums text-xs font-medium",
-              entry.strengthScore > 0.0001
-                ? "text-wr-high"
-                : entry.strengthScore < -0.0001
-                  ? "text-wr-low"
-                  : "text-muted"
-            )}
+          <Tooltip
+            content={formatEbStory({
+              winRate: entry.winRate,
+              roleBaseline: entry.roleBaseline ?? 0,
+              strengthScore: entry.strengthScore,
+              games: entry.games
+            })}
           >
-            {formatStrengthDelta(entry.strengthScore)}
-          </span>
+            <span
+              className={cn(
+                "type-tabular cursor-help tabular-nums text-xs font-medium",
+                entry.strengthScore > 0.0001
+                  ? "text-wr-high"
+                  : entry.strengthScore < -0.0001
+                    ? "text-wr-low"
+                    : "text-muted"
+              )}
+            >
+              {formatStrengthDelta(entry.strengthScore)}
+            </span>
+          </Tooltip>
         </td>
         <td className="hidden px-3 py-2.5 text-right text-fg/70 lg:table-cell">
           {formatPercent(entry.pickRate, { decimals: 1 })}

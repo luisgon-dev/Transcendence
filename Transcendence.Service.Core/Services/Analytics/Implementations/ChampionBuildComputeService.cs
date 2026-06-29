@@ -236,7 +236,8 @@ public sealed class ChampionBuildComputeService : IChampionBuildComputeService
             build.RuneInfo.SubRunes,
             build.RuneInfo.StatShards,
             build.Games,
-            build.WinRate
+            build.WinRate,
+            totalGames > 0 ? (double)build.Games / totalGames : 0
         )).ToList();
 
         // Sectioned, timing-aware build path (spells, skill order, starters, boots, ordered core

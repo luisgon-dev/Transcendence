@@ -4829,6 +4829,8 @@ export interface components {
             games?: number;
             /** Format: double */
             winRate?: number;
+            /** Format: double */
+            pickRate?: number;
         };
         ChampionBuildsResponse: {
             /** Format: int32 */
@@ -4994,6 +4996,8 @@ export interface components {
             winRate?: number;
             /** Format: double */
             avgCompletionMinute?: number;
+            /** Format: double */
+            pickRate?: number;
         };
         DataAgeMetadata: {
             /** Format: date-time */
@@ -5030,6 +5034,8 @@ export interface components {
             games?: number;
             /** Format: double */
             winRate?: number;
+            /** Format: double */
+            pickRate?: number;
         };
         LiveGameAnalysisDto: {
             /** Format: date-time */
@@ -5512,6 +5518,8 @@ export interface components {
             games?: number;
             /** Format: double */
             winRate?: number;
+            /** Format: double */
+            pickRate?: number;
         };
         StarterItemSetDto: {
             items?: number[] | null;
@@ -5519,6 +5527,8 @@ export interface components {
             games?: number;
             /** Format: double */
             winRate?: number;
+            /** Format: double */
+            pickRate?: number;
         };
         SummonerAcceptedResponse: {
             /** @description Refresh state message. "Refresh queued" when accepted now, "Refresh in process" when contention is detected. */
@@ -5600,6 +5610,8 @@ export interface components {
             games?: number;
             /** Format: double */
             winRate?: number;
+            /** Format: double */
+            pickRate?: number;
         };
         TeamAnalysisDto: {
             /** Format: int32 */

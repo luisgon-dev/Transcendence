@@ -10,7 +10,7 @@ import {
 } from "@/lib/analyticsRegionFallback";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
-import { type AnalyticsSampleLike } from "@/lib/analyticsSample";
+import { normalizeAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { GLOBAL_ANALYTICS_REGION } from "@/lib/analyticsRegionShared";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { fetchLolAnalyticsPatches } from "@/lib/lolAnalyticsPatches";
@@ -115,6 +115,25 @@ export default async function TierListPage({
       ? tierlist.rankTier
       : null;
 
+  const sample = (tierlist as { sample?: unknown } | null)?.sample as AnalyticsSampleLike;
+  // The per-row "Stable" threshold for the confidence layer: the patch sample's
+  // recommended games floor. Undefined when no sample (confidence falls back to its default).
+  const minGames = normalizeAnalyticsSample(sample)?.minimumRecommendedSampleSize;
+
+  // roleBaseline (the role-average win rate) rides the wire on each TierListEntry but is
+  // dropped by normalizeTierListEntries; re-attach it by (champion, role) so the EB trust
+  // hover can name the role average without re-fetching.
+  const roleBaselineByKey = new Map<string, number>();
+  for (const raw of tierlist.entries ?? []) {
+    if (typeof raw.championId !== "number" || typeof raw.roleBaseline !== "number") continue;
+    const role = typeof raw.role === "string" && raw.role ? raw.role.toUpperCase() : "ALL";
+    roleBaselineByKey.set(`${raw.championId}-${role}`, raw.roleBaseline);
+  }
+  const entriesWithBaseline = normalizedEntries.map((entry) => ({
+    ...entry,
+    roleBaseline: roleBaselineByKey.get(`${entry.championId}-${entry.role.toUpperCase()}`) ?? 0
+  }));
+
   return (
     <div className="grid gap-4">
       <Toolbar
@@ -156,17 +175,22 @@ export default async function TierListPage({
       />
 
       {fallbackMessage ? <p className="type-ui px-1 text-muted">{fallbackMessage}</p> : null}
+
+      {/* Single freshness readout that stays docked below the header while the table scrolls. */}
       <AnalyticsSampleBanner
-        sample={(tierlist as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
+        sample={sample}
+        variant="strip"
+        className="sticky top-24 z-30 rounded-lg border border-border bg-surface/92 px-3 py-2 shadow-soft backdrop-blur-md"
       />
 
       <TierListTable
-        entries={normalizedEntries}
+        entries={entriesWithBaseline}
         champions={champions}
         version={version}
         rankTierValue={rankTierValue}
         activeRegion={effectiveRegion}
         activePatch={selectedPatch}
+        minGames={minGames}
       />
     </div>
   );

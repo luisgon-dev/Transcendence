@@ -1,4 +1,5 @@
 import { cn } from "@/lib/cn";
+import { winRateIntervalPP } from "@/lib/confidence";
 import { formatPercent, toWinPercent } from "@/lib/format";
 
 // Diverging win-rate bar centered on 50%. Above 50 fills right (win color),
@@ -10,6 +11,7 @@ export function DataBar({
   domain = 8,
   decimals = 1,
   showValue = true,
+  games,
   className
 }: {
   value: number | null | undefined;
@@ -17,6 +19,12 @@ export function DataBar({
   domain?: number;
   decimals?: number;
   showValue?: boolean;
+  /**
+   * Optional sample size. When finite and > 0, draws a faint 95% CI whisker
+   * centered on the fill end so a thin sample reads as less certain. Omit (or
+   * pass <= 0) to render exactly as before.
+   */
+  games?: number;
   className?: string;
 }) {
   const pct = toWinPercent(value);
@@ -31,6 +39,14 @@ export function DataBar({
   const magnitude = Math.min(Math.abs(delta) / domain, 1) * 50; // 0–50% of track
   const positive = delta >= 0;
   const colorVar = positive ? "var(--t-win)" : "var(--t-loss)";
+
+  // Optional confidence whisker: a faint band the width of the 95% CI, centered
+  // on the fill end. Mapped onto the track the same way the fill magnitude is.
+  const hasGames = typeof games === "number" && Number.isFinite(games) && games > 0;
+  const ciHalf = hasGames
+    ? Math.min((winRateIntervalPP(pct, games) / domain) * 50, 50)
+    : 0;
+  const endPct = positive ? 50 + magnitude : 50 - magnitude;
 
   return (
     <span className={cn("inline-flex items-center gap-2", className)}>
@@ -48,6 +64,19 @@ export function DataBar({
               : { right: "50%", width: `${magnitude}%`, background: colorVar }
           }
         />
+        {hasGames ? (
+          <span
+            aria-hidden="true"
+            className="absolute inset-y-0"
+            style={{
+              left: `${endPct}%`,
+              width: `max(2px, ${ciHalf * 2}%)`,
+              transform: "translateX(-50%)",
+              background: "var(--t-border-strong)",
+              opacity: 0.5
+            }}
+          />
+        ) : null}
       </span>
       {showValue ? (
         <span

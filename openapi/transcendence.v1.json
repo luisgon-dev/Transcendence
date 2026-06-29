@@ -6536,6 +6536,10 @@
           "winRate": {
             "type": "number",
             "format": "double"
+          },
+          "pickRate": {
+            "type": "number",
+            "format": "double"
           }
         },
         "additionalProperties": false
@@ -7024,6 +7028,10 @@
           "avgCompletionMinute": {
             "type": "number",
             "format": "double"
+          },
+          "pickRate": {
+            "type": "number",
+            "format": "double"
           }
         },
         "additionalProperties": false
@@ -7116,6 +7124,10 @@
             "format": "int32"
           },
           "winRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "pickRate": {
             "type": "number",
             "format": "double"
           }
@@ -8503,6 +8515,10 @@
           "winRate": {
             "type": "number",
             "format": "double"
+          },
+          "pickRate": {
+            "type": "number",
+            "format": "double"
           }
         },
         "additionalProperties": false
@@ -8523,6 +8539,10 @@
             "format": "int32"
           },
           "winRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "pickRate": {
             "type": "number",
             "format": "double"
           }
@@ -8746,6 +8766,10 @@
             "format": "int32"
           },
           "winRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "pickRate": {
             "type": "number",
             "format": "double"
           }

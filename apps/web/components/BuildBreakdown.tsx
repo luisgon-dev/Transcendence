@@ -4,6 +4,7 @@ import type { components } from "@transcendence/api-client";
 
 import { cn } from "@/lib/cn";
 import { WinRateText } from "@/components/WinRateText";
+import { Confidence } from "@/components/ui/Confidence";
 import { itemIconUrl, summonerSpellIconUrl } from "@/lib/staticData";
 
 type SummonerSpellPairDto = components["schemas"]["SummonerSpellPairDto"];
@@ -160,6 +161,7 @@ export function BuildBreakdown({
   items,
   spellVersion,
   spells,
+  minGames,
   className
 }: {
   summonerSpells?: SummonerSpellPairDto[] | null;
@@ -172,6 +174,8 @@ export function BuildBreakdown({
   items: ItemMap;
   spellVersion: string;
   spells: SpellMap;
+  /** Sample-size threshold for the per-variant confidence pips (falls back to the default). */
+  minGames?: number;
   className?: string;
 }) {
   const spellPairs = summonerSpells ?? [];
@@ -210,7 +214,10 @@ export function BuildBreakdown({
                     version={spellVersion}
                     spells={spells}
                   />
-                  <WinRateText value={pair.winRate} games={pair.games} className="text-xs" />
+                  <span className="flex items-center gap-1.5">
+                    <WinRateText value={pair.winRate} games={pair.games} pickRate={pair.pickRate} className="text-xs" />
+                    {pair.games != null ? <Confidence games={pair.games} minGames={minGames} /> : null}
+                  </span>
                 </div>
               ))}
             </div>
@@ -229,11 +236,17 @@ export function BuildBreakdown({
                   </Fragment>
                 ))}
                 {skillOrder?.winRate != null ? (
-                  <WinRateText
-                    value={skillOrder.winRate}
-                    games={skillOrder.games}
-                    className="ml-1 text-xs"
-                  />
+                  <>
+                    <WinRateText
+                      value={skillOrder.winRate}
+                      games={skillOrder.games}
+                      pickRate={skillOrder.pickRate}
+                      className="ml-1 text-xs"
+                    />
+                    {skillOrder.games != null ? (
+                      <Confidence games={skillOrder.games} minGames={minGames} />
+                    ) : null}
+                  </>
                 ) : null}
               </div>
               {firstThreeLetters.length > 0 ? (
@@ -264,7 +277,10 @@ export function BuildBreakdown({
                       />
                     ))}
                   </div>
-                  <WinRateText value={set.winRate} games={set.games} className="text-xs" />
+                  <span className="flex items-center gap-1.5">
+                    <WinRateText value={set.winRate} games={set.games} pickRate={set.pickRate} className="text-xs" />
+                    {set.games != null ? <Confidence games={set.games} minGames={minGames} /> : null}
+                  </span>
                 </div>
               ))}
             </div>
@@ -277,7 +293,10 @@ export function BuildBreakdown({
               {bootOptions.slice(0, 3).map((boot, idx) => (
                 <div key={idx} className="flex items-center justify-between gap-2">
                   <ItemIcon itemId={boot.itemId ?? 0} version={itemVersion} items={items} size={26} />
-                  <WinRateText value={boot.winRate} games={boot.games} className="text-xs" />
+                  <span className="flex items-center gap-1.5">
+                    <WinRateText value={boot.winRate} games={boot.games} pickRate={boot.pickRate} className="text-xs" />
+                    {boot.games != null ? <Confidence games={boot.games} minGames={minGames} /> : null}
+                  </span>
                 </div>
               ))}
             </div>
@@ -328,6 +347,7 @@ export function BuildBreakdown({
                       <WinRateText
                         value={option.winRate}
                         games={option.games}
+                        pickRate={option.pickRate}
                         className="text-[11px]"
                       />
                     </div>

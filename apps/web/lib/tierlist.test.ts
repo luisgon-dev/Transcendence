@@ -155,23 +155,29 @@ describe("filterTierListEntries", () => {
       championId: 266,
       role: "TOP",
       tier: "S",
-      compositeScore: 0.71,
       winRate: 0.52,
       pickRate: 0.13,
+      banRate: 0.05,
       games: 1240,
       movement: "UP",
-      previousTier: "A"
+      previousTier: "A",
+      strengthScore: 0.032,
+      contestedScore: 0.21,
+      isLowSample: false
     },
     {
       championId: 103,
       role: "MIDDLE",
       tier: "A",
-      compositeScore: 0.64,
       winRate: 0.5,
       pickRate: 0.08,
+      banRate: 0.03,
       games: 987,
       movement: "DOWN",
-      previousTier: "S"
+      previousTier: "S",
+      strengthScore: 0.012,
+      contestedScore: 0.14,
+      isLowSample: false
     }
   ] as const;
 
@@ -200,23 +206,29 @@ describe("summarizeTierListEntries", () => {
           championId: 266,
           role: "TOP",
           tier: "S",
-          compositeScore: 0.71,
           winRate: 0.52,
           pickRate: 0.13,
+          banRate: 0.05,
           games: 1240,
           movement: "UP",
-          previousTier: "A"
+          previousTier: "A",
+          strengthScore: 0.032,
+          contestedScore: 0.21,
+          isLowSample: false
         },
         {
           championId: 103,
           role: "MIDDLE",
           tier: "A",
-          compositeScore: 0.64,
           winRate: 0.5,
           pickRate: 0.08,
+          banRate: 0.03,
           games: 987,
           movement: "DOWN",
-          previousTier: "S"
+          previousTier: "S",
+          strengthScore: 0.012,
+          contestedScore: 0.14,
+          isLowSample: false
         }
       ])
     ).toEqual({

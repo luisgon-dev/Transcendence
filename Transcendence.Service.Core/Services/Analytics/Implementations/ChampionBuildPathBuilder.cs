@@ -200,7 +200,7 @@ internal sealed class ChampionBuildPathBuilder
             .Where(s => s.Spell1Id > 0 && s.Spell2Id > 0)
             .Select(s => new { s.Win, Lo = Math.Min(s.Spell1Id, s.Spell2Id), Hi = Math.Max(s.Spell1Id, s.Spell2Id) })
             .GroupBy(s => new { s.Lo, s.Hi })
-            .Select(g => new SummonerSpellPairDto(g.Key.Lo, g.Key.Hi, g.Count(), (double)g.Count(x => x.Win) / g.Count()))
+            .Select(g => new SummonerSpellPairDto(g.Key.Lo, g.Key.Hi, g.Count(), (double)g.Count(x => x.Win) / g.Count(), (double)g.Count() / samples.Count))
             .Where(p => p.Games >= minGames)
             .OrderByDescending(p => p.Games)
             .ThenByDescending(p => p.WinRate)
@@ -225,7 +225,8 @@ internal sealed class ChampionBuildPathBuilder
                 dominantFirstThree,
                 dominantMax.Key,
                 dominantMax.Count(),
-                (double)dominantMax.Count(x => x.Win) / dominantMax.Count());
+                (double)dominantMax.Count(x => x.Win) / dominantMax.Count(),
+                (double)dominantMax.Count() / skillSamples.Count);
         }
 
         var startingItems = samples
@@ -243,7 +244,7 @@ internal sealed class ChampionBuildPathBuilder
             })
             .Where(x => x.Set.Count > 0)
             .GroupBy(x => string.Join(",", x.Set))
-            .Select(g => new StarterItemSetDto(g.First().Set, g.Count(), (double)g.Count(x => x.Win) / g.Count()))
+            .Select(g => new StarterItemSetDto(g.First().Set, g.Count(), (double)g.Count(x => x.Win) / g.Count(), coveredCount > 0 ? (double)g.Count() / coveredCount : 0))
             .Where(x => x.Games >= purchaseMinGames)
             .OrderByDescending(x => x.Games)
             .ThenByDescending(x => x.WinRate)
@@ -262,7 +263,7 @@ internal sealed class ChampionBuildPathBuilder
             })
             .Where(x => x.BootId.HasValue)
             .GroupBy(x => x.BootId!.Value)
-            .Select(g => new ItemChoiceDto(g.Key, g.Count(), (double)g.Count(x => x.Win) / g.Count()))
+            .Select(g => new ItemChoiceDto(g.Key, g.Count(), (double)g.Count(x => x.Win) / g.Count(), coveredCount > 0 ? (double)g.Count() / coveredCount : 0))
             .Where(x => x.Games >= purchaseMinGames)
             .OrderByDescending(x => x.Games)
             .ThenByDescending(x => x.WinRate)
@@ -317,7 +318,8 @@ internal sealed class ChampionBuildPathBuilder
                 pick.ItemId,
                 pick.Games,
                 (double)pick.Wins / pick.Games,
-                pick.SumMinutes / pick.Games));
+                pick.SumMinutes / pick.Games,
+                coveredCount > 0 ? (double)pick.Games / coveredCount : 0));
         }
 
         var situationalSlots = new List<SituationalSlotDto>();
@@ -331,7 +333,7 @@ internal sealed class ChampionBuildPathBuilder
                 .OrderByDescending(kvp => kvp.Value.Games)
                 .ThenByDescending(kvp => (double)kvp.Value.Wins / kvp.Value.Games)
                 .Take(4)
-                .Select(kvp => new ItemChoiceDto(kvp.Key, kvp.Value.Games, (double)kvp.Value.Wins / kvp.Value.Games))
+                .Select(kvp => new ItemChoiceDto(kvp.Key, kvp.Value.Games, (double)kvp.Value.Wins / kvp.Value.Games, coveredCount > 0 ? (double)kvp.Value.Games / coveredCount : 0))
                 .ToList();
 
             if (options.Count > 0)

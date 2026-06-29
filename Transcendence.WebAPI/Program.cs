@@ -25,7 +25,6 @@ using Transcendence.Service.Core.Services.Auth.Implementations;
 using Transcendence.Service.Core.Services.Auth.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Models;
 using Transcendence.Service.Core.Services.Analytics.Models;
-using Transcendence.Service.Core.Services.Database;
 using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Extensions;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
@@ -344,13 +343,9 @@ using (var scope = app.Services.CreateScope())
         bootstrapLogger.LogInformation("Admin bootstrap: no new grants.");
 }
 
-// Apply pending EF migrations before serving (gated by Database:AutoMigrate). EF Core's migration lock makes
-// this safe even though the worker host runs the same step on a simultaneous deploy.
-await DatabaseMigrator.MigrateIfEnabledAsync(
-    app.Services,
-    builder.Configuration.GetValue("Database:AutoMigrate", false),
-    app.Services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(DatabaseMigrator)));
-
+// NOTE: auto-migrate runs in the WORKER host only (Transcendence.Service), which is the migrations assembly
+// (MigrationsAssembly("Transcendence.Service")). The WebAPI does not reference that assembly, so calling
+// MigrateAsync here throws FileNotFoundException loading it — the WebAPI relies on the worker for migrations.
 app.Run();
 
 static bool ParseBool(string? raw, bool fallback)

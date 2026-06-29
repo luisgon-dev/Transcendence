@@ -10,10 +10,12 @@ namespace Transcendence.Service.Core.Services.Database;
 /// brings the schema up to date without a manual <c>dotnet ef database update</c> (the gap that previously
 /// 500'd analytics after a migration-bearing release).
 /// <para>
-/// EF Core 9+ acquires a database-wide migration lock for the whole apply, so this is safe to call from BOTH
-/// hosts on a simultaneous deploy: whichever acquires the lock first applies the migrations; the other waits,
-/// then finds nothing pending. Disabled by default; the OpenAPI export host (which boots against a throwaway
-/// connection just to dump swagger) force-disables it via <c>--Database:AutoMigrate=false</c>.
+/// Called from the WORKER host only (<c>Transcendence.Service</c>), which IS the migrations assembly
+/// (<c>MigrationsAssembly("Transcendence.Service")</c>). The WebAPI host does not reference that assembly, so
+/// it cannot enumerate/apply migrations (EF throws <c>FileNotFoundException</c> loading it) and relies on the
+/// worker. EF Core 9+ still acquires a database-wide migration lock for the whole apply, so concurrent worker
+/// instances remain safe. Disabled by default; the OpenAPI export host force-disables it via
+/// <c>--Database:AutoMigrate=false</c>.
 /// </para>
 /// </summary>
 public static class DatabaseMigrator

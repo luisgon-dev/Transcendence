@@ -93,7 +93,8 @@ describe("normalizeTierListEntries", () => {
         movement: "UP",
         previousTier: "A",
         strengthScore: 0.032,
-        contestedScore: 0.21
+        contestedScore: 0.21,
+        isLowSample: false
       }
     ]);
   });
@@ -123,7 +124,8 @@ describe("normalizeTierListEntries", () => {
         movement: "DOWN",
         previousTier: "S",
         strengthScore: 0,
-        contestedScore: 0
+        contestedScore: 0,
+        isLowSample: false
       }
     ]);
   });

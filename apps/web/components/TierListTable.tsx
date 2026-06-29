@@ -100,6 +100,7 @@ export function TierListTable({
   const [sortCol, setSortCol] = useState<SortColumn>("rank");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [focusTier, setFocusTier] = useState<TierListFocusTier>("ALL");
+  const [showLowSample, setShowLowSample] = useState(false);
   const [activeTierSection, setActiveTierSection] = useState<UITierGrade>("S");
   const sectionRefs = useRef<Record<UITierGrade, HTMLElement | null>>({
     S: null,
@@ -109,9 +110,18 @@ export function TierListTable({
     D: null
   });
 
+  const lowSampleCount = useMemo(() => entries.filter((entry) => entry.isLowSample).length, [entries]);
+
+  // Hide low-sample champions by default. On thin / early-patch data most champion-role cells fall below the
+  // games floor (capped at B) and bury the few with real signal; the toggle reveals them.
+  const baseEntries = useMemo(
+    () => (showLowSample ? entries : entries.filter((entry) => !entry.isLowSample)),
+    [entries, showLowSample]
+  );
+
   const entriesWithRank = useMemo<RowEntry[]>(
-    () => entries.map((entry, index) => ({ ...entry, rank: index + 1 })),
-    [entries]
+    () => baseEntries.map((entry, index) => ({ ...entry, rank: index + 1 })),
+    [baseEntries]
   );
 
   const filteredEntries = useMemo(
@@ -404,6 +414,18 @@ export function TierListTable({
               Avg WR {formatPercent(summary.averageWinRate, { decimals: 2 })}
             </span>
           ) : null}
+          {lowSampleCount > 0 ? (
+            <Button
+              variant={showLowSample ? "outline" : "ghost"}
+              size="sm"
+              onClick={() => setShowLowSample((value) => !value)}
+              className="ml-1 h-8 px-3"
+              aria-pressed={showLowSample}
+              title="Low-sample champions are below the games floor (capped at B) — hidden by default"
+            >
+              {showLowSample ? "Hide" : "Show"} low-sample ({lowSampleCount})
+            </Button>
+          ) : null}
           <Button
             variant={sortCol === "contestedScore" ? "outline" : "ghost"}
             size="sm"
@@ -424,11 +446,25 @@ export function TierListTable({
 
       {summary.visibleCount === 0 ? (
         <Card className="grid gap-3 p-6">
-          <p className="type-section text-fg">No champions match this view.</p>
-          <p className="type-ui text-muted">Reset the board to bring every tier back into the table.</p>
-          <Button variant="outline" size="sm" onClick={resetView} className="w-fit">
-            Reset board view
-          </Button>
+          {!showLowSample && lowSampleCount > 0 ? (
+            <>
+              <p className="type-section text-fg">Every champion in this view is low-sample.</p>
+              <p className="type-ui text-muted">
+                Not enough games yet for a confident grade. Show them (capped at B) or pick a wider scope.
+              </p>
+              <Button variant="outline" size="sm" onClick={() => setShowLowSample(true)} className="w-fit">
+                Show {lowSampleCount} low-sample
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="type-section text-fg">No champions match this view.</p>
+              <p className="type-ui text-muted">Reset the board to bring every tier back into the table.</p>
+              <Button variant="outline" size="sm" onClick={resetView} className="w-fit">
+                Reset board view
+              </Button>
+            </>
+          )}
         </Card>
       ) : (
         <div className={cn("grid gap-4", showTierRail ? "xl:grid-cols-[180px_minmax(0,1fr)]" : "")}>

@@ -15,6 +15,7 @@ export type UITierListEntry = {
   previousTier: UITierGrade | null;
   strengthScore: number;
   contestedScore: number;
+  isLowSample: boolean;
 };
 
 // The champion's grade for a specific (role, scope) — the SAME grade the tier list shows. Decoded from the
@@ -138,7 +139,8 @@ export function normalizeTierListEntries(
       movement: decodeTierMovement(raw.movement),
       previousTier: decodeTierGrade(raw.previousTier),
       strengthScore: asFiniteNumber(raw.strengthScore, 0),
-      contestedScore: asFiniteNumber(raw.contestedScore, 0)
+      contestedScore: asFiniteNumber(raw.contestedScore, 0),
+      isLowSample: raw.isLowSample === true
     });
   }
 

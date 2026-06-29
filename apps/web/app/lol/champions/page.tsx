@@ -67,7 +67,7 @@ export default async function ChampionsPage({
   // Build a map of championId -> best tier/role/winRate from the tier list
   const tierMap = new Map<
     number,
-    { tier: UITierGrade; role: string; winRate: number; games: number }
+    { tier: UITierGrade | null; role: string; winRate: number; games: number }
   >();
 
   if (tierListRes.ok && tierListRes.body) {
@@ -77,7 +77,8 @@ export default async function ChampionsPage({
       // Keep the entry with the most games (most relevant role)
       if (!existing || entry.games > existing.games) {
         tierMap.set(entry.championId, {
-          tier: entry.tier,
+          // Low-sample champions are below the games floor — show their win rate but no (misleading) grade.
+          tier: entry.isLowSample ? null : entry.tier,
           role: entry.role,
           winRate: entry.winRate,
           games: entry.games

@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 
 import { ParticipantRuneCard } from "@/components/lol-profile/ParticipantRuneCard";
-import { ScoreboardTeamTable } from "@/components/lol-profile/ScoreboardTeamTable";
+import { ScoreboardTeamTable, type ScoreboardDensity } from "@/components/lol-profile/ScoreboardTeamTable";
 import { GoldDiffChart } from "@/components/lol-profile/GoldDiffChart";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { cn } from "@/lib/cn";
+import { deriveMatchTakeaways, type Takeaway, type TakeawayTone } from "@/lib/matchInsights";
 import { roleDisplayLabel } from "@/lib/roles";
 import { championIconUrl } from "@/lib/staticData";
 import { buildLolPublicSummonerMatchTimelinePath } from "@/lib/lolPublicApi";
@@ -81,6 +83,61 @@ function RuneTabCell({
   );
 }
 
+const DENSITY_OPTIONS = [
+  { value: "compact" as const, label: "Compact" },
+  { value: "full" as const, label: "Detailed" }
+];
+
+const TAKEAWAY_TONE_CLASS: Record<TakeawayTone, string> = {
+  good: "text-success",
+  bad: "text-danger",
+  neutral: "text-muted"
+};
+
+function TakeawayIcon({ tone }: { tone: TakeawayTone }) {
+  const className = cn("mt-0.5 h-3.5 w-3.5 shrink-0", TAKEAWAY_TONE_CLASS[tone]);
+  if (tone === "good") {
+    return (
+      <svg viewBox="0 0 16 16" aria-hidden="true" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m3.5 8.5 3 3 6-7" />
+      </svg>
+    );
+  }
+  if (tone === "bad") {
+    return (
+      <svg viewBox="0 0 16 16" aria-hidden="true" className={className} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M8 2 1.5 13.5h13L8 2Z" />
+        <path d="M8 6.25v3.25" />
+        <path d="M8 11.75h.01" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true" className={className} fill="currentColor" stroke="none">
+      <circle cx="8" cy="8" r="2.75" />
+    </svg>
+  );
+}
+
+// Calm, scannable post-game summary — a tone-iconed strip of the most salient
+// facts about the viewing player's game. Renders nothing when there's no signal.
+function MatchTakeaways({ takeaways }: { takeaways: Takeaway[] }) {
+  if (takeaways.length === 0) return null;
+  return (
+    <div className="surface-subtle grid gap-1.5 rounded-control px-3 py-2.5">
+      <p className="type-overline text-muted">Takeaways</p>
+      <ul className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
+        {takeaways.map((takeaway, idx) => (
+          <li key={idx} className="flex items-start gap-1.5">
+            <TakeawayIcon tone={takeaway.tone} />
+            <span className="text-sm leading-snug text-fg/90 tabular-nums">{takeaway.text}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function TeamObjectivesSummary({ team, side }: { team: MatchTeamObjectives | undefined; side: "blue" | "red" }) {
   const items = team
     ? [
@@ -144,6 +201,7 @@ export function MatchScoreboard({
 }) {
   const [tab, setTab] = useState<ScoreboardTab>("overview");
   const [timeline, setTimeline] = useState<MatchTimeline | null>(null);
+  const [density, setDensity] = useState<ScoreboardDensity>("compact");
 
   // Lazy-load the gold/xp-diff curve once the scoreboard mounts (i.e. the match is expanded).
   // Optional decoration — only present for matches with ingested timeline frames.
@@ -173,6 +231,11 @@ export function MatchScoreboard({
   // Normalize damage bars to the whole lobby's top dealer so the carry reads across both teams.
   const matchMaxDamage = Math.max(1, ...participants.map((p) => p.totalDamageDealtToChampions));
   const alignedRows = buildAlignedParticipantRows(participants);
+  // overviewStats isn't threaded into the scoreboard — derive from in-match signal only.
+  const takeaways = useMemo(
+    () => deriveMatchTakeaways({ detail, gameName, tagLine, timeline }),
+    [detail, gameName, tagLine, timeline]
+  );
 
   return (
     <div className="flex flex-col gap-3">
@@ -186,6 +249,7 @@ export function MatchScoreboard({
 
       {tab === "overview" ? (
         <div className="flex flex-col gap-3">
+          <MatchTakeaways takeaways={takeaways} />
           {detail.objectives && detail.objectives.length > 0 ? (
             <ObjectivesStrip objectives={detail.objectives} />
           ) : null}
@@ -195,6 +259,15 @@ export function MatchScoreboard({
               <GoldDiffChart frames={timeline.frames} />
             </div>
           ) : null}
+          <div className="flex items-center justify-end px-1">
+            <SegmentedControl<ScoreboardDensity>
+              options={DENSITY_OPTIONS}
+              value={density}
+              onValueChange={setDensity}
+              ariaLabel="Scoreboard density"
+              className="w-fit"
+            />
+          </div>
           <ScoreboardTeamTable
             participants={blue}
             teamId={100}
@@ -204,6 +277,7 @@ export function MatchScoreboard({
             region={region}
             gameName={gameName}
             tagLine={tagLine}
+            density={density}
             championStatic={championStatic}
             itemStatic={itemStatic}
             spellStatic={spellStatic}
@@ -218,6 +292,7 @@ export function MatchScoreboard({
             region={region}
             gameName={gameName}
             tagLine={tagLine}
+            density={density}
             championStatic={championStatic}
             itemStatic={itemStatic}
             spellStatic={spellStatic}

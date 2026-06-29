@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useReducedMotion } from "framer-motion";
 
 import { MatchHistorySection } from "@/components/lol-profile/MatchHistorySection";
+import { PerformanceCard } from "@/components/lol-profile/PerformanceCard";
 import { ProfileHeroCard } from "@/components/lol-profile/ProfileHeroCard";
 import { ProfileSidebar } from "@/components/lol-profile/ProfileSidebar";
 import {
@@ -468,46 +469,53 @@ export function SummonerProfileClient({
             gameName={gameName}
             tagLine={tagLine}
           />
-          <MatchHistorySection
-            region={region}
-            gameName={gameName}
-            tagLine={tagLine}
-            summonerId={profile.summonerId ?? ""}
-            page={page}
-            queue={queue}
-            championFilter={championFilter}
-            sort={sort}
-            history={history}
-            historyBusy={historyBusy}
-            historyError={historyError}
-            visibleMatches={visibleMatches}
-            queueOptions={queueOptions}
-            championOptions={championOptions}
-            sortOptions={sortOptions}
-            expandedMatchId={expandedMatchId}
-            details={details}
-            detailBusy={detailBusy}
-            championStatic={championStatic}
-            itemStatic={itemStatic}
-            spellStatic={spellStatic}
-            runeStatic={runeStatic}
-            prefersReducedMotion={Boolean(prefersReducedMotion)}
-            onQueueChange={(value) => {
-              setQueue(value);
-              setPage(1);
-            }}
-            onChampionFilterChange={(value) => {
-              setChampionFilter(value);
-              setPage(1);
-            }}
-            onSortChange={(value) => {
-              setSort(value);
-              setPage(1);
-            }}
-            onToggleExpanded={toggleExpanded}
-            onPreviousPage={() => setPage((current) => Math.max(1, current - 1))}
-            onNextPage={() => setPage((current) => current + 1)}
-          />
+          <div className="grid gap-6">
+            <PerformanceCard
+              matches={history?.items ?? []}
+              overviewStats={profile.overviewStats}
+              topChampions={profile.topChampions}
+            />
+            <MatchHistorySection
+              region={region}
+              gameName={gameName}
+              tagLine={tagLine}
+              summonerId={profile.summonerId ?? ""}
+              page={page}
+              queue={queue}
+              championFilter={championFilter}
+              sort={sort}
+              history={history}
+              historyBusy={historyBusy}
+              historyError={historyError}
+              visibleMatches={visibleMatches}
+              queueOptions={queueOptions}
+              championOptions={championOptions}
+              sortOptions={sortOptions}
+              expandedMatchId={expandedMatchId}
+              details={details}
+              detailBusy={detailBusy}
+              championStatic={championStatic}
+              itemStatic={itemStatic}
+              spellStatic={spellStatic}
+              runeStatic={runeStatic}
+              prefersReducedMotion={Boolean(prefersReducedMotion)}
+              onQueueChange={(value) => {
+                setQueue(value);
+                setPage(1);
+              }}
+              onChampionFilterChange={(value) => {
+                setChampionFilter(value);
+                setPage(1);
+              }}
+              onSortChange={(value) => {
+                setSort(value);
+                setPage(1);
+              }}
+              onToggleExpanded={toggleExpanded}
+              onPreviousPage={() => setPage((current) => Math.max(1, current - 1))}
+              onNextPage={() => setPage((current) => current + 1)}
+            />
+          </div>
         </div>
       )}
     </div>

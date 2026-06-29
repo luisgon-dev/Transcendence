@@ -13,7 +13,8 @@ public record ChampionBuildDto(
     List<int> SubRunes,           // 2 runes from sub tree
     List<int> StatShards,         // 3 stat shards
     int Games,                    // Number of games with this exact build
-    double WinRate                // Win rate for this build (0.0 to 1.0)
+    double WinRate,               // Win rate for this build (0.0 to 1.0)
+    double PickRate = 0           // Share of all scoped games on this exact build (0.0 to 1.0)
 );
 
 /// <summary>
@@ -23,7 +24,8 @@ public record SummonerSpellPairDto(
     int Spell1Id,
     int Spell2Id,
     int Games,
-    double WinRate
+    double WinRate,
+    double PickRate = 0
 );
 
 /// <summary>
@@ -32,7 +34,8 @@ public record SummonerSpellPairDto(
 public record StarterItemSetDto(
     List<int> Items,
     int Games,
-    double WinRate
+    double WinRate,
+    double PickRate = 0
 );
 
 /// <summary>
@@ -41,7 +44,8 @@ public record StarterItemSetDto(
 public record ItemChoiceDto(
     int ItemId,
     int Games,
-    double WinRate
+    double WinRate,
+    double PickRate = 0
 );
 
 /// <summary>
@@ -51,7 +55,8 @@ public record CoreItemStepDto(
     int ItemId,
     int Games,
     double WinRate,
-    double AvgCompletionMinute
+    double AvgCompletionMinute,
+    double PickRate = 0
 );
 
 /// <summary>
@@ -135,5 +140,6 @@ public record SkillOrderDto(
     string FirstThree,            // e.g., "QWE" or "QEW"
     string MaxOrder,              // e.g., "Q>E>W"
     int Games = 0,
-    double WinRate = 0
+    double WinRate = 0,
+    double PickRate = 0
 );

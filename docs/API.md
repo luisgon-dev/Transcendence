@@ -182,15 +182,16 @@ Tier methodology (`GET /api/lol/analytics/tierlist`):
 `GET /api/lol/analytics/champions/{championId}/builds` includes full rune setup per build:
 - `primaryStyleId`, `subStyleId`
 - `primaryRunes` (4), `subRunes` (2), `statShards` (3)
+- Each build (and each build-path variant below) carries `games`, `winRate`, and `pickRate`. `pickRate` is the share of scoped games using that variant (0–1): main `builds[]` vs the champion+role+scope total; build-path sections vs their own section denominator. It is additive and defaults to `0` for snapshots computed before the field existed (clients hide a `0` pick rate); real values populate on the next analytics refresh.
 - Build item lists include only completed, build-impact items (no components, trinkets, wards, or consumables).
 - If patch item metadata is temporarily incomplete, the service uses a legacy exclusion fallback so builds still render while metadata refresh catches up.
 - The response also carries a sectioned, timeline-derived build path (all optional — `null`/empty when timeline data has not been ingested for the champion/patch):
-  - `summonerSpells[]` — top normalized spell pairs with `games`/`winRate`
-  - `skillOrder` — `{ firstThree, maxOrder, games, winRate }` (e.g. `firstThree: "QWE"`, `maxOrder: "Q>E>W"`)
-  - `startingItems[]` — top opening item sets with `games`/`winRate`
-  - `boots[]` — boots options with `games`/`winRate`
-  - `coreBuildPath[]` — the ordered 1st→2nd→3rd core items, each with `games`, `winRate`, and `avgCompletionMinute`
-  - `situationalSlots[]` — 4th/5th/6th slots, each with the top item `options[]`
+  - `summonerSpells[]` — top normalized spell pairs with `games`/`winRate`/`pickRate`
+  - `skillOrder` — `{ firstThree, maxOrder, games, winRate, pickRate }` (e.g. `firstThree: "QWE"`, `maxOrder: "Q>E>W"`)
+  - `startingItems[]` — top opening item sets with `games`/`winRate`/`pickRate`
+  - `boots[]` — boots options with `games`/`winRate`/`pickRate`
+  - `coreBuildPath[]` — the ordered 1st→2nd→3rd core items, each with `games`, `winRate`, `pickRate`, and `avgCompletionMinute`
+  - `situationalSlots[]` — 4th/5th/6th slots, each with the top item `options[]` (each option carries `games`/`winRate`/`pickRate`)
 - These sections degrade gracefully: champions/patches without ingested timeline build data return the existing build rows with the new fields null.
 
 `GET /api/lol/analytics/champions/{championId}/profile` returns the champion detail payload in one request:

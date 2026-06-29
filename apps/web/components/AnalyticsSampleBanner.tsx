@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { cn } from "@/lib/cn";
 import {
   analyticsSampleCoveragePercent,
   analyticsSampleShortfall,
@@ -9,9 +10,20 @@ import {
 
 type AnalyticsSampleBannerProps = {
   sample: AnalyticsSampleLike;
+  /**
+   * "card" (default) is the full Card readout. "strip" is a condensed single-line
+   * row of the same badges + chips, for a page to dock/stick above its content.
+   */
+  variant?: "card" | "strip";
+  /** Passthrough so the page can position the banner (e.g. sticky), unset by default. */
+  className?: string;
 };
 
-export function AnalyticsSampleBanner({ sample }: AnalyticsSampleBannerProps) {
+export function AnalyticsSampleBanner({
+  sample,
+  variant = "card",
+  className
+}: AnalyticsSampleBannerProps) {
   const normalized = normalizeAnalyticsSample(sample);
   if (!normalized) return null;
 
@@ -55,8 +67,33 @@ export function AnalyticsSampleBanner({ sample }: AnalyticsSampleBannerProps) {
           ? "Patch maturing"
           : "Patch stable";
 
+  const chips = (
+    <>
+      <span className="surface-chip rounded-full px-3 py-1.5 text-xs text-fg/72">
+        {normalized.sampleSize} games
+      </span>
+      <span className="surface-chip rounded-full px-3 py-1.5 text-xs text-fg/72">
+        {patchAgeLabel}
+      </span>
+      <span className="surface-chip rounded-full px-3 py-1.5 text-xs text-fg/72">
+        {coverage}% of target
+      </span>
+    </>
+  );
+
+  if (variant === "strip") {
+    return (
+      <div className={cn("flex flex-wrap items-center gap-2", className)}>
+        <Badge className={tone.badge}>{tone.kicker}</Badge>
+        <Badge>{phaseLabel}</Badge>
+        <span className="hidden type-ui text-fg/75 sm:inline">{tone.summary}</span>
+        <div className="ml-auto flex flex-wrap items-center gap-2">{chips}</div>
+      </div>
+    );
+  }
+
   return (
-    <Card className={`overflow-hidden px-4 py-3 md:px-4 md:py-3.5 ${tone.card}`}>
+    <Card className={cn("overflow-hidden px-4 py-3 md:px-4 md:py-3.5", tone.card, className)}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -66,17 +103,7 @@ export function AnalyticsSampleBanner({ sample }: AnalyticsSampleBannerProps) {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="surface-chip rounded-full px-3 py-1.5 text-xs text-fg/72">
-            {normalized.sampleSize} games
-          </span>
-          <span className="surface-chip rounded-full px-3 py-1.5 text-xs text-fg/72">
-            {patchAgeLabel}
-          </span>
-          <span className="surface-chip rounded-full px-3 py-1.5 text-xs text-fg/72">
-            {coverage}% of target
-          </span>
-        </div>
+        <div className="flex flex-wrap items-center gap-2">{chips}</div>
       </div>
     </Card>
   );

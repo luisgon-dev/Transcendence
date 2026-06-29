@@ -8,6 +8,7 @@ import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { BuildBreakdown } from "@/components/BuildBreakdown";
 import { ChampionPortrait } from "@/components/ChampionPortrait";
 import { FilterBar } from "@/components/FilterBar";
+import { MatchupsTable, type MatchupRow } from "@/components/MatchupsTable";
 import { ItemBuildDisplay } from "@/components/ItemBuildDisplay";
 import { RuneTreeDisplay } from "@/components/RuneTreeDisplay";
 import { StatsBar } from "@/components/StatsBar";
@@ -17,6 +18,7 @@ import { WinRateText } from "@/components/WinRateText";
 import { Card } from "@/components/ui/Card";
 import { DataBar } from "@/components/ui/DataBar";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { pickMostSevereAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyticsSample";
@@ -33,6 +35,7 @@ import {
   fetchRunesReforged,
   fetchSummonerSpellMap
 } from "@/lib/staticData";
+import { formatEbStory } from "@/lib/confidence";
 import { decodeGrade, formatStrengthDelta } from "@/lib/tierlist";
 
 type ChampionWinRateDto = components["schemas"]["ChampionWinRateDto"];
@@ -262,18 +265,28 @@ async function ChampionHeroMeta({
     <>
       <div className="flex flex-wrap items-center gap-2">
         {heroTier ? (
-          <span className="flex items-center gap-2">
-            <TierBadge tier={heroTier} size="md" />
-            {heroGrade ? (
-              <span
-                className="type-tabular tabular-nums text-xs text-muted"
-                title="Win rate vs the role average — the value the tier is based on"
-              >
-                {formatStrengthDelta(heroGrade.strengthScore)}
-                {heroGrade.isLowSample ? " · low sample" : ""}
+          heroGrade ? (
+            <Tooltip
+              content={formatEbStory({
+                winRate: heroGrade.winRate,
+                roleBaseline: heroGrade.roleBaseline,
+                strengthScore: heroGrade.strengthScore,
+                games: heroGrade.games
+              })}
+            >
+              <span className="flex items-center gap-2">
+                <TierBadge tier={heroTier} size="md" />
+                <span className="type-tabular tabular-nums text-xs text-muted">
+                  {formatStrengthDelta(heroGrade.strengthScore)}
+                  {heroGrade.isLowSample ? " · low sample" : ""}
+                </span>
               </span>
-            ) : null}
-          </span>
+            </Tooltip>
+          ) : (
+            <span className="flex items-center gap-2">
+              <TierBadge tier={heroTier} size="md" />
+            </span>
+          )
         ) : (
           <span className="rounded-control border border-border/60 px-2 py-1 text-xs font-medium text-muted">
             Unrated
@@ -410,25 +423,28 @@ async function ChampionSections({
   const globalCoreItems = builds?.globalCoreItems ?? [];
   const counters = matchups?.counters ?? [];
   const favorableMatchups = matchups?.favorableMatchups ?? [];
-  const matchupSortKey = searchParams.sort === "games" ? "games" : "winRate";
+  // Confidence threshold for build variants (omit -> Confidence falls back to DEFAULT_MIN_GAMES).
+  const buildMinGames = builds?.sample?.minimumRecommendedSampleSize;
   const allMatchups = [...counters, ...favorableMatchups]
     .filter((m): m is MatchupEntryDto => Boolean(m?.opponentChampionId))
     .filter(
       (entry, idx, rows) =>
         rows.findIndex((candidate) => candidate.opponentChampionId === entry.opponentChampionId) === idx
     )
-    .sort((a, b) =>
-      matchupSortKey === "games"
-        ? (b.games ?? 0) - (a.games ?? 0)
-        : (a.winRate ?? 0) - (b.winRate ?? 0)
-    );
-  const buildMatchupSortHref = (sort: string) => {
-    const sortParams = new URLSearchParams({ role: effectiveRole, sort });
-    if (normalizedRankTier) sortParams.set("rankTier", normalizedRankTier);
-    if (activeRegion !== "ALL") sortParams.set("region", activeRegion);
-    if (selectedPatch) sortParams.set("patch", selectedPatch);
-    return `/lol/champions/${championId}?${sortParams.toString()}#matchups`;
-  };
+    // Default order: toughest first (ascending win rate). The table re-sorts client-side from here.
+    .sort((a, b) => (a.winRate ?? 0) - (b.winRate ?? 0));
+  const matchupRows: MatchupRow[] = allMatchups.map((entry) => {
+    const opponentId = entry.opponentChampionId ?? 0;
+    const opponent = champions[String(opponentId)];
+    return {
+      opponentChampionId: opponentId,
+      winRate: entry.winRate ?? null,
+      games: entry.games ?? null,
+      opponentSlug: opponent?.id ?? "Unknown",
+      opponentName: opponent?.name ?? `Champion ${opponentId}`,
+      verdict: matchupVerdict(entry.winRate)
+    };
+  });
   const linkParams = new URLSearchParams();
   if (normalizedRankTier) linkParams.set("rankTier", normalizedRankTier);
   if (activeRegion !== "ALL") linkParams.set("region", activeRegion);
@@ -518,6 +534,7 @@ async function ChampionSections({
                 items={items}
                 spellVersion={spellStatic.version}
                 spells={spellStatic.spells}
+                minGames={buildMinGames}
               />
 
               {/* Global Core Items */}
@@ -624,9 +641,7 @@ async function ChampionSections({
                               className="min-w-0"
                             />
                           </Link>
-                          <span className="shrink-0">
-                            <DataBar value={m.winRate} decimals={1} />
-                          </span>
+                          <DataBar value={m.winRate} decimals={1} games={m.games} className="shrink-0 justify-end" />
                         </li>
                       );
                     })}
@@ -669,9 +684,7 @@ async function ChampionSections({
                               className="min-w-0"
                             />
                           </Link>
-                          <span className="shrink-0">
-                            <DataBar value={m.winRate} decimals={1} />
-                          </span>
+                          <DataBar value={m.winRate} decimals={1} games={m.games} className="shrink-0 justify-end" />
                         </li>
                       );
                     })}
@@ -685,90 +698,13 @@ async function ChampionSections({
 
       {/* ── All Matchups (full table) ── */}
       <Card className="p-5" id="matchups">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="type-section">All Matchups</h2>
-            <p className="mt-1 text-xs text-muted">
-              Lane matchups for {champName} as {roleDisplayLabel(effectiveRole)}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 text-xs">
-            <Link
-              href={buildMatchupSortHref("winRate")}
-              scroll={false}
-              className="control-tab type-ui px-3 py-2"
-              data-active={matchupSortKey === "winRate"}
-            >
-              Sort by Win Rate
-            </Link>
-            <Link
-              href={buildMatchupSortHref("games")}
-              scroll={false}
-              className="control-tab type-ui px-3 py-2"
-              data-active={matchupSortKey === "games"}
-            >
-              Sort by Games
-            </Link>
-          </div>
-        </div>
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[640px] text-left text-sm">
-            <thead className="type-overline text-muted">
-              <tr className="border-b border-border/30">
-                <th className="py-2 pr-4">Opponent</th>
-                <th className="py-2 pr-4 text-right">Win Rate</th>
-                <th className="py-2 pr-4 text-right">Games</th>
-                <th className="py-2 pr-4 text-right">Verdict</th>
-              </tr>
-            </thead>
-            <tbody>
-              {allMatchups.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="py-4 text-sm text-muted">
-                    No matchup data is available for the selected filters yet.
-                  </td>
-                </tr>
-              ) : (
-                allMatchups.map((entry, idx) => {
-                  const opponentId = entry.opponentChampionId ?? 0;
-                  const opponent = champions[String(opponentId)];
-                  const verdict = matchupVerdict(entry.winRate);
-                  const verdictClass =
-                    verdict === "Favored"
-                      ? "text-win"
-                      : verdict === "Unfavored"
-                        ? "text-loss"
-                        : "text-muted";
-                  return (
-                    <tr key={`${opponentId}-${idx}`} className="border-b border-border/40 transition hover:bg-surface-2/40">
-                      <td className="py-2.5 pr-4">
-                        <Link
-                          href={`/lol/champions/${opponentId}${linkQuery ? `?${linkQuery}` : ""}`}
-                          className="hover:underline"
-                        >
-                          <ChampionPortrait
-                            championSlug={opponent?.id ?? "Unknown"}
-                            championName={opponent?.name ?? `Champion ${opponentId}`}
-                            version={version}
-                            size={24}
-                            showName
-                          />
-                        </Link>
-                      </td>
-                      <td className="py-2.5 pr-4 text-right">
-                        <DataBar value={entry.winRate} decimals={1} className="justify-end" />
-                      </td>
-                      <td className="type-tabular py-2.5 pr-4 text-right tabular-nums text-fg/70">
-                        {formatGames(entry.games)}
-                      </td>
-                      <td className={`py-2.5 pr-4 text-right font-medium ${verdictClass}`}>{verdict}</td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+        <MatchupsTable
+          title="All Matchups"
+          subtitle={`Lane matchups for ${champName} as ${roleDisplayLabel(effectiveRole)}`}
+          rows={matchupRows}
+          version={version}
+          linkQuery={linkQuery}
+        />
       </Card>
     </>
   );

@@ -180,6 +180,12 @@ export function championIconUrl(version: string, champId: string) {
   return `https://ddragon.leagueoflegends.com/cdn/${version}/img/champion/${champId}.png`;
 }
 
+// CommunityDragon champion square keyed by NUMERIC champion id — for places that
+// only have the id (e.g. live-game scouting) without the ddragon slug map loaded.
+export function championSquareIconUrlById(championId: number) {
+  return `https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/${championId}.png`;
+}
+
 export function profileIconUrl(version: string, profileIconId: number) {
   return `https://ddragon.leagueoflegends.com/cdn/${version}/img/profileicon/${profileIconId}.png`;
 }

@@ -6,15 +6,15 @@ product
 
 ## Users
 
-**Primary: competitive climbers.** Players grinding ranked who come for tier lists, matchups, and optimal builds. They need data that is fast, fresh, well-sampled, and statistically honest, because they make in-game decisions on it. They arrive with intent and a specific question ("is this matchup winnable", "what's the optimal build into this comp") and want the answer immediately, with drill-down available when they want to verify or go deeper.
+**Primary: competitive climbers.** Players grinding ranked who come for tier lists, matchups, and optimal builds. They need data that is fast, fresh, well-sampled, and statistically honest, because they make in-game decisions on it. They arrive with intent and a specific question ("is this matchup winnable", "what's the optimal build into this matchup") and want the answer immediately, with drill-down available when they want to verify or go deeper.
 
-**Secondary: casual players.** They browse profiles, check post-game stats, and explore champions and comps. The surface must stay approachable for them, never overwhelming, but their needs do not set the center of gravity. When a tradeoff pits casual approachability against competitive trust or density, competitive wins.
+**Secondary: casual players.** They browse profiles, check post-game stats, and explore champions and builds. The surface must stay approachable for them, never overwhelming, but their needs do not set the center of gravity. When a tradeoff pits casual approachability against competitive trust or density, competitive wins.
 
-Both groups span LoL and TFT. The interface uses progressive depth: a surface-level answer is immediate, with layered drill-down for those who want it.
+The interface uses progressive depth: a surface-level answer is immediate, with layered drill-down for those who want it.
 
 ## Product Purpose
 
-Transcendence is a League of Legends and TFT analytics platform. It turns a large, continuously ingested match corpus into trustworthy, fast answers about champions, comps, matchups, and builds.
+Transcendence is a League of Legends analytics platform. It turns a large, continuously ingested match corpus into trustworthy, fast answers about champions, matchups, builds, and tier lists.
 
 **Success = trust through data quality.** The product wins when competitive players believe the numbers: that samples are large enough to matter, that data reflects the current patch, that win rates and tiers are computed honestly (empirical-Bayes shrinkage, sample gating, an explicit confidence layer rather than raw small-n noise). Speed and breadth serve that trust; they do not substitute for it. A fast wrong answer is a failure.
 

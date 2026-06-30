@@ -1,20 +1,14 @@
 import Link from "next/link";
 
 import { Card } from "@/components/ui/Card";
-import { TFT_FRONTEND_ENABLED } from "@/lib/featureFlags";
 
 const suggestions = [
   { href: "/lol/tierlist", label: "LoL Tier List" },
   { href: "/lol/champions", label: "Champions" },
-  { href: "/lol/pro-builds", label: "Pro Builds" },
-  { href: "/tft/comps", label: "TFT Comps", tft: true }
+  { href: "/lol/pro-builds", label: "Pro Builds" }
 ];
 
 export default function NotFound() {
-  const visibleSuggestions = suggestions.filter((suggestion) =>
-    suggestion.tft ? TFT_FRONTEND_ENABLED : true
-  );
-
   return (
     <div className="empty-state-shell">
       <section className="page-hero w-full max-w-4xl p-6 sm:p-8">
@@ -54,7 +48,7 @@ export default function NotFound() {
 
             <nav>
               <ul className="grid gap-2.5">
-                {visibleSuggestions.map((suggestion) => (
+                {suggestions.map((suggestion) => (
                   <li key={suggestion.href}>
                     <Link
                       href={suggestion.href}

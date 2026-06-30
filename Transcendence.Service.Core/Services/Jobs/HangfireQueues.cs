@@ -2,7 +2,7 @@ namespace Transcendence.Service.Core.Services.Jobs;
 
 /// <summary>
 /// Hangfire queue names. Most queues are referenced as inline literals at the worker host
-/// (<c>refresh-high</c>/<c>default</c>/<c>refresh-low</c> and their <c>tft-*</c> peers); this
+/// (<c>refresh-high</c>/<c>default</c>/<c>refresh-low</c>); this
 /// constant exists because the reserved analytics lane is referenced from several places
 /// (the dedicated <c>AddHangfireServer</c> registration plus the jobs' <c>[Queue]</c> attributes)
 /// and must not drift.

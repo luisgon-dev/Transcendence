@@ -1,6 +1,6 @@
 ---
 name: Transcendence
-description: A flat command-deck for League of Legends and TFT analytics. Data is the hero; red lights the controls.
+description: A flat command-deck for League of Legends analytics. Data is the hero; red lights the controls.
 colors:
   bg: "oklch(0.985 0.003 255)"
   surface: "oklch(0.997 0.002 255)"
@@ -99,7 +99,7 @@ components:
 
 **Creative North Star: "The Command Deck"**
 
-Transcendence is a flat, lit instrument panel for League of Legends and TFT data. Every surface is a readout. The interface reads like a high-tech command deck: layered solid surfaces, hairline borders, and a barely-perceptible atmospheric wash, with a single red accent that lights only the controls a player can act on. It earns trust through craft and information density, not flash. Immersive enough to feel premium, restrained enough to stay out of the data's way.
+Transcendence is a flat, lit instrument panel for League of Legends data. Every surface is a readout. The interface reads like a high-tech command deck: layered solid surfaces, hairline borders, and a barely-perceptible atmospheric wash, with a single red accent that lights only the controls a player can act on. It earns trust through craft and information density, not flash. Immersive enough to feel premium, restrained enough to stay out of the data's way.
 
 The system is built for competitive climbers first. They make in-game decisions on these numbers, so the design's job is to make data fast to read and honest about its own certainty. Color is not decoration here: it is a data channel. Win rates render as diverging bars centered on 50%, tiers carry a categorical S→D scale, ranks carry an iron→challenger scale, and a confidence meter signals sample strength. When something wears the vivid action red, it is a control you can act on; when something is green or a muted red, it is a measured outcome (a win, a loss, a low win rate). The two reds are kept deliberately apart (see the Named Rules). Nothing is colored to look nice.
 

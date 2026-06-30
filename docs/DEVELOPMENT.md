@@ -20,10 +20,9 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Compose reads local backend credentials from the repo-root [`.env.example`](../.env.example). Copy it to an untracked `.env` before first run. The current Riot key variables are:
+Compose reads local backend credentials from the repo-root [`.env.example`](../.env.example). Copy it to an untracked `.env` before first run. The current Riot key variable is:
 
 - `RIOT_API_KEY_LOL`
-- `RIOT_API_KEY_TFT`
 
 2. Install JS dependencies:
 
@@ -70,7 +69,7 @@ API health:
 
 ## Local E2E Workflows
 
-Use full Compose when you want the simplest end-to-end path and you need the worker running for LoL/TFT refresh flows:
+Use full Compose when you want the simplest end-to-end path and you need the worker running for LoL refresh flows:
 
 ```bash
 cp .env.example .env
@@ -94,7 +93,7 @@ pnpm e2e:local
 ```
 
 Rule of thumb:
-- Use `pnpm e2e:stack` for true local E2E and TFT/worker verification.
+- Use `pnpm e2e:stack` for true local E2E and worker verification.
 - Use the hybrid mode for day-to-day UI changes when you want faster frontend rebuilds.
 
 ## Run Without Docker (Backend)
@@ -125,7 +124,6 @@ Security notes:
 dotnet user-secrets set "ConnectionStrings:MainDatabase" "Host=localhost;Port=5432;Database=transcendence;Username=postgres;Password=changme" --project Transcendence.Service
 dotnet user-secrets set "ConnectionStrings:Redis" "localhost:6379" --project Transcendence.Service
 dotnet user-secrets set "RiotApi:League:ApiKey" "RGAPI-your-lol-key" --project Transcendence.Service
-dotnet user-secrets set "RiotApi:Tft:ApiKey" "RGAPI-your-tft-key" --project Transcendence.Service
 ```
 
 Local defaults:
@@ -134,9 +132,8 @@ Local defaults:
 - User-secrets remain the recommended override for local credentials and Riot keys.
 
 Riot API key model:
-- Only `Transcendence.Service` resolves Riot keys from the canonical nested settings:
+- Only `Transcendence.Service` resolves the Riot key from the canonical nested setting:
   - `RiotApi:League:ApiKey`
-  - `RiotApi:Tft:ApiKey`
 - The legacy `ConnectionStrings:RiotApi` setting is no longer used.
 
 ### Database migrations
@@ -210,38 +207,6 @@ dotnet run --project Transcendence.WebAPI
 dotnet run --project Transcendence.Service
 ```
 
-### TFT Local Smoke Test
-
-After the migration is applied and both hosts are running:
-
-1. Verify static-data warmup:
-
-```bash
-curl http://localhost:8080/api/tft/analytics/champions
-```
-
-2. Queue a TFT refresh for a known Riot ID:
-
-```bash
-curl -X POST http://localhost:8080/api/tft/summoners/na1/<gameName>/<tagLine>/refresh
-```
-
-3. Poll until the stored profile becomes available:
-
-```bash
-curl http://localhost:8080/api/tft/summoners/na1/<gameName>/<tagLine>
-```
-
-4. Verify the web surfaces:
-- `/tft`
-- `/tft/comps`
-- `/tft/summoners/na/<gameName>-<tagLine>`
-
-Notes:
-- TFT analytics catalog/detail endpoints serve the active set only.
-- The worker must have a valid `RiotApi:Tft:ApiKey` for TFT refresh/bootstrap to succeed.
-- Static-data refresh pulls from CommunityDragon, so the local machine must have outbound access to `raw.communitydragon.org`.
-
 Admin web UI runs in `apps/web` under `/admin` and requires an authenticated user with `admin` role.
 Admin diagnostics include:
 - `/admin` for worker/server status, database + analysis metrics, and top backlog groups
@@ -275,10 +240,9 @@ The admin logs API scans the live file plus rotated `*.log.N` archives and repor
 The logger provider now pre-creates the target `*.log` file and writes a one-time stderr warning if the process cannot create or append the file. In container deployments, that warning appears in the container's stdout/stderr stream and is the first place to check when `service.log` is missing.
 
 Compose env contract:
-- [`compose.yml`](../compose.yml) injects Riot keys with `RiotApi__League__ApiKey` and `RiotApi__Tft__ApiKey`.
-- The repo-root [`.env.example`](../.env.example) uses matching variables:
+- [`compose.yml`](../compose.yml) injects the Riot key with `RiotApi__League__ApiKey`.
+- The repo-root [`.env.example`](../.env.example) uses the matching variable:
   - `RIOT_API_KEY_LOL`
-  - `RIOT_API_KEY_TFT`
 
 ## Web Commands
 
@@ -343,7 +307,7 @@ Which recurring jobs are active is determined by:
 - the per-job `Enable*` flags under `Jobs:Schedule` (for example `EnableChampionAnalyticsIngestion`, `EnableMatchTimelineBackfill`), and
 - the resolved **scheduling profile** (`Jobs:Schedule:Profile`, falling back to `DefaultProfile`, default `stable`), whose `Jobs:SchedulingProfiles:Profiles:<name>:JobOverrides` can flip a job's `Enabled`/`Cron`/`MandatoryBaseline`. Profile overrides win over the descriptor defaults, and `poll-live-games` is disabled by default.
 
-The base `appsettings.json` ships `Jobs:Schedule:Profile = "stable"` (there is no `appsettings.Development.json`), so a local worker resolves the **same `stable` profile as production** unless you override `Jobs:Schedule:Profile` (or individual `Enable*` / `JobOverrides` values) via user-secrets or environment variables. Under `stable` the enabled jobs are the LoL analytics-coverage set (adaptive analytics refresh, champion-analytics ingestion, summoner maintenance — each a single self-pacing job that tightens cadence during the new-patch ramp window — plus match-timeline backfill and high-elo profile refresh), the full TFT set (`tft-static-data-refresh`, `tft-analytics-refresh`, `tft-analytics-ingestion`, `tft-summoner-maintenance`), plus the baseline jobs (`detect-patch`, `retry-failed-matches`, `refresh-lock-lifecycle-cleanup`); `poll-live-games`, `rune-selection-integrity-backfill`, and the daily `refresh-champion-analytics` are disabled. The TFT analytics jobs were enabled in the `stable` profile when the TFT frontend went live; they run on the isolated `tft-*` queues using the separate `RiotApi:Tft:ApiKey`, so TFT demand never competes with LoL refresh throughput. TFT comps and player profiles stay empty until these jobs have ingested data, which requires a valid TFT Riot key and some ramp-up time after deploy.
+The base `appsettings.json` ships `Jobs:Schedule:Profile = "stable"` (there is no `appsettings.Development.json`), so a local worker resolves the **same `stable` profile as production** unless you override `Jobs:Schedule:Profile` (or individual `Enable*` / `JobOverrides` values) via user-secrets or environment variables. Under `stable` the enabled jobs are the LoL analytics-coverage set (adaptive analytics refresh, champion-analytics ingestion, summoner maintenance — each a single self-pacing job that tightens cadence during the new-patch ramp window — plus match-timeline backfill and high-elo profile refresh), plus the baseline jobs (`detect-patch`, `retry-failed-matches`, `refresh-lock-lifecycle-cleanup`); `poll-live-games`, `rune-selection-integrity-backfill`, and the daily `refresh-champion-analytics` are disabled.
 
 `DevelopmentWorker`'s only environment-specific startup actions are: removing legacy/invalid recurring jobs (old `cache-warmup*` ids), an optional full Hangfire purge when `Jobs:Schedule:CleanupOnStartup=true` (default `false`), and a startup integrity check that fail-fasts on mandatory-baseline job failures. It does **not** run the production startup bootstrap described below.
 
@@ -452,34 +416,6 @@ Non-ranked backfill ordering is tracked per summoner with `SummonerIngestionCurs
 - `RampDataStaleAfterMinutes`
 
 This recurring job refreshes stale summoners in low-priority mode when no active high-priority API refresh lock exists.
-
-### TFT Worker Jobs
-
-`Jobs:Schedule` now also supports dedicated TFT recurring jobs:
-
-- `TftStaticDataCron`
-- `TftAnalyticsRefreshCron`
-- `TftAnalyticsIngestionCron`
-- `TftSummonerMaintenanceCron`
-- `EnableTftStaticDataRefresh`
-- `EnableTftAnalyticsRefresh`
-- `EnableTftAnalyticsIngestion`
-- `EnableTftSummonerMaintenance`
-
-Queue model:
-- TFT profile refresh: `tft-refresh-high`
-- TFT analytics/static-data work: `tft-default`
-- TFT maintenance/bootstrap work: `tft-refresh-low`
-
-All four TFT recurring jobs are enabled under the `stable` profile (see the scheduling-profile section above) now that the TFT web surface is live.
-
-Static-data behavior:
-- TFT champion/item/trait/augment catalog endpoints read only the currently active set.
-- If a TFT static-data refresh fails while previously stored static data exists, the worker logs the failure and continues serving the stored active-set catalog.
-
-### TFT web surface
-
-The TFT frontend (`/tft/*`) is gated by `TFT_FRONTEND_ENABLED` in `apps/web/lib/featureFlags.ts` (now `true`). With the flag on, the header game switcher, command palette, landing page, and `/tft` routes are all live. Catalog pages (units/items/traits/augments) render from the active-set static data immediately; the comps tier list and player profiles populate only once the TFT analytics/ingestion jobs above have run against a valid TFT Riot key.
 
 ### Refresh Lock Lifecycle Cleanup and Telemetry
 

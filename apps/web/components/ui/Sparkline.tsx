@@ -14,7 +14,7 @@ export function Sparkline({
   width?: number;
   height?: number;
   className?: string;
-  /** Set when lower is better (e.g. TFT placement). */
+  /** Set when lower is better (e.g. a placement where 1st is best). */
   invert?: boolean;
 }) {
   const clean = values.filter((v) => Number.isFinite(v));

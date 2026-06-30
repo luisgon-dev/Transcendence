@@ -29,7 +29,6 @@ using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Extensions;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Priority;
-using Transcendence.Service.Core.Services.Tft.Configuration;
 using Transcendence.WebAPI.Errors;
 using Transcendence.WebAPI.Security;
 
@@ -210,7 +209,6 @@ builder.Services.AddTranscendenceCore();
 builder.Services.AddProjectSyndraRepositories();
 builder.Services.Configure<ChampionAnalyticsComputeOptions>(builder.Configuration.GetSection("Analytics:Compute"));
 builder.Services.Configure<TieringOptions>(builder.Configuration.GetSection("Analytics:Tiering"));
-builder.Services.Configure<TftAnalyticsComputeOptions>(builder.Configuration.GetSection("Analytics:TftCompute"));
 builder.Services.Configure<ChampionAnalyticsIngestionJobOptions>(
     builder.Configuration.GetSection("Jobs:ChampionAnalyticsIngestion"));
 builder.Services.Configure<MultiRegionIngestionOptions>(builder.Configuration.GetSection("Jobs:MultiRegionIngestion"));

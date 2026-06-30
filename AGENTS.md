@@ -51,7 +51,6 @@ Monorepo with a **.NET backend** (WebAPI + Hangfire Worker) and a **Next.js fron
 
 **Patterns:**
 
-- **Game surface isolation** — each game (`/lol/*`, `/tft/*`) has its own entities, services, caches, and Hangfire job queues under separate namespaces.
 - **BFF proxy** — Next.js proxies API requests to the backend; auth tokens live in HttpOnly cookies.
 - **Summoner refresh flow** — client gets `202 Accepted` → backend enqueues refresh job → worker fetches from Riot API → client polls until `200 OK`.
 - **Tech stack** — PostgreSQL 16, Redis 7, Hangfire (job processing), HybridCache (L1 in-memory + L2 Redis).
@@ -104,7 +103,6 @@ When working on **frontend-only changes** (no backend modifications), use the li
 
 Test summoner for verification: `Kronic#NA1` (region: NA)
 - LoL profile: `https://transcend.kronic.one/lol/summoners/na/Kronic-NA1`
-- TFT profile: `https://transcend.kronic.one/tft/summoners/na/Kronic-NA1`
 
 ## EF Migration Policy (Required)
 

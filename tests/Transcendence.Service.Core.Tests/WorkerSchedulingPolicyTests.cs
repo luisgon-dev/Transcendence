@@ -124,26 +124,6 @@ public class WorkerSchedulingPolicyTests
     }
 
     [Fact]
-    public void BuildDescriptors_DefaultProfile_RegistersTftRecurringJobs()
-    {
-        var policy = CreatePolicyWithDevelopmentOverrides(new WorkerSchedulingProfileDefinition());
-        var schedule = new WorkerJobScheduleOptions
-        {
-            EnableTftStaticDataRefresh = true,
-            EnableTftAnalyticsRefresh = true,
-            EnableTftAnalyticsIngestion = true,
-            EnableTftSummonerMaintenance = true
-        };
-
-        var descriptors = policy.BuildDescriptors(schedule);
-
-        descriptors.Should().Contain(descriptor => descriptor.JobId == WorkerRecurringJobPolicy.TftStaticDataJobId && descriptor.IsEnabled);
-        descriptors.Should().Contain(descriptor => descriptor.JobId == WorkerRecurringJobPolicy.TftAnalyticsRefreshJobId && descriptor.IsEnabled);
-        descriptors.Should().Contain(descriptor => descriptor.JobId == WorkerRecurringJobPolicy.TftAnalyticsIngestionJobId && descriptor.IsEnabled);
-        descriptors.Should().Contain(descriptor => descriptor.JobId == WorkerRecurringJobPolicy.TftSummonerMaintenanceJobId && descriptor.IsEnabled);
-    }
-
-    [Fact]
     public void BuildDescriptors_StableProfile_EnablesCoverageFirstAnalyticsJobs()
     {
         var policy = new WorkerRecurringJobPolicy(Options.Create(new WorkerSchedulingProfileOptions
@@ -161,10 +141,7 @@ public class WorkerSchedulingPolicyTests
                         [WorkerRecurringJobPolicy.MatchTimelineBackfillJobId] = new() { Enabled = true, Cron = "0 * * * *" },
                         [WorkerRecurringJobPolicy.RuneSelectionIntegrityBackfillJobId] = new() { Enabled = false },
                         [WorkerRecurringJobPolicy.PollLiveGamesJobId] = new() { Enabled = false },
-                        [WorkerRecurringJobPolicy.HighEloProfileRefreshJobId] = new() { Enabled = true, Cron = "0 */2 * * *" },
-                        [WorkerRecurringJobPolicy.TftAnalyticsRefreshJobId] = new() { Enabled = false },
-                        [WorkerRecurringJobPolicy.TftAnalyticsIngestionJobId] = new() { Enabled = false },
-                        [WorkerRecurringJobPolicy.TftSummonerMaintenanceJobId] = new() { Enabled = false }
+                        [WorkerRecurringJobPolicy.HighEloProfileRefreshJobId] = new() { Enabled = true, Cron = "0 */2 * * *" }
                     }
                 }
             }
@@ -182,7 +159,6 @@ public class WorkerSchedulingPolicyTests
         descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.RetryFailedMatchesJobId && x.IsEnabled && x.IsMandatoryBaseline);
         descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.ChampionAnalyticsIngestionJobId && x.IsEnabled && x.IsMandatoryBaseline);
         descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.RefreshLockLifecycleCleanupJobId && x.IsEnabled && x.IsMandatoryBaseline);
-        descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.TftStaticDataJobId && x.IsEnabled && x.IsMandatoryBaseline);
 
         descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.RefreshChampionAnalyticsJobId && !x.IsEnabled);
         descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.RefreshChampionAnalyticsAdaptiveJobId && x.IsEnabled && x.CronExpression == "*/5 * * * *");
@@ -191,7 +167,6 @@ public class WorkerSchedulingPolicyTests
         descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.MatchTimelineBackfillJobId && x.IsEnabled && x.CronExpression == "0 * * * *");
         descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.HighEloProfileRefreshJobId && x.IsEnabled && x.CronExpression == "0 */2 * * *");
         descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.PollLiveGamesJobId && !x.IsEnabled);
-        descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.TftAnalyticsRefreshJobId && !x.IsEnabled);
     }
 
     private static WorkerRecurringJobPolicy CreatePolicyWithDevelopmentOverrides(

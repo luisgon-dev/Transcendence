@@ -4,7 +4,6 @@ x-app-env: &app-env
   ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
   ConnectionStrings__Redis: ${REDIS_CONNECTION}
   RiotApi__League__ApiKey: ${RIOT_API_KEY_LOL}
-  RiotApi__Tft__ApiKey: ${RIOT_API_KEY_TFT}
 
 services:
   postgres:

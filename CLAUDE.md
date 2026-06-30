@@ -1,6 +1,6 @@
 # Transcendence
 
-League of Legends and TFT analytics platform. Monorepo with .NET 10 backend and Next.js 16 frontend.
+League of Legends analytics platform. Monorepo with .NET 10 backend and Next.js 16 frontend.
 
 ## Design Context
 

@@ -18,8 +18,6 @@ using Transcendence.Service.Core.Services.RiotApi.Implementations;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
 using Transcendence.Service.Core.Services.StaticData.Implementations;
 using Transcendence.Service.Core.Services.StaticData.Interfaces;
-using Transcendence.Service.Core.Services.Tft.Implementations;
-using Transcendence.Service.Core.Services.Tft.Interfaces;
 
 namespace Transcendence.Service.Core.Services.Extensions;
 
@@ -50,10 +48,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IChampionMatchupComputeService, ChampionMatchupComputeService>();
         services.AddScoped<IChampionAnalyticsService, ChampionAnalyticsService>();
         services.AddScoped<IPrecomputedAnalyticsRefresher, PrecomputedAnalyticsRefresher>();
-        services.AddScoped<ITftSummonerReadService, TftSummonerReadService>();
-        services.AddScoped<ITftStaticDataService, TftStaticDataService>();
-        services.AddScoped<ITftAnalyticsComputeService, TftAnalyticsComputeService>();
-        services.AddScoped<ITftAnalyticsService, TftAnalyticsService>();
 
         return services;
     }
@@ -76,7 +70,6 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddTranscendenceWorkerCore(this IServiceCollection services)
     {
         services.AddScoped<ISummonerBootstrapService, SummonerBootstrapService>();
-        services.AddScoped<ITftSummonerBootstrapService, TftSummonerBootstrapService>();
         services.AddScoped<ChampionAnalyticsIngestionJob>();
         services.AddScoped<RefreshChampionAnalyticsJob>();
         services.AddScoped<WarmDefaultChampionProfilesJob>();
@@ -87,10 +80,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<SummonerMaintenanceJob>();
         services.AddScoped<RefreshLockLifecycleJob>();
         services.AddScoped<BackfillMatchPlatformRegionJob>();
-        services.AddScoped<UpdateTftStaticDataJob>();
-        services.AddScoped<RefreshTftAnalyticsJob>();
-        services.AddScoped<TftAnalyticsIngestionJob>();
-        services.AddScoped<TftSummonerMaintenanceJob>();
         services.AddScoped<IngestionHealthAlertJob>();
         services.AddScoped<IIngestionPriorityScoringPolicy, IngestionPriorityScoringPolicy>();
         services.AddSingleton<IQueueDepthProbe, HangfireQueueDepthProbe>();
@@ -127,26 +116,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MatchTimelineIngestionJob>();
         services.AddScoped<IRiotAccountService, RiotAccountService>();
         services.AddScoped<ILiveGamePollingService, RiotLiveGamePollingService>();
-        return services;
-    }
-
-    public static IServiceCollection AddTranscendenceTftRiot(this IServiceCollection services,
-        IConfiguration configuration)
-    {
-        var riotApiKey = configuration["RiotApi:Tft:ApiKey"];
-        if (string.IsNullOrWhiteSpace(riotApiKey))
-        {
-            throw new InvalidOperationException(
-                "Missing TFT Riot API key configuration. Set 'RiotApi:Tft:ApiKey'.");
-        }
-
-        services.AddSingleton(_ => new TftRiotApiContext(Camille.RiotGames.RiotGamesApi.NewInstance(riotApiKey)));
-        services.AddScoped<ITftSummonerService, TftSummonerService>();
-        services.AddScoped<ITftRankService, TftRankService>();
-        services.AddScoped<ITftMatchIdsClient, TftMatchIdsClient>();
-        services.AddScoped<ITftMatchService, TftMatchService>();
-        services.AddScoped<ITftSummonerRefreshJob, TftSummonerRefreshJob>();
-
         return services;
     }
 }

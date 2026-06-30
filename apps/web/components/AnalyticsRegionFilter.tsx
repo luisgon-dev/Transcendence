@@ -3,7 +3,9 @@
 import { useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
+import { cn } from "@/lib/cn";
 import {
   ANALYTICS_REGION_COOKIE,
   ANALYTICS_REGION_STORAGE_KEY,
@@ -54,11 +56,14 @@ async function syncPreferredRegion(region: string) {
 export function AnalyticsRegionFilter({
   options,
   activeRegion,
-  className
+  className,
+  variant = "tabs"
 }: {
   options: readonly AnalyticsRegionOption[];
   activeRegion: string;
   className?: string;
+  /** "tabs" (default, used across analytics pages) or "select" (compact dropdown, matches Rank/Patch). */
+  variant?: "tabs" | "select";
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -82,6 +87,23 @@ export function AnalyticsRegionFilter({
     startTransition(() => {
       router.push(nextUrl);
     });
+  }
+
+  if (variant === "select") {
+    return (
+      <span className="relative inline-flex" aria-busy={isPending}>
+        <Select
+          value={activeRegion}
+          onValueChange={applyRegion}
+          ariaLabel="Region"
+          options={options.map((option) => ({ value: option.code, label: option.label }))}
+          className={cn(isPending && "opacity-60", className)}
+        />
+        {isPending ? (
+          <Spinner className="pointer-events-none absolute right-8 top-1/2 -translate-y-1/2" />
+        ) : null}
+      </span>
+    );
   }
 
   return (

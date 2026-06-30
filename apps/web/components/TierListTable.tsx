@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import Image from "next/image";
 import Link from "next/link";
@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfidenceBadge } from "@/components/ui/Confidence";
 import { DataBar } from "@/components/ui/DataBar";
+import { SearchIcon } from "@/components/ui/icons";
+import { Input } from "@/components/ui/Input";
 import { LaneIcon } from "@/components/ui/LaneIcon";
 import { TierSpine } from "@/components/ui/TierSpine";
 import { Tooltip } from "@/components/ui/Tooltip";
@@ -19,6 +21,7 @@ import { formatGames, formatPercent } from "@/lib/format";
 import { roleDisplayLabel } from "@/lib/roles";
 import { championIconUrl } from "@/lib/staticData";
 import {
+  filterTierListEntries,
   formatStrengthDelta,
   movementClass,
   movementIcon,
@@ -110,6 +113,9 @@ export function TierListTable({
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [focusTier, setFocusTier] = useState<TierListFocusTier>("ALL");
   const [showLowSample, setShowLowSample] = useState(false);
+  const [query, setQuery] = useState("");
+  // Deferred so typing stays smooth while React re-filters/re-groups a 170+ row table.
+  const deferredQuery = useDeferredValue(query);
   const [activeTierSection, setActiveTierSection] = useState<UITierGrade>("S");
   const sectionRefs = useRef<Record<UITierGrade, HTMLElement | null>>({
     S: null,
@@ -134,11 +140,8 @@ export function TierListTable({
   );
 
   const filteredEntries = useMemo(
-    () =>
-      focusTier === "ALL"
-        ? entriesWithRank
-        : entriesWithRank.filter((entry) => entry.tier === focusTier),
-    [entriesWithRank, focusTier]
+    () => filterTierListEntries(entriesWithRank, champions, { query: deferredQuery, focusTier }),
+    [entriesWithRank, champions, deferredQuery, focusTier]
   );
 
   const sortedEntries = useMemo(() => {
@@ -155,6 +158,9 @@ export function TierListTable({
   const summary = useMemo(() => summarizeTierListEntries(filteredEntries), [filteredEntries]);
   const isDefaultSort = sortCol === "rank" && sortDir === "asc";
   const isFilteredView = focusTier !== "ALL" || !isDefaultSort;
+  // The per-row Tier badge is redundant in the grouped (default-sort) view — every row already sits
+  // under a "Tier X" section header. Show the Tier column only in the flat sorted/filtered table.
+  const showTierColumn = !isDefaultSort;
 
   const groups = useMemo(() => {
     if (!isDefaultSort) return null;
@@ -238,17 +244,22 @@ export function TierListTable({
   }
 
   function renderHeader() {
+    const cols = showTierColumn ? COLUMNS : COLUMNS.filter((column) => column.label !== "Tier");
     return (
       <thead className="type-overline text-muted">
         <tr className="border-b border-border/60">
-          {COLUMNS.map((column) => {
+          {cols.map((column) => {
             const sortable = Boolean(column.sortKey);
             const active = column.sortKey === sortCol;
 
             return (
               <th
                 key={column.label}
-                className={cn("tierlist-sticky-head cursor-default py-2.5", column.className)}
+                className={cn(
+                  "tierlist-sticky-head py-2.5",
+                  sortable ? "cursor-pointer" : "cursor-default",
+                  column.className
+                )}
                 aria-sort={
                   sortable && active ? (sortDir === "asc" ? "ascending" : "descending") : undefined
                 }
@@ -302,9 +313,11 @@ export function TierListTable({
             {entry.rank}
           </span>
         </td>
-        <td className="px-2 py-2.5">
-          <TierBadge tier={entry.tier} />
-        </td>
+        {showTierColumn ? (
+          <td className="px-2 py-2.5">
+            <TierBadge tier={entry.tier} />
+          </td>
+        ) : null}
         <td className="px-2 py-2.5 md:px-3">
           <div className="flex items-center gap-2">
             <Link
@@ -392,7 +405,7 @@ export function TierListTable({
         <td className="hidden px-3 py-2.5 text-right md:table-cell">
           <Link
             href={`/lol/champions/${entry.championId}?${rowQuery}#matchups`}
-            className="type-ui font-medium text-primary hover:underline"
+            className="type-ui font-medium text-fg/70 transition-colors hover:text-primary hover:underline"
           >
             Analyze
           </Link>
@@ -419,6 +432,19 @@ export function TierListTable({
 
   return (
     <div className="grid gap-3">
+      <div className="px-1">
+        <div className="relative w-full sm:max-w-xs">
+          <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
+          <Input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Find a champion"
+            aria-label="Find a champion"
+            className="h-10 pl-9"
+          />
+        </div>
+      </div>
       <div className="flex flex-col gap-3 px-1 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-1.5">
           {(["ALL", ...TIER_ORDER] as const).map((tier) => (
@@ -477,7 +503,17 @@ export function TierListTable({
 
       {summary.visibleCount === 0 ? (
         <Card className="grid gap-3 p-6">
-          {!showLowSample && lowSampleCount > 0 ? (
+          {deferredQuery.trim() ? (
+            <>
+              <p className="type-section text-fg">No champion matches “{deferredQuery.trim()}”.</p>
+              <p className="type-ui text-muted">
+                Check the spelling, or clear the search to see the full board.
+              </p>
+              <Button variant="outline" size="sm" onClick={() => setQuery("")} className="w-fit">
+                Clear search
+              </Button>
+            </>
+          ) : !showLowSample && lowSampleCount > 0 ? (
             <>
               <p className="type-section text-fg">Every champion in this view is low-sample.</p>
               <p className="type-ui text-muted">

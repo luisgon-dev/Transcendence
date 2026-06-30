@@ -82,14 +82,15 @@ export function TierListFilterBar({
         </label>
 
         {regionOptions && activeRegion ? (
-          <div className="grid gap-1.5" role="group" aria-label="Region">
+          <label className="grid gap-1.5">
             <span className="type-kicker text-fg/55">Region</span>
             <AnalyticsRegionFilter
+              variant="select"
               options={regionOptions}
               activeRegion={activeRegion}
-              className="-ml-1 flex flex-wrap gap-x-2 gap-y-1"
+              className="w-full sm:w-52"
             />
-          </div>
+          </label>
         ) : null}
 
         {patchOptions ? (

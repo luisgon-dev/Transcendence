@@ -20,10 +20,12 @@
   --t-fg: oklch(0.24 0.022 264);
   --t-muted: oklch(0.45 0.02 264);
 
-  /* Action accent (gold) — reserved for primary actions / active / focus */
-  --t-primary: oklch(0.69 0.135 76);
-  --t-primary-fg: oklch(0.22 0.03 80);
-  --t-primary-2: oklch(0.62 0.16 45);
+  /* Action accent (red) — reserved for primary actions / active / focus. A vivid
+     scarlet-crimson, pushed more saturated + lighter than the muted data `danger`
+     red (hue 27) so "chrome you act on" reads apart from "a measured bad outcome". */
+  --t-primary: oklch(0.555 0.215 25);
+  --t-primary-fg: oklch(0.985 0.012 25);
+  --t-primary-2: oklch(0.62 0.2 36);
 
   /* Semantic — tuned for WCAG AA as text on the near-white light surfaces */
   --t-success: oklch(0.50 0.13 158);
@@ -61,9 +63,9 @@
   --t-fg: oklch(0.965 0.005 255);
   --t-muted: oklch(0.705 0.02 264);
 
-  --t-primary: oklch(0.80 0.14 82);
-  --t-primary-fg: oklch(0.18 0.02 80);
-  --t-primary-2: oklch(0.70 0.16 45);
+  --t-primary: oklch(0.63 0.21 25);
+  --t-primary-fg: oklch(0.99 0.008 25);
+  --t-primary-2: oklch(0.7 0.2 38);
 
   --t-success: oklch(0.72 0.15 158);
   --t-danger: oklch(0.66 0.18 22);

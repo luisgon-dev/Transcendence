@@ -10,7 +10,7 @@ import { LaneIcon } from "./ui/LaneIcon";
 
 /**
  * The prominent lane selector for the tier list — official LoL position icons
- * over gold-underline tabs, URL-driven (sets `?role=`). Sits directly above the
+ * over accent-underline tabs, URL-driven (sets `?role=`). Sits directly above the
  * champion table so the chosen lane reads right onto the rows it filters.
  */
 export function LaneTabs({

@@ -25,7 +25,7 @@ function normalizeLane(role: string | null | undefined): LaneGlyph {
 // Official League position icons (paths from Community Dragon's
 // rcp-fe-lol-static-assets/svg/position-*.svg, viewBox 0 0 34 34). Each lane
 // pairs a dim "frame" path with a bright "active" shape; both use currentColor
-// so the icon inherits the gold accent on the active lane tab and stays
+// so the icon inherits the action accent on the active lane tab and stays
 // grayscale otherwise. Top/Jungle render the position bracket; "All" uses a
 // neutral quad glyph since Riot ships no all-roles icon.
 function LaneGlyphPaths({ lane }: { lane: LaneGlyph }) {

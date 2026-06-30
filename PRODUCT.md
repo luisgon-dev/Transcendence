@@ -41,7 +41,7 @@ The interface must never read as generic AI output or a glowing gamer dashboard.
 
 1. **Data is the hero.** Tables, stats, and rankings are the product. Atmosphere may enhance but never competes with readability. If a decorative element obscures or distracts from data, it goes.
 2. **Trust is earned in the numbers.** Surface sample size, recency, and confidence. Never present small-n noise as fact. Honest uncertainty beats false precision; this is the competitive user's whole reason to be here.
-3. **One accent, used with intent.** Gold marks what matters: primary actions, active states, top-tier rankings. Everything else is grayscale. Semantic color (win/loss, diverging win-rate scales, tier/rank categoricals) encodes data, and is the only other licensed color.
+3. **One accent, used with intent.** A vivid action red marks what you can act on: primary actions, active states, focus. It is deliberately more saturated than the muted data red (loss, danger, low win rate) and appears only as interactive chrome, never as a measured value, so the two reds never blur. Everything else is grayscale. Semantic color (win/loss, diverging win-rate scales, tier/rank categoricals, including gold for tier-S and gold rank) encodes data, and is the only other licensed color.
 4. **Progressive disclosure.** Show the answer first, then offer depth. Grade at a glance, click for stats, click again for matchup detail. Each layer adds information without requiring it.
 5. **Earn every element.** If a component, badge, or border does not help a user reach an answer faster, delete it. No placeholder features, no redundant labels.
 6. **Inclusive by default.** Good contrast, keyboard navigability, readable type, respected reduced-motion. A baseline, not a feature.

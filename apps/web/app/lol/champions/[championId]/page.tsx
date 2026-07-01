@@ -21,7 +21,7 @@ import { fetchBackendJson } from "@/lib/backendCall";
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { pickMostSevereAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
-import { formatGames, formatPercent } from "@/lib/format";
+import { formatGames } from "@/lib/format";
 import { fetchLolAnalyticsPatches } from "@/lib/lolAnalyticsPatches";
 import { normalizeAnalyticsPatch } from "@/lib/lolPatchFilters";
 import { resolveDefaultedRankTier, rankTierDisplayLabel } from "@/lib/ranks";
@@ -444,58 +444,42 @@ async function ChampionSections({
 
   return (
     <>
-      {/* ── Win Rates Table ── */}
-      <Card className="p-5">
-        <h2 className="type-section">
-          Win Rate by Rank
-          <span className="ml-2 type-overline text-muted">{roleDisplayLabel(effectiveRole)}</span>
-        </h2>
-        {!winrates ? (
-          <div className="mt-2">
-            <p className="text-sm text-fg/75">Win-rate data is unavailable right now.</p>
-            <p className="mt-1 text-xs text-muted">Try selecting a different region or check back after patch data has been processed.</p>
-          </div>
-        ) : winrateRows.length === 0 ? (
-          <p className="mt-2 text-sm text-fg/75">No games have been added for the selected patch yet.</p>
-        ) : (
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="type-overline text-muted">
-                <tr className="border-b border-border/30">
-                  <th className="py-2 pr-4">Tier</th>
-                  <th className="py-2 pr-4 text-right">Win Rate</th>
-                  <th className="py-2 pr-4 text-right">Pick Rate</th>
-                  <th className="py-2 pr-4 text-right">Games</th>
-                </tr>
-              </thead>
-              <tbody>
-                {winrateRows
-                  .slice()
-                  .sort((a, b) => (b.games ?? 0) - (a.games ?? 0))
-                  .map((w) => (
-                    <tr
-                      key={`${w.role ?? "ALL"}-${w.rankTier ?? "all"}`}
-                      className="border-t border-border/40 transition hover:bg-surface-2/40"
-                    >
-                      <td className="py-2.5 pr-4 font-medium text-muted">
-                        {rankTierDisplayLabel(w.rankTier ?? "all")}
-                      </td>
-                      <td className="py-2.5 pr-4 text-right">
-                        <DataBar value={w.winRate} decimals={2} className="justify-end" />
-                      </td>
-                      <td className="type-tabular py-2.5 pr-4 text-right tabular-nums text-fg/70">
-                        {formatPercent(w.pickRate, { decimals: 1 })}
-                      </td>
-                      <td className="type-tabular py-2.5 pr-4 text-right tabular-nums text-fg/70">
-                        {formatGames(w.games)}
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
+      {/* ── Win rate by rank — compact strip. Keeps the per-rank win-rate signal (with the
+             DataBar's sample-size whisker) without a full table pushing the builds below the
+             fold. Overall win/pick/matches live in the hero StatsBar; per-rank pick rate and a
+             separate games column were the non-essential weight, so they're dropped here
+             (games rides the whisker + the row title). ── */}
+      <section className="surface-subtle rounded-card px-4 py-3">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2.5">
+          <span className="type-overline shrink-0 text-muted">
+            Win rate by rank
+            <span className="ml-1.5 text-fg/45">{roleDisplayLabel(effectiveRole)}</span>
+          </span>
+          {!winrates ? (
+            <span className="type-note text-muted">Win-rate data is unavailable right now.</span>
+          ) : winrateRows.length === 0 ? (
+            <span className="type-note text-muted">No games for the selected patch yet.</span>
+          ) : (
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2.5">
+              {winrateRows
+                .slice()
+                .sort((a, b) => (b.games ?? 0) - (a.games ?? 0))
+                .map((w) => (
+                  <span
+                    key={`${w.role ?? "ALL"}-${w.rankTier ?? "all"}`}
+                    className="inline-flex items-center gap-2"
+                    title={`${rankTierDisplayLabel(w.rankTier ?? "all")} · ${formatGames(w.games)} games`}
+                  >
+                    <span className="type-caption w-[4.25rem] shrink-0 truncate text-muted">
+                      {rankTierDisplayLabel(w.rankTier ?? "all")}
+                    </span>
+                    <DataBar value={w.winRate} games={w.games} decimals={1} />
+                  </span>
+                ))}
+            </div>
+          )}
+        </div>
+      </section>
 
       {/* ── Builds + Matchups (balanced two-up; matchups owned by the single sortable table) ── */}
       <div className="grid gap-6 lg:grid-cols-2 lg:items-start">

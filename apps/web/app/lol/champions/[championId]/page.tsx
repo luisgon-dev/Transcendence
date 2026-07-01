@@ -482,9 +482,9 @@ async function ChampionSections({
       </section>
 
       {/* ── Builds + Matchups (balanced two-up; matchups owned by the single sortable table) ── */}
-      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+      <div className="grid min-w-0 gap-6 lg:grid-cols-2 lg:items-start">
         {/* ── Builds ── */}
-        <Card className="p-5" id="builds">
+        <Card className="min-w-0 p-5" id="builds">
           <h2 className="type-section">
             Builds
           </h2>
@@ -577,7 +577,6 @@ async function ChampionSections({
                         trees={runeTrees}
                         runeById={runeById}
                         styleById={styleById}
-                        iconSize={22}
                       />
                     </div>
                   </div>
@@ -588,7 +587,7 @@ async function ChampionSections({
         </Card>
 
         {/* ── Matchups (one sortable table owns matchups; no redundant lists) ── */}
-        <Card className="p-5" id="matchups">
+        <Card className="min-w-0 p-5" id="matchups">
           {!matchups ? (
             <>
               <h2 className="type-section">Matchups</h2>

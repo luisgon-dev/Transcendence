@@ -138,7 +138,7 @@ export function RuneTreeDisplay({
   }
 
   const compact = density === "compact";
-  const resolvedIcon = iconSize ?? (compact ? 22 : 26);
+  const resolvedIcon = iconSize ?? (compact ? 22 : 28);
   const keystoneSize = resolvedIcon + 6;
   const shardSize = Math.max(12, resolvedIcon - (compact ? 6 : 4));
   const slotGap = compact ? "gap-1" : "gap-2.5";
@@ -150,9 +150,11 @@ export function RuneTreeDisplay({
   return (
     <div className={cn(gridCls, className)}>
       {primaryTree ? (
-        <div className={panelCls}>
+        // flex-col + flex-1 rows so the primary tree distributes to fill its height when the grid
+        // stretches it to match the taller secondary+shards column (no dead gap below the last row).
+        <div className={cn(panelCls, "flex flex-col")}>
           <StyleHeader styleId={primaryStyleId} styleById={styleById} label="Primary" size={resolvedIcon} dense={compact} />
-          <div className={cn("grid", slotGap)}>
+          <div className={cn("flex flex-1 flex-col justify-between", slotGap)}>
             {primaryTree.slots.map((slot, slotIdx) => (
               <div
                 key={`p-slot-${slotIdx}`}

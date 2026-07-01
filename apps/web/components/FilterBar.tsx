@@ -76,7 +76,7 @@ export function FilterBar({
         emitAllRank={explicitAllRank}
       />
       {regionOptions && activeRegion ? (
-        <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />
+        <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} variant="select" />
       ) : null}
       {patchOptions ? (
         <AnalyticsPatchFilter patches={patchOptions} activePatch={activePatch} />

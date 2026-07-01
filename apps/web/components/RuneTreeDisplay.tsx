@@ -31,6 +31,10 @@ function RuneNode({
   return (
     <span
       title={name}
+      // The page shows the whole tree with chosen runes highlighted. For assistive
+      // tech only the *selected* runes carry information, so dimmed nodes are hidden
+      // from the a11y tree and selected ones announce their state (opacity can't).
+      aria-hidden={selected ? undefined : true}
       className={cn(
         "inline-flex items-center justify-center border transition-opacity",
         radius,
@@ -42,7 +46,7 @@ function RuneNode({
     >
       <Image
         src={runeIconUrl(icon)}
-        alt={name}
+        alt={selected ? `${name} (selected)` : ""}
         title={name}
         width={size}
         height={size}

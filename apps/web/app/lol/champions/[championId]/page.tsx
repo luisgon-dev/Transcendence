@@ -6,19 +6,17 @@ import type { components } from "@transcendence/api-client";
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { BuildBreakdown } from "@/components/BuildBreakdown";
-import { ChampionPortrait } from "@/components/ChampionPortrait";
 import { FilterBar } from "@/components/FilterBar";
 import { MatchupsTable, type MatchupRow } from "@/components/MatchupsTable";
 import { ItemBuildDisplay } from "@/components/ItemBuildDisplay";
 import { RuneTreeDisplay } from "@/components/RuneTreeDisplay";
 import { StatsBar } from "@/components/StatsBar";
-import { TierBadge } from "@/components/TierBadge";
+import { TierStoryBadge } from "@/components/TierStoryBadge";
 import { UpdatedAgo } from "@/components/UpdatedAgo";
 import { WinRateText } from "@/components/WinRateText";
 import { Card } from "@/components/ui/Card";
 import { DataBar } from "@/components/ui/DataBar";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Tooltip } from "@/components/ui/Tooltip";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { pickMostSevereAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyticsSample";
@@ -265,28 +263,21 @@ async function ChampionHeroMeta({
     <>
       <div className="flex flex-wrap items-center gap-2">
         {heroTier ? (
-          heroGrade ? (
-            <Tooltip
-              content={formatEbStory({
-                winRate: heroGrade.winRate,
-                roleBaseline: heroGrade.roleBaseline,
-                strengthScore: heroGrade.strengthScore,
-                games: heroGrade.games
-              })}
-            >
-              <span className="flex items-center gap-2">
-                <TierBadge tier={heroTier} size="md" />
-                <span className="type-tabular tabular-nums text-xs text-muted">
-                  {formatStrengthDelta(heroGrade.strengthScore)}
-                  {heroGrade.isLowSample ? " · low sample" : ""}
-                </span>
-              </span>
-            </Tooltip>
-          ) : (
-            <span className="flex items-center gap-2">
-              <TierBadge tier={heroTier} size="md" />
-            </span>
-          )
+          <TierStoryBadge
+            tier={heroTier}
+            story={
+              heroGrade
+                ? formatEbStory({
+                    winRate: heroGrade.winRate,
+                    roleBaseline: heroGrade.roleBaseline,
+                    strengthScore: heroGrade.strengthScore,
+                    games: heroGrade.games
+                  })
+                : null
+            }
+            delta={heroGrade ? formatStrengthDelta(heroGrade.strengthScore) : null}
+            lowSample={heroGrade?.isLowSample}
+          />
         ) : (
           <span className="rounded-control border border-border/60 px-2 py-1 text-xs font-medium text-muted">
             Unrated
@@ -506,8 +497,8 @@ async function ChampionSections({
         )}
       </Card>
 
-      {/* ── Builds + Matchups ── */}
-      <div className="grid gap-6 md:grid-cols-2">
+      {/* ── Builds + Matchups (balanced two-up; matchups owned by the single sortable table) ── */}
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
         {/* ── Builds ── */}
         <Card className="p-5" id="builds">
           <h2 className="type-section">
@@ -549,21 +540,37 @@ async function ChampionSections({
               ) : null}
 
               {buildRows.map((b, idx) => (
-                <div
+                <details
                   key={idx}
-                  className="rounded-lg border border-border/60 bg-surface-2/40 p-3"
+                  open={idx === 0}
+                  className="group rounded-lg border border-border/60 bg-surface-2/40"
                 >
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold text-fg">
+                  {/* Recommended is open; alternatives collapse to a summary row (progressive disclosure). */}
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-3 [&::-webkit-details-marker]:hidden">
+                    <span className="flex items-center gap-2 text-sm font-semibold text-fg">
+                      <svg
+                        viewBox="0 0 12 12"
+                        aria-hidden="true"
+                        className="size-3 shrink-0 text-muted transition-transform duration-150 group-open:rotate-90"
+                      >
+                        <path
+                          d="M4.5 3 7.5 6 4.5 9"
+                          stroke="currentColor"
+                          strokeWidth="1.4"
+                          fill="none"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
                       {idx === 0 ? "Recommended Build" : `Alternative ${idx}`}
-                    </p>
-                    <p className="text-xs text-muted">
+                    </span>
+                    <span className="text-xs text-muted">
                       <WinRateText value={b.winRate} decimals={1} games={b.games} />
-                    </p>
-                  </div>
+                    </span>
+                  </summary>
 
-                  {/* Items: Core + Situational */}
-                  <div className="mt-3">
+                  <div className="border-t border-border/40 p-3">
+                    {/* Items: Core + Situational */}
                     <ItemBuildDisplay
                       allItems={b.items ?? []}
                       coreItems={b.coreItems ?? []}
@@ -573,139 +580,50 @@ async function ChampionSections({
                       winRate={b.winRate}
                       games={b.games}
                     />
-                  </div>
 
-                  {/* Runes */}
-                  <div className="mt-3 border-t border-border/40 pt-3">
-                    <p className="mb-2 text-xs font-medium text-muted">Runes</p>
-                    <RuneTreeDisplay
-                      primaryStyleId={b.primaryStyleId ?? 0}
-                      subStyleId={b.subStyleId ?? 0}
-                      primarySelections={b.primaryRunes ?? []}
-                      subSelections={b.subRunes ?? []}
-                      statShards={b.statShards ?? []}
-                      trees={runeTrees}
-                      runeById={runeById}
-                      styleById={styleById}
-                      iconSize={22}
-                    />
+                    {/* Runes */}
+                    <div className="mt-3 border-t border-border/40 pt-3">
+                      <p className="mb-2 text-xs font-medium text-muted">Runes</p>
+                      <RuneTreeDisplay
+                        primaryStyleId={b.primaryStyleId ?? 0}
+                        subStyleId={b.subStyleId ?? 0}
+                        primarySelections={b.primaryRunes ?? []}
+                        subSelections={b.subRunes ?? []}
+                        statShards={b.statShards ?? []}
+                        trees={runeTrees}
+                        runeById={runeById}
+                        styleById={styleById}
+                        iconSize={22}
+                      />
+                    </div>
                   </div>
-                </div>
+                </details>
               ))}
             </div>
           )}
         </Card>
 
-        {/* ── Matchups ── */}
-        <Card className="p-5">
-          <h2 className="type-section">
-            Matchups
-          </h2>
+        {/* ── Matchups (one sortable table owns matchups; no redundant lists) ── */}
+        <Card className="p-5" id="matchups">
           {!matchups ? (
-            <div className="mt-2">
-              <p className="text-sm text-fg/75">Matchup data is unavailable right now.</p>
-              <p className="mt-1 text-xs text-muted">Try selecting a different region or check back after patch data has been processed.</p>
-            </div>
+            <>
+              <h2 className="type-section">Matchups</h2>
+              <div className="mt-2">
+                <p className="text-sm text-fg/75">Matchup data is unavailable right now.</p>
+                <p className="mt-1 text-xs text-muted">Try selecting a different region or check back after patch data has been processed.</p>
+              </div>
+            </>
           ) : (
-            <div className="mt-4 grid gap-5">
-              {/* Toughest Matchups */}
-              <div>
-                <p className="text-sm font-semibold text-fg">
-                  Toughest Matchups
-                </p>
-                <p className="mt-0.5 text-xs text-muted">
-                  These champions counter {champName}
-                </p>
-                {counters.length === 0 ? (
-                  <p className="mt-2 text-xs text-muted">No strong counters found.</p>
-                ) : (
-                  <ul className="mt-2 grid gap-1.5 text-sm">
-                    {counters.map((m, idx) => {
-                      const opponentChampionId = m.opponentChampionId ?? 0;
-                      const opp = champions[String(opponentChampionId)];
-                      return (
-                        <li
-                          key={`${opponentChampionId}-${idx}`}
-                          className="flex items-center justify-between rounded-md border border-border/50 bg-surface-2/40 px-3 py-2"
-                        >
-                          <Link
-                            href={`/lol/champions/${opponentChampionId}${linkQuery ? `?${linkQuery}` : ""}`}
-                            className="flex min-w-0 items-center gap-2 hover:underline"
-                          >
-                            <ChampionPortrait
-                              championSlug={opp?.id ?? "Unknown"}
-                              championName={opp?.name ?? `Champion ${opponentChampionId}`}
-                              version={version}
-                              size={24}
-                              showName
-                              className="min-w-0"
-                            />
-                          </Link>
-                          <DataBar value={m.winRate} decimals={1} games={m.games} className="shrink-0 justify-end" />
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-
-              {/* Best Matchups */}
-              <div>
-                <p className="text-sm font-semibold text-fg">
-                  Best Matchups
-                </p>
-                <p className="mt-0.5 text-xs text-muted">
-                  {champName} performs well against these champions
-                </p>
-                {favorableMatchups.length === 0 ? (
-                  <p className="mt-2 text-xs text-muted">
-                    No strong favorable matchups found.
-                  </p>
-                ) : (
-                  <ul className="mt-2 grid gap-1.5 text-sm">
-                    {favorableMatchups.map((m, idx) => {
-                      const opponentChampionId = m.opponentChampionId ?? 0;
-                      const opp = champions[String(opponentChampionId)];
-                      return (
-                        <li
-                          key={`${opponentChampionId}-${idx}`}
-                          className="flex items-center justify-between rounded-md border border-border/50 bg-surface-2/40 px-3 py-2"
-                        >
-                          <Link
-                            href={`/lol/champions/${opponentChampionId}${linkQuery ? `?${linkQuery}` : ""}`}
-                            className="flex min-w-0 items-center gap-2 hover:underline"
-                          >
-                            <ChampionPortrait
-                              championSlug={opp?.id ?? "Unknown"}
-                              championName={opp?.name ?? `Champion ${opponentChampionId}`}
-                              version={version}
-                              size={24}
-                              showName
-                              className="min-w-0"
-                            />
-                          </Link>
-                          <DataBar value={m.winRate} decimals={1} games={m.games} className="shrink-0 justify-end" />
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-            </div>
+            <MatchupsTable
+              title="Matchups"
+              subtitle={`Lane matchups for ${champName} as ${roleDisplayLabel(effectiveRole)}`}
+              rows={matchupRows}
+              version={version}
+              linkQuery={linkQuery}
+            />
           )}
         </Card>
       </div>
-
-      {/* ── All Matchups (full table) ── */}
-      <Card className="p-5" id="matchups">
-        <MatchupsTable
-          title="All Matchups"
-          subtitle={`Lane matchups for ${champName} as ${roleDisplayLabel(effectiveRole)}`}
-          rows={matchupRows}
-          version={version}
-          linkQuery={linkQuery}
-        />
-      </Card>
     </>
   );
 }

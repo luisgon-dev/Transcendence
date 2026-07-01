@@ -1,3 +1,5 @@
+"use client";
+
 import { Badge } from "@/components/ui/Badge";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/cn";
@@ -8,10 +10,11 @@ import {
 } from "@/lib/confidence";
 import { formatGames } from "@/lib/format";
 
-// Small, data-driven "how much should I trust this?" markers. Server-compatible:
-// this file renders the client Tooltip as a child but holds no state itself, so
-// it stays a server component. Confidence is DATA, never decoration — neutral
-// tones, with a warning accent reserved for genuinely thin samples.
+// Small, data-driven "how much should I trust this?" markers. Marked "use client"
+// so the Radix Tooltip it renders hydrates inside this client boundary: rendering
+// the Tooltip straight from a streamed server component mismatches on hydration
+// and regenerates the subtree client-side. Confidence is DATA, never decoration —
+// neutral tones, with a warning accent reserved for genuinely thin samples.
 
 const FILLED_PIPS: Record<ConfidenceLevel, number> = {
   high: 3,

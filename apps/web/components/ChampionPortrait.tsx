@@ -25,7 +25,7 @@ export function ChampionPortrait({
         alt={championName}
         width={size}
         height={size}
-        className="rounded-md transition-transform duration-300 hover:scale-110"
+        className="rounded-md transition-transform duration-150 ease-[cubic-bezier(0.25,1,0.5,1)] hover:scale-105 motion-reduce:transition-none motion-reduce:hover:scale-100"
       />
       {showName ? (
         <span className="truncate text-sm font-medium">{championName}</span>

@@ -9,11 +9,18 @@ export default function Loading() {
   return (
     <div className="grid gap-8">
       <section className="page-hero p-6 sm:p-8 md:p-10">
-        <div className="grid max-w-3xl gap-3">
-          <Skeleton className="h-10 w-11/12 rounded-lg" />
-          <Skeleton className="h-10 w-2/3 rounded-lg" />
+        {/* Three lines of display type: bar heights track the clamp()-sized
+            headline (h-10→14) and the lead runs two lines, so the real hero
+            (~476px on desktop) streams in without shoving the panels down. */}
+        <div className="grid max-w-3xl gap-3 sm:gap-3.5 md:gap-4">
+          <Skeleton className="h-10 w-full rounded-lg sm:h-12 md:h-14" />
+          <Skeleton className="h-10 w-11/12 rounded-lg sm:h-12 md:h-14" />
+          <Skeleton className="h-10 w-2/5 rounded-lg sm:h-12 md:h-14" />
         </div>
-        <Skeleton className="mt-6 h-4 w-3/4 max-w-2xl rounded-md" />
+        <div className="mt-5 grid max-w-2xl gap-2">
+          <Skeleton className="h-4 w-full rounded-md" />
+          <Skeleton className="h-4 w-1/3 rounded-md" />
+        </div>
         <div className="mt-8 grid gap-3">
           <Skeleton className="h-14 w-full max-w-2xl rounded-control" />
           <Skeleton className="h-3.5 w-64 rounded-md" />

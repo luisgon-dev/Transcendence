@@ -69,8 +69,7 @@ public class ProductionWorkerTests
                 WorkerRecurringJobPolicy.DetectPatchJobId,
                 WorkerRecurringJobPolicy.RetryFailedMatchesJobId,
                 WorkerRecurringJobPolicy.ChampionAnalyticsIngestionJobId,
-                WorkerRecurringJobPolicy.RefreshLockLifecycleCleanupJobId,
-                WorkerRecurringJobPolicy.TftStaticDataJobId
+                WorkerRecurringJobPolicy.RefreshLockLifecycleCleanupJobId
             ]);
             Policy.Setup(x => x.ResolveProfile(It.IsAny<WorkerJobScheduleOptions>())).Returns("stable");
             Policy.Setup(x => x.BuildDescriptors(It.IsAny<WorkerJobScheduleOptions>()))
@@ -78,8 +77,7 @@ public class ProductionWorkerTests
                     Descriptor(WorkerRecurringJobPolicy.DetectPatchJobId),
                     Descriptor(WorkerRecurringJobPolicy.RetryFailedMatchesJobId),
                     Descriptor(WorkerRecurringJobPolicy.ChampionAnalyticsIngestionJobId),
-                    Descriptor(WorkerRecurringJobPolicy.RefreshLockLifecycleCleanupJobId),
-                    Descriptor(WorkerRecurringJobPolicy.TftStaticDataJobId)
+                    Descriptor(WorkerRecurringJobPolicy.RefreshLockLifecycleCleanupJobId)
                 ]);
 
             StartupIntegrityService
@@ -93,8 +91,7 @@ public class ProductionWorkerTests
                         WorkerRecurringJobPolicy.DetectPatchJobId,
                         WorkerRecurringJobPolicy.RetryFailedMatchesJobId,
                         WorkerRecurringJobPolicy.ChampionAnalyticsIngestionJobId,
-                        WorkerRecurringJobPolicy.RefreshLockLifecycleCleanupJobId,
-                        WorkerRecurringJobPolicy.TftStaticDataJobId
+                        WorkerRecurringJobPolicy.RefreshLockLifecycleCleanupJobId
                     ],
                     [],
                     []));

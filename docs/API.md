@@ -237,35 +237,6 @@ Response: `{ patch, region, scope, champions[], sample }` where each champion en
 
 - `GET /api/lol/summoners/{region}/{gameName}/{tagLine}/live-game`
 
-### TFT
-
-- `GET /api/tft/summoners/{region}/{name}/{tag}`
-- `POST /api/tft/summoners/{region}/{name}/{tag}/refresh`
-- `GET /api/tft/summoners/search`
-- `GET /api/tft/summoners/{summonerId}/matches/recent`
-- `GET /api/tft/summoners/{summonerId}/matches/{matchId}`
-- `GET /api/tft/analytics/regions`
-- `GET /api/tft/analytics/comps`
-- `GET /api/tft/analytics/comps/{compSlug}`
-- `GET /api/tft/analytics/champions`
-- `GET /api/tft/analytics/champions/{championId}`
-- `GET /api/tft/analytics/items`
-- `GET /api/tft/analytics/items/{itemId}`
-- `GET /api/tft/analytics/traits`
-- `GET /api/tft/analytics/traits/{traitId}`
-- `GET /api/tft/analytics/augments`
-- `GET /api/tft/analytics/augments/{augmentId}`
-- `POST /api/tft/analytics/cache/invalidate` (`AppOnly`)
-
-TFT behavior notes:
-- TFT controllers are read-only against persisted data and never call Camille directly.
-- `GET /api/tft/summoners/{region}/{name}/{tag}` returns `200` with stored profile/matches or `202 Accepted` when the profile is missing or already refreshing.
-- `POST /api/tft/summoners/{region}/{name}/{tag}/refresh` queues a background refresh behind `tft:summoner-refresh:*` locks.
-- TFT analytics are isolated from LoL analytics. The comps endpoint is a separate surface and does not share the LoL tier-list route or payload.
-- TFT catalog/detail analytics endpoints (`champions`, `items`, `traits`, `augments`) serve the active set only.
-- TFT static data remains set-versioned in storage; active-set reads preserve response shapes across set rollovers without returning duplicate cross-set rows.
-- `GET /api/tft/analytics/comps` defaults `rankTier` to `EMERALD_PLUS`; `rankTier=ALL` is treated case-insensitively as an all-ranks query.
-
 ### Operational Health
 
 - `GET /health/live`

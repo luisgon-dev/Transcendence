@@ -5,7 +5,7 @@ Transcendence is a backend + web monorepo:
 - A .NET Web API that serves reads and queues refresh jobs
 - A .NET background worker that executes Hangfire jobs (refresh, ingestion, analytics, etc.)
 - A Next.js web frontend that renders pages (SSR) and proxies to the backend via route handlers (BFF)
-- Game surfaces are modularized by route namespace: `/lol/*` + `/api/lol/*` and `/tft/*` + `/api/tft/*`
+- Frontend and API routes live under the `/lol/*` + `/api/lol/*` namespace
 
 ## Components
 
@@ -18,7 +18,7 @@ Transcendence is a backend + web monorepo:
 ### `Transcendence.Service`
 - Background host that runs Hangfire server and recurring jobs
 - Executes ingestion/refresh/analytics workflows
-- Owns Riot/Camille integration for both LoL and TFT
+- Owns Riot/Camille integration for LoL
 - Recurring jobs are registered through a shared `WorkerRecurringJobPolicy`; the active set is driven by the `Jobs:Schedule` `Enable*` flags and the resolved scheduling profile (`Jobs:Schedule:Profile`, default `stable`). `DevelopmentWorker` and `ProductionWorker` schedule the same job set and differ only in startup behavior, not in which recurring jobs run.
 - The default `stable` scheduling profile is coverage-first for LoL analytics:
   - adaptive analytics refresh (self-paced; tightens during the new-patch ramp window)
@@ -31,7 +31,6 @@ Transcendence is a backend + web monorepo:
 ### `Transcendence.Service.Core`
 - Domain/application services (analysis, analytics compute, auth, live game, Riot API integration, jobs)
 - Called from WebAPI controllers and the worker host
-- LoL and TFT live in separate bounded contexts with separate entities, repositories, services, caches, and jobs
 
 ### `Transcendence.Data`
 - EF Core DbContext + entities + repositories
@@ -52,13 +51,6 @@ Transcendence is a backend + web monorepo:
   - `/lol/pro-builds/*` — the index hero is a pro/high-elo champion playrate ranking with a `scope` segmented control (Pro / High-Elo / All) plus a public "Tracked Pros" roster panel, retaining champion search and the recent-pro-matches feed.
   - `/lol/summoners/[region]/[riotId]` is the unified LoL profile + match history surface
     - Legacy `/lol/summoners/[region]/[riotId]/matches*` routes redirect into this unified view using query state (`page`, `queue`, `expandMatchId`)
-  - `/tft`
-  - `/tft/comps/*`
-  - `/tft/champions/*`
-  - `/tft/items/*`
-  - `/tft/traits/*`
-  - `/tft/augments/*`
-  - `/tft/summoners/[region]/[riotId]`
 - Public LoL patch badges now read backend analytics patch status instead of raw Data Dragon latest so web patch labels match the active analytics dataset
 - LoL analytics pages (tier list, champion, pro-builds) carry a historical patch selector (`AnalyticsPatchFilter`, backed by `lib/lolPatchFilters.ts` + `lib/lolAnalyticsPatches.ts`, surfaced via `FilterBar`) that reads `GET /api/lol/analytics/patches` and drives the `patch` query parameter
 - Analytics filter defaults and feedback:
@@ -92,7 +84,7 @@ Transcendence is a backend + web monorepo:
 
 ## Riot Identifier Policy
 
-- `Puuid` is the canonical durable Riot identifier in storage for both LoL and TFT.
+- `Puuid` is the canonical durable Riot identifier in storage.
 - User-facing lookup uses normalized Riot ID fields: `gameName` + `tagLine` + `platformRegion`.
 - Internal joins and downstream reads pivot from Riot ID to local summoner GUIDs or directly to `Puuid`.
 - `RiotSummonerId` and `AccountId` are non-canonical refresh artifacts. They must not be required for search, profile lookup, favorites, live-game resolution, or analytics joins.
@@ -100,7 +92,6 @@ Transcendence is a backend + web monorepo:
 Current app usage follows that policy:
 - LoL search/autosuggest uses stored normalized Riot ID fields plus match participation presence.
 - LoL profile GET resolves by Riot ID first, then uses the local summoner GUID for stats and matches.
-- TFT search/profile resolves by Riot ID first, then uses the local summoner GUID for match history.
 - Favorites, pro-roster rows, and live-game snapshots key on `Puuid` or local IDs rather than encrypted Riot identifiers.
 
 Operational implication:
@@ -126,11 +117,7 @@ Operational implication:
   - `refresh-high`
   - `default`
   - `refresh-low`
-  - `tft-refresh-high`
-  - `tft-default`
-  - `tft-refresh-low`
 - API refresh jobs run on `refresh-high`; ingestion-driven refresh jobs run on `refresh-low`.
-- TFT refresh jobs use their own lock and queue namespace (`tft:summoner-refresh:*`, `tft:refresh-priority:api:*`) so TFT demand does not block LoL refresh throughput.
 - Refresh locks use DB-backed lease semantics (atomic acquire/renew + explicit lease expiry on release) so concurrent lock races do not require lock-row deletion.
 
 ### Refresh Lock Lifecycle Telemetry and Retention
@@ -376,7 +363,7 @@ The web app never exposes backend tokens to browser JS:
 - Backend never receives browser cookies (explicitly stripped in proxy)
 - Catch-all proxy routes reject invalid path segments (`.`/`..`) to avoid path normalization escapes.
 - AppOnly proxy route `/api/trn/app/*` is explicitly allowlisted for approved paths (not a generic arbitrary AppOnly relay).
-- Anonymous public proxy route `/api/trn/public/*` is explicitly allowlisted (`lib/publicProxyAllowlist.ts`): only LoL/TFT summoner reads (`{lol,tft}/summoners/**` GET) and the on-demand refresh POST (`.../refresh`) are relayed; anything else (admin, user, auth, analytics writes, arbitrary paths, `PUT`/`DELETE`) is rejected `404`. It forwards no credentials, so it is a narrow read surface, not a generic anonymous relay. (Per-IP partitioning of public read limits is a separate follow-up — P8.2.)
+- Anonymous public proxy route `/api/trn/public/*` is explicitly allowlisted (`lib/publicProxyAllowlist.ts`): only LoL summoner reads (`lol/summoners/**` GET) and the on-demand refresh POST (`.../refresh`) are relayed; anything else (admin, user, auth, analytics writes, arbitrary paths, `PUT`/`DELETE`) is rejected `404`. It forwards no credentials, so it is a narrow read surface, not a generic anonymous relay. (Per-IP partitioning of public read limits is a separate follow-up — P8.2.)
 - Logout flow revokes refresh tokens server-side via `POST /api/auth/logout` before cookie clear.
 
 ## Admin Surface and Security
@@ -405,20 +392,6 @@ The web app never exposes backend tokens to browser JS:
 - `GET /api/lol/analytics/regions` exposes the enabled ingestion regions plus `ALL`/global for the web app.
 - Tier list, builds, matchup, and winrate queries accept the same platform-region tokens and use `PlatformRegion` filtering so region-scoped pages match the ingestion model.
 - The web app persists the last selected analytics region in client storage/cookie and best-effort syncs it to `UserPreferences.PreferredRegion`.
-
-## TFT Architecture
-
-- TFT persistence is parallel to LoL, not shared with it:
-  - `TftSummoners`, `TftRanks`, `TftHistoricalRanks`
-  - `TftMatches` plus participant/unit/trait/augment child rows
-  - TFT static-data tables for sets, patches, units, items, augments, and traits
-- TFT summoner refresh flow mirrors LoL semantics but remains isolated:
-  - WebAPI checks the store and returns `200` or `202`
-  - refresh requests enqueue `ITftSummonerRefreshJob`
-  - worker resolves Riot account + TFT summoner + TFT ranks + TFT matches, then persists them
-- TFT static data is refreshed independently from LoL patch/static-data flows through `UpdateTftStaticDataJob`.
-- TFT static-data rows remain set-versioned in storage, but read endpoints project only the active set so set transitions do not surface duplicate units/items/traits/augments.
-- TFT analytics cache and comp aggregation are isolated behind `ITftAnalyticsService` and `/api/tft/analytics/*`.
 
 ### Operational Logging
 

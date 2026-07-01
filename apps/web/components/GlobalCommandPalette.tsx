@@ -12,7 +12,6 @@ import {
   GLOBAL_SEARCH_OPEN_EVENT,
   type GlobalSearchOpenOrigin
 } from "@/lib/globalSearch";
-import { TFT_FRONTEND_ENABLED } from "@/lib/featureFlags";
 import { buildLolPublicSummonerSearchPath } from "@/lib/lolPublicApi";
 import { DEFAULT_TIERLIST_RANK_TIER, rankTierDisplayLabel } from "@/lib/ranks";
 import { encodeRiotIdPath, parseRiotIdInput } from "@/lib/riotid";
@@ -55,7 +54,7 @@ const REGIONS = [
   { value: "ru", label: "RU" }
 ] as const;
 
-const LOL_TIER_LINKS = [
+const TIER_LINKS = [
   {
     label: `Tier List · All Roles (${rankTierDisplayLabel(DEFAULT_TIERLIST_RANK_TIER)})`,
     href: "/lol/tierlist"
@@ -85,18 +84,6 @@ const LOL_TIER_LINKS = [
   { label: "Champions", href: "/lol/champions" },
   { label: "Pro Builds", href: "/lol/pro-builds" }
 ] as const;
-
-const TFT_TIER_LINKS = [
-  { label: "TFT Comps", href: "/tft/comps" },
-  { label: "TFT Champions", href: "/tft/champions" },
-  { label: "TFT Items", href: "/tft/items" },
-  { label: "TFT Traits", href: "/tft/traits" },
-  { label: "TFT Augments", href: "/tft/augments" }
-] as const;
-
-const TIER_LINKS = TFT_FRONTEND_ENABLED
-  ? [...LOL_TIER_LINKS, ...TFT_TIER_LINKS]
-  : LOL_TIER_LINKS;
 
 const RESULT_ITEM_CLASS =
   "group flex min-h-[52px] cursor-pointer items-center gap-3 rounded-card border border-transparent px-3 py-2.5 text-left text-fg/90 transition duration-150 data-[selected=true]:translate-x-1 data-[selected=true]:border-primary/25 data-[selected=true]:bg-primary/10 data-[selected=true]:shadow-card";

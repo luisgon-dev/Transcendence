@@ -38,7 +38,7 @@ function isVerbose() {
 }
 
 function isSummonerPath(pathname: string) {
-  return pathname.startsWith("/lol/summoners/") || pathname.startsWith("/tft/summoners/");
+  return pathname.startsWith("/lol/summoners/");
 }
 
 function isPrefetchRequest(req: NextRequest) {

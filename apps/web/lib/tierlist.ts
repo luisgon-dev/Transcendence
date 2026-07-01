@@ -205,7 +205,9 @@ export function movementClass(movement: UITierMovement): string {
     case "DOWN":
       return "text-wr-low";
     case "NEW":
-      return "text-primary";
+      // Data color (info), not action-red: "new entrant" is a data signal, and
+      // --t-primary is reserved for actions/active/focus.
+      return "text-info";
     case "SAME":
     default:
       return "text-fg/70";

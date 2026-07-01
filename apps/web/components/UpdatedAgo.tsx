@@ -7,7 +7,7 @@ import { cn } from "@/lib/cn";
 // Subtle "Updated 23 min ago" freshness label for precomputed analytics.
 // Client component so it can compute relative time from the viewer's clock.
 // Renders nothing when the timestamp is missing — informational metadata only,
-// so it stays grayscale/muted (no gold, no badge, no border).
+// so it stays grayscale/muted (no accent, no badge, no border).
 
 function formatRelative(fromMs: number, nowMs: number): string {
   const diffMs = Math.max(0, nowMs - fromMs);

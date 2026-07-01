@@ -1,6 +1,6 @@
 ---
 name: Transcendence
-description: A flat command-deck for League of Legends and TFT analytics. Data is the hero; gold lights the controls.
+description: A flat command-deck for League of Legends analytics. Data is the hero; red lights the controls.
 colors:
   bg: "oklch(0.985 0.003 255)"
   surface: "oklch(0.997 0.002 255)"
@@ -9,9 +9,9 @@ colors:
   border-strong: "oklch(0.82 0.009 255)"
   fg: "oklch(0.24 0.022 264)"
   muted: "oklch(0.45 0.02 264)"
-  primary: "oklch(0.69 0.135 76)"
-  primary-fg: "oklch(0.22 0.03 80)"
-  primary-2: "oklch(0.62 0.16 45)"
+  primary: "oklch(0.555 0.215 25)"
+  primary-fg: "oklch(0.985 0.012 25)"
+  primary-2: "oklch(0.62 0.2 36)"
   success: "oklch(0.50 0.13 158)"
   danger: "oklch(0.50 0.20 27)"
   warning: "oklch(0.55 0.13 70)"
@@ -99,15 +99,15 @@ components:
 
 **Creative North Star: "The Command Deck"**
 
-Transcendence is a flat, lit instrument panel for League of Legends and TFT data. Every surface is a readout. The interface reads like a high-tech command deck: layered solid surfaces, hairline borders, and a barely-perceptible atmospheric wash, with a single gold accent that lights only the controls a player can act on. It earns trust through craft and information density, not flash. Immersive enough to feel premium, restrained enough to stay out of the data's way.
+Transcendence is a flat, lit instrument panel for League of Legends data. Every surface is a readout. The interface reads like a high-tech command deck: layered solid surfaces, hairline borders, and a barely-perceptible atmospheric wash, with a single red accent that lights only the controls a player can act on. It earns trust through craft and information density, not flash. Immersive enough to feel premium, restrained enough to stay out of the data's way.
 
-The system is built for competitive climbers first. They make in-game decisions on these numbers, so the design's job is to make data fast to read and honest about its own certainty. Color is not decoration here: it is a data channel. Win rates render as diverging bars centered on 50%, tiers carry a categorical S→D scale, ranks carry an iron→challenger scale, and a confidence meter signals sample strength. When something is gold, it is an action. When something is green or red, it is a measured outcome. Nothing is colored to look nice.
+The system is built for competitive climbers first. They make in-game decisions on these numbers, so the design's job is to make data fast to read and honest about its own certainty. Color is not decoration here: it is a data channel. Win rates render as diverging bars centered on 50%, tiers carry a categorical S→D scale, ranks carry an iron→challenger scale, and a confidence meter signals sample strength. When something wears the vivid action red, it is a control you can act on; when something is green or a muted red, it is a measured outcome (a win, a loss, a low win rate). The two reds are kept deliberately apart (see the Named Rules). Nothing is colored to look nice.
 
 The aesthetic is deliberately the opposite of the "gamer dashboard" reflex. It rejects cyan-and-purple neon, gradient text, glow as a substitute for hierarchy, noise textures, hero-metric layouts, and glassmorphism-as-decoration. Depth comes from tonal layering and 1px borders, not from blur and shadow theatrics. Both light and dark themes are first-class (system-aware with a header toggle and a FOUC-safe head script); neither is the "default."
 
 **Key Characteristics:**
 - Flat, solid surfaces with 1px borders and restrained shadow; never glass-by-default.
-- Gold (`oklch(0.69 0.135 76)`) reserved exclusively for actions, active state, and focus.
+- Action red (`oklch(0.555 0.215 25)` light / `oklch(0.63 0.21 25)` dark) reserved exclusively for actions, active state, and focus, with near-white text on its solid fills, kept visibly distinct from the muted data red.
 - Color encodes data: diverging win-rate, tier categorical, rank categorical, win/loss semantic, confidence.
 - Bricolage Grotesque display + Hanken Grotesk body; JetBrains Mono only for real codes/IDs.
 - oklch throughout, theme-flipping via `--t-*` variables mapped through Tailwind v4 `@theme inline`.
@@ -115,10 +115,10 @@ The aesthetic is deliberately the opposite of the "gamer dashboard" reflex. It r
 
 ## 2. Colors
 
-A cool-slate neutral spine, one warm gold action accent, and a set of purpose-built data scales. Light and dark are defined as parallel token sets that flip via a `.dark` class.
+A cool-slate neutral spine, one vivid red action accent, and a set of purpose-built data scales. Light and dark are defined as parallel token sets that flip via a `.dark` class.
 
 ### Primary
-- **Signal Gold** (`oklch(0.69 0.135 76)` light / `oklch(0.80 0.14 82)` dark): The single action accent. Primary buttons, active tab/filter state, focus rings, top-tier (S) emphasis. A warmer companion, **Ember** (`primary-2`, `oklch(0.62 0.16 45)`), appears only in tiny accent washes (auth/hero radial tints). Gold is never decorative.
+- **Signal Red** (`oklch(0.555 0.215 25)` light / `oklch(0.63 0.21 25)` dark): The single action accent. Primary buttons, active tab/filter state, focus rings. It is a vivid scarlet-crimson, intentionally more saturated and a touch lighter than the muted data red (`danger`/`loss`/`wr-low`, `oklch(0.50 0.20 27)` light), and it appears only as interactive chrome (solid fills with near-white text, active underlines, focus rings), never as a measured value. `primary-fg` is near-white (`oklch(0.985 0.012 25)` light / `oklch(0.99 0.008 25)` dark) because the red is dark enough to need light text, where the old gold needed dark text. A warmer companion, **Ember** (`primary-2`, `oklch(0.62 0.2 36)`), appears only in tiny accent washes (auth/hero radial tints). The brand marks (favicon/icon SVGs and regenerated raster icons) carry the same accent as a `#f24a3d → #c11436` gradient. The action red is never decorative.
 
 ### Secondary
 - **Win Green** (`oklch(0.50 0.13 158)` light / `oklch(0.72 0.15 158)` dark): The positive pole of every win-rate bar, the "win" match outcome, the `success` semantic, and tier-A.
@@ -126,7 +126,7 @@ A cool-slate neutral spine, one warm gold action accent, and a set of purpose-bu
 
 ### Tertiary
 - **Info Blue** (`oklch(0.50 0.13 245)`): Ops/admin notes, the second atmospheric wash, tier-B. Utilitarian, never a brand color.
-- **Tier & Rank scales**: Tier categorical (S gold, A green, B blue, C amber, D slate) and rank categorical (iron→challenger, 10 steps) are full named scales used as small badges, dots, and the Tier Spine. They are data legends, not palette expansion.
+- **Tier & Rank scales**: Tier categorical (S gold, A green, B blue, C amber, D slate) and rank categorical (iron→challenger, 10 steps) are full named scales used as small badges, dots, and the Tier Spine. They are data legends, not palette expansion. Note gold now lives here only: it encodes tier-S (`oklch(0.66 0.14 76)`), gold rank, and challenger, and is no longer the action accent.
 
 ### Neutral
 - **Deck White / Ink** (`bg` `oklch(0.985 0.003 255)`, `surface` `oklch(0.997 0.002 255)`, `surface-2` `oklch(0.965 0.004 255)`; `fg` `oklch(0.24 0.022 264)`): Off-white surfaces, slate-ink text. Every neutral is tinted toward 255–264 hue; never pure `#fff`/`#000`.
@@ -134,9 +134,9 @@ A cool-slate neutral spine, one warm gold action accent, and a set of purpose-bu
 - **Borders** (`border` `oklch(0.905 0.006 255)`, `border-strong` `oklch(0.82 0.009 255)`): Hairlines do the structural work that shadow doesn't.
 
 ### Named Rules
-**The Gold-Is-A-Verb Rule.** Gold means "you can act here": primary action, active state, focus, top rank. If an element is gold but does nothing and ranks nothing, it is wrong. Repaint it neutral.
+**The Red-Is-A-Verb Rule.** The action red means "you can act here": primary action, active state, focus. It is the vivid, saturated scarlet, and it is deliberately separated from the muted data red used for loss, danger, and the low pole of win-rate bars (more chroma, slightly lighter, only ever on interactive chrome with near-white text). If an element wears the action red but does nothing, it is wrong; repaint it neutral. If it encodes a measured-bad value, use the muted data red, not the action red.
 
-**The Color-Is-Data Rule.** Outside of gold, every saturated color must encode a value: win/loss, win-rate magnitude, tier, rank, or confidence. There is no "brand teal," no decorative accent. If you cannot say what a color measures, it does not belong.
+**The Color-Is-Data Rule.** Outside of the action red, every saturated color must encode a value: win/loss, win-rate magnitude, tier, rank, or confidence. Gold is now one such data color (tier-S, gold rank, challenger), not a brand accent. There is no "brand teal," no decorative accent. If you cannot say what a color measures, it does not belong.
 
 ## 3. Typography
 
@@ -178,7 +178,7 @@ Flat by default, state-driven. Surfaces sit flush at rest, separated by `surface
 For each component, lead with character, then shape, color, and states.
 
 ### Buttons
-Confident and quiet. Solid gold primary, restrained neutral secondaries.
+Confident and quiet. Solid red primary with near-white text, restrained neutral secondaries.
 - **Shape:** `rounded-control` (`0.625rem`); min-height `2.75rem` (`md`) / `2.25rem` (`sm`).
 - **Primary:** `bg-primary text-primary-fg` + `shadow-soft`; hover `bg-primary/92`, active `bg-primary/85` plus a 1px downward nudge.
 - **Outline:** `border-border bg-surface text-fg/92`; hover lifts to `border-border-strong` + `surface-2/60`.
@@ -186,7 +186,7 @@ Confident and quiet. Solid gold primary, restrained neutral secondaries.
 - **Focus:** `ring-2 ring-primary/40 ring-offset-2 ring-offset-bg` on every variant. Motion-reduce disables transitions.
 
 ### Chips / Filters
-Filters are not pill clusters. The primary affordances are the `SegmentedControl` and `Select` primitives (Radix-backed, keyboard-accessible). Where filter pills exist (`.tierlist-filter-pill`), active state is a faint gold wash + gold-tinted border (`primary/88` bg, `primary/55` border), never a solid gold fill.
+Filters are not pill clusters. The primary affordances are the `SegmentedControl` and `Select` primitives (Radix-backed, keyboard-accessible). Where filter pills exist (`.tierlist-filter-pill`), active state is a faint red wash + red-tinted border (`primary/88` bg, `primary/55` border), never a solid red fill.
 
 ### Cards / Containers
 - **Corner Style:** `rounded-card` (`0.875rem`); panels `rounded-panel` (`1.125rem`), heroes `rounded-hero` (`1.375rem`).
@@ -201,7 +201,7 @@ Filters are not pill clusters. The primary affordances are the `SegmentedControl
 - **Error:** `.field-error`: danger-tinted border + `danger/88` background wash, danger text. Disabled drops to 60% opacity.
 
 ### Navigation
-Tabs (`.control-tab`) are underline-driven: a 1px bottom hairline at rest, deepening on hover, becoming a 2px gold underline + gold text when active. No filled tab backgrounds. The header carries the theme toggle and command-palette trigger.
+Tabs (`.control-tab`) are underline-driven: a 1px bottom hairline at rest, deepening on hover, becoming a 2px red underline + red text when active. No filled tab backgrounds. The header carries the theme toggle and command-palette trigger.
 
 ### Signature Components
 - **Tier Spine** (`TierSpine.tsx`): A continuous S→D tier-colored vertical rail the data hangs off. Each segment is a jump target into its tier section. The defining structural element of the tier list.
@@ -211,7 +211,7 @@ Tabs (`.control-tab`) are underline-driven: a 1px bottom hairline at rest, deepe
 ## 6. Do's and Don'ts
 
 ### Do:
-- **Do** reserve gold (`oklch(0.69 0.135 76)`) for actions, active state, focus rings, and top-tier rank, and nothing else.
+- **Do** reserve the action red (`oklch(0.555 0.215 25)`) for actions, active state, and focus rings, and nothing else; keep it more saturated than the muted data red so the two never blur. Top-tier (S) is gold, a data color, not this accent.
 - **Do** render every win rate as a `DataBar` diverging from 50%, and pass `games` so thin samples show a CI whisker.
 - **Do** keep surfaces flat at rest; introduce shadow or `backdrop-filter` only as a response to state (hover, sticky, overlay, focus).
 - **Do** lead pages with a compact sticky `Toolbar`, answer-first, op.gg/u.gg-style. Tables are the product.

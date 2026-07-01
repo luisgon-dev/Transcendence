@@ -14,7 +14,6 @@ using Transcendence.Service.Core.Services.Extensions;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Priority;
-using Transcendence.Service.Core.Services.Tft.Configuration;
 using Transcendence.Service.Workers;
 using Transcendence.Service.Workers.Startup;
 
@@ -49,7 +48,7 @@ builder.Services.AddHangfire(config =>
             options.UseNpgsqlConnection(builder.Configuration.GetConnectionString("MainDatabase"))));
 builder.Services.AddHangfireServer(options =>
 {
-    options.Queues = ["refresh-high", "default", "refresh-low", "tft-refresh-high", "tft-default", "tft-refresh-low"];
+    options.Queues = ["refresh-high", "default", "refresh-low"];
     // Refresh jobs are I/O-bound (awaiting the Riot API, throttled per-region by Camille), so a
     // worker count well above CPU count keeps more regions/summoners in flight concurrently.
     options.WorkerCount = 24;
@@ -196,8 +195,6 @@ else
 builder.Services.AddTranscendenceCore();
 builder.Services.AddTranscendenceWorkerCore();
 builder.Services.AddTranscendenceLeagueRiot(builder.Configuration);
-builder.Services.AddTranscendenceTftRiot(builder.Configuration);
-builder.Services.Configure<TftAnalyticsComputeOptions>(builder.Configuration.GetSection("Analytics:TftCompute"));
 
 // add data repositories
 builder.Services.AddProjectSyndraRepositories();

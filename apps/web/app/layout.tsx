@@ -26,7 +26,7 @@ const monoFont = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "Transcendence",
-  description: "League of Legends and TFT stats, builds, comps, and player profiles.",
+  description: "League of Legends stats, builds, runes, and player profiles.",
   icons: {
     icon: [
       { url: "/favicon.ico" },

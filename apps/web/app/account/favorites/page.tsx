@@ -84,7 +84,7 @@ export default function FavoritesPage() {
       <Toolbar
         eyebrow="Account"
         title="Favorites"
-        meta={<span>Your saved players from League and TFT profiles</span>}
+        meta={<span>Your saved players from League profiles</span>}
       />
 
       {error ? (
@@ -111,7 +111,7 @@ export default function FavoritesPage() {
       ) : items.length === 0 ? (
         <EmptyState
           title="No saved players yet"
-          description="Open any League or TFT player profile and use Add Favorite to pin it here for quick access."
+          description="Open any League player profile and use Add Favorite to pin it here for quick access."
           action={
             <Link
               href="/lol/tierlist"

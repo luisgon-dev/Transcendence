@@ -22,9 +22,4 @@ test.describe("Summoner profiles", () => {
       page.locator("[href*='/lol/matches/'], [class*='match'], text=/victory|defeat/i").first()
     ).toBeVisible({ timeout: 15_000 });
   });
-
-  test("TFT profile loads", async ({ page }) => {
-    await page.goto("/tft/summoners/na/Kronic-NA1");
-    await expect(page.getByText(/Kronic/i)).toBeVisible();
-  });
 });

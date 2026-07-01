@@ -4,9 +4,9 @@
 
 # Transcendence
 
-**A command deck for League of Legends &amp; Teamfight Tactics analytics.**
+**A command deck for League of Legends analytics.**
 
-Tier lists, champion builds, pro picks, comps, and live summoner profiles — fast, trustworthy, and unapologetically data-forward.
+Tier lists, champion builds, pro picks, and live summoner profiles — fast, trustworthy, and unapologetically data-forward.
 
 <!-- hero screenshot goes here — e.g. the LoL tier list or a summoner profile from apps/web -->
 
@@ -17,7 +17,7 @@ Tier lists, champion builds, pro picks, comps, and live summoner profiles — fa
 [![Next.js](https://img.shields.io/badge/Next.js-16.2-000000?logo=nextdotjs&logoColor=white)](apps/web)
 [![pnpm](https://img.shields.io/badge/pnpm-10.22.0-F69220?logo=pnpm&logoColor=white)](package.json)
 
-[**Live site →**](https://transcend.kronic.one) &nbsp;·&nbsp; [Sample LoL profile](https://transcend.kronic.one/lol/summoners/na/Kronic-NA1) &nbsp;·&nbsp; [Sample TFT profile](https://transcend.kronic.one/tft/summoners/na/Kronic-NA1)
+[**Live site →**](https://transcend.kronic.one) &nbsp;·&nbsp; [Sample profile](https://transcend.kronic.one/lol/summoners/na/Kronic-NA1)
 
 </div>
 
@@ -33,7 +33,7 @@ The live site redeploys automatically once changes land on `main`.
 
 <table>
 <tr>
-<td width="33%" valign="top">
+<td width="50%" valign="top">
 
 **🏆 League of Legends**
 
@@ -45,19 +45,7 @@ The live site redeploys automatically once changes land on `main`.
 - Search with prefix autosuggest, plus multi-search (up to 5 players) for champ-select — surfacing average rank, role coverage, and autofill risk
 
 </td>
-<td width="33%" valign="top">
-
-**🎲 Teamfight Tactics**
-
-- Composition analytics (meta builds)
-- Unit / champion analytics
-- Trait, item, and augment databases
-- Summoner profiles with recent matches and match detail
-
-LoL and TFT stay isolated at the data and job level while sharing auth, infrastructure, and deployment.
-
-</td>
-<td width="33%" valign="top">
+<td width="50%" valign="top">
 
 **🛠 Platform**
 
@@ -118,7 +106,7 @@ flowchart LR
   User -.->|poll until ready| API
 ```
 
-**The async refresh flow:** a profile request returns `200` immediately when data is cached. If it's missing, the API returns `202 Accepted`, takes a refresh lock, and enqueues a Hangfire job on a prioritized refresh queue (`refresh-high` for LoL, `tft-refresh-high` for TFT). The worker fetches from the Riot API and ingests matches into PostgreSQL while the client polls the same endpoint until the data appears. The Next.js BFF proxies authenticated requests so tokens stay in HttpOnly cookies — never exposed to browser JavaScript.
+**The async refresh flow:** a profile request returns `200` immediately when data is cached. If it's missing, the API returns `202 Accepted`, takes a refresh lock, and enqueues a Hangfire job on the prioritized `refresh-high` queue. The worker fetches from the Riot API and ingests matches into PostgreSQL while the client polls the same endpoint until the data appears. The Next.js BFF proxies authenticated requests so tokens stay in HttpOnly cookies — never exposed to browser JavaScript.
 
 ## 🚀 Quick Start
 
@@ -208,7 +196,7 @@ Transcendence/
 ├─ packages/api-client/          # Generated TS client (@transcendence/api-client)
 ├─ openapi/transcendence.v1.json # Committed OpenAPI contract — source of truth
 ├─ tests/                        # Backend unit tests (Service.Core, WebAPI)
-├─ e2e/                          # Playwright tests (navigation, smoke, summoner, tft, tierlist)
+├─ e2e/                          # Playwright tests (navigation, smoke, summoner, tierlist)
 ├─ docs/                         # DEVELOPMENT.md · API.md · ARCHITECTURE.md
 ├─ scripts/                      # OpenAPI export, e2e, and ops helpers
 └─ config/                       # backend.shared.json

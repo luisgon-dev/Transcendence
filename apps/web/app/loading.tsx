@@ -1,41 +1,42 @@
-import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 
+// Root fallback for segments without their own loading.tsx — primarily the
+// search-forward landing (hero + top-picks / explore panels), plus the LoL
+// index and account/admin pages. Mirrors the landing's structure so streamed
+// content lands in place instead of replacing a differently-shaped skeleton.
+// Flat placeholders, no shimmer (per the "Ladder" aesthetic).
 export default function Loading() {
   return (
-    <div className="grid gap-6">
-      <Card className="p-5">
-        <div className="flex items-center gap-4">
-          <Skeleton className="h-16 w-16 rounded-xl" />
-          <div className="flex flex-col gap-2">
-            <Skeleton className="h-8 w-48" />
-            <Skeleton className="h-4 w-32" />
+    <div className="grid gap-8">
+      <section className="page-hero p-6 sm:p-8 md:p-10">
+        <div className="grid max-w-3xl gap-3">
+          <Skeleton className="h-10 w-11/12 rounded-lg" />
+          <Skeleton className="h-10 w-2/3 rounded-lg" />
+        </div>
+        <Skeleton className="mt-6 h-4 w-3/4 max-w-2xl rounded-md" />
+        <div className="mt-8 grid gap-3">
+          <Skeleton className="h-14 w-full max-w-2xl rounded-control" />
+          <Skeleton className="h-3.5 w-64 rounded-md" />
+        </div>
+      </section>
+
+      <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr] lg:items-start">
+        <div className="page-panel grid gap-4 p-5 sm:p-6">
+          <Skeleton className="h-3 w-44 rounded-md" />
+          <div className="grid gap-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-11 w-full rounded-md" />
+            ))}
           </div>
         </div>
-        <div className="mt-6 flex flex-wrap gap-4">
-          <Skeleton className="h-10 w-24 rounded-lg" />
-          <Skeleton className="h-10 w-24 rounded-lg" />
-          <Skeleton className="h-10 w-24 rounded-lg" />
+        <div className="page-panel grid content-start gap-4 p-5 sm:p-6">
+          <Skeleton className="h-3 w-24 rounded-md" />
+          <div className="grid gap-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-16 w-full rounded-md" />
+            ))}
+          </div>
         </div>
-      </Card>
-      
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card className="p-5">
-          <Skeleton className="h-6 w-32 mb-4" />
-          <div className="space-y-4">
-            <Skeleton className="h-12 w-full rounded-md" />
-            <Skeleton className="h-12 w-full rounded-md" />
-            <Skeleton className="h-12 w-full rounded-md" />
-          </div>
-        </Card>
-        
-        <Card className="p-5">
-          <Skeleton className="h-6 w-32 mb-4" />
-          <div className="space-y-4">
-            <Skeleton className="h-24 w-full rounded-md" />
-            <Skeleton className="h-24 w-full rounded-md" />
-          </div>
-        </Card>
       </div>
     </div>
   );

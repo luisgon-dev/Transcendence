@@ -11,17 +11,13 @@ describe("isAllowedPublicProxyPath", () => {
       ["lol matches recent", ["lol", "summoners", "abc-123", "matches", "recent"]],
       ["lol match detail", ["lol", "summoners", "abc-123", "matches", "MATCH_1"]],
       ["lol match timeline", ["lol", "summoners", "abc-123", "matches", "MATCH_1", "timeline"]],
-      ["lol rank history", ["lol", "summoners", "abc-123", "stats", "rank-history"]],
-      ["tft profile", ["tft", "summoners", "na", "Faker", "NA1"]],
-      ["tft matches recent", ["tft", "summoners", "abc-123", "matches", "recent"]],
-      ["tft match detail", ["tft", "summoners", "abc-123", "matches", "MATCH_1"]]
+      ["lol rank history", ["lol", "summoners", "abc-123", "stats", "rank-history"]]
     ])("GET %s", (_label, path) => {
       expect(isAllowedPublicProxyPath("GET", path)).toBe(true);
     });
 
     it.each([
-      ["lol refresh", ["lol", "summoners", "na", "Faker", "NA1", "refresh"]],
-      ["tft refresh", ["tft", "summoners", "na", "Faker", "NA1", "refresh"]]
+      ["lol refresh", ["lol", "summoners", "na", "Faker", "NA1", "refresh"]]
     ])("POST %s", (_label, path) => {
       expect(isAllowedPublicProxyPath("POST", path)).toBe(true);
     });
@@ -31,7 +27,6 @@ describe("isAllowedPublicProxyPath", () => {
     it("rejects non-summoner namespaces", () => {
       expect(isAllowedPublicProxyPath("GET", ["lol", "analytics", "tier-list"])).toBe(false);
       expect(isAllowedPublicProxyPath("GET", ["lol", "champions", "Aatrox"])).toBe(false);
-      expect(isAllowedPublicProxyPath("GET", ["tft", "analytics", "comps"])).toBe(false);
     });
 
     it("rejects non-public top-level namespaces", () => {
@@ -43,7 +38,6 @@ describe("isAllowedPublicProxyPath", () => {
 
     it("rejects POST that is not a refresh", () => {
       expect(isAllowedPublicProxyPath("POST", ["lol", "summoners", "na", "Faker", "NA1"])).toBe(false);
-      expect(isAllowedPublicProxyPath("POST", ["tft", "summoners", "abc-123", "matches"])).toBe(false);
     });
 
     it("rejects PUT and DELETE on the public surface", () => {

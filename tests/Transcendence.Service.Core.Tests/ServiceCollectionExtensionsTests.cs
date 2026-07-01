@@ -9,8 +9,6 @@ using Transcendence.Data.Extensions;
 using Transcendence.Service.Core.Services.Extensions;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.LiveGame.Interfaces;
-using Transcendence.Service.Core.Services.Tft.Configuration;
-using Transcendence.Service.Core.Services.Tft.Interfaces;
 using Transcendence.Service.Core.Tests.Support;
 
 namespace Transcendence.Service.Core.Tests;
@@ -36,7 +34,6 @@ public class ServiceCollectionExtensionsTests
             .Options;
         services.AddScoped<TranscendenceContext>(_ => new SqliteCompatibleTranscendenceContext(dbOptions));
         services.Configure<MultiRegionIngestionOptions>(_ => { });
-        services.Configure<TftAnalyticsComputeOptions>(_ => { });
         services.AddProjectSyndraRepositories();
         services.AddTranscendenceCore();
 
@@ -47,8 +44,6 @@ public class ServiceCollectionExtensionsTests
         });
 
         using var scope = provider.CreateScope();
-        scope.ServiceProvider.GetRequiredService<ITftAnalyticsService>().Should().NotBeNull();
-        scope.ServiceProvider.GetRequiredService<ITftStaticDataService>().Should().NotBeNull();
         scope.ServiceProvider.GetRequiredService<ILiveGameService>().Should().NotBeNull();
     }
 

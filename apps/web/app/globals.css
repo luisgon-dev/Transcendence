@@ -291,6 +291,7 @@ body::before {
     font-size: 1.0625rem;
     line-height: 1.7;
     color: color-mix(in oklch, var(--t-fg), transparent 22%);
+    text-wrap: pretty;
   }
   .type-ui {
     font-size: 0.9375rem;
@@ -459,20 +460,25 @@ body::before {
     padding: 0.95rem 1rem;
   }
 
-  /* Match cards — flat surface + win/loss accent edge (no radial glow) */
+  /* Match cards — flat surface with a faint win/loss wash (no side-stripe, no
+     radial glow). Win/loss is carried by the VICTORY/DEFEAT badge + the 1px
+     border tint; this full-surface wash is the scannable at-a-glance
+     reinforcement the old left edge used to provide. */
   .match-card-shell {
     position: relative;
     overflow: hidden;
     border-radius: var(--radius-card);
     transition: transform 160ms var(--ease-out-quart), border-color 160ms var(--ease-out-quart), box-shadow 160ms var(--ease-out-quart);
   }
+  /* Interpolate in oklab (rectangular), not oklch: mixing a saturated accent
+     into a near-achromatic surface in cylindrical oklch lets the surface's
+     powerless hue drag the result toward slate on some engines, collapsing the
+     win/loss tints into the same gray. oklab keeps the green/red deterministic. */
   .match-card-shell--win {
-    border-left: 3px solid color-mix(in oklch, var(--t-win), transparent 25%);
-    background: var(--t-surface);
+    background: color-mix(in oklab, var(--t-win) 5%, var(--t-surface));
   }
   .match-card-shell--loss {
-    border-left: 3px solid color-mix(in oklch, var(--t-loss), transparent 25%);
-    background: var(--t-surface);
+    background: color-mix(in oklab, var(--t-loss) 5%, var(--t-surface));
   }
   .match-card-shell:hover {
     transform: translateY(-1px);

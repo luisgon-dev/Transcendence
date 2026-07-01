@@ -138,7 +138,7 @@ export default async function LandingPage() {
       >
         {hasPicks ? (
           <div className="page-panel grid gap-4 p-5 sm:p-6">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex min-h-7 items-center justify-between gap-3">
               <span className="inline-flex flex-wrap items-center gap-2">
                 <span className="type-kicker text-muted">Top picks · Emerald+</span>
                 {patch ? <Badge>Patch {patch}</Badge> : null}
@@ -184,7 +184,7 @@ export default async function LandingPage() {
         ) : null}
 
         <div className="page-panel grid content-start gap-4 p-5 sm:p-6">
-          <p className="type-kicker text-muted">Explore</p>
+          <p className="type-kicker flex min-h-7 items-center text-muted">Explore</p>
           <div className="grid">
             {EXPLORE.map((dest, index) => (
               <Link

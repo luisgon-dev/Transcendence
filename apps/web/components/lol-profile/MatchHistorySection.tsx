@@ -126,10 +126,6 @@ function MatchHistoryCard({
         match.win ? "match-card-shell--win border-success/28" : "match-card-shell--loss border-danger/28"
       } rounded-panel border`}
     >
-      <span
-        className={`absolute inset-y-0 left-0 w-1.5 ${match.win ? "bg-success/75" : "bg-danger/75"}`}
-        aria-hidden="true"
-      />
       <button
         className="relative z-10 w-full px-4 py-4 text-left focus-visible:outline-none md:px-5 md:py-5"
         onClick={() => void onToggleExpanded(match.matchId)}

@@ -123,7 +123,7 @@ function MatchHistoryCard({
   return (
     <div
       className={`match-card-shell ${
-        match.win ? "match-card-shell--win border-success/28" : "match-card-shell--loss border-danger/28"
+        match.win ? "match-card-shell--win border-win/28" : "match-card-shell--loss border-loss/28"
       } rounded-panel border`}
     >
       <button
@@ -139,7 +139,7 @@ function MatchHistoryCard({
             <div className="flex flex-wrap items-center gap-2">
               <span
                 className={`type-overline rounded-full px-2.5 py-1 ${
-                  match.win ? "bg-success/15 text-success" : "bg-danger/15 text-danger"
+                  match.win ? "bg-win/15 text-win" : "bg-loss/15 text-loss"
                 }`}
               >
                 {match.win ? "VICTORY" : "DEFEAT"}
@@ -291,7 +291,7 @@ function MatchHistoryCard({
           <div className="grid gap-2 xl:justify-items-end">
             <div className="surface-subtle rounded-card px-4 py-3 text-right">
               <p className="text-xl font-semibold leading-tight tracking-tight text-fg">
-                <span>{match.kills}</span>/<span className="text-danger/90">{match.deaths}</span>/<span>{match.assists}</span>
+                <span>{match.kills}</span>/<span className="text-loss/90">{match.deaths}</span>/<span>{match.assists}</span>
               </p>
               <p className="mt-1 text-xs font-medium text-fg/82">
                 {matchKdaRatio(match).toFixed(2)} KDA
@@ -322,7 +322,7 @@ function MatchHistoryCard({
             <div className="mt-4 border-t border-border/55 px-4 pt-4 md:px-5">
               {detailBusy ? <Skeleton className="h-12 w-full" /> : null}
               {!detailBusy && !detail ? (
-                <p className="text-sm text-fg/75">Detailed rows are unavailable for this match.</p>
+                <p className="text-sm text-fg/75">Detailed stats are unavailable for this match.</p>
               ) : null}
               {detail ? (
                 <MatchScoreboard
@@ -485,12 +485,11 @@ export function MatchHistorySection({
         </div>
 
         <p className="mt-3 text-xs text-muted">
-          Match history:{" "}
           <Link
             href={`/lol/summoners/${region}/${encodeRiotIdPath({ gameName, tagLine })}/matches`}
-            className="text-primary hover:underline"
+            className="rounded-control text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45"
           >
-            /lol/summoners/.../matches
+            View full match history →
           </Link>
         </p>
       </Card>

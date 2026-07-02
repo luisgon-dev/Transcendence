@@ -80,7 +80,7 @@ export default async function SummonerProfilePage({
     return (
       <BackendErrorCard
         title="Summoner"
-        message="Invalid player link. Use /summoners/{region}/{gameName}-{tagLine}."
+        message="This player link isn't valid. Search for the player by name from the home page instead."
         requestId={pageRequestId}
         detail={
           verbosity === "verbose"

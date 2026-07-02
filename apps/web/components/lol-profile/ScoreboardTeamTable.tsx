@@ -185,7 +185,7 @@ function ScoreboardRow({
             {canLink ? (
               <Link
                 href={`/lol/summoners/${region}/${encodeRiotIdPath({ gameName: participant.gameName as string, tagLine: participant.tagLine as string })}`}
-                className="block truncate text-sm font-medium text-fg/95 transition-colors hover:text-primary hover:underline"
+                className="block truncate rounded text-sm font-medium text-fg/95 transition-colors hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45"
               >
                 {displayName}
               </Link>
@@ -226,13 +226,17 @@ function ScoreboardRow({
               </div>
             }
           >
-            <div className="ml-auto mt-1 h-1.5 w-16 overflow-hidden rounded-full bg-surface-2/70">
-              <div className="flex h-full" style={{ width: `${damageFillPct}%` }}>
+            <button
+              type="button"
+              aria-label={`Damage ${totalDmg.toLocaleString()}: ${physDmg.toLocaleString()} physical, ${magicDmg.toLocaleString()} magic, ${trueDmg.toLocaleString()} true`}
+              className="ml-auto mt-1 block h-1.5 w-16 overflow-hidden rounded-full bg-surface-2/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45"
+            >
+              <span className="flex h-full" style={{ width: `${damageFillPct}%` }}>
                 <span className="h-full" style={{ width: `${(physDmg / splitSum) * 100}%`, backgroundColor: "var(--color-loss)" }} />
                 <span className="h-full" style={{ width: `${(magicDmg / splitSum) * 100}%`, backgroundColor: "var(--color-team-blue)" }} />
                 <span className="h-full" style={{ width: `${(trueDmg / splitSum) * 100}%`, backgroundColor: "var(--color-fg)" }} />
-              </div>
-            </div>
+              </span>
+            </button>
           </Tooltip>
         ) : null}
       </Td>

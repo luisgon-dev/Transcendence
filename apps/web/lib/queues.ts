@@ -9,6 +9,7 @@ const QUEUE_ID_LABELS: Record<number, string> = {
   900: "ARURF",
   1700: "Arena",
   1710: "Arena",
+  1750: "Arena",
   1810: "Arena",
   1820: "Arena",
   1830: "Arena",

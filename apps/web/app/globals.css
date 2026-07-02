@@ -487,7 +487,7 @@ body::before {
   }
   .match-card-shell:focus-within {
     border-color: color-mix(in oklch, var(--t-primary), transparent 45%);
-    box-shadow: 0 0 0 1px color-mix(in oklch, var(--t-primary), transparent 60%);
+    box-shadow: 0 0 0 2px color-mix(in oklch, var(--t-primary), transparent 30%);
   }
   .match-detail-shell {
     position: relative; border-radius: var(--radius-card);

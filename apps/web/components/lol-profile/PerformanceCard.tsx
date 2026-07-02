@@ -4,7 +4,7 @@ import { LaneIcon } from "@/components/ui/LaneIcon";
 import { Stat } from "@/components/ui/Stat";
 import { cn } from "@/lib/cn";
 import { formatGames } from "@/lib/format";
-import { roleDisplayLabel } from "@/lib/roles";
+import { LANE_ROLES, roleDisplayLabel } from "@/lib/roles";
 
 import {
   matchKdaRatio,
@@ -70,10 +70,12 @@ export function PerformanceCard({
     buckets.set(role, bucket);
   }
 
-  // Drop UNKNOWN entirely — an "Unknown" role row teaches nothing. If every match
-  // is unknown the per-role section simply renders nothing.
+  // Keep only the five real lanes. normalizeRoleKey maps every valid position into
+  // LANE_ROLES (SUPPORT→UTILITY), so this drops both "UNKNOWN" and the non-standard
+  // teamPosition tokens that special modes (e.g. Arena) carry — those render as a
+  // meaningless "Unknown" row and teach nothing about how the player lanes.
   const roleRows: RoleRow[] = [...buckets.entries()]
-    .filter(([role]) => role !== "UNKNOWN")
+    .filter(([role]) => (LANE_ROLES as readonly string[]).includes(role))
     .map(([role, bucket]) => {
       let topChampionId = -1;
       let topCount = -1;
@@ -105,11 +107,17 @@ export function PerformanceCard({
       </div>
 
       {hasAverages ? (
-        <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Stat label="CS / min" value={formatStat(overviewStats.avgCsPerMin, 1)} />
-          <Stat label="Vision" value={formatStat(overviewStats.avgVisionScore, 1)} />
-          <Stat label="KDA" value={formatStat(overviewStats.kdaRatio, 2)} />
-          <Stat label="Dmg / game" value={formatCompactNumber(overviewStats.avgDamageToChamps)} />
+        <div className="mt-4 grid gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <p className="type-overline text-muted">Averages</p>
+            <p className="type-caption text-muted">Across {formatGames(overviewStats.totalMatches)} games</p>
+          </div>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <Stat label="CS / min" value={formatStat(overviewStats.avgCsPerMin, 1)} />
+            <Stat label="Vision" value={formatStat(overviewStats.avgVisionScore, 1)} />
+            <Stat label="KDA" value={formatStat(overviewStats.kdaRatio, 2)} />
+            <Stat label="Dmg / game" value={formatCompactNumber(overviewStats.avgDamageToChamps)} />
+          </div>
         </div>
       ) : null}
 

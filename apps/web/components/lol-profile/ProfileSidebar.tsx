@@ -153,7 +153,7 @@ export function ProfileSidebar({
                 <Link
                   key={m.championId}
                   href={`/lol/champions/${m.championId}`}
-                  className="surface-subtle group flex items-center gap-3 rounded-control px-3 py-2.5 transition hover:border-border-strong hover:bg-surface-2/60"
+                  className="surface-subtle group flex items-center gap-3 rounded-control px-3 py-2.5 transition hover:border-border-strong hover:bg-surface-2/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45"
                 >
                   {champion && championStatic ? (
                     <Image
@@ -198,7 +198,7 @@ export function ProfileSidebar({
               <Link
                 key={championStat.championId}
                 href={`/lol/champions/${championStat.championId}`}
-                className="surface-subtle group grid gap-2 rounded-control px-3 py-3 transition hover:border-border-strong hover:bg-surface-2/60"
+                className="surface-subtle group grid gap-2 rounded-control px-3 py-3 transition hover:border-border-strong hover:bg-surface-2/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -207,7 +207,7 @@ export function ProfileSidebar({
                       {champion?.name ?? championStat.championName}
                     </p>
                   </div>
-                  <DataBar value={championStat.winRate} />
+                  <DataBar value={championStat.winRate} games={championStat.games} />
                 </div>
                 <div className="flex items-center justify-between gap-2 text-xs text-fg/64">
                   <span>{championStat.games} games tracked</span>
@@ -233,14 +233,14 @@ export function ProfileSidebar({
                 <Link
                   key={mate.summonerId}
                   href={`/lol/summoners/${region}/${encodeRiotIdPath({ gameName: mate.gameName, tagLine: mate.tagLine })}`}
-                  className="surface-subtle group grid gap-1.5 rounded-control px-3 py-2.5 transition hover:border-border-strong hover:bg-surface-2/60"
+                  className="surface-subtle group grid gap-1.5 rounded-control px-3 py-2.5 transition hover:border-border-strong hover:bg-surface-2/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <p className="min-w-0 truncate text-sm font-medium text-fg group-hover:text-primary">
                       {mate.gameName}
                       <span className="text-muted">#{mate.tagLine}</span>
                     </p>
-                    {wr != null ? <DataBar value={wr} /> : null}
+                    {wr != null ? <DataBar value={wr} games={mate.sameTeamGames} /> : null}
                   </div>
                   <div className="flex items-center justify-between gap-2 text-xs text-fg/64">
                     <span>{mate.gamesTogether} games together</span>

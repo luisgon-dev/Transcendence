@@ -17,12 +17,6 @@ import {
 } from "@/components/lol-profile/shared";
 import { rankTierDisplayLabel } from "@/lib/ranks";
 
-type QuickStats = {
-  total: number;
-  winRate: number;
-  avgKda: number;
-};
-
 type RankedEntry = {
   label: string;
   rank: RankInfo;
@@ -41,7 +35,6 @@ export function ProfileHeroCard({
   championStatic,
   dataAge,
   rankedEntries,
-  quickStats,
   recentForm,
   accepted,
   error,
@@ -56,7 +49,6 @@ export function ProfileHeroCard({
   championStatic: ChampionStatic | null;
   dataAge: string;
   rankedEntries: RankedEntry[];
-  quickStats: QuickStats | null;
   recentForm: boolean[];
   accepted: AcceptedResponse | null;
   error: ApiErrorResponse | null;
@@ -67,6 +59,13 @@ export function ProfileHeroCard({
   const rankText = primaryRank
     ? `${rankTierDisplayLabel(primaryRank.tier)} ${primaryRank.division}`
     : "Unranked";
+
+  // Win rate is derived from — and labelled against — the same recent-form window
+  // as the pips below, so it never reads as (and never contradicts) the ranked win
+  // rate broken out in the sidebar.
+  const recentWins = recentForm.filter(Boolean).length;
+  const recentWr =
+    recentForm.length > 0 ? formatPercent(recentWins / recentForm.length) : null;
 
   return (
     <div className="flex flex-col gap-3">
@@ -96,7 +95,6 @@ export function ProfileHeroCard({
               {rankText}
               {primaryRank ? ` · ${primaryRank.leaguePoints} LP` : ""}
             </span>
-            {quickStats ? <span className="text-fg/80">{formatPercent(quickStats.winRate)} WR</span> : null}
           </>
         }
         actions={
@@ -111,18 +109,31 @@ export function ProfileHeroCard({
           recentForm.length > 0 ? (
             <>
               <span className="type-overline text-muted">Recent form</span>
-              <div className="flex flex-wrap items-center gap-1" aria-label="Recent match outcomes (latest first)">
+              {/* Wins render solid, losses render outlined: a fill/shape cue that
+                  survives red/green color blindness, with color as a redundant
+                  signal. The whole strip is one labelled image for screen readers;
+                  the individual pips are decorative (aria-hidden). */}
+              <div
+                className="flex flex-wrap items-center gap-1"
+                role="img"
+                aria-label={`Recent form, latest first: ${recentForm
+                  .map((win) => (win ? "Win" : "Loss"))
+                  .join(", ")}`}
+              >
                 {recentForm.map((win, idx) => (
                   <span
                     key={`${win ? "w" : "l"}-${idx}`}
-                    className={`h-2.5 w-7 rounded-full ${win ? "bg-success/75" : "bg-danger/70"}`}
-                    aria-label={win ? "Win" : "Loss"}
+                    aria-hidden="true"
+                    className={`h-2.5 w-7 rounded-full ${
+                      win ? "bg-win/80" : "border border-loss/70 bg-loss/25"
+                    }`}
                     title={win ? "Win" : "Loss"}
                   />
                 ))}
               </div>
               <span className="type-caption ml-auto text-muted">
-                Last {recentForm.length} · {dataAge}
+                Last {recentForm.length}
+                {recentWr ? ` · ${recentWr} WR` : ""} · {dataAge}
               </span>
             </>
           ) : undefined

@@ -181,21 +181,6 @@ export function SummonerProfileClient({
     return (history?.items ?? []).slice(0, 10).map((match) => match.win);
   }, [history?.items]);
 
-  const quickStats = useMemo(() => {
-    const matches = history?.items ?? [];
-    if (matches.length === 0) return null;
-
-    const total = matches.length;
-    const wins = matches.filter((match) => match.win).length;
-    const avgKda = matches.reduce((sum, match) => sum + matchKdaRatio(match), 0) / total;
-
-    return {
-      total,
-      winRate: wins / total,
-      avgKda
-    };
-  }, [history?.items]);
-
   useEffect(() => {
     if (!history || !expandedMatchId) return;
     if (visibleMatches.some((match) => match.matchId === expandedMatchId)) return;
@@ -285,7 +270,7 @@ export function SummonerProfileClient({
     if (pollAttempts >= MAX_POLL_ATTEMPTS) {
       setPolling(false);
       setAccepted({
-        message: "This update is taking longer than expected — it'll keep processing in the background. Tap Update Now to check again."
+        message: "This update is taking longer than expected — it'll keep processing in the background. Use Update Now to check again."
       });
       return;
     }
@@ -445,7 +430,6 @@ export function SummonerProfileClient({
         championStatic={championStatic}
         dataAge={dataAge}
         rankedEntries={rankedEntries}
-        quickStats={quickStats}
         recentForm={recentForm}
         accepted={accepted}
         error={error}

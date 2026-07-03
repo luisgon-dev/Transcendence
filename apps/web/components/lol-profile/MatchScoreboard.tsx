@@ -8,6 +8,7 @@ import { ScoreboardTeamTable, type ScoreboardDensity } from "@/components/lol-pr
 import { GoldDiffChart } from "@/components/lol-profile/GoldDiffChart";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { cn } from "@/lib/cn";
+import { plural } from "@/lib/format";
 import { deriveMatchTakeaways, type Takeaway, type TakeawayTone } from "@/lib/matchInsights";
 import { roleDisplayLabel } from "@/lib/roles";
 import { championIconUrl } from "@/lib/staticData";
@@ -139,14 +140,15 @@ function MatchTakeaways({ takeaways }: { takeaways: Takeaway[] }) {
 }
 
 function TeamObjectivesSummary({ team, side }: { team: MatchTeamObjectives | undefined; side: "blue" | "red" }) {
+  const obj = (n: number, noun: string) => `${n} ${plural(n, noun)}`;
   const items = team
     ? [
-        team.dragon.kills > 0 ? `${team.dragon.kills} Dragon` : null,
-        team.baron.kills > 0 ? `${team.baron.kills} Baron` : null,
-        team.riftHerald.kills > 0 ? `${team.riftHerald.kills} Herald` : null,
-        team.horde.kills > 0 ? `${team.horde.kills} Grubs` : null,
-        `${team.tower.kills} Towers`,
-        team.inhibitor.kills > 0 ? `${team.inhibitor.kills} Inhib` : null
+        team.dragon.kills > 0 ? obj(team.dragon.kills, "Dragon") : null,
+        team.baron.kills > 0 ? obj(team.baron.kills, "Baron") : null,
+        team.riftHerald.kills > 0 ? obj(team.riftHerald.kills, "Herald") : null,
+        team.horde.kills > 0 ? obj(team.horde.kills, "Grub") : null,
+        obj(team.tower.kills, "Tower"),
+        team.inhibitor.kills > 0 ? obj(team.inhibitor.kills, "Inhib") : null
       ].filter(Boolean)
     : [];
 

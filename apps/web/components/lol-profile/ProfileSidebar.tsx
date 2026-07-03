@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { DataBar } from "@/components/ui/DataBar";
 import { Sparkline } from "@/components/ui/Sparkline";
 import { championIconUrl } from "@/lib/staticData";
-import { formatPercent, winRateColorClass } from "@/lib/format";
+import { formatPercent, plural, winRateColorClass } from "@/lib/format";
 import { rankEmblemUrl, rankTierDisplayLabel, rankToLadderPoints } from "@/lib/ranks";
 import { encodeRiotIdPath } from "@/lib/riotid";
 
@@ -210,7 +210,7 @@ export function ProfileSidebar({
                   <DataBar value={championStat.winRate} games={championStat.games} />
                 </div>
                 <div className="flex items-center justify-between gap-2 text-xs text-fg/64">
-                  <span>{championStat.games} games tracked</span>
+                  <span>{championStat.games} {plural(championStat.games, "game")} tracked</span>
                   <span>{championStat.kdaRatio.toFixed(2)} KDA</span>
                 </div>
               </Link>
@@ -243,7 +243,7 @@ export function ProfileSidebar({
                     {wr != null ? <DataBar value={wr} games={mate.sameTeamGames} /> : null}
                   </div>
                   <div className="flex items-center justify-between gap-2 text-xs text-fg/64">
-                    <span>{mate.gamesTogether} games together</span>
+                    <span>{mate.gamesTogether} {plural(mate.gamesTogether, "game")} together</span>
                     {mate.sameTeamGames > 0 ? <span>{mate.sameTeamGames} as duo</span> : null}
                   </div>
                 </Link>

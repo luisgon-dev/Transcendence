@@ -63,6 +63,12 @@ export function formatGames(count: number | null | undefined): string {
   return Math.floor(count).toLocaleString();
 }
 
+// Count-agreeing noun: plural(1, "game") → "game", plural(3, "game") → "games".
+// Pair with the caller's own number formatting, e.g. `{formatGames(n)} {plural(n, "game")}`.
+export function plural(count: number | null | undefined, noun: string): string {
+  return count === 1 ? noun : `${noun}s`;
+}
+
 export function formatRelativeTime(timestamp: number | null | undefined): string {
   if (timestamp == null || !Number.isFinite(timestamp)) return "";
   const now = Date.now();

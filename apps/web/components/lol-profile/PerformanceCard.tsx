@@ -3,7 +3,7 @@ import { DataBar } from "@/components/ui/DataBar";
 import { LaneIcon } from "@/components/ui/LaneIcon";
 import { Stat } from "@/components/ui/Stat";
 import { cn } from "@/lib/cn";
-import { formatGames } from "@/lib/format";
+import { formatGames, plural } from "@/lib/format";
 import { LANE_ROLES, roleDisplayLabel } from "@/lib/roles";
 
 import {
@@ -110,7 +110,7 @@ export function PerformanceCard({
         <div className="mt-4 grid gap-2">
           <div className="flex items-center justify-between gap-2">
             <p className="type-overline text-muted">Averages</p>
-            <p className="type-caption text-muted">Across {formatGames(overviewStats.totalMatches)} games</p>
+            <p className="type-caption text-muted">Across {formatGames(overviewStats.totalMatches)} {plural(overviewStats.totalMatches, "game")}</p>
           </div>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <Stat label="CS / min" value={formatStat(overviewStats.avgCsPerMin, 1)} />
@@ -122,29 +122,48 @@ export function PerformanceCard({
       ) : null}
 
       {hasRoles ? (
-        <div className={cn("grid gap-2", hasAverages && "mt-5 border-t border-border pt-5")}>
-          <div className="flex items-center justify-between gap-2">
-            <p className="type-overline text-muted">By role</p>
-            <p className="type-caption text-muted">From last {formatGames(matches.length)} games</p>
-          </div>
-          {roleRows.map((row) => (
-            <div key={row.role} className="surface-subtle grid gap-2 rounded-control px-3 py-2.5">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2">
-                  <LaneIcon role={row.role} className="h-4 w-4 shrink-0 text-muted" />
-                  <span className="truncate text-sm font-medium text-fg">{roleDisplayLabel(row.role)}</span>
+        // Collapsed by default so the match history sits higher on the page — the
+        // season averages above answer "how do you play" at a glance, and the
+        // per-role split is one click of depth away. Native <details> keeps it
+        // keyboard-accessible with no client state.
+        <details className={cn("group", hasAverages && "mt-5 border-t border-border/70 pt-5")}>
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-control py-2 [&::-webkit-details-marker]:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45">
+            <span className="flex items-center gap-2">
+              <svg
+                viewBox="0 0 12 12"
+                aria-hidden="true"
+                className="size-3 shrink-0 text-muted transition-transform duration-150 group-open:rotate-90"
+              >
+                <path d="M4.5 3 7.5 6 4.5 9" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span className="type-overline text-muted">By role</span>
+            </span>
+            <span className="type-caption text-muted">From last {formatGames(matches.length)} {plural(matches.length, "game")}</span>
+          </summary>
+          <div className="mt-3 grid gap-2">
+            {roleRows.map((row) => (
+              <div key={row.role} className="surface-subtle grid gap-2 rounded-control px-3 py-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <LaneIcon role={row.role} className="h-4 w-4 shrink-0 text-muted" />
+                    <span className="truncate text-sm font-medium text-fg">{roleDisplayLabel(row.role)}</span>
+                  </div>
+                  {/* A single-game (usually off-role) row lands at 0%/100%, where the
+                      Wald CI whisker collapses and the bar would read as a confident
+                      verdict. Below 2 games we render a muted "—" instead — matching
+                      the played-with guard and the "never present small-n as fact" rule. */}
+                  <DataBar value={row.games >= 2 ? row.winRate : null} games={row.games} />
                 </div>
-                <DataBar value={row.winRate} games={row.games} />
+                <div className="flex items-center justify-between gap-2 text-xs text-fg/64">
+                  <span className="min-w-0 truncate">
+                    {formatGames(row.games)} {plural(row.games, "game")}{row.topChampion ? ` · ${row.topChampion}` : ""}
+                  </span>
+                  <span className="shrink-0 tabular-nums">{row.avgKda.toFixed(2)} KDA</span>
+                </div>
               </div>
-              <div className="flex items-center justify-between gap-2 text-xs text-fg/64">
-                <span className="min-w-0 truncate">
-                  {formatGames(row.games)} games{row.topChampion ? ` · ${row.topChampion}` : ""}
-                </span>
-                <span className="shrink-0 tabular-nums">{row.avgKda.toFixed(2)} KDA</span>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </details>
       ) : null}
     </Card>
   );

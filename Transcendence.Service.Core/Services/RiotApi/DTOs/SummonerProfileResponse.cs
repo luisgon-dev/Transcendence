@@ -19,6 +19,9 @@ public class SummonerProfileResponse
     // Top champions by games played
     public List<ProfileChampionStat>? TopChampions { get; set; }
 
+    public ProfileSeasonMetadata? ActiveSeason { get; set; }
+    public ProfileFullHistoryStatus? FullHistory { get; set; }
+
     // Summoners this player most frequently appears in matches with
     public List<FrequentlyPlayedWithStat>? FrequentlyPlayedWith { get; set; }
 
@@ -75,6 +78,33 @@ public class ProfileChampionStat
     public int Losses { get; set; }
     public double WinRate { get; set; }
     public double KdaRatio { get; set; }
+}
+
+public class ProfileSeasonMetadata
+{
+    public string SeasonKey { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string QueueScope { get; set; } = string.Empty;
+}
+
+public class ProfileFullHistoryStatus
+{
+    public string Status { get; set; } = string.Empty;
+    public DateTime RequestedAtUtc { get; set; }
+    public DateTime? StartedAtUtc { get; set; }
+    public DateTime? CompletedAtUtc { get; set; }
+    public DateTime UpdatedAtUtc { get; set; }
+    public int PagesScanned { get; set; }
+    public int MatchIdsDiscovered { get; set; }
+    public int FactsPersisted { get; set; }
+    public int DetailFetchFailures { get; set; }
+    public int CompletedMatchCount { get; set; }
+    public int? RiotWins { get; set; }
+    public int? RiotLosses { get; set; }
+    public int? RiotTotal { get; set; }
+    public int? RankedCountDelta { get; set; }
+    public string? CoverageStatus { get; set; }
+    public int ClassifierVersion { get; set; }
 }
 
 /// <summary>

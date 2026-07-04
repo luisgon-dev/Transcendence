@@ -71,6 +71,7 @@ public class CancellationPropagationTests
             PlatformRoute.NA1,
             "lock:main",
             "lock:priority",
+            null,
             cts.Token);
 
         await act.Should().ThrowAsync<OperationCanceledException>();

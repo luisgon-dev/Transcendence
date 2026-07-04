@@ -396,6 +396,18 @@ Match-detail preparation is intentionally sequential inside each refresh job bec
 
 Non-ranked backfill ordering is tracked per summoner with `SummonerIngestionCursors` to ensure monotonic progress across repeated low-priority runs.
 
+### Full-History Profile Backfill
+
+`Jobs:FullHistoryBackfill` supports:
+
+- `Enabled` (default `true`)
+- `PageSize` (default `100`, clamped to Riot's Match-V5 page limit)
+- `MaxPagesPerRun` (default `5`; each Hangfire execution processes a bounded chunk and re-enqueues itself if more history remains)
+- `MaxFailureRetriesPerRun` (default `25`; retries unresolved match-detail fetch failures before scanning the next page)
+- `MinimumMatchStartEpochSeconds` (default `1623801600`, June 16, 2021)
+
+Signed-in manual profile refreshes enqueue `FullHistoryBackfillJob` after the normal quick refresh finishes. The job runs on the dedicated `history-backfill` Hangfire queue with its own small worker pool, so deep selected-player history scans do not block the high-priority refresh lane or the current-patch discovery lane. It persists compact `SummonerMatchFacts` and active-season ranked solo/duo aggregates instead of raw `Matches`, so the weekly old-patch archive/prune job does not remove the selected player's profile history.
+
 ### Summoner Maintenance
 
 `Jobs:SummonerMaintenance` supports:

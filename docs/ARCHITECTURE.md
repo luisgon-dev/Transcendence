@@ -71,6 +71,7 @@ Transcendence is a backend + web monorepo:
    - If data exists in DB: return immediately
    - If missing: return `202 Accepted` indicating refresh is needed
 2. Client triggers refresh:
+   - The refresh endpoint is signed-in only (`UserOnly`); the web app reaches it through `/api/trn/user/*`
    - WebAPI acquires a refresh lock (prevents concurrent refreshes)
    - WebAPI enqueues Hangfire job
 3. Worker performs refresh:
@@ -80,7 +81,18 @@ Transcendence is a backend + web monorepo:
      - ranked solo/duo head sync first
      - all-mode head sync second
      - non-ranked backfill pagination (bounded by safety caps)
+   - Signed-in manual refreshes then enqueue `FullHistoryBackfillJob` on the reserved `history-backfill` queue
 4. Client polls GET endpoint until data is ready (200 OK)
+
+### Full-History Profile Backfill
+
+- A manual signed-in profile refresh is the opt-in trigger for exhaustive profile history. Routine analytics ingestion stays current-patch/ranked-head focused and does not scan an arbitrary player's ancient history.
+- `FullHistoryBackfillJob` pages Match-V5 by PUUID with `count=100`, a time cursor (`endTime`), and no queue filter, so it discovers every queue that Riot's account match history can search for that player. The lower bound is configurable as `Jobs:FullHistoryBackfill:MinimumMatchStartEpochSeconds` (default June 16, 2021, the Match-V5 historical floor the app targets).
+- The job stores compact `SummonerMatchFacts` for the selected summoner only: match id, queue, patch, season key, participant stats, surrender/remake signals, and versioned ranked-total classification. These facts intentionally have no FK to `Matches`, so they persist when the archival job prunes raw match detail.
+- Active-season profile overview/champion stats are materialized into `SummonerSeasonOverviewStats` and `SummonerSeasonChampionStats` for ranked solo/duo. The profile read uses these aggregates when present and falls back to retained raw `MatchParticipants` for players that have not completed a backfill.
+- `SummonerSeasonCoverages` compares the stored completed ranked solo/duo fact count to the current Riot ranked total (`Rank.Wins + Rank.Losses`) and records the delta/status. The first classifier version counts queue 420, `GameComplete`, and excludes early-ended matches using Riot's early-surrender signal; the classifier version is persisted so future interpretation changes are auditable.
+- Riot's public league API exposes current league entries, not a historical per-player season-rank ledger. Existing `HistoricalRank` data is therefore app-observed snapshots only; season labels like "Season 2025 Diamond IV" can only be produced from snapshots the app captured.
+- Profile season windows are resolved from `RankedSeasons` when configured, with a calendar-year fallback. This keeps the active-season profile surface independent from the analytics patch selector.
 
 ## Riot Identifier Policy
 
@@ -237,6 +249,9 @@ detail is archived off-box and pruned to keep the database from growing unbounde
 - **Policy:** keep full match detail for the newest `KEEP_PATCHES` (default 3 = active + last 2); every older
   patch is archived to the NAS, then pruned from Postgres. Cached analytics aggregates for old patches are
   unaffected (they are recomputed/served from their own stores, not the raw match tables).
+- Full-history profile facts (`SummonerMatchFacts` and the season aggregate/coverage tables) are outside the
+  `Matches` cascade and are not archived by this patch-retention job. They are the durable store for selected
+  players' deeper profile insights.
 - **Archival job** (`scripts/ops/archive-old-patches.sh`, weekly cron on the Docker host): for each eligible
   patch it streams `Matches` + all cascade children (`MatchParticipants`, `MatchParticipantItems`,
   `MatchParticipantRunes`, `MatchBans`, `MatchSummoner`, `MatchParticipantTimelineSnapshots`,
@@ -363,7 +378,7 @@ The web app never exposes backend tokens to browser JS:
 - Backend never receives browser cookies (explicitly stripped in proxy)
 - Catch-all proxy routes reject invalid path segments (`.`/`..`) to avoid path normalization escapes.
 - AppOnly proxy route `/api/trn/app/*` is explicitly allowlisted for approved paths (not a generic arbitrary AppOnly relay).
-- Anonymous public proxy route `/api/trn/public/*` is explicitly allowlisted (`lib/publicProxyAllowlist.ts`): only LoL summoner reads (`lol/summoners/**` GET) and the on-demand refresh POST (`.../refresh`) are relayed; anything else (admin, user, auth, analytics writes, arbitrary paths, `PUT`/`DELETE`) is rejected `404`. It forwards no credentials, so it is a narrow read surface, not a generic anonymous relay. (Per-IP partitioning of public read limits is a separate follow-up — P8.2.)
+- Anonymous public proxy route `/api/trn/public/*` is explicitly allowlisted (`lib/publicProxyAllowlist.ts`): only LoL summoner reads (`lol/summoners/**` GET) are relayed; anything else (admin, user, auth, analytics writes, refresh POSTs, arbitrary paths, `PUT`/`DELETE`) is rejected `404`. It forwards no credentials, so it is a narrow read surface, not a generic anonymous relay. Signed-in profile refreshes go through `/api/trn/user/*`, where the BFF attaches the user's JWT.
 - Logout flow revokes refresh tokens server-side via `POST /api/auth/logout` before cookie clear.
 
 ## Admin Surface and Security

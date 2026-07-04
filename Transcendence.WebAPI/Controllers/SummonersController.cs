@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using System.Security.Claims;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Analysis.Interfaces;
 using Transcendence.Service.Core.Services.Diagnostics;
@@ -113,8 +114,9 @@ public class SummonersController(
                 .FirstOrDefault();
 
             // Keep these sequential because statsService shares a scoped DbContext, which is not thread-safe.
-            var overview = await statsService.GetSummonerOverviewAsync(summoner.Id, 20, ct);
-            var champions = await statsService.GetChampionStatsAsync(summoner.Id, 5, ct);
+            var activeSeasonStats = await statsService.GetActiveSeasonProfileStatsAsync(summoner.Id, 5, 20, ct);
+            var overview = activeSeasonStats.Overview;
+            var champions = activeSeasonStats.Champions;
             var recent = await statsService.GetRecentMatchesAsync(summoner.Id, 1, 10, null, null, ct);
             var playedWith = await statsService.GetPlayedWithAsync(summoner.Id, 100, 6, ct);
             var mastery = await statsService.GetTopMasteryAsync(summoner.Id, 6, ct);
@@ -176,6 +178,33 @@ public class SummonersController(
                     WinRate = c.WinRate,
                     KdaRatio = c.KdaRatio
                 }).ToList(),
+
+                ActiveSeason = new ProfileSeasonMetadata
+                {
+                    SeasonKey = activeSeasonStats.SeasonKey,
+                    DisplayName = activeSeasonStats.SeasonDisplayName,
+                    QueueScope = activeSeasonStats.QueueScope
+                },
+
+                FullHistory = activeSeasonStats.FullHistory != null ? new ProfileFullHistoryStatus
+                {
+                    Status = activeSeasonStats.FullHistory.Status,
+                    RequestedAtUtc = activeSeasonStats.FullHistory.RequestedAtUtc,
+                    StartedAtUtc = activeSeasonStats.FullHistory.StartedAtUtc,
+                    CompletedAtUtc = activeSeasonStats.FullHistory.CompletedAtUtc,
+                    UpdatedAtUtc = activeSeasonStats.FullHistory.UpdatedAtUtc,
+                    PagesScanned = activeSeasonStats.FullHistory.PagesScanned,
+                    MatchIdsDiscovered = activeSeasonStats.FullHistory.MatchIdsDiscovered,
+                    FactsPersisted = activeSeasonStats.FullHistory.FactsPersisted,
+                    DetailFetchFailures = activeSeasonStats.FullHistory.DetailFetchFailures,
+                    CompletedMatchCount = activeSeasonStats.FullHistory.CompletedMatchCount,
+                    RiotWins = activeSeasonStats.FullHistory.RiotWins,
+                    RiotLosses = activeSeasonStats.FullHistory.RiotLosses,
+                    RiotTotal = activeSeasonStats.FullHistory.RiotTotal,
+                    RankedCountDelta = activeSeasonStats.FullHistory.RankedCountDelta,
+                    CoverageStatus = activeSeasonStats.FullHistory.CoverageStatus,
+                    ClassifierVersion = activeSeasonStats.FullHistory.ClassifierVersion
+                } : null,
 
                 FrequentlyPlayedWith = playedWith.Select(p => new FrequentlyPlayedWithStat
                 {
@@ -254,7 +283,9 @@ public class SummonersController(
     ///     Queue a background refresh for the specified summoner by Riot ID. Only one refresh can be in-flight at a time.
     /// </summary>
     [HttpPost("{region}/{name}/{tag}/refresh")]
+    [Authorize(Policy = AuthPolicies.UserOnly)]
     [EnableRateLimiting("expensive-read")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(
         typeof(SummonerAcceptedResponse),
@@ -266,6 +297,9 @@ public class SummonersController(
     {
         if (!PlatformRouteParser.TryParse(region, out var platform))
             return BadRequest($"Unsupported region '{region}'. Use a platform like NA1, EUW1, EUN1, KR, etc.");
+
+        if (!TryGetUserId(out var requestedByUserAccountId))
+            return Unauthorized();
 
         var key = RefreshLockKeys.BuildSummonerRefreshKey(platform, name, tag);
         var priorityKey = RefreshLockKeys.BuildApiPriorityKey(platform, name, tag);
@@ -325,6 +359,7 @@ public class SummonersController(
         {
             backgroundJobClient.Enqueue<ISummonerRefreshJob>(job =>
                 job.RefreshByRiotId(name, tag, platform, key, priorityAcquired ? priorityKey : null,
+                    requestedByUserAccountId,
                     CancellationToken.None));
         }
         catch (Exception ex)
@@ -522,6 +557,12 @@ public class SummonersController(
         {
             return null;
         }
+    }
+
+    private bool TryGetUserId(out Guid userId)
+    {
+        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(claim, out userId);
     }
 
     private static void EmitTelemetry(Action emit)

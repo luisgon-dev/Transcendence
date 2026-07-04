@@ -272,7 +272,7 @@ public class ProSummonersController(
         {
             backgroundJobClient.Enqueue<ISummonerRefreshJob>(job =>
                 job.RefreshByRiotId(entity.GameName, entity.TagLine, platform, key,
-                    priorityAcquired ? priorityKey : null, CancellationToken.None));
+                    priorityAcquired ? priorityKey : null, null, CancellationToken.None));
         }
         catch (Exception ex)
         {

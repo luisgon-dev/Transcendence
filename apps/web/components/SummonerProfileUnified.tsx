@@ -35,7 +35,8 @@ import { formatQueueLabel } from "@/lib/queues";
 import {
   buildLolPublicSummonerByIdPath,
   buildLolPublicSummonerByRiotIdPath,
-  buildLolPublicSummonerRankHistoryPath
+  buildLolPublicSummonerRankHistoryPath,
+  buildLolUserSummonerRefreshPath
 } from "@/lib/lolPublicApi";
 
 export type { SummonerProfileResponse } from "@/components/lol-profile/shared";
@@ -355,7 +356,7 @@ export function SummonerProfileClient({
     setError(null);
     try {
       const res = await fetch(
-        `${buildLolPublicSummonerByRiotIdPath(region, gameName, tagLine)}/refresh`,
+        buildLolUserSummonerRefreshPath(region, gameName, tagLine),
         { method: "POST" }
       );
       const json = (await res.json().catch(() => null)) as AcceptedResponse | null;
@@ -458,6 +459,8 @@ export function SummonerProfileClient({
               matches={history?.items ?? []}
               overviewStats={profile.overviewStats}
               topChampions={profile.topChampions}
+              activeSeason={profile.activeSeason}
+              fullHistory={profile.fullHistory}
             />
             <MatchHistorySection
               region={region}

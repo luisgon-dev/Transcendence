@@ -32,4 +32,11 @@ public static class HangfireQueues
     /// and was previously the only one without an isolated lane.
     /// </summary>
     public const string Discovery = "discovery";
+
+    /// <summary>
+    /// Reserved lane for signed-in manual profile full-history backfills. These jobs page through a
+    /// player's Match-V5 searchable account history and persist compact per-summoner facts that survive
+    /// match-detail archive pruning, so they are intentionally isolated from the quick refresh queues.
+    /// </summary>
+    public const string HistoryBackfill = "history-backfill";
 }

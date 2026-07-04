@@ -96,6 +96,15 @@ builder.Services.AddHangfireServer(options =>
     options.WorkerCount = 8;
 });
 
+// Full player-history backfills are user-initiated but potentially long-running. Keep them off the
+// quick refresh lane so a selected profile can go deep without delaying normal profile updates.
+builder.Services.AddHangfireServer(options =>
+{
+    options.ServerName = HangfireQueues.HistoryBackfill;
+    options.Queues = [HangfireQueues.HistoryBackfill];
+    options.WorkerCount = 2;
+});
+
 builder.Services.AddHttpClient();
 
 // Configure Redis distributed cache
@@ -136,6 +145,7 @@ builder.Services.Configure<StarvationGuardrailOptions>(
 builder.Services.Configure<IngestionPriorityPolicyOptions>(
     builder.Configuration.GetSection("Jobs:IngestionPriorityPolicy"));
 builder.Services.Configure<MatchIngestionOptions>(builder.Configuration.GetSection("Jobs:MatchIngestion"));
+builder.Services.Configure<FullHistoryBackfillJobOptions>(builder.Configuration.GetSection("Jobs:FullHistoryBackfill"));
 builder.Services.Configure<PatchPromotionOptions>(builder.Configuration.GetSection("Jobs:PatchPromotion"));
 builder.Services.Configure<RiotRateGateOptions>(builder.Configuration.GetSection("Jobs:RiotRateGate"));
 builder.Services.Configure<TimelineIngestionOptions>(builder.Configuration.GetSection("Jobs:TimelineIngestion"));

@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
+using System.Security.Claims;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Analysis.Exceptions;
@@ -62,8 +63,8 @@ public class SummonersControllerTests
             .ReturnsAsync(summoner);
 
         statsService
-            .Setup(x => x.GetSummonerOverviewAsync(summoner.Id, 20, It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new SummonerStatsComputationException("Failed to compute overview stats.", new Exception("boom")));
+            .Setup(x => x.GetActiveSeasonProfileStatsAsync(summoner.Id, 5, 20, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new SummonerStatsComputationException("Failed to compute active-season profile stats.", new Exception("boom")));
 
         var controller = BuildController(
             summonerRepository.Object,
@@ -256,9 +257,19 @@ public class SummonersControllerTests
         {
             ControllerContext = new ControllerContext
             {
-                HttpContext = new DefaultHttpContext()
+                HttpContext = new DefaultHttpContext
+                {
+                    User = BuildUser()
+                }
             }
         };
+    }
+
+    private static ClaimsPrincipal BuildUser()
+    {
+        return new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString())],
+            "unit-test"));
     }
 
     private sealed class StaticUrlHelper(string url) : IUrlHelper

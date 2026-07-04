@@ -48,7 +48,7 @@ public class SummonerRefreshJob(
 
     [Queue("refresh-high")]
     public async Task RefreshByRiotId(string gameName, string tagLine, PlatformRoute platformRoute, string lockKey,
-        string? priorityLockKey, CancellationToken ct = default)
+        string? priorityLockKey, Guid? requestedByUserAccountId = null, CancellationToken ct = default)
     {
         try
         {
@@ -125,6 +125,12 @@ public class SummonerRefreshJob(
                 ct);
 
             await InvalidateStatsCacheAsync(summoner.Id, ct);
+
+            if (requestedByUserAccountId.HasValue)
+            {
+                backgroundJobClient.Enqueue<FullHistoryBackfillJob>(job =>
+                    job.ProcessAsync(summoner.Id, requestedByUserAccountId, CancellationToken.None));
+            }
 
             logger.LogInformation(
                 "[Refresh] Completed refresh for {GameName}#{Tag} on {Platform}. Persisted rankedHead={RankedHead}, allModesHead={AllModesHead}, nonRankedBackfill={NonRankedBackfill}.",

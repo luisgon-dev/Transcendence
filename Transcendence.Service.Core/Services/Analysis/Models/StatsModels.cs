@@ -47,6 +47,32 @@ public record ChampionStat(
     double AvgDamageToChamps
 );
 
+public record SummonerSeasonProfileStats(
+    string SeasonKey,
+    string SeasonDisplayName,
+    string QueueScope,
+    SummonerOverviewStats Overview,
+    IReadOnlyList<ChampionStat> Champions,
+    SummonerFullHistoryProfileStatus? FullHistory);
+
+public record SummonerFullHistoryProfileStatus(
+    string Status,
+    DateTime RequestedAtUtc,
+    DateTime? StartedAtUtc,
+    DateTime? CompletedAtUtc,
+    DateTime UpdatedAtUtc,
+    int PagesScanned,
+    int MatchIdsDiscovered,
+    int FactsPersisted,
+    int DetailFetchFailures,
+    int CompletedMatchCount,
+    int? RiotWins,
+    int? RiotLosses,
+    int? RiotTotal,
+    int? RankedCountDelta,
+    string? CoverageStatus,
+    int ClassifierVersion);
+
 public record RoleStat(
     string Role,
     int Games,

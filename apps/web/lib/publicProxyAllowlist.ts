@@ -2,9 +2,9 @@
 //
 // The public proxy forwards to the backend WITHOUT any credentials (no session
 // cookie, no API key). Without an allowlist it would relay anonymous traffic to
-// *any* `/api/*` backend route. We restrict it to the only surface the public
-// frontend actually uses: LoL summoner reads, plus the refresh POST that
-// kicks off an on-demand profile refresh.
+// *any* `/api/*` backend route. We restrict it to the only anonymous surface the
+// public frontend actually uses: LoL summoner reads. Mutating profile refreshes
+// go through `/api/trn/user/...` so the BFF can attach a signed-in user's JWT.
 //
 // `normalizeProxyPath` (lib/proxyPath.ts) already rejects path traversal
 // (`.`/`..`/embedded separators); this is the orthogonal "which routes" gate.
@@ -24,9 +24,6 @@ export function isAllowedPublicProxyPath(method: string, path: string[]): boolea
 
   // Summoner reads.
   if (method === "GET") return true;
-
-  // The only mutating public action is the on-demand refresh: `.../refresh`.
-  if (method === "POST") return path[path.length - 1] === "refresh";
 
   return false;
 }

@@ -40,6 +40,31 @@ export type ProfileChampionStat = {
   kdaRatio: number;
 };
 
+export type ProfileSeasonMetadata = {
+  seasonKey: string;
+  displayName: string;
+  queueScope: string;
+};
+
+export type ProfileFullHistoryStatus = {
+  status: string;
+  requestedAtUtc: string;
+  startedAtUtc?: string | null;
+  completedAtUtc?: string | null;
+  updatedAtUtc: string;
+  pagesScanned: number;
+  matchIdsDiscovered: number;
+  factsPersisted: number;
+  detailFetchFailures: number;
+  completedMatchCount: number;
+  riotWins?: number | null;
+  riotLosses?: number | null;
+  riotTotal?: number | null;
+  rankedCountDelta?: number | null;
+  coverageStatus?: string | null;
+  classifierVersion: number;
+};
+
 export type PlayedWithEntry = {
   summonerId: string;
   gameName: string;
@@ -70,6 +95,8 @@ export type SummonerProfileResponse = {
   flexRank?: RankInfo | null;
   overviewStats?: ProfileOverviewStats | null;
   topChampions?: ProfileChampionStat[] | null;
+  activeSeason?: ProfileSeasonMetadata | null;
+  fullHistory?: ProfileFullHistoryStatus | null;
   frequentlyPlayedWith?: PlayedWithEntry[] | null;
   topMastery?: ChampionMasteryEntry[] | null;
   profileAge: DataAgeMetadata;

@@ -19,6 +19,13 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<ChampionMastery> ChampionMasteries { get; set; }
     public DbSet<TrackedProSummoner> TrackedProSummoners { get; set; }
     public DbSet<SummonerIngestionCursor> SummonerIngestionCursors { get; set; }
+    public DbSet<RankedSeason> RankedSeasons { get; set; }
+    public DbSet<SummonerFullHistoryBackfill> SummonerFullHistoryBackfills { get; set; }
+    public DbSet<SummonerMatchFact> SummonerMatchFacts { get; set; }
+    public DbSet<SummonerMatchFactFetchFailure> SummonerMatchFactFetchFailures { get; set; }
+    public DbSet<SummonerSeasonOverviewStat> SummonerSeasonOverviewStats { get; set; }
+    public DbSet<SummonerSeasonChampionStat> SummonerSeasonChampionStats { get; set; }
+    public DbSet<SummonerSeasonCoverage> SummonerSeasonCoverages { get; set; }
     public DbSet<CurrentChampionLoadout> CurrentChampionLoadouts { get; set; }
     public DbSet<MatchParticipant> MatchParticipants { get; set; }
     public DbSet<MatchBan> MatchBans { get; set; }
@@ -498,6 +505,108 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             entity.HasIndex(x => x.UpdatedAtUtc);
         });
 
+        modelBuilder.Entity<RankedSeason>(entity =>
+        {
+            entity.HasKey(x => x.SeasonKey);
+            entity.Property(x => x.SeasonKey).HasMaxLength(16);
+            entity.Property(x => x.DisplayName).HasMaxLength(64).IsRequired();
+            entity.HasIndex(x => x.IsActive);
+            entity.HasIndex(x => new { x.StartUtc, x.EndUtc });
+        });
+
+        modelBuilder.Entity<SummonerFullHistoryBackfill>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Scope).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.LastErrorMessage).HasMaxLength(1024);
+            entity.HasIndex(x => new { x.SummonerId, x.Scope }).IsUnique();
+            entity.HasIndex(x => new { x.Status, x.UpdatedAtUtc });
+            entity.HasOne(x => x.Summoner)
+                .WithMany(x => x.FullHistoryBackfills)
+                .HasForeignKey(x => x.SummonerId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SummonerMatchFact>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.MatchId).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Puuid).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.PlatformRegion).HasMaxLength(16);
+            entity.Property(x => x.RegionalRoute).HasMaxLength(16);
+            entity.Property(x => x.SeasonKey).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.Patch).HasMaxLength(32);
+            entity.Property(x => x.QueueType).HasMaxLength(64);
+            entity.Property(x => x.QueueFamily).HasMaxLength(64);
+            entity.Property(x => x.EndOfGameResult).HasMaxLength(64);
+            entity.Property(x => x.TeamPosition).HasMaxLength(32);
+            entity.Property(x => x.IndividualPosition).HasMaxLength(32);
+            entity.Property(x => x.RankedCountExclusionReason).HasMaxLength(128);
+            entity.HasIndex(x => new { x.SummonerId, x.MatchId }).IsUnique();
+            entity.HasIndex(x => new { x.SummonerId, x.SeasonKey, x.QueueId, x.CountsTowardRankedTotal });
+            entity.HasIndex(x => new { x.SummonerId, x.SeasonKey, x.QueueFamily });
+            entity.HasIndex(x => new { x.MatchDate, x.QueueId });
+            entity.HasOne(x => x.Summoner)
+                .WithMany(x => x.MatchFacts)
+                .HasForeignKey(x => x.SummonerId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SummonerMatchFactFetchFailure>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.MatchId).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.PlatformRegion).HasMaxLength(16);
+            entity.Property(x => x.RegionalRoute).HasMaxLength(16);
+            entity.Property(x => x.LastErrorMessage).HasMaxLength(1024);
+            entity.HasIndex(x => new { x.SummonerId, x.MatchId }).IsUnique();
+            entity.HasIndex(x => new { x.ResolvedAtUtc, x.LastAttemptAtUtc });
+            entity.HasOne(x => x.Summoner)
+                .WithMany()
+                .HasForeignKey(x => x.SummonerId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SummonerSeasonOverviewStat>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.SeasonKey).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.QueueScope).HasMaxLength(64).IsRequired();
+            entity.HasIndex(x => new { x.SummonerId, x.SeasonKey, x.QueueScope }).IsUnique();
+            entity.HasOne(x => x.Summoner)
+                .WithMany(x => x.SeasonOverviewStats)
+                .HasForeignKey(x => x.SummonerId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SummonerSeasonChampionStat>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.SeasonKey).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.QueueScope).HasMaxLength(64).IsRequired();
+            entity.HasIndex(x => new { x.SummonerId, x.SeasonKey, x.QueueScope, x.ChampionId }).IsUnique();
+            entity.HasIndex(x => new { x.SummonerId, x.SeasonKey, x.QueueScope, x.Games });
+            entity.HasOne(x => x.Summoner)
+                .WithMany(x => x.SeasonChampionStats)
+                .HasForeignKey(x => x.SummonerId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SummonerSeasonCoverage>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.SeasonKey).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.QueueScope).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.BackfillStatus).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.CoverageStatus).HasMaxLength(64);
+            entity.HasIndex(x => new { x.SummonerId, x.SeasonKey, x.QueueScope }).IsUnique();
+            entity.HasOne(x => x.Summoner)
+                .WithMany(x => x.SeasonCoverages)
+                .HasForeignKey(x => x.SummonerId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         // Precomputed analytics aggregates. Keys double as the UPSERT conflict target and the read
         // lookup; the secondary indexes serve the two read shapes (per-champion vs across-all-champions).
         modelBuilder.Entity<ChampionRoleTierStat>(entity =>
@@ -560,4 +669,3 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
         });
     }
 }
-

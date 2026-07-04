@@ -29,4 +29,9 @@ public class Summoner
     public ICollection<Rank> Ranks { get; set; } = new List<Rank>();
     public ICollection<HistoricalRank> HistoricalRanks { get; set; } = new List<HistoricalRank>();
     public ICollection<ChampionMastery> ChampionMasteries { get; set; } = new List<ChampionMastery>();
+    public ICollection<SummonerFullHistoryBackfill> FullHistoryBackfills { get; set; } = new List<SummonerFullHistoryBackfill>();
+    public ICollection<SummonerMatchFact> MatchFacts { get; set; } = new List<SummonerMatchFact>();
+    public ICollection<SummonerSeasonOverviewStat> SeasonOverviewStats { get; set; } = new List<SummonerSeasonOverviewStat>();
+    public ICollection<SummonerSeasonChampionStat> SeasonChampionStats { get; set; } = new List<SummonerSeasonChampionStat>();
+    public ICollection<SummonerSeasonCoverage> SeasonCoverages { get; set; } = new List<SummonerSeasonCoverage>();
 }

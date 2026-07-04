@@ -7,6 +7,11 @@ public interface ISummonerStatsService
 {
     Task<SummonerOverviewStats> GetSummonerOverviewAsync(Guid summonerId, int recentGamesCount, CancellationToken ct);
     Task<IReadOnlyList<ChampionStat>> GetChampionStatsAsync(Guid summonerId, int top, CancellationToken ct);
+    Task<SummonerSeasonProfileStats> GetActiveSeasonProfileStatsAsync(
+        Guid summonerId,
+        int topChampions,
+        int recentGamesCount,
+        CancellationToken ct);
     Task<IReadOnlyList<RoleStat>> GetRoleBreakdownAsync(Guid summonerId, CancellationToken ct);
 
     /// <summary>

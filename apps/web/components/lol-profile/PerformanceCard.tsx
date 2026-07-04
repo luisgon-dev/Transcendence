@@ -10,8 +10,10 @@ import {
   matchKdaRatio,
   normalizeRoleKey,
   type MatchSummary,
+  type ProfileFullHistoryStatus,
   type ProfileChampionStat,
-  type ProfileOverviewStats
+  type ProfileOverviewStats,
+  type ProfileSeasonMetadata
 } from "@/components/lol-profile/shared";
 
 type RoleRow = {
@@ -35,6 +37,20 @@ function formatCompactNumber(value: number | null | undefined): string {
   return Math.round(value).toLocaleString();
 }
 
+function formatHistoryCoverage(history: ProfileFullHistoryStatus | null | undefined): string | null {
+  if (!history) return null;
+  const riotTotal = history.riotTotal;
+  if (typeof riotTotal === "number") {
+    const delta = history.rankedCountDelta ?? history.completedMatchCount - riotTotal;
+    if (delta === 0) return `Riot ranked total matched · ${formatGames(riotTotal)} games`;
+    const sign = delta > 0 ? "+" : "";
+    return `${formatGames(history.completedMatchCount)} stored / ${formatGames(riotTotal)} Riot · ${sign}${delta}`;
+  }
+
+  const normalized = history.status.replaceAll("_", " ").toLowerCase();
+  return `${normalized} · ${formatGames(history.completedMatchCount)} ranked games stored`;
+}
+
 // An approachable "your performance" lens for the profile: a per-role split of
 // the loaded recent matches plus the player's own season averages. Complements
 // (does not duplicate) the sidebar "most played champions" — role is the angle
@@ -43,11 +59,15 @@ function formatCompactNumber(value: number | null | undefined): string {
 export function PerformanceCard({
   matches,
   overviewStats,
-  topChampions
+  topChampions,
+  activeSeason,
+  fullHistory
 }: {
   matches: MatchSummary[];
   overviewStats?: ProfileOverviewStats | null;
   topChampions?: ProfileChampionStat[] | null;
+  activeSeason?: ProfileSeasonMetadata | null;
+  fullHistory?: ProfileFullHistoryStatus | null;
 }) {
   // championId → name, sourced from the profile's aggregate champion stats so we
   // can label each role's signature pick without depending on static asset data.
@@ -97,12 +117,13 @@ export function PerformanceCard({
 
   const hasRoles = roleRows.length > 0;
   const hasAverages = overviewStats != null;
+  const coverageLabel = formatHistoryCoverage(fullHistory);
   if (!hasRoles && !hasAverages) return null;
 
   return (
     <Card className="profile-section-card p-5">
       <div>
-        <p className="type-kicker text-muted">Performance</p>
+        <p className="type-kicker text-muted">{activeSeason?.displayName ?? "Active season"} · Solo/Duo</p>
         <h2 className="mt-2 type-section">How you play</h2>
       </div>
 
@@ -112,6 +133,9 @@ export function PerformanceCard({
             <p className="type-overline text-muted">Averages</p>
             <p className="type-caption text-muted">Across {formatGames(overviewStats.totalMatches)} {plural(overviewStats.totalMatches, "game")}</p>
           </div>
+          {coverageLabel ? (
+            <p className="type-caption text-muted">{coverageLabel}</p>
+          ) : null}
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <Stat label="CS / min" value={formatStat(overviewStats.avgCsPerMin, 1)} />
             <Stat label="Vision" value={formatStat(overviewStats.avgVisionScore, 1)} />

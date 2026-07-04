@@ -3436,6 +3436,26 @@
               }
             }
           },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "400": {
             "description": "Bad Request",
             "content": {
@@ -3475,8 +3495,14 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Forbidden"
           }
-        }
+        },
+        "security": [
+          { }
+        ]
       }
     },
     "/api/lol/summoners/multi-search": {
@@ -7405,6 +7431,82 @@
         },
         "additionalProperties": false
       },
+      "ProfileFullHistoryStatus": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "nullable": true
+          },
+          "requestedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "startedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "completedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "updatedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "pagesScanned": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "matchIdsDiscovered": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "factsPersisted": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "detailFetchFailures": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "completedMatchCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "riotWins": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "riotLosses": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "riotTotal": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "rankedCountDelta": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "coverageStatus": {
+            "type": "string",
+            "nullable": true
+          },
+          "classifierVersion": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
       "ProfileOverviewStats": {
         "type": "object",
         "properties": {
@@ -7451,6 +7553,24 @@
           "avgDamageToChamps": {
             "type": "number",
             "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProfileSeasonMetadata": {
+        "type": "object",
+        "properties": {
+          "seasonKey": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "queueScope": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -7912,6 +8032,12 @@
               "$ref": "#/components/schemas/ProfileChampionStat"
             },
             "nullable": true
+          },
+          "activeSeason": {
+            "$ref": "#/components/schemas/ProfileSeasonMetadata"
+          },
+          "fullHistory": {
+            "$ref": "#/components/schemas/ProfileFullHistoryStatus"
           },
           "frequentlyPlayedWith": {
             "type": "array",

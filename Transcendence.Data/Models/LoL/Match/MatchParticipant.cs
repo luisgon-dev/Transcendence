@@ -24,6 +24,9 @@ public class MatchParticipant
 
     // Outcome
     public bool Win { get; set; }
+    public bool? GameEndedInEarlySurrender { get; set; }
+    public bool? GameEndedInSurrender { get; set; }
+    public bool? TeamEarlySurrendered { get; set; }
 
     // Basic combat/economy
     public int Kills { get; set; }

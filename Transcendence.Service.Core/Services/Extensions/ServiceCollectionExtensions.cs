@@ -113,6 +113,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<UpdateStaticDataJob>();
         services.AddScoped<RetryFailedMatchesJob>();
         services.AddScoped<ISummonerRefreshJob, SummonerRefreshJob>();
+        services.AddScoped<FullHistoryBackfillJob>();
         services.AddScoped<MatchTimelineIngestionJob>();
         services.AddScoped<IRiotAccountService, RiotAccountService>();
         services.AddScoped<ILiveGamePollingService, RiotLiveGamePollingService>();

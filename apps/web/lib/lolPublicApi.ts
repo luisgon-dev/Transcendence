@@ -1,4 +1,5 @@
 const LOL_PUBLIC_SUMMONERS_PREFIX = "/api/trn/public/lol/summoners";
+const LOL_USER_SUMMONERS_PREFIX = "/api/trn/user/lol/summoners";
 
 export function buildLolPublicSummonerByRiotIdPath(
   region: string,
@@ -8,6 +9,16 @@ export function buildLolPublicSummonerByRiotIdPath(
   return `${LOL_PUBLIC_SUMMONERS_PREFIX}/${encodeURIComponent(region)}/${encodeURIComponent(
     gameName
   )}/${encodeURIComponent(tagLine)}`;
+}
+
+export function buildLolUserSummonerRefreshPath(
+  region: string,
+  gameName: string,
+  tagLine: string
+) {
+  return `${LOL_USER_SUMMONERS_PREFIX}/${encodeURIComponent(region)}/${encodeURIComponent(
+    gameName
+  )}/${encodeURIComponent(tagLine)}/refresh`;
 }
 
 export function buildLolPublicSummonerByIdPath(summonerId: string) {

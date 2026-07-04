@@ -9,7 +9,7 @@ public interface ISummonerRefreshJob
     // the [Queue] from the INTERFACE method — attributes on the implementation are ignored here.
     [Queue("refresh-high")]
     Task RefreshByRiotId(string gameName, string tagLine, PlatformRoute platformRoute, string lockKey,
-        string? priorityLockKey, CancellationToken ct = default);
+        string? priorityLockKey, Guid? requestedByUserAccountId = null, CancellationToken ct = default);
 
     [Queue(HangfireQueues.Discovery)]
     Task RefreshForAnalytics(string gameName, string tagLine, PlatformRoute platformRoute, string lockKey,

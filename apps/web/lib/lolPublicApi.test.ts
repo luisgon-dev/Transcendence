@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildLolPublicSummonerByIdPath,
   buildLolPublicSummonerByRiotIdPath,
-  buildLolPublicSummonerSearchPath
+  buildLolPublicSummonerSearchPath,
+  buildLolUserSummonerRefreshPath
 } from "@/lib/lolPublicApi";
 
 describe("lolPublicApi", () => {
@@ -22,6 +23,12 @@ describe("lolPublicApi", () => {
   it("builds search paths with the lol prefix", () => {
     expect(buildLolPublicSummonerSearchPath("na", "Faker", 8)).toBe(
       "/api/trn/public/lol/summoners/search?region=na&q=Faker&limit=8"
+    );
+  });
+
+  it("builds signed-in refresh paths with the user proxy prefix", () => {
+    expect(buildLolUserSummonerRefreshPath("kr", "Hide on bush", "KR1")).toBe(
+      "/api/trn/user/lol/summoners/kr/Hide%20on%20bush/KR1/refresh"
     );
   });
 });

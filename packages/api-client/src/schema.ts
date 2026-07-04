@@ -2889,6 +2889,24 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
                 /** @description Too Many Requests */
                 429: {
                     headers: {
@@ -4669,6 +4687,38 @@ export interface components {
             /** Format: double */
             kdaRatio?: number;
         };
+        ProfileFullHistoryStatus: {
+            status?: string | null;
+            /** Format: date-time */
+            requestedAtUtc?: string;
+            /** Format: date-time */
+            startedAtUtc?: string | null;
+            /** Format: date-time */
+            completedAtUtc?: string | null;
+            /** Format: date-time */
+            updatedAtUtc?: string;
+            /** Format: int32 */
+            pagesScanned?: number;
+            /** Format: int32 */
+            matchIdsDiscovered?: number;
+            /** Format: int32 */
+            factsPersisted?: number;
+            /** Format: int32 */
+            detailFetchFailures?: number;
+            /** Format: int32 */
+            completedMatchCount?: number;
+            /** Format: int32 */
+            riotWins?: number | null;
+            /** Format: int32 */
+            riotLosses?: number | null;
+            /** Format: int32 */
+            riotTotal?: number | null;
+            /** Format: int32 */
+            rankedCountDelta?: number | null;
+            coverageStatus?: string | null;
+            /** Format: int32 */
+            classifierVersion?: number;
+        };
         ProfileOverviewStats: {
             /** Format: int32 */
             totalMatches?: number;
@@ -4692,6 +4742,11 @@ export interface components {
             avgVisionScore?: number;
             /** Format: double */
             avgDamageToChamps?: number;
+        };
+        ProfileSeasonMetadata: {
+            seasonKey?: string | null;
+            displayName?: string | null;
+            queueScope?: string | null;
         };
         RankHistoryEntryDto: {
             queueType?: string | null;
@@ -4872,6 +4927,8 @@ export interface components {
             flexRank?: components["schemas"]["RankInfo"];
             overviewStats?: components["schemas"]["ProfileOverviewStats"];
             topChampions?: components["schemas"]["ProfileChampionStat"][] | null;
+            activeSeason?: components["schemas"]["ProfileSeasonMetadata"];
+            fullHistory?: components["schemas"]["ProfileFullHistoryStatus"];
             frequentlyPlayedWith?: components["schemas"]["FrequentlyPlayedWithStat"][] | null;
             topMastery?: components["schemas"]["ChampionMasteryStat"][] | null;
             profileAge?: components["schemas"]["DataAgeMetadata"];

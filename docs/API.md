@@ -41,16 +41,23 @@ This is a navigational summary; the OpenAPI spec is the source of truth.
 - `GET /api/lol/summoners/{region}/{name}/{tag}`
 - `GET /api/lol/summoners/search`
 - `POST /api/lol/summoners/multi-search` (`AppOnly`)
-- `POST /api/lol/summoners/{region}/{name}/{tag}/refresh`
+- `POST /api/lol/summoners/{region}/{name}/{tag}/refresh` (`UserOnly`)
 - `GET /api/lol/summoners/{summonerId}/stats/overview`
 - `GET /api/lol/summoners/{summonerId}/stats/champions`
 - `GET /api/lol/summoners/{summonerId}/stats/roles`
+- `GET /api/lol/summoners/{summonerId}/stats/rank-history`
 - `GET /api/lol/summoners/{summonerId}/matches/recent`
 - `GET /api/lol/summoners/{summonerId}/matches/{matchId}`
 
 Default stats scope:
 - `stats/overview`, `stats/champions`, and `stats/roles` are computed from ranked solo/duo sample data.
+- `GET /api/lol/summoners/{region}/{name}/{tag}` uses the active season for profile overview and champion stats. When a signed-in manual refresh has produced full-history facts, those profile stats use the durable active-season aggregate; otherwise they fall back to retained match detail currently present in the database.
 - `matches/recent` defaults to full stored history and can be filtered by queue metadata.
+- `stats/rank-history` is app-observed history from stored snapshots. Riot League-V4 exposes current league entries, not an official per-account past-season rank history endpoint.
+
+Profile responses include additional season/history metadata:
+- `activeSeason`: `{ seasonKey, displayName, queueScope }`
+- `fullHistory`: nullable status/coverage object with backfill status, scan counters, stored completed solo/duo count, current Riot ranked wins/losses/total, count delta, coverage status, and classifier version
 
 `GET /api/lol/summoners/{summonerId}/matches/recent` supports:
 - `page` / `pageSize`
@@ -88,9 +95,12 @@ Stats and profile read surfaces now fail closed on backend errors:
 
 #### Refresh Priority Behavior
 
-- `POST /api/lol/summoners/{region}/{name}/{tag}/refresh` is implicitly treated as a high-priority refresh request.
+- `POST /api/lol/summoners/{region}/{name}/{tag}/refresh` requires a signed-in user (`UserOnly`) and returns `401` when no user JWT is present.
+- The Next.js app calls this through `/api/trn/user/lol/summoners/{region}/{name}/{tag}/refresh`; the anonymous `/api/trn/public/*` proxy does not forward refresh POSTs.
+- The refresh is implicitly treated as a high-priority refresh request.
 - The request/response contract is unchanged (no priority request parameter).
 - When high-priority refresh demand is active, lower-priority Riot-calling background jobs are temporarily paused.
+- After the normal quick refresh completes, signed-in manual refreshes enqueue a full-history profile backfill. The backfill scans all Riot-searchable queues for that PUUID and persists compact per-summoner facts/season aggregates independently of the raw match-detail retention window.
 
 #### Refresh Contention Contract (LOCK-01)
 

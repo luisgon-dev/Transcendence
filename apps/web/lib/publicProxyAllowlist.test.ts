@@ -16,11 +16,6 @@ describe("isAllowedPublicProxyPath", () => {
       expect(isAllowedPublicProxyPath("GET", path)).toBe(true);
     });
 
-    it.each([
-      ["lol refresh", ["lol", "summoners", "na", "Faker", "NA1", "refresh"]]
-    ])("POST %s", (_label, path) => {
-      expect(isAllowedPublicProxyPath("POST", path)).toBe(true);
-    });
   });
 
   describe("blocks everything outside the public surface", () => {
@@ -36,8 +31,9 @@ describe("isAllowedPublicProxyPath", () => {
       expect(isAllowedPublicProxyPath("POST", ["auth", "login"])).toBe(false);
     });
 
-    it("rejects POST that is not a refresh", () => {
+    it("rejects POST requests on the anonymous summoner surface", () => {
       expect(isAllowedPublicProxyPath("POST", ["lol", "summoners", "na", "Faker", "NA1"])).toBe(false);
+      expect(isAllowedPublicProxyPath("POST", ["lol", "summoners", "na", "Faker", "NA1", "refresh"])).toBe(false);
     });
 
     it("rejects PUT and DELETE on the public surface", () => {

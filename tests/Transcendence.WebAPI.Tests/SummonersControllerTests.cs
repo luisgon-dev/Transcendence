@@ -165,11 +165,11 @@ public class SummonersControllerTests
         var refreshLockRepository = new Mock<IRefreshLockRepository>();
         var observedKeys = new List<string>();
         refreshLockRepository
-            .Setup(x => x.TryAcquireAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.TryAcquireOwnedAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
             .Returns<string, TimeSpan, CancellationToken>((key, _, _) =>
             {
                 observedKeys.Add(key);
-                return Task.FromResult(false);
+                return Task.FromResult<Guid?>(null);
             });
         refreshLockRepository
             .Setup(x => x.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -202,8 +202,9 @@ public class SummonersControllerTests
             RefreshLockKeys.BuildApiPriorityKey(Camille.Enums.PlatformRoute.NA1, "Name", "Tag");
         var refreshLockRepository = new Mock<IRefreshLockRepository>();
         refreshLockRepository
-            .Setup(x => x.TryAcquireAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
-            .Returns<string, TimeSpan, CancellationToken>((key, _, _) => Task.FromResult(key == expectedMainKey));
+            .Setup(x => x.TryAcquireOwnedAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .Returns<string, TimeSpan, CancellationToken>((key, _, _) =>
+                Task.FromResult<Guid?>(key == expectedMainKey ? Guid.NewGuid() : null));
         var backgroundJobClient = new Mock<IBackgroundJobClient>();
         backgroundJobClient
             .Setup(x => x.Create(It.IsAny<Hangfire.Common.Job>(), It.IsAny<Hangfire.States.IState>()))

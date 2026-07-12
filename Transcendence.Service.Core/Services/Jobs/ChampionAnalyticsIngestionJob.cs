@@ -391,26 +391,28 @@ public class ChampionAnalyticsIngestionJob(
 
             var lockKey = RefreshLockKeys.BuildSummonerRefreshKey(platform, candidate.GameName, candidate.TagLine);
             ct.ThrowIfCancellationRequested();
-            var acquired = await refreshLockRepository.TryAcquireAsync(lockKey, lockTtl, ct);
-            if (!acquired) continue;
+            var lockToken = await refreshLockRepository.TryAcquireOwnedAsync(lockKey, lockTtl, ct);
+            if (lockToken is null) continue;
 
             try
             {
                 ct.ThrowIfCancellationRequested();
                 backgroundJobClient.Enqueue<ISummonerRefreshJob>(job =>
                     job.RefreshForAnalytics(candidate.GameName, candidate.TagLine, platform,
-                        SummonerRefreshJob.BuildAnalyticsExecutionLockKey(lockKey, forcedCatchUpActive),
+                        RefreshLockKeys.BuildOwnedHandle(
+                            SummonerRefreshJob.BuildAnalyticsExecutionLockKey(lockKey, forcedCatchUpActive),
+                            lockToken.Value),
                         patchStartEpoch, currentPatch, includeAllModes, CancellationToken.None));
                 queued++;
             }
             catch (OperationCanceledException)
             {
-                await ReleaseLockAfterQueueFailureAsync(lockKey);
+                await ReleaseLockAfterQueueFailureAsync(lockKey, lockToken.Value);
                 throw;
             }
             catch (Exception)
             {
-                await ReleaseLockAfterQueueFailureAsync(lockKey);
+                await ReleaseLockAfterQueueFailureAsync(lockKey, lockToken.Value);
                 throw;
             }
         }
@@ -483,12 +485,12 @@ public class ChampionAnalyticsIngestionJob(
             .ToList();
     }
 
-    private async Task ReleaseLockAfterQueueFailureAsync(string lockKey)
+    private async Task ReleaseLockAfterQueueFailureAsync(string lockKey, Guid ownerToken)
     {
         using var releaseTimeoutCts = new CancellationTokenSource(QueueFailureLockReleaseTimeout);
         try
         {
-            await refreshLockRepository.ReleaseAsync(lockKey, releaseTimeoutCts.Token);
+            await refreshLockRepository.ReleaseOwnedAsync(lockKey, ownerToken, releaseTimeoutCts.Token);
         }
         catch (OperationCanceledException) when (releaseTimeoutCts.IsCancellationRequested)
         {

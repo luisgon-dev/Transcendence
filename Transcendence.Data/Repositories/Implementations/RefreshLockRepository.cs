@@ -63,6 +63,67 @@ public class RefreshLockRepository(TranscendenceContext db, ILogger<RefreshLockR
         }
     }
 
+    public async Task<Guid?> TryAcquireOwnedAsync(string key, TimeSpan ttl, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            throw new ArgumentException("Lock key is required.", nameof(key));
+
+        var now = DateTime.UtcNow;
+        var lockedUntil = now.Add(ttl);
+        var rowId = Guid.NewGuid();
+        var ownerToken = Guid.NewGuid();
+
+        // Same atomic upsert as TryAcquireAsync, but stamp (and rotate on re-acquire) a per-acquisition
+        // owner token so ReleaseOwnedAsync can prove ownership and a stale holder can't free a lock that
+        // has since been re-acquired.
+        var affectedRows = await db.Database.ExecuteSqlInterpolatedAsync($@"
+            INSERT INTO ""RefreshLocks"" (""Id"", ""Key"", ""CreatedAtUtc"", ""LockedUntilUtc"", ""OwnerToken"")
+            VALUES ({rowId}, {key}, {now}, {lockedUntil}, {ownerToken})
+            ON CONFLICT (""Key"") DO UPDATE
+            SET ""LockedUntilUtc"" = EXCLUDED.""LockedUntilUtc"", ""OwnerToken"" = EXCLUDED.""OwnerToken""
+            WHERE ""RefreshLocks"".""LockedUntilUtc"" <= {now};", ct);
+
+        var acquired = affectedRows > 0;
+        EmitLifecycleLog(
+            "refresh_lock.lifecycle",
+            key,
+            acquired ? "acquired" : "contention",
+            ttlSeconds: ttl.TotalSeconds);
+
+        return acquired ? ownerToken : null;
+    }
+
+    public async Task ReleaseOwnedAsync(string key, Guid ownerToken, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            throw new ArgumentException("Lock key is required.", nameof(key));
+
+        var now = DateTime.UtcNow;
+        try
+        {
+            // Fenced release: only clear the lease when this caller still owns the current token. A
+            // no-op here means the lease already expired and was re-acquired by someone else — exactly
+            // the case where the old release-by-key would have freed the new owner's lock.
+            var affectedRows = await db.RefreshLocks
+                .Where(x => x.Key == key && x.OwnerToken == ownerToken && x.LockedUntilUtc > now)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.LockedUntilUtc, now), ct);
+
+            EmitLifecycleLog(
+                "refresh_lock.lifecycle",
+                key,
+                affectedRows > 0 ? "released" : "release_noop");
+        }
+        catch (Exception ex)
+        {
+            EmitLifecycleLog("refresh_lock.lifecycle", key, "release_error");
+            logger?.LogError(
+                ex,
+                "event=refresh_lock.lifecycle lock_key={LockKey} outcome=release_error",
+                key);
+            throw;
+        }
+    }
+
     public Task<RefreshLock?> GetAsync(string key, CancellationToken ct = default)
     {
         return db.RefreshLocks

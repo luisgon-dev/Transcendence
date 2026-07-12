@@ -80,11 +80,11 @@ public class ChampionAnalyticsIngestionJobRampTests
         using var cts = new CancellationTokenSource();
 
         harness.RefreshLockRepository
-            .Setup(x => x.TryAcquireAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.TryAcquireOwnedAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
             .Returns(() =>
             {
                 cts.Cancel();
-                return Task.FromResult(true);
+                return Task.FromResult<Guid?>(Guid.NewGuid());
             });
 
         Func<Task> act = async () => await harness.Job.ExecuteForRegionAsync("NA1", cts.Token);
@@ -94,7 +94,7 @@ public class ChampionAnalyticsIngestionJobRampTests
             x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()),
             Times.Never);
         harness.RefreshLockRepository.Verify(
-            x => x.ReleaseAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            x => x.ReleaseOwnedAsync(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -109,11 +109,11 @@ public class ChampionAnalyticsIngestionJobRampTests
 
         var acquiredKeys = new List<string>();
         harness.RefreshLockRepository
-            .Setup(x => x.TryAcquireAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.TryAcquireOwnedAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
             .Returns<string, TimeSpan, CancellationToken>((key, _, _) =>
             {
                 acquiredKeys.Add(key);
-                return Task.FromResult(true);
+                return Task.FromResult<Guid?>(Guid.NewGuid());
             });
 
         await harness.Job.ExecuteForRegionAsync("NA1", CancellationToken.None);
@@ -233,8 +233,10 @@ public class ChampionAnalyticsIngestionJobRampTests
             x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()),
             Times.Once);
         queuedJobs.Should().ContainSingle();
+        // The execution key now carries a trailing fencing-token segment after the forced-catch-up
+        // marker (owned handle), so assert the marker is present rather than at the very end.
         queuedJobs[0].Args[3].Should().BeOfType<string>()
-            .Which.Should().EndWith("|forced-catch-up");
+            .Which.Should().Contain("|forced-catch-up");
     }
 
     [Fact]
@@ -447,6 +449,9 @@ public class ChampionAnalyticsIngestionJobRampTests
                 .ReturnsAsync(false);
             refreshLocks.Setup(x => x.TryAcquireAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(true);
+            // The per-candidate summoner lock now uses the fenced acquire/release.
+            refreshLocks.Setup(x => x.TryAcquireOwnedAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Guid.NewGuid());
 
             var backgroundJobs = new Mock<IBackgroundJobClient>();
             backgroundJobs.Setup(x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()))

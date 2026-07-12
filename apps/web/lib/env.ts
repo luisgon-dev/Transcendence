@@ -20,6 +20,21 @@ export function getErrorVerbosity(): TrnErrorVerbosity {
   return "safe";
 }
 
+/**
+ * Server-configured canonical public origin (e.g. `https://transcend.kronic.one`). When set, it is
+ * the authoritative value for same-origin (CSRF) checks — unlike a host derived from a client-
+ * forwardable `X-Forwarded-Host`. Optional; unset falls back to header-derived comparison.
+ */
+export function getPublicOrigin(): string | null {
+  const raw = (process.env.TRN_PUBLIC_ORIGIN ?? "").trim();
+  if (!raw) return null;
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return null;
+  }
+}
+
 export function getBackendTimeoutMs(): number {
   const raw = process.env.TRN_BACKEND_TIMEOUT_MS;
   const n = raw ? Number(raw) : NaN;

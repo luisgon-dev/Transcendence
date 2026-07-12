@@ -304,7 +304,7 @@ export function TierListTable({
       <tr
         key={`${entry.tier}-${entry.role}-${entry.championId}`}
         className={cn(
-          "tierlist-row border-b border-border/40 text-sm last:border-0",
+          "tierlist-row tierlist-cv border-b border-border/40 text-sm last:border-0",
           entry.isLowSample && "opacity-70"
         )}
       >
@@ -322,6 +322,7 @@ export function TierListTable({
           <div className="flex items-center gap-2">
             <Link
               href={`/lol/champions/${entry.championId}?${rowQuery}`}
+              prefetch={false}
               className="group flex min-w-0 items-center gap-2.5"
             >
               <Image
@@ -405,6 +406,7 @@ export function TierListTable({
         <td className="hidden px-3 py-2.5 text-right md:table-cell">
           <Link
             href={`/lol/champions/${entry.championId}?${rowQuery}#matchups`}
+            prefetch={false}
             className="type-ui font-medium text-fg/70 transition-colors hover:text-primary hover:underline"
           >
             Analyze

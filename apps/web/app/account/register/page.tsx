@@ -1,18 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 
 import { registerAction } from "@/app/account/actions";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 export default function RegisterPage() {
   const [state, formAction, pending] = useActionState(
     registerAction,
     { error: null as string | null }
   );
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const mismatch = confirm.length > 0 && confirm !== password;
 
   return (
     <div className="auth-shell">
@@ -74,14 +78,38 @@ export default function RegisterPage() {
               </label>
               <label className="grid gap-1.5">
                 <span className="field-label">Password</span>
-                <Input
+                <PasswordInput
                   name="password"
-                  type="password"
                   autoComplete="new-password"
                   required
+                  minLength={12}
                   placeholder="At least 12 characters"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
                 />
                 <span className="field-note">Use at least 12 characters.</span>
+              </label>
+              <label className="grid gap-1.5">
+                <span className="field-label">Confirm password</span>
+                <PasswordInput
+                  name="confirmPassword"
+                  autoComplete="new-password"
+                  required
+                  placeholder="Re-enter your password"
+                  value={confirm}
+                  onChange={(event) => setConfirm(event.target.value)}
+                  aria-invalid={mismatch || undefined}
+                  aria-describedby={mismatch ? "confirm-password-error" : undefined}
+                />
+                {mismatch ? (
+                  <span
+                    id="confirm-password-error"
+                    className="field-error type-ui"
+                    aria-live="polite"
+                  >
+                    Passwords do not match.
+                  </span>
+                ) : null}
               </label>
 
               {state.error ? (
@@ -90,7 +118,7 @@ export default function RegisterPage() {
                 </p>
               ) : null}
 
-              <Button type="submit" disabled={pending} className="mt-1">
+              <Button type="submit" disabled={pending || mismatch} className="mt-1">
                 {pending ? "Creating account..." : "Create account"}
               </Button>
             </form>

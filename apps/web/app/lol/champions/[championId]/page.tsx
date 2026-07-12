@@ -24,7 +24,7 @@ import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { formatGames } from "@/lib/format";
 import { fetchLolAnalyticsPatches } from "@/lib/lolAnalyticsPatches";
 import { normalizeAnalyticsPatch } from "@/lib/lolPatchFilters";
-import { resolveDefaultedRankTier, rankTierDisplayLabel } from "@/lib/ranks";
+import { resolveDefaultedRankTier, rankTierDisplayLabel, rankTierLadderOrdinal } from "@/lib/ranks";
 import { roleDisplayLabel } from "@/lib/roles";
 import {
   championIconUrl,
@@ -463,7 +463,7 @@ async function ChampionSections({
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2.5">
               {winrateRows
                 .slice()
-                .sort((a, b) => (b.games ?? 0) - (a.games ?? 0))
+                .sort((a, b) => rankTierLadderOrdinal(a.rankTier) - rankTierLadderOrdinal(b.rankTier))
                 .map((w) => (
                   <span
                     key={`${w.role ?? "ALL"}-${w.rankTier ?? "all"}`}

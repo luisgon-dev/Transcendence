@@ -555,6 +555,10 @@ body::before {
   }
   .tierlist-row { transition: background-color 140ms var(--ease-out-quart); }
   .tierlist-row:hover { background: color-mix(in oklch, var(--t-fg), transparent 95%); }
+  /* Off-screen tier-list rows skip layout/paint; `auto` lets the engine cache the real
+     rendered height after first paint, so 52px is only a first-pass estimate. No JS
+     virtualization; degrades to a no-op where content-visibility is unsupported. */
+  .tierlist-cv { content-visibility: auto; contain-intrinsic-size: auto 52px; }
   .tierlist-tier-section { scroll-margin-top: 7rem; }
 }
 

@@ -44,6 +44,9 @@ const nextConfig = {
         permanent: true
       }
     ];
+  },
+  experimental: {
+    optimizePackageImports: ["radix-ui", "framer-motion"]
   }
 };
 

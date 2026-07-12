@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import type { components } from "@transcendence/api-client";
 
 import {
@@ -30,7 +32,7 @@ function isDynamicServerUsageError(error: unknown) {
   );
 }
 
-export async function getSessionMe(): Promise<SessionMe> {
+export const getSessionMe = cache(async (): Promise<SessionMe> => {
   try {
     const client = getTrnClient();
     const { accessToken, accessExpiresAtUtc } = await getAuthCookies();
@@ -97,4 +99,4 @@ export async function getSessionMe(): Promise<SessionMe> {
     logEvent("error", "getSessionMe failed unexpectedly", { error });
     return { authenticated: false };
   }
-}
+});

@@ -15,6 +15,9 @@ public class UserAuthService(
 {
     private const int RefreshTokenDays = 7;
     private const int PasswordIterations = 310_000;
+    // Per-account brute-force lockout, independent of the per-IP rate limiter.
+    private const int MaxFailedLoginAttempts = 10;
+    private const int LockoutDurationMinutes = 15;
     private readonly HashSet<string> _bootstrapAdminEmails = adminBootstrapOptions.Value.Emails
         .Where(x => !string.IsNullOrWhiteSpace(x))
         .Select(NormalizeEmail)
@@ -49,15 +52,40 @@ public class UserAuthService(
 
     public async Task<AuthTokenResponse?> LoginAsync(LoginRequest request, CancellationToken ct = default)
     {
+        var now = DateTime.UtcNow;
         var emailNormalized = NormalizeEmail(request.Email);
         var user = await userAccountRepository.GetByEmailNormalizedAsync(emailNormalized, ct);
         if (user == null) return null;
 
-        if (!VerifyPassword(request.Password, user.PasswordHash, out var storedIterations))
+        // Per-account lockout: a distributed/rotating-IP brute force against ONE account is throttled
+        // here even when each individual IP stays under its own rate-limit partition.
+        if (user.LockoutUntilUtc is { } lockedUntil && lockedUntil > now)
+        {
+            logger.LogWarning("Login blocked: account {Email} is locked out until {LockoutUntilUtc:o}.",
+                user.Email, lockedUntil);
             return null;
+        }
 
-        user.LastLoginAtUtc = DateTime.UtcNow;
-        user.UpdatedAtUtc = DateTime.UtcNow;
+        if (!VerifyPassword(request.Password, user.PasswordHash, out var storedIterations))
+        {
+            user.FailedLoginAttempts++;
+            if (user.FailedLoginAttempts >= MaxFailedLoginAttempts)
+            {
+                user.LockoutUntilUtc = now.AddMinutes(LockoutDurationMinutes);
+                logger.LogWarning(
+                    "Account {Email} locked for {Minutes}m after {Attempts} consecutive failed logins.",
+                    user.Email, LockoutDurationMinutes, user.FailedLoginAttempts);
+            }
+            user.UpdatedAtUtc = now;
+            await userAccountRepository.SaveChangesAsync(ct);
+            return null;
+        }
+
+        // Successful auth clears the counter and any (now-expired) lockout window.
+        user.FailedLoginAttempts = 0;
+        user.LockoutUntilUtc = null;
+        user.LastLoginAtUtc = now;
+        user.UpdatedAtUtc = now;
         if (storedIterations < PasswordIterations)
         {
             user.PasswordHash = HashPassword(request.Password);

@@ -100,7 +100,7 @@ public class SummonersController(
 
         var platformRegion = platform.ToString();
         var summoner = await summonerRepository.FindByRiotIdAsync(platformRegion, name, tag,
-            q => q.Include(s => s.Ranks).Include(s => s.HistoricalRanks).AsSplitQuery(), ct);
+            q => q.AsNoTracking().Include(s => s.Ranks), ct);
         if (summoner != null)
         {
             // Map to response DTO with data age metadata

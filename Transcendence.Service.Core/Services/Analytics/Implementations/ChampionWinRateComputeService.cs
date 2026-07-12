@@ -281,11 +281,11 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
         if (totalParticipants == 0)
             return [];
 
-        var scopeMatchIds = await query
-            .Select(x => x.MatchId)
-            .Distinct()
-            .ToListAsync(ct);
-        var totalMatchesInScope = scopeMatchIds.Count;
+        // Keep the scope's distinct match-id set as an IQueryable subquery so the ban rollup stays
+        // entirely in SQL (a COUNT subquery + a Contains-subquery), never materialising the (large)
+        // id set into app memory. Derived from `query` so the role filter above stays in scope.
+        var scopeMatchIds = query.Select(x => x.MatchId).Distinct();
+        var totalMatchesInScope = await scopeMatchIds.CountAsync(ct);
         var banCountsByChampion = totalMatchesInScope == 0
             ? new Dictionary<int, int>()
             : await _context.MatchBans

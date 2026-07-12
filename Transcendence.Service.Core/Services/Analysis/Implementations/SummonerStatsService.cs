@@ -161,7 +161,9 @@ public class SummonerStatsService(
     private async Task<IReadOnlyList<ChampionStat>> ComputeChampionStatsAsync(Guid summonerId, int top,
         CancellationToken ct)
     {
-        var games = await db.MatchParticipants
+        // Aggregate server-side (GROUP BY ChampionId) so only the grouped rows leave the DB.
+        // Mirrors the ComputeOverviewAsync aggregate pattern (project → GroupBy → Select).
+        var rows = await db.MatchParticipants
             .AsNoTracking()
             .Where(mp => mp.SummonerId == summonerId)
             .InRankedSoloQueue()
@@ -177,36 +179,39 @@ public class SummonerStatsService(
                 Cs = mp.TotalMinionsKilled + mp.NeutralMinionsKilled,
                 MatchDuration = mp.Match.Duration
             })
-            .ToListAsync(ct);
-
-        var list = games
             .GroupBy(x => x.ChampionId)
-            .Select(g => new ChampionStat(
-                g.Key,
-                g.Count(),
-                g.Sum(x => x.Win ? 1 : 0),
-                g.Sum(x => x.Win ? 0 : 1),
-                g.Count() > 0 ? (double)g.Sum(x => x.Win ? 1 : 0) / g.Count() * 100.0 : 0.0,
-                g.Average(x => (double)x.Kills),
-                g.Average(x => (double)x.Deaths),
-                g.Average(x => (double)x.Assists),
-                0, // fill KDA after
-                g.Average(x => x.MatchDuration > 0
+            .Select(g => new
+            {
+                ChampionId = g.Key,
+                Games = g.Count(),
+                Wins = g.Sum(x => x.Win ? 1 : 0),
+                AvgKills = g.Average(x => (double)x.Kills),
+                AvgDeaths = g.Average(x => (double)x.Deaths),
+                AvgAssists = g.Average(x => (double)x.Assists),
+                AvgCsPerMin = g.Average(x => x.MatchDuration > 0
                     ? x.Cs / (x.MatchDuration / 60.0)
                     : 0.0),
-                g.Average(x => (double)x.VisionScore),
-                g.Average(x => (double)x.TotalDamageDealtToChampions)
-            ))
+                AvgVision = g.Average(x => (double)x.VisionScore),
+                AvgDamage = g.Average(x => (double)x.TotalDamageDealtToChampions)
+            })
             .OrderByDescending(x => x.Games)
             .Take(top)
-            .ToList();
+            .ToListAsync(ct);
 
-        // Compute KDA for each (post-projection)
-        return list
-            .Select(x => x with
-            {
-                KdaRatio = CalcKdaRatio(x.AvgKills, x.AvgDeaths, x.AvgAssists)
-            })
+        return rows
+            .Select(x => new ChampionStat(
+                x.ChampionId,
+                x.Games,
+                x.Wins,
+                x.Games - x.Wins,
+                x.Games > 0 ? (double)x.Wins / x.Games * 100.0 : 0.0,
+                x.AvgKills,
+                x.AvgDeaths,
+                x.AvgAssists,
+                CalcKdaRatio(x.AvgKills, x.AvgDeaths, x.AvgAssists),
+                x.AvgCsPerMin,
+                x.AvgVision,
+                x.AvgDamage))
             .ToList();
     }
 
@@ -574,19 +579,27 @@ public class SummonerStatsService(
 
     private async Task<IReadOnlyList<RoleStat>> ComputeRoleBreakdownAsync(Guid summonerId, CancellationToken ct)
     {
-        var rows = await db.MatchParticipants
+        // Aggregate raw TeamPosition server-side (GROUP BY TeamPosition); normalization/merge
+        // ("top" → "TOP", null → "UNKNOWN") happens in C# on the small grouped result set.
+        var rawRows = await db.MatchParticipants
             .AsNoTracking()
             .Where(mp => mp.SummonerId == summonerId)
             .InRankedSoloQueue()
-            .Select(mp => new { mp.TeamPosition, mp.Win })
+            .GroupBy(mp => mp.TeamPosition)
+            .Select(g => new
+            {
+                TeamPosition = g.Key,
+                Games = g.Count(),
+                Wins = g.Sum(x => x.Win ? 1 : 0)
+            })
             .ToListAsync(ct);
 
-        var list = rows
+        var list = rawRows
             .GroupBy(row => NormalizeTeamPosition(row.TeamPosition))
             .Select(g =>
             {
-                var games = g.Count();
-                var wins = g.Sum(x => x.Win ? 1 : 0);
+                var games = g.Sum(x => x.Games);
+                var wins = g.Sum(x => x.Wins);
                 return new RoleStat(
                     g.Key,
                     games,
@@ -1096,11 +1109,26 @@ public class SummonerStatsService(
         var cacheKey = $"{MatchTimelineCacheKeyPrefix}{matchId}";
         return await ExecuteStatsRequestAsync(
             "Failed to load match timeline.",
-            async token => await cache.GetOrCreateAsync(
-                cacheKey,
-                async cancel => await ComputeMatchTimelineAsync(matchId, cancel),
-                MatchDetailCacheOptions,
-                cancellationToken: token),
+            async token =>
+            {
+                var result = await cache.GetOrCreateAsync(
+                    cacheKey,
+                    async cancel => await ComputeMatchTimelineAsync(matchId, cancel),
+                    MatchDetailCacheOptions,
+                    cancellationToken: token);
+
+                // Do NOT persist an empty timeline under the long TTL: a match whose
+                // gold/XP snapshots have not been derived yet returns zero frames, and
+                // caching that for an hour would mask a freshly-ingested timeline with
+                // no invalidation path. Evict so the next request recomputes. Populated
+                // results stay cached; on a cache hit the entry is already non-empty
+                // (we never store empties), so this only fires on a miss that computed
+                // empty frames.
+                if (result is { Frames.Count: 0 })
+                    await cache.RemoveAsync(cacheKey, token);
+
+                return result;
+            },
             ct);
     }
 

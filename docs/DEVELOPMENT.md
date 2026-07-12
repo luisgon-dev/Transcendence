@@ -54,6 +54,7 @@ Optional (admin bootstrap):
 Optional:
 - `TRN_BACKEND_TIMEOUT_MS=10000` (server-side backend timeout, milliseconds)
 - `TRN_ERROR_VERBOSITY=safe|verbose` (controls user-visible error detail from Next route handlers)
+- `TRN_PUBLIC_ORIGIN=https://transcend.kronic.one` (optional; canonical public origin for the admin BFF same-origin/CSRF check. Set in production so the check can't be influenced by a client-supplied `X-Forwarded-Host`; unset falls back to header-derived comparison for local dev)
 
 5. Run the web app:
 

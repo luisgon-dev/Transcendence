@@ -90,8 +90,9 @@ public class ProSummonersControllerTests
 
         var refreshLockRepository = new Mock<IRefreshLockRepository>();
         refreshLockRepository
-            .Setup(x => x.TryAcquireAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
-            .Returns<string, TimeSpan, CancellationToken>((key, _, _) => Task.FromResult(key == expectedMainKey));
+            .Setup(x => x.TryAcquireOwnedAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .Returns<string, TimeSpan, CancellationToken>((key, _, _) =>
+                Task.FromResult<Guid?>(key == expectedMainKey ? Guid.NewGuid() : null));
 
         var backgroundJobClient = new Mock<IBackgroundJobClient>();
         backgroundJobClient
@@ -132,10 +133,10 @@ public class ProSummonersControllerTests
             Times.Once);
 
         refreshLockRepository.Verify(
-            x => x.TryAcquireAsync(expectedMainKey, It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()),
+            x => x.TryAcquireOwnedAsync(expectedMainKey, It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()),
             Times.Once);
         refreshLockRepository.Verify(
-            x => x.TryAcquireAsync(expectedPriorityKey, It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()),
+            x => x.TryAcquireOwnedAsync(expectedPriorityKey, It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()),
             Times.Once);
         backgroundJobClient.Verify(
             x => x.Create(It.IsAny<Hangfire.Common.Job>(), It.IsAny<Hangfire.States.IState>()),

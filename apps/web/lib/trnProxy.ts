@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 
+import { resolveClientIp } from "@/lib/clientIp";
 import { getBackendBaseUrl, getBackendTimeoutMs, getErrorVerbosity } from "@/lib/env";
 import { fetchWithTimeout, isAbortError } from "@/lib/fetchWithTimeout";
 import { normalizeProxyPath } from "@/lib/proxyPath";
@@ -15,6 +16,14 @@ function copyHeaders(req: NextRequest) {
   // Let fetch set host.
   headers.delete("host");
   headers.delete("content-length");
+
+  // Normalize X-Forwarded-For to a single, trusted client IP. A client can inject a forged
+  // X-Forwarded-For chain; forwarding it verbatim would let it spoof the backend's per-IP read
+  // limiter (or masquerade as an internal, unlimited source). Strip the inbound value and re-set it
+  // to the IP our edge vouches for. Leaves X-Forwarded-Proto/-Host untouched (scheme/host behavior).
+  headers.delete("x-forwarded-for");
+  const clientIp = resolveClientIp(req.headers);
+  if (clientIp) headers.set("x-forwarded-for", clientIp);
 
   return headers;
 }

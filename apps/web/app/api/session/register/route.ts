@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { setAuthCookies, type AuthTokenResponse } from "@/lib/authCookies";
+import { resolveClientIp } from "@/lib/clientIp";
 import { getTrnClient } from "@/lib/trnClient";
 
 type RegisterBody = { email?: string; password?: string };
@@ -15,8 +16,11 @@ export async function POST(req: NextRequest) {
   }
 
   const client = getTrnClient();
+  // Forward the real client IP so the backend's register limiter partitions per client, not globally.
+  const clientIp = resolveClientIp(req.headers);
   const { data, error, response } = await client.POST("/api/auth/register", {
-    body: { email: body.email, password: body.password }
+    body: { email: body.email, password: body.password },
+    ...(clientIp ? { headers: { "x-forwarded-for": clientIp } } : {})
   });
 
   if (!data) {

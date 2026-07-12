@@ -312,7 +312,8 @@ public class SummonersController(
             tag
         });
 
-        var acquired = await refreshLockRepository.TryAcquireAsync(key, ttl, ct);
+        var keyToken = await refreshLockRepository.TryAcquireOwnedAsync(key, ttl, ct);
+        var acquired = keyToken is not null;
         if (!acquired)
         {
             var existing = await refreshLockRepository.GetAsync(key, ct);
@@ -341,7 +342,8 @@ public class SummonersController(
 
         EmitTelemetry(() => lockTelemetry?.RecordLifecycleOutcome(key, "acquired", "summoners-controller"));
 
-        var priorityAcquired = await refreshLockRepository.TryAcquireAsync(priorityKey, ttl, ct);
+        var priorityToken = await refreshLockRepository.TryAcquireOwnedAsync(priorityKey, ttl, ct);
+        var priorityAcquired = priorityToken is not null;
         if (!priorityAcquired)
         {
             EmitTelemetry(() =>
@@ -358,15 +360,17 @@ public class SummonersController(
         try
         {
             backgroundJobClient.Enqueue<ISummonerRefreshJob>(job =>
-                job.RefreshByRiotId(name, tag, platform, key, priorityAcquired ? priorityKey : null,
+                job.RefreshByRiotId(name, tag, platform,
+                    RefreshLockKeys.BuildOwnedHandle(key, keyToken!.Value),
+                    priorityAcquired ? RefreshLockKeys.BuildOwnedHandle(priorityKey, priorityToken!.Value) : null,
                     requestedByUserAccountId,
                     CancellationToken.None));
         }
         catch (Exception ex)
         {
-            await refreshLockRepository.ReleaseAsync(key, ct);
+            await refreshLockRepository.ReleaseOwnedAsync(key, keyToken!.Value, ct);
             if (priorityAcquired)
-                await refreshLockRepository.ReleaseAsync(priorityKey, ct);
+                await refreshLockRepository.ReleaseOwnedAsync(priorityKey, priorityToken!.Value, ct);
 
             logger.LogError(
                 ex,

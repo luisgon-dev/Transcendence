@@ -6,6 +6,7 @@ using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Account;
+using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Analysis;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
@@ -21,6 +22,7 @@ public sealed class FullHistoryBackfillJob(
     IBackgroundJobClient backgroundJobClient,
     HybridCache cache,
     IOptions<FullHistoryBackfillJobOptions> options,
+    IRefreshLockRepository refreshLockRepository,
     ILogger<FullHistoryBackfillJob> logger)
 {
     private const string RankedSoloQueueType = "RANKED_SOLO_5x5";
@@ -42,6 +44,36 @@ public sealed class FullHistoryBackfillJob(
             return;
         }
 
+        // Serialize per summoner. Overlapping runs (a fresh enqueue from the refresh path colliding
+        // with an in-flight self-continuation chain) double-fetch the same matches — wasting the
+        // scarce personal-tier Riot budget — and collide on the SummonerMatchFacts unique index,
+        // rolling back the whole page. A short lease admits one run at a time; overlapping
+        // invocations skip. The lease TTL bounds recovery if a run dies without releasing.
+        var backfillLockKey = $"fullhistory-backfill:{summonerId:N}";
+        if (!await refreshLockRepository.TryAcquireAsync(backfillLockKey, TimeSpan.FromMinutes(15), ct))
+        {
+            logger.LogInformation(
+                "[FullHistory] Backfill already running for summoner {SummonerId}; skipping overlapping run.",
+                summonerId);
+            return;
+        }
+
+        try
+        {
+            await RunBackfillAsync(summonerId, requestedByUserAccountId, jobOptions, ct);
+        }
+        finally
+        {
+            await refreshLockRepository.ReleaseAsync(backfillLockKey, ct);
+        }
+    }
+
+    private async Task RunBackfillAsync(
+        Guid summonerId,
+        Guid? requestedByUserAccountId,
+        FullHistoryBackfillJobOptions jobOptions,
+        CancellationToken ct)
+    {
         var now = DateTime.UtcNow;
         var pageSize = Math.Clamp(jobOptions.PageSize, 1, 100);
         var maxPages = Math.Max(1, jobOptions.MaxPagesPerRun);
@@ -145,36 +177,65 @@ public sealed class FullHistoryBackfillJob(
             foreach (var matchId in pendingIds)
             {
                 ct.ThrowIfCancellationRequested();
-                var result = await BuildFactAsync(
-                    summoner,
-                    matchId,
-                    regionalRoute,
-                    platformRoute,
-                    configuredSeasons,
-                    now,
-                    ct);
-
-                if (result.MatchEpochSeconds.HasValue && result.MatchEpochSeconds.Value < oldestSeenEpochSeconds)
-                    oldestSeenEpochSeconds = result.MatchEpochSeconds.Value;
-
-                if (result.Fact == null)
+                try
                 {
+                    var result = await BuildFactAsync(
+                        summoner,
+                        matchId,
+                        regionalRoute,
+                        platformRoute,
+                        configuredSeasons,
+                        now,
+                        ct);
+
+                    if (result.MatchEpochSeconds.HasValue && result.MatchEpochSeconds.Value < oldestSeenEpochSeconds)
+                        oldestSeenEpochSeconds = result.MatchEpochSeconds.Value;
+
+                    if (result.Fact == null)
+                    {
+                        backfill.DetailFetchFailures++;
+                        await RecordFetchFailureAsync(
+                            summonerId,
+                            matchId,
+                            platformRoute.ToString(),
+                            regionalRoute.ToString(),
+                            result.FailureMessage ?? "Match detail unavailable.",
+                            now,
+                            ct);
+                        continue;
+                    }
+
+                    db.SummonerMatchFacts.Add(result.Fact);
+                    touchedSeasons.Add(result.Fact.SeasonKey);
+                    backfill.FactsPersisted++;
+                    await MarkFetchFailureResolvedAsync(summonerId, matchId, now, ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    // Isolate per-match failures. A single transient Riot error (5xx/timeout/parse)
+                    // must not escape ProcessAsync — that killed the self-continuation chain and left
+                    // the backfill stranded in 'Running' with no resumer. Record it like an unavailable
+                    // detail and continue; the outstanding-failure retry sweep re-attempts it later.
                     backfill.DetailFetchFailures++;
+                    var message = ex.Message.Length > 512 ? ex.Message[..512] : ex.Message;
                     await RecordFetchFailureAsync(
                         summonerId,
                         matchId,
                         platformRoute.ToString(),
                         regionalRoute.ToString(),
-                        result.FailureMessage ?? "Match detail unavailable.",
+                        message,
                         now,
                         ct);
-                    continue;
+                    logger.LogWarning(
+                        ex,
+                        "[FullHistory] Match {MatchId} for summoner {SummonerId} threw; recorded as a failure and continuing.",
+                        matchId,
+                        summonerId);
                 }
-
-                db.SummonerMatchFacts.Add(result.Fact);
-                touchedSeasons.Add(result.Fact.SeasonKey);
-                backfill.FactsPersisted++;
-                await MarkFetchFailureResolvedAsync(summonerId, matchId, now, ct);
             }
 
             if (oldestSeenEpochSeconds != long.MaxValue)
@@ -499,6 +560,11 @@ public sealed class FullHistoryBackfillJob(
             })
             .ToListAsync(ct);
 
+        // Delete-then-reinsert must be atomic: without a transaction, uncached profile reads between
+        // the ExecuteDelete and the SaveChanges observe empty season stats, and a crash mid-recompute
+        // leaves the season's aggregates missing until the next backfill.
+        await using var recomputeTx = await db.Database.BeginTransactionAsync(ct);
+
         await db.SummonerSeasonOverviewStats
             .Where(x => x.SummonerId == summonerId && x.SeasonKey == seasonKey && x.QueueScope == RankedSoloQueueScope)
             .ExecuteDeleteAsync(ct);
@@ -598,6 +664,7 @@ public sealed class FullHistoryBackfillJob(
         coverage.UpdatedAtUtc = now;
 
         await db.SaveChangesAsync(ct);
+        await recomputeTx.CommitAsync(ct);
     }
 
     private static string NormalizePatch(string? gameVersion)

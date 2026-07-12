@@ -50,6 +50,19 @@ public class SummonerRefreshJob(
     public async Task RefreshByRiotId(string gameName, string tagLine, PlatformRoute platformRoute, string lockKey,
         string? priorityLockKey, Guid? requestedByUserAccountId = null, CancellationToken ct = default)
     {
+        // The keys arrive as owned handles (key + fencing token). Split so we release only the lock we
+        // still own — a stale run whose lease already expired must not free a newer holder's lock. A
+        // legacy job enqueued before fencing carries a plain key → null token → release-by-key fallback.
+        var (summonerLockKey, summonerLockToken) = RefreshLockKeys.ParseOwnedHandle(lockKey);
+        string? priorityLockKeyRaw = null;
+        Guid? priorityLockToken = null;
+        if (priorityLockKey is not null)
+        {
+            var parsedPriority = RefreshLockKeys.ParseOwnedHandle(priorityLockKey);
+            priorityLockKeyRaw = parsedPriority.Key;
+            priorityLockToken = parsedPriority.OwnerToken;
+        }
+
         try
         {
             ct.ThrowIfCancellationRequested();
@@ -160,9 +173,9 @@ public class SummonerRefreshJob(
         }
         finally
         {
-            await ReleaseLockSafeAsync(lockKey, "[Refresh]");
-            if (!string.IsNullOrWhiteSpace(priorityLockKey))
-                await ReleaseLockSafeAsync(priorityLockKey, "[Refresh]");
+            await ReleaseLockSafeAsync(summonerLockKey, summonerLockToken, "[Refresh]");
+            if (!string.IsNullOrWhiteSpace(priorityLockKeyRaw))
+                await ReleaseLockSafeAsync(priorityLockKeyRaw, priorityLockToken, "[Refresh]");
         }
     }
 
@@ -170,7 +183,10 @@ public class SummonerRefreshJob(
     public async Task RefreshForAnalytics(string gameName, string tagLine, PlatformRoute platformRoute, string lockKey,
         long startTimeEpochSeconds, string currentPatch, bool includeAllModes, CancellationToken ct = default)
     {
-        var executionContext = ParseAnalyticsExecutionContext(lockKey);
+        // Split the owned handle (fencing token) BEFORE the analytics-context parse, so the forced-
+        // catch-up suffix detection still sees the real key end.
+        var (analyticsHandleKey, analyticsLockToken) = RefreshLockKeys.ParseOwnedHandle(lockKey);
+        var executionContext = ParseAnalyticsExecutionContext(analyticsHandleKey);
         try
         {
             ct.ThrowIfCancellationRequested();
@@ -301,7 +317,7 @@ public class SummonerRefreshJob(
         }
         finally
         {
-            await ReleaseLockSafeAsync(executionContext.LockKey, "[AnalyticsRefresh]");
+            await ReleaseLockSafeAsync(executionContext.LockKey, analyticsLockToken, "[AnalyticsRefresh]");
         }
     }
 
@@ -805,12 +821,17 @@ public class SummonerRefreshJob(
         return Task.CompletedTask;
     }
 
-    private async Task ReleaseLockSafeAsync(string lockKey, string operation)
+    private async Task ReleaseLockSafeAsync(string lockKey, Guid? ownerToken, string operation)
     {
         using var releaseTimeoutCts = new CancellationTokenSource(LockReleaseTimeout);
         try
         {
-            await refreshLockRepository.ReleaseAsync(lockKey, releaseTimeoutCts.Token);
+            // Fenced release when we hold a token; fall back to release-by-key only for legacy jobs
+            // (enqueued before fencing) that carry no token.
+            if (ownerToken.HasValue)
+                await refreshLockRepository.ReleaseOwnedAsync(lockKey, ownerToken.Value, releaseTimeoutCts.Token);
+            else
+                await refreshLockRepository.ReleaseAsync(lockKey, releaseTimeoutCts.Token);
             EmitTelemetry(() =>
                 lockTelemetry?.RecordLifecycleOutcome(lockKey, "released", "summoner-refresh-job"));
         }

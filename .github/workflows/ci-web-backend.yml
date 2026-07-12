@@ -84,7 +84,10 @@ jobs:
 
       # Fails if the EF model and the latest migration snapshot have drifted
       # (an entity changed without a migration → deployed code expects columns
-      # that prod, which never auto-migrates, does not have).
+      # the schema lacks). Prod DOES auto-migrate on worker startup
+      # (Database:AutoMigrate=true), so drift or a bad migration would auto-apply —
+      # which is exactly why the hot-table DDL gate above and the migration-apply
+      # job (full chain vs a real Postgres) matter.
       - name: Model/snapshot drift check
         run: |
           dotnet tool restore

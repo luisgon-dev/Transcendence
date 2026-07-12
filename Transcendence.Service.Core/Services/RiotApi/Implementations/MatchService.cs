@@ -396,12 +396,40 @@ public class MatchService(
 
             var platformRoute = ResolvePlatformRoute(matchId, regionalRoute);
             if (!await rateGate.AcquireAsync(regionalRoute.ToString(), cancellationToken))
-                throw new InvalidOperationException($"Riot rate gate exhausted for match {matchId} ({regionalRoute}); retry later.");
+            {
+                // Riot rate-gate backpressure is transient, NOT a fetch failure. Defer WITHOUT
+                // incrementing RetryCount so a merely-throttled match is never flipped to
+                // PermanentlyUnfetchable (a terminal status the global query filter hides forever).
+                // The periodic RetryFailedMatchesJob sweep re-attempts TemporaryFailure rows once the
+                // rate budget frees up. Mirrors the no-op skip in the two other rate-gate sites.
+                match.Status = FetchStatus.TemporaryFailure;
+                match.LastErrorMessage = "Deferred: Riot rate gate exhausted; will retry.";
+                if (match.Id == Guid.Empty)
+                    context.Matches.Add(match);
+                await context.SaveChangesAsync(cancellationToken);
+                logger.LogDebug(
+                    "Match {MatchId} deferred: Riot rate gate exhausted ({Region}); will retry later.",
+                    matchId, regionalRoute);
+                return false;
+            }
+
             var matchDto = await riotApiContext.Api.MatchV5().GetMatchAsync(regionalRoute, matchId, cancellationToken);
 
             if (matchDto == null)
             {
-                throw new InvalidOperationException($"Riot API returned null for match {matchId}");
+                // Camille returns null for 404/410 — the match is genuinely gone. This is the only
+                // legitimately-permanent outcome; mark it terminal directly instead of burning five
+                // retries (and instead of conflating it with transient failures), so real losses are
+                // classified correctly and fetchable matches are not.
+                match.Status = FetchStatus.PermanentlyUnfetchable;
+                match.LastErrorMessage = "Riot API returned null (match not found / gone).";
+                if (match.Id == Guid.Empty)
+                    context.Matches.Add(match);
+                await context.SaveChangesAsync(cancellationToken);
+                logger.LogInformation(
+                    "Match {MatchId} marked PermanentlyUnfetchable: Riot returned null (404/gone).",
+                    matchId);
+                return false;
             }
 
             // Parse and store match data

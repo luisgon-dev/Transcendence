@@ -33,6 +33,8 @@ public class RetryFailedMatchesJob(
         var maxMatchesPerRun = Math.Max(1, jobOptions.MaxMatchesPerRun);
         var minimumMinutesSinceAttempt = Math.Max(1, jobOptions.MinimumMinutesSinceLastAttempt);
 
+        await ReviveRateGateMisclassifiedAsync(jobOptions, cancellationToken);
+
         // Find matches with TemporaryFailure that haven't been attempted recently.
         var cutoff = DateTime.UtcNow.AddMinutes(-minimumMinutesSinceAttempt);
         var failedMatches = await context.Matches
@@ -62,6 +64,41 @@ public class RetryFailedMatchesJob(
                 logger.LogWarning(ex, "Failed retry execution for match {MatchId}", match.MatchId);
             }
         }
+    }
+
+    // One-time backlog drain: matches wrongly flipped to PermanentlyUnfetchable by the old
+    // rate-gate-as-failure bug carried the thrown message "...rate gate exhausted...". Revive a
+    // bounded batch of those to TemporaryFailure so the corrected fetch path re-evaluates them.
+    // Genuine 404/gone rows (message "Riot API returned null …") do NOT match and are left terminal.
+    private async Task ReviveRateGateMisclassifiedAsync(
+        RetryFailedMatchesJobOptions jobOptions, CancellationToken cancellationToken)
+    {
+        var revivePerRun = Math.Max(0, jobOptions.RevivePermanentlyUnfetchablePerRun);
+        if (revivePerRun == 0)
+            return;
+
+        var revived = await context.Matches
+            .IgnoreQueryFilters()
+            .Where(m => m.Status == FetchStatus.PermanentlyUnfetchable
+                        && m.LastErrorMessage != null
+                        && m.LastErrorMessage.Contains("rate gate exhausted"))
+            .OrderBy(m => m.LastAttemptAt)
+            .Take(revivePerRun)
+            .ToListAsync(cancellationToken);
+
+        if (revived.Count == 0)
+            return;
+
+        foreach (var match in revived)
+        {
+            match.Status = FetchStatus.TemporaryFailure;
+            match.RetryCount = 0;
+            match.LastErrorMessage = "Revived from rate-gate misclassification; will retry.";
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+        logger.LogInformation(
+            "Revived {Count} match(es) wrongly marked unfetchable under rate pressure.", revived.Count);
     }
 
     private static RegionalRoute ResolveRegionalRoute(string matchId)

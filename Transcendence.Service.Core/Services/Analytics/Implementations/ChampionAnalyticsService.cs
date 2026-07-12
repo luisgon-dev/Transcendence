@@ -55,6 +55,10 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
     private readonly ChampionAnalyticsComputeOptions _computeOptions;
     private readonly MultiRegionIngestionOptions _multiRegionOptions;
 
+    // Short TTL for freshly-computed empty / zero-sample payloads so incoming games surface within
+    // minutes instead of inheriting the 24h analytics expiration (built per-instance from options).
+    private readonly HybridCacheEntryOptions _emptyResultCacheOptions;
+
     public ChampionAnalyticsService(
         TranscendenceContext context,
         HybridCache cache,
@@ -73,6 +77,13 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         _proService = proService;
         _computeOptions = computeOptions.Value;
         _multiRegionOptions = multiRegionOptions.Value;
+
+        var emptyTtl = TimeSpan.FromMinutes(Math.Max(1, _computeOptions.EmptyResultTtlMinutes));
+        _emptyResultCacheOptions = new HybridCacheEntryOptions
+        {
+            Expiration = emptyTtl,
+            LocalCacheExpiration = emptyTtl < TimeSpan.FromMinutes(2) ? emptyTtl : TimeSpan.FromMinutes(2)
+        };
     }
 
     /// <summary>
@@ -87,6 +98,41 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             ActivePatchCacheOptions,
             tags: new[] { AnalyticsCacheTag, CacheTags.ForPatch(patch) },
             cancellationToken: ct);
+
+    /// <summary>
+    /// Wraps <see cref="HybridCache.GetOrCreateAsync"/> so a freshly-computed empty / zero-sample
+    /// payload is re-cached under a short TTL (<see cref="_emptyResultCacheOptions"/>) instead of
+    /// inheriting the 24h analytics expiration. Newly-ingested games then surface within minutes
+    /// rather than waiting out the patch-tag invalidation. Non-empty results and plain cache hits are
+    /// returned untouched with the standard 24h TTL.
+    /// </summary>
+    private async Task<T> GetOrCreateWithEmptyTtlAsync<T>(
+        string key,
+        Func<CancellationToken, ValueTask<T>> factory,
+        Func<T, bool> isEmpty,
+        IEnumerable<string> tags,
+        CancellationToken ct)
+    {
+        var computed = false;
+        var value = await _cache.GetOrCreateAsync(
+            key,
+            async cancel =>
+            {
+                computed = true;
+                return await factory(cancel);
+            },
+            AnalyticsCacheOptions,
+            tags: tags,
+            cancellationToken: ct);
+
+        // Only shorten the TTL when WE just computed the value (a hit already carries the right TTL).
+        if (computed && isEmpty(value))
+        {
+            await _cache.SetAsync(key, value, _emptyResultCacheOptions, tags, ct);
+        }
+
+        return value;
+    }
 
     public async Task<ChampionWinRateSummary> GetWinRatesAsync(
         int championId,
@@ -119,12 +165,12 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 
         // Serve from the precomputed aggregate tables (fast indexed scope roll-up; falls back to the raw
         // compute for any patch without aggregates yet). HybridCache stays the hot tier in front.
-        var winRates = await _cache.GetOrCreateAsync(
+        var winRates = await GetOrCreateWithEmptyTtlAsync(
             cacheKey,
             async cancel => await _winRateService.ComputeWinRatesFromStatsAsync(championId, normalizedFilter, currentPatch, cancel),
-            AnalyticsCacheOptions,
-            tags: new[] { AnalyticsCacheTag, $"champion:{championId}", CacheTags.ForPatch(currentPatch) },
-            cancellationToken: ct
+            static list => list.Sum(x => Math.Max(0, x.Games)) <= 0,
+            new[] { AnalyticsCacheTag, $"champion:{championId}", CacheTags.ForPatch(currentPatch) },
+            ct
         );
 
         var sampleSize = winRates.Sum(x => Math.Max(0, x.Games));
@@ -255,7 +301,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 
         var selectedPatch = patchContext.Patch!;
 
-        var cacheKey = $"{BuildsCacheKeyPrefix}{championId}:{normalizedRole}:{normalizedTier}:{normalizedRegion}:{selectedPatch}";
+        var cacheKey = BuildBuildsKey(championId, normalizedRole, normalizedTier, normalizedRegion, selectedPatch);
         var tags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(selectedPatch), "builds" };
 
         var response = await _cache.GetOrCreateAsync(
@@ -300,7 +346,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
                 [],
                 BuildSampleMetadata(0, patchContext));
 
-        var cacheKey = $"{ProBuildsCacheKeyPrefix}{championId}:{normalizedRegion}:{normalizedRole}:{normalizedScope}:{resolvedPatch}";
+        var cacheKey = BuildProBuildsKey(championId, normalizedRegion, normalizedRole, normalizedScope, resolvedPatch);
         var tags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(resolvedPatch), "probuilds" };
 
         var response = await _cache.GetOrCreateAsync(
@@ -405,7 +451,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         }
 
         var selectedPatch = patchContext.Patch!;
-        var cacheKey = $"{MatchupsCacheKeyPrefix}{championId}:{normalizedRole}:{normalizedTier}:{normalizedRegion}:{selectedPatch}";
+        var cacheKey = BuildMatchupsKey(championId, normalizedRole, normalizedTier, normalizedRegion, selectedPatch);
         var tags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(selectedPatch), "matchups" };
 
         // Serve from the precomputed matchup aggregates (all-region scope; falls back to the raw self-join
@@ -492,13 +538,13 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         effectiveRole ??= "MIDDLE"; // mirror GetProfile's final fallback so the key always matches
 
         // ── Builds + matchups for the resolved lane (region=ALL, given tier) ──
-        var buildsKey = $"{BuildsCacheKeyPrefix}{championId}:{effectiveRole}:{normalizedTier}:{normalizedRegion}:{currentPatch}";
+        var buildsKey = BuildBuildsKey(championId, effectiveRole, normalizedTier, normalizedRegion, currentPatch);
         var buildsTags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(currentPatch), "builds" };
         var builds = await _buildService.ComputeBuildsFromStatsAsync(
             championId, effectiveRole, tierForCompute, normalizedRegion, currentPatch, ct);
         await _cache.SetAsync(buildsKey, builds, AnalyticsCacheOptions, buildsTags, ct);
 
-        var matchupsKey = $"{MatchupsCacheKeyPrefix}{championId}:{effectiveRole}:{normalizedTier}:{normalizedRegion}:{currentPatch}";
+        var matchupsKey = BuildMatchupsKey(championId, effectiveRole, normalizedTier, normalizedRegion, currentPatch);
         var matchupsTags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(currentPatch), "matchups" };
         var matchups = await _matchupService.ComputeMatchupsFromStatsAsync(
             championId, effectiveRole, tierForCompute, normalizedRegion, currentPatch, ct);
@@ -509,7 +555,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         {
             var proScope = ChampionProComputeService.NormalizeProScope(null); // "all"
             const string proRegion = "ALL";
-            var proKey = $"{ProBuildsCacheKeyPrefix}{championId}:{proRegion}:{effectiveRole}:{proScope}:{currentPatch}";
+            var proKey = BuildProBuildsKey(championId, proRegion, effectiveRole, proScope, currentPatch);
             var proTags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(currentPatch), "probuilds" };
             var proBuilds = await _proService.ComputeProBuildsFromStatsAsync(
                 championId, proRegion, effectiveRole, proScope, currentPatch, ct);
@@ -577,6 +623,18 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             patchPhase != AnalyticsPatchPhase.Steady,
             patchPhase);
     }
+
+    // Shared cache-key builders — the reader path (GetBuildsAsync/GetProBuildsAsync/GetMatchupsAsync)
+    // and the warm writer (RefreshDefaultProfileCacheAsync) MUST produce byte-identical keys or the
+    // warmed entry never gets hit. Keep these as the single source of truth (mirrors BuildCacheKey).
+    private static string BuildBuildsKey(int championId, string role, string tier, string region, string patch)
+        => $"{BuildsCacheKeyPrefix}{championId}:{role}:{tier}:{region}:{patch}";
+
+    private static string BuildMatchupsKey(int championId, string role, string tier, string region, string patch)
+        => $"{MatchupsCacheKeyPrefix}{championId}:{role}:{tier}:{region}:{patch}";
+
+    private static string BuildProBuildsKey(int championId, string region, string role, string scope, string patch)
+        => $"{ProBuildsCacheKeyPrefix}{championId}:{region}:{role}:{scope}:{patch}";
 
     private static string BuildCacheKey(int championId, ChampionAnalyticsFilter filter, string patch)
     {

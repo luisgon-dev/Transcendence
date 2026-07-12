@@ -17,4 +17,12 @@ public class ChampionAnalyticsComputeOptions
     /// most-recent-first, which matches the "recent pro/high-MMR builds" surface.
     /// </summary>
     public int ProBuildMaxParticipantRows { get; set; } = 1500;
+
+    /// <summary>
+    /// Cache lifetime (minutes) applied to a freshly-computed empty / zero-sample analytics payload
+    /// instead of the 24h analytics TTL. Keeps "no data yet" answers cheap to serve while letting
+    /// newly-ingested games surface within minutes rather than waiting out the 24h patch-tag
+    /// invalidation. Kept small (single-digit-to-low-double-digit minutes).
+    /// </summary>
+    public int EmptyResultTtlMinutes { get; set; } = 10;
 }

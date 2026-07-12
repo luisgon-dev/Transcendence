@@ -444,17 +444,22 @@ export function SummonerProfileClient({
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(280px,0.32fr)_minmax(0,1fr)] xl:items-start">
-          <ProfileSidebar
-            profile={profile}
-            championStatic={championStatic}
-            rankedEntries={rankedEntries}
-            unrankedQueues={unrankedQueues}
-            rankHistory={rankHistory}
-            region={region}
-            gameName={gameName}
-            tagLine={tagLine}
-          />
-          <div className="grid gap-6">
+          {/* On mobile the sidebar (mastery / champion pool / duo / live-game) drops BELOW the match
+              history so the primary content isn't buried under five cards; the xl two-column layout
+              (sidebar left) is unchanged. */}
+          <div className="order-2 xl:order-1">
+            <ProfileSidebar
+              profile={profile}
+              championStatic={championStatic}
+              rankedEntries={rankedEntries}
+              unrankedQueues={unrankedQueues}
+              rankHistory={rankHistory}
+              region={region}
+              gameName={gameName}
+              tagLine={tagLine}
+            />
+          </div>
+          <div className="grid gap-6 order-1 xl:order-2">
             <PerformanceCard
               matches={history?.items ?? []}
               overviewStats={profile.overviewStats}

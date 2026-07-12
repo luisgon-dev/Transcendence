@@ -84,7 +84,10 @@ jobs:
 
       # Fails if the EF model and the latest migration snapshot have drifted
       # (an entity changed without a migration → deployed code expects columns
-      # that prod, which never auto-migrates, does not have).
+      # the schema lacks). Prod DOES auto-migrate on worker startup
+      # (Database:AutoMigrate=true), so drift or a bad migration would auto-apply —
+      # which is exactly why the hot-table DDL gate above and the migration-apply
+      # job (full chain vs a real Postgres) matter.
       - name: Model/snapshot drift check
         run: |
           dotnet tool restore
@@ -138,3 +141,17 @@ jobs:
           dotnet build Transcendence.sln -c Debug
           dotnet ef database update \
             --project Transcendence.Service --startup-project Transcendence.Service --no-build
+
+      - name: Seed representative rows (schema-accepts-writes smoke)
+        env:
+          PGPASSWORD: postgres
+        # The empty-DB migration above catches DDL / ordering / type errors; this additionally proves
+        # the migrated schema accepts a realistic write. RefreshLocks has a stable, self-owned schema
+        # so this stays low-maintenance. (Full data-dependent migration coverage — apply-N-1, seed,
+        # apply-N — is a follow-up on the integration tier.)
+        run: |
+          psql -h localhost -U postgres -d transcendence_ci -v ON_ERROR_STOP=1 <<'SQL'
+          INSERT INTO "RefreshLocks" ("Id", "Key", "CreatedAtUtc", "LockedUntilUtc", "OwnerToken")
+          VALUES (gen_random_uuid(), 'ci-seed:smoke', now(), now() + interval '1 minute', gen_random_uuid());
+          SELECT count(*) AS refresh_locks_seeded FROM "RefreshLocks";
+          SQL

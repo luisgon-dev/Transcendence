@@ -9,6 +9,13 @@ public class UserAccount
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime? LastLoginAtUtc { get; set; }
+
+    /// <summary>Consecutive failed login attempts since the last success; drives per-account lockout.</summary>
+    public int FailedLoginAttempts { get; set; }
+
+    /// <summary>When set and in the future, logins for this account are refused regardless of source IP.</summary>
+    public DateTime? LockoutUntilUtc { get; set; }
+
     public ICollection<UserRole> Roles { get; set; } = new List<UserRole>();
     public ICollection<UserRefreshToken> RefreshTokens { get; set; } = new List<UserRefreshToken>();
     public ICollection<UserFavoriteSummoner> FavoriteSummoners { get; set; } = new List<UserFavoriteSummoner>();

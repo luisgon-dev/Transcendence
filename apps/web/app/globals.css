@@ -230,8 +230,23 @@ body::before {
     transition: background-color 9999s ease-in-out 0s;
   }
 
-  *:focus-visible {
-    outline: none;
+  /* Keyboard focus MUST be visible (WCAG 2.4.7). The previous blanket `outline:none` removed it
+     everywhere — tier-list rows/sort headers/analyze links, champion & pro-build tabs/pills, the
+     command palette. Restore a single restrained token ring on interactive elements. Pointer focus
+     (:focus without :focus-visible) stays ringless; individual components may override with their own. */
+  a:focus-visible,
+  button:focus-visible,
+  summary:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [role="button"]:focus-visible,
+  [role="tab"]:focus-visible,
+  [role="option"]:focus-visible,
+  [role="menuitem"]:focus-visible,
+  [tabindex]:not([tabindex="-1"]):focus-visible {
+    outline: 2px solid color-mix(in oklch, var(--t-primary), transparent 40%);
+    outline-offset: 2px;
   }
 }
 

@@ -1,11 +1,14 @@
 import "server-only";
 
+import { headers as requestHeaders } from "next/headers";
+
 import {
   getAuthCookies,
   setAuthCookies,
   shouldRefreshAccessToken,
   type AuthTokenResponse
 } from "@/lib/authCookies";
+import { resolveClientIp } from "@/lib/clientIp";
 import { logEvent } from "@/lib/serverLog";
 import { getTrnClient } from "@/lib/trnClient";
 
@@ -34,14 +37,18 @@ export async function refreshAccessToken(
 
   try {
     const client = getTrnClient();
-    const headers: Record<string, string> = {};
+    const outboundHeaders: Record<string, string> = {};
     if (options?.requestId) {
-      headers["x-trn-request-id"] = options.requestId;
+      outboundHeaders["x-trn-request-id"] = options.requestId;
     }
+    // Forward the real client IP so the (per-navigation, heavily-hit) refresh limiter partitions per
+    // client rather than collapsing site-wide onto the BFF's own address.
+    const clientIp = resolveClientIp(await requestHeaders());
+    if (clientIp) outboundHeaders["x-forwarded-for"] = clientIp;
 
     const { data, response } = await client.POST("/api/auth/refresh", {
       body: { refreshToken },
-      ...(Object.keys(headers).length > 0 ? { headers } : {})
+      ...(Object.keys(outboundHeaders).length > 0 ? { headers: outboundHeaders } : {})
     });
 
     if (data) {

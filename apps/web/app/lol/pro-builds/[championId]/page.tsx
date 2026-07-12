@@ -335,6 +335,8 @@ export default async function ProBuildsChampionPage({
         </Card>
       ) : null}
 
+      {proBuildsRes.ok ? (
+        <>
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="p-5">
           <h2 className="type-section">Top Players</h2>
@@ -485,6 +487,8 @@ export default async function ProBuildsChampionPage({
           </ul>
         )}
       </Card>
+        </>
+      ) : null}
 
       <Card className="border-primary/40 bg-primary/10 p-5">
         <h2 className="type-section text-primary">

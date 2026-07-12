@@ -96,6 +96,17 @@ const TIER_LADDER_ORDER = [
   "CHALLENGER"
 ];
 
+/**
+ * Canonical ladder ordinal for a rank tier (Iron = 0 … Challenger = 9), matching
+ * TIER_LADDER_ORDER. Unknown/composite buckets (e.g. "ALL", "EMERALD_PLUS") sort
+ * last so real ladder tiers stay in ascending order.
+ */
+export function rankTierLadderOrdinal(tier: string | null | undefined): number {
+  if (!tier) return Number.MAX_SAFE_INTEGER;
+  const index = TIER_LADDER_ORDER.indexOf(tier.toUpperCase());
+  return index < 0 ? Number.MAX_SAFE_INTEGER : index;
+}
+
 const DIVISION_RANK: Record<string, number> = {
   IV: 0,
   III: 1,

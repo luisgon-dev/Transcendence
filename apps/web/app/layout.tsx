@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Bricolage_Grotesque, Hanken_Grotesk, JetBrains_Mono } from "next/font/google";
 
 import "@/app/globals.css";
-import { GlobalCommandPalette } from "@/components/GlobalCommandPalette";
+import { GlobalCommandPaletteLoader } from "@/components/GlobalCommandPaletteLoader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 
@@ -64,7 +64,7 @@ export default function RootLayout({
           {children}
         </main>
         <SiteFooter />
-        <GlobalCommandPalette />
+        <GlobalCommandPaletteLoader />
       </body>
     </html>
   );

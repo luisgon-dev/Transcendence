@@ -28,7 +28,13 @@ import {
   type SpellStatic,
   type SummonerProfileResponse
 } from "@/components/lol-profile/shared";
+import Link from "next/link";
+
+import { Button } from "@/components/ui/Button";
+import { buttonClassName } from "@/components/ui/buttonStyles";
 import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { SearchIcon } from "@/components/ui/icons";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { computeNextPollDelayMs } from "@/lib/polling";
 import { formatQueueLabel } from "@/lib/queues";
@@ -439,9 +445,35 @@ export function SummonerProfileClient({
       />
 
       {!profile ? (
-        <Card className="profile-section-card p-5">
-          <Skeleton className="h-16 w-full" />
-        </Card>
+        polling && !error ? (
+          <Card className="profile-section-card p-5">
+            <Skeleton className="h-16 w-full" />
+          </Card>
+        ) : (
+          <EmptyState
+            icon={<SearchIcon className="h-6 w-6" />}
+            title={`We couldn’t find ${title}`}
+            description={
+              error?.message
+                ? `${error.message} Double-check the Riot ID and that ${region.toUpperCase()} is the right region, or queue an update to fetch fresh data.`
+                : `No profile in ${region.toUpperCase()} matched this Riot ID. Double-check the spelling and region, or queue an update to fetch fresh data.`
+            }
+            action={
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <Button
+                  variant="primary"
+                  onClick={() => void queueRefresh()}
+                  disabled={busy}
+                >
+                  {busy ? "Updating…" : "Update now"}
+                </Button>
+                <Link href="/" className={buttonClassName({ variant: "outline" })}>
+                  New search
+                </Link>
+              </div>
+            }
+          />
+        )
       ) : (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(280px,0.32fr)_minmax(0,1fr)] xl:items-start">
           {/* On mobile the sidebar (mastery / champion pool / duo / live-game) drops BELOW the match

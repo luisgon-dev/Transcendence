@@ -58,3 +58,20 @@ export function ArrowCornerIcon({ className }: { className?: string }) {
     </svg>
   );
 }
+
+export function ChevronRightIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 12 12"
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M4.5 3 7.5 6 4.5 9" />
+    </svg>
+  );
+}

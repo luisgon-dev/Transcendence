@@ -7,6 +7,9 @@ import { loginAction } from "@/app/account/actions";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { PasswordInput } from "@/components/ui/PasswordInput";
+
+const GITHUB_REPO_URL = "https://github.com/luisgon-dev/Transcendence";
 
 export default function LoginPage() {
   const [state, formAction, pending] = useActionState(
@@ -78,16 +81,29 @@ export default function LoginPage() {
                   placeholder="name@example.com"
                 />
               </label>
-              <label className="grid gap-1.5">
-                <span className="field-label">Password</span>
-                <Input
+              <div className="grid gap-1.5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <label htmlFor="password" className="field-label">
+                    Password
+                  </label>
+                  <Link
+                    href={`${GITHUB_REPO_URL}/issues`}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Password recovery is handled through our support tracker."
+                    className="type-meta rounded-sm font-semibold text-fg/62 transition hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/24 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
+                <PasswordInput
+                  id="password"
                   name="password"
-                  type="password"
                   autoComplete="current-password"
                   required
                   placeholder="Your password"
                 />
-              </label>
+              </div>
 
               {state.error ? (
                 <p className="field-error type-ui" aria-live="polite">

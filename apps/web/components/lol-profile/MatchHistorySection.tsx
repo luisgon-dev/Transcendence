@@ -9,6 +9,8 @@ import { Card } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { ChevronRightIcon } from "@/components/ui/icons";
+import { cn } from "@/lib/cn";
 import { MatchScoreboard } from "@/components/lol-profile/MatchScoreboard";
 import {
   formatDateTimeMs,
@@ -297,7 +299,13 @@ function MatchHistoryCard({
                 {matchKdaRatio(match).toFixed(2)} KDA
               </p>
             </div>
-            <span className="type-overline text-fg/65">
+            <span className="flex items-center justify-end gap-1.5 type-overline text-muted">
+              <ChevronRightIcon
+                className={cn(
+                  "size-3 shrink-0 transition-transform duration-150",
+                  expanded && "rotate-90"
+                )}
+              />
               {expanded ? "Collapse details" : "Expand details"}
             </span>
           </div>

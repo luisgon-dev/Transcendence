@@ -94,3 +94,47 @@ jobs:
           dotnet build Transcendence.sln -c Debug
           dotnet ef migrations has-pending-model-changes \
             --project Transcendence.Service --startup-project Transcendence.Service --no-build
+
+  migration-apply:
+    runs-on: ubuntu-latest
+
+    # Prod auto-migrates on worker startup (Database:AutoMigrate); a migration that compiles and
+    # passes the drift check but fails at RUNTIME (PG-specific DDL, ordering, or type error) would
+    # crash-loop the worker while the deploy reports success. The SQLite/InMemory tests can't catch
+    # that. This job applies the full migration chain from empty against real PostgreSQL so those
+    # failures surface pre-merge. See docs/DEVELOPMENT.md.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: transcendence_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Apply full migration chain to a fresh Postgres
+        env:
+          # Overrides config/backend.shared.json's localhost default for the CI service container.
+          ConnectionStrings__MainDatabase: "Host=localhost;Port=5432;Database=transcendence_ci;Username=postgres;Password=postgres"
+          Database__AutoMigrate: "false"
+        run: |
+          dotnet tool restore
+          # Solution build first (same reason as the drift check above), then apply with --no-build.
+          dotnet build Transcendence.sln -c Debug
+          dotnet ef database update \
+            --project Transcendence.Service --startup-project Transcendence.Service --no-build

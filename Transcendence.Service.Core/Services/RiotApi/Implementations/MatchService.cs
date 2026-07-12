@@ -1,7 +1,6 @@
 using Camille.Enums;
 using Camille.RiotGames;
 using Camille.RiotGames.MatchV5;
-using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Match;
@@ -582,18 +581,15 @@ public class MatchService(
             }
             else
             {
+                // Leave as TemporaryFailure; the recurring RetryFailedMatchesJob owns re-attempts
+                // (paced by MaxMatchesPerRun, deduped, and backed off via LastAttemptAt). The former
+                // inline BackgroundJob.Schedule here was a SECOND retry driver racing that sweep —
+                // the same match could be fetched twice near-simultaneously, double-spending the
+                // scarce personal-tier Riot budget and double-incrementing RetryCount.
                 match.Status = FetchStatus.TemporaryFailure;
-
-                // Schedule retry with exponential backoff: 30s, 60s, 120s, 300s
-                var delays = new[] { 30, 60, 120, 300 };
-                var delay = TimeSpan.FromSeconds(delays[Math.Min(match.RetryCount - 1, delays.Length - 1)]);
-
-                BackgroundJob.Schedule<IMatchService>(
-                    service => service.FetchMatchWithRetryAsync(matchId, region, CancellationToken.None),
-                    delay);
-
-                logger.LogDebug("Match {MatchId} retry scheduled in {Delay}s (attempt {RetryCount})",
-                    matchId, delay.TotalSeconds, match.RetryCount);
+                logger.LogDebug(
+                    "Match {MatchId} marked TemporaryFailure (attempt {RetryCount}); the retry sweep will re-attempt it.",
+                    matchId, match.RetryCount);
             }
 
             if (match.Id == Guid.Empty)

@@ -140,6 +140,19 @@ public class MatchTimelineIngestionJob(
             if (snapshots.Count == 0)
                 throw new InvalidOperationException("No participant snapshots could be derived from timeline frames.");
 
+            // Serialize the snapshot/build-path rewrite for THIS match. The ingestion and backfill
+            // paths can enqueue the same match concurrently, and two workers interleaving their
+            // delete-then-insert collide on the snapshot / purchase / skill primary keys (burning the
+            // retry budget). A per-match Postgres advisory lock, auto-released at transaction end,
+            // serializes same-match writes while keeping DIFFERENT matches fully parallel — the whole
+            // reason this job deliberately avoids a global [DisableConcurrentExecution].
+            await using var writeTx = await db.Database.BeginTransactionAsync(ct);
+            if (db.Database.ProviderName?.Contains("Npgsql", StringComparison.Ordinal) == true)
+            {
+                await db.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT pg_advisory_xact_lock(hashtextextended({matchId}, 0))", ct);
+            }
+
             // Replace the whole snapshot set for this match so re-ingestion is idempotent.
             var existingSnapshots = await db.MatchParticipantTimelineSnapshots
                 .Where(x => x.MatchId == match.Id)
@@ -164,6 +177,7 @@ public class MatchTimelineIngestionJob(
                 state.SchemaVersion = CurrentTimelineSchemaVersion;
 
             await db.SaveChangesAsync(ct);
+            await writeTx.CommitAsync(ct);
         }
         catch (Exception ex)
         {

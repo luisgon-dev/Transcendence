@@ -24,7 +24,7 @@
     ]
   },
   "scripts": {
-    "backend:test": "dotnet test tests/Transcendence.Service.Core.Tests/Transcendence.Service.Core.Tests.csproj -v minimal && dotnet test tests/Transcendence.WebAPI.Tests/Transcendence.WebAPI.Tests.csproj -v minimal",
+    "backend:test": "dotnet test tests/Transcendence.Service.Core.Tests/Transcendence.Service.Core.Tests.csproj -v minimal && dotnet test tests/Transcendence.WebAPI.Tests/Transcendence.WebAPI.Tests.csproj -v minimal && dotnet test tests/Transcendence.IntegrationTests/Transcendence.IntegrationTests.csproj -v minimal",
     "dev:stack:up": "docker compose up --build -d",
     "dev:stack:down": "docker compose down",
     "hooks:install": "git config core.hooksPath .githooks",

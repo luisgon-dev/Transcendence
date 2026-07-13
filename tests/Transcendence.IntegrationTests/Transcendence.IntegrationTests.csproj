@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" Version="8.8.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.2" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.13.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <!-- References the WebAPI (WebApplicationFactory entry point) AND Transcendence.Service (the
+       migrations assembly — MigrationsAssembly("Transcendence.Service")), which the WebAPI itself
+       does NOT reference; without it Database.MigrateAsync throws FileNotFoundException. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Transcendence.Data\Transcendence.Data.csproj" />
+    <ProjectReference Include="..\..\Transcendence.Service\Transcendence.Service.csproj" />
+    <ProjectReference Include="..\..\Transcendence.Service.Core\Transcendence.Service.Core.csproj" />
+    <ProjectReference Include="..\..\Transcendence.WebAPI\Transcendence.WebAPI.csproj" />
+  </ItemGroup>
+
+</Project>

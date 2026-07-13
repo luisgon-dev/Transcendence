@@ -136,7 +136,12 @@ export default async function TierListPage({
 
   return (
     <div className="grid gap-4">
+      {/* Sticky so the filters (role / rank / region / patch) stay reachable deep in the ~170-row
+          board without scrolling back to the top. Docks at top-24 below the sticky site header;
+          z-30 keeps it under the header (z-40) and above the table. Freshness stays legible in the
+          meta row while docked, so the separate freshness strip below no longer needs to stick. */}
       <Toolbar
+        className="sticky top-24 z-30"
         eyebrow="League Analytics"
         title="Tier List"
         meta={
@@ -176,11 +181,12 @@ export default async function TierListPage({
 
       {fallbackMessage ? <p className="type-ui px-1 text-muted">{fallbackMessage}</p> : null}
 
-      {/* Single freshness readout that stays docked below the header while the table scrolls. */}
+      {/* Sample-size readout. No longer sticky — the sticky filter Toolbar above owns the docked
+          region now, and its meta row already surfaces the "updated N ago" freshness. */}
       <AnalyticsSampleBanner
         sample={sample}
         variant="strip"
-        className="sticky top-24 z-30 rounded-lg border border-border bg-surface/92 px-3 py-2 shadow-soft backdrop-blur-md"
+        className="rounded-lg border border-border bg-surface/92 px-3 py-2 shadow-soft"
       />
 
       <TierListTable

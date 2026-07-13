@@ -173,7 +173,7 @@ function MatchHistoryCard({
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
                     <p className="truncate text-lg font-semibold">{championName}</p>
-                    <p className="text-xs text-fg/55">{formatRelativeTime(match.matchDate)}</p>
+                    <p className="text-xs text-muted">{formatRelativeTime(match.matchDate)}</p>
                   </div>
                   <p id={matchMetaId} className="mt-1 text-sm text-fg/72">
                     {formatDateTimeMs(match.matchDate)}

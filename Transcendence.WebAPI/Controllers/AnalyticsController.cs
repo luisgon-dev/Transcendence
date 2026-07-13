@@ -9,6 +9,7 @@ using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.RiotApi;
+using Transcendence.WebAPI.Models.Common;
 using Transcendence.WebAPI.Security;
 
 namespace Transcendence.WebAPI.Controllers;
@@ -124,10 +125,10 @@ public class AnalyticsController(
     /// </summary>
     [HttpPost("cache/invalidate")]
     [Authorize(Policy = AuthPolicies.AppOnly)]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(OperationResult), StatusCodes.Status200OK)]
     public async Task<IActionResult> InvalidateCache(CancellationToken ct = default)
     {
         await analyticsService.InvalidateAnalyticsCacheAsync(ct);
-        return Ok(new { message = "Analytics cache invalidated. Data will refresh on next request." });
+        return Ok(new OperationResult("Analytics cache invalidated. Data will refresh on next request."));
     }
 }

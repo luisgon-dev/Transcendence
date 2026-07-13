@@ -32,7 +32,6 @@ export type ProfileOverviewStats = {
 
 export type ProfileChampionStat = {
   championId: number;
-  championName: string;
   games: number;
   wins: number;
   losses: number;
@@ -76,7 +75,6 @@ export type PlayedWithEntry = {
 
 export type ChampionMasteryEntry = {
   championId: number;
-  championName: string;
   championLevel: number;
   championPoints: number;
   lastPlayTime: number;

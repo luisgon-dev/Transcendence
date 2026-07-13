@@ -182,7 +182,11 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["OperationResult"];
+                        "application/json": components["schemas"]["OperationResult"];
+                        "text/json": components["schemas"]["OperationResult"];
+                    };
                 };
                 /** @description Bad Request */
                 400: {
@@ -242,7 +246,11 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["OperationResult"];
+                        "application/json": components["schemas"]["OperationResult"];
+                        "text/json": components["schemas"]["OperationResult"];
+                    };
                 };
                 /** @description Bad Request */
                 400: {
@@ -302,7 +310,11 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["OperationResult"];
+                        "application/json": components["schemas"]["OperationResult"];
+                        "text/json": components["schemas"]["OperationResult"];
+                    };
                 };
                 /** @description Bad Request */
                 400: {
@@ -425,6 +437,17 @@ export interface paths {
                         "text/plain": components["schemas"]["AdminJobListResponse"];
                         "application/json": components["schemas"]["AdminJobListResponse"];
                         "text/json": components["schemas"]["AdminJobListResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
                 /** @description Unauthorized */
@@ -598,6 +621,17 @@ export interface paths {
                         "text/json": components["schemas"]["AdminJobDetailDto"];
                     };
                 };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
                 /** @description Unauthorized */
                 401: {
                     headers: {
@@ -658,7 +692,11 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["OperationResult"];
+                        "application/json": components["schemas"]["OperationResult"];
+                        "text/json": components["schemas"]["OperationResult"];
+                    };
                 };
                 /** @description Bad Request */
                 400: {
@@ -854,7 +892,11 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["OperationResult"];
+                        "application/json": components["schemas"]["OperationResult"];
+                        "text/json": components["schemas"]["OperationResult"];
+                    };
                 };
                 /** @description Unauthorized */
                 401: {
@@ -1220,7 +1262,11 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["OperationResult"];
+                        "application/json": components["schemas"]["OperationResult"];
+                        "text/json": components["schemas"]["OperationResult"];
+                    };
                 };
                 /** @description Unauthorized */
                 401: {
@@ -1383,7 +1429,11 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["OperationResult"];
+                        "application/json": components["schemas"]["OperationResult"];
+                        "text/json": components["schemas"]["OperationResult"];
+                    };
                 };
                 /** @description Unauthorized */
                 401: {
@@ -2141,7 +2191,11 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["OperationResult"];
+                        "application/json": components["schemas"]["OperationResult"];
+                        "text/json": components["schemas"]["OperationResult"];
+                    };
                 };
                 /** @description Unauthorized */
                 401: {
@@ -2967,9 +3021,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
                     };
                 };
                 /** @description Unauthorized */
@@ -3727,90 +3781,90 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         AddFavoriteRequest: {
-            region?: string | null;
-            gameName?: string | null;
-            tagLine?: string | null;
+            region: string;
+            gameName: string;
+            tagLine: string;
         };
         AdminAnalysisMetricsResponse: {
             /** Format: date-time */
-            generatedAtUtc?: string;
+            generatedAtUtc: string;
             activePatchVersion?: string | null;
             /** Format: date-time */
             activePatchReleasedAtUtc?: string | null;
-            summary?: components["schemas"]["AdminAnalysisSummaryDto"];
-            regions?: components["schemas"]["AdminAnalysisRegionMetricsDto"][] | null;
+            summary: components["schemas"]["AdminAnalysisSummaryDto"];
+            regions: components["schemas"]["AdminAnalysisRegionMetricsDto"][];
         };
         AdminAnalysisRegionMetricsDto: {
-            region?: string | null;
-            enabled?: boolean;
+            region: string;
+            enabled: boolean;
             /** Format: int64 */
-            summoners?: number;
+            summoners: number;
             /** Format: int64 */
-            currentPatchTotalMatches?: number;
+            currentPatchTotalMatches: number;
             /** Format: int64 */
-            currentPatchSuccessfulMatches?: number;
+            currentPatchSuccessfulMatches: number;
             /** Format: int64 */
-            currentPatchTemporaryFailures?: number;
+            currentPatchTemporaryFailures: number;
             /** Format: int64 */
-            currentPatchUnfetchedMatches?: number;
+            currentPatchUnfetchedMatches: number;
             /** Format: int64 */
-            currentPatchPermanentlyUnfetchableMatches?: number;
+            currentPatchPermanentlyUnfetchableMatches: number;
             /** Format: int64 */
-            currentPatchOutsideRetentionMatches?: number;
+            currentPatchOutsideRetentionMatches: number;
             /** Format: int64 */
-            rankedCurrentPatchMatches?: number;
+            rankedCurrentPatchMatches: number;
             /** Format: date-time */
             latestSuccessfulFetchUtc?: string | null;
             /** Format: int64 */
-            timelineSuccessfulMatches?: number;
+            timelineSuccessfulMatches: number;
             /** Format: int64 */
-            timelinePendingMatches?: number;
+            timelinePendingMatches: number;
             /** Format: int64 */
-            timelineTemporaryFailures?: number;
+            timelineTemporaryFailures: number;
             /** Format: int64 */
-            timelinePermanentFailures?: number;
+            timelinePermanentFailures: number;
             /** Format: int64 */
-            trackedProSummoners?: number;
+            trackedProSummoners: number;
             /** Format: int64 */
-            enqueuedJobs?: number;
+            enqueuedJobs: number;
             /** Format: int64 */
-            processingJobs?: number;
+            processingJobs: number;
             /** Format: int64 */
-            scheduledJobs?: number;
-            health?: string | null;
+            scheduledJobs: number;
+            health: string;
         };
         AdminAnalysisSummaryDto: {
             /** Format: int64 */
-            summoners?: number;
+            summoners: number;
             /** Format: int64 */
-            matches?: number;
+            matches: number;
             /** Format: int64 */
-            currentPatchSuccessfulMatches?: number;
+            currentPatchSuccessfulMatches: number;
             /** Format: int64 */
-            currentPatchRankedMatches?: number;
+            currentPatchRankedMatches: number;
             /** Format: double */
-            timelineCoverageRatio?: number;
+            timelineCoverageRatio: number;
             /** Format: int32 */
-            activeRefreshLocks?: number;
+            activeRefreshLocks: number;
             /** Format: int32 */
-            expiredRefreshLocks?: number;
+            expiredRefreshLocks: number;
             /** Format: int64 */
-            trackedProSummoners?: number;
+            trackedProSummoners: number;
         };
         AdminAuditEntryDto: {
             /** Format: uuid */
-            id?: string;
+            id: string;
             /** Format: uuid */
             actorUserAccountId?: string | null;
             actorEmail?: string | null;
-            action?: string | null;
+            action: string;
             targetType?: string | null;
             targetId?: string | null;
             requestId?: string | null;
-            isSuccess?: boolean;
+            isSuccess: boolean;
             metadataJson?: string | null;
             /** Format: date-time */
-            createdAtUtc?: string;
+            createdAtUtc: string;
         };
         AdminBulkDeleteJobsRequest: {
             states?: string[] | null;
@@ -3824,18 +3878,18 @@ export interface components {
             limit?: number | null;
             /** Format: int32 */
             scanLimit?: number | null;
-            dryRun?: boolean;
+            dryRun: boolean;
         };
         AdminBulkDeleteJobsResultDto: {
-            dryRun?: boolean;
-            truncated?: boolean;
+            dryRun: boolean;
+            truncated: boolean;
             /** Format: int32 */
-            matched?: number;
+            matched: number;
             /** Format: int32 */
-            deleted?: number;
+            deleted: number;
             /** Format: int32 */
-            failed?: number;
-            sampleJobIds?: string[] | null;
+            failed: number;
+            sampleJobIds: string[];
         };
         AdminDeleteJobRequest: {
             expectedState?: string | null;
@@ -3843,13 +3897,13 @@ export interface components {
         };
         AdminDeleteJobResultDto: {
             jobId: string;
-            deleted?: boolean;
+            deleted: boolean;
             expectedState?: string | null;
             currentState?: string | null;
             message: string;
         };
         AdminFailedJobDto: {
-            jobId?: string | null;
+            jobId: string;
             reason?: string | null;
             exceptionType?: string | null;
             exceptionMessage?: string | null;
@@ -3857,12 +3911,12 @@ export interface components {
             failedAt?: string | null;
         };
         AdminJobDetailDto: {
-            jobId?: string | null;
+            jobId: string;
             currentState?: string | null;
-            queue?: string | null;
+            queue: string;
             jobType?: string | null;
             jobMethod?: string | null;
-            arguments?: string[] | null;
+            arguments: string[];
             region?: string | null;
             /** Format: date-time */
             createdAtUtc?: string | null;
@@ -3884,29 +3938,29 @@ export interface components {
             exceptionMessage?: string | null;
             exceptionDetails?: string | null;
             /** Format: int32 */
-            failedCount?: number;
-            states?: components["schemas"]["AdminJobStateTransitionDto"][] | null;
-            properties?: {
+            failedCount: number;
+            states: components["schemas"]["AdminJobStateTransitionDto"][];
+            properties: {
                 [key: string]: string;
-            } | null;
+            };
         };
         AdminJobGroupDto: {
-            state?: string | null;
-            queue?: string | null;
+            state: string;
+            queue: string;
             jobType?: string | null;
             jobMethod?: string | null;
             region?: string | null;
             /** Format: int64 */
-            count?: number;
+            count: number;
             /** Format: date-time */
             oldestSeenAtUtc?: string | null;
             /** Format: date-time */
             newestSeenAtUtc?: string | null;
         };
         AdminJobListItemDto: {
-            jobId?: string | null;
-            state?: string | null;
-            queue?: string | null;
+            jobId: string;
+            state: string;
+            queue: string;
             jobType?: string | null;
             jobMethod?: string | null;
             region?: string | null;
@@ -3920,83 +3974,83 @@ export interface components {
             reason?: string | null;
             exceptionType?: string | null;
             exceptionMessage?: string | null;
-            arguments?: string[] | null;
+            arguments: string[];
         };
         AdminJobListResponse: {
             /** Format: date-time */
-            generatedAtUtc?: string;
+            generatedAtUtc: string;
             /** Format: int32 */
-            from?: number;
+            from: number;
             /** Format: int32 */
-            count?: number;
+            count: number;
             /** Format: int32 */
-            totalMatched?: number;
-            truncated?: boolean;
+            totalMatched: number;
+            truncated: boolean;
             /** Format: int32 */
-            scanLimit?: number;
-            items?: components["schemas"]["AdminJobListItemDto"][] | null;
+            scanLimit: number;
+            items: components["schemas"]["AdminJobListItemDto"][];
         };
         AdminJobStateTransitionDto: {
-            stateName?: string | null;
+            stateName: string;
             /** Format: date-time */
-            createdAtUtc?: string;
+            createdAtUtc: string;
             reason?: string | null;
-            data?: {
+            data: {
                 [key: string]: string;
-            } | null;
+            };
         };
         AdminLogSourceDto: {
-            service?: string | null;
-            available?: boolean;
+            service: string;
+            available: boolean;
             /** Format: int32 */
-            filesScanned?: number;
+            filesScanned: number;
             /** Format: date-time */
             latestTimestampUtc?: string | null;
-            truncated?: boolean;
+            truncated: boolean;
         };
         AdminOverviewResponse: {
             /** Format: date-time */
-            generatedAtUtc?: string;
-            databaseConnected?: boolean;
+            generatedAtUtc: string;
+            databaseConnected: boolean;
             /** Format: int64 */
-            enqueued?: number;
+            enqueued: number;
             /** Format: int64 */
-            processing?: number;
+            processing: number;
             /** Format: int64 */
-            scheduled?: number;
+            scheduled: number;
             /** Format: int64 */
-            failed?: number;
+            failed: number;
             /** Format: int64 */
-            succeeded?: number;
+            succeeded: number;
             /** Format: int64 */
-            recurring?: number;
+            recurring: number;
             /** Format: int64 */
-            deleted?: number;
+            deleted: number;
             /** Format: int32 */
-            effectiveConcurrency?: number;
-            servers?: components["schemas"]["AdminServerSnapshot"][] | null;
-            queues?: components["schemas"]["AdminQueueSnapshot"][] | null;
+            effectiveConcurrency: number;
+            servers: components["schemas"]["AdminServerSnapshot"][];
+            queues: components["schemas"]["AdminQueueSnapshot"][];
         };
         AdminQueueSnapshot: {
-            name?: string | null;
+            name: string;
             /** Format: int64 */
-            length?: number;
+            length: number;
             /** Format: int64 */
             fetched?: number | null;
         };
         AdminQueueSummaryResponse: {
             /** Format: date-time */
-            generatedAtUtc?: string;
-            truncated?: boolean;
+            generatedAtUtc: string;
+            truncated: boolean;
             /** Format: int32 */
-            scanLimit?: number;
-            queues?: components["schemas"]["AdminQueueSnapshot"][] | null;
-            topGroups?: components["schemas"]["AdminJobGroupDto"][] | null;
+            scanLimit: number;
+            queues: components["schemas"]["AdminQueueSnapshot"][];
+            topGroups: components["schemas"]["AdminJobGroupDto"][];
         };
         AdminRecurringJobDto: {
-            id?: string | null;
-            queue?: string | null;
-            cron?: string | null;
+            id: string;
+            queue: string;
+            cron: string;
             /** Format: date-time */
             nextExecution?: string | null;
             /** Format: date-time */
@@ -4004,45 +4058,45 @@ export interface components {
             lastJobId?: string | null;
             lastJobState?: string | null;
             error?: string | null;
-            isPresentInStorage?: boolean;
-            isEnabledByConfiguration?: boolean;
-            isPaused?: boolean;
-            isPausable?: boolean;
+            isPresentInStorage: boolean;
+            isEnabledByConfiguration: boolean;
+            isPaused: boolean;
+            isPausable: boolean;
         };
         AdminServerSnapshot: {
-            name?: string | null;
+            name: string;
             /** Format: int32 */
-            workersCount?: number;
+            workersCount: number;
             /** Format: date-time */
-            startedAtUtc?: string;
+            startedAtUtc: string;
             /** Format: date-time */
             heartbeatUtc?: string | null;
-            queues?: string[] | null;
+            queues: string[];
         };
         AdminServiceLogDto: {
             /** Format: date-time */
-            timestampUtc?: string;
-            service?: string | null;
-            level?: string | null;
-            category?: string | null;
+            timestampUtc: string;
+            service: string;
+            level: string;
+            category: string;
             /** Format: int32 */
-            eventId?: number;
+            eventId: number;
             message?: string | null;
             exception?: string | null;
         };
         AdminServiceLogsResponse: {
-            source?: components["schemas"]["AdminLogSourceDto"];
-            items?: components["schemas"]["AdminServiceLogDto"][] | null;
+            source: components["schemas"]["AdminLogSourceDto"];
+            items: components["schemas"]["AdminServiceLogDto"][];
         };
         AnalyticsPatchOptionDto: {
-            patch?: string | null;
+            patch: string;
             /** Format: date-time */
             releasedAtUtc?: string | null;
             /** Format: date-time */
             detectedAtUtc?: string | null;
-            isActive?: boolean;
+            isActive: boolean;
             /** Format: int32 */
-            rankedSoloDuoMatchCount?: number;
+            rankedSoloDuoMatchCount: number;
         };
         /**
          * Format: int32
@@ -4057,21 +4111,21 @@ export interface components {
             activePatchDetectedAtUtc?: string | null;
         };
         AnalyticsRegionDto: {
-            code?: string | null;
-            label?: string | null;
-            isDefault?: boolean;
+            code: string;
+            label: string;
+            isDefault: boolean;
         };
         AnalyticsSampleMetadata: {
-            sampleStatus?: components["schemas"]["AnalyticsSampleStatus"];
+            sampleStatus: components["schemas"]["AnalyticsSampleStatus"];
             /** Format: int32 */
-            sampleSize?: number;
+            sampleSize: number;
             /** Format: int32 */
-            minimumRecommendedSampleSize?: number;
+            minimumRecommendedSampleSize: number;
             /** Format: double */
-            patchAgeHours?: number;
-            isEarlyPatchWindow?: boolean;
-            patchPhase?: components["schemas"]["AnalyticsPatchPhase"];
-            isProvisional?: boolean;
+            patchAgeHours: number;
+            isEarlyPatchWindow: boolean;
+            patchPhase: components["schemas"]["AnalyticsPatchPhase"];
+            isProvisional: boolean;
         };
         /**
          * Format: int32
@@ -4079,29 +4133,29 @@ export interface components {
          */
         AnalyticsSampleStatus: 0 | 1 | 2;
         ApiKeyCreateRequest: {
-            name?: string | null;
+            name: string;
             /** Format: date-time */
             expiresAt?: string | null;
         };
         ApiKeyCreateResult: {
             /** Format: uuid */
-            id?: string;
-            name?: string | null;
-            plaintextKey?: string | null;
-            prefix?: string | null;
+            id: string;
+            name: string;
+            plaintextKey: string;
+            prefix: string;
             /** Format: date-time */
-            createdAt?: string;
+            createdAt: string;
             /** Format: date-time */
             expiresAt?: string | null;
         };
         ApiKeyListItem: {
             /** Format: uuid */
-            id?: string;
-            name?: string | null;
-            prefix?: string | null;
-            isRevoked?: boolean;
+            id: string;
+            name: string;
+            prefix: string;
+            isRevoked: boolean;
             /** Format: date-time */
-            createdAt?: string;
+            createdAt: string;
             /** Format: date-time */
             expiresAt?: string | null;
             /** Format: date-time */
@@ -4110,251 +4164,250 @@ export interface components {
         AuthMeResponse: {
             subject?: string | null;
             name?: string | null;
-            roles?: string[] | null;
+            roles: string[];
             authType?: string | null;
         };
         AuthTokenResponse: {
-            accessToken?: string | null;
-            refreshToken?: string | null;
+            accessToken: string;
+            refreshToken: string;
             /** Format: date-time */
-            accessTokenExpiresAtUtc?: string;
-            tokenType?: string | null;
+            accessTokenExpiresAtUtc: string;
+            tokenType: string;
         };
         ChampionBuildDto: {
-            items?: number[] | null;
-            coreItems?: number[] | null;
-            situationalItems?: number[] | null;
+            items: number[];
+            coreItems: number[];
+            situationalItems: number[];
             /** Format: int32 */
-            primaryStyleId?: number;
+            primaryStyleId: number;
             /** Format: int32 */
-            subStyleId?: number;
-            primaryRunes?: number[] | null;
-            subRunes?: number[] | null;
-            statShards?: number[] | null;
+            subStyleId: number;
+            primaryRunes: number[];
+            subRunes: number[];
+            statShards: number[];
             /** Format: int32 */
-            games?: number;
+            games: number;
             /** Format: double */
-            winRate?: number;
+            winRate: number;
             /** Format: double */
-            pickRate?: number;
+            pickRate: number;
         };
         ChampionBuildsResponse: {
             /** Format: int32 */
-            championId?: number;
-            role?: string | null;
-            rankTier?: string | null;
-            region?: string | null;
-            patch?: string | null;
-            globalCoreItems?: number[] | null;
-            builds?: components["schemas"]["ChampionBuildDto"][] | null;
-            sample?: components["schemas"]["AnalyticsSampleMetadata"];
+            championId: number;
+            role: string;
+            rankTier: string;
+            region: string;
+            patch: string;
+            globalCoreItems: number[];
+            builds: components["schemas"]["ChampionBuildDto"][];
+            sample?: components["schemas"]["AnalyticsSampleMetadata"] | null;
             summonerSpells?: components["schemas"]["SummonerSpellPairDto"][] | null;
-            skillOrder?: components["schemas"]["SkillOrderDto"];
+            skillOrder?: components["schemas"]["SkillOrderDto"] | null;
             startingItems?: components["schemas"]["StarterItemSetDto"][] | null;
             boots?: components["schemas"]["ItemChoiceDto"][] | null;
             coreBuildPath?: components["schemas"]["CoreItemStepDto"][] | null;
             situationalSlots?: components["schemas"]["SituationalSlotDto"][] | null;
         };
         ChampionGradeDto: {
-            tier?: components["schemas"]["TierGrade"];
+            tier: components["schemas"]["TierGrade"];
             /** Format: double */
-            strengthScore?: number;
+            strengthScore: number;
             /** Format: double */
-            winRate?: number;
+            winRate: number;
             /** Format: double */
-            pickRate?: number;
+            pickRate: number;
             /** Format: double */
-            banRate?: number;
+            banRate: number;
             /** Format: double */
-            contestedScore?: number;
+            contestedScore: number;
             /** Format: int32 */
-            games?: number;
+            games: number;
             /** Format: double */
-            roleBaseline?: number;
-            isLowSample?: boolean;
-            movement?: components["schemas"]["TierMovement"];
-            previousTier?: components["schemas"]["TierGrade"];
-            role?: string | null;
-            rankScope?: string | null;
+            roleBaseline: number;
+            isLowSample: boolean;
+            movement?: components["schemas"]["TierMovement"] | null;
+            previousTier?: components["schemas"]["TierGrade"] | null;
+            role: string;
+            rankScope: string;
         };
         ChampionMasteryStat: {
             /** Format: int32 */
-            championId?: number;
-            championName?: string | null;
+            championId: number;
             /** Format: int32 */
-            championLevel?: number;
+            championLevel: number;
             /** Format: int64 */
-            championPoints?: number;
+            championPoints: number;
             /** Format: int64 */
-            lastPlayTime?: number;
-            chestGranted?: boolean;
+            lastPlayTime: number;
+            chestGranted: boolean;
             /** Format: int32 */
-            tokensEarned?: number;
+            tokensEarned: number;
         };
         ChampionMatchupsResponse: {
             /** Format: int32 */
-            championId?: number;
-            role?: string | null;
+            championId: number;
+            role: string;
             rankTier?: string | null;
-            region?: string | null;
-            patch?: string | null;
-            counters?: components["schemas"]["MatchupEntryDto"][] | null;
-            favorableMatchups?: components["schemas"]["MatchupEntryDto"][] | null;
-            allMatchups?: components["schemas"]["MatchupEntryDto"][] | null;
+            region: string;
+            patch: string;
+            counters: components["schemas"]["MatchupEntryDto"][];
+            favorableMatchups: components["schemas"]["MatchupEntryDto"][];
+            allMatchups: components["schemas"]["MatchupEntryDto"][];
             /** Format: double */
             timelineCoverageRatio?: number | null;
             /** Format: int32 */
-            timelineSampleSize?: number;
+            timelineSampleSize: number;
             /** Format: date-time */
             timelineDataFreshnessUtc?: string | null;
-            sample?: components["schemas"]["AnalyticsSampleMetadata"];
+            sample?: components["schemas"]["AnalyticsSampleMetadata"] | null;
         };
         ChampionProBuildsResponse: {
             /** Format: int32 */
-            championId?: number;
-            patch?: string | null;
-            role?: string | null;
-            region?: string | null;
-            scope?: string | null;
-            recentProMatches?: components["schemas"]["ProMatchBuildDto"][] | null;
-            topPlayers?: components["schemas"]["ProPlayerSummaryDto"][] | null;
-            commonBuilds?: components["schemas"]["CommonProBuildDto"][] | null;
-            sample?: components["schemas"]["AnalyticsSampleMetadata"];
+            championId: number;
+            patch: string;
+            role: string;
+            region: string;
+            scope: string;
+            recentProMatches: components["schemas"]["ProMatchBuildDto"][];
+            topPlayers: components["schemas"]["ProPlayerSummaryDto"][];
+            commonBuilds: components["schemas"]["CommonProBuildDto"][];
+            sample?: components["schemas"]["AnalyticsSampleMetadata"] | null;
         };
         ChampionProfileAnalyticsResponse: {
             /** Format: int32 */
-            championId?: number;
-            effectiveRole?: string | null;
-            winRates?: components["schemas"]["ChampionWinRateSummary"];
-            builds?: components["schemas"]["ChampionBuildsResponse"];
-            matchups?: components["schemas"]["ChampionMatchupsResponse"];
-            grade?: components["schemas"]["ChampionGradeDto"];
+            championId: number;
+            effectiveRole: string;
+            winRates: components["schemas"]["ChampionWinRateSummary"];
+            builds: components["schemas"]["ChampionBuildsResponse"];
+            matchups: components["schemas"]["ChampionMatchupsResponse"];
+            grade?: components["schemas"]["ChampionGradeDto"] | null;
         };
         ChampionStatDto: {
             /** Format: int32 */
-            championId?: number;
+            championId: number;
             /** Format: int32 */
-            games?: number;
+            games: number;
             /** Format: int32 */
-            wins?: number;
+            wins: number;
             /** Format: int32 */
-            losses?: number;
+            losses: number;
             /** Format: double */
-            winRate?: number;
+            winRate: number;
             /** Format: double */
-            avgKills?: number;
+            avgKills: number;
             /** Format: double */
-            avgDeaths?: number;
+            avgDeaths: number;
             /** Format: double */
-            avgAssists?: number;
+            avgAssists: number;
             /** Format: double */
-            kdaRatio?: number;
+            kdaRatio: number;
             /** Format: double */
-            avgCsPerMin?: number;
+            avgCsPerMin: number;
             /** Format: double */
-            avgVisionScore?: number;
+            avgVisionScore: number;
             /** Format: double */
-            avgDamageToChamps?: number;
+            avgDamageToChamps: number;
         };
         ChampionWinRateDto: {
             /** Format: int32 */
-            championId?: number;
-            role?: string | null;
-            rankTier?: string | null;
+            championId: number;
+            role: string;
+            rankTier: string;
             /** Format: int32 */
-            games?: number;
+            games: number;
             /** Format: int32 */
-            wins?: number;
+            wins: number;
             /** Format: double */
-            winRate?: number;
+            winRate: number;
             /** Format: double */
-            pickRate?: number;
+            pickRate: number;
             /** Format: double */
-            banRate?: number;
+            banRate: number;
             /** Format: int32 */
             roleRank?: number | null;
             /** Format: int32 */
             rolePopulation?: number | null;
-            patch?: string | null;
+            patch: string;
         };
         ChampionWinRateSummary: {
             /** Format: int32 */
-            championId?: number;
-            patch?: string | null;
-            byRoleTier?: components["schemas"]["ChampionWinRateDto"][] | null;
-            sample?: components["schemas"]["AnalyticsSampleMetadata"];
+            championId: number;
+            patch: string;
+            byRoleTier: components["schemas"]["ChampionWinRateDto"][];
+            sample?: components["schemas"]["AnalyticsSampleMetadata"] | null;
             /** Format: date-time */
             computedAtUtc?: string | null;
         };
         CommonProBuildDto: {
-            items?: number[] | null;
+            items: number[];
             /** Format: int32 */
-            games?: number;
+            games: number;
             /** Format: double */
-            winRate?: number;
+            winRate: number;
         };
         CoreItemStepDto: {
             /** Format: int32 */
-            itemId?: number;
+            itemId: number;
             /** Format: int32 */
-            games?: number;
+            games: number;
             /** Format: double */
-            winRate?: number;
+            winRate: number;
             /** Format: double */
-            avgCompletionMinute?: number;
+            avgCompletionMinute: number;
             /** Format: double */
-            pickRate?: number;
+            pickRate: number;
         };
         DataAgeMetadata: {
             /** Format: date-time */
-            fetchedAt?: string;
+            fetchedAt: string;
             /** Format: date-span */
-            readonly age?: string;
-            readonly ageDescription?: string | null;
+            readonly age: string;
+            readonly ageDescription: string;
         };
         FavoriteSummonerDto: {
             /** Format: uuid */
-            id?: string;
-            summonerPuuid?: string | null;
-            platformRegion?: string | null;
+            id: string;
+            summonerPuuid: string;
+            platformRegion: string;
             displayName?: string | null;
             /** Format: date-time */
-            createdAtUtc?: string;
+            createdAtUtc: string;
         };
         FrequentlyPlayedWithStat: {
             /** Format: uuid */
-            summonerId?: string;
-            gameName?: string | null;
-            tagLine?: string | null;
+            summonerId: string;
+            gameName: string;
+            tagLine: string;
             /** Format: int32 */
-            gamesTogether?: number;
+            gamesTogether: number;
             /** Format: int32 */
-            sameTeamGames?: number;
+            sameTeamGames: number;
             /** Format: int32 */
-            sameTeamWins?: number;
+            sameTeamWins: number;
         };
         ItemChoiceDto: {
             /** Format: int32 */
-            itemId?: number;
+            itemId: number;
             /** Format: int32 */
-            games?: number;
+            games: number;
             /** Format: double */
-            winRate?: number;
+            winRate: number;
             /** Format: double */
-            pickRate?: number;
+            pickRate: number;
         };
         LiveGameAnalysisDto: {
             /** Format: date-time */
-            generatedAtUtc?: string;
-            participants?: components["schemas"]["LiveGameParticipantAnalysisDto"][] | null;
-            teams?: components["schemas"]["TeamAnalysisDto"][] | null;
+            generatedAtUtc: string;
+            participants: components["schemas"]["LiveGameParticipantAnalysisDto"][];
+            teams: components["schemas"]["TeamAnalysisDto"][];
         };
         LiveGameParticipantAnalysisDto: {
-            puuid?: string | null;
+            puuid: string;
             /** Format: int32 */
-            teamId?: number;
+            teamId: number;
             /** Format: int32 */
-            championId?: number;
+            championId: number;
             rankTier?: string | null;
             rankDivision?: string | null;
             /** Format: int32 */
@@ -4367,23 +4420,23 @@ export interface components {
             championWinRate?: number | null;
         };
         LiveGameParticipantDto: {
-            puuid?: string | null;
+            puuid: string;
             riotId?: string | null;
             summonerId?: string | null;
             /** Format: int32 */
-            teamId?: number;
+            teamId: number;
             /** Format: int32 */
-            championId?: number;
+            championId: number;
             /** Format: int32 */
-            spell1Id?: number;
+            spell1Id: number;
             /** Format: int32 */
-            spell2Id?: number;
+            spell2Id: number;
             /** Format: int32 */
-            profileIconId?: number;
+            profileIconId: number;
         };
         LiveGameResponseDto: {
-            state?: string | null;
-            platformRegion?: string | null;
+            state: string;
+            platformRegion: string;
             gameId?: string | null;
             queueType?: string | null;
             map?: string | null;
@@ -4391,262 +4444,266 @@ export interface components {
             gameStartTimeUtc?: string | null;
             /** Format: int64 */
             gameLengthSeconds?: number | null;
-            participants?: components["schemas"]["LiveGameParticipantDto"][] | null;
+            participants: components["schemas"]["LiveGameParticipantDto"][];
             /** Format: date-time */
-            lastUpdatedUtc?: string;
+            lastUpdatedUtc: string;
             /** Format: int32 */
-            dataAgeSeconds?: number;
-            analysis?: components["schemas"]["LiveGameAnalysisDto"];
+            dataAgeSeconds: number;
+            analysis?: components["schemas"]["LiveGameAnalysisDto"] | null;
         };
         LoginRequest: {
-            email?: string | null;
-            password?: string | null;
+            email: string;
+            password: string;
         };
         MatchDetailDto: {
-            matchId?: string | null;
+            matchId: string;
             /** Format: int64 */
-            matchDate?: number;
+            matchDate: number;
             /** Format: int32 */
-            duration?: number;
+            duration: number;
             /** Format: int32 */
-            queueId?: number;
-            queueType?: string | null;
+            queueId: number;
+            queueType: string;
             patch?: string | null;
-            participants?: components["schemas"]["ParticipantDetailDto"][] | null;
-            bans?: components["schemas"]["TeamBansDto"][] | null;
-            objectives?: components["schemas"]["TeamObjectivesDto"][] | null;
+            participants: components["schemas"]["ParticipantDetailDto"][];
+            bans: components["schemas"]["TeamBansDto"][];
+            objectives: components["schemas"]["TeamObjectivesDto"][];
         };
         MatchRuneDetailDto: {
             /** Format: int32 */
-            primaryStyleId?: number;
+            primaryStyleId: number;
             /** Format: int32 */
-            subStyleId?: number;
-            primarySelections?: number[] | null;
-            subSelections?: number[] | null;
-            statShards?: number[] | null;
+            subStyleId: number;
+            primarySelections: number[];
+            subSelections: number[];
+            statShards: number[];
         };
         MatchRuneSummaryDto: {
             /** Format: int32 */
-            primaryStyleId?: number;
+            primaryStyleId: number;
             /** Format: int32 */
-            subStyleId?: number;
+            subStyleId: number;
             /** Format: int32 */
-            keystoneId?: number;
+            keystoneId: number;
         };
         MatchTimelineDto: {
-            matchId?: string | null;
+            matchId: string;
             /** Format: int32 */
-            duration?: number;
-            frames?: components["schemas"]["TimelineFrameDto"][] | null;
+            duration: number;
+            frames: components["schemas"]["TimelineFrameDto"][];
         };
         MatchupEntryDto: {
             /** Format: int32 */
-            opponentChampionId?: number;
+            opponentChampionId: number;
             /** Format: int32 */
-            games?: number;
+            games: number;
             /** Format: int32 */
-            wins?: number;
+            wins: number;
             /** Format: int32 */
-            losses?: number;
+            losses: number;
             /** Format: double */
-            winRate?: number;
+            winRate: number;
             /** Format: double */
             avgGoldDiffAt15?: number | null;
             /** Format: double */
             avgXpDiffAt15?: number | null;
         };
         MultiSearchAutofillRisk: {
-            gameName?: string | null;
-            tagLine?: string | null;
+            gameName: string;
+            tagLine: string;
             primaryRole?: string | null;
-            note?: string | null;
+            note: string;
         };
         MultiSearchChampionStat: {
             /** Format: int32 */
-            championId?: number;
+            championId: number;
             /** Format: int32 */
-            games?: number;
+            games: number;
             /** Format: int32 */
-            wins?: number;
+            wins: number;
             /** Format: double */
-            winRate?: number;
+            winRate: number;
             /** Format: double */
-            kdaRatio?: number;
+            kdaRatio: number;
         };
         MultiSearchOverviewStats: {
             /** Format: int32 */
-            totalMatches?: number;
+            totalMatches: number;
             /** Format: int32 */
-            wins?: number;
+            wins: number;
             /** Format: int32 */
-            losses?: number;
+            losses: number;
             /** Format: double */
-            winRate?: number;
+            winRate: number;
             /** Format: double */
-            avgKills?: number;
+            avgKills: number;
             /** Format: double */
-            avgDeaths?: number;
+            avgDeaths: number;
             /** Format: double */
-            avgAssists?: number;
+            avgAssists: number;
             /** Format: double */
-            kdaRatio?: number;
+            kdaRatio: number;
         };
         MultiSearchRankInfo: {
-            tier?: string | null;
-            division?: string | null;
+            tier: string;
+            division: string;
             /** Format: int32 */
-            leaguePoints?: number;
+            leaguePoints: number;
             /** Format: int32 */
-            wins?: number;
+            wins: number;
             /** Format: int32 */
-            losses?: number;
+            losses: number;
         };
         MultiSearchRequest: {
             region: string;
             summoners: components["schemas"]["MultiSearchSummonerInput"][];
         };
         MultiSearchResponse: {
-            results?: components["schemas"]["MultiSearchSummonerResult"][] | null;
-            teamInsights?: components["schemas"]["MultiSearchTeamInsights"];
+            results: components["schemas"]["MultiSearchSummonerResult"][];
+            teamInsights: components["schemas"]["MultiSearchTeamInsights"];
         };
         MultiSearchRoleStat: {
-            role?: string | null;
+            role: string;
             /** Format: int32 */
-            games?: number;
+            games: number;
             /** Format: double */
-            percentage?: number;
+            percentage: number;
         };
         MultiSearchSummonerInput: {
             gameName: string;
             tagLine: string;
         };
         MultiSearchSummonerResult: {
-            gameName?: string | null;
-            tagLine?: string | null;
-            found?: boolean;
+            gameName: string;
+            tagLine: string;
+            found: boolean;
             /** Format: uuid */
             summonerId?: string | null;
             /** Format: int32 */
             profileIconId?: number | null;
             /** Format: int32 */
             summonerLevel?: number | null;
-            soloRank?: components["schemas"]["MultiSearchRankInfo"];
-            flexRank?: components["schemas"]["MultiSearchRankInfo"];
-            overviewStats?: components["schemas"]["MultiSearchOverviewStats"];
+            soloRank?: components["schemas"]["MultiSearchRankInfo"] | null;
+            flexRank?: components["schemas"]["MultiSearchRankInfo"] | null;
+            overviewStats?: components["schemas"]["MultiSearchOverviewStats"] | null;
             topChampions?: components["schemas"]["MultiSearchChampionStat"][] | null;
             roleDistribution?: components["schemas"]["MultiSearchRoleStat"][] | null;
             primaryRole?: string | null;
         };
         MultiSearchTeamInsights: {
             /** Format: double */
-            averageRankScore?: number;
-            averageRankLabel?: string | null;
-            roleCoverage?: string[] | null;
-            missingRoles?: string[] | null;
-            potentialAutofills?: components["schemas"]["MultiSearchAutofillRisk"][] | null;
+            averageRankScore: number;
+            averageRankLabel: string;
+            roleCoverage: string[];
+            missingRoles: string[];
+            potentialAutofills: components["schemas"]["MultiSearchAutofillRisk"][];
         };
         ObjectiveStatDto: {
             /** Format: int32 */
-            kills?: number;
-            first?: boolean;
+            kills: number;
+            first: boolean;
+        };
+        OperationResult: {
+            message: string;
+            id?: string | null;
         };
         ParticipantDetailDto: {
             puuid?: string | null;
             gameName?: string | null;
             tagLine?: string | null;
             /** Format: int32 */
-            teamId?: number;
+            teamId: number;
             /** Format: int32 */
-            championId?: number;
+            championId: number;
             teamPosition?: string | null;
-            win?: boolean;
+            win: boolean;
             /** Format: int32 */
-            kills?: number;
+            kills: number;
             /** Format: int32 */
-            deaths?: number;
+            deaths: number;
             /** Format: int32 */
-            assists?: number;
+            assists: number;
             /** Format: int32 */
-            champLevel?: number;
+            champLevel: number;
             /** Format: int32 */
-            goldEarned?: number;
+            goldEarned: number;
             /** Format: int32 */
-            totalDamageDealtToChampions?: number;
+            totalDamageDealtToChampions: number;
             /** Format: int32 */
-            physicalDamageDealtToChampions?: number;
+            physicalDamageDealtToChampions: number;
             /** Format: int32 */
-            magicDamageDealtToChampions?: number;
+            magicDamageDealtToChampions: number;
             /** Format: int32 */
-            trueDamageDealtToChampions?: number;
+            trueDamageDealtToChampions: number;
             /** Format: int32 */
-            visionScore?: number;
+            visionScore: number;
             /** Format: int32 */
-            totalMinionsKilled?: number;
+            totalMinionsKilled: number;
             /** Format: int32 */
-            neutralMinionsKilled?: number;
+            neutralMinionsKilled: number;
             /** Format: int32 */
-            summonerSpell1Id?: number;
+            summonerSpell1Id: number;
             /** Format: int32 */
-            summonerSpell2Id?: number;
-            items?: number[] | null;
-            runes?: components["schemas"]["ParticipantRunesDto"];
+            summonerSpell2Id: number;
+            items: number[];
+            runes: components["schemas"]["ParticipantRunesDto"];
         };
         ParticipantRunesDto: {
             /** Format: int32 */
-            primaryStyleId?: number;
+            primaryStyleId: number;
             /** Format: int32 */
-            subStyleId?: number;
-            primarySelections?: number[] | null;
-            subSelections?: number[] | null;
-            statShards?: number[] | null;
+            subStyleId: number;
+            primarySelections: number[];
+            subSelections: number[];
+            statShards: number[];
         };
         PasswordResetRequest: {
-            email?: string | null;
+            email: string;
         };
         ProChampionPlayrateDto: {
             /** Format: int32 */
-            championId?: number;
+            championId: number;
             /** Format: int32 */
-            games?: number;
+            games: number;
             /** Format: int32 */
-            wins?: number;
+            wins: number;
             /** Format: double */
-            winRate?: number;
+            winRate: number;
             /** Format: int32 */
-            uniquePlayers?: number;
+            uniquePlayers: number;
         };
         ProChampionPlayrateResponse: {
-            patch?: string | null;
-            region?: string | null;
-            scope?: string | null;
-            champions?: components["schemas"]["ProChampionPlayrateDto"][] | null;
-            sample?: components["schemas"]["AnalyticsSampleMetadata"];
+            patch: string;
+            region: string;
+            scope: string;
+            champions: components["schemas"]["ProChampionPlayrateDto"][];
+            sample?: components["schemas"]["AnalyticsSampleMetadata"] | null;
         };
         ProMatchBuildDto: {
-            matchId?: string | null;
+            matchId: string;
             playerName?: string | null;
             teamName?: string | null;
-            win?: boolean;
+            win: boolean;
             /** Format: int64 */
-            playedAt?: number;
-            items?: number[] | null;
+            playedAt: number;
+            items: number[];
             /** Format: int32 */
-            primaryStyleId?: number;
+            primaryStyleId: number;
             /** Format: int32 */
-            subStyleId?: number;
-            primaryRunes?: number[] | null;
-            subRunes?: number[] | null;
-            statShards?: number[] | null;
+            subStyleId: number;
+            primaryRunes: number[];
+            subRunes: number[];
+            statShards: number[];
             /** Format: int32 */
-            spell1Id?: number;
+            spell1Id: number;
             /** Format: int32 */
-            spell2Id?: number;
-            skillOrder?: components["schemas"]["SkillOrderDto"];
+            spell2Id: number;
+            skillOrder?: components["schemas"]["SkillOrderDto"] | null;
         };
         ProPlayerDto: {
             proName?: string | null;
             teamName?: string | null;
-            platformRegion?: string | null;
+            platformRegion: string;
             gameName?: string | null;
             tagLine?: string | null;
         };
@@ -4654,13 +4711,13 @@ export interface components {
             playerName?: string | null;
             teamName?: string | null;
             /** Format: int32 */
-            games?: number;
+            games: number;
             /** Format: double */
-            winRate?: number;
+            winRate: number;
         };
         ProRosterResponse: {
-            region?: string | null;
-            players?: components["schemas"]["ProPlayerDto"][] | null;
+            region: string;
+            players: components["schemas"]["ProPlayerDto"][];
         };
         ProblemDetails: {
             type?: string | null;
@@ -4674,39 +4731,38 @@ export interface components {
         };
         ProfileChampionStat: {
             /** Format: int32 */
-            championId?: number;
-            championName?: string | null;
+            championId: number;
             /** Format: int32 */
-            games?: number;
+            games: number;
             /** Format: int32 */
-            wins?: number;
+            wins: number;
             /** Format: int32 */
-            losses?: number;
+            losses: number;
             /** Format: double */
-            winRate?: number;
+            winRate: number;
             /** Format: double */
-            kdaRatio?: number;
+            kdaRatio: number;
         };
         ProfileFullHistoryStatus: {
-            status?: string | null;
+            status: string;
             /** Format: date-time */
-            requestedAtUtc?: string;
+            requestedAtUtc: string;
             /** Format: date-time */
             startedAtUtc?: string | null;
             /** Format: date-time */
             completedAtUtc?: string | null;
             /** Format: date-time */
-            updatedAtUtc?: string;
+            updatedAtUtc: string;
             /** Format: int32 */
-            pagesScanned?: number;
+            pagesScanned: number;
             /** Format: int32 */
-            matchIdsDiscovered?: number;
+            matchIdsDiscovered: number;
             /** Format: int32 */
-            factsPersisted?: number;
+            factsPersisted: number;
             /** Format: int32 */
-            detailFetchFailures?: number;
+            detailFetchFailures: number;
             /** Format: int32 */
-            completedMatchCount?: number;
+            completedMatchCount: number;
             /** Format: int32 */
             riotWins?: number | null;
             /** Format: int32 */
@@ -4717,165 +4773,165 @@ export interface components {
             rankedCountDelta?: number | null;
             coverageStatus?: string | null;
             /** Format: int32 */
-            classifierVersion?: number;
+            classifierVersion: number;
         };
         ProfileOverviewStats: {
             /** Format: int32 */
-            totalMatches?: number;
+            totalMatches: number;
             /** Format: int32 */
-            wins?: number;
+            wins: number;
             /** Format: int32 */
-            losses?: number;
+            losses: number;
             /** Format: double */
-            winRate?: number;
+            winRate: number;
             /** Format: double */
-            avgKills?: number;
+            avgKills: number;
             /** Format: double */
-            avgDeaths?: number;
+            avgDeaths: number;
             /** Format: double */
-            avgAssists?: number;
+            avgAssists: number;
             /** Format: double */
-            kdaRatio?: number;
+            kdaRatio: number;
             /** Format: double */
-            avgCsPerMin?: number;
+            avgCsPerMin: number;
             /** Format: double */
-            avgVisionScore?: number;
+            avgVisionScore: number;
             /** Format: double */
-            avgDamageToChamps?: number;
+            avgDamageToChamps: number;
         };
         ProfileSeasonMetadata: {
-            seasonKey?: string | null;
-            displayName?: string | null;
-            queueScope?: string | null;
+            seasonKey: string;
+            displayName: string;
+            queueScope: string;
         };
         RankHistoryEntryDto: {
             queueType?: string | null;
             tier?: string | null;
             rankNumber?: string | null;
             /** Format: int32 */
-            leaguePoints?: number;
+            leaguePoints: number;
             /** Format: int32 */
-            wins?: number;
+            wins: number;
             /** Format: int32 */
-            losses?: number;
+            losses: number;
             /** Format: date-time */
-            dateRecorded?: string;
+            dateRecorded: string;
         };
         RankInfo: {
-            tier?: string | null;
-            division?: string | null;
+            tier: string;
+            division: string;
             /** Format: int32 */
-            leaguePoints?: number;
+            leaguePoints: number;
             /** Format: int32 */
-            wins?: number;
+            wins: number;
             /** Format: int32 */
-            losses?: number;
+            losses: number;
         };
         RecentMatchSummaryDto: {
-            matchId?: string | null;
+            matchId: string;
             /** Format: int64 */
-            matchDate?: number;
+            matchDate: number;
             /** Format: int32 */
-            durationSeconds?: number;
+            durationSeconds: number;
             /** Format: int32 */
-            queueId?: number;
-            queueType?: string | null;
-            win?: boolean;
+            queueId: number;
+            queueType: string;
+            win: boolean;
             /** Format: int32 */
-            championId?: number;
+            championId: number;
             teamPosition?: string | null;
             /** Format: int32 */
-            kills?: number;
+            kills: number;
             /** Format: int32 */
-            deaths?: number;
+            deaths: number;
             /** Format: int32 */
-            assists?: number;
+            assists: number;
             /** Format: int32 */
-            visionScore?: number;
+            visionScore: number;
             /** Format: int32 */
-            damageToChamps?: number;
+            damageToChamps: number;
             /** Format: double */
-            csPerMin?: number;
+            csPerMin: number;
             /** Format: int32 */
-            summonerSpell1Id?: number;
+            summonerSpell1Id: number;
             /** Format: int32 */
-            summonerSpell2Id?: number;
-            items?: number[] | null;
-            runes?: components["schemas"]["MatchRuneSummaryDto"];
-            runesDetail?: components["schemas"]["MatchRuneDetailDto"];
+            summonerSpell2Id: number;
+            items: number[];
+            runes: components["schemas"]["MatchRuneSummaryDto"];
+            runesDetail: components["schemas"]["MatchRuneDetailDto"];
         };
         RecentMatchSummaryDtoPagedResultDto: {
-            items?: components["schemas"]["RecentMatchSummaryDto"][] | null;
+            items: components["schemas"]["RecentMatchSummaryDto"][];
             /** Format: int32 */
-            page?: number;
+            page: number;
             /** Format: int32 */
-            pageSize?: number;
+            pageSize: number;
             /** Format: int32 */
-            totalCount?: number;
+            totalCount: number;
             /** Format: int32 */
-            totalPages?: number;
+            totalPages: number;
         };
         RecentPerformanceDto: {
-            matchId?: string | null;
-            win?: boolean;
+            matchId: string;
+            win: boolean;
             /** Format: int32 */
-            kills?: number;
+            kills: number;
             /** Format: int32 */
-            deaths?: number;
+            deaths: number;
             /** Format: int32 */
-            assists?: number;
+            assists: number;
             /** Format: double */
-            csPerMin?: number;
+            csPerMin: number;
             /** Format: int32 */
-            visionScore?: number;
+            visionScore: number;
             /** Format: int32 */
-            damageToChamps?: number;
+            damageToChamps: number;
         };
         RefreshRequest: {
-            refreshToken?: string | null;
+            refreshToken: string;
         };
         RegisterRequest: {
-            email?: string | null;
-            password?: string | null;
+            email: string;
+            password: string;
         };
         RoleStatDto: {
-            role?: string | null;
+            role: string;
             /** Format: int32 */
-            games?: number;
+            games: number;
             /** Format: int32 */
-            wins?: number;
+            wins: number;
             /** Format: int32 */
-            losses?: number;
+            losses: number;
             /** Format: double */
-            winRate?: number;
+            winRate: number;
         };
         SituationalSlotDto: {
             /** Format: int32 */
-            slot?: number;
-            options?: components["schemas"]["ItemChoiceDto"][] | null;
+            slot: number;
+            options: components["schemas"]["ItemChoiceDto"][];
         };
         SkillOrderDto: {
-            firstThree?: string | null;
-            maxOrder?: string | null;
+            firstThree: string;
+            maxOrder: string;
             /** Format: int32 */
-            games?: number;
+            games: number;
             /** Format: double */
-            winRate?: number;
+            winRate: number;
             /** Format: double */
-            pickRate?: number;
+            pickRate: number;
         };
         StarterItemSetDto: {
-            items?: number[] | null;
+            items: number[];
             /** Format: int32 */
-            games?: number;
+            games: number;
             /** Format: double */
-            winRate?: number;
+            winRate: number;
             /** Format: double */
-            pickRate?: number;
+            pickRate: number;
         };
         SummonerAcceptedResponse: {
             /** @description Refresh state message. "Refresh queued" when accepted now, "Refresh in process" when contention is detected. */
-            message?: string | null;
+            message: string;
             /** @description Absolute URL clients can poll for current refresh status/result. */
             poll?: string | null;
             /**
@@ -4886,109 +4942,109 @@ export interface components {
         };
         SummonerOverviewDto: {
             /** Format: uuid */
-            summonerId?: string;
+            summonerId: string;
             /** Format: int32 */
-            totalMatches?: number;
+            totalMatches: number;
             /** Format: int32 */
-            wins?: number;
+            wins: number;
             /** Format: int32 */
-            losses?: number;
+            losses: number;
             /** Format: double */
-            winRate?: number;
+            winRate: number;
             /** Format: double */
-            avgKills?: number;
+            avgKills: number;
             /** Format: double */
-            avgDeaths?: number;
+            avgDeaths: number;
             /** Format: double */
-            avgAssists?: number;
+            avgAssists: number;
             /** Format: double */
-            kdaRatio?: number;
+            kdaRatio: number;
             /** Format: double */
-            avgCsPerMin?: number;
+            avgCsPerMin: number;
             /** Format: double */
-            avgVisionScore?: number;
+            avgVisionScore: number;
             /** Format: double */
-            avgDamageToChamps?: number;
+            avgDamageToChamps: number;
             /** Format: double */
-            avgGameDurationMin?: number;
-            recentPerformance?: components["schemas"]["RecentPerformanceDto"][] | null;
+            avgGameDurationMin: number;
+            recentPerformance: components["schemas"]["RecentPerformanceDto"][];
         };
         SummonerProfileResponse: {
             /** Format: uuid */
-            summonerId?: string;
-            puuid?: string | null;
-            gameName?: string | null;
-            tagLine?: string | null;
+            summonerId: string;
+            puuid: string;
+            gameName: string;
+            tagLine: string;
             /** Format: int32 */
-            summonerLevel?: number;
+            summonerLevel: number;
             /** Format: int32 */
-            profileIconId?: number;
-            soloRank?: components["schemas"]["RankInfo"];
-            flexRank?: components["schemas"]["RankInfo"];
-            overviewStats?: components["schemas"]["ProfileOverviewStats"];
+            profileIconId: number;
+            soloRank?: components["schemas"]["RankInfo"] | null;
+            flexRank?: components["schemas"]["RankInfo"] | null;
+            overviewStats?: components["schemas"]["ProfileOverviewStats"] | null;
             topChampions?: components["schemas"]["ProfileChampionStat"][] | null;
-            activeSeason?: components["schemas"]["ProfileSeasonMetadata"];
-            fullHistory?: components["schemas"]["ProfileFullHistoryStatus"];
+            activeSeason?: components["schemas"]["ProfileSeasonMetadata"] | null;
+            fullHistory?: components["schemas"]["ProfileFullHistoryStatus"] | null;
             frequentlyPlayedWith?: components["schemas"]["FrequentlyPlayedWithStat"][] | null;
             topMastery?: components["schemas"]["ChampionMasteryStat"][] | null;
-            profileAge?: components["schemas"]["DataAgeMetadata"];
-            rankAge?: components["schemas"]["DataAgeMetadata"];
-            statsAge?: components["schemas"]["DataAgeMetadata"];
+            profileAge: components["schemas"]["DataAgeMetadata"];
+            rankAge: components["schemas"]["DataAgeMetadata"];
+            statsAge?: components["schemas"]["DataAgeMetadata"] | null;
         };
         SummonerSearchItem: {
-            platformRegion: string | null;
-            region: string | null;
-            gameName: string | null;
-            tagLine: string | null;
+            platformRegion: string;
+            region: string;
+            gameName: string;
+            tagLine: string;
             /** Format: int32 */
-            profileIconId?: number;
+            profileIconId: number;
         };
         SummonerSearchResponse: {
-            items?: components["schemas"]["SummonerSearchItem"][] | null;
+            items: components["schemas"]["SummonerSearchItem"][];
         };
         SummonerSpellPairDto: {
             /** Format: int32 */
-            spell1Id?: number;
+            spell1Id: number;
             /** Format: int32 */
-            spell2Id?: number;
+            spell2Id: number;
             /** Format: int32 */
-            games?: number;
+            games: number;
             /** Format: double */
-            winRate?: number;
+            winRate: number;
             /** Format: double */
-            pickRate?: number;
+            pickRate: number;
         };
         TeamAnalysisDto: {
             /** Format: int32 */
-            teamId?: number;
+            teamId: number;
             /** Format: double */
-            averageRecentWinRate?: number;
+            averageRecentWinRate: number;
             /** Format: double */
-            averageChampionWinRate?: number;
+            averageChampionWinRate: number;
             /** Format: double */
-            averageRankScore?: number;
+            averageRankScore: number;
             /** Format: double */
-            compositeScore?: number;
+            compositeScore: number;
             /** Format: double */
-            estimatedWinProbability?: number;
-            strengths?: string[] | null;
-            weaknesses?: string[] | null;
+            estimatedWinProbability: number;
+            strengths: string[];
+            weaknesses: string[];
         };
         TeamBansDto: {
             /** Format: int32 */
-            teamId?: number;
-            bannedChampionIds?: number[] | null;
+            teamId: number;
+            bannedChampionIds: number[];
         };
         TeamObjectivesDto: {
             /** Format: int32 */
-            teamId?: number;
-            firstBlood?: boolean;
-            baron?: components["schemas"]["ObjectiveStatDto"];
-            dragon?: components["schemas"]["ObjectiveStatDto"];
-            riftHerald?: components["schemas"]["ObjectiveStatDto"];
-            horde?: components["schemas"]["ObjectiveStatDto"];
-            tower?: components["schemas"]["ObjectiveStatDto"];
-            inhibitor?: components["schemas"]["ObjectiveStatDto"];
+            teamId: number;
+            firstBlood: boolean;
+            baron: components["schemas"]["ObjectiveStatDto"];
+            dragon: components["schemas"]["ObjectiveStatDto"];
+            riftHerald: components["schemas"]["ObjectiveStatDto"];
+            horde: components["schemas"]["ObjectiveStatDto"];
+            tower: components["schemas"]["ObjectiveStatDto"];
+            inhibitor: components["schemas"]["ObjectiveStatDto"];
         };
         /**
          * Format: int32
@@ -4997,34 +5053,34 @@ export interface components {
         TierGrade: 0 | 1 | 2 | 3 | 4;
         TierListEntry: {
             /** Format: int32 */
-            championId?: number;
-            role?: string | null;
-            tier?: components["schemas"]["TierGrade"];
+            championId: number;
+            role: string;
+            tier: components["schemas"]["TierGrade"];
             /** Format: double */
-            strengthScore?: number;
+            strengthScore: number;
             /** Format: double */
-            winRate?: number;
+            winRate: number;
             /** Format: double */
-            pickRate?: number;
+            pickRate: number;
             /** Format: double */
-            banRate?: number;
+            banRate: number;
             /** Format: int32 */
-            games?: number;
-            movement?: components["schemas"]["TierMovement"];
-            previousTier?: components["schemas"]["TierGrade"];
+            games: number;
+            movement?: components["schemas"]["TierMovement"] | null;
+            previousTier?: components["schemas"]["TierGrade"] | null;
             /** Format: double */
-            contestedScore?: number;
+            contestedScore: number;
             /** Format: double */
-            roleBaseline?: number;
-            isLowSample?: boolean;
+            roleBaseline: number;
+            isLowSample: boolean;
         };
         TierListResponse: {
-            patch?: string | null;
+            patch: string;
             role?: string | null;
             rankTier?: string | null;
-            region?: string | null;
-            entries?: components["schemas"]["TierListEntry"][] | null;
-            sample?: components["schemas"]["AnalyticsSampleMetadata"];
+            region: string;
+            entries: components["schemas"]["TierListEntry"][];
+            sample?: components["schemas"]["AnalyticsSampleMetadata"] | null;
             /** Format: date-time */
             computedAtUtc?: string | null;
         };
@@ -5035,55 +5091,68 @@ export interface components {
         TierMovement: 0 | 1 | 2 | 3;
         TimelineFrameDto: {
             /** Format: int32 */
-            minuteMark?: number;
+            minuteMark: number;
             /** Format: int32 */
-            blueGold?: number;
+            blueGold: number;
             /** Format: int32 */
-            redGold?: number;
+            redGold: number;
             /** Format: int32 */
-            blueXp?: number;
+            blueXp: number;
             /** Format: int32 */
-            redXp?: number;
+            redXp: number;
         };
         TrackedProSummonerDto: {
             /** Format: uuid */
-            id?: string;
-            puuid?: string | null;
-            platformRegion?: string | null;
+            id: string;
+            puuid: string;
+            platformRegion: string;
             gameName?: string | null;
             tagLine?: string | null;
             proName?: string | null;
             teamName?: string | null;
-            isPro?: boolean;
-            isHighEloOtp?: boolean;
-            isActive?: boolean;
+            isPro: boolean;
+            isHighEloOtp: boolean;
+            isActive: boolean;
             /** Format: date-time */
-            createdAtUtc?: string;
+            createdAtUtc: string;
             /** Format: date-time */
-            updatedAtUtc?: string;
+            updatedAtUtc: string;
         };
         UpdateUserPreferencesRequest: {
             preferredRegion?: string | null;
             preferredRankTier?: string | null;
-            livePollingEnabled?: boolean;
+            livePollingEnabled: boolean;
         };
         UpsertTrackedProSummonerRequest: {
-            gameName?: string | null;
-            tagLine?: string | null;
-            platformRegion?: string | null;
+            gameName: string;
+            tagLine: string;
+            platformRegion: string;
             puuid?: string | null;
             proName?: string | null;
             teamName?: string | null;
-            isPro?: boolean;
-            isHighEloOtp?: boolean;
-            isActive?: boolean;
+            isPro: boolean;
+            isHighEloOtp: boolean;
+            isActive: boolean;
         };
         UserPreferencesDto: {
             preferredRegion?: string | null;
             preferredRankTier?: string | null;
-            livePollingEnabled?: boolean;
+            livePollingEnabled: boolean;
             /** Format: date-time */
-            updatedAtUtc?: string;
+            updatedAtUtc: string;
+        };
+        ValidationProblemDetails: {
+            type?: string | null;
+            title?: string | null;
+            /** Format: int32 */
+            status?: number | null;
+            detail?: string | null;
+            instance?: string | null;
+            errors: {
+                [key: string]: string[];
+            };
+        } & {
+            [key: string]: unknown;
         };
     };
     responses: never;

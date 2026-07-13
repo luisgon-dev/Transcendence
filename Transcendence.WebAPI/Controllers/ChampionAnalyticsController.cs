@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
+using Transcendence.WebAPI.Models.Common;
 using Transcendence.WebAPI.Security;
 
 namespace Transcendence.WebAPI.Controllers;
@@ -244,11 +245,11 @@ public class ChampionAnalyticsController(
     /// </summary>
     [HttpPost("cache/invalidate")]
     [Authorize(Policy = AuthPolicies.AppOnly)]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(OperationResult), StatusCodes.Status200OK)]
     public async Task<IActionResult> InvalidateCache(CancellationToken ct)
     {
         await analyticsService.InvalidateAnalyticsCacheAsync(ct);
-        return Ok(new { message = "Analytics cache invalidated successfully" });
+        return Ok(new OperationResult("Analytics cache invalidated successfully"));
     }
 
     private async Task<T> RunInAnalyticsScopeAsync<T>(Func<IChampionAnalyticsService, Task<T>> action)

@@ -171,7 +171,6 @@ public class SummonersController(
                 TopChampions = champions.Select(c => new ProfileChampionStat
                 {
                     ChampionId = c.ChampionId,
-                    ChampionName = ResolveChampionName(c.ChampionId),
                     Games = c.Games,
                     Wins = c.Wins,
                     Losses = c.Losses,
@@ -219,7 +218,6 @@ public class SummonersController(
                 TopMastery = mastery.Select(m => new ChampionMasteryStat
                 {
                     ChampionId = m.ChampionId,
-                    ChampionName = ResolveChampionName(m.ChampionId),
                     ChampionLevel = m.ChampionLevel,
                     ChampionPoints = m.ChampionPoints,
                     LastPlayTime = m.LastPlayTime,
@@ -406,7 +404,7 @@ public class SummonersController(
     [Authorize(Policy = AuthPolicies.AppOnly)]
     [EnableRateLimiting("multisearch-read")]
     [ProducesResponseType(typeof(MultiSearchResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> MultiSearch(
         [FromBody] MultiSearchRequest request,
         CancellationToken ct)
@@ -475,15 +473,6 @@ public class SummonersController(
         );
 
         return Ok(response);
-    }
-
-    /// <summary>
-    /// Resolves champion ID to name. Phase 3 will add proper static data service.
-    /// For now, returns placeholder that clients can resolve client-side.
-    /// </summary>
-    private static string ResolveChampionName(int championId)
-    {
-        return $"Champion {championId}";
     }
 
     private static bool IsSoloRankQueue(string? queueType)

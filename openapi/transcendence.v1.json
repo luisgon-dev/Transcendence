@@ -146,7 +146,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad Request",
@@ -197,7 +214,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad Request",
@@ -248,7 +282,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad Request",
@@ -426,6 +477,26 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AdminJobListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -613,6 +684,26 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Not Found",
             "content": {
@@ -662,7 +753,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad Request",
@@ -715,17 +823,29 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AdminDeleteJobRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/AdminDeleteJobRequest"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/AdminDeleteJobRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/AdminDeleteJobRequest"
+                  }
+                ]
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/AdminDeleteJobRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/AdminDeleteJobRequest"
+                  }
+                ]
               }
             }
           }
@@ -792,17 +912,29 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AdminBulkDeleteJobsRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/AdminBulkDeleteJobsRequest"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/AdminBulkDeleteJobsRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/AdminBulkDeleteJobsRequest"
+                  }
+                ]
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/AdminBulkDeleteJobsRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/AdminBulkDeleteJobsRequest"
+                  }
+                ]
               }
             }
           }
@@ -867,7 +999,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              }
+            }
           },
           "401": {
             "description": "Unauthorized"
@@ -1317,7 +1466,24 @@
             }
           },
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              }
+            }
           },
           "401": {
             "description": "Unauthorized"
@@ -1385,17 +1551,29 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ApiKeyCreateRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ApiKeyCreateRequest"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/ApiKeyCreateRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ApiKeyCreateRequest"
+                  }
+                ]
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/ApiKeyCreateRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ApiKeyCreateRequest"
+                  }
+                ]
               }
             }
           }
@@ -1471,7 +1649,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              }
+            }
           },
           "404": {
             "description": "Not Found",
@@ -1583,17 +1778,29 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RegisterRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RegisterRequest"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/RegisterRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RegisterRequest"
+                  }
+                ]
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/RegisterRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RegisterRequest"
+                  }
+                ]
               }
             }
           }
@@ -1671,17 +1878,29 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/LoginRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/LoginRequest"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/LoginRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/LoginRequest"
+                  }
+                ]
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/LoginRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/LoginRequest"
+                  }
+                ]
               }
             }
           }
@@ -1739,17 +1958,29 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RefreshRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RefreshRequest"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/RefreshRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RefreshRequest"
+                  }
+                ]
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/RefreshRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RefreshRequest"
+                  }
+                ]
               }
             }
           }
@@ -1807,17 +2038,29 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RefreshRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RefreshRequest"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/RefreshRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RefreshRequest"
+                  }
+                ]
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/RefreshRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RefreshRequest"
+                  }
+                ]
               }
             }
           }
@@ -1838,17 +2081,29 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PasswordResetRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PasswordResetRequest"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/PasswordResetRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PasswordResetRequest"
+                  }
+                ]
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/PasswordResetRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PasswordResetRequest"
+                  }
+                ]
               }
             }
           }
@@ -2483,7 +2738,24 @@
             }
           },
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationResult"
+                }
+              }
+            }
           },
           "401": {
             "description": "Unauthorized"
@@ -2794,17 +3066,29 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpsertTrackedProSummonerRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpsertTrackedProSummonerRequest"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpsertTrackedProSummonerRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpsertTrackedProSummonerRequest"
+                  }
+                ]
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/UpsertTrackedProSummonerRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpsertTrackedProSummonerRequest"
+                  }
+                ]
               }
             }
           }
@@ -2949,17 +3233,29 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpsertTrackedProSummonerRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpsertTrackedProSummonerRequest"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpsertTrackedProSummonerRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpsertTrackedProSummonerRequest"
+                  }
+                ]
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/UpsertTrackedProSummonerRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpsertTrackedProSummonerRequest"
+                  }
+                ]
               }
             }
           }
@@ -3514,17 +3810,29 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MultiSearchRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/MultiSearchRequest"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/MultiSearchRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/MultiSearchRequest"
+                  }
+                ]
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/MultiSearchRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/MultiSearchRequest"
+                  }
+                ]
               }
             }
           }
@@ -3575,17 +3883,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
                 }
               }
             }
@@ -4360,17 +4668,29 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AddFavoriteRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/AddFavoriteRequest"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/AddFavoriteRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/AddFavoriteRequest"
+                  }
+                ]
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/AddFavoriteRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/AddFavoriteRequest"
+                  }
+                ]
               }
             }
           }
@@ -4525,17 +4845,29 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateUserPreferencesRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateUserPreferencesRequest"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateUserPreferencesRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateUserPreferencesRequest"
+                  }
+                ]
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateUserPreferencesRequest"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateUserPreferencesRequest"
+                  }
+                ]
               }
             }
           }
@@ -4577,24 +4909,31 @@
   "components": {
     "schemas": {
       "AddFavoriteRequest": {
+        "required": [
+          "gameName",
+          "region",
+          "tagLine"
+        ],
         "type": "object",
         "properties": {
           "region": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "gameName": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "tagLine": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           }
         },
         "additionalProperties": false
       },
       "AdminAnalysisMetricsResponse": {
+        "required": [
+          "generatedAtUtc",
+          "regions",
+          "summary"
+        ],
         "type": "object",
         "properties": {
           "generatedAtUtc": {
@@ -4611,24 +4950,47 @@
             "nullable": true
           },
           "summary": {
-            "$ref": "#/components/schemas/AdminAnalysisSummaryDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminAnalysisSummaryDto"
+              }
+            ]
           },
           "regions": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/AdminAnalysisRegionMetricsDto"
-            },
-            "nullable": true
+            }
           }
         },
         "additionalProperties": false
       },
       "AdminAnalysisRegionMetricsDto": {
+        "required": [
+          "currentPatchOutsideRetentionMatches",
+          "currentPatchPermanentlyUnfetchableMatches",
+          "currentPatchSuccessfulMatches",
+          "currentPatchTemporaryFailures",
+          "currentPatchTotalMatches",
+          "currentPatchUnfetchedMatches",
+          "enabled",
+          "enqueuedJobs",
+          "health",
+          "processingJobs",
+          "rankedCurrentPatchMatches",
+          "region",
+          "scheduledJobs",
+          "summoners",
+          "timelinePendingMatches",
+          "timelinePermanentFailures",
+          "timelineSuccessfulMatches",
+          "timelineTemporaryFailures",
+          "trackedProSummoners"
+        ],
         "type": "object",
         "properties": {
           "region": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "enabled": {
             "type": "boolean"
@@ -4703,13 +5065,22 @@
             "format": "int64"
           },
           "health": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           }
         },
         "additionalProperties": false
       },
       "AdminAnalysisSummaryDto": {
+        "required": [
+          "activeRefreshLocks",
+          "currentPatchRankedMatches",
+          "currentPatchSuccessfulMatches",
+          "expiredRefreshLocks",
+          "matches",
+          "summoners",
+          "timelineCoverageRatio",
+          "trackedProSummoners"
+        ],
         "type": "object",
         "properties": {
           "summoners": {
@@ -4748,6 +5119,12 @@
         "additionalProperties": false
       },
       "AdminAuditEntryDto": {
+        "required": [
+          "action",
+          "createdAtUtc",
+          "id",
+          "isSuccess"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -4764,8 +5141,7 @@
             "nullable": true
           },
           "action": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "targetType": {
             "type": "string",
@@ -4794,6 +5170,9 @@
         "additionalProperties": false
       },
       "AdminBulkDeleteJobsRequest": {
+        "required": [
+          "dryRun"
+        ],
         "type": "object",
         "properties": {
           "states": {
@@ -4844,6 +5223,14 @@
         "additionalProperties": false
       },
       "AdminBulkDeleteJobsResultDto": {
+        "required": [
+          "deleted",
+          "dryRun",
+          "failed",
+          "matched",
+          "sampleJobIds",
+          "truncated"
+        ],
         "type": "object",
         "properties": {
           "dryRun": {
@@ -4868,8 +5255,7 @@
             "type": "array",
             "items": {
               "type": "string"
-            },
-            "nullable": true
+            }
           }
         },
         "additionalProperties": false
@@ -4890,6 +5276,7 @@
       },
       "AdminDeleteJobResultDto": {
         "required": [
+          "deleted",
           "jobId",
           "message"
         ],
@@ -4918,11 +5305,13 @@
         "additionalProperties": false
       },
       "AdminFailedJobDto": {
+        "required": [
+          "jobId"
+        ],
         "type": "object",
         "properties": {
           "jobId": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "reason": {
             "type": "string",
@@ -4945,19 +5334,25 @@
         "additionalProperties": false
       },
       "AdminJobDetailDto": {
+        "required": [
+          "arguments",
+          "failedCount",
+          "jobId",
+          "properties",
+          "queue",
+          "states"
+        ],
         "type": "object",
         "properties": {
           "jobId": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "currentState": {
             "type": "string",
             "nullable": true
           },
           "queue": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "jobType": {
             "type": "string",
@@ -4971,8 +5366,7 @@
             "type": "array",
             "items": {
               "type": "string"
-            },
-            "nullable": true
+            }
           },
           "region": {
             "type": "string",
@@ -5041,29 +5435,30 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/AdminJobStateTransitionDto"
-            },
-            "nullable": true
+            }
           },
           "properties": {
             "type": "object",
             "additionalProperties": {
               "type": "string"
-            },
-            "nullable": true
+            }
           }
         },
         "additionalProperties": false
       },
       "AdminJobGroupDto": {
+        "required": [
+          "count",
+          "queue",
+          "state"
+        ],
         "type": "object",
         "properties": {
           "state": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "queue": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "jobType": {
             "type": "string",
@@ -5095,19 +5490,22 @@
         "additionalProperties": false
       },
       "AdminJobListItemDto": {
+        "required": [
+          "arguments",
+          "jobId",
+          "queue",
+          "state"
+        ],
         "type": "object",
         "properties": {
           "jobId": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "state": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "queue": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "jobType": {
             "type": "string",
@@ -5156,13 +5554,21 @@
             "type": "array",
             "items": {
               "type": "string"
-            },
-            "nullable": true
+            }
           }
         },
         "additionalProperties": false
       },
       "AdminJobListResponse": {
+        "required": [
+          "count",
+          "from",
+          "generatedAtUtc",
+          "items",
+          "scanLimit",
+          "totalMatched",
+          "truncated"
+        ],
         "type": "object",
         "properties": {
           "generatedAtUtc": {
@@ -5192,18 +5598,21 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/AdminJobListItemDto"
-            },
-            "nullable": true
+            }
           }
         },
         "additionalProperties": false
       },
       "AdminJobStateTransitionDto": {
+        "required": [
+          "createdAtUtc",
+          "data",
+          "stateName"
+        ],
         "type": "object",
         "properties": {
           "stateName": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "createdAtUtc": {
             "type": "string",
@@ -5217,18 +5626,22 @@
             "type": "object",
             "additionalProperties": {
               "type": "string"
-            },
-            "nullable": true
+            }
           }
         },
         "additionalProperties": false
       },
       "AdminLogSourceDto": {
+        "required": [
+          "available",
+          "filesScanned",
+          "service",
+          "truncated"
+        ],
         "type": "object",
         "properties": {
           "service": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "available": {
             "type": "boolean"
@@ -5249,6 +5662,20 @@
         "additionalProperties": false
       },
       "AdminOverviewResponse": {
+        "required": [
+          "databaseConnected",
+          "deleted",
+          "effectiveConcurrency",
+          "enqueued",
+          "failed",
+          "generatedAtUtc",
+          "processing",
+          "queues",
+          "recurring",
+          "scheduled",
+          "servers",
+          "succeeded"
+        ],
         "type": "object",
         "properties": {
           "generatedAtUtc": {
@@ -5294,25 +5721,26 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/AdminServerSnapshot"
-            },
-            "nullable": true
+            }
           },
           "queues": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/AdminQueueSnapshot"
-            },
-            "nullable": true
+            }
           }
         },
         "additionalProperties": false
       },
       "AdminQueueSnapshot": {
+        "required": [
+          "length",
+          "name"
+        ],
         "type": "object",
         "properties": {
           "name": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "length": {
             "type": "integer",
@@ -5327,6 +5755,13 @@
         "additionalProperties": false
       },
       "AdminQueueSummaryResponse": {
+        "required": [
+          "generatedAtUtc",
+          "queues",
+          "scanLimit",
+          "topGroups",
+          "truncated"
+        ],
         "type": "object",
         "properties": {
           "generatedAtUtc": {
@@ -5344,33 +5779,37 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/AdminQueueSnapshot"
-            },
-            "nullable": true
+            }
           },
           "topGroups": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/AdminJobGroupDto"
-            },
-            "nullable": true
+            }
           }
         },
         "additionalProperties": false
       },
       "AdminRecurringJobDto": {
+        "required": [
+          "cron",
+          "id",
+          "isEnabledByConfiguration",
+          "isPausable",
+          "isPaused",
+          "isPresentInStorage",
+          "queue"
+        ],
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "queue": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "cron": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "nextExecution": {
             "type": "string",
@@ -5410,11 +5849,16 @@
         "additionalProperties": false
       },
       "AdminServerSnapshot": {
+        "required": [
+          "name",
+          "queues",
+          "startedAtUtc",
+          "workersCount"
+        ],
         "type": "object",
         "properties": {
           "name": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "workersCount": {
             "type": "integer",
@@ -5433,13 +5877,19 @@
             "type": "array",
             "items": {
               "type": "string"
-            },
-            "nullable": true
+            }
           }
         },
         "additionalProperties": false
       },
       "AdminServiceLogDto": {
+        "required": [
+          "category",
+          "eventId",
+          "level",
+          "service",
+          "timestampUtc"
+        ],
         "type": "object",
         "properties": {
           "timestampUtc": {
@@ -5447,16 +5897,13 @@
             "format": "date-time"
           },
           "service": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "level": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "category": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "eventId": {
             "type": "integer",
@@ -5474,27 +5921,38 @@
         "additionalProperties": false
       },
       "AdminServiceLogsResponse": {
+        "required": [
+          "items",
+          "source"
+        ],
         "type": "object",
         "properties": {
           "source": {
-            "$ref": "#/components/schemas/AdminLogSourceDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminLogSourceDto"
+              }
+            ]
           },
           "items": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/AdminServiceLogDto"
-            },
-            "nullable": true
+            }
           }
         },
         "additionalProperties": false
       },
       "AnalyticsPatchOptionDto": {
+        "required": [
+          "isActive",
+          "patch",
+          "rankedSoloDuoMatchCount"
+        ],
         "type": "object",
         "properties": {
           "patch": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "releasedAtUtc": {
             "type": "string",
@@ -5547,15 +6005,18 @@
         "additionalProperties": false
       },
       "AnalyticsRegionDto": {
+        "required": [
+          "code",
+          "isDefault",
+          "label"
+        ],
         "type": "object",
         "properties": {
           "code": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "label": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "isDefault": {
             "type": "boolean"
@@ -5564,10 +6025,23 @@
         "additionalProperties": false
       },
       "AnalyticsSampleMetadata": {
+        "required": [
+          "isEarlyPatchWindow",
+          "isProvisional",
+          "minimumRecommendedSampleSize",
+          "patchAgeHours",
+          "patchPhase",
+          "sampleSize",
+          "sampleStatus"
+        ],
         "type": "object",
         "properties": {
           "sampleStatus": {
-            "$ref": "#/components/schemas/AnalyticsSampleStatus"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AnalyticsSampleStatus"
+              }
+            ]
           },
           "sampleSize": {
             "type": "integer",
@@ -5585,7 +6059,11 @@
             "type": "boolean"
           },
           "patchPhase": {
-            "$ref": "#/components/schemas/AnalyticsPatchPhase"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AnalyticsPatchPhase"
+              }
+            ]
           },
           "isProvisional": {
             "type": "boolean"
@@ -5603,11 +6081,13 @@
         "format": "int32"
       },
       "ApiKeyCreateRequest": {
+        "required": [
+          "name"
+        ],
         "type": "object",
         "properties": {
           "name": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "expiresAt": {
             "type": "string",
@@ -5618,6 +6098,13 @@
         "additionalProperties": false
       },
       "ApiKeyCreateResult": {
+        "required": [
+          "createdAt",
+          "id",
+          "name",
+          "plaintextKey",
+          "prefix"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -5625,16 +6112,13 @@
             "format": "uuid"
           },
           "name": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "plaintextKey": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "prefix": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "createdAt": {
             "type": "string",
@@ -5649,6 +6133,13 @@
         "additionalProperties": false
       },
       "ApiKeyListItem": {
+        "required": [
+          "createdAt",
+          "id",
+          "isRevoked",
+          "name",
+          "prefix"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -5656,12 +6147,10 @@
             "format": "uuid"
           },
           "name": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "prefix": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "isRevoked": {
             "type": "boolean"
@@ -5684,6 +6173,9 @@
         "additionalProperties": false
       },
       "AuthMeResponse": {
+        "required": [
+          "roles"
+        ],
         "type": "object",
         "properties": {
           "subject": {
@@ -5698,8 +6190,7 @@
             "type": "array",
             "items": {
               "type": "string"
-            },
-            "nullable": true
+            }
           },
           "authType": {
             "type": "string",
@@ -5709,28 +6200,44 @@
         "additionalProperties": false
       },
       "AuthTokenResponse": {
+        "required": [
+          "accessToken",
+          "accessTokenExpiresAtUtc",
+          "refreshToken",
+          "tokenType"
+        ],
         "type": "object",
         "properties": {
           "accessToken": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "refreshToken": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "accessTokenExpiresAtUtc": {
             "type": "string",
             "format": "date-time"
           },
           "tokenType": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           }
         },
         "additionalProperties": false
       },
       "ChampionBuildDto": {
+        "required": [
+          "coreItems",
+          "games",
+          "items",
+          "pickRate",
+          "primaryRunes",
+          "primaryStyleId",
+          "situationalItems",
+          "statShards",
+          "subRunes",
+          "subStyleId",
+          "winRate"
+        ],
         "type": "object",
         "properties": {
           "items": {
@@ -5738,24 +6245,21 @@
             "items": {
               "type": "integer",
               "format": "int32"
-            },
-            "nullable": true
+            }
           },
           "coreItems": {
             "type": "array",
             "items": {
               "type": "integer",
               "format": "int32"
-            },
-            "nullable": true
+            }
           },
           "situationalItems": {
             "type": "array",
             "items": {
               "type": "integer",
               "format": "int32"
-            },
-            "nullable": true
+            }
           },
           "primaryStyleId": {
             "type": "integer",
@@ -5770,24 +6274,21 @@
             "items": {
               "type": "integer",
               "format": "int32"
-            },
-            "nullable": true
+            }
           },
           "subRunes": {
             "type": "array",
             "items": {
               "type": "integer",
               "format": "int32"
-            },
-            "nullable": true
+            }
           },
           "statShards": {
             "type": "array",
             "items": {
               "type": "integer",
               "format": "int32"
-            },
-            "nullable": true
+            }
           },
           "games": {
             "type": "integer",
@@ -5805,6 +6306,15 @@
         "additionalProperties": false
       },
       "ChampionBuildsResponse": {
+        "required": [
+          "builds",
+          "championId",
+          "globalCoreItems",
+          "patch",
+          "rankTier",
+          "region",
+          "role"
+        ],
         "type": "object",
         "properties": {
           "championId": {
@@ -5812,38 +6322,37 @@
             "format": "int32"
           },
           "role": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "rankTier": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "region": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "patch": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "globalCoreItems": {
             "type": "array",
             "items": {
               "type": "integer",
               "format": "int32"
-            },
-            "nullable": true
+            }
           },
           "builds": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ChampionBuildDto"
-            },
-            "nullable": true
+            }
           },
           "sample": {
-            "$ref": "#/components/schemas/AnalyticsSampleMetadata"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AnalyticsSampleMetadata"
+              }
+            ],
+            "nullable": true
           },
           "summonerSpells": {
             "type": "array",
@@ -5853,7 +6362,12 @@
             "nullable": true
           },
           "skillOrder": {
-            "$ref": "#/components/schemas/SkillOrderDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SkillOrderDto"
+              }
+            ],
+            "nullable": true
           },
           "startingItems": {
             "type": "array",
@@ -5887,10 +6401,27 @@
         "additionalProperties": false
       },
       "ChampionGradeDto": {
+        "required": [
+          "banRate",
+          "contestedScore",
+          "games",
+          "isLowSample",
+          "pickRate",
+          "rankScope",
+          "role",
+          "roleBaseline",
+          "strengthScore",
+          "tier",
+          "winRate"
+        ],
         "type": "object",
         "properties": {
           "tier": {
-            "$ref": "#/components/schemas/TierGrade"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TierGrade"
+              }
+            ]
           },
           "strengthScore": {
             "type": "number",
@@ -5924,32 +6455,44 @@
             "type": "boolean"
           },
           "movement": {
-            "$ref": "#/components/schemas/TierMovement"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TierMovement"
+              }
+            ],
+            "nullable": true
           },
           "previousTier": {
-            "$ref": "#/components/schemas/TierGrade"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TierGrade"
+              }
+            ],
+            "nullable": true
           },
           "role": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "rankScope": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           }
         },
         "additionalProperties": false
       },
       "ChampionMasteryStat": {
+        "required": [
+          "championId",
+          "championLevel",
+          "championPoints",
+          "chestGranted",
+          "lastPlayTime",
+          "tokensEarned"
+        ],
         "type": "object",
         "properties": {
           "championId": {
             "type": "integer",
             "format": "int32"
-          },
-          "championName": {
-            "type": "string",
-            "nullable": true
           },
           "championLevel": {
             "type": "integer",
@@ -5974,6 +6517,16 @@
         "additionalProperties": false
       },
       "ChampionMatchupsResponse": {
+        "required": [
+          "allMatchups",
+          "championId",
+          "counters",
+          "favorableMatchups",
+          "patch",
+          "region",
+          "role",
+          "timelineSampleSize"
+        ],
         "type": "object",
         "properties": {
           "championId": {
@@ -5981,41 +6534,35 @@
             "format": "int32"
           },
           "role": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "rankTier": {
             "type": "string",
             "nullable": true
           },
           "region": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "patch": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "counters": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/MatchupEntryDto"
-            },
-            "nullable": true
+            }
           },
           "favorableMatchups": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/MatchupEntryDto"
-            },
-            "nullable": true
+            }
           },
           "allMatchups": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/MatchupEntryDto"
-            },
-            "nullable": true
+            }
           },
           "timelineCoverageRatio": {
             "type": "number",
@@ -6032,12 +6579,27 @@
             "nullable": true
           },
           "sample": {
-            "$ref": "#/components/schemas/AnalyticsSampleMetadata"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AnalyticsSampleMetadata"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
       },
       "ChampionProBuildsResponse": {
+        "required": [
+          "championId",
+          "commonBuilds",
+          "patch",
+          "recentProMatches",
+          "region",
+          "role",
+          "scope",
+          "topPlayers"
+        ],
         "type": "object",
         "properties": {
           "championId": {
@@ -6045,49 +6607,54 @@
             "format": "int32"
           },
           "patch": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "role": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "region": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "scope": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "recentProMatches": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ProMatchBuildDto"
-            },
-            "nullable": true
+            }
           },
           "topPlayers": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ProPlayerSummaryDto"
-            },
-            "nullable": true
+            }
           },
           "commonBuilds": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/CommonProBuildDto"
-            },
-            "nullable": true
+            }
           },
           "sample": {
-            "$ref": "#/components/schemas/AnalyticsSampleMetadata"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AnalyticsSampleMetadata"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
       },
       "ChampionProfileAnalyticsResponse": {
+        "required": [
+          "builds",
+          "championId",
+          "effectiveRole",
+          "matchups",
+          "winRates"
+        ],
         "type": "object",
         "properties": {
           "championId": {
@@ -6095,25 +6662,55 @@
             "format": "int32"
           },
           "effectiveRole": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "winRates": {
-            "$ref": "#/components/schemas/ChampionWinRateSummary"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ChampionWinRateSummary"
+              }
+            ]
           },
           "builds": {
-            "$ref": "#/components/schemas/ChampionBuildsResponse"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ChampionBuildsResponse"
+              }
+            ]
           },
           "matchups": {
-            "$ref": "#/components/schemas/ChampionMatchupsResponse"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ChampionMatchupsResponse"
+              }
+            ]
           },
           "grade": {
-            "$ref": "#/components/schemas/ChampionGradeDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ChampionGradeDto"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
       },
       "ChampionStatDto": {
+        "required": [
+          "avgAssists",
+          "avgCsPerMin",
+          "avgDamageToChamps",
+          "avgDeaths",
+          "avgKills",
+          "avgVisionScore",
+          "championId",
+          "games",
+          "kdaRatio",
+          "losses",
+          "winRate",
+          "wins"
+        ],
         "type": "object",
         "properties": {
           "championId": {
@@ -6168,6 +6765,17 @@
         "additionalProperties": false
       },
       "ChampionWinRateDto": {
+        "required": [
+          "banRate",
+          "championId",
+          "games",
+          "patch",
+          "pickRate",
+          "rankTier",
+          "role",
+          "winRate",
+          "wins"
+        ],
         "type": "object",
         "properties": {
           "championId": {
@@ -6175,12 +6783,10 @@
             "format": "int32"
           },
           "role": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "rankTier": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "games": {
             "type": "integer",
@@ -6213,13 +6819,17 @@
             "nullable": true
           },
           "patch": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           }
         },
         "additionalProperties": false
       },
       "ChampionWinRateSummary": {
+        "required": [
+          "byRoleTier",
+          "championId",
+          "patch"
+        ],
         "type": "object",
         "properties": {
           "championId": {
@@ -6227,18 +6837,21 @@
             "format": "int32"
           },
           "patch": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "byRoleTier": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ChampionWinRateDto"
-            },
-            "nullable": true
+            }
           },
           "sample": {
-            "$ref": "#/components/schemas/AnalyticsSampleMetadata"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AnalyticsSampleMetadata"
+              }
+            ],
+            "nullable": true
           },
           "computedAtUtc": {
             "type": "string",
@@ -6249,6 +6862,11 @@
         "additionalProperties": false
       },
       "CommonProBuildDto": {
+        "required": [
+          "games",
+          "items",
+          "winRate"
+        ],
         "type": "object",
         "properties": {
           "items": {
@@ -6256,8 +6874,7 @@
             "items": {
               "type": "integer",
               "format": "int32"
-            },
-            "nullable": true
+            }
           },
           "games": {
             "type": "integer",
@@ -6271,6 +6888,13 @@
         "additionalProperties": false
       },
       "CoreItemStepDto": {
+        "required": [
+          "avgCompletionMinute",
+          "games",
+          "itemId",
+          "pickRate",
+          "winRate"
+        ],
         "type": "object",
         "properties": {
           "itemId": {
@@ -6297,6 +6921,11 @@
         "additionalProperties": false
       },
       "DataAgeMetadata": {
+        "required": [
+          "age",
+          "ageDescription",
+          "fetchedAt"
+        ],
         "type": "object",
         "properties": {
           "fetchedAt": {
@@ -6310,13 +6939,18 @@
           },
           "ageDescription": {
             "type": "string",
-            "nullable": true,
             "readOnly": true
           }
         },
         "additionalProperties": false
       },
       "FavoriteSummonerDto": {
+        "required": [
+          "createdAtUtc",
+          "id",
+          "platformRegion",
+          "summonerPuuid"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -6324,12 +6958,10 @@
             "format": "uuid"
           },
           "summonerPuuid": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "platformRegion": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "displayName": {
             "type": "string",
@@ -6343,6 +6975,14 @@
         "additionalProperties": false
       },
       "FrequentlyPlayedWithStat": {
+        "required": [
+          "gameName",
+          "gamesTogether",
+          "sameTeamGames",
+          "sameTeamWins",
+          "summonerId",
+          "tagLine"
+        ],
         "type": "object",
         "properties": {
           "summonerId": {
@@ -6350,12 +6990,10 @@
             "format": "uuid"
           },
           "gameName": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "tagLine": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "gamesTogether": {
             "type": "integer",
@@ -6373,6 +7011,12 @@
         "additionalProperties": false
       },
       "ItemChoiceDto": {
+        "required": [
+          "games",
+          "itemId",
+          "pickRate",
+          "winRate"
+        ],
         "type": "object",
         "properties": {
           "itemId": {
@@ -6395,6 +7039,11 @@
         "additionalProperties": false
       },
       "LiveGameAnalysisDto": {
+        "required": [
+          "generatedAtUtc",
+          "participants",
+          "teams"
+        ],
         "type": "object",
         "properties": {
           "generatedAtUtc": {
@@ -6405,25 +7054,27 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/LiveGameParticipantAnalysisDto"
-            },
-            "nullable": true
+            }
           },
           "teams": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/TeamAnalysisDto"
-            },
-            "nullable": true
+            }
           }
         },
         "additionalProperties": false
       },
       "LiveGameParticipantAnalysisDto": {
+        "required": [
+          "championId",
+          "puuid",
+          "teamId"
+        ],
         "type": "object",
         "properties": {
           "puuid": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "teamId": {
             "type": "integer",
@@ -6465,11 +7116,18 @@
         "additionalProperties": false
       },
       "LiveGameParticipantDto": {
+        "required": [
+          "championId",
+          "profileIconId",
+          "puuid",
+          "spell1Id",
+          "spell2Id",
+          "teamId"
+        ],
         "type": "object",
         "properties": {
           "puuid": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "riotId": {
             "type": "string",
@@ -6503,15 +7161,20 @@
         "additionalProperties": false
       },
       "LiveGameResponseDto": {
+        "required": [
+          "dataAgeSeconds",
+          "lastUpdatedUtc",
+          "participants",
+          "platformRegion",
+          "state"
+        ],
         "type": "object",
         "properties": {
           "state": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "platformRegion": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "gameId": {
             "type": "string",
@@ -6539,8 +7202,7 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/LiveGameParticipantDto"
-            },
-            "nullable": true
+            }
           },
           "lastUpdatedUtc": {
             "type": "string",
@@ -6551,31 +7213,47 @@
             "format": "int32"
           },
           "analysis": {
-            "$ref": "#/components/schemas/LiveGameAnalysisDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LiveGameAnalysisDto"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
       },
       "LoginRequest": {
+        "required": [
+          "email",
+          "password"
+        ],
         "type": "object",
         "properties": {
           "email": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "password": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           }
         },
         "additionalProperties": false
       },
       "MatchDetailDto": {
+        "required": [
+          "bans",
+          "duration",
+          "matchDate",
+          "matchId",
+          "objectives",
+          "participants",
+          "queueId",
+          "queueType"
+        ],
         "type": "object",
         "properties": {
           "matchId": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "matchDate": {
             "type": "integer",
@@ -6590,8 +7268,7 @@
             "format": "int32"
           },
           "queueType": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "patch": {
             "type": "string",
@@ -6601,27 +7278,31 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ParticipantDetailDto"
-            },
-            "nullable": true
+            }
           },
           "bans": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/TeamBansDto"
-            },
-            "nullable": true
+            }
           },
           "objectives": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/TeamObjectivesDto"
-            },
-            "nullable": true
+            }
           }
         },
         "additionalProperties": false
       },
       "MatchRuneDetailDto": {
+        "required": [
+          "primarySelections",
+          "primaryStyleId",
+          "statShards",
+          "subSelections",
+          "subStyleId"
+        ],
         "type": "object",
         "properties": {
           "primaryStyleId": {
@@ -6637,29 +7318,31 @@
             "items": {
               "type": "integer",
               "format": "int32"
-            },
-            "nullable": true
+            }
           },
           "subSelections": {
             "type": "array",
             "items": {
               "type": "integer",
               "format": "int32"
-            },
-            "nullable": true
+            }
           },
           "statShards": {
             "type": "array",
             "items": {
               "type": "integer",
               "format": "int32"
-            },
-            "nullable": true
+            }
           }
         },
         "additionalProperties": false
       },
       "MatchRuneSummaryDto": {
+        "required": [
+          "keystoneId",
+          "primaryStyleId",
+          "subStyleId"
+        ],
         "type": "object",
         "properties": {
           "primaryStyleId": {
@@ -6678,11 +7361,15 @@
         "additionalProperties": false
       },
       "MatchTimelineDto": {
+        "required": [
+          "duration",
+          "frames",
+          "matchId"
+        ],
         "type": "object",
         "properties": {
           "matchId": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "duration": {
             "type": "integer",
@@ -6692,13 +7379,19 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/TimelineFrameDto"
-            },
-            "nullable": true
+            }
           }
         },
         "additionalProperties": false
       },
       "MatchupEntryDto": {
+        "required": [
+          "games",
+          "losses",
+          "opponentChampionId",
+          "winRate",
+          "wins"
+        ],
         "type": "object",
         "properties": {
           "opponentChampionId": {
@@ -6735,28 +7428,37 @@
         "additionalProperties": false
       },
       "MultiSearchAutofillRisk": {
+        "required": [
+          "gameName",
+          "note",
+          "tagLine"
+        ],
         "type": "object",
         "properties": {
           "gameName": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "tagLine": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "primaryRole": {
             "type": "string",
             "nullable": true
           },
           "note": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           }
         },
         "additionalProperties": false
       },
       "MultiSearchChampionStat": {
+        "required": [
+          "championId",
+          "games",
+          "kdaRatio",
+          "winRate",
+          "wins"
+        ],
         "type": "object",
         "properties": {
           "championId": {
@@ -6783,6 +7485,16 @@
         "additionalProperties": false
       },
       "MultiSearchOverviewStats": {
+        "required": [
+          "avgAssists",
+          "avgDeaths",
+          "avgKills",
+          "kdaRatio",
+          "losses",
+          "totalMatches",
+          "winRate",
+          "wins"
+        ],
         "type": "object",
         "properties": {
           "totalMatches": {
@@ -6821,15 +7533,20 @@
         "additionalProperties": false
       },
       "MultiSearchRankInfo": {
+        "required": [
+          "division",
+          "leaguePoints",
+          "losses",
+          "tier",
+          "wins"
+        ],
         "type": "object",
         "properties": {
           "tier": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "division": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "leaguePoints": {
             "type": "integer",
@@ -6869,27 +7586,38 @@
         "additionalProperties": false
       },
       "MultiSearchResponse": {
+        "required": [
+          "results",
+          "teamInsights"
+        ],
         "type": "object",
         "properties": {
           "results": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/MultiSearchSummonerResult"
-            },
-            "nullable": true
+            }
           },
           "teamInsights": {
-            "$ref": "#/components/schemas/MultiSearchTeamInsights"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MultiSearchTeamInsights"
+              }
+            ]
           }
         },
         "additionalProperties": false
       },
       "MultiSearchRoleStat": {
+        "required": [
+          "games",
+          "percentage",
+          "role"
+        ],
         "type": "object",
         "properties": {
           "role": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "games": {
             "type": "integer",
@@ -6921,15 +7649,18 @@
         "additionalProperties": false
       },
       "MultiSearchSummonerResult": {
+        "required": [
+          "found",
+          "gameName",
+          "tagLine"
+        ],
         "type": "object",
         "properties": {
           "gameName": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "tagLine": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "found": {
             "type": "boolean"
@@ -6950,13 +7681,28 @@
             "nullable": true
           },
           "soloRank": {
-            "$ref": "#/components/schemas/MultiSearchRankInfo"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MultiSearchRankInfo"
+              }
+            ],
+            "nullable": true
           },
           "flexRank": {
-            "$ref": "#/components/schemas/MultiSearchRankInfo"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MultiSearchRankInfo"
+              }
+            ],
+            "nullable": true
           },
           "overviewStats": {
-            "$ref": "#/components/schemas/MultiSearchOverviewStats"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MultiSearchOverviewStats"
+              }
+            ],
+            "nullable": true
           },
           "topChampions": {
             "type": "array",
@@ -6980,6 +7726,13 @@
         "additionalProperties": false
       },
       "MultiSearchTeamInsights": {
+        "required": [
+          "averageRankLabel",
+          "averageRankScore",
+          "missingRoles",
+          "potentialAutofills",
+          "roleCoverage"
+        ],
         "type": "object",
         "properties": {
           "averageRankScore": {
@@ -6987,34 +7740,34 @@
             "format": "double"
           },
           "averageRankLabel": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "roleCoverage": {
             "type": "array",
             "items": {
               "type": "string"
-            },
-            "nullable": true
+            }
           },
           "missingRoles": {
             "type": "array",
             "items": {
               "type": "string"
-            },
-            "nullable": true
+            }
           },
           "potentialAutofills": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/MultiSearchAutofillRisk"
-            },
-            "nullable": true
+            }
           }
         },
         "additionalProperties": false
       },
       "ObjectiveStatDto": {
+        "required": [
+          "first",
+          "kills"
+        ],
         "type": "object",
         "properties": {
           "kills": {
@@ -7027,7 +7780,44 @@
         },
         "additionalProperties": false
       },
+      "OperationResult": {
+        "required": [
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "ParticipantDetailDto": {
+        "required": [
+          "assists",
+          "championId",
+          "champLevel",
+          "deaths",
+          "goldEarned",
+          "items",
+          "kills",
+          "magicDamageDealtToChampions",
+          "neutralMinionsKilled",
+          "physicalDamageDealtToChampions",
+          "runes",
+          "summonerSpell1Id",
+          "summonerSpell2Id",
+          "teamId",
+          "totalDamageDealtToChampions",
+          "totalMinionsKilled",
+          "trueDamageDealtToChampions",
+          "visionScore",
+          "win"
+        ],
         "type": "object",
         "properties": {
           "puuid": {
@@ -7118,16 +7908,26 @@
             "items": {
               "type": "integer",
               "format": "int32"
-            },
-            "nullable": true
+            }
           },
           "runes": {
-            "$ref": "#/components/schemas/ParticipantRunesDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ParticipantRunesDto"
+              }
+            ]
           }
         },
         "additionalProperties": false
       },
       "ParticipantRunesDto": {
+        "required": [
+          "primarySelections",
+          "primaryStyleId",
+          "statShards",
+          "subSelections",
+          "subStyleId"
+        ],
         "type": "object",
         "properties": {
           "primaryStyleId": {
@@ -7143,39 +7943,45 @@
             "items": {
               "type": "integer",
               "format": "int32"
-            },
-            "nullable": true
+            }
           },
           "subSelections": {
             "type": "array",
             "items": {
               "type": "integer",
               "format": "int32"
-            },
-            "nullable": true
+            }
           },
           "statShards": {
             "type": "array",
             "items": {
               "type": "integer",
               "format": "int32"
-            },
-            "nullable": true
+            }
           }
         },
         "additionalProperties": false
       },
       "PasswordResetRequest": {
+        "required": [
+          "email"
+        ],
         "type": "object",
         "properties": {
           "email": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           }
         },
         "additionalProperties": false
       },
       "ProChampionPlayrateDto": {
+        "required": [
+          "championId",
+          "games",
+          "uniquePlayers",
+          "winRate",
+          "wins"
+        ],
         "type": "object",
         "properties": {
           "championId": {
@@ -7202,39 +8008,58 @@
         "additionalProperties": false
       },
       "ProChampionPlayrateResponse": {
+        "required": [
+          "champions",
+          "patch",
+          "region",
+          "scope"
+        ],
         "type": "object",
         "properties": {
           "patch": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "region": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "scope": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "champions": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ProChampionPlayrateDto"
-            },
-            "nullable": true
+            }
           },
           "sample": {
-            "$ref": "#/components/schemas/AnalyticsSampleMetadata"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AnalyticsSampleMetadata"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
       },
       "ProMatchBuildDto": {
+        "required": [
+          "items",
+          "matchId",
+          "playedAt",
+          "primaryRunes",
+          "primaryStyleId",
+          "spell1Id",
+          "spell2Id",
+          "statShards",
+          "subRunes",
+          "subStyleId",
+          "win"
+        ],
         "type": "object",
         "properties": {
           "matchId": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "playerName": {
             "type": "string",
@@ -7256,8 +8081,7 @@
             "items": {
               "type": "integer",
               "format": "int32"
-            },
-            "nullable": true
+            }
           },
           "primaryStyleId": {
             "type": "integer",
@@ -7272,24 +8096,21 @@
             "items": {
               "type": "integer",
               "format": "int32"
-            },
-            "nullable": true
+            }
           },
           "subRunes": {
             "type": "array",
             "items": {
               "type": "integer",
               "format": "int32"
-            },
-            "nullable": true
+            }
           },
           "statShards": {
             "type": "array",
             "items": {
               "type": "integer",
               "format": "int32"
-            },
-            "nullable": true
+            }
           },
           "spell1Id": {
             "type": "integer",
@@ -7300,12 +8121,20 @@
             "format": "int32"
           },
           "skillOrder": {
-            "$ref": "#/components/schemas/SkillOrderDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SkillOrderDto"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
       },
       "ProPlayerDto": {
+        "required": [
+          "platformRegion"
+        ],
         "type": "object",
         "properties": {
           "proName": {
@@ -7317,8 +8146,7 @@
             "nullable": true
           },
           "platformRegion": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "gameName": {
             "type": "string",
@@ -7332,6 +8160,10 @@
         "additionalProperties": false
       },
       "ProPlayerSummaryDto": {
+        "required": [
+          "games",
+          "winRate"
+        ],
         "type": "object",
         "properties": {
           "playerName": {
@@ -7354,18 +8186,20 @@
         "additionalProperties": false
       },
       "ProRosterResponse": {
+        "required": [
+          "players",
+          "region"
+        ],
         "type": "object",
         "properties": {
           "region": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "players": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ProPlayerDto"
-            },
-            "nullable": true
+            }
           }
         },
         "additionalProperties": false
@@ -7398,15 +8232,19 @@
         "additionalProperties": { }
       },
       "ProfileChampionStat": {
+        "required": [
+          "championId",
+          "games",
+          "kdaRatio",
+          "losses",
+          "winRate",
+          "wins"
+        ],
         "type": "object",
         "properties": {
           "championId": {
             "type": "integer",
             "format": "int32"
-          },
-          "championName": {
-            "type": "string",
-            "nullable": true
           },
           "games": {
             "type": "integer",
@@ -7432,11 +8270,21 @@
         "additionalProperties": false
       },
       "ProfileFullHistoryStatus": {
+        "required": [
+          "classifierVersion",
+          "completedMatchCount",
+          "detailFetchFailures",
+          "factsPersisted",
+          "matchIdsDiscovered",
+          "pagesScanned",
+          "requestedAtUtc",
+          "status",
+          "updatedAtUtc"
+        ],
         "type": "object",
         "properties": {
           "status": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "requestedAtUtc": {
             "type": "string",
@@ -7508,6 +8356,19 @@
         "additionalProperties": false
       },
       "ProfileOverviewStats": {
+        "required": [
+          "avgAssists",
+          "avgCsPerMin",
+          "avgDamageToChamps",
+          "avgDeaths",
+          "avgKills",
+          "avgVisionScore",
+          "kdaRatio",
+          "losses",
+          "totalMatches",
+          "winRate",
+          "wins"
+        ],
         "type": "object",
         "properties": {
           "totalMatches": {
@@ -7558,24 +8419,32 @@
         "additionalProperties": false
       },
       "ProfileSeasonMetadata": {
+        "required": [
+          "displayName",
+          "queueScope",
+          "seasonKey"
+        ],
         "type": "object",
         "properties": {
           "seasonKey": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "displayName": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "queueScope": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           }
         },
         "additionalProperties": false
       },
       "RankHistoryEntryDto": {
+        "required": [
+          "dateRecorded",
+          "leaguePoints",
+          "losses",
+          "wins"
+        ],
         "type": "object",
         "properties": {
           "queueType": {
@@ -7610,15 +8479,20 @@
         "additionalProperties": false
       },
       "RankInfo": {
+        "required": [
+          "division",
+          "leaguePoints",
+          "losses",
+          "tier",
+          "wins"
+        ],
         "type": "object",
         "properties": {
           "tier": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "division": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "leaguePoints": {
             "type": "integer",
@@ -7636,11 +8510,30 @@
         "additionalProperties": false
       },
       "RecentMatchSummaryDto": {
+        "required": [
+          "assists",
+          "championId",
+          "csPerMin",
+          "damageToChamps",
+          "deaths",
+          "durationSeconds",
+          "items",
+          "kills",
+          "matchDate",
+          "matchId",
+          "queueId",
+          "queueType",
+          "runes",
+          "runesDetail",
+          "summonerSpell1Id",
+          "summonerSpell2Id",
+          "visionScore",
+          "win"
+        ],
         "type": "object",
         "properties": {
           "matchId": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "matchDate": {
             "type": "integer",
@@ -7655,8 +8548,7 @@
             "format": "int32"
           },
           "queueType": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "win": {
             "type": "boolean"
@@ -7706,27 +8598,40 @@
             "items": {
               "type": "integer",
               "format": "int32"
-            },
-            "nullable": true
+            }
           },
           "runes": {
-            "$ref": "#/components/schemas/MatchRuneSummaryDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MatchRuneSummaryDto"
+              }
+            ]
           },
           "runesDetail": {
-            "$ref": "#/components/schemas/MatchRuneDetailDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MatchRuneDetailDto"
+              }
+            ]
           }
         },
         "additionalProperties": false
       },
       "RecentMatchSummaryDtoPagedResultDto": {
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "totalCount",
+          "totalPages"
+        ],
         "type": "object",
         "properties": {
           "items": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/RecentMatchSummaryDto"
-            },
-            "nullable": true
+            }
           },
           "page": {
             "type": "integer",
@@ -7748,11 +8653,20 @@
         "additionalProperties": false
       },
       "RecentPerformanceDto": {
+        "required": [
+          "assists",
+          "csPerMin",
+          "damageToChamps",
+          "deaths",
+          "kills",
+          "matchId",
+          "visionScore",
+          "win"
+        ],
         "type": "object",
         "properties": {
           "matchId": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "win": {
             "type": "boolean"
@@ -7785,35 +8699,45 @@
         "additionalProperties": false
       },
       "RefreshRequest": {
+        "required": [
+          "refreshToken"
+        ],
         "type": "object",
         "properties": {
           "refreshToken": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           }
         },
         "additionalProperties": false
       },
       "RegisterRequest": {
+        "required": [
+          "email",
+          "password"
+        ],
         "type": "object",
         "properties": {
           "email": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "password": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           }
         },
         "additionalProperties": false
       },
       "RoleStatDto": {
+        "required": [
+          "games",
+          "losses",
+          "role",
+          "winRate",
+          "wins"
+        ],
         "type": "object",
         "properties": {
           "role": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "games": {
             "type": "integer",
@@ -7835,6 +8759,10 @@
         "additionalProperties": false
       },
       "SituationalSlotDto": {
+        "required": [
+          "options",
+          "slot"
+        ],
         "type": "object",
         "properties": {
           "slot": {
@@ -7845,22 +8773,26 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ItemChoiceDto"
-            },
-            "nullable": true
+            }
           }
         },
         "additionalProperties": false
       },
       "SkillOrderDto": {
+        "required": [
+          "firstThree",
+          "games",
+          "maxOrder",
+          "pickRate",
+          "winRate"
+        ],
         "type": "object",
         "properties": {
           "firstThree": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "maxOrder": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "games": {
             "type": "integer",
@@ -7878,6 +8810,12 @@
         "additionalProperties": false
       },
       "StarterItemSetDto": {
+        "required": [
+          "games",
+          "items",
+          "pickRate",
+          "winRate"
+        ],
         "type": "object",
         "properties": {
           "items": {
@@ -7885,8 +8823,7 @@
             "items": {
               "type": "integer",
               "format": "int32"
-            },
-            "nullable": true
+            }
           },
           "games": {
             "type": "integer",
@@ -7904,12 +8841,14 @@
         "additionalProperties": false
       },
       "SummonerAcceptedResponse": {
+        "required": [
+          "message"
+        ],
         "type": "object",
         "properties": {
           "message": {
             "type": "string",
-            "description": "Refresh state message. \"Refresh queued\" when accepted now, \"Refresh in process\" when contention is detected.",
-            "nullable": true
+            "description": "Refresh state message. \"Refresh queued\" when accepted now, \"Refresh in process\" when contention is detected."
           },
           "poll": {
             "type": "string",
@@ -7926,6 +8865,22 @@
         "additionalProperties": false
       },
       "SummonerOverviewDto": {
+        "required": [
+          "avgAssists",
+          "avgCsPerMin",
+          "avgDamageToChamps",
+          "avgDeaths",
+          "avgGameDurationMin",
+          "avgKills",
+          "avgVisionScore",
+          "kdaRatio",
+          "losses",
+          "recentPerformance",
+          "summonerId",
+          "totalMatches",
+          "winRate",
+          "wins"
+        ],
         "type": "object",
         "properties": {
           "summonerId": {
@@ -7984,13 +8939,22 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/RecentPerformanceDto"
-            },
-            "nullable": true
+            }
           }
         },
         "additionalProperties": false
       },
       "SummonerProfileResponse": {
+        "required": [
+          "gameName",
+          "profileAge",
+          "profileIconId",
+          "puuid",
+          "rankAge",
+          "summonerId",
+          "summonerLevel",
+          "tagLine"
+        ],
         "type": "object",
         "properties": {
           "summonerId": {
@@ -7998,16 +8962,13 @@
             "format": "uuid"
           },
           "puuid": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "gameName": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "tagLine": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "summonerLevel": {
             "type": "integer",
@@ -8018,13 +8979,28 @@
             "format": "int32"
           },
           "soloRank": {
-            "$ref": "#/components/schemas/RankInfo"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RankInfo"
+              }
+            ],
+            "nullable": true
           },
           "flexRank": {
-            "$ref": "#/components/schemas/RankInfo"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RankInfo"
+              }
+            ],
+            "nullable": true
           },
           "overviewStats": {
-            "$ref": "#/components/schemas/ProfileOverviewStats"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProfileOverviewStats"
+              }
+            ],
+            "nullable": true
           },
           "topChampions": {
             "type": "array",
@@ -8034,10 +9010,20 @@
             "nullable": true
           },
           "activeSeason": {
-            "$ref": "#/components/schemas/ProfileSeasonMetadata"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProfileSeasonMetadata"
+              }
+            ],
+            "nullable": true
           },
           "fullHistory": {
-            "$ref": "#/components/schemas/ProfileFullHistoryStatus"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProfileFullHistoryStatus"
+              }
+            ],
+            "nullable": true
           },
           "frequentlyPlayedWith": {
             "type": "array",
@@ -8054,13 +9040,26 @@
             "nullable": true
           },
           "profileAge": {
-            "$ref": "#/components/schemas/DataAgeMetadata"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DataAgeMetadata"
+              }
+            ]
           },
           "rankAge": {
-            "$ref": "#/components/schemas/DataAgeMetadata"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DataAgeMetadata"
+              }
+            ]
           },
           "statsAge": {
-            "$ref": "#/components/schemas/DataAgeMetadata"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DataAgeMetadata"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -8069,26 +9068,23 @@
         "required": [
           "gameName",
           "platformRegion",
+          "profileIconId",
           "region",
           "tagLine"
         ],
         "type": "object",
         "properties": {
           "platformRegion": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "region": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "gameName": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "tagLine": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "profileIconId": {
             "type": "integer",
@@ -8098,19 +9094,28 @@
         "additionalProperties": false
       },
       "SummonerSearchResponse": {
+        "required": [
+          "items"
+        ],
         "type": "object",
         "properties": {
           "items": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SummonerSearchItem"
-            },
-            "nullable": true
+            }
           }
         },
         "additionalProperties": false
       },
       "SummonerSpellPairDto": {
+        "required": [
+          "games",
+          "pickRate",
+          "spell1Id",
+          "spell2Id",
+          "winRate"
+        ],
         "type": "object",
         "properties": {
           "spell1Id": {
@@ -8137,6 +9142,16 @@
         "additionalProperties": false
       },
       "TeamAnalysisDto": {
+        "required": [
+          "averageChampionWinRate",
+          "averageRankScore",
+          "averageRecentWinRate",
+          "compositeScore",
+          "estimatedWinProbability",
+          "strengths",
+          "teamId",
+          "weaknesses"
+        ],
         "type": "object",
         "properties": {
           "teamId": {
@@ -8167,20 +9182,22 @@
             "type": "array",
             "items": {
               "type": "string"
-            },
-            "nullable": true
+            }
           },
           "weaknesses": {
             "type": "array",
             "items": {
               "type": "string"
-            },
-            "nullable": true
+            }
           }
         },
         "additionalProperties": false
       },
       "TeamBansDto": {
+        "required": [
+          "bannedChampionIds",
+          "teamId"
+        ],
         "type": "object",
         "properties": {
           "teamId": {
@@ -8192,13 +9209,22 @@
             "items": {
               "type": "integer",
               "format": "int32"
-            },
-            "nullable": true
+            }
           }
         },
         "additionalProperties": false
       },
       "TeamObjectivesDto": {
+        "required": [
+          "baron",
+          "dragon",
+          "firstBlood",
+          "horde",
+          "inhibitor",
+          "riftHerald",
+          "teamId",
+          "tower"
+        ],
         "type": "object",
         "properties": {
           "teamId": {
@@ -8209,22 +9235,46 @@
             "type": "boolean"
           },
           "baron": {
-            "$ref": "#/components/schemas/ObjectiveStatDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObjectiveStatDto"
+              }
+            ]
           },
           "dragon": {
-            "$ref": "#/components/schemas/ObjectiveStatDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObjectiveStatDto"
+              }
+            ]
           },
           "riftHerald": {
-            "$ref": "#/components/schemas/ObjectiveStatDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObjectiveStatDto"
+              }
+            ]
           },
           "horde": {
-            "$ref": "#/components/schemas/ObjectiveStatDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObjectiveStatDto"
+              }
+            ]
           },
           "tower": {
-            "$ref": "#/components/schemas/ObjectiveStatDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObjectiveStatDto"
+              }
+            ]
           },
           "inhibitor": {
-            "$ref": "#/components/schemas/ObjectiveStatDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObjectiveStatDto"
+              }
+            ]
           }
         },
         "additionalProperties": false
@@ -8241,6 +9291,19 @@
         "format": "int32"
       },
       "TierListEntry": {
+        "required": [
+          "banRate",
+          "championId",
+          "contestedScore",
+          "games",
+          "isLowSample",
+          "pickRate",
+          "role",
+          "roleBaseline",
+          "strengthScore",
+          "tier",
+          "winRate"
+        ],
         "type": "object",
         "properties": {
           "championId": {
@@ -8248,11 +9311,14 @@
             "format": "int32"
           },
           "role": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "tier": {
-            "$ref": "#/components/schemas/TierGrade"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TierGrade"
+              }
+            ]
           },
           "strengthScore": {
             "type": "number",
@@ -8275,10 +9341,20 @@
             "format": "int32"
           },
           "movement": {
-            "$ref": "#/components/schemas/TierMovement"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TierMovement"
+              }
+            ],
+            "nullable": true
           },
           "previousTier": {
-            "$ref": "#/components/schemas/TierGrade"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TierGrade"
+              }
+            ],
+            "nullable": true
           },
           "contestedScore": {
             "type": "number",
@@ -8295,11 +9371,15 @@
         "additionalProperties": false
       },
       "TierListResponse": {
+        "required": [
+          "entries",
+          "patch",
+          "region"
+        ],
         "type": "object",
         "properties": {
           "patch": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "role": {
             "type": "string",
@@ -8310,18 +9390,21 @@
             "nullable": true
           },
           "region": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "entries": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/TierListEntry"
-            },
-            "nullable": true
+            }
           },
           "sample": {
-            "$ref": "#/components/schemas/AnalyticsSampleMetadata"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AnalyticsSampleMetadata"
+              }
+            ],
+            "nullable": true
           },
           "computedAtUtc": {
             "type": "string",
@@ -8342,6 +9425,13 @@
         "format": "int32"
       },
       "TimelineFrameDto": {
+        "required": [
+          "blueGold",
+          "blueXp",
+          "minuteMark",
+          "redGold",
+          "redXp"
+        ],
         "type": "object",
         "properties": {
           "minuteMark": {
@@ -8368,6 +9458,16 @@
         "additionalProperties": false
       },
       "TrackedProSummonerDto": {
+        "required": [
+          "createdAtUtc",
+          "id",
+          "isActive",
+          "isHighEloOtp",
+          "isPro",
+          "platformRegion",
+          "puuid",
+          "updatedAtUtc"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -8375,12 +9475,10 @@
             "format": "uuid"
           },
           "puuid": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "platformRegion": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "gameName": {
             "type": "string",
@@ -8419,6 +9517,9 @@
         "additionalProperties": false
       },
       "UpdateUserPreferencesRequest": {
+        "required": [
+          "livePollingEnabled"
+        ],
         "type": "object",
         "properties": {
           "preferredRegion": {
@@ -8436,19 +9537,24 @@
         "additionalProperties": false
       },
       "UpsertTrackedProSummonerRequest": {
+        "required": [
+          "gameName",
+          "isActive",
+          "isHighEloOtp",
+          "isPro",
+          "platformRegion",
+          "tagLine"
+        ],
         "type": "object",
         "properties": {
           "gameName": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "tagLine": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "platformRegion": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "puuid": {
             "type": "string",
@@ -8475,6 +9581,10 @@
         "additionalProperties": false
       },
       "UserPreferencesDto": {
+        "required": [
+          "livePollingEnabled",
+          "updatedAtUtc"
+        ],
         "type": "object",
         "properties": {
           "preferredRegion": {
@@ -8494,6 +9604,45 @@
           }
         },
         "additionalProperties": false
+      },
+      "ValidationProblemDetails": {
+        "required": [
+          "errors"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "detail": {
+            "type": "string",
+            "nullable": true
+          },
+          "instance": {
+            "type": "string",
+            "nullable": true
+          },
+          "errors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "additionalProperties": { }
       }
     },
     "securitySchemes": {

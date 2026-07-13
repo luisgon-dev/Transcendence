@@ -78,10 +78,14 @@ async function adminRequest<T>(path: string, init?: RequestInit): Promise<T> {
 
   const payload = await readResponseJson(response);
   if (!response.ok) {
+    // Admin errors are RFC7807 ProblemDetails ({ title, detail, status }); `.message` is kept as a
+    // fallback for any legacy body shape.
     const message =
-      typeof payload?.message === "string"
-        ? payload.message
-        : `Admin request failed (${response.status}).`;
+      typeof payload?.title === "string"
+        ? payload.title
+        : typeof payload?.message === "string"
+          ? payload.message
+          : `Admin request failed (${response.status}).`;
     const detail =
       typeof payload?.detail === "string" ? ` ${payload.detail}` : "";
     throw new Error(`${message}${detail}`);

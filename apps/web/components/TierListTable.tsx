@@ -211,6 +211,33 @@ export function TierListTable({
     return () => observer.disconnect();
   }, [showTierRail, visibleTiers]);
 
+  // Drive the sticky offsets off live measurements: the filter toolbar docks flush below the site
+  // header and the column headers dock flush below the (variable-height) toolbar — no fragile
+  // hardcoded top values. Re-measures when the header or toolbar resize (viewport / filter wrap).
+  useEffect(() => {
+    const root = document.documentElement;
+    const header = document.querySelector<HTMLElement>("header");
+    const toolbar = document.querySelector<HTMLElement>(".toolbar");
+    if (!header || !toolbar) return;
+
+    const measure = () => {
+      const headerH = header.getBoundingClientRect().height;
+      const toolbarH = toolbar.getBoundingClientRect().height;
+      root.style.setProperty("--tl-header-h", `${Math.round(headerH)}px`);
+      root.style.setProperty("--tl-thead-top", `${Math.round(headerH + toolbarH)}px`);
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(header);
+    observer.observe(toolbar);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
+
   function applySort(nextSortCol: SortColumn) {
     startVisualTransition(() => {
       if (nextSortCol === sortCol) {
@@ -543,12 +570,12 @@ export function TierListTable({
                 items={spineItems}
                 active={activeTierSection}
                 onSelect={jumpToTier}
-                className="sticky top-24"
+                className="tierlist-toolbar-dock"
               />
             </div>
           ) : null}
 
-          <Card className="overflow-hidden p-0">
+          <Card className="overflow-clip p-0">
             {isDefaultSort && groups ? (
               <div className="grid">
                 {TIER_ORDER.map((tier, tierIdx) => {
@@ -575,7 +602,7 @@ export function TierListTable({
                           Best WR {formatPercent(Math.max(...tierEntries.map((e) => e.winRate)), { decimals: 2 })}
                         </span>
                       </div>
-                      <div className="overflow-x-auto">
+                      <div className="overflow-x-clip">
                         <table className="w-full text-left">
                           {renderHeader()}
                           <tbody>{tierEntries.map(renderRow)}</tbody>
@@ -586,7 +613,7 @@ export function TierListTable({
                 })}
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-clip">
                 <table className="w-full text-left">
                   {renderHeader()}
                   <tbody>{sortedEntries.map(renderRow)}</tbody>

@@ -4,9 +4,11 @@ import { Command } from "cmdk";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { Dialog, VisuallyHidden } from "radix-ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ArrowCornerIcon, SearchIcon, SparkIcon } from "@/components/ui/icons";
+import { Select } from "@/components/ui/Select";
 import {
   getGlobalSearchOpenDetail,
   GLOBAL_SEARCH_OPEN_EVENT,
@@ -263,6 +265,9 @@ export function GlobalCommandPalette() {
   const router = useRouter();
   const prefersReducedMotion = useReducedMotion() ?? false;
   const inputRef = useRef<HTMLInputElement | null>(null);
+  // The element focused when the palette opened, so focus returns there on close. Captured manually
+  // because forceMount (kept for the exit animation) disrupts Radix's own focus-restore capture.
+  const lastFocusedRef = useRef<HTMLElement | null>(null);
   const suggestionCacheRef = useRef<Map<string, SummonerSearchItem[]>>(new Map());
   const [open, setOpen] = useState(false);
   const [openOrigin, setOpenOrigin] = useState<GlobalSearchOpenOrigin | null>(null);
@@ -283,16 +288,16 @@ export function GlobalCommandPalette() {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k" && !e.altKey && !e.shiftKey) {
         if (isEditableTarget(e.target)) return;
         e.preventDefault();
+        lastFocusedRef.current = document.activeElement as HTMLElement | null;
         setOpenOrigin(null);
         setOpen(true);
       }
-      if (open && e.key === "Escape") {
-        e.preventDefault();
-        setOpen(false);
-      }
+      // Escape (and outside-click / focus-out) close is owned by the Radix Dialog below, which also
+      // dismisses a nested Region dropdown first — so no manual Escape handling here.
     }
 
     function onOpenEvent(event: Event) {
+      lastFocusedRef.current = document.activeElement as HTMLElement | null;
       setOpenOrigin(getGlobalSearchOpenDetail(event).origin);
       setOpen(true);
     }
@@ -487,25 +492,44 @@ export function GlobalCommandPalette() {
   const panelTopOffset = getPanelTopOffset();
 
   return (
-    <AnimatePresence initial={false} onExitComplete={() => setOpenOrigin(null)}>
-      {open ? (
-        <div className="command-palette-overlay fixed inset-0 z-50">
-          <motion.button
-            type="button"
-            className="absolute inset-0 backdrop-blur-md"
-            style={overlayStyle}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: prefersReducedMotion ? 0.12 : 0.2, ease: PANEL_ENTRY_EASE }}
-            aria-label="Close search"
-            onClick={() => setOpen(false)}
-          />
+    // Radix Dialog supplies the modal a11y the hand-rolled overlay lacked: role="dialog" + aria-modal,
+    // a focus trap, focus return to the launcher on close, Escape-to-close, and page scroll lock — while
+    // forceMount keeps the nodes present so framer-motion still owns the enter/exit animation.
+    <Dialog.Root open={open} onOpenChange={setOpen}>
+      <Dialog.Portal forceMount>
+        <AnimatePresence initial={false} onExitComplete={() => setOpenOrigin(null)}>
+          {open ? (
+            <div className="command-palette-overlay fixed inset-0 z-50">
+              <Dialog.Overlay asChild forceMount>
+                <motion.div
+                  className="absolute inset-0 backdrop-blur-md"
+                  style={overlayStyle}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: prefersReducedMotion ? 0.12 : 0.2, ease: PANEL_ENTRY_EASE }}
+                />
+              </Dialog.Overlay>
 
-          <div
+              <div
             className="command-palette-shell absolute inset-x-0 top-0 flex justify-center px-3"
             style={{ paddingTop: `${panelTopOffset}px` }}
           >
+            <Dialog.Content
+              asChild
+              forceMount
+              aria-label="Global search"
+              aria-modal="true"
+              aria-describedby={undefined}
+              onOpenAutoFocus={(event) => {
+                event.preventDefault();
+                inputRef.current?.focus();
+              }}
+              onCloseAutoFocus={(event) => {
+                event.preventDefault();
+                lastFocusedRef.current?.focus?.();
+              }}
+            >
             <motion.div
               className="command-palette-panel pointer-events-auto w-[min(880px,calc(100vw-24px))] overflow-hidden border border-border/70 bg-surface shadow-overlay"
               initial={panelEnterState}
@@ -540,6 +564,9 @@ export function GlobalCommandPalette() {
               }
               style={{ transformOrigin: "top center" }}
             >
+              <VisuallyHidden.Root asChild>
+                <Dialog.Title>Global search</Dialog.Title>
+              </VisuallyHidden.Root>
               <Command shouldFilter={false} className="relative w-full">
                 <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-primary/75 to-transparent" />
 
@@ -588,10 +615,10 @@ export function GlobalCommandPalette() {
                   >
                     <div className="relative flex-1">
                       <SearchIcon className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary/75" />
-                      <input
+                      <Command.Input
                         ref={inputRef}
                         value={query}
-                        onChange={(e) => setQuery(e.target.value)}
+                        onValueChange={setQuery}
                         onKeyDown={handleQueryKeyDown}
                         placeholder="Search champions, tier list, or summoner"
                         className="type-ui h-12 w-full rounded-control border border-border/65 bg-surface-2/55 pl-11 pr-4 text-fg shadow-inset outline-none transition placeholder:text-muted/70 focus:border-primary/65 focus:bg-surface-2/70 focus:ring-2 focus:ring-primary/18"
@@ -601,18 +628,13 @@ export function GlobalCommandPalette() {
 
                     <div className="sm:w-[124px]">
                       <label className="type-kicker mb-2 block text-fg/65">Region</label>
-                      <select
-                        className="type-ui h-12 w-full rounded-control border border-border/65 bg-surface-2/55 px-3 text-fg shadow-inset outline-none transition focus:border-primary/65 focus:bg-surface-2/70 focus:ring-2 focus:ring-primary/18"
+                      <Select
                         value={region}
-                        onChange={(e) => setRegion(e.target.value)}
-                        aria-label="Summoner region"
-                      >
-                        {REGIONS.map((item) => (
-                          <option key={item.value} value={item.value}>
-                            {item.label}
-                          </option>
-                        ))}
-                      </select>
+                        onValueChange={setRegion}
+                        options={[...REGIONS]}
+                        ariaLabel="Summoner region"
+                        className="h-12 w-full rounded-control border-border/65 bg-surface-2/55 text-fg shadow-inset"
+                      />
                     </div>
                   </motion.div>
 
@@ -837,9 +859,12 @@ export function GlobalCommandPalette() {
                 </Command.List>
               </Command>
             </motion.div>
+            </Dialog.Content>
           </div>
         </div>
       ) : null}
-    </AnimatePresence>
+        </AnimatePresence>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

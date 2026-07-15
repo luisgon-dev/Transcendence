@@ -72,7 +72,6 @@ public class ProfileOverviewStats
 public class ProfileChampionStat
 {
     public int ChampionId { get; set; }
-    public string ChampionName { get; set; } = string.Empty;
     public int Games { get; set; }
     public int Wins { get; set; }
     public int Losses { get; set; }
@@ -126,7 +125,6 @@ public class FrequentlyPlayedWithStat
 public class ChampionMasteryStat
 {
     public int ChampionId { get; set; }
-    public string ChampionName { get; set; } = string.Empty;
     public int ChampionLevel { get; set; }
     public long ChampionPoints { get; set; }
     public long LastPlayTime { get; set; }

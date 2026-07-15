@@ -495,7 +495,7 @@ export function SummonerProfileClient({
             <PerformanceCard
               matches={history?.items ?? []}
               overviewStats={profile.overviewStats}
-              topChampions={profile.topChampions}
+              championStatic={championStatic}
               activeSeason={profile.activeSeason}
               fullHistory={profile.fullHistory}
             />

@@ -9,9 +9,9 @@ import { LANE_ROLES, roleDisplayLabel } from "@/lib/roles";
 import {
   matchKdaRatio,
   normalizeRoleKey,
+  type ChampionStatic,
   type MatchSummary,
   type ProfileFullHistoryStatus,
-  type ProfileChampionStat,
   type ProfileOverviewStats,
   type ProfileSeasonMetadata
 } from "@/components/lol-profile/shared";
@@ -59,22 +59,20 @@ function formatHistoryCoverage(history: ProfileFullHistoryStatus | null | undefi
 export function PerformanceCard({
   matches,
   overviewStats,
-  topChampions,
+  championStatic,
   activeSeason,
   fullHistory
 }: {
   matches: MatchSummary[];
   overviewStats?: ProfileOverviewStats | null;
-  topChampions?: ProfileChampionStat[] | null;
+  championStatic?: ChampionStatic | null;
   activeSeason?: ProfileSeasonMetadata | null;
   fullHistory?: ProfileFullHistoryStatus | null;
 }) {
-  // championId → name, sourced from the profile's aggregate champion stats so we
-  // can label each role's signature pick without depending on static asset data.
-  const championNameById = new Map<number, string>();
-  for (const champion of topChampions ?? []) {
-    championNameById.set(champion.championId, champion.championName);
-  }
+  // Resolve each role's signature pick to a champion name via static data; championId is the
+  // source of truth (the profile's aggregate champion stats no longer carry a placeholder name).
+  const resolveChampionName = (championId: number): string | null =>
+    championStatic?.champions[String(championId)]?.name ?? null;
 
   const buckets = new Map<
     string,
@@ -110,7 +108,7 @@ export function PerformanceCard({
         games: bucket.games,
         winRate: bucket.wins / bucket.games,
         avgKda: bucket.kdaSum / bucket.games,
-        topChampion: championNameById.get(topChampionId) ?? null
+        topChampion: resolveChampionName(topChampionId)
       };
     })
     .sort((a, b) => b.games - a.games);
@@ -178,7 +176,7 @@ export function PerformanceCard({
                       the played-with guard and the "never present small-n as fact" rule. */}
                   <DataBar value={row.games >= 2 ? row.winRate : null} games={row.games} />
                 </div>
-                <div className="flex items-center justify-between gap-2 text-xs text-fg/64">
+                <div className="flex items-center justify-between gap-2 text-xs text-muted">
                   <span className="min-w-0 truncate">
                     {formatGames(row.games)} {plural(row.games, "game")}{row.topChampion ? ` · ${row.topChampion}` : ""}
                   </span>

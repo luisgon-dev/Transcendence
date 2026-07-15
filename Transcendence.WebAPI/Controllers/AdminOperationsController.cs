@@ -7,6 +7,7 @@ using Transcendence.Service.Core.Services.Admin.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Models;
+using Transcendence.WebAPI.Models.Common;
 using Transcendence.WebAPI.Security;
 
 namespace Transcendence.WebAPI.Controllers;
@@ -44,8 +45,8 @@ public class AdminOperationsController(
 
     [HttpPost("jobs/recurring/{id}/trigger")]
     [EnableRateLimiting("admin-write")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(OperationResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> TriggerRecurring([FromRoute] string id, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(id))
@@ -55,7 +56,7 @@ public class AdminOperationsController(
         if (result.IsSuccess)
         {
             await WriteAuditAsync("jobs.recurring.trigger", "recurring-job", id, true, null, ct);
-            return Ok(new { message = "Recurring job triggered.", id });
+            return Ok(new OperationResult("Recurring job triggered.", id));
         }
 
         await WriteAuditAsync(
@@ -65,24 +66,26 @@ public class AdminOperationsController(
             false,
             new { error = result.Error },
             ct);
-        return BadRequest(new { message = "Unable to trigger recurring job.", detail = result.Error });
+        return Problem(title: "Unable to trigger recurring job.", detail: result.Error,
+            statusCode: StatusCodes.Status400BadRequest);
     }
 
     [HttpPost("jobs/recurring/{id}/pause")]
     [EnableRateLimiting("admin-write")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(OperationResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> PauseRecurring([FromRoute] string id, CancellationToken ct)
     {
         var normalizedId = id.Trim();
         if (!AdminJobsFacade.IsPausableRecurringJob(normalizedId))
-            return BadRequest(new { message = "Only producer recurring jobs can be paused from admin." });
+            return Problem(title: "Only producer recurring jobs can be paused from admin.",
+                statusCode: StatusCodes.Status400BadRequest);
 
         var result = jobsFacade.PauseRecurring(id);
         if (result.IsSuccess)
         {
             await WriteAuditAsync("jobs.recurring.pause", "recurring-job", normalizedId, true, null, ct);
-            return Ok(new { message = "Recurring job paused.", id = normalizedId });
+            return Ok(new OperationResult("Recurring job paused.", normalizedId));
         }
 
         await WriteAuditAsync(
@@ -92,27 +95,30 @@ public class AdminOperationsController(
             false,
             new { error = result.Error },
             ct);
-        return BadRequest(new { message = "Unable to pause recurring job.", detail = result.Error });
+        return Problem(title: "Unable to pause recurring job.", detail: result.Error,
+            statusCode: StatusCodes.Status400BadRequest);
     }
 
     [HttpPost("jobs/recurring/{id}/resume")]
     [EnableRateLimiting("admin-write")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(OperationResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ResumeRecurring([FromRoute] string id, CancellationToken ct)
     {
         var normalizedId = id.Trim();
         var validation = jobsFacade.ValidateResume(normalizedId);
         if (validation.Kind == AdminResumeValidationKind.NotPausable)
-            return BadRequest(new { message = "Only producer recurring jobs can be resumed from admin." });
+            return Problem(title: "Only producer recurring jobs can be resumed from admin.",
+                statusCode: StatusCodes.Status400BadRequest);
         if (validation.Kind == AdminResumeValidationKind.DisabledByConfiguration)
-            return BadRequest(new { message = "Recurring job is disabled by configuration and cannot be resumed." });
+            return Problem(title: "Recurring job is disabled by configuration and cannot be resumed.",
+                statusCode: StatusCodes.Status400BadRequest);
 
         var result = jobsFacade.ResumeRecurring(id);
         if (result.IsSuccess)
         {
             await WriteAuditAsync("jobs.recurring.resume", "recurring-job", normalizedId, true, null, ct);
-            return Ok(new { message = "Recurring job resumed.", id = normalizedId });
+            return Ok(new OperationResult("Recurring job resumed.", normalizedId));
         }
 
         await WriteAuditAsync(
@@ -122,7 +128,8 @@ public class AdminOperationsController(
             false,
             new { error = result.Error },
             ct);
-        return BadRequest(new { message = "Unable to resume recurring job.", detail = result.Error });
+        return Problem(title: "Unable to resume recurring job.", detail: result.Error,
+            statusCode: StatusCodes.Status400BadRequest);
     }
 
     [HttpGet("jobs/queues")]
@@ -134,6 +141,7 @@ public class AdminOperationsController(
 
     [HttpGet("jobs/list")]
     [ProducesResponseType(typeof(AdminJobListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public IActionResult GetJobs(
         [FromQuery] string state = "failed",
         [FromQuery] string? queue = null,
@@ -147,7 +155,8 @@ public class AdminOperationsController(
     {
         var lookup = jobsFacade.GetJobs(state, queue, type, region, q, olderThanMinutes, from, count, scanLimit);
         if (!lookup.StatesValid)
-            return BadRequest(new { message = "Unsupported state. Allowed values: enqueued, processing, scheduled, failed." });
+            return Problem(title: "Unsupported state. Allowed values: enqueued, processing, scheduled, failed.",
+                statusCode: StatusCodes.Status400BadRequest);
 
         return Ok(lookup.Response);
     }
@@ -161,7 +170,7 @@ public class AdminOperationsController(
 
     [HttpGet("jobs/inspect/{jobId}")]
     [ProducesResponseType(typeof(AdminJobDetailDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public IActionResult GetJobDetail([FromRoute] string jobId)
     {
         if (string.IsNullOrWhiteSpace(jobId))
@@ -169,13 +178,15 @@ public class AdminOperationsController(
 
         var dto = jobsFacade.GetJobDetail(jobId.Trim());
         return dto is null
-            ? NotFound(new { message = "Job not found.", jobId = jobId.Trim() })
+            ? Problem(title: "Job not found.", detail: $"No job found for id '{jobId.Trim()}'.",
+                statusCode: StatusCodes.Status404NotFound)
             : Ok(dto);
     }
 
     [HttpGet("jobs/failed/{jobId}")]
     [ProducesResponseType(typeof(AdminJobDetailDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public IActionResult GetFailedJobDetail([FromRoute] string jobId)
     {
         if (string.IsNullOrWhiteSpace(jobId))
@@ -183,17 +194,20 @@ public class AdminOperationsController(
 
         var dto = jobsFacade.GetJobDetail(jobId.Trim());
         if (dto is null)
-            return NotFound(new { message = "Job not found.", jobId = jobId.Trim() });
+            return Problem(title: "Job not found.", detail: $"No job found for id '{jobId.Trim()}'.",
+                statusCode: StatusCodes.Status404NotFound);
         if (!string.Equals(dto.CurrentState, "Failed", StringComparison.OrdinalIgnoreCase))
-            return BadRequest(new { message = "Job is not currently in the failed state.", jobId = jobId.Trim() });
+            return Problem(title: "Job is not currently in the failed state.",
+                detail: $"Job '{jobId.Trim()}' is in state '{dto.CurrentState}'.",
+                statusCode: StatusCodes.Status400BadRequest);
 
         return Ok(dto);
     }
 
     [HttpPost("jobs/failed/{jobId}/retry")]
     [EnableRateLimiting("admin-write")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(OperationResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> RetryFailedJob([FromRoute] string jobId, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(jobId))
@@ -203,7 +217,7 @@ public class AdminOperationsController(
         if (result.IsSuccess)
         {
             await WriteAuditAsync("jobs.failed.retry", "background-job", jobId, true, null, ct);
-            return Ok(new { message = "Failed job re-queued.", jobId });
+            return Ok(new OperationResult("Failed job re-queued.", jobId));
         }
 
         await WriteAuditAsync(
@@ -213,13 +227,14 @@ public class AdminOperationsController(
             false,
             new { error = result.Error },
             ct);
-        return BadRequest(new { message = "Unable to re-queue failed job.", detail = result.Error });
+        return Problem(title: "Unable to re-queue failed job.", detail: result.Error,
+            statusCode: StatusCodes.Status400BadRequest);
     }
 
     [HttpPost("jobs/inspect/{jobId}/delete")]
     [EnableRateLimiting("admin-write")]
     [ProducesResponseType(typeof(AdminDeleteJobResultDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> DeleteJob(
         [FromRoute] string jobId,
         [FromBody] AdminDeleteJobRequest? request,
@@ -251,22 +266,21 @@ public class AdminOperationsController(
             false,
             new { expectedState, request?.Reason, error = outcome.ThrewError },
             ct);
-        return BadRequest(new { message = "Unable to delete job.", detail = outcome.ThrewError });
+        return Problem(title: "Unable to delete job.", detail: outcome.ThrewError,
+            statusCode: StatusCodes.Status400BadRequest);
     }
 
     [HttpPost("jobs/bulk-delete")]
     [EnableRateLimiting("admin-write")]
     [ProducesResponseType(typeof(AdminBulkDeleteJobsResultDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> BulkDeleteJobs([FromBody] AdminBulkDeleteJobsRequest request, CancellationToken ct)
     {
         var validation = AdminJobsFacade.ValidateBulkDeleteStates(request.States);
         if (!validation.IsValid)
         {
-            return BadRequest(new
-            {
-                message = "Bulk delete only supports enqueued, scheduled, and failed states."
-            });
+            return Problem(title: "Bulk delete only supports enqueued, scheduled, and failed states.",
+                statusCode: StatusCodes.Status400BadRequest);
         }
 
         var outcome = jobsFacade.BulkDeleteJobs(request);
@@ -299,12 +313,12 @@ public class AdminOperationsController(
 
     [HttpPost("cache/invalidate")]
     [EnableRateLimiting("admin-write")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(OperationResult), StatusCodes.Status200OK)]
     public async Task<IActionResult> InvalidateAnalyticsCache(CancellationToken ct)
     {
         await analyticsService.InvalidateAnalyticsCacheAsync(ct);
         await WriteAuditAsync("cache.invalidate", "analytics-cache", null, true, null, ct);
-        return Ok(new { message = "Analytics cache invalidated." });
+        return Ok(new OperationResult("Analytics cache invalidated."));
     }
 
     [HttpGet("audit-log")]
@@ -317,7 +331,7 @@ public class AdminOperationsController(
 
     [HttpGet("logs/services")]
     [ProducesResponseType(typeof(AdminServiceLogsResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public IActionResult GetServiceLogs(
         [FromQuery] string service = "service",
         [FromQuery] string? level = null,
@@ -329,10 +343,8 @@ public class AdminOperationsController(
         var lookup = logsFacade.GetServiceLogs(service, level, q, sinceUtc, untilUtc, limit);
         if (!lookup.ServiceAllowed)
         {
-            return BadRequest(new
-            {
-                message = "Unsupported service. Allowed values: webapi, service."
-            });
+            return Problem(title: "Unsupported service. Allowed values: webapi, service.",
+                statusCode: StatusCodes.Status400BadRequest);
         }
 
         return Ok(lookup.Response);

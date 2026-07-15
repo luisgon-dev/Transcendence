@@ -105,6 +105,20 @@ builder.Services.AddRateLimiter(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
+    // Emit C# nullable-reference-type semantics into the schema (spec stays OpenAPI 3.0): a non-nullable
+    // reference property (e.g. `string Puuid`) is no longer marked nullable, and a nullable one (`RankInfo?`)
+    // emits `allOf:[{$ref}], nullable:true`. NonNullableReferenceTypesAsRequired additionally lists
+    // non-null reference properties in each schema's `required` set. Together the generated TS client types
+    // always-present fields as non-optional/non-null and sometimes-null fields as `T | null`, fixing the
+    // inverted nullability the client shipped before (P1 — API Design & Contracts).
+    options.SupportNonNullableReferenceTypes();
+    options.NonNullableReferenceTypesAsRequired();
+    // Wrap $ref properties in `allOf` so sibling keywords apply — in OpenAPI 3.0 a bare `$ref` cannot
+    // carry a `nullable: true` sibling, so without this a nullable object property (e.g. `RankInfo? SoloRank`)
+    // would serialize as a bare `$ref` and the generated client would type it non-null. With allOf-wrapping
+    // it becomes `{ allOf: [{$ref}], nullable: true }` → `RankInfo | null` in the TS client.
+    options.UseAllOfToExtendReferenceSchemas();
+
     options.SwaggerDoc("v1", new OpenApiInfo
     {
         Title = "Transcendence API",

@@ -99,7 +99,7 @@ export function ProfileSidebar({
                     <div className="h-24 w-24 rounded-control border border-border/60 bg-surface/70" />
                   )}
                   <div className="min-w-0">
-                    <p className="type-kicker text-fg/62">{label}</p>
+                    <p className="type-kicker text-muted">{label}</p>
                     <p className={`mt-2 truncate text-lg font-semibold ${rankColorClass(rank.tier)}`}>
                       {rankTierDisplayLabel(rank.tier)} {rank.division}
                     </p>
@@ -122,7 +122,7 @@ export function ProfileSidebar({
           <div className="surface-subtle mt-4 flex items-center justify-between gap-3 rounded-card px-3 py-2.5">
             <div>
               <p className="type-overline text-muted">Solo/Duo progression</p>
-              <p className="type-caption text-fg/65">{soloSeries.length} snapshots</p>
+              <p className="type-caption text-muted">{soloSeries.length} snapshots</p>
             </div>
             <Sparkline values={soloSeries} width={104} height={30} />
           </div>
@@ -202,14 +202,14 @@ export function ProfileSidebar({
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="type-kicker text-fg/55">#{index + 1}</p>
+                    <p className="type-kicker text-muted">#{index + 1}</p>
                     <p className="mt-1 text-sm font-semibold text-fg group-hover:text-primary">
-                      {champion?.name ?? championStat.championName}
+                      {champion?.name ?? `Champion ${championStat.championId}`}
                     </p>
                   </div>
                   <DataBar value={championStat.winRate} games={championStat.games} />
                 </div>
-                <div className="flex items-center justify-between gap-2 text-xs text-fg/64">
+                <div className="flex items-center justify-between gap-2 text-xs text-muted">
                   <span>{championStat.games} {plural(championStat.games, "game")} tracked</span>
                   <span>{championStat.kdaRatio.toFixed(2)} KDA</span>
                 </div>
@@ -242,7 +242,7 @@ export function ProfileSidebar({
                     </p>
                     {wr != null ? <DataBar value={wr} games={mate.sameTeamGames} /> : null}
                   </div>
-                  <div className="flex items-center justify-between gap-2 text-xs text-fg/64">
+                  <div className="flex items-center justify-between gap-2 text-xs text-muted">
                     <span>{mate.gamesTogether} {plural(mate.gamesTogether, "game")} together</span>
                     {mate.sameTeamGames > 0 ? <span>{mate.sameTeamGames} as duo</span> : null}
                   </div>

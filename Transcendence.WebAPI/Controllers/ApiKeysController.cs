@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Transcendence.Service.Core.Services.Auth.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Models;
+using Transcendence.WebAPI.Models.Common;
 using Transcendence.WebAPI.Security;
 
 namespace Transcendence.WebAPI.Controllers;
@@ -42,14 +43,14 @@ public class ApiKeysController(IApiKeyService apiKeyService, IAdminAuditService 
 
     [HttpPost("{id:guid}/revoke")]
     [EnableRateLimiting("admin-write")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(OperationResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Revoke([FromRoute] Guid id, CancellationToken ct)
     {
         var revoked = await apiKeyService.RevokeAsync(id, ct);
         if (!revoked) return NotFound();
         await WriteAuditAsync("api-keys.revoke", "api-key", id.ToString(), true, null, ct);
-        return Ok(new { message = "API key revoked." });
+        return Ok(new OperationResult("API key revoked."));
     }
 
     [HttpPost("{id:guid}/rotate")]

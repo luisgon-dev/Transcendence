@@ -35,31 +35,42 @@ type ConfidenceInput = {
 export function Confidence({ games, isLowSample, minGames, className }: ConfidenceInput) {
   const level = confidenceLevel({ games, isLowSample, minGames });
   const filled = FILLED_PIPS[level];
-  const label = `${formatGames(games)} games · ${confidenceSampleLabel(level)} sample`;
+  const sampleLabel = confidenceSampleLabel(level);
+  const label = `${formatGames(games)} games · ${sampleLabel} sample`;
   const filledTone = level === "low" ? "bg-warning" : "bg-fg/70";
 
+  // Not a tab stop: the marker restates the adjacent games count, so it stayed out of the
+  // reading flow's tab order (WCAG 2.4.3 — it was adding dozens of low-value stops on dense
+  // pages). Screen readers still announce it via role="img" + aria-label; the tooltip stays a
+  // pointer affordance and the inline label below makes the level legible without hover.
   return (
     <Tooltip content={label}>
       <span
         role="img"
         aria-label={label}
-        tabIndex={0}
-        className={cn(
-          "inline-flex items-end gap-[2px] rounded-[2px] align-middle outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-          className
-        )}
+        className={cn("inline-flex items-center gap-1.5 align-middle", className)}
       >
-        {PIP_HEIGHTS.map((height, i) => (
-          <span
-            key={i}
-            aria-hidden="true"
-            className={cn(
-              "w-[3px] rounded-[1px]",
-              height,
-              i < filled ? filledTone : "bg-border"
-            )}
-          />
-        ))}
+        <span aria-hidden="true" className="inline-flex items-end gap-[2px]">
+          {PIP_HEIGHTS.map((height, i) => (
+            <span
+              key={i}
+              className={cn(
+                "w-[3px] rounded-[1px]",
+                height,
+                i < filled ? filledTone : "bg-border"
+              )}
+            />
+          ))}
+        </span>
+        <span
+          aria-hidden="true"
+          className={cn(
+            "hidden text-[11px] font-medium leading-none sm:inline",
+            level === "low" ? "text-warning" : "text-muted"
+          )}
+        >
+          {sampleLabel}
+        </span>
       </span>
     </Tooltip>
   );

@@ -32,6 +32,16 @@ Read-heavy endpoints are protected by server-side fixed-window rate limiting and
 
 Auth endpoints use dedicated per-client rate limits: `/api/auth/register` (`auth-register`), `/api/auth/login` (`auth-login`), and `/api/auth/refresh` + `/api/auth/logout` (shared `auth-refresh`). `/api/auth/password-reset` is not rate-limited.
 
+## Error Model
+
+All error responses use RFC 7807 **ProblemDetails** (`application/problem+json`):
+
+- Empty-body `4xx/5xx` (e.g. `NotFound()`), model-validation failures, and unhandled exceptions are ProblemDetails automatically.
+- Body-carrying errors are normalized: a bare string body (`BadRequest("…")`) is rewrapped as ProblemDetails `detail`, and admin operations return `Problem(title, detail, status)` rather than the legacy `{ message, detail }` object.
+- Model-validation failures (e.g. `POST /api/lol/summoners/multi-search`) return **`ValidationProblemDetails`** — ProblemDetails plus a per-field `errors` map. The schema is published in the OpenAPI contract.
+
+Side-effecting operations that acknowledge success with a message return a typed **`OperationResult`** (`{ message, id? }`) instead of an anonymous body, so the shape is documented in the contract and typed in the generated client. Pure side-effect operations may return `204 No Content`.
+
 ## Key Endpoint Areas (Current)
 
 This is a navigational summary; the OpenAPI spec is the source of truth.
@@ -54,6 +64,7 @@ Default stats scope:
 - `GET /api/lol/summoners/{region}/{name}/{tag}` uses the active season for profile overview and champion stats. When a signed-in manual refresh has produced full-history facts, those profile stats use the durable active-season aggregate; otherwise they fall back to retained match detail currently present in the database.
 - `matches/recent` defaults to full stored history and can be filtered by queue metadata.
 - `stats/rank-history` is app-observed history from stored snapshots. Riot League-V4 exposes current league entries, not an official per-account past-season rank history endpoint.
+- Profile champion entries (`topChampions[]`, `topMastery[]`) carry `championId` only; champion display names are resolved client-side from static (DDragon) data, so `championId` is the single source of truth.
 
 Profile responses include additional season/history metadata:
 - `activeSeason`: `{ seasonKey, displayName, queueScope }`
@@ -365,6 +376,8 @@ Auth behavior notes:
 ## OpenAPI Generation Workflow
 
 The repo keeps the exported spec committed and uses it to generate the TypeScript client during build/check flows.
+
+The spec is OpenAPI 3.0 with C# nullable-reference-type fidelity: Swashbuckle is configured with `SupportNonNullableReferenceTypes` + `NonNullableReferenceTypesAsRequired` + `UseAllOfToExtendReferenceSchemas` (`Transcendence.WebAPI/Program.cs`), so always-present properties are `required`/non-null and nullable reference properties emit `T | null` in the generated client.
 
 - Export spec: `scripts/openapi/export.sh` (invoked via `pnpm api:spec`)
 - Generate client package from the spec: `packages/api-client` (invoked via `pnpm api:client`)

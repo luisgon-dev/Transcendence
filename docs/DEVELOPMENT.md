@@ -152,7 +152,7 @@ Automatic migrations on startup (`Database:AutoMigrate`):
 - The **worker host** (`Transcendence.Service`) applies pending migrations on startup when `Database:AutoMigrate` is `true` (set in `config/backend.shared.json`, so it ships baked into the image). Only the worker can — it is the migrations assembly (`MigrationsAssembly("Transcendence.Service")`); the WebAPI host doesn't reference it and so never migrates (it relies on the worker). EF Core 9+ takes a database-wide migration lock, so concurrent worker instances stay safe. This removes the manual post-deploy `dotnet ef database update` step a migration-bearing release used to require (the WebAPI may briefly 500 on a brand-new table during the deploy window until the worker finishes).
 - Locally, `dotnet run` with the shared config also auto-migrates your dev DB, so the manual `database update` above is optional; override with `Database:AutoMigrate=false` (user-secrets / `appsettings.Development.json`) if you want manual control. The OpenAPI export host force-disables it (`--Database:AutoMigrate=false`) since it boots against a throwaway connection.
 - **Hot-table index migrations are the exception** — auto-migrate would run them as a blocking `CREATE INDEX`. Apply them via the out-of-band recipe below (create the index concurrently, then record the migration in `__EFMigrationsHistory`) **before** the deploy so the migration is already applied and auto-migrate skips it. The migration-safety CI gate failing your PR is the signal to use the recipe.
-- **CI applies the full chain to real Postgres.** Because prod auto-migrates on worker startup, a migration that compiles and passes the drift check but fails at *runtime* (PG-specific DDL, ordering, or type error) would crash-loop the worker while the deploy still reports success. The `migration-apply` job (`.github/workflows/ci-web-backend.yml`) spins up an ephemeral `postgres:16` service and runs `dotnet ef database update` from an empty database on every PR to surface those failures pre-merge — SQLite/InMemory tests cannot. It applies to an *empty* DB, so data-dependent migration failures still need a seeded follow-up.
+- **CI applies the full chain to real Postgres.** Because prod auto-migrates on worker startup, a migration that compiles and passes the drift check but fails at *runtime* (PG-specific DDL, ordering, or type error) would crash-loop the worker while the deploy still reports success. The `migration-apply` job (`.github/workflows/ci-web-backend.yml`) spins up an ephemeral `postgres:16` service and runs `dotnet ef database update` from an empty database on every PR to surface those failures pre-merge — SQLite/InMemory tests cannot. It applies to an *empty* DB, so data-dependent migration failures still need a seeded follow-up. The `Transcendence.IntegrationTests` tier (see Backend Tests) additionally applies the chain **in-process** against a Testcontainers Postgres 18 and asserts every migration is applied with none pending — catching migration/model drift and PG-runtime faults from within `dotnet test`.
 
 #### Applying index migrations to hot tables
 
@@ -265,9 +265,28 @@ pnpm web:build
 From repo root:
 
 ```bash
-dotnet test tests/Transcendence.Service.Core.Tests
-dotnet test tests/Transcendence.WebAPI.Tests
+pnpm backend:test   # runs all three projects below in sequence
+# or individually:
+dotnet test tests/Transcendence.Service.Core.Tests   # domain/service unit tests (SQLite/in-memory)
+dotnet test tests/Transcendence.WebAPI.Tests         # controller unit tests (EF InMemory)
+dotnet test tests/Transcendence.IntegrationTests     # real Postgres — REQUIRES a running Docker daemon
 ```
+
+**Integration tier (`tests/Transcendence.IntegrationTests`).** Runs against a real Postgres 18 container
+managed by Testcontainers (matching prod's major), exercising actual Npgsql translation, the migration
+chain, and the auth/authz middleware — things SQLite and the EF InMemory provider cannot. A running
+**Docker daemon is required**; a single shared container starts once per test run. Coverage:
+
+- the full migration chain applied from an empty database (`Database.MigrateAsync`, in the fixture);
+- the authorization boundary end-to-end through `WebApplicationFactory<Program>` — public / AppOnly
+  (X-API-Key) / UserOnly (JWT) / AdminOnly (JWT+admin) × no / wrong / correct credentials, with
+  credentials minted through the app's own `IApiKeyService` / `IJwtService`;
+- analytics raw-vs-precompute equivalence on real Postgres (the SQLite equivalence gate, re-run on
+  Npgsql for real GROUP BY / NULL collation / tie-break ordering);
+- `List<int>` / `List<string>` ↔ Postgres `integer[]` / `text[]` array round-trips.
+
+It runs in CI via the solution-wide `dotnet test Transcendence.sln` step (GitHub `ubuntu-latest` has Docker
+preinstalled, so Testcontainers works with no extra configuration).
 
 Current `web:test` scope:
 - Utility/unit tests in `apps/web/lib/*.test.ts`

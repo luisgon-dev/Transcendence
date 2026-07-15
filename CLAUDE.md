@@ -2,6 +2,17 @@
 
 League of Legends analytics platform. Monorepo with .NET 10 backend and Next.js 16 frontend.
 
+## Operations — Prod Access
+
+Prod is a single self-hosted box on the LAN, reachable over SSH: **`ssh kronic@192.168.0.221`** (if that user is rejected, try **`ssh root@192.168.0.221`** — one of the two). Public URLs: `https://transcend.kronic.one` (web) and `https://api.kronic.one` (backend).
+
+**Deploy is automatic on merge to `main`:** the merge builds + pushes signed images (`Docker Images` workflow), then a **prod-side systemd `poll-deploy` timer (~60s)** pulls them and recreates the `web` / `webapi` / `service` containers (Portainer stack). There is no auto-migrate in the WebAPI; the **worker (`service`) applies EF migrations on startup**.
+
+**After merging something, SSH in to verify/observe** (the HTTP surface alone can't prove which build is live):
+- `docker ps` — container status + health; confirm the **revision label matches the merged git SHA** (the deploy's source of truth — always check this post-merge).
+- `docker logs -f transcendence-webapi` (or `-web` / `-service`) — live logs.
+- poll-deploy pipeline + logs: `scripts/ops/poll-deploy.sh` and its systemd timer; deploy runbook is `scripts/ops/README.md`, architecture in `docs/ARCHITECTURE.md`.
+
 ## Design Context
 
 ### Users

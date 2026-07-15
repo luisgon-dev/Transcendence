@@ -4,14 +4,15 @@ League of Legends analytics platform. Monorepo with .NET 10 backend and Next.js 
 
 ## Operations — Prod Access
 
-Prod is a single self-hosted box on the LAN, reachable over SSH: **`ssh kronic@192.168.0.221`** (if that user is rejected, try **`ssh root@192.168.0.221`** — one of the two). Public URLs: `https://transcend.kronic.one` (web) and `https://api.kronic.one` (backend).
+Prod is a single self-hosted box on the LAN (hostname `docker`), reachable over SSH as **`ssh root@192.168.0.221`** (root has key auth; the `kronic` user is rejected). Public URLs: `https://transcend.kronic.one` (web) and `https://api.kronic.one` (backend). Containers run under a Portainer stack: `transcendence-web`, `transcendence-webapi`, `transcendence-service` (worker), `transcendence-postgres`, `transcendence-redis`, plus grafana/prometheus.
 
-**Deploy is automatic on merge to `main`:** the merge builds + pushes signed images (`Docker Images` workflow), then a **prod-side systemd `poll-deploy` timer (~60s)** pulls them and recreates the `web` / `webapi` / `service` containers (Portainer stack). There is no auto-migrate in the WebAPI; the **worker (`service`) applies EF migrations on startup**.
+**Deploy is automatic on merge to `main`:** the merge builds + pushes signed images (`Docker Images` workflow, **path-filtered per component**), then a **prod-side systemd `poll-deploy` timer (~60s)** pulls the `:main` tags and recreates the affected containers. There is no auto-migrate in the WebAPI; the **worker (`transcendence-service`) applies EF migrations on startup**.
 
-**After merging something, SSH in to verify/observe** (the HTTP surface alone can't prove which build is live):
-- `docker ps` — container status + health; confirm the **revision label matches the merged git SHA** (the deploy's source of truth — always check this post-merge).
+**After merging, SSH in to verify** — the HTTP surface alone can't prove which build is live:
+- `docker ps --format '{{.Names}}\t{{.Status}}\t{{.Image}}'` — status + health.
+- Revision label per container (the deploy's source of truth — check it post-merge): `docker inspect -f '{{ index .Config.Labels "org.opencontainers.image.revision"}}' transcendence-web`. **Because image builds are path-filtered, a web-only change only rebuilds `transcendence-web`; `-webapi`/`-service` legitimately stay at the last backend-affecting SHA — that is NOT a failed deploy.** So verify each container against the last commit that actually touched *its* component.
 - `docker logs -f transcendence-webapi` (or `-web` / `-service`) — live logs.
-- poll-deploy pipeline + logs: `scripts/ops/poll-deploy.sh` and its systemd timer; deploy runbook is `scripts/ops/README.md`, architecture in `docs/ARCHITECTURE.md`.
+- poll-deploy pipeline: `scripts/ops/poll-deploy.sh` + its systemd timer; runbook `scripts/ops/README.md`, architecture `docs/ARCHITECTURE.md`.
 
 ## Design Context
 

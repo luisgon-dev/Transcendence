@@ -199,6 +199,9 @@ services:
       GF_SECURITY_ADMIN_USER: "${GRAFANA_ADMIN_USER:-admin}"
       GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-admin}"
       GF_USERS_ALLOW_SIGN_UP: "false"
+      # Discord/Slack webhook the provisioned alert rules notify (config/grafana/provisioning/alerting).
+      # Unset → alerts still fire + show in Grafana, but delivery fails; set it in prod.
+      DISCORD_ALERT_WEBHOOK_URL: "${DISCORD_ALERT_WEBHOOK_URL:-}"
     volumes:
       - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro

@@ -245,6 +245,16 @@ The stack ships continuously: a push to `main` triggers the `Docker Images` work
 
 A schema-affecting deploy cannot be fully undone by an image rollback alone — an out-of-band migration (see DEVELOPMENT.md) must be reversed deliberately.
 
+### Metrics-based alerting
+
+The WebAPI (`/metrics`, ASP.NET Core exporter) and worker (`:9464`, standalone Prometheus `HttpListener`) are scraped by Prometheus (`config/prometheus/prometheus.yml`), which Grafana (`grafana/grafana:11.3.1`) reads. Both run under the `ops-tools` compose profile and are file-provisioned (`config/grafana/provisioning`). Beyond the worker's own in-app **ingestion** health alerter (`IngestionHealthAlertJob` → `WebhookAlertNotifier`, posts to `Alerts:Webhook:Url`), Grafana now owns **infrastructure** alerting so that an external process — not the dying worker — pages:
+
+- **Provisioned rules** (`config/grafana/provisioning/alerting/rules.yml`, folder `Transcendence`, evaluated every 1m): `WebAPI down` and `Worker down` (`up == 0`, `for 2m`, `noData → Alerting` so a vanished scrape target still pages), `API 5xx error ratio high` (5xx : total request ratio > 5%, `for 5m`), and `API p95 latency high` (p95 `http_server_request_duration_seconds` > 1.5s, `for 10m`). Each is a two-stage query — an *instant* PromQL query (refId A) feeding a Math condition (refId B) — routed via per-rule `notification_settings` so the default notification policy is left untouched.
+- **Contact point** (`config/grafana/provisioning/alerting/contactpoints.yml`): a Grafana-native `discord` receiver whose URL is interpolated from the `DISCORD_ALERT_WEBHOOK_URL` env var on the grafana container, so no secret is committed. Unset → rules still fire and show in Grafana, but delivery no-ops; set it in prod (reuse the same webhook as the worker's `Alerts:Webhook:Url`).
+- **Postgres/Redis have no Prometheus target of their own** (only webapi + worker are scraped), so their loss is covered *indirectly*: the worker crash-loops without the DB (→ `Worker down`) and DB/cache faults surface as API 5xx (→ `API 5xx error ratio high`). Add `postgres_exporter`/`redis_exporter` if dedicated DB/Redis-down alerts are ever needed.
+
+This complements — but does not replace — the deploy pipeline: poll-deploy still performs no post-deploy `/health/ready` verification, so a recovering-then-crashing container is caught here rather than at deploy time.
+
 ### Match Detail Retention and Archival
 
 The binding constraint on tier-list sample size is storage, not the Riot API budget, so old-patch match

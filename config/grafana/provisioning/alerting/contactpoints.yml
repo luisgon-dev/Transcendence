@@ -1,0 +1,19 @@
+# Grafana provisioned alerting — contact points.
+# The Discord/Slack-compatible incoming webhook the worker already uses for ingestion alerts
+# (Alerts:Webhook:Url) is reused here as a Grafana-native `discord` contact point so metrics-based
+# alerts (target down, API 5xx, latency) land in the same channel. The URL is injected from the
+# DISCORD_ALERT_WEBHOOK_URL env var on the grafana container (Grafana provisioning interpolates
+# `$VAR`); unset locally → provisioning logs an error but Grafana still starts (dashboards +
+# datasources unaffected), so this ships without a committed secret. Set the var in prod.
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: transcendence-discord
+    receivers:
+      - uid: transcendence-discord
+        type: discord
+        settings:
+          url: $DISCORD_ALERT_WEBHOOK_URL
+        # Also notify when a firing alert recovers, mirroring the ingestion alerter's resolve path.
+        disableResolveMessage: false

@@ -162,9 +162,15 @@
 /* ----------------------------------------------------------------------------
    Base
 ---------------------------------------------------------------------------- */
+html {
+  /* height (not on body): body is a min-h-screen flex column, so pinning body to height:100% clamped
+     it to the viewport and broke the sticky site header on any page taller than one screen — the
+     header's containing block must span the full content height. */
+  height: 100%;
+}
+
 html,
 body {
-  height: 100%;
   background: var(--t-bg);
   scroll-behavior: smooth;
 }
@@ -548,9 +554,20 @@ body::before {
     border-color: color-mix(in oklch, var(--t-primary), transparent 40%);
     box-shadow: 0 0 0 2px color-mix(in oklch, var(--t-primary), transparent 70%);
   }
+  /* The filter toolbar docks flush below the site header; --tl-header-h is measured live in
+     TierListTable (fallback ~header height for first paint). */
+  .tierlist-toolbar-dock {
+    position: sticky;
+    top: var(--tl-header-h, 4.3125rem);
+  }
+  /* Column headers dock flush below the docked toolbar; --tl-thead-top = header + toolbar height,
+     measured live so it survives filter-wrap / viewport changes. z-index sits above rows but below
+     the toolbar (z-30). */
   .tierlist-sticky-head {
-    position: sticky; top: 0; z-index: 1;
-    background: color-mix(in oklch, var(--t-surface), transparent 6%);
+    position: sticky; top: var(--tl-thead-top, 18.5rem); z-index: 20;
+    /* Near-opaque so scrolling rows don't read through the column labels, with a whisper of the
+       sanctioned sticky-head frost. */
+    background: color-mix(in oklch, var(--t-surface), transparent 2%);
     backdrop-filter: blur(8px);
   }
   .tierlist-row { transition: background-color 140ms var(--ease-out-quart); }

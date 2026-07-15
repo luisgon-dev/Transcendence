@@ -141,7 +141,7 @@ export default async function TierListPage({
           z-30 keeps it under the header (z-40) and above the table. Freshness stays legible in the
           meta row while docked, so the separate freshness strip below no longer needs to stick. */}
       <Toolbar
-        className="sticky top-24 z-30"
+        className="tierlist-toolbar-dock z-30"
         eyebrow="League Analytics"
         title="Tier List"
         meta={

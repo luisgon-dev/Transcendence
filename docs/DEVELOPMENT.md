@@ -137,6 +137,21 @@ Riot API key model:
   - `RiotApi:League:ApiKey`
 - The legacy `ConnectionStrings:RiotApi` setting is no longer used.
 
+### Observability & alerting (ops-tools profile)
+
+Prometheus + Grafana ship in `compose.yml` under the `ops-tools` profile (not started by a default `docker compose up`):
+
+```bash
+# start just the metrics stack (Grafana at http://localhost:3001, admin/admin by default)
+DISCORD_ALERT_WEBHOOK_URL="https://discord.com/api/webhooks/…" docker compose --profile ops-tools up -d grafana prometheus
+```
+
+Grafana is file-provisioned from `config/grafana/provisioning` (datasource, dashboards, and — as of the alerting pass — `alerting/rules.yml` + `alerting/contactpoints.yml`). The provisioned rules (WebAPI/worker down, API 5xx ratio, API p95 latency) evaluate against Prometheus and notify a Discord/Slack-compatible webhook:
+
+- **`DISCORD_ALERT_WEBHOOK_URL`** — set on the grafana container; the `discord` contact point's URL is interpolated from it (`$VAR` provisioning interpolation). Unset → rules still fire and are visible in Grafana → Alerting, but delivery no-ops (no committed secret). In prod, set it to the same incoming webhook the worker's ingestion alerter uses (`Alerts__Webhook__Url`). Locally the `up == 0` rules go `pending`/`Alerting` because no webapi/worker target is scraped — expected.
+
+See `docs/ARCHITECTURE.md` → *Metrics-based alerting* for the rule set and DB/Redis coverage rationale.
+
 ### Database migrations
 
 ```bash

@@ -2,9 +2,10 @@
 #   docker compose -f compose.yml -f compose.prod.yml up -d
 #
 # Only concern: the Grafana admin password is delivered as a Docker file secret in prod (rather than
-# the local env default). Everything else that differs between environments (root URLs, cookie-secure,
-# Prometheus external-url, the Discord webhook) is driven from ./.env — see .env.example. When
-# GF_SECURITY_ADMIN_PASSWORD__FILE is set, it takes precedence over the base GF_SECURITY_ADMIN_PASSWORD.
+# Grafana's local admin/admin default). Everything else that differs between environments (root URLs,
+# cookie-secure, Prometheus external-url, the Discord webhook) is driven from ./.env — see .env.example.
+# NB the base compose deliberately does NOT set GF_SECURITY_ADMIN_PASSWORD: Grafana refuses to start
+# when both the plain and __FILE forms are set (they are mutually exclusive), so __FILE stands alone.
 services:
   grafana:
     environment:

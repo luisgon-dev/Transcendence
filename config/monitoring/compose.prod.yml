@@ -1,0 +1,13 @@
+# Prod overlay for the monitoring stack. Layer on top of compose.yml:
+#   docker compose -f compose.yml -f compose.prod.yml up -d
+#
+# Only concern: the Grafana admin password is delivered as a Docker file secret in prod (rather than
+# the local env default). Everything else that differs between environments (root URLs, cookie-secure,
+# Prometheus external-url, the Discord webhook) is driven from ./.env — see .env.example. When
+# GF_SECURITY_ADMIN_PASSWORD__FILE is set, it takes precedence over the base GF_SECURITY_ADMIN_PASSWORD.
+services:
+  grafana:
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+    volumes:
+      - ./secrets/grafana_admin_password:/run/secrets/grafana_admin_password:ro

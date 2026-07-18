@@ -139,18 +139,18 @@ Riot API key model:
 
 ### Observability & alerting (ops-tools profile)
 
-Prometheus + Grafana ship in `compose.yml` under the `ops-tools` profile (not started by a default `docker compose up`):
+Prometheus + Grafana are their own stack — the single source of truth for both local dev and prod — at [`config/monitoring/`](../config/monitoring/README.md) (separate from the app `compose.yml`). Bring the app stack up first (it creates the shared `transcendence_transcendence-net` network), then:
 
 ```bash
-# start just the metrics stack (Grafana at http://localhost:3001, admin/admin by default)
-DISCORD_ALERT_WEBHOOK_URL="https://discord.com/api/webhooks/…" docker compose --profile ops-tools up -d grafana prometheus
+# Grafana → http://localhost:3300 (admin/admin), Prometheus → http://localhost:9090
+docker compose -f config/monitoring/compose.yml up -d
 ```
 
-Grafana is file-provisioned from `config/grafana/provisioning` (datasource, dashboards, and — as of the alerting pass — `alerting/rules.yml` + `alerting/contactpoints.yml`). The provisioned rules (WebAPI/worker down, API 5xx ratio, API p95 latency) evaluate against Prometheus and notify a Discord/Slack-compatible webhook:
+Grafana is file-provisioned from `config/monitoring/grafana/provisioning` (datasource, dashboards, and `alerting/rules.yml` + `alerting/contactpoints.yml`). The provisioned rules (WebAPI/worker down, API 5xx ratio, API p95 latency) evaluate against Prometheus and notify a Discord/Slack-compatible webhook:
 
-- **`DISCORD_ALERT_WEBHOOK_URL`** — set on the grafana container; the `discord` contact point's URL is interpolated from it (`$VAR` provisioning interpolation). Unset → rules still fire and are visible in Grafana → Alerting, but delivery no-ops (no committed secret). In prod, set it to the same incoming webhook the worker's ingestion alerter uses (`Alerts__Webhook__Url`). Locally the `up == 0` rules go `pending`/`Alerting` because no webapi/worker target is scraped — expected.
+- **`DISCORD_ALERT_WEBHOOK_URL`** (in `config/monitoring/.env`, see `.env.example`) — the `discord` contact point's URL is interpolated from it (`$VAR` provisioning interpolation). Unset → rules still fire and are visible in Grafana → Alerting, but delivery no-ops (no committed secret). In prod, set it to the same incoming webhook the worker's ingestion alerter uses (`Alerts__Webhook__Url`). Locally the `up == 0` rules go `pending`/`Alerting` because no webapi/worker target is scraped — expected.
 
-See `docs/ARCHITECTURE.md` → *Metrics-based alerting* for the rule set and DB/Redis coverage rationale.
+Prod deploys the same stack with the `compose.prod.yml` overlay (admin-password file secret); the sync/deploy runbook is in `config/monitoring/README.md`. See `docs/ARCHITECTURE.md` → *Metrics-based alerting* for the rule set and DB/Redis coverage rationale.
 
 ### Database migrations
 

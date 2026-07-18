@@ -1,0 +1,69 @@
+# Transcendence monitoring stack — the SINGLE source of truth for Prometheus + Grafana.
+#
+# This is the deployable unit for BOTH local dev and prod (prod runs it at
+# /root/transcendence-monitoring — see README.md for the sync/deploy runbook). It is a *separate*
+# stack from the app compose (repo-root compose.yml): the app owns web/webapi/service/postgres/redis;
+# this owns observability. They share the app's Docker network (external `transcendence-net`) so
+# Prometheus can scrape webapi/service by name.
+#
+# Local:  docker compose -f config/monitoring/compose.yml up -d          (needs the app network up)
+# Prod:   docker compose -f compose.yml -f compose.prod.yml up -d        (adds the admin-password file secret)
+#
+# Environment-specific values come from ./.env (see .env.example); defaults here are local-friendly.
+services:
+  prometheus:
+    image: prom/prometheus:v3.13.1
+    container_name: transcendence-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.external-url=${PROMETHEUS_EXTERNAL_URL:-http://localhost:9090}"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    labels:
+      # wud is retired for these; the poll-deploy pipeline does not manage the monitoring stack.
+      wud.watch: "false"
+    networks:
+      - monitor
+
+  grafana:
+    image: grafana/grafana:13.1.0-25893932881-ubuntu
+    container_name: transcendence-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: "${GRAFANA_ADMIN_USER:-admin}"
+      # Local default; prod overrides with GF_SECURITY_ADMIN_PASSWORD__FILE via compose.prod.yml.
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-admin}"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: "${GRAFANA_ROOT_URL:-http://localhost:3300}"
+      GF_SECURITY_COOKIE_SECURE: "${GRAFANA_COOKIE_SECURE:-false}"
+      # Provisioned-alerting Discord/Slack webhook (interpolated into the discord contact point).
+      # Unset → rules still fire + show in Grafana, delivery no-ops. Reuse the worker's Alerts__Webhook__Url.
+      DISCORD_ALERT_WEBHOOK_URL: "${DISCORD_ALERT_WEBHOOK_URL:-}"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3300}:3000"
+    labels:
+      wud.watch: "false"
+    depends_on:
+      - prometheus
+    networks:
+      - monitor
+
+volumes:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  monitor:
+    # The app stack's network. Local: created by the repo-root compose (project `transcendence`).
+    # Prod: the Portainer app stack's network. Bring the app up first.
+    external: true
+    name: ${MONITOR_NETWORK:-transcendence_transcendence-net}

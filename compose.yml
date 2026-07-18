@@ -172,54 +172,15 @@ services:
     networks:
       - transcendence-net
 
-  prometheus:
-    image: prom/prometheus:v3.1.0
-    container_name: transcendence-prometheus
-    restart: unless-stopped
-    profiles: ["ops-tools"]
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.retention.time=15d"
-    volumes:
-      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    ports:
-      - "${PROMETHEUS_PORT:-9090}:9090"
-    networks:
-      - transcendence-net
-
-  grafana:
-    # 11.4.0 fails to start on SQLite ("unified storage data migration failed: playlists
-    # migration: no such column p.uid"); 11.3.1 is the build verified working on prod.
-    image: grafana/grafana:11.3.1
-    container_name: transcendence-grafana
-    restart: unless-stopped
-    profiles: ["ops-tools"]
-    environment:
-      GF_SECURITY_ADMIN_USER: "${GRAFANA_ADMIN_USER:-admin}"
-      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-admin}"
-      GF_USERS_ALLOW_SIGN_UP: "false"
-      # Discord/Slack webhook the provisioned alert rules notify (config/grafana/provisioning/alerting).
-      # Unset → alerts still fire + show in Grafana, but delivery fails; set it in prod.
-      DISCORD_ALERT_WEBHOOK_URL: "${DISCORD_ALERT_WEBHOOK_URL:-}"
-    volumes:
-      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
-      - grafana_data:/var/lib/grafana
-    ports:
-      - "${GRAFANA_PORT:-3001}:3000"
-    depends_on:
-      - prometheus
-    networks:
-      - transcendence-net
+  # Prometheus + Grafana now live in their own stack — the single source of truth for both local
+  # dev and prod — at config/monitoring/ (compose.yml + compose.prod.yml). They share this app
+  # network so Prometheus can scrape webapi/service by name. See config/monitoring/README.md.
 
 volumes:
   postgres_data:
   redis_data:
   pgadmin_data:
   operational_logs:
-  prometheus_data:
-  grafana_data:
 
 networks:
   transcendence-net:

@@ -216,3 +216,56 @@ groups:
           group_by:
             - alertname
             - grafana_folder
+
+      # --- Host disk space low (node-exporter) ----------------------------------------------------
+      # Pages BEFORE a full disk crash-loops Postgres (2026-07-19 incident). Takes the fullest real
+      # filesystem's free ratio; fires under 15% free (>85% used) for 15m of slow-fill headroom.
+      - uid: trn-disk-space-low
+        title: Host disk space low
+        condition: B
+        for: 15m
+        # If node-exporter is unreachable this rule can't judge disk — stay quiet (a separate concern),
+        # don't misreport "disk low".
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              editorMode: code
+              expr: min(node_filesystem_avail_bytes{fstype=~"ext4|xfs|btrfs"} / node_filesystem_size_bytes{fstype=~"ext4|xfs|btrfs"}) * 100
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: prometheus
+                uid: prometheus
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: math
+              expression: $A < 15
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: __expr__
+                uid: __expr__
+        labels:
+          severity: critical
+        annotations:
+          summary: Host disk space below 15% free
+          description: A host filesystem has under 15% free space for over 15 minutes. Free space (prune images, expand the CT disk via `pct resize`, or archive/prune old-patch match data) before Postgres runs out and crash-loops.
+        notification_settings:
+          receiver: transcendence-discord
+          group_by:
+            - alertname
+            - grafana_folder

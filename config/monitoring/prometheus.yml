@@ -23,3 +23,8 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets: ["transcendence-service:9464"]
+
+  # Host/CT system metrics (disk, cpu, mem) via node-exporter — powers the disk-space alert.
+  - job_name: node
+    static_configs:
+      - targets: ["transcendence-node-exporter:9100"]

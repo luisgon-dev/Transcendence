@@ -60,6 +60,26 @@ services:
     networks:
       - monitor
 
+  # Host/CT filesystem + system metrics, so Prometheus can see disk usage and the "disk space low"
+  # alert can page BEFORE a full disk crashes Postgres (as it did 2026-07-19). Mounts the host root
+  # read-only and rewrites mountpoints via --path.rootfs so node_filesystem_* reflects the real disk.
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    container_name: transcendence-node-exporter
+    restart: unless-stopped
+    command:
+      - "--path.rootfs=/host"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|run|var/lib/docker)($|/)"
+      - "--collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs|tmpfs)$$"
+    volumes:
+      - "/:/host:ro,rslave"
+    ports:
+      - "${NODE_EXPORTER_PORT:-9100}:9100"
+    labels:
+      wud.watch: "false"
+    networks:
+      - monitor
+
 volumes:
   prometheus_data:
   grafana_data:

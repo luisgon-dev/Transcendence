@@ -102,12 +102,23 @@ public class AddOrUpdateHighEloProfiles(
 
             foreach (var summonerPuuid in summonerPuuids)
             {
-                var summoner =
-                    await summonerService.GetSummonerByPuuidAsync(summonerPuuid, platform, stoppingToken);
-                await summonerRepository.AddOrUpdateSummonerAsync(summoner, stoppingToken);
-                await UpsertTrackedHighValueSummonerAsync(summoner, platform, stoppingToken);
-                pendingChanges++;
-                rosterUpdates++;
+                try
+                {
+                    var summoner =
+                        await summonerService.GetSummonerByPuuidAsync(summonerPuuid, platform, stoppingToken);
+                    await summonerRepository.AddOrUpdateSummonerAsync(summoner, stoppingToken);
+                    await UpsertTrackedHighValueSummonerAsync(summoner, platform, stoppingToken);
+                    pendingChanges++;
+                    rosterUpdates++;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // Isolate per summoner: a single account that fails to enrich (e.g. a Riot payload the
+                    // client can't parse, or a dead riot-id) must not abort the whole platform's refresh.
+                    logger.LogWarning(ex,
+                        "High-elo profile refresh skipped summoner {Puuid} on {Platform}.", summonerPuuid, platform);
+                    continue;
+                }
 
                 if (pendingChanges < saveBatchSize)
                     continue;

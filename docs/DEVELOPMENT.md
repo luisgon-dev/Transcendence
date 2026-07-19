@@ -148,7 +148,7 @@ docker compose -f config/monitoring/compose.yml up -d
 
 Grafana is file-provisioned from `config/monitoring/grafana/provisioning` (datasource, dashboards, and `alerting/rules.yml` + `alerting/contactpoints.yml`). The provisioned rules (WebAPI/worker down, API 5xx ratio, API p95 latency) evaluate against Prometheus and notify a Discord/Slack-compatible webhook:
 
-- **`DISCORD_ALERT_WEBHOOK_URL`** (in `config/monitoring/.env`, see `.env.example`) — the `discord` contact point's URL is interpolated from it (`$VAR` provisioning interpolation). Unset → rules still fire and are visible in Grafana → Alerting, but delivery no-ops (no committed secret). In prod, set it to the same incoming webhook the worker's ingestion alerter uses (`Alerts__Webhook__Url`). Locally the `up == 0` rules go `pending`/`Alerting` because no webapi/worker target is scraped — expected.
+- **`DISCORD_ALERT_WEBHOOK_URL`** (in `config/monitoring/.env`, see `.env.example`) — the `discord` contact point's URL is interpolated from it (`$VAR` provisioning interpolation). Grafana 13 **refuses to start** on an empty contact-point URL, so when unset the base compose falls back to a no-op placeholder URL: Grafana boots and the rules are visible in Grafana → Alerting, but alerts don't deliver anywhere real. In prod, set it to the same incoming webhook the worker's ingestion alerter uses (`Alerts__Webhook__Url`). Locally the `up == 0` rules go `pending`/`Alerting` because no webapi/worker target is scraped — expected.
 
 Prod deploys the same stack with the `compose.prod.yml` overlay (admin-password file secret); the sync/deploy runbook is in `config/monitoring/README.md`. See `docs/ARCHITECTURE.md` → *Metrics-based alerting* for the rule set and DB/Redis coverage rationale.
 

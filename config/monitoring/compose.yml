@@ -36,14 +36,17 @@ services:
     restart: unless-stopped
     environment:
       GF_SECURITY_ADMIN_USER: "${GRAFANA_ADMIN_USER:-admin}"
-      # Local default; prod overrides with GF_SECURITY_ADMIN_PASSWORD__FILE via compose.prod.yml.
-      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-admin}"
+      # No admin password set here on purpose: Grafana defaults to admin/admin locally, and prod
+      # supplies it via GF_SECURITY_ADMIN_PASSWORD__FILE (compose.prod.yml). Grafana rejects having
+      # BOTH the plain and __FILE forms set (they are mutually exclusive), so the base must not set it.
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_ROOT_URL: "${GRAFANA_ROOT_URL:-http://localhost:3300}"
       GF_SECURITY_COOKIE_SECURE: "${GRAFANA_COOKIE_SECURE:-false}"
       # Provisioned-alerting Discord/Slack webhook (interpolated into the discord contact point).
-      # Unset → rules still fire + show in Grafana, delivery no-ops. Reuse the worker's Alerts__Webhook__Url.
-      DISCORD_ALERT_WEBHOOK_URL: "${DISCORD_ALERT_WEBHOOK_URL:-}"
+      # Grafana refuses to START if the contact point's URL is empty, so unset falls back to a no-op
+      # placeholder (a valid-but-dead Discord URL): Grafana boots, alerts just don't deliver anywhere
+      # real. Set DISCORD_ALERT_WEBHOOK_URL (prod: the worker's Alerts__Webhook__Url) for real delivery.
+      DISCORD_ALERT_WEBHOOK_URL: "${DISCORD_ALERT_WEBHOOK_URL:-https://discord.com/api/webhooks/0/LOCAL_DEV_NO_OP}"
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro

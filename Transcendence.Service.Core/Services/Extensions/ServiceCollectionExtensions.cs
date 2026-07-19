@@ -105,6 +105,13 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<ISummonerService, SummonerService>();
         services.AddScoped<IRankService, RankService>();
+        // Tolerant League-V4 entries fallback (enum-free) for when Riot returns a queueType Camille's
+        // latest nightly doesn't model. Binds the Riot key on the typed client; used only on that failure.
+        services.AddHttpClient<IRankFallbackClient, RankFallbackClient>(client =>
+        {
+            client.DefaultRequestHeaders.Add("X-Riot-Token", riotApiKey);
+            client.Timeout = TimeSpan.FromSeconds(15);
+        });
         services.AddScoped<IChampionMasteryService, ChampionMasteryService>();
         services.AddScoped<IMatchService, MatchService>();
         services.AddScoped<IStaticDataService, StaticDataService>();

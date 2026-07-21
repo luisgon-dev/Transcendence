@@ -113,6 +113,10 @@ services:
       Auth__PasswordReset__Smtp__Password: ${PASSWORD_RESET_SMTP_PASSWORD:-}
       Auth__PasswordReset__Smtp__FromAddress: ${PASSWORD_RESET_SMTP_FROM_ADDRESS:-}
       Auth__PasswordReset__Smtp__FromName: ${PASSWORD_RESET_SMTP_FROM_NAME:-Transcendence}
+      Auth__RiotRso__Enabled: ${RIOT_RSO_ENABLED:-false}
+      Auth__RiotRso__ClientId: ${RIOT_RSO_CLIENT_ID:-}
+      Auth__RiotRso__ClientSecret: ${RIOT_RSO_CLIENT_SECRET:-}
+      Auth__RiotRso__RedirectUri: ${RIOT_RSO_REDIRECT_URI:-https://transcend.kronic.one/api/session/riot/callback}
       OperationalLogs__DirectoryPath: /var/log/transcendence
       <<: *app-env
     ports:

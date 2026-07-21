@@ -61,6 +61,7 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<UserPasswordResetToken> UserPasswordResetTokens { get; set; }
     public DbSet<UserFavoriteSummoner> UserFavoriteSummoners { get; set; }
     public DbSet<UserPreferences> UserPreferences { get; set; }
+    public DbSet<UserRiotAccount> UserRiotAccounts { get; set; }
     public DbSet<AdminAuditEvent> AdminAuditEvents { get; set; }
     public DbSet<LiveGameSnapshot> LiveGameSnapshots { get; set; }
 
@@ -220,6 +221,21 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             entity.Property(x => x.Email).IsRequired();
             entity.Property(x => x.EmailNormalized).IsRequired();
             entity.Property(x => x.PasswordHash).IsRequired();
+            entity.Property(x => x.DisplayName).HasMaxLength(128);
+        });
+
+        modelBuilder.Entity<UserRiotAccount>(entity =>
+        {
+            entity.HasKey(x => x.UserAccountId);
+            entity.HasIndex(x => x.Puuid).IsUnique();
+            entity.Property(x => x.Puuid).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.GameName).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.TagLine).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.PlatformRegion).HasMaxLength(16).IsRequired();
+            entity.HasOne(x => x.UserAccount)
+                .WithOne(x => x.RiotAccount)
+                .HasForeignKey<UserRiotAccount>(x => x.UserAccountId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<UserRole>(entity =>

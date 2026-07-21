@@ -11,12 +11,17 @@ import { fetchBackendJson } from "@/lib/backendCall";
 import { cn } from "@/lib/cn";
 import { getBackendBaseUrl } from "@/lib/env";
 import { fetchLolAnalyticsStatus } from "@/lib/lolAnalyticsStatus";
+import { platformRegionToSlug } from "@/lib/lolRegions";
 import { DEFAULT_TIERLIST_RANK_TIER } from "@/lib/ranks";
+import { encodeRiotIdPath } from "@/lib/riotid";
 import { roleDisplayLabel } from "@/lib/roles";
+import { getAccessTokenOrRefresh } from "@/lib/sessionToken";
 import { championIconUrl, fetchChampionMap } from "@/lib/staticData";
 import { normalizeTierListEntries } from "@/lib/tierlist";
+import { getTrnClient } from "@/lib/trnClient";
 
 type TierListResponse = components["schemas"]["TierListResponse"];
+type RiotAccountLink = components["schemas"]["RiotAccountLinkDto"];
 
 // Shared focus-ring treatment for the page's bare <Link>s. Globals set
 // `*:focus-visible { outline: none }`, so every interactive element must paint
@@ -107,13 +112,32 @@ async function loadHomeLiveData(): Promise<HomeLiveData> {
   }
 }
 
+async function loadVerifiedMain(): Promise<RiotAccountLink | null> {
+  try {
+    const token = await getAccessTokenOrRefresh();
+    if (!token.ok) return null;
+    const { data } = await getTrnClient().GET("/api/users/me/riot-account", {
+      headers: { authorization: `Bearer ${token.accessToken}` }
+    });
+    return (data as RiotAccountLink | undefined) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export default async function LandingPage() {
-  const { version, champions, patch, lolTop } = await loadHomeLiveData();
+  const [{ version, champions, patch, lolTop }, verifiedMain] = await Promise.all([
+    loadHomeLiveData(),
+    loadVerifiedMain()
+  ]);
   const hasPicks = lolTop.length > 0;
 
   return (
     <div className="grid gap-8">
       <section className="page-hero p-6 sm:p-8 md:p-10">
+        {verifiedMain ? (
+          <p className="type-kicker mb-3 text-primary">Welcome back, {verifiedMain.gameName}</p>
+        ) : null}
         <h1 className="type-display max-w-3xl">Look up any League player, champion, or matchup.</h1>
         <p className="type-lead mt-5 max-w-2xl">
           Current-patch tier lists, builds, and live profiles, refreshed continuously from ranked
@@ -123,7 +147,22 @@ export default async function LandingPage() {
         <div className="mt-8 grid gap-3">
           <GlobalSearchLauncher className="h-14 w-full max-w-2xl ring-offset-surface" />
           <p className="type-note text-muted">
-            Prefer to browse?{" "}
+            {verifiedMain ? (
+              <>
+                <Link
+                  href={`/lol/summoners/${platformRegionToSlug(verifiedMain.platformRegion)}/${encodeRiotIdPath(verifiedMain)}`}
+                  className={cn(
+                    "rounded-sm font-semibold text-primary transition-colors hover:text-primary/80",
+                    FOCUS_RING
+                  )}
+                >
+                  Open {verifiedMain.gameName}#{verifiedMain.tagLine}
+                </Link>{" "}
+                or browse the{" "}
+              </>
+            ) : (
+              <>Prefer to browse? </>
+            )}
             <Link
               href="/lol/tierlist"
               className={cn(

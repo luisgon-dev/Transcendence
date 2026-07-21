@@ -224,6 +224,7 @@ builder.Services.Configure<WorkerJobScheduleOptions>(builder.Configuration.GetSe
 builder.Services.Configure<WorkerSchedulingProfileOptions>(builder.Configuration.GetSection("Jobs:SchedulingProfiles"));
 builder.Services.Configure<AdminBootstrapOptions>(builder.Configuration.GetSection("Auth:AdminBootstrap"));
 builder.Services.Configure<PasswordResetOptions>(builder.Configuration.GetSection("Auth:PasswordReset"));
+builder.Services.Configure<RiotRsoOptions>(builder.Configuration.GetSection("Auth:RiotRso"));
 builder.Services.AddSingleton<IWorkerRecurringJobPolicy, WorkerRecurringJobPolicy>();
 builder.Services.AddAdminOperationsFacades();
 builder.Services.AddSingleton<IAdaptiveThroughputBudgetPolicy, AdaptiveThroughputBudgetPolicy>();

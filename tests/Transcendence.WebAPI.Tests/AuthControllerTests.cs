@@ -11,8 +11,43 @@ public class AuthControllerTests
 {
     private static AuthController CreateController(
         IUserAuthService authService,
-        IPasswordResetService? passwordResetService = null) =>
-        new(authService, passwordResetService ?? Mock.Of<IPasswordResetService>());
+        IPasswordResetService? passwordResetService = null,
+        IRiotRsoService? riotRsoService = null) =>
+        new(
+            authService,
+            passwordResetService ?? Mock.Of<IPasswordResetService>(),
+            riotRsoService ?? Mock.Of<IRiotRsoService>());
+
+    [Fact]
+    public void RiotAuthorize_WhenRsoIsUnavailable_ReturnsServiceUnavailable()
+    {
+        var rso = new Mock<IRiotRsoService>();
+        rso.Setup(service => service.CreateAuthorization(It.IsAny<string>()))
+            .Throws<RiotRsoUnavailableException>();
+        var controller = CreateController(Mock.Of<IUserAuthService>(), riotRsoService: rso.Object);
+
+        var result = controller.RiotAuthorize(new RiotAuthorizationRequest(new string('s', 32)));
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(503);
+    }
+
+    [Fact]
+    public async Task CompleteRiotLogin_WhenExchangeFails_ReturnsUnauthorized()
+    {
+        var rso = new Mock<IRiotRsoService>();
+        rso.Setup(service => service.CompleteLoginAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new RiotRsoExchangeException("invalid"));
+        var controller = CreateController(Mock.Of<IUserAuthService>(), riotRsoService: rso.Object);
+
+        var result = await controller.CompleteRiotLogin(
+            new RiotRsoCompleteRequest("code", "na"),
+            CancellationToken.None);
+
+        result.Should().BeOfType<UnauthorizedObjectResult>();
+    }
 
     [Fact]
     public async Task Register_WhenUserAlreadyExists_ReturnsGenericConflictMessage()

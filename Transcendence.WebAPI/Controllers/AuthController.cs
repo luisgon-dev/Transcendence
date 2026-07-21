@@ -12,8 +12,64 @@ namespace Transcendence.WebAPI.Controllers;
 [Route("api/auth")]
 public class AuthController(
     IUserAuthService userAuthService,
-    IPasswordResetService passwordResetService) : ControllerBase
+    IPasswordResetService passwordResetService,
+    IRiotRsoService riotRsoService) : ControllerBase
 {
+    [HttpPost("riot/authorize")]
+    [EnableRateLimiting("auth-login")]
+    [ProducesResponseType(typeof(RiotAuthorizationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public IActionResult RiotAuthorize([FromBody] RiotAuthorizationRequest request)
+    {
+        try
+        {
+            return Ok(riotRsoService.CreateAuthorization(request.State));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (RiotRsoUnavailableException)
+        {
+            return Problem(
+                title: "Riot sign-in unavailable",
+                detail: "Riot account linking is not configured right now.",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+    }
+
+    [HttpPost("riot/complete")]
+    [EnableRateLimiting("auth-login")]
+    [ProducesResponseType(typeof(RiotRsoAuthResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> CompleteRiotLogin(
+        [FromBody] RiotRsoCompleteRequest request,
+        CancellationToken ct)
+    {
+        try
+        {
+            return Ok(await riotRsoService.CompleteLoginAsync(request.Code, request.Region, ct));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (RiotRsoUnavailableException)
+        {
+            return Problem(
+                title: "Riot sign-in unavailable",
+                detail: "Riot account linking is not configured right now.",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+        catch (RiotRsoExchangeException ex)
+        {
+            return Unauthorized(ex.Message);
+        }
+    }
+
     [HttpPost("register")]
     [EnableRateLimiting("auth-register")]
     [ProducesResponseType(typeof(AuthTokenResponse), StatusCodes.Status200OK)]

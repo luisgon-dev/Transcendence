@@ -462,7 +462,7 @@ _Discoverability, multi-mode analytics, and the champ-select hook_
   - **Fix:** Persist per-patch champion win-rate history and render a trend chart on champion pages; capture per-game LP deltas (or backfill from ranked snapshots) for a true profile LP graph.
   - **Why:** op.gg shows a full LP-per-game graph; lolalytics/u.gg show 30-day and patch-over-patch win-rate trends that climbers use to judge whether a pick is rising or falling. Without real time series, users can't answer 'is this champ getting stronger?' or 'how has my LP moved?' — both core recurring questions.
   - **Where:** `apps/web/components/lol-profile/ProfileSidebar.tsx:47-56 (snapshot-based LP sparkline, self-hides <2 points); TierListTable.tsx:69 'Trend' column = tier movement/previousTier only, not a time series`
-- [ ] **No Riot account linking (RSO) — email-only auth, manual favorites, no personalization** `MED` · `large` · ✅ verified
+- [x] **No Riot account linking (RSO) — email-only auth, manual favorites, no personalization** `MED` · `large` · ✅ verified
   - **Fix:** Add Riot RSO login to establish a verified main summoner, auto-populate favorites/home, and personalize the landing page around the signed-in player's data.
   - **Why:** Competitors let a user link Riot once and get a personalized home (their profile, their champions, their recent games) on every visit — the strongest retention loop for a daily driver. Without it, onboarding is generic and the site never becomes 'my' dashboard.
   - **Where:** `Transcendence.WebAPI/Controllers/AuthController.cs (register/login/refresh/password-reset only); UserPreferencesController.cs favorites are manual GUID adds; grep 'rso|oauth' across source → 0 hits`

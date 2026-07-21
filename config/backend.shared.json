@@ -7,6 +7,15 @@
     "AutoMigrate": true
   },
   "Auth": {
+    "RiotRso": {
+      "Enabled": false,
+      "ClientId": "",
+      "ClientSecret": "",
+      "RedirectUri": "https://transcend.kronic.one/api/session/riot/callback",
+      "AuthorizationEndpoint": "https://auth.riotgames.com/authorize",
+      "TokenEndpoint": "https://auth.riotgames.com/token",
+      "AccountEndpoint": "https://americas.api.riotgames.com/riot/account/v1/accounts/me"
+    },
     "PasswordReset": {
       "Enabled": false,
       "PublicBaseUrl": "https://transcend.kronic.one",

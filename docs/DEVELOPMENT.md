@@ -120,12 +120,21 @@ dotnet user-secrets set "Auth:PasswordReset:Smtp:Host" "localhost" --project Tra
 dotnet user-secrets set "Auth:PasswordReset:Smtp:Port" "1025" --project Transcendence.WebAPI
 dotnet user-secrets set "Auth:PasswordReset:Smtp:EnableSsl" "false" --project Transcendence.WebAPI
 dotnet user-secrets set "Auth:PasswordReset:Smtp:FromAddress" "no-reply@local.dev" --project Transcendence.WebAPI
+# Optional Riot Sign On (requires an approved production RSO client)
+dotnet user-secrets set "Auth:RiotRso:Enabled" "true" --project Transcendence.WebAPI
+dotnet user-secrets set "Auth:RiotRso:ClientId" "your-rso-client-id" --project Transcendence.WebAPI
+dotnet user-secrets set "Auth:RiotRso:ClientSecret" "your-rso-client-secret" --project Transcendence.WebAPI
+dotnet user-secrets set "Auth:RiotRso:RedirectUri" "http://localhost:3000/api/session/riot/callback" --project Transcendence.WebAPI
 ```
 
 Security notes:
 - `Auth:Jwt:Key` is required outside `Development`; startup fails if missing or if the known development placeholder is used.
 - `Auth:BootstrapApiKeyEnabledInDevelopmentOnly=true` rejects bootstrap API key auth outside `Development`.
 - Password recovery remains unavailable until `Auth:PasswordReset:Enabled=true`, a valid public base URL, SMTP host, and from-address are all configured. SMTP credentials are optional for trusted local relays; never commit them. Docker uses the matching `PASSWORD_RESET_*` variables documented in `.env.example`.
+- Riot Sign On remains unavailable until `Auth:RiotRso:Enabled=true` and an approved RSO client ID,
+  client secret, and exact registered callback URI are configured. Production endpoints/callbacks must
+  use HTTPS; loopback HTTP is accepted only for local development. The matching Docker variables are
+  `RIOT_RSO_*` in `.env.example`. RSO credentials belong only on the Web API host, never in `apps/web`.
 
 `Transcendence.Service`:
 

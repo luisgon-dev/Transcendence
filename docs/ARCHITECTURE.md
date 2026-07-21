@@ -47,6 +47,12 @@ Transcendence is a backend + web monorepo:
   - `/api/diagnostics/backend` is a server-side backend connectivity probe (GETs the analytics tier-list endpoint) that always returns HTTP `200` with `{ ok, backend, requestId, durationMs }`
 - Tailwind styling, SSR-first pages where possible
 - **Auth token refresh runs in `proxy.ts` (Next 16 middleware), not during render.** Auth uses a short-lived access token + a single-use, rotated refresh token (the backend revokes the presented refresh token on every `/api/auth/refresh`, no grace window). Refreshing inside a Server Component render can't persist the rotated cookie (cookie writes are illegal during render), which would burn the refresh token and silently log users out. So `proxy.ts` refreshes a stale access token on page navigations and writes the rotated cookies to **both** the forwarded request (so the SSR render reads the fresh token and doesn't refresh again) and the response (so the browser persists them). It is fail-safe: it only acts when a refresh token exists and the access token is stale, skips prefetch requests (so a speculative prefetch can't burn the single-use token), and on any failure (401/5xx/network/timeout/malformed) passes through **without** clearing cookies. The matcher excludes `/api/*` (route handlers refresh + clear in their own writable context via `getAccessTokenOrRefresh`/`getSessionMe`), `_next`, and static files. Pure helpers live in `lib/proxyAuth.ts`; cookie names + the staleness check in `lib/authCookieShared.ts`.
+- Riot Sign On uses two same-origin route handlers: `/api/session/riot/start` creates a 256-bit
+  correlation state in an HttpOnly, SameSite=Lax, ten-minute cookie; `/api/session/riot/callback`
+  validates it with a constant-time comparison before sending the one-time code to the backend.
+  The backend performs Client Secret Basic token exchange and Account-V1 identity verification,
+  then discards Riot tokens. Durable state is limited to the one-to-one verified PUUID/Riot ID link.
+  RSO is optional and fails closed while its approved production-client credentials are absent.
 - `getSessionMe` is React-`cache()` wrapped so server consumers share one `/api/auth/me` lookup per render. The header renders `AccountNav` behind a fixed-size `<Suspense>` fallback, keeping session resolution off the document-shell critical path.
 - Admin dashboard routes under `/admin/*` for ops controls/reports (JWT `admin` role required)
 - Frontend analysis routes:
@@ -114,6 +120,8 @@ Current app usage follows that policy:
 - LoL search/autosuggest uses stored normalized Riot ID fields plus match participation presence.
 - LoL profile GET resolves by Riot ID first, then uses the local summoner GUID for stats and matches.
 - Favorites, pro-roster rows, and live-game snapshots key on `Puuid` or local IDs rather than encrypted Riot identifiers.
+- `UserRiotAccount` makes a verified PUUID unique across site accounts. Linked identity personalizes
+  the landing-page main-profile shortcut and account dashboard; it does not alter public analytics.
 
 Operational implication:
 - Riot API key swaps should not invalidate stored gameplay data as long as `Puuid` and Riot ID fields remain intact.

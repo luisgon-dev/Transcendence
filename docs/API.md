@@ -308,11 +308,19 @@ Response: `{ patch, region, scope, champions[], sample }` where each champion en
 - `POST /api/auth/logout`
 - `POST /api/auth/password-reset` (anonymous; returns the same generic `200 OK` for existing and unknown accounts; `503` when SMTP recovery is disabled/unconfigured)
 - `POST /api/auth/password-reset/complete` (anonymous; consumes a one-time token and returns `204`; invalid/expired tokens return `400`)
+- `POST /api/auth/riot/authorize` (anonymous; returns the configured Riot OAuth authorization URL for a caller-generated state value; `503` while RSO is disabled/unconfigured)
+- `POST /api/auth/riot/complete` (anonymous; exchanges a one-time Riot code, signs in an existing linked account or creates a Riot-only account, and returns site tokens)
 - `GET /api/auth/me` (`AppOrUser`)
 - `GET /api/auth/keys` (`AdminOnly`)
 - `POST /api/auth/keys` (`AdminOnly`)
 - `POST /api/auth/keys/{id}/revoke` (`AdminOnly`)
 - `POST /api/auth/keys/{id}/rotate` (`AdminOnly`)
+
+Riot account linking (`UserOnly`):
+- `GET /api/users/me/riot-account` returns the verified main or `404` when none is linked.
+- `POST /api/users/me/riot-account/complete` exchanges a one-time Riot code and links its verified PUUID to the signed-in account. A PUUID can belong to only one account.
+- `DELETE /api/users/me/riot-account` unlinks only when the user has an email/password credential; Riot-only accounts cannot remove their sole sign-in method.
+- Riot access/refresh tokens are never persisted. Only PUUID, Riot ID, selected platform region, and link/verification timestamps are stored.
 
 Auth behavior notes:
 - Registration duplicate-email responses are intentionally generic (`Registration failed.`).

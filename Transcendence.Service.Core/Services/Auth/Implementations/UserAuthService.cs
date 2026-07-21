@@ -167,6 +167,18 @@ public class UserAuthService(
             await userAccountRepository.SaveChangesAsync(ct);
     }
 
+    public async Task<AuthTokenResponse> SignInExternalAsync(UserAccount user, CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow;
+        user.FailedLoginAttempts = 0;
+        user.LockoutUntilUtc = null;
+        user.LastLoginAtUtc = now;
+        user.UpdatedAtUtc = now;
+        var response = await IssueTokensAsync(user, ct);
+        await userAccountRepository.SaveChangesAsync(ct);
+        return response;
+    }
+
     private async Task<AuthTokenResponse> IssueTokensAsync(UserAccount user, CancellationToken ct)
     {
         var accessToken = jwtService.GenerateAccessToken(user);

@@ -49,6 +49,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUserAuthService, UserAuthService>();
         services.AddScoped<IPasswordResetService, PasswordResetService>();
         services.AddScoped<IPasswordResetEmailSender, SmtpPasswordResetEmailSender>();
+        services.AddScoped<IRiotRsoService, RiotRsoService>();
         services.AddScoped<IUserPreferencesService, UserPreferencesService>();
         services.AddScoped<ILiveGameService, StoredLiveGameService>();
         services.AddScoped<ILiveGameAnalysisService, LiveGameAnalysisService>();

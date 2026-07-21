@@ -6,6 +6,7 @@ public class UserAccount
     public string Email { get; set; } = string.Empty;
     public string EmailNormalized { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
+    public string? DisplayName { get; set; }
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime? LastLoginAtUtc { get; set; }
@@ -21,4 +22,5 @@ public class UserAccount
     public ICollection<UserPasswordResetToken> PasswordResetTokens { get; set; } = new List<UserPasswordResetToken>();
     public ICollection<UserFavoriteSummoner> FavoriteSummoners { get; set; } = new List<UserFavoriteSummoner>();
     public UserPreferences? Preferences { get; set; }
+    public UserRiotAccount? RiotAccount { get; set; }
 }

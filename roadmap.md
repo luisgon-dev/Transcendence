@@ -273,15 +273,15 @@ _Make CI test reality, fix the lock protocol, restore accessibility, and add ale
 
 > The frontend is thoughtfully built on server components + ISR with backend precompute, streaming on the champion detail page, paginated match history, and consistently CLS-safe images (explicit width/height, next/font swap). The dominant risk is the Tier List: the entire ~170-row champion ladder renders in a single "use client" component with no virtualization, and each row mounts heavy per-row subcomponents including a self-contained Radix Tooltip.Provider — inflating hydration, TBT, and memory. Secondary risks are a site-wide first-load JS penalty from eagerly bundling framer-motion + cmdk in the root layout, a fully-blocking multi-fetch waterfall on the pro-builds index (no streaming), an unoptimized full-resolution splash JPG on every champion page, and over-eager Link prefetch across the dense tier-list table.
 
-- [ ] **Tier List renders the entire ~170-row ladder unvirtualized as one client component** `MED` · `large` · ✅ verified
+- [x] **Tier List renders the entire ~170-row ladder unvirtualized as one client component** `MED` · `large` · ✅ verified
   - **Fix:** Virtualize the table body (e.g. @tanstack/react-virtual) or cap the initial render with a 'show more' boundary. At minimum add CSS `content-visibility: auto` + `contain-intrinsic-size` on `.tierlist-row`/tier sections so off-screen rows skip layout/paint. Consider keeping the row list as a server component and only hydrating the interactive controls.
   - **Why:** All ~170 rows — each with a next/image icon, DataBar (with CI-whisker math), ConfidenceBadge, LaneIcon and a Tooltip — are serialized into the RSC/HTML payload and fully re-rendered on hydration. This drives up Total Blocking Time, hydration cost, and DOM size on the site's flagship analytics page. Sorting/filtering re-sorts and re-renders the whole array (memoized but still O(n) per interaction). On a role-filtered view the row count can climb further.
   - **Where:** `apps/web/components/TierListTable.tsx:1,579,590`
-- [ ] **framer-motion + cmdk eagerly bundled into every route via GlobalCommandPalette in the root layout** `MED` · `medium`
+- [x] **framer-motion + cmdk eagerly bundled into every route via GlobalCommandPalette in the root layout** `MED` · `medium`
   - **Fix:** Lazy-load the palette with `next/dynamic(..., { ssr: false })` triggered on first Cmd+K/open, and add `experimental.optimizePackageImports: ['radix-ui','framer-motion']` to next.config. Prefer CSS transitions over framer-motion for the simple height/opacity match-card expand where feasible.
   - **Why:** Site-wide first-load JavaScript is larger than necessary (framer-motion core alone is tens of KB gzipped), hurting TBT/LCP on first navigation to any route, including light pages like the landing and login.
   - **Where:** `apps/web/app/layout.tsx:5,67 ; apps/web/components/GlobalCommandPalette.tsx:1-4`
-- [ ] **Pro-builds index blocks first byte on a two-phase, up-to-13-request server fetch with no streaming** `MED` · `medium`
+- [x] **Pro-builds index blocks first byte on a two-phase, up-to-13-request server fetch with no streaming** `MED` · `medium`
   - **Fix:** Wrap the champion pro-build feed in `<Suspense>` so the toolbar + playrate table stream immediately while the per-champion feed loads. Consider a single backend endpoint that returns the feed rather than fanning out N per-champion requests.
   - **Why:** On an ISR cache miss/revalidation the user waits for two sequential network batches (5 then 8 backend round-trips) before any content paints, delaying TTFB/LCP. Unlike the champion detail page, there is no Suspense shell to stream the header first.
   - **Where:** `apps/web/app/lol/pro-builds/page.tsx:131-197`
@@ -289,7 +289,7 @@ _Make CI test reality, fix the lock protocol, restore accessibility, and add ale
   - **Fix:** Route it through next/image (fill + a small `sizes`) or use the smaller `_0` loading/centered crop, and/or serve it as a low-res/blurred decorative layer. Since it's purely decorative, consider `fetchpriority=low` and lazy behavior.
   - **Why:** Every champion page eagerly downloads a large full-res JPG purely for a 30%-opacity backdrop, wasting bandwidth and competing with LCP on mobile/slow connections for no data value.
   - **Where:** `apps/web/app/lol/champions/[championId]/page.tsx:163,171-175`
-- [ ] **Over-eager Link prefetch across the dense tier-list table (~340 default-prefetch links)** `MED` · `trivial`
+- [x] **Over-eager Link prefetch across the dense tier-list table (~340 default-prefetch links)** `MED` · `trivial`
   - **Fix:** Set `prefetch={false}` on the row/analyze links (or prefetch on hover/focus only, as the command palette already does with router.prefetch), keeping prefetch for the small set of likely-clicked links.
   - **Why:** Scrolling the tier list can trigger a large number of RSC prefetch fetches to the champion route, adding network/CPU pressure on the client and origin with low hit value (most rows are never clicked).
   - **Where:** `apps/web/components/TierListTable.tsx:323-333,406-411`

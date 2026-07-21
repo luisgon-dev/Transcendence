@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { Suspense } from "react";
 import type { components } from "@transcendence/api-client";
 
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
@@ -7,6 +8,7 @@ import { AnalyticsRegionFilter } from "@/components/AnalyticsRegionFilter";
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { Card } from "@/components/ui/Card";
 import { DataBar } from "@/components/ui/DataBar";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Toolbar } from "@/components/ui/Toolbar";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
@@ -128,9 +130,8 @@ export default async function ProBuildsIndexPage({
   const tierListQuery = new URLSearchParams();
   if (activeRegion !== "ALL") tierListQuery.set("region", activeRegion);
 
-  const [{ version, champions }, itemStatic, tierListRes, playrateRes, rosterRes] = await Promise.all([
+  const [{ version, champions }, tierListRes, playrateRes, rosterRes] = await Promise.all([
     fetchChampionMap(),
-    fetchItemMap(),
     fetchBackendJson<TierListResponse>(`${getBackendBaseUrl()}/api/lol/analytics/tierlist?${tierListQuery.toString()}`, {
       next: { revalidate: 60 * 60 }
     }),
@@ -186,44 +187,6 @@ export default async function ProBuildsIndexPage({
       : featuredChampionIds.slice(0, MAX_FEED_CHAMPIONS_DEFAULT)
   ).filter((championId, idx, rows) => rows.indexOf(championId) === idx);
 
-  const proResponses = await Promise.all(
-    feedChampionIds.map(async (championId) => ({
-      championId,
-      response: await fetchBackendJson<ChampionProBuildsResponse>(
-        `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/pro-builds?region=${encodeURIComponent(activeRegion)}&role=ALL&scope=${encodeURIComponent(scope)}`,
-        { next: { revalidate: 60 * 30 } }
-      )
-    }))
-  );
-
-  const successfulFeeds = proResponses.filter((row) => row.response.ok && row.response.body);
-  const proFeedRows: ProFeedRow[] = [];
-
-  for (const row of successfulFeeds) {
-    const body = row.response.body;
-    const recentMatches = body?.recentProMatches ?? [];
-    for (const match of recentMatches.slice(0, MAX_MATCHES_PER_CHAMPION)) {
-      proFeedRows.push({
-        championId: row.championId,
-        match,
-        patch: body?.patch
-      });
-    }
-  }
-
-  const dedupe = new Set<string>();
-  const recentMatchesFeed = proFeedRows
-    .sort((a, b) => (b.match.playedAt ?? 0) - (a.match.playedAt ?? 0))
-    .filter((entry) => {
-      const key = `${entry.match.matchId ?? "unknown"}:${entry.championId}`;
-      if (dedupe.has(key)) return false;
-      dedupe.add(key);
-      return true;
-    })
-    .slice(0, MAX_FEED_ROWS);
-
-  const failedFeedCount = proResponses.length - successfulFeeds.length;
-
   if (!tierListRes.ok) {
     return (
       <BackendErrorCard
@@ -252,7 +215,7 @@ export default async function ProBuildsIndexPage({
         title="Pro Builds"
         meta={
           <>
-            <span className="type-tabular tabular-nums">{recentMatchesFeed.length} matches</span>
+            <span className="type-tabular tabular-nums">{playrateChampions.length} ranked picks</span>
             <span aria-hidden="true">·</span>
             <span>{activeRegionLabel}</span>
             {championQuery ? (
@@ -459,114 +422,208 @@ export default async function ProBuildsIndexPage({
         </div>
       </Card>
 
-      <Card className="p-0">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-4 py-3">
-          <div>
-            <h2 className="type-section">Recent Pro Matches</h2>
-            <p className="type-ui mt-1 text-muted">
-              Click any row to open champion-specific pro builds and recent match details.
-            </p>
+      <Suspense fallback={<RecentProMatchesFallback />}>
+        <RecentProMatches
+          championIds={feedChampionIds}
+          championById={championById}
+          version={version}
+          activeRegion={activeRegion}
+          scope={scope}
+        />
+      </Suspense>
+    </div>
+  );
+}
+
+function RecentProMatchesFallback() {
+  return (
+    <Card className="p-0" aria-busy="true" aria-label="Loading recent pro matches">
+      <div className="border-b border-border/40 px-4 py-3">
+        <h2 className="type-section">Recent Pro Matches</h2>
+        <p className="type-ui mt-1 text-muted">Loading the latest tracked builds…</p>
+      </div>
+      <div className="grid gap-0">
+        {Array.from({ length: 5 }, (_, index) => (
+          <div
+            key={index}
+            className="grid gap-3 border-b border-border/20 px-4 py-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"
+          >
+            <div className="flex items-center gap-3">
+              <Skeleton className="size-[34px] shrink-0 rounded-md" />
+              <div className="grid flex-1 gap-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-3 w-48 max-w-full" />
+              </div>
+            </div>
+            <div className="hidden justify-self-end sm:grid sm:gap-2">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-3 w-28" />
+            </div>
           </div>
-          {failedFeedCount > 0 ? (
-            <p className="text-xs text-muted">
-              {failedFeedCount} champion feed{failedFeedCount === 1 ? "" : "s"} unavailable right now.
-            </p>
-          ) : null}
-        </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
 
-        {recentMatchesFeed.length === 0 ? (
-          <p className="px-4 py-4 text-sm text-muted">
-            No pro matches are available for the current selection.
+async function RecentProMatches({
+  championIds,
+  championById,
+  version,
+  activeRegion,
+  scope
+}: {
+  championIds: number[];
+  championById: Map<number, ChampionLookup>;
+  version: string;
+  activeRegion: string;
+  scope: ProBuildScope;
+}) {
+  const [itemStatic, proResponses] = await Promise.all([
+    fetchItemMap(),
+    Promise.all(
+      championIds.map(async (championId) => ({
+        championId,
+        response: await fetchBackendJson<ChampionProBuildsResponse>(
+          `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/pro-builds?region=${encodeURIComponent(activeRegion)}&role=ALL&scope=${encodeURIComponent(scope)}`,
+          { next: { revalidate: 60 * 30 } }
+        )
+      }))
+    )
+  ]);
+
+  const successfulFeeds = proResponses.filter((row) => row.response.ok && row.response.body);
+  const proFeedRows: ProFeedRow[] = [];
+
+  for (const row of successfulFeeds) {
+    for (const match of (row.response.body?.recentProMatches ?? []).slice(0, MAX_MATCHES_PER_CHAMPION)) {
+      proFeedRows.push({ championId: row.championId, match, patch: row.response.body?.patch });
+    }
+  }
+
+  const dedupe = new Set<string>();
+  const recentMatchesFeed = proFeedRows
+    .sort((a, b) => (b.match.playedAt ?? 0) - (a.match.playedAt ?? 0))
+    .filter((entry) => {
+      const key = `${entry.match.matchId ?? "unknown"}:${entry.championId}`;
+      if (dedupe.has(key)) return false;
+      dedupe.add(key);
+      return true;
+    })
+    .slice(0, MAX_FEED_ROWS);
+  const failedFeedCount = proResponses.length - successfulFeeds.length;
+
+  return (
+    <Card className="p-0">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-4 py-3">
+        <div>
+          <h2 className="type-section">Recent Pro Matches</h2>
+          <p className="type-ui mt-1 text-muted">
+            {recentMatchesFeed.length > 0
+              ? `${recentMatchesFeed.length} recent builds — open any row for champion-specific details.`
+              : "Click any row to open champion-specific pro builds and recent match details."}
           </p>
-        ) : (
-          <ul className="grid gap-0">
-            {recentMatchesFeed.map((entry, idx) => {
-              const champion = championById.get(entry.championId);
-              const championSlug = champion?.slug ?? "Unknown";
-              const championName = champion?.name ?? `Champion ${entry.championId}`;
-              const playedAt = entry.match.playedAt ?? 0;
-              const hasTimestamp = Number.isFinite(playedAt) && playedAt > 0;
-              const items = (entry.match.items ?? [])
-                .filter((itemId) => Number.isFinite(itemId) && itemId > 0)
-                .slice(0, 6);
-              return (
-                <li key={`${entry.match.matchId ?? "match"}-${entry.championId}-${idx}`}>
-                  <Link
-                    href={buildProBuildPageHref(entry.championId, {
-                      role: "ALL",
-                      region: activeRegion,
-                      scope,
-                      patch: null
-                    })}
-                    className="block border-b border-border/20 px-4 py-3 transition hover:bg-surface-2/40"
-                  >
-                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-3">
-                          <Image
-                            src={championIconUrl(version, championSlug)}
-                            alt={championName}
-                            width={34}
-                            height={34}
-                            className="rounded-md border border-border/60"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <p className="truncate text-sm font-medium text-fg">{championName}</p>
-                              <span className={`shrink-0 text-xs font-semibold sm:hidden ${entry.match.win ? "text-wr-high" : "text-wr-low"}`}>
-                                {entry.match.win ? "Win" : "Loss"}
-                              </span>
-                            </div>
-                            <p className="truncate text-xs text-muted">
-                              {entry.match.playerName ?? "Unknown player"}
-                              {entry.match.teamName ? ` (${entry.match.teamName})` : ""}
-                              {hasTimestamp ? ` · ${formatRelativeTime(playedAt)}` : ""}
-                            </p>
+        </div>
+        {failedFeedCount > 0 ? (
+          <p className="text-xs text-muted">
+            {failedFeedCount} champion feed{failedFeedCount === 1 ? "" : "s"} unavailable right now.
+          </p>
+        ) : null}
+      </div>
+
+      {recentMatchesFeed.length === 0 ? (
+        <p className="px-4 py-4 text-sm text-muted">
+          No pro matches are available for the current selection.
+        </p>
+      ) : (
+        <ul className="grid gap-0">
+          {recentMatchesFeed.map((entry, idx) => {
+            const champion = championById.get(entry.championId);
+            const championSlug = champion?.slug ?? "Unknown";
+            const championName = champion?.name ?? `Champion ${entry.championId}`;
+            const playedAt = entry.match.playedAt ?? 0;
+            const hasTimestamp = Number.isFinite(playedAt) && playedAt > 0;
+            const items = (entry.match.items ?? [])
+              .filter((itemId) => Number.isFinite(itemId) && itemId > 0)
+              .slice(0, 6);
+
+            return (
+              <li key={`${entry.match.matchId ?? "match"}-${entry.championId}-${idx}`}>
+                <Link
+                  href={buildProBuildPageHref(entry.championId, {
+                    role: "ALL",
+                    region: activeRegion,
+                    scope,
+                    patch: null
+                  })}
+                  className="block border-b border-border/20 px-4 py-3 transition hover:bg-surface-2/40"
+                >
+                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-3">
+                        <Image
+                          src={championIconUrl(version, championSlug)}
+                          alt={championName}
+                          width={34}
+                          height={34}
+                          className="rounded-md border border-border/60"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="truncate text-sm font-medium text-fg">{championName}</p>
+                            <span className={`shrink-0 text-xs font-semibold sm:hidden ${entry.match.win ? "text-wr-high" : "text-wr-low"}`}>
+                              {entry.match.win ? "Win" : "Loss"}
+                            </span>
                           </div>
-                        </div>
-
-                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          {items.map((itemId, itemIdx) => {
-                            const itemMeta = itemStatic.items[String(itemId)];
-                            return (
-                              <Image
-                                key={`${itemId}-${itemIdx}`}
-                                src={itemIconUrl(itemStatic.version, itemId)}
-                                alt={itemMeta?.name ?? `Item ${itemId}`}
-                                title={itemMeta?.name ?? `Item ${itemId}`}
-                                width={24}
-                                height={24}
-                                className="rounded-md border border-border/40"
-                              />
-                            );
-                          })}
+                          <p className="truncate text-xs text-muted">
+                            {entry.match.playerName ?? "Unknown player"}
+                            {entry.match.teamName ? ` (${entry.match.teamName})` : ""}
+                            {hasTimestamp ? ` · ${formatRelativeTime(playedAt)}` : ""}
+                          </p>
                         </div>
                       </div>
 
-                      <div className="hidden sm:block">
-                        <p className={`text-sm font-semibold ${entry.match.win ? "text-wr-high" : "text-wr-low"}`}>
-                          {entry.match.win ? "Win" : "Loss"}
-                        </p>
-                        <p className="text-xs text-muted">{entry.match.matchId ?? "Unknown match id"}</p>
-                        <p className="mt-1 text-xs text-muted">Patch {entry.patch ?? "Unknown"}</p>
-                      </div>
-
-                      <div className="hidden text-left lg:block lg:text-right">
-                        <p className="text-xs text-muted">
-                          {hasTimestamp ? formatRelativeTime(playedAt) : "Time unavailable"}
-                        </p>
-                        <p className="text-xs text-muted">
-                          {hasTimestamp ? formatDateTimeMs(playedAt) : "-"}
-                        </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        {items.map((itemId, itemIdx) => {
+                          const itemMeta = itemStatic.items[String(itemId)];
+                          return (
+                            <Image
+                              key={`${itemId}-${itemIdx}`}
+                              src={itemIconUrl(itemStatic.version, itemId)}
+                              alt={itemMeta?.name ?? `Item ${itemId}`}
+                              title={itemMeta?.name ?? `Item ${itemId}`}
+                              width={24}
+                              height={24}
+                              className="rounded-md border border-border/40"
+                            />
+                          );
+                        })}
                       </div>
                     </div>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Card>
-    </div>
+
+                    <div className="hidden sm:block">
+                      <p className={`text-sm font-semibold ${entry.match.win ? "text-wr-high" : "text-wr-low"}`}>
+                        {entry.match.win ? "Win" : "Loss"}
+                      </p>
+                      <p className="text-xs text-muted">{entry.match.matchId ?? "Unknown match id"}</p>
+                      <p className="mt-1 text-xs text-muted">Patch {entry.patch ?? "Unknown"}</p>
+                    </div>
+
+                    <div className="hidden text-left lg:block lg:text-right">
+                      <p className="text-xs text-muted">
+                        {hasTimestamp ? formatRelativeTime(playedAt) : "Time unavailable"}
+                      </p>
+                      <p className="text-xs text-muted">
+                        {hasTimestamp ? formatDateTimeMs(playedAt) : "-"}
+                      </p>
+                    </div>
+                  </div>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Card>
   );
 }

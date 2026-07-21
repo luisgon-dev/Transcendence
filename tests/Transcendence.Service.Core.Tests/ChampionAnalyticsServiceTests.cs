@@ -240,6 +240,54 @@ public class ChampionAnalyticsServiceTests
     }
 
     [Fact]
+    public async Task GetTierListAsync_ReportsResolvedFlatAndInsufficientScopeConfidence()
+    {
+        await using var harness = await Harness.CreateAsync();
+        harness.SetActivePatch("15.2", DateTime.UtcNow.AddHours(-6));
+        await harness.Db.SaveChangesAsync();
+
+        harness.WinRateService
+            .Setup(x => x.ComputeTierListFromStatsAsync(
+                "ALL", null, "ALL", "15.2", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([TierEntry(1, TierGrade.B, isLowSample: true)]);
+        harness.WinRateService
+            .Setup(x => x.ComputeTierListFromStatsAsync(
+                "TOP", null, "ALL", "15.2", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                TierEntry(1, TierGrade.B, isLowSample: false),
+                TierEntry(2, TierGrade.B, isLowSample: false)
+            ]);
+        harness.WinRateService
+            .Setup(x => x.ComputeTierListFromStatsAsync(
+                "MIDDLE", null, "ALL", "15.2", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                TierEntry(1, TierGrade.A, isLowSample: false),
+                TierEntry(2, TierGrade.B, isLowSample: false)
+            ]);
+
+        var insufficient = await harness.Service.GetTierListAsync("ALL", null, null, null, CancellationToken.None);
+        var flat = await harness.Service.GetTierListAsync("TOP", null, null, null, CancellationToken.None);
+        var resolved = await harness.Service.GetTierListAsync("MIDDLE", null, null, null, CancellationToken.None);
+
+        insufficient.Confidence.Should().Be(TierScopeConfidence.INSUFFICIENT);
+        flat.Confidence.Should().Be(TierScopeConfidence.FLAT);
+        resolved.Confidence.Should().Be(TierScopeConfidence.RESOLVED);
+    }
+
+    private static TierListEntry TierEntry(int championId, TierGrade tier, bool isLowSample) => new(
+        ChampionId: championId,
+        Role: "TOP",
+        Tier: tier,
+        StrengthScore: tier == TierGrade.A ? 0.02 : 0,
+        WinRate: 0.5,
+        PickRate: 0.1,
+        BanRate: 0.01,
+        Games: 100,
+        Movement: null,
+        PreviousTier: null,
+        IsLowSample: isLowSample);
+
+    [Fact]
     public async Task GetTrendAsync_ReturnsDurablePatchHistoryInReleaseOrderAndQueueScope()
     {
         await using var harness = await Harness.CreateAsync();

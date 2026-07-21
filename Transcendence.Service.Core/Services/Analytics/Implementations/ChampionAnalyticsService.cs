@@ -20,7 +20,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
     private const string WinRateCacheKeyPrefix = "analytics:champion:winrates:";
     // v3: per-role-first empirical-Bayes tiering (strength delta + absolute cutoffs + new entry fields).
     // Bumped so stale v2 percentile-composite payloads are not served from cache.
-    private const string TierListCacheKeyPrefix = "analytics:tierlist:v3:";
+    private const string TierListCacheKeyPrefix = "analytics:tierlist:v4:";
     // v2: ordered, timing-aware sectioned builds (Build Analysis Overhaul). Bumped so stale
     // pre-overhaul payloads are not served from cache.
     private const string BuildsCacheKeyPrefix = "analytics:builds:v2:";
@@ -223,7 +223,8 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
                 Region: normalizedRegion,
                 Entries: new List<TierListEntry>(),
                 Sample: BuildSampleMetadata(0, patchContext),
-                QueueFamily: normalizedQueue
+                QueueFamily: normalizedQueue,
+                Confidence: TierScopeConfidence.INSUFFICIENT
             );
         }
 
@@ -262,8 +263,20 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             Entries: entries,
             Sample: BuildSampleMetadata(sampleSize, patchContext),
             ComputedAtUtc: await ResolveAnalyticsFreshnessAsync(currentPatch, normalizedQueue, ct),
-            QueueFamily: normalizedQueue
+            QueueFamily: normalizedQueue,
+            Confidence: DeriveTierScopeConfidence(entries)
         );
+    }
+
+    private static TierScopeConfidence DeriveTierScopeConfidence(IReadOnlyList<TierListEntry> entries)
+    {
+        if (entries.Count == 0 || entries.All(entry => entry.IsLowSample))
+            return TierScopeConfidence.INSUFFICIENT;
+
+        var firstTier = entries[0].Tier;
+        return entries.All(entry => entry.Tier == firstTier)
+            ? TierScopeConfidence.FLAT
+            : TierScopeConfidence.RESOLVED;
     }
 
     public async Task<ChampionGradeDto?> GetGradeAsync(

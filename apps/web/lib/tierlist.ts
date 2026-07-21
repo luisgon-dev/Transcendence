@@ -2,6 +2,7 @@ import type { components } from "@transcendence/api-client";
 
 export type UITierGrade = "S" | "A" | "B" | "C" | "D";
 export type UITierMovement = "NEW" | "UP" | "DOWN" | "SAME";
+export type UITierScopeConfidence = "RESOLVED" | "FLAT" | "INSUFFICIENT";
 
 export type UITierListEntry = {
   championId: number;
@@ -52,6 +53,7 @@ type ApiTierListEntry = components["schemas"]["TierListEntry"];
 // the patch were last refreshed; it powers the "Updated N min ago" indicator.
 export type TierListResponseLike = components["schemas"]["TierListResponse"] & {
   computedAtUtc?: string | null;
+  confidence?: number | string | null;
 };
 
 export const TIER_ORDER: UITierGrade[] = ["S", "A", "B", "C", "D"];
@@ -103,6 +105,38 @@ export function decodeTierMovement(
     default:
       return "SAME";
   }
+}
+
+export function decodeTierScopeConfidence(
+  value: number | string | null | undefined
+): UITierScopeConfidence | null {
+  const normalized = typeof value === "string" ? value.toUpperCase() : value;
+
+  switch (normalized) {
+    case 0:
+    case "RESOLVED":
+      return "RESOLVED";
+    case 1:
+    case "FLAT":
+      return "FLAT";
+    case 2:
+    case "INSUFFICIENT":
+      return "INSUFFICIENT";
+    default:
+      return null;
+  }
+}
+
+/** Derives the server's scope-level confidence signal for compatibility with an older API response. */
+export function deriveTierScopeConfidence(
+  entries: Pick<UITierListEntry, "tier" | "isLowSample">[]
+): UITierScopeConfidence {
+  if (entries.length === 0 || entries.every((entry) => entry.isLowSample)) {
+    return "INSUFFICIENT";
+  }
+
+  const firstTier = entries[0].tier;
+  return entries.every((entry) => entry.tier === firstTier) ? "FLAT" : "RESOLVED";
 }
 
 function asFiniteNumber(value: unknown, fallback = 0): number {
@@ -341,4 +375,3 @@ export function summarizeTierListEntries(entries: UITierListEntry[]): TierListSu
     tierCounts
   };
 }
-

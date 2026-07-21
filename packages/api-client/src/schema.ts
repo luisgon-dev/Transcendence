@@ -5290,12 +5290,18 @@ export interface components {
             /** Format: date-time */
             computedAtUtc?: string | null;
             queueFamily: string;
+            confidence: components["schemas"]["TierScopeConfidence"];
         };
         /**
          * Format: int32
          * @enum {integer}
          */
         TierMovement: 0 | 1 | 2 | 3;
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        TierScopeConfidence: 0 | 1 | 2;
         TimelineFrameDto: {
             /** Format: int32 */
             minuteMark: number;

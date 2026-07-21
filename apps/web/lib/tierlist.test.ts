@@ -3,8 +3,10 @@ import type { components } from "@transcendence/api-client";
 
 import {
   decodeGrade,
+  decodeTierScopeConfidence,
   decodeTierGrade,
   decodeTierMovement,
+  deriveTierScopeConfidence,
   filterTierListEntries,
   formatStrengthDelta,
   normalizeTierListEntries,
@@ -58,6 +60,33 @@ describe("decodeTierMovement", () => {
     );
     expect(decodeTierMovement("SIDEWAYS")).toBe("SAME");
     expect(decodeTierMovement(undefined)).toBe("SAME");
+  });
+});
+
+describe("tier scope confidence", () => {
+  it("decodes numeric and string API values", () => {
+    expect(decodeTierScopeConfidence(0)).toBe("RESOLVED");
+    expect(decodeTierScopeConfidence(1)).toBe("FLAT");
+    expect(decodeTierScopeConfidence(2)).toBe("INSUFFICIENT");
+    expect(decodeTierScopeConfidence("flat")).toBe("FLAT");
+    expect(decodeTierScopeConfidence(99)).toBeNull();
+  });
+
+  it("derives compatibility confidence from normalized entries", () => {
+    expect(deriveTierScopeConfidence([])).toBe("INSUFFICIENT");
+    expect(deriveTierScopeConfidence([{ tier: "B", isLowSample: true }])).toBe("INSUFFICIENT");
+    expect(
+      deriveTierScopeConfidence([
+        { tier: "B", isLowSample: false },
+        { tier: "B", isLowSample: false }
+      ])
+    ).toBe("FLAT");
+    expect(
+      deriveTierScopeConfidence([
+        { tier: "A", isLowSample: false },
+        { tier: "B", isLowSample: false }
+      ])
+    ).toBe("RESOLVED");
   });
 });
 

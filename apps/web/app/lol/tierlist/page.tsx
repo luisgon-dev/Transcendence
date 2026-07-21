@@ -5,6 +5,7 @@ import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { TierListFilterBar } from "@/components/TierListFilterBar";
 import { TierListTable } from "@/components/TierListTable";
 import { Badge } from "@/components/ui/Badge";
+import { Card } from "@/components/ui/Card";
 import { Toolbar } from "@/components/ui/Toolbar";
 import {
   fetchWithGlobalAnalyticsRegionFallback,
@@ -26,7 +27,12 @@ import {
 import { roleDisplayLabel } from "@/lib/roles";
 import { socialImageUrl } from "@/lib/seo";
 import { fetchChampionMap } from "@/lib/staticData";
-import { normalizeTierListEntries, type TierListResponseLike } from "@/lib/tierlist";
+import {
+  decodeTierScopeConfidence,
+  deriveTierScopeConfidence,
+  normalizeTierListEntries,
+  type TierListResponseLike
+} from "@/lib/tierlist";
 import { UpdatedAgo } from "@/components/UpdatedAgo";
 
 type TierListResponse = TierListResponseLike;
@@ -183,6 +189,8 @@ export default async function TierListPage({
     ...entry,
     roleBaseline: roleBaselineByKey.get(`${entry.championId}-${entry.role.toUpperCase()}`) ?? 0
   }));
+  const tierScopeConfidence =
+    decodeTierScopeConfidence(tierlist.confidence) ?? deriveTierScopeConfidence(entriesWithBaseline);
 
   return (
     <div className="grid gap-4">
@@ -242,6 +250,26 @@ export default async function TierListPage({
         variant="strip"
         className="rounded-lg border border-border bg-surface/92 px-3 py-2 shadow-soft"
       />
+
+      {tierScopeConfidence !== "RESOLVED" ? (
+        <Card
+          role="status"
+          className="border-warning/40 bg-warning/10 px-4 py-3"
+          data-testid="tier-scope-confidence"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className="border-warning/40 bg-warning/20 text-fg">Scope confidence</Badge>
+            <span className="type-ui font-semibold text-fg">
+              {tierScopeConfidence === "INSUFFICIENT" ? "Insufficient data" : "Flat tier signal"}
+            </span>
+          </div>
+          <p className="mt-1.5 type-ui text-fg/75">
+            {tierScopeConfidence === "INSUFFICIENT"
+              ? "No champion has cleared this scope's adaptive confidence floor yet. Treat these grades as provisional or widen the rank and region filters."
+              : "This scope has enough games, but every champion currently resolves to the same tier. The data does not support a meaningful tier spread yet."}
+          </p>
+        </Card>
+      ) : null}
 
       <TierListTable
         entries={entriesWithBaseline}

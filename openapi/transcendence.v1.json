@@ -9858,6 +9858,7 @@
       },
       "TierListResponse": {
         "required": [
+          "confidence",
           "entries",
           "patch",
           "queueFamily",
@@ -9900,6 +9901,13 @@
           },
           "queueFamily": {
             "type": "string"
+          },
+          "confidence": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TierScopeConfidence"
+              }
+            ]
           }
         },
         "additionalProperties": false
@@ -9910,6 +9918,15 @@
           1,
           2,
           3
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "TierScopeConfidence": {
+        "enum": [
+          0,
+          1,
+          2
         ],
         "type": "integer",
         "format": "int32"

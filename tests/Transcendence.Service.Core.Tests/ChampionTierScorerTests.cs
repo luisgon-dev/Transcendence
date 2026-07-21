@@ -37,7 +37,7 @@ public class ChampionTierScorerTests
         top.ChampionId.Should().Be(1);
         top.RoleBaseline.Should().BeApproximately(0.5, 1e-12);
         top.PriorStrength.Should().BeApproximately(155.25, 1e-9);
-        top.IsLowSample.Should().BeFalse();          // 10000 >= GradeMinGamesFloor (500)
+        top.IsLowSample.Should().BeFalse();          // broad role volume resolves to the 500-game ceiling
         top.WinRate.Should().BeApproximately(0.54, 1e-12);
         top.PickRate.Should().BeApproximately(0.5, 1e-12);
         // strength = (0.54 - 0.5) * 10000 / (10000 + 155.25) = 400 / 10155.25 ≈ +0.0393885.
@@ -65,7 +65,8 @@ public class ChampionTierScorerTests
 
         var champ1 = scored.Single(c => c.ChampionId == 1);
         champ1.WinRate.Should().BeApproximately(0.75, 1e-12);
-        // mu = 0.5, k = PriorStrengthMax (2000, no champ meets PriorFitMinGames): strength = 0.25*4/2004 ≈ 0.0005.
+        // mu = 0.5, k = PriorStrengthMax (2000, no champ meets the adaptive prior-fit floor):
+        // strength = 0.25*4/2004 ≈ 0.0005.
         champ1.StrengthScore.Should().BeInRange(-0.001, 0.001);
         champ1.IsLowSample.Should().BeTrue();
         champ1.Tier.Should().Be(TierGrade.B);        // both shrunk to ~0 delta AND low-sample
@@ -75,7 +76,15 @@ public class ChampionTierScorerTests
     public void ScoreRole_ClearsTopCutoffButBelowGamesFloor_IsCappedToBAndFlaggedLowSample()
     {
         // Custom options make a 100-game champ's shrunk delta clear SMin, isolating the games-floor cap.
-        var options = new TieringOptions { PriorStrengthMin = 1, PriorStrengthMax = 10, PriorFitMinGames = 10 };
+        var options = new TieringOptions
+        {
+            PriorStrengthMin = 1,
+            PriorStrengthMax = 10,
+            PriorFitMinGamesFloor = 10,
+            PriorFitMinGamesCeiling = 10,
+            GradeMinGamesFloor = 500,
+            GradeMinGamesCeiling = 500
+        };
 
         var population = new[]
         {
@@ -88,8 +97,66 @@ public class ChampionTierScorerTests
         var champ1 = scored.Single(c => c.ChampionId == 1);
         // k = 0.25/0.04 - 1 = 5.25; strength = (0.7-0.5)*100/105.25 ≈ 0.19 — comfortably above SMin (0.03).
         champ1.StrengthScore.Should().BeGreaterThan(options.Cutoffs.SMin);
-        champ1.IsLowSample.Should().BeTrue();        // 100 < GradeMinGamesFloor (500)
+        champ1.IsLowSample.Should().BeTrue();        // 100 < fixed 500-game test floor
         champ1.Tier.Should().Be(TierGrade.B);        // would be S, but a thin sample is capped at B
+    }
+
+    [Fact]
+    public void ResolveAdaptiveThreshold_LiveCalibratedDefaultsScaleBetweenThinAndBroadScopes()
+    {
+        var options = new TieringOptions();
+
+        ChampionTierScorer.ResolveAdaptiveThreshold(
+                totalRoleGames: 2_000,
+                options.GradeRoleVolumeShare,
+                options.GradeMinGamesFloor,
+                options.GradeMinGamesCeiling)
+            .Should().Be(50);
+        ChampionTierScorer.ResolveAdaptiveThreshold(
+                totalRoleGames: 50_000,
+                options.GradeRoleVolumeShare,
+                options.GradeMinGamesFloor,
+                options.GradeMinGamesCeiling)
+            .Should().Be(150);
+        ChampionTierScorer.ResolveAdaptiveThreshold(
+                totalRoleGames: 200_000,
+                options.GradeRoleVolumeShare,
+                options.GradeMinGamesFloor,
+                options.GradeMinGamesCeiling)
+            .Should().Be(500);
+
+        ChampionTierScorer.ResolveAdaptiveThreshold(
+                totalRoleGames: 2_000,
+                options.PriorFitRoleVolumeShare,
+                options.PriorFitMinGamesFloor,
+                options.PriorFitMinGamesCeiling)
+            .Should().Be(20);
+        ChampionTierScorer.ResolveAdaptiveThreshold(
+                totalRoleGames: 200_000,
+                options.PriorFitRoleVolumeShare,
+                options.PriorFitMinGamesFloor,
+                options.PriorFitMinGamesCeiling)
+            .Should().Be(200);
+    }
+
+    [Fact]
+    public void ScoreRole_ThinScopeCanResolveSignalAboveTheAdaptiveFloor()
+    {
+        var population = new[]
+        {
+            Champ(1, "TOP", games: 100, wins: 70),
+            Champ(2, "TOP", games: 100, wins: 30),
+        };
+
+        var scored = ChampionTierScorer.ScoreRole(
+            population,
+            totalRoleGames: 200,
+            LargeScopeMatches,
+            new TieringOptions());
+
+        var strongest = scored.Single(champion => champion.ChampionId == 1);
+        strongest.IsLowSample.Should().BeFalse();
+        strongest.Tier.Should().Be(TierGrade.S);
     }
 
     [Fact]

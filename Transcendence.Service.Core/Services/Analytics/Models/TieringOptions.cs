@@ -4,8 +4,8 @@ namespace Transcendence.Service.Core.Services.Analytics.Models;
 /// Tuning knobs for the per-role-first, empirical-Bayes champion tier methodology
 /// (see <c>ChampionTierScorer</c>). Bound from configuration section <c>Analytics:Tiering</c>
 /// in both hosts. Defaults are sensible starting points — the absolute cutoffs and the prior
-/// strengths are expected to get one calibration pass against a live patch before S/D are trusted,
-/// which is why every value here is config-overridable without a logic redeploy.
+/// strengths are calibrated against live-patch scope volumes and remain config-overridable without
+/// a logic redeploy.
 /// </summary>
 public class TieringOptions
 {
@@ -26,16 +26,29 @@ public class TieringOptions
     public double PriorStrengthMax { get; set; } = 2000.0;
 
     /// <summary>
-    /// Minimum games for a champion's win rate to participate in the Beta prior fit. Excludes noisy
-    /// low-sample champions from inflating the variance (which would otherwise *reduce* shrinkage).
+    /// Lower bound for the adaptive games threshold used to include a champion in the Beta prior fit.
     /// </summary>
-    public int PriorFitMinGames { get; set; } = 200;
+    public int PriorFitMinGamesFloor { get; set; } = 20;
 
     /// <summary>
-    /// Minimum games for a champion to be eligible for S/A. Below this the champion is flagged low-sample
-    /// and capped at B, so a thin sample cannot earn a top tier even after shrinkage.
+    /// Upper bound for the adaptive games threshold used to include a champion in the Beta prior fit.
     /// </summary>
-    public int GradeMinGamesFloor { get; set; } = 500;
+    public int PriorFitMinGamesCeiling { get; set; } = 200;
+
+    /// <summary>Share of a role's games used to scale the prior-fit threshold between its bounds.</summary>
+    public double PriorFitRoleVolumeShare { get; set; } = 0.0012;
+
+    /// <summary>Lower bound for the adaptive S/A eligibility threshold.</summary>
+    public int GradeMinGamesFloor { get; set; } = 50;
+
+    /// <summary>Upper bound for the adaptive S/A eligibility threshold.</summary>
+    public int GradeMinGamesCeiling { get; set; } = 500;
+
+    /// <summary>
+    /// Share of a role's games used to scale the S/A eligibility threshold between its bounds. A champion
+    /// below the resolved threshold is flagged low-sample and capped at B.
+    /// </summary>
+    public double GradeRoleVolumeShare { get; set; } = 0.003;
 
     /// <summary>Weight on champion-select presence (games-per-match) in the "most contested" index.</summary>
     public double ContestPickWeight { get; set; } = 1.0;

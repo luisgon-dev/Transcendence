@@ -1,17 +1,47 @@
 using Microsoft.EntityFrameworkCore;
 using Transcendence.Data.Models.Auth;
+using Transcendence.Data.Models.LiveGame;
 using Transcendence.Data.Repositories.Interfaces;
 
 namespace Transcendence.Data.Repositories.Implementations;
 
 public class UserPreferencesRepository(TranscendenceContext db) : IUserPreferencesRepository
 {
-    public Task<List<UserFavoriteSummoner>> GetFavoritesAsync(Guid userAccountId, CancellationToken ct = default)
+    public Task<List<FavoriteSummonerReadModel>> GetFavoritesAsync(
+        Guid userAccountId,
+        CancellationToken ct = default)
     {
         return db.Set<UserFavoriteSummoner>()
             .AsNoTracking()
-            .Where(x => x.UserAccountId == userAccountId)
-            .OrderByDescending(x => x.CreatedAtUtc)
+            .Where(favorite => favorite.UserAccountId == userAccountId)
+            .OrderByDescending(favorite => favorite.CreatedAtUtc)
+            .Select(favorite => new FavoriteSummonerReadModel(
+                favorite.Id,
+                favorite.SummonerPuuid,
+                favorite.PlatformRegion,
+                favorite.DisplayName,
+                favorite.CreatedAtUtc,
+                db.Set<LiveGameSnapshot>()
+                    .Where(snapshot => snapshot.Puuid == favorite.SummonerPuuid
+                                       && snapshot.PlatformRegion == favorite.PlatformRegion)
+                    .OrderByDescending(snapshot => snapshot.ObservedAtUtc)
+                    .ThenByDescending(snapshot => snapshot.Id)
+                    .Select(snapshot => snapshot.State)
+                    .FirstOrDefault(),
+                db.Set<LiveGameSnapshot>()
+                    .Where(snapshot => snapshot.Puuid == favorite.SummonerPuuid
+                                       && snapshot.PlatformRegion == favorite.PlatformRegion)
+                    .OrderByDescending(snapshot => snapshot.ObservedAtUtc)
+                    .ThenByDescending(snapshot => snapshot.Id)
+                    .Select(snapshot => snapshot.GameId)
+                    .FirstOrDefault(),
+                db.Set<LiveGameSnapshot>()
+                    .Where(snapshot => snapshot.Puuid == favorite.SummonerPuuid
+                                       && snapshot.PlatformRegion == favorite.PlatformRegion)
+                    .OrderByDescending(snapshot => snapshot.ObservedAtUtc)
+                    .ThenByDescending(snapshot => snapshot.Id)
+                    .Select(snapshot => (DateTime?)snapshot.ObservedAtUtc)
+                    .FirstOrDefault()))
             .ToListAsync(ct);
     }
 

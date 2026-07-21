@@ -50,7 +50,7 @@ The live site redeploys automatically once changes land on `main`.
 **🛠 Platform**
 
 - Email auth — register, login, token refresh, password reset
-- User preferences + saved favorite summoners
+- User preferences + saved favorite summoners with fresh "live now" surfacing
 - Admin dashboard — Hangfire queue visibility, recurring-job controls, audit logs, cache invalidation, service logs, and analysis metrics
 - 80+ endpoints behind a committed OpenAPI contract
 - Per-surface rate limiting and health probes

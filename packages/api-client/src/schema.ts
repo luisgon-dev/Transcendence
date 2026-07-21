@@ -5245,6 +5245,11 @@ export interface components {
             displayName?: string | null;
             /** Format: date-time */
             createdAtUtc: string;
+            isLive: boolean;
+            liveState?: string | null;
+            liveGameId?: string | null;
+            /** Format: date-time */
+            liveObservedAtUtc?: string | null;
         };
         FrequentlyPlayedWithStat: {
             /** Format: uuid */

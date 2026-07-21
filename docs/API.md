@@ -440,7 +440,10 @@ Auth behavior notes:
 
 ### User Preferences (`UserOnly`)
 
-- Favorites and preferences under `/api/users/me/*`
+- Favorites and preferences under `/api/users/me/*`. `GET /api/users/me/favorites` includes the
+  latest stored live-game observation (`liveState`, `liveGameId`, `liveObservedAtUtc`) and an
+  `isLive` convenience flag. `isLive` is true only for an `in_game` observation no more than ten
+  minutes old, so a stale worker snapshot cannot present a player as currently live.
 
 ## OpenAPI Generation Workflow
 

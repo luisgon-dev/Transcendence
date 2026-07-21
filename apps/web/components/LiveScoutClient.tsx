@@ -6,15 +6,25 @@ import { LiveGameCard } from "@/components/LiveGameCard";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Select";
-import { LOL_REGION_OPTIONS } from "@/lib/lolRegions";
+import { LOL_REGION_OPTIONS, normalizeLolRegionSlug } from "@/lib/lolRegions";
 import { parseRiotIdInput, type RiotId } from "@/lib/riotid";
 
 type ScoutTarget = RiotId & { region: string };
 
-export function LiveScoutClient() {
-  const [region, setRegion] = useState("na");
-  const [riotId, setRiotId] = useState("");
-  const [target, setTarget] = useState<ScoutTarget | null>(null);
+export function LiveScoutClient({
+  initialRegion,
+  initialRiotId
+}: {
+  initialRegion?: string;
+  initialRiotId?: string;
+} = {}) {
+  const normalizedInitialRegion = normalizeLolRegionSlug(initialRegion);
+  const parsedInitialRiotId = parseRiotIdInput(initialRiotId ?? "");
+  const [region, setRegion] = useState(normalizedInitialRegion);
+  const [riotId, setRiotId] = useState(initialRiotId ?? "");
+  const [target, setTarget] = useState<ScoutTarget | null>(
+    parsedInitialRiotId ? { region: normalizedInitialRegion, ...parsedInitialRiotId } : null
+  );
   const [error, setError] = useState<string | null>(null);
 
   function submit(event: FormEvent<HTMLFormElement>) {

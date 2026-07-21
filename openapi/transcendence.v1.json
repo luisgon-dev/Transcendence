@@ -8405,6 +8405,7 @@
         "required": [
           "createdAtUtc",
           "id",
+          "isLive",
           "platformRegion",
           "summonerPuuid"
         ],
@@ -8427,6 +8428,22 @@
           "createdAtUtc": {
             "type": "string",
             "format": "date-time"
+          },
+          "isLive": {
+            "type": "boolean"
+          },
+          "liveState": {
+            "type": "string",
+            "nullable": true
+          },
+          "liveGameId": {
+            "type": "string",
+            "nullable": true
+          },
+          "liveObservedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           }
         },
         "additionalProperties": false

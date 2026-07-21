@@ -478,7 +478,7 @@ _Discoverability, multi-mode analytics, and the champ-select hook_
   - **Fix:** If pursuing breadth, integrate an esports schedule/results feed (e.g. LoL Esports data) into a /lol/esports hub; otherwise clarify positioning so 'Pro' isn't confused with esports coverage.
   - **Why:** u.gg, Mobalytics and Blitz run esports hubs (schedules, results, pro team comps) that pull fans in daily during splits. This is a differentiator rather than table stakes, but its absence caps engagement outside of ranked players.
   - **Where:** `apps/web/app/lol/pro-builds + ProAnalyticsController.cs:25,42 (champions/players); grep 'esport|lck|lec|worlds|schedule' across source → 0 hits`
-- [ ] **No retention/growth hooks: no notifications/alerts, no sharing/embeds, no companion/overlay** `LOW` · `medium` · ✅ verified
+- [x] **No retention/growth hooks: no notifications/alerts, no sharing/embeds, no companion/overlay** `LOW` · `medium` · ✅ verified
   - **Fix:** Start cheap: 'favorite is live now' surfacing on the favorites page and shareable OG cards for profiles/champions; consider a lightweight browser or in-client companion later.
   - **Why:** Daily drivers rely on pull mechanics: Blitz/Porofessor use a desktop client, op.gg pushes 'your favorite is in game', and everyone leans on shareable cards. Transcendence is purely pull-to-refresh in a browser tab, so it has no mechanism to bring users back between intentional visits.
   - **Where:** `absent — grep 'notification|webhook|alert|embed' across source → 0 product hits; no in-client/overlay app in repo; only manual favorites (UserPreferencesController)`
@@ -737,7 +737,7 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > The App Router architecture is largely sound and, in places, genuinely sophisticated: a clean BFF trust-boundary design (no-credentials public allowlist proxy, per-namespace credential injection, cookie stripping in both directions), no secrets in the client bundle, a well-reasoned Next 16 `proxy.ts` middleware that refreshes-and-persists tokens before render, and correct Suspense streaming on the champion detail page. The main architectural weaknesses are concentrated in the summoner-profile surface, which abandons the server-streaming pattern used elsewhere and pushes nearly all data fetching (match history, rank history, and four full static-data maps) to the client as a post-hydration waterfall. Secondary issues are missing per-request deduplication of `getSessionMe` (blocking, un-suspended, called twice on admin routes) and a couple of pages/fetch paths that fetch on the client where the server already has the data.
 
-- [ ] **Favorites page is fully client-rendered when the initial list could be server-fetched** `LOW` · `medium`
+- [x] **Favorites page is fully client-rendered when the initial list could be server-fetched** `LOW` · `medium`
   - **Fix:** Render the page as a server component that fetches the initial favorites list (via the session-aware backend call), and keep a small client island only for the interactive remove/add actions.
   - **Why:** Extra client round-trip and a loading flash on an authenticated route whose first paint could be data-complete; minor but inconsistent with the server-first pattern the analytics pages follow.
   - **Where:** `apps/web/app/account/favorites/page.tsx:20-58`

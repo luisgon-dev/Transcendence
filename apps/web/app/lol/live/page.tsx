@@ -22,6 +22,11 @@ export const metadata: Metadata = {
   twitter: { card: "summary_large_image", title, description, images: [image] }
 };
 
-export default function LiveScoutPage() {
-  return <LiveScoutClient />;
+export default async function LiveScoutPage({
+  searchParams
+}: {
+  searchParams?: Promise<{ region?: string; riotId?: string }>;
+}) {
+  const resolved = searchParams ? await searchParams : undefined;
+  return <LiveScoutClient initialRegion={resolved?.region} initialRiotId={resolved?.riotId} />;
 }

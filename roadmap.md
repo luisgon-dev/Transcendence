@@ -482,7 +482,7 @@ _Discoverability, multi-mode analytics, and the champ-select hook_
   - **Fix:** Start cheap: 'favorite is live now' surfacing on the favorites page and shareable OG cards for profiles/champions; consider a lightweight browser or in-client companion later.
   - **Why:** Daily drivers rely on pull mechanics: Blitz/Porofessor use a desktop client, op.gg pushes 'your favorite is in game', and everyone leans on shareable cards. Transcendence is purely pull-to-refresh in a browser tab, so it has no mechanism to bring users back between intentional visits.
   - **Where:** `absent — grep 'notification|webhook|alert|embed' across source → 0 product hits; no in-client/overlay app in repo; only manual favorites (UserPreferencesController)`
-- [ ] **Casual-user onboarding is thin — landing is search + tier list, no guidance layer** `LOW` · `small` · ✅ verified
+- [x] **Casual-user onboarding is thin — landing is search + tier list, no guidance layer** `LOW` · `small` · ✅ verified
   - **Fix:** Add a lightweight guidance strip for query-less visitors (e.g. 'easy champions to climb with' by role, a one-line 'how tiers are computed' explainer) without compromising the data-first center of gravity.
   - **Why:** PRODUCT.md deliberately centers competitive climbers, which is defensible — but the owner's stated goal is a *general-purpose* daily driver, and a first-time casual visitor with no summoner name in mind gets a tier list and little else. Competitors offer 'champions to climb with', role-based starter guidance, and explainer copy.
   - **Where:** `apps/web/app/page.tsx (search launcher + tier list 'top picks' strip); SiteHeaderClient.tsx:16-18 nav = Tier List/Champions/Pro Builds`

@@ -227,6 +227,8 @@ Tier methodology (`GET /api/lol/analytics/tierlist`):
 - `rankedSoloDuoMatchCount` (backward-compatible alias of `matchCount`; use `matchCount` for new clients)
 
 `GET /api/lol/analytics/champions/{championId}/builds` includes full rune setup per build:
+
+- `builds[]` is ordered by `games × winRate` (observed wins), balancing sample support and results rather than sorting by raw win rate alone. A later variant can therefore have a higher rate on fewer games.
 - `primaryStyleId`, `subStyleId`
 - `primaryRunes` (4), `subRunes` (2), `statShards` (3)
 - Each build (and each build-path variant below) carries `games`, `winRate`, and `pickRate`. `pickRate` is the share of scoped games using that variant (0–1): main `builds[]` vs the champion+role+scope total; build-path sections vs their own section denominator. It is additive and defaults to `0` for snapshots computed before the field existed (clients hide a `0` pick rate); real values populate on the next analytics refresh.

@@ -618,6 +618,11 @@ async function ChampionSections({
                 />
               ) : null}
 
+              <p className="type-note text-muted">
+                Recommended balances sample size and results (games × win rate). An alternative may
+                show a higher rate from fewer games.
+              </p>
+
               {buildRows.map((b, idx) => (
                 <details
                   key={idx}
@@ -641,7 +646,7 @@ async function ChampionSections({
                           strokeLinejoin="round"
                         />
                       </svg>
-                      {idx === 0 ? "Recommended Build" : `Alternative ${idx}`}
+                      {idx === 0 ? "Recommended Build · Most proven" : `Alternative ${idx}`}
                     </span>
                     <span className="text-xs text-muted">
                       <WinRateText value={b.winRate} decimals={1} games={b.games} />

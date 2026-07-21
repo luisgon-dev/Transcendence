@@ -361,7 +361,7 @@ _Make CI test reality, fix the lock protocol, restore accessibility, and add ale
   - **Fix:** Add a shared focus-visible ring to `.control-tab` (e.g. `:focus-visible { box-shadow: inset 0 -2px 0 var(--t-primary), 0 0 0 2px color-mix(in oklch, var(--t-primary), transparent 78%); }`) and to the hero pill Links / Search button. Keep the global `outline:none` only where a token ring replaces it.
   - **Why:** A keyboard-only user tabbing through the champion detail role filters, matchup sort, region/scope filters, and pro-builds pages sees no indication of which control is focused — they cannot tell where they are. This is a clear WCAG 2.1 SA 2.4.7 (Focus Visible) failure across the primary interactive surface of both in-scope pages, and directly contradicts CLAUDE.md principle 6 ('keyboard navigability … accessibility is a baseline').
   - **Where:** `apps/web/app/globals.css:233-235 and :604-617; apps/web/components/RoleFilterTabs.tsx:44-52; apps/web/components/MatchupsTable.tsx:54-69; apps/web/app/lol/champions/[championId]/page.tsx:297-308`
-- [ ] **"Recommended Build" can show a lower win rate than the collapsed "Alternative 1", with no explanation** `MED` · `small`
+- [x] **"Recommended Build" can show a lower win rate than the collapsed "Alternative 1", with no explanation** `MED` · `small`
   - **Fix:** Either sort so the recommended build is defensibly best, or label the axis of recommendation (e.g. 'Most played · 144 games' vs 'Higher win rate, smaller sample') and add a one-line tooltip explaining that Recommended weights sample size/popularity. The existing Confidence pip vocabulary could carry this.
   - **Why:** This directly undercuts the page's core job ('which build do I actually use?'). A casual user sees a build labelled 'Recommended' underperforming a hidden 'Alternative' by ~7pp; a competitive user optimizing win rate is actively misled into distrusting the ranking. The naming asserts a recommendation the visible numbers contradict, with zero rationale.
   - **Where:** `apps/web/app/lol/champions/[championId]/page.tsx:526-554 (BuildRows) — screenshot d-champ-detail.png Builds card`
@@ -369,7 +369,7 @@ _Make CI test reality, fix the lock protocol, restore accessibility, and add ale
   - **Fix:** Reuse/adapt BuildBreakdown (or at least name the common builds by their differentiator — 'Lethality opener', 'Bruiser') and lead with a single recommended pro build + runes before the per-match feed.
   - **Why:** The page a user reaches specifically to see how the best players build a champion is the weakest build view in the product. A first-time visitor cannot extract 'the pro build' — they get an undifferentiated list. This wastes the strong BuildBreakdown component that already exists and violates CLAUDE.md principle 4 (progressive disclosure / show the answer first).
   - **Where:** `apps/web/app/lol/pro-builds/[championId]/page.tsx:369-397 (Common Builds) and :400-487 (Recent Pro Matches) — screenshot d-probuild-detail.png`
-- [ ] **Win-rate-by-rank strip is ordered by sample size, not by the rank ladder** `MED` · `trivial`
+- [x] **Win-rate-by-rank strip is ordered by sample size, not by the rank ladder** `MED` · `trivial`
   - **Fix:** Sort by the canonical rank ordinal (ranks.ts already has the ladder ordering used elsewhere), keep games in the tooltip/whisker. Optionally add tiny rank crests for scannability.
   - **Why:** A casual user scanning 'how does this champ do at MY rank?' must hunt through an arbitrary order; the eye expects a monotonic Iron→Challenger (or reverse) ladder. The diverging bars are excellent but the axis they hang off is unreadable as a progression.
   - **Where:** `apps/web/app/lol/champions/[championId]/page.tsx:464-467 — screenshot d-champ-detail.png ('WIN RATE BY RANK')`
@@ -377,7 +377,7 @@ _Make CI test reality, fix the lock protocol, restore accessibility, and add ale
   - **Fix:** Show a short inline label on wider layouts (e.g. 'Stable') or an accessible-by-default caption; enlarge the hit/focus target to ≥24px; consider making it non-focusable when an adjacent text label already conveys the same signal to reduce tab noise.
   - **Why:** On mobile (no hover) a casual user sees three cryptic bars with no way to learn what they mean; on keyboard they collect dozens of tiny tab stops. CLAUDE.md insists 'Confidence is DATA, never decoration' — but here the data is only legible to a mouse user who happens to hover.
   - **Where:** `apps/web/components/ui/Confidence.tsx:41-64 (used throughout BuildBreakdown.tsx:219,247,282,298)`
-- [ ] **Pro Builds detail error state stacks a "Data Unavailable" card on top of three empty section cards** `MED` · `small`
+- [x] **Pro Builds detail error state stacks a "Data Unavailable" card on top of three empty section cards** `MED` · `small`
   - **Fix:** When `!proBuildsRes.ok`, render only the error card (and keep the Filters card) — suppress the empty Top Players/Common Builds/Recent Matches sections instead of showing three redundant empties.
   - **Why:** A single backend failure produces four stacked failure/empty panels saying roughly the same thing, plus a header badge reading '0 matches' and 'Patch Unknown'. It reads as broken and cluttered rather than one clean error, and buries the still-useful filters.
   - **Where:** `apps/web/app/lol/pro-builds/[championId]/page.tsx:324-336 then :338-487`
@@ -390,7 +390,7 @@ _Make CI test reality, fix the lock protocol, restore accessibility, and add ale
   - **Fix:** Interleave with `order` utilities so mobile order is hero → Ranked snapshot → PerformanceCard → MatchHistorySection → (mastery, champion pool, duo, live-game). Split ProfileSidebar into a top slice (ranked) that floats above matches and a bottom slice that drops below on mobile. Keep the desktop xl two-column layout unchanged.
   - **Why:** On the most-used device class, the profile's primary content (match history + recent-form context) is the last thing a user reaches, contradicting the "show the answer first" / progressive-disclosure principle. Casual players (a stated primary audience) come for recent games yet must scroll through mastery/duo/live-game cards first.
   - **Where:** `apps/web/components/SummonerProfileUnified.tsx:446-457`
-- [ ] **Failed / not-found profile renders a permanent loading skeleton under the error banner** `MED` · `small`
+- [x] **Failed / not-found profile renders a permanent loading skeleton under the error banner** `MED` · `small`
   - **Fix:** When `error && !profile`, replace the skeleton card with a dedicated EmptyState (the primitive exists) — e.g. "We couldn't find <RiotId> in <REGION>" with a Search CTA and a Retry action — instead of an endless Skeleton. Only render the skeleton while `polling`/`busy`.
   - **Why:** A not-found or errored profile looks half-broken/still-loading rather than clearly "we couldn't find this player." Undermines trust on exactly the failure path where clarity matters most, and offers no recovery action (search again, retry).
   - **Where:** `apps/web/components/SummonerProfileUnified.tsx:441-444`
@@ -398,7 +398,7 @@ _Make CI test reality, fix the lock protocol, restore accessibility, and add ale
   - **Fix:** Add a "Forgot password?" link + reset flow (or explicitly state recovery isn't available if intentionally omitted). Add a password show/hide toggle to both forms and a confirm-password field to register. Keep the email-only stance if desired.
   - **Why:** A user who forgets their password has zero in-product recovery path; lockout forces a second account. No reveal toggle raises entry friction on the enforced 12-char passwords, and no confirm field means a signup typo silently locks the new account. The "No Riot auth" stance is a fine deliberate choice; the missing recovery is the real gap.
   - **Where:** `apps/web/app/account/login/page.tsx:70-111`
-- [ ] **Add Favorite is add-only: no favorited/toggle state, silent duplicates, non-actionable login prompt** `MED` · `medium`
+- [x] **Add Favorite is add-only: no favorited/toggle state, silent duplicates, non-actionable login prompt** `MED` · `medium`
   - **Fix:** Fetch favorite state on mount and render a real toggle (Added ✓ ↔ Add Favorite) that removes on second press; make the 401 message a Link to /account/login with a return path; disable/replace the button once saved to prevent duplicate POSTs.
   - **Why:** Users can't tell a player is already saved, may create duplicates, and a signed-out user is told to log in with no one-click way to do so. The control reads as a one-shot rather than a stateful toggle.
   - **Where:** `apps/web/components/FavoriteButton.tsx:29-59`
@@ -406,7 +406,7 @@ _Make CI test reality, fix the lock protocol, restore accessibility, and add ale
   - **Fix:** Replace sub-muted fg tints (text-fg/55, text-fg/64) on small type with the `text-muted` token (or bump to >=text-fg/72, which passes). Audit the profile for `text-fg/5x`/`/6x` on text-xs and standardize on the token so contrast holds in both themes.
   - **Why:** Timestamps, rank indices, and per-champion meta are the scannable scaffolding of the profile; in light mode they are hard to read for low-vision users, breaching the "inclusive by default" baseline. Dark mode is borderline-passing but light fails.
   - **Where:** `apps/web/components/lol-profile/ProfileSidebar.tsx:205`
-- [ ] **"Expand details" affordance is a faint text-only label with no caret/icon** `MED` · `small`
+- [x] **"Expand details" affordance is a faint text-only label with no caret/icon** `MED` · `small`
   - **Fix:** Add a rotating chevron icon (mirroring the by-role <details> caret in PerformanceCard.tsx:156-162) next to the label and raise its contrast (text-muted or fg/80). Consider a subtle full-width bottom affordance so the expand target reads as interactive on touch.
   - **Why:** Discoverability of the richest feature (per-match scoreboard, runes, takeaways, gold curve) hinges on a subtle label many users won't register; the type-overline + fg/65 also compounds the contrast issue above. Progressive disclosure only works if the "there's more here" cue is legible.
   - **Where:** `apps/web/components/lol-profile/MatchHistorySection.tsx:300-302`

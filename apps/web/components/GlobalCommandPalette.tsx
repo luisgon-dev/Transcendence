@@ -539,7 +539,7 @@ export function GlobalCommandPalette() {
               <VisuallyHidden.Root asChild>
                 <Dialog.Title>Global search</Dialog.Title>
               </VisuallyHidden.Root>
-              <Command shouldFilter={false} className="relative w-full">
+              <Command label="Global search input" shouldFilter={false} className="relative w-full">
                 <motion.div
                   variants={resultsContainerVariants}
                   initial="hidden"

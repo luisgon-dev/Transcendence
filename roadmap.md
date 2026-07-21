@@ -247,7 +247,7 @@ _Make CI test reality, fix the lock protocol, restore accessibility, and add ale
   - **Fix:** Add end-to-end tests with WebApplicationFactory hitting representative public / AppOnly (X-API-Key) / admin endpoints with no credentials, wrong credentials, and correct credentials, asserting 401/403 vs 200. At minimum, unit-test the ApiKeyAuthenticationHandler and policy definitions directly.
   - **Why:** The access-control boundary — arguably the highest-risk thing to get wrong in an admin/AppOnly API — has no regression protection. Dropping an [Authorize] attribute, misconfiguring a policy, or breaking the X-API-Key scheme would not fail any test.
   - **Where:** `tests/Transcendence.WebAPI.Tests/SummonersControllerTests.cs:243-273; ProSummonersControllerTests.cs:47-54; AdminOperationsControllerTests.cs`
-- [ ] **Frontend tests cover only lib/ pure functions — zero component, page, or rendering tests despite substantial UI** `MED` · `large`
+- [x] **Frontend tests cover only lib/ pure functions — zero component, page, or rendering tests despite substantial UI** `MED` · `large`
   - **Fix:** Add React Testing Library component tests for the highest-risk interactive components (command palette, tier-list table, profile/match-history), focused on state transitions and empty/error/loading branches; wire them into `pnpm --filter web test`.
   - **Why:** Regressions in rendering logic, loading/empty/error states, accessibility affordances, and data wiring in the React tree are caught only by the compose e2e script (not in the standard PR test gate) or by manual review. The frontend correctness signal is limited to domain/proxy utilities.
   - **Where:** `apps/web/lib/*.test.ts (20 files) + apps/web/proxy.test.ts; apps/web/package.json:10`

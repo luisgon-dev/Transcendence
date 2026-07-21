@@ -5,8 +5,8 @@ using Hangfire.Storage;
 using Hangfire.Storage.Monitoring;
 using Microsoft.Extensions.Options;
 using Transcendence.Service.Core.Services.Admin.Interfaces;
+using Transcendence.Service.Core.Services.Admin.Models;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
-using Transcendence.WebAPI.Controllers;
 
 namespace Transcendence.Service.Core.Services.Admin.Implementations;
 

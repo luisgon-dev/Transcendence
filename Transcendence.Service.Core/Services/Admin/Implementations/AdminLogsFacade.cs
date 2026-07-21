@@ -2,8 +2,8 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Transcendence.Service.Core.Services.Admin.Interfaces;
+using Transcendence.Service.Core.Services.Admin.Models;
 using Transcendence.Service.Core.Services.Diagnostics;
-using Transcendence.WebAPI.Controllers;
 
 namespace Transcendence.Service.Core.Services.Admin.Implementations;
 

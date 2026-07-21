@@ -1,5 +1,5 @@
+using Transcendence.Service.Core.Services.Admin.Models;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
-using Transcendence.WebAPI.Controllers;
 
 namespace Transcendence.Service.Core.Services.Admin.Interfaces;
 

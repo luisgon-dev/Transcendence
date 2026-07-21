@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Transcendence.Service.Core.Services.Admin.Implementations;
 using Transcendence.Service.Core.Services.Admin.Interfaces;
+using Transcendence.Service.Core.Services.Admin.Models;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Models;

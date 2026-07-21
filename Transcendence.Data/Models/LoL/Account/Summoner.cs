@@ -23,7 +23,6 @@ public class Summoner
     // signal for candidate selection (distinct from UpdatedAt, which is fetch/coverage recency).
     // Null until the summoner next appears in an ingested match. Maintained in MatchService.
     public DateTime? LastActiveAtUtc { get; set; }
-    public List<Match.Match> Matches { get; } = [];
     public ICollection<MatchParticipant> MatchParticipants { get; } = [];
     public ICollection<SummonerIngestionCursor> IngestionCursors { get; } = [];
     public ICollection<Rank> Ranks { get; set; } = new List<Rank>();

@@ -41,6 +41,19 @@ public sealed class SchemaMigrationTests(PostgresIntegrationFixture fixture)
     }
 
     [Fact]
+    public async Task RedundantMatchSummonerTable_IsNotInTheCurrentSchema()
+    {
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<TranscendenceContext>();
+
+        await db.Database.OpenConnectionAsync();
+        await using var command = db.Database.GetDbConnection().CreateCommand();
+        command.CommandText = "SELECT to_regclass('public.\"MatchSummoner\"') IS NULL";
+
+        (await command.ExecuteScalarAsync()).Should().Be(true);
+    }
+
+    [Fact]
     public void TestHost_PointsMainDatabaseConnectionString_AtTheContainer()
     {
         using var scope = fixture.Factory.Services.CreateScope();

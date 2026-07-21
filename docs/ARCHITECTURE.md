@@ -276,7 +276,7 @@ detail is archived off-box and pruned to keep the database from growing unbounde
   players' deeper profile insights.
 - **Archival job** (`scripts/ops/archive-old-patches.sh`, weekly cron on the Docker host): for each eligible
   patch it streams `Matches` + all cascade children (`MatchParticipants`, `MatchParticipantItems`,
-  `MatchParticipantRunes`, `MatchBans`, `MatchSummoner`, `MatchParticipantTimelineSnapshots`,
+  `MatchParticipantRunes`, `MatchBans`, `MatchParticipantTimelineSnapshots`,
   `MatchTimelineFetchStates`) out via Postgres `COPY` → `gzip` → `ssh` to the NAS, verifies each archive
   (gzip integrity + exact row count) and only then prunes (one cascading `DELETE` on `Matches`, batched).
   Restore is `zcat <Table>.csv.gz | psql -c "COPY \"<Table>\" FROM STDIN WITH (FORMAT csv, HEADER true)"`

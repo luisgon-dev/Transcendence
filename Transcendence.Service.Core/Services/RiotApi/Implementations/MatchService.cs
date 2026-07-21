@@ -106,9 +106,6 @@ public class MatchService(
             var summoner = summonersByPuuid[p.Puuid!];
             TouchLastActive(summoner, match.MatchDate);
 
-            // Link summoner to this match (many-to-many)
-            if (match.Summoners.All(s => s.Id != summoner.Id)) match.Summoners.Add(summoner);
-
             if (!seenSummonerIds.Add(summoner.Id) || !seenParticipantIds.Add(p.ParticipantId))
             {
                 skippedDuplicateParticipants++;
@@ -294,8 +291,6 @@ public class MatchService(
             }
 
             TouchLastActive(summoner, match.MatchDate);
-
-            if (match.Summoners.All(s => s.Id != summoner.Id)) match.Summoners.Add(summoner);
 
             if (!seenLightweightSummonerIds.Add(summoner.Id) || !seenLightweightParticipantIds.Add(p.ParticipantId))
             {
@@ -484,8 +479,6 @@ public class MatchService(
             {
                 var summoner = summonersByPuuid[p.Puuid!];
                 TouchLastActive(summoner, match.MatchDate);
-
-                if (match.Summoners.All(s => s.Id != summoner.Id)) match.Summoners.Add(summoner);
 
                 if (!seenRetrySummonerIds.Add(summoner.Id) || !seenRetryParticipantIds.Add(p.ParticipantId))
                 {

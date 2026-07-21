@@ -44,7 +44,13 @@ public class ChampionAnalyticsControllerTests
         service.Setup(x => x.GetTrendAsync(
                 103, "MIDDLE", "EMERALD_PLUS", "RANKED_SOLO_DUO", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChampionTrendResponse(103, "RANKED_SOLO_DUO", "MIDDLE", "EMERALD_PLUS", "ALL", []));
-        var controller = new ChampionAnalyticsController(service.Object, null);
+        var synergy = new Mock<IChampionSynergyService>();
+        synergy.Setup(x => x.GetSynergiesAsync(
+                103, "MIDDLE", "EMERALD_PLUS", "KR", "RANKED_SOLO_DUO", "15.1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ChampionSynergiesResponse(
+                103, "MIDDLE", "EMERALD_PLUS", "KR", "15.1", "RANKED_SOLO_DUO", 20, 11, 0.55,
+                [new ChampionSynergyEntryDto(64, "JUNGLE", 10, 6, 0.6, 0.5, 0.05, 0.01)]));
+        var controller = new ChampionAnalyticsController(service.Object, null, synergy.Object);
 
         var result = await controller.GetProfile(103, null, "EMERALD_PLUS", "KR", null, "15.1", CancellationToken.None);
 
@@ -54,6 +60,26 @@ public class ChampionAnalyticsControllerTests
         payload.WinRates.ByRoleTier.Should().HaveCount(2);
         payload.Builds.Role.Should().Be("MIDDLE");
         payload.Matchups.Role.Should().Be("MIDDLE");
+        payload.Synergies!.BestPartners.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task GetSynergies_ForwardsScopeFilters()
+    {
+        var analytics = new Mock<IChampionAnalyticsService>();
+        var synergy = new Mock<IChampionSynergyService>();
+        synergy.Setup(x => x.GetSynergiesAsync(
+                103, "MIDDLE", "EMERALD_PLUS", "KR", "flex", "15.1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ChampionSynergiesResponse(
+                103, "MIDDLE", "EMERALD_PLUS", "KR", "15.1", "RANKED_FLEX", 0, 0, 0, []));
+        var controller = new ChampionAnalyticsController(analytics.Object, null, synergy.Object);
+
+        var result = await controller.GetSynergies(
+            103, "MIDDLE", "EMERALD_PLUS", "KR", "flex", "15.1", CancellationToken.None);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        synergy.Verify(x => x.GetSynergiesAsync(
+            103, "MIDDLE", "EMERALD_PLUS", "KR", "flex", "15.1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

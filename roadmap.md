@@ -470,7 +470,7 @@ _Discoverability, multi-mode analytics, and the champ-select hook_
   - **Fix:** Add /lol/items and /lol/runes index + detail pages driven by the existing build corpus (win rate / pick rate per item and per rune, by champion/role).
   - **Why:** u.gg and lolalytics ship item stat pages ('which champs build this, win rate by item') and rune-stats pages. These are secondary but expected exploration surfaces for theorycrafters and add indexable long-tail SEO pages. Their absence narrows the site to champion/profile only.
   - **Where:** `absent — apps/web/app/lol/ contains only champions, pro-builds, summoners, tierlist; apps/web/app/api/static/{items,runes} are Data Dragon passthrough only`
-- [ ] **No team-composition, synergy, or duo tools — only per-champion counters** `MED` · `medium` · ✅ verified
+- [x] **No team-composition, synergy, or duo tools — only per-champion counters** `MED` · `medium` · ✅ verified
   - **Fix:** Add champion synergy (co-occurrence win rate for bot-lane and jungle+lane pairs) and a 'best partners' section on champion pages, reusing the existing matchup compute pipeline.
   - **Why:** Mobalytics/u.gg offer synergy and duo/lane-partner data and team-comp tools that competitive duos rely on. Counters alone answer 'is this matchup winnable' but not 'who should I duo/pair with', a common recurring question.
   - **Where:** `Transcendence.WebAPI/Controllers/ChampionAnalyticsController.cs:223 (matchups only); grep 'synerg|duo' across source → 0 hits`

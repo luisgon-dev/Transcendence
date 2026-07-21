@@ -2328,6 +2328,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/lol/analytics/champions/{championId}/synergies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    role?: string;
+                    rankTier?: string;
+                    region?: string;
+                    queue?: string;
+                    patch?: string;
+                };
+                header?: never;
+                path: {
+                    championId: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ChampionSynergiesResponse"];
+                        "application/json": components["schemas"]["ChampionSynergiesResponse"];
+                        "text/json": components["schemas"]["ChampionSynergiesResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/lol/analytics/champions/{championId}/winrates": {
         parameters: {
             query?: never;
@@ -5019,6 +5093,7 @@ export interface components {
             grade?: components["schemas"]["ChampionGradeDto"] | null;
             queueFamily: string;
             trend?: components["schemas"]["ChampionTrendResponse"] | null;
+            synergies?: components["schemas"]["ChampionSynergiesResponse"] | null;
         };
         ChampionStatDto: {
             /** Format: int32 */
@@ -5045,6 +5120,39 @@ export interface components {
             avgVisionScore: number;
             /** Format: double */
             avgDamageToChamps: number;
+        };
+        ChampionSynergiesResponse: {
+            /** Format: int32 */
+            championId: number;
+            role: string;
+            rankTier: string;
+            region: string;
+            patch: string;
+            queueFamily: string;
+            /** Format: int32 */
+            totalGames: number;
+            /** Format: int32 */
+            totalWins: number;
+            /** Format: double */
+            baselineWinRate: number;
+            bestPartners: components["schemas"]["ChampionSynergyEntryDto"][];
+        };
+        ChampionSynergyEntryDto: {
+            /** Format: int32 */
+            partnerChampionId: number;
+            partnerRole: string;
+            /** Format: int32 */
+            games: number;
+            /** Format: int32 */
+            wins: number;
+            /** Format: double */
+            winRate: number;
+            /** Format: double */
+            pickRate: number;
+            /** Format: double */
+            winRateDelta: number;
+            /** Format: double */
+            confidenceScore: number;
         };
         ChampionTrendPointDto: {
             patch: string;

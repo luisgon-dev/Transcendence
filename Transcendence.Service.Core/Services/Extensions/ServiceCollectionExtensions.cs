@@ -69,6 +69,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IChampionAnalyticsService, ChampionAnalyticsService>();
         services.AddScoped<IAnalyticsPatchQueryService, AnalyticsPatchQueryService>();
         services.AddScoped<IBuildResourceAnalyticsService, BuildResourceAnalyticsService>();
+        services.AddScoped<IChampionSynergyService, ChampionSynergyService>();
         services.AddScoped<IPrecomputedAnalyticsRefresher, PrecomputedAnalyticsRefresher>();
 
         return services;

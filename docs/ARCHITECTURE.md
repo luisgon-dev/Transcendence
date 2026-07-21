@@ -57,7 +57,7 @@ Transcendence is a backend + web monorepo:
 - Admin dashboard routes under `/admin/*` for ops controls/reports (JWT `admin` role required)
 - Frontend analysis routes:
   - `/lol/tierlist`
-  - `/lol/champions/*` is the unified champion surface: win rates, builds (with the full rune tree), inline matchups summary, a sortable "All Matchups" table (`?sort=winRate|games`, anchored at `#matchups`), and a quick link to pro builds. The page reads `/api/lol/analytics/champions/{championId}/profile` so the role selection, cached build aggregate, and cached matchup aggregate arrive through one backend request instead of a client-side analytics waterfall. The standalone `/lol/matchups` surface was removed; `/lol/matchups` and `/lol/matchups/:championId` now 308-redirect into `/lol/champions/*` (preserving query state) via `next.config.mjs` `redirects()`.
+  - `/lol/champions/*` is the unified champion surface: win rates, builds (with the full rune tree), confidence-ranked same-team partner synergy, inline matchups summary, a sortable "All Matchups" table (`?sort=winRate|games`, anchored at `#matchups`), and a quick link to pro builds. The page reads `/api/lol/analytics/champions/{championId}/profile` so the role selection, cached build, synergy, and matchup aggregates arrive through one backend request instead of a client-side analytics waterfall. The standalone `/lol/matchups` surface was removed; `/lol/matchups` and `/lol/matchups/:championId` now 308-redirect into `/lol/champions/*` (preserving query state) via `next.config.mjs` `redirects()`.
   - `/lol/pro-builds/*` — the index hero is a pro/high-elo champion playrate ranking with a `scope` segmented control (Pro / High-Elo / All) plus a public "Tracked Pros" roster panel. The toolbar, playrate table, roster, and champion search render from the first fetch batch; the fan-out recent-match feed and its item map stream independently behind `<Suspense>` with a stable row skeleton.
   - `/lol/items/*` and `/lol/runes/*` are the Build Atlas: searchable index and detail pages for
     resource pick rate, win rate, sample size, and champion-role fit. The indexes, detail pages,
@@ -358,6 +358,11 @@ detail is archived off-box and pruned to keep the database from growing unbounde
   per participant/resource before grouping, so duplicate item slots cannot inflate pick rate. The
   service joins static patch metadata softly, excludes non-build-impact inventory and stat shards,
   and caches region/patch index and detail payloads in HybridCache for 24h (1h local).
+- Champion synergy analytics self-joins the focal champion-role to same-match, same-team partners,
+  then keeps only actionable Bottom/Utility and Jungle/lane pairings. Results are filtered by the
+  same rank, region, queue, and patch scopes as the champion page and ranked by Wilson lower-bound
+  lift over the focal baseline. The hourly default-profile warm also fills the synergy cache in an
+  isolated per-champion DI scope, preserving the no-shared-DbContext concurrency rule.
 
 ### Match Queue Scope and History
 

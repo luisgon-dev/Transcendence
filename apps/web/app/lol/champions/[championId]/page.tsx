@@ -8,6 +8,7 @@ import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { BuildBreakdown } from "@/components/BuildBreakdown";
 import { ChampionTrendChart, type ChampionTrend } from "@/components/ChampionTrendChart";
+import { ChampionSynergyPanel } from "@/components/ChampionSynergyPanel";
 import { FilterBar } from "@/components/FilterBar";
 import { MatchupsTable, type MatchupRow } from "@/components/MatchupsTable";
 import { ItemBuildDisplay } from "@/components/ItemBuildDisplay";
@@ -377,12 +378,20 @@ async function ChampionHeroMeta({
       </div>
       <div className="-mt-2 flex flex-wrap items-center gap-2 text-xs">
         {queueOption.hasRoles ? (
-          <Link
-            href="#matchups"
-            className="rounded-lg border border-border/60 bg-surface-2/50 px-2.5 py-1 font-medium text-fg/80 transition-colors hover:bg-surface-2/80"
-          >
-            Matchups
-          </Link>
+          <>
+            <Link
+              href="#synergies"
+              className="rounded-lg border border-border/60 bg-surface-2/50 px-2.5 py-1 font-medium text-fg/80 transition-colors hover:bg-surface-2/80"
+            >
+              Partners
+            </Link>
+            <Link
+              href="#matchups"
+              className="rounded-lg border border-border/60 bg-surface-2/50 px-2.5 py-1 font-medium text-fg/80 transition-colors hover:bg-surface-2/80"
+            >
+              Matchups
+            </Link>
+          </>
         ) : null}
         <Link
           href={`/lol/pro-builds/${championId}${linkQuery ? `?${linkQuery}` : ""}`}
@@ -490,6 +499,7 @@ async function ChampionSections({
   const builds = profile.builds ?? null;
   const matchups = profile.matchups ?? null;
   const trend = profile.trend ?? null;
+  const synergies = profile.synergies ?? null;
   const effectiveRole = queueOption.hasRoles
     ? normalizeRole(profile.effectiveRole) ?? explicitRole ?? pickMostPlayedRole(winrates) ?? "MIDDLE"
     : "ALL";
@@ -536,6 +546,16 @@ async function ChampionSections({
   return (
     <>
       <ChampionTrendChart championName={champName} trend={trend} />
+
+      {queueOption.hasRoles ? (
+        <ChampionSynergyPanel
+          championName={champName}
+          synergies={synergies}
+          champions={champions}
+          version={version}
+          linkQuery={linkQuery}
+        />
+      ) : null}
 
       {/* ── Win rate by rank — compact strip. Keeps the per-rank win-rate signal (with the
              DataBar's sample-size whisker) without a full table pushing the builds below the

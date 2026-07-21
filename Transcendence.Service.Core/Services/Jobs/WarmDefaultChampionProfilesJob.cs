@@ -9,13 +9,14 @@ using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Service.Core.Queries;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
+using Transcendence.Service.Core.Services.RiotApi;
 
 namespace Transcendence.Service.Core.Services.Jobs;
 
 /// <summary>
 /// Hourly job that keeps every popular champion's DEFAULT profile-page analytics warm and fresh.
 /// For each champion with enough games on the active patch it recomputes win rates / builds /
-/// matchups (and optionally pro-builds) for the page-default params and OVERWRITES the cache via
+/// matchups, synergies (and optionally pro-builds) for the page-default params and OVERWRITES the cache via
 /// <see cref="IChampionAnalyticsService.RefreshDefaultProfileCacheAsync"/> (gap-free SetAsync).
 /// Runs on the reserved <see cref="HangfireQueues.AnalyticsWarm"/> lane (its own dedicated worker
 /// pool) so it is always ready regardless of how saturated the shared refresh queues are.
@@ -82,8 +83,20 @@ public class WarmDefaultChampionProfilesJob(
                 // job's injected db for the per-champion work.
                 using var scope = scopeFactory.CreateScope();
                 var analytics = scope.ServiceProvider.GetRequiredService<IChampionAnalyticsService>();
-                await analytics.RefreshDefaultProfileCacheAsync(
+                var effectiveRole = await analytics.RefreshDefaultProfileCacheAsync(
                     championId, opts.RankTier, opts.IncludeProBuilds, ct);
+                if (effectiveRole != null)
+                {
+                    var synergies = scope.ServiceProvider.GetRequiredService<IChampionSynergyService>();
+                    await synergies.GetSynergiesAsync(
+                        championId,
+                        effectiveRole,
+                        opts.RankTier,
+                        region: null,
+                        QueueCatalog.QueueFamilyRankedSoloDuo,
+                        patch,
+                        ct);
+                }
                 Interlocked.Increment(ref warmed);
             }
             catch (OperationCanceledException)

@@ -147,6 +147,7 @@ Example (`SummonerAcceptedResponse`):
 - `GET /api/lol/analytics/champions/{championId}/builds`
 - `GET /api/lol/analytics/champions/{championId}/pro-builds`
 - `GET /api/lol/analytics/champions/{championId}/matchups`
+- `GET /api/lol/analytics/champions/{championId}/synergies`
 - `GET /api/lol/analytics/pro/champions`
 - `GET /api/lol/analytics/pro/players`
 - `GET /api/lol/analytics/items`
@@ -227,6 +228,9 @@ Tier methodology (`GET /api/lol/analytics/tierlist`):
 - `releasedAtUtc`
 - `detectedAtUtc`
 - `isActive`
+- `matchCount`
+- `queueFamily`
+- `rankedSoloDuoMatchCount` (backward-compatible alias of `matchCount`; use `matchCount` for new clients)
 
 Item and rune analytics are public Ranked Solo/Duo corpus reads. They accept optional `region`
 and `patch` filters with the same semantics as champion analytics. Index responses rank resources
@@ -236,9 +240,14 @@ deduplicated per participant and restricted to completed build-impact items or u
 rune rows exclude stat shards. All rates are `0..1` ratios. Champion-level `pickRate` uses that
 champion-role's total games as its denominator, while `shareOfResourceUses` uses all observed uses
 of the selected item/rune. These are descriptive correlations, not causal item/rune power scores.
-- `matchCount`
-- `queueFamily`
-- `rankedSoloDuoMatchCount` (backward-compatible alias of `matchCount`; use `matchCount` for new clients)
+
+`GET /api/lol/analytics/champions/{championId}/synergies` accepts `role`, `rankTier`,
+`region`, `queue`, and `patch`. It measures actionable same-team role pairs: Bottom+Utility,
+Jungle+lane, and lane+Jungle. Each partner includes games, wins, pair win rate, pick rate within
+the focal champion-role sample, raw win-rate delta from that focal baseline, and a Wilson
+confidence score. `bestPartners` is ordered by confidence-adjusted lift so tiny lucky samples do
+not outrank supported pairings. The same `synergies` payload is included by the aggregate
+`/profile` response; roleless queues return an empty pairing set.
 
 `GET /api/lol/analytics/champions/{championId}/builds` includes full rune setup per build:
 

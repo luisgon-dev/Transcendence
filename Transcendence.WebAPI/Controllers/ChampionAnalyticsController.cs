@@ -16,7 +16,8 @@ namespace Transcendence.WebAPI.Controllers;
 [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
 public class ChampionAnalyticsController(
     IChampionAnalyticsService analyticsService,
-    IServiceScopeFactory? serviceScopeFactory) : ControllerBase
+    IServiceScopeFactory? serviceScopeFactory,
+    IChampionSynergyService? synergyService = null) : ControllerBase
 {
     private static readonly HashSet<string> ValidRoles = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -87,6 +88,7 @@ public class ChampionAnalyticsController(
         ChampionMatchupsResponse matchups;
         ChampionGradeDto? grade;
         ChampionTrendResponse trend;
+        ChampionSynergiesResponse synergies;
         if (serviceScopeFactory == null)
         {
             builds = await analyticsService.GetBuildsAsync(
@@ -97,6 +99,10 @@ public class ChampionAnalyticsController(
                 championId, effectiveRole, rankTier, region, normalizedQueue, patch, ct);
             trend = await analyticsService.GetTrendAsync(
                 championId, effectiveRole, rankTier, normalizedQueue, ct);
+            synergies = synergyService == null
+                ? EmptySynergies(championId, effectiveRole, rankTier, region, patch, normalizedQueue)
+                : await synergyService.GetSynergiesAsync(
+                    championId, effectiveRole, rankTier, region, normalizedQueue, patch, ct);
         }
         else
         {
@@ -111,12 +117,16 @@ public class ChampionAnalyticsController(
                     championId, effectiveRole, rankTier, region, normalizedQueue, patch, ct));
             var trendTask = RunInAnalyticsScopeAsync(
                 scoped => scoped.GetTrendAsync(championId, effectiveRole, rankTier, normalizedQueue, ct));
+            var synergiesTask = RunInSynergyScopeAsync(
+                scoped => scoped.GetSynergiesAsync(
+                    championId, effectiveRole, rankTier, region, normalizedQueue, patch, ct));
 
-            await Task.WhenAll(buildsTask, matchupsTask, gradeTask, trendTask);
+            await Task.WhenAll(buildsTask, matchupsTask, gradeTask, trendTask, synergiesTask);
             builds = await buildsTask;
             matchups = await matchupsTask;
             grade = await gradeTask;
             trend = await trendTask;
+            synergies = await synergiesTask;
         }
 
         return Ok(new ChampionProfileAnalyticsResponse(
@@ -127,7 +137,35 @@ public class ChampionAnalyticsController(
             matchups,
             grade,
             normalizedQueue,
-            trend));
+            trend,
+            synergies));
+    }
+
+    [HttpGet("{championId}/synergies")]
+    [ProducesResponseType(typeof(ChampionSynergiesResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<ChampionSynergiesResponse>> GetSynergies(
+        int championId,
+        [FromQuery] string role,
+        [FromQuery] string? rankTier = null,
+        [FromQuery] string? region = null,
+        [FromQuery] string? queue = null,
+        [FromQuery] string? patch = null,
+        CancellationToken ct = default)
+    {
+        if (championId <= 0)
+            return BadRequest("Invalid champion ID. Must be positive integer.");
+        var normalizedRole = NormalizeRole(role);
+        if (normalizedRole == null)
+            return BadRequest("Invalid role. Expected TOP, JUNGLE, MIDDLE, BOTTOM, or UTILITY.");
+        if (!AnalyticsQueueCatalog.IsSupported(queue))
+            return BadRequest("Invalid queue. Expected solo, aram, arena, or flex.");
+        if (synergyService == null)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+
+        return Ok(await synergyService.GetSynergiesAsync(
+            championId, normalizedRole, rankTier, region, queue, patch, ct));
     }
 
     /// <summary>
@@ -299,6 +337,32 @@ public class ChampionAnalyticsController(
         var scopedAnalyticsService = scope.ServiceProvider.GetRequiredService<IChampionAnalyticsService>();
         return await action(scopedAnalyticsService);
     }
+
+    private async Task<T> RunInSynergyScopeAsync<T>(Func<IChampionSynergyService, Task<T>> action)
+    {
+        using var scope = serviceScopeFactory!.CreateScope();
+        var scopedSynergyService = scope.ServiceProvider.GetRequiredService<IChampionSynergyService>();
+        return await action(scopedSynergyService);
+    }
+
+    private static ChampionSynergiesResponse EmptySynergies(
+        int championId,
+        string role,
+        string? rankTier,
+        string? region,
+        string? patch,
+        string queueFamily) =>
+        new(
+            championId,
+            role,
+            rankTier ?? "all",
+            AnalyticsRegionCatalog.NormalizeOrDefault(region),
+            patch ?? string.Empty,
+            queueFamily,
+            0,
+            0,
+            0,
+            []);
 
     private static string? NormalizeRole(string? role)
     {

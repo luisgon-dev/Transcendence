@@ -10,5 +10,6 @@ public record ChampionProfileAnalyticsResponse(
     ChampionBuildsResponse Builds,
     ChampionMatchupsResponse Matchups,
     ChampionGradeDto? Grade = null,
-    string QueueFamily = "RANKED_SOLO_DUO"
+    string QueueFamily = "RANKED_SOLO_DUO",
+    ChampionTrendResponse? Trend = null
 );

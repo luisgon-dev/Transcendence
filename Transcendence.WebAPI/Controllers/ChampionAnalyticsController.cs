@@ -86,6 +86,7 @@ public class ChampionAnalyticsController(
         ChampionBuildsResponse builds;
         ChampionMatchupsResponse matchups;
         ChampionGradeDto? grade;
+        ChampionTrendResponse trend;
         if (serviceScopeFactory == null)
         {
             builds = await analyticsService.GetBuildsAsync(
@@ -94,6 +95,8 @@ public class ChampionAnalyticsController(
                 championId, effectiveRole, rankTier, region, normalizedQueue, patch, ct);
             grade = await analyticsService.GetGradeAsync(
                 championId, effectiveRole, rankTier, region, normalizedQueue, patch, ct);
+            trend = await analyticsService.GetTrendAsync(
+                championId, effectiveRole, rankTier, normalizedQueue, ct);
         }
         else
         {
@@ -106,11 +109,14 @@ public class ChampionAnalyticsController(
             var gradeTask = RunInAnalyticsScopeAsync(
                 scoped => scoped.GetGradeAsync(
                     championId, effectiveRole, rankTier, region, normalizedQueue, patch, ct));
+            var trendTask = RunInAnalyticsScopeAsync(
+                scoped => scoped.GetTrendAsync(championId, effectiveRole, rankTier, normalizedQueue, ct));
 
-            await Task.WhenAll(buildsTask, matchupsTask, gradeTask);
+            await Task.WhenAll(buildsTask, matchupsTask, gradeTask, trendTask);
             builds = await buildsTask;
             matchups = await matchupsTask;
             grade = await gradeTask;
+            trend = await trendTask;
         }
 
         return Ok(new ChampionProfileAnalyticsResponse(
@@ -120,7 +126,8 @@ public class ChampionAnalyticsController(
             builds,
             matchups,
             grade,
-            normalizedQueue));
+            normalizedQueue,
+            trend));
     }
 
     /// <summary>

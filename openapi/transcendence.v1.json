@@ -6878,6 +6878,14 @@
           },
           "queueFamily": {
             "type": "string"
+          },
+          "trend": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ChampionTrendResponse"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -6946,6 +6954,96 @@
           "avgDamageToChamps": {
             "type": "number",
             "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChampionTrendPointDto": {
+        "required": [
+          "banRate",
+          "games",
+          "isLowSample",
+          "patch",
+          "pickRate",
+          "releasedAtUtc",
+          "strengthScore",
+          "tier",
+          "winRate"
+        ],
+        "type": "object",
+        "properties": {
+          "patch": {
+            "type": "string"
+          },
+          "releasedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "tier": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TierGrade"
+              }
+            ]
+          },
+          "games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "winRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "pickRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "banRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "strengthScore": {
+            "type": "number",
+            "format": "double"
+          },
+          "isLowSample": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChampionTrendResponse": {
+        "required": [
+          "championId",
+          "points",
+          "queueFamily",
+          "rankScope",
+          "region",
+          "role"
+        ],
+        "type": "object",
+        "properties": {
+          "championId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "queueFamily": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "rankScope": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChampionTrendPointDto"
+            }
           }
         },
         "additionalProperties": false

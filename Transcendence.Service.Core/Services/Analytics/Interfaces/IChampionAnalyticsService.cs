@@ -117,6 +117,16 @@ public interface IChampionAnalyticsService
         string? patch,
         CancellationToken ct);
 
+    /// <summary>
+    /// Gets durable patch-over-patch champion performance from the persisted global grade history.
+    /// </summary>
+    Task<ChampionTrendResponse> GetTrendAsync(
+        int championId,
+        string? role,
+        string? rankTier,
+        string? queueFamily,
+        CancellationToken ct);
+
     Task<ChampionMatchupsResponse> GetMatchupsAsync(
         int championId,
         string role,

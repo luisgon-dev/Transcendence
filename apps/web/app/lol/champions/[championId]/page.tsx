@@ -7,6 +7,7 @@ import type { components } from "@transcendence/api-client";
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { BuildBreakdown } from "@/components/BuildBreakdown";
+import { ChampionTrendChart, type ChampionTrend } from "@/components/ChampionTrendChart";
 import { FilterBar } from "@/components/FilterBar";
 import { MatchupsTable, type MatchupRow } from "@/components/MatchupsTable";
 import { ItemBuildDisplay } from "@/components/ItemBuildDisplay";
@@ -45,7 +46,9 @@ type ChampionWinRateDto = components["schemas"]["ChampionWinRateDto"];
 type ChampionWinRateSummary = components["schemas"]["ChampionWinRateSummary"] & {
   computedAtUtc?: string | null;
 };
-type ChampionProfileAnalyticsResponse = components["schemas"]["ChampionProfileAnalyticsResponse"];
+type ChampionProfileAnalyticsResponse = components["schemas"]["ChampionProfileAnalyticsResponse"] & {
+  trend?: ChampionTrend | null;
+};
 type MatchupEntryDto = components["schemas"]["MatchupEntryDto"];
 
 type ChampionSearchParams = {
@@ -478,6 +481,7 @@ async function ChampionSections({
   const winrates = profile.winRates ?? null;
   const builds = profile.builds ?? null;
   const matchups = profile.matchups ?? null;
+  const trend = profile.trend ?? null;
   const effectiveRole = queueOption.hasRoles
     ? normalizeRole(profile.effectiveRole) ?? explicitRole ?? pickMostPlayedRole(winrates) ?? "MIDDLE"
     : "ALL";
@@ -523,6 +527,8 @@ async function ChampionSections({
 
   return (
     <>
+      <ChampionTrendChart championName={champName} trend={trend} />
+
       {/* ── Win rate by rank — compact strip. Keeps the per-rank win-rate signal (with the
              DataBar's sample-size whisker) without a full table pushing the builds below the
              fold. Overall win/pick/matches live in the hero StatsBar; per-rank pick rate and a

@@ -542,6 +542,69 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         return response with { Sample = BuildSampleMetadata(sampleSize, patchContext) };
     }
 
+    public async Task<ChampionTrendResponse> GetTrendAsync(
+        int championId,
+        string? role,
+        string? rankTier,
+        string? queueFamily,
+        CancellationToken ct)
+    {
+        var normalizedQueue = AnalyticsQueueCatalog.Normalize(queueFamily);
+        var normalizedRole = AnalyticsQueueCatalog.HasRoles(normalizedQueue) &&
+                             !string.IsNullOrWhiteSpace(role) &&
+                             !string.Equals(role, AnalyticsQueueCatalog.AllRoles, StringComparison.OrdinalIgnoreCase)
+            ? role.Trim().ToUpperInvariant()
+            : AnalyticsQueueCatalog.AllRoles;
+        var rankScope = AnalyticsScopeMath.ScopeTokenOf(AnalyticsScopeMath.ParseRankTierScope(rankTier));
+
+        var rows = await (
+                from grade in _context.ChampionScopeGradeStats.AsNoTracking()
+                join patch in _context.Patches.AsNoTracking() on grade.Patch equals patch.Version
+                where grade.ChampionId == championId &&
+                      grade.QueueFamily == normalizedQueue &&
+                      grade.PlatformRegion == AnalyticsRegionCatalog.GlobalRegionCode &&
+                      grade.RankScope == rankScope &&
+                      grade.Role == normalizedRole
+                orderby patch.ReleaseDate descending, patch.Version descending
+                select new
+                {
+                    grade.Patch,
+                    patch.ReleaseDate,
+                    grade.Tier,
+                    grade.Games,
+                    grade.WinRate,
+                    grade.PickRate,
+                    grade.BanRate,
+                    grade.StrengthScore,
+                    grade.IsLowSample
+                })
+            .Take(12)
+            .ToListAsync(ct);
+
+        var points = rows
+            .OrderBy(row => row.ReleaseDate)
+            .ThenBy(row => row.Patch)
+            .Select(row => new ChampionTrendPointDto(
+                row.Patch,
+                row.ReleaseDate,
+                (TierGrade)row.Tier,
+                row.Games,
+                row.WinRate,
+                row.PickRate,
+                row.BanRate,
+                row.StrengthScore,
+                row.IsLowSample))
+            .ToList();
+
+        return new ChampionTrendResponse(
+            championId,
+            normalizedQueue,
+            normalizedRole,
+            rankScope,
+            AnalyticsRegionCatalog.GlobalRegionCode,
+            points);
+    }
+
     public async Task InvalidateAnalyticsCacheAsync(CancellationToken ct)
     {
         await _cache.RemoveByTagAsync(AnalyticsCacheTag, ct);

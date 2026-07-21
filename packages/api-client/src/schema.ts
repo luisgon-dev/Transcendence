@@ -4361,6 +4361,7 @@ export interface components {
             matchups: components["schemas"]["ChampionMatchupsResponse"];
             grade?: components["schemas"]["ChampionGradeDto"] | null;
             queueFamily: string;
+            trend?: components["schemas"]["ChampionTrendResponse"] | null;
         };
         ChampionStatDto: {
             /** Format: int32 */
@@ -4387,6 +4388,32 @@ export interface components {
             avgVisionScore: number;
             /** Format: double */
             avgDamageToChamps: number;
+        };
+        ChampionTrendPointDto: {
+            patch: string;
+            /** Format: date-time */
+            releasedAtUtc: string;
+            tier: components["schemas"]["TierGrade"];
+            /** Format: int32 */
+            games: number;
+            /** Format: double */
+            winRate: number;
+            /** Format: double */
+            pickRate: number;
+            /** Format: double */
+            banRate: number;
+            /** Format: double */
+            strengthScore: number;
+            isLowSample: boolean;
+        };
+        ChampionTrendResponse: {
+            /** Format: int32 */
+            championId: number;
+            queueFamily: string;
+            role: string;
+            rankScope: string;
+            region: string;
+            points: components["schemas"]["ChampionTrendPointDto"][];
         };
         ChampionWinRateDto: {
             /** Format: int32 */

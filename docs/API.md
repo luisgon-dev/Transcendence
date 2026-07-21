@@ -63,7 +63,7 @@ Default stats scope:
 - `stats/overview`, `stats/champions`, and `stats/roles` are computed from ranked solo/duo sample data.
 - `GET /api/lol/summoners/{region}/{name}/{tag}` uses the active season for profile overview and champion stats. When a signed-in manual refresh has produced full-history facts, those profile stats use the durable active-season aggregate; otherwise they fall back to retained match detail currently present in the database.
 - `matches/recent` defaults to full stored history and can be filtered by queue metadata.
-- `stats/rank-history` is app-observed history from stored snapshots. Riot League-V4 exposes current league entries, not an official per-account past-season rank history endpoint.
+- `stats/rank-history` is app-observed history from stored snapshots. Riot League-V4 exposes current league entries, not an official per-account past-season rank history endpoint. The web profile converts tier + division + LP into a monotonic ladder-points series so promotions do not look like LP resets, labels it as observed (not per-game Riot history), and appends the current rank only when it differs from the latest snapshot.
 - Profile champion entries (`topChampions[]`, `topMastery[]`) carry `championId` only; champion display names are resolved client-side from static (DDragon) data, so `championId` is the single source of truth.
 
 Profile responses include additional season/history metadata:
@@ -243,10 +243,11 @@ Tier methodology (`GET /api/lol/analytics/tierlist`):
 
 `GET /api/lol/analytics/champions/{championId}/profile` returns the champion detail payload in one request:
 - Query filters: `role`, `rankTier`, `region`, `queue`, `patch`
-- Response: `{ championId, effectiveRole, winRates, builds, matchups, grade, queueFamily }`
+- Response: `{ championId, effectiveRole, winRates, builds, matchups, grade, queueFamily, trend }`
 - `grade` (`ChampionGradeDto`, nullable) is the champion's tier grade for the resolved `effectiveRole` + scope — the **same** grade the tier list shows for that champion in that role (so the detail page hero is consistent with the list). It carries `tier`, `strengthScore`, `winRate`, `pickRate`, `banRate`, `contestedScore`, `games`, `roleBaseline`, `isLowSample`, `movement`, `previousTier`, `role`, `rankScope`. Null when the champion is not graded in scope (render "Unrated").
 - The endpoint reuses the cached winrate, build, matchup, and tier-list aggregates. For Solo/Duo and Flex, when `role` is omitted it chooses the most-played role from winrates; if a scoped rank filter has no winrate rows, it uses all-rank winrates only to choose the role while keeping the requested rank filter for build and matchup data. ARAM/Arena resolve `effectiveRole=ALL`.
 - The build and matchup reads run in separate backend scopes so their cached aggregate reads can execute concurrently without sharing an EF `DbContext`.
+- `trend` is the last 12 durable patch-grade points for the same champion, queue, role, and rank scope at the global region grain. Each point carries `patch`, `releasedAtUtc`, `tier`, `games`, `winRate`, `pickRate`, `banRate`, `strengthScore`, and `isLowSample`; it is empty for exact-tier scopes that are not persisted. The champion page renders a real patch-over-patch win-rate chart only when at least two points exist.
 
 Additional analytics fields:
 - Tier list and champion winrate surfaces include queue-scoped `banRate`.

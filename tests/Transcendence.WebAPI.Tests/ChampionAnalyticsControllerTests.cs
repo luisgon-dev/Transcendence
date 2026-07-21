@@ -41,6 +41,9 @@ public class ChampionAnalyticsControllerTests
                 Region = "KR",
                 Patch = "15.1"
             });
+        service.Setup(x => x.GetTrendAsync(
+                103, "MIDDLE", "EMERALD_PLUS", "RANKED_SOLO_DUO", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ChampionTrendResponse(103, "RANKED_SOLO_DUO", "MIDDLE", "EMERALD_PLUS", "ALL", []));
         var controller = new ChampionAnalyticsController(service.Object, null);
 
         var result = await controller.GetProfile(103, null, "EMERALD_PLUS", "KR", null, "15.1", CancellationToken.None);
@@ -68,6 +71,9 @@ public class ChampionAnalyticsControllerTests
         service.Setup(x => x.GetMatchupsAsync(
                 103, "ALL", null, null, "ARAM", "15.1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChampionMatchupsResponse { ChampionId = 103, Role = "ALL", Patch = "15.1", QueueFamily = "ARAM" });
+        service.Setup(x => x.GetTrendAsync(
+                103, "ALL", null, "ARAM", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ChampionTrendResponse(103, "ARAM", "ALL", "all", "ALL", []));
 
         var controller = new ChampionAnalyticsController(service.Object, null);
         var result = await controller.GetProfile(103, null, null, null, "aram", "15.1", CancellationToken.None);

@@ -410,7 +410,7 @@ _Make CI test reality, fix the lock protocol, restore accessibility, and add ale
   - **Fix:** Add a rotating chevron icon (mirroring the by-role <details> caret in PerformanceCard.tsx:156-162) next to the label and raise its contrast (text-muted or fg/80). Consider a subtle full-width bottom affordance so the expand target reads as interactive on touch.
   - **Why:** Discoverability of the richest feature (per-match scoreboard, runes, takeaways, gold curve) hinges on a subtle label many users won't register; the type-overline + fg/65 also compounds the contrast issue above. Progressive disclosure only works if the "there's more here" cue is legible.
   - **Where:** `apps/web/components/lol-profile/MatchHistorySection.tsx:300-302`
-- [ ] **Live Game check is a buried, manual one-shot with no auto-refresh or loading skeleton** `MED` · `medium`
+- [x] **Live Game check is a buried, manual one-shot with no auto-refresh or loading skeleton** `MED` · `medium`
   - **Fix:** Surface a live indicator higher (e.g. an auto-checked "In game" badge in the hero when detected), add a skeleton/spinner during the fetch, stamp the result with a checked-at time, and offer a light auto-refresh/Re-check while state is IN_PROGRESS. At minimum move the card above duo/mastery on mobile.
   - **Why:** The most time-sensitive profile feature (is this player in a game right now?) is the hardest to find and requires deliberate action; there's no freshness once shown and no visible progress during the request, so most users never engage it.
   - **Where:** `apps/web/components/LiveGameCard.tsx:229-289`

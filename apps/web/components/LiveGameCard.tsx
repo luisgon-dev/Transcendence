@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/cn";
 import { formatDurationSeconds, formatPercent, winRateColorClass } from "@/lib/format";
 import { rankTierColorClass } from "@/lib/ranks";
@@ -23,6 +24,7 @@ const TEAMS: ReadonlyArray<{ id: number; label: string }> = [
   { id: 100, label: "Blue Side" },
   { id: 200, label: "Red Side" }
 ];
+const LIVE_REFRESH_INTERVAL_MS = 60_000;
 
 function titleCaseTier(value: string | null | undefined): string {
   if (!value) return "";
@@ -176,18 +178,23 @@ export function LiveGameCard({
 }) {
   const [busy, setBusy] = useState(false);
   const [checked, setChecked] = useState(false);
+  const [checkedAt, setCheckedAt] = useState<Date | null>(null);
   const [data, setData] = useState<LiveGameResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const requestRef = useRef<AbortController | null>(null);
 
-  async function check() {
+  const check = useCallback(async () => {
+    if (requestRef.current) return;
     setBusy(true);
     setError(null);
+    const controller = new AbortController();
+    requestRef.current = controller;
     try {
       const res = await fetch(
         `/api/trn/app/summoners/${encodeURIComponent(region)}/${encodeURIComponent(
           gameName
         )}/${encodeURIComponent(tagLine)}/live-game`,
-        { cache: "no-store" }
+        { cache: "no-store", signal: controller.signal }
       );
 
       const json = (await res.json().catch(() => null)) as
@@ -201,16 +208,42 @@ export function LiveGameCard({
       }
 
       setData(json);
+      setCheckedAt(new Date());
     } catch (e) {
+      if (controller.signal.aborted) return;
       setError(e instanceof Error ? e.message : "Live game error.");
     } finally {
-      setBusy(false);
-      setChecked(true);
+      if (requestRef.current === controller) {
+        requestRef.current = null;
+        if (!controller.signal.aborted) {
+          setBusy(false);
+          setChecked(true);
+        }
+      }
     }
-  }
+  }, [gameName, region, tagLine]);
+
+  // Live state is time-sensitive, so check as soon as the card mounts instead of requiring the user
+  // to discover and press a one-shot button.
+  useEffect(() => {
+    void check();
+    return () => {
+      const request = requestRef.current;
+      request?.abort();
+      if (requestRef.current === request) requestRef.current = null;
+    };
+  }, [check]);
 
   const participants = data?.participants ?? [];
   const inGame = data?.state === "IN_PROGRESS" || participants.length > 0;
+
+  // Once a game is detected, keep the scout view fresh at a deliberately light cadence. A timeout
+  // (rather than an interval) avoids overlapping a slow request.
+  useEffect(() => {
+    if (!inGame) return;
+    const timer = window.setTimeout(() => void check(), LIVE_REFRESH_INTERVAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [check, checkedAt, inGame]);
 
   const analysisByPuuid = new Map<string, LiveGameParticipantAnalysis>();
   for (const entry of data?.analysis?.participants ?? []) {
@@ -228,65 +261,81 @@ export function LiveGameCard({
 
   return (
     <Card className="p-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="type-section">Live Game</h3>
           <p className="type-ui mt-2 text-fg/75">
-            Check whether this player is currently in a game.
+            Automatically checks whether this player is in a game.
           </p>
+          {checkedAt ? (
+            <p className="mt-1 text-xs tabular-nums text-muted">
+              Checked {checkedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+              {inGame ? " · Auto-refreshes every 60 sec" : ""}
+            </p>
+          ) : null}
         </div>
-        <Button variant="outline" onClick={check} disabled={busy}>
-          {busy ? "Checking..." : "Check"}
+        <Button variant="outline" onClick={() => void check()} disabled={busy}>
+          {busy ? "Checking…" : "Re-check"}
         </Button>
       </div>
 
-      {error ? <p className="type-ui mt-3 text-danger">{error}</p> : null}
+      <div aria-live="polite">
+        {error ? <p className="type-ui mt-3 text-danger">{error}</p> : null}
 
-      {!error && checked ? (
-        inGame ? (
-          <div className="mt-4">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span className="inline-flex items-center gap-1.5 type-ui text-fg">
-                <span className="relative flex size-2">
-                  <span className="absolute inline-flex size-2 animate-ping rounded-full bg-success/60 motion-reduce:hidden" />
-                  <span className="relative inline-flex size-2 rounded-full bg-success" />
-                </span>
-                Live
-              </span>
-              {metaParts.map((part) => (
-                <span key={part} className="type-ui text-fg/80">
-                  <span className="mr-3 text-muted">{"·"}</span>
-                  {part}
-                </span>
-              ))}
-              <span className="text-muted">{"·"}</span>
-              <span className="type-ui tabular-nums text-fg/80">
-                {formatDurationSeconds(data?.gameLengthSeconds)}
-              </span>
-            </div>
-
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              {TEAMS.map((team) => {
-                const teamParticipants = participants.filter((p) => p.teamId === team.id);
-                if (teamParticipants.length === 0) return null;
-                return (
-                  <TeamBlock
-                    key={team.id}
-                    label={team.label}
-                    participants={teamParticipants}
-                    analysisByPuuid={analysisByPuuid}
-                    teamAnalysis={teamAnalysisById.get(team.id)}
-                  />
-                );
-              })}
+        {busy && !checked ? (
+          <div className="mt-4 grid gap-3" aria-label="Checking live game">
+            <Skeleton className="h-4 w-40" />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Skeleton className="h-32 w-full" />
+              <Skeleton className="h-32 w-full" />
             </div>
           </div>
-        ) : (
-          <p className="type-ui mt-4 text-muted">Not currently in a game.</p>
-        )
-      ) : !error ? (
-        <p className="type-ui mt-4 text-muted">No live game data loaded yet.</p>
-      ) : null}
+        ) : checked && data ? (
+          inGame ? (
+            <div className="mt-4">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="inline-flex items-center gap-1.5 type-ui text-fg">
+                  <span className="relative flex size-2">
+                    <span className="absolute inline-flex size-2 animate-ping rounded-full bg-success/60 motion-reduce:hidden" />
+                    <span className="relative inline-flex size-2 rounded-full bg-success" />
+                  </span>
+                  Live
+                </span>
+                {metaParts.map((part) => (
+                  <span key={part} className="type-ui text-fg/80">
+                    <span className="mr-3 text-muted">{"·"}</span>
+                    {part}
+                  </span>
+                ))}
+                <span className="text-muted">{"·"}</span>
+                <span className="type-ui tabular-nums text-fg/80">
+                  {formatDurationSeconds(data?.gameLengthSeconds)}
+                </span>
+              </div>
+
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                {TEAMS.map((team) => {
+                  const teamParticipants = participants.filter((p) => p.teamId === team.id);
+                  if (teamParticipants.length === 0) return null;
+                  return (
+                    <TeamBlock
+                      key={team.id}
+                      label={team.label}
+                      participants={teamParticipants}
+                      analysisByPuuid={analysisByPuuid}
+                      teamAnalysis={teamAnalysisById.get(team.id)}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <p className="type-ui mt-4 text-muted">Not currently in a game.</p>
+          )
+        ) : !error && !busy ? (
+          <p className="type-ui mt-4 text-muted">Waiting to check live game status.</p>
+        ) : null}
+      </div>
     </Card>
   );
 }

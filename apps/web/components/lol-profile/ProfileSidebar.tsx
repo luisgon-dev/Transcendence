@@ -174,6 +174,10 @@ export function ProfileSidebar({
         ) : null}
       </Card>
 
+      {/* Time-sensitive scouting belongs immediately after rank context, before mastery/pool/duo
+          exploration on mobile and desktop. The card auto-checks on mount. */}
+      <LiveGameCard region={region} gameName={gameName} tagLine={tagLine} />
+
       {(profile.topMastery?.length ?? 0) > 0 ? (
         <Card className="profile-section-card p-5">
           <div>
@@ -287,8 +291,6 @@ export function ProfileSidebar({
           </div>
         </Card>
       ) : null}
-
-      <LiveGameCard region={region} gameName={gameName} tagLine={tagLine} />
     </aside>
   );
 }

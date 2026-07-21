@@ -6,7 +6,7 @@
 
 **A command deck for League of Legends analytics.**
 
-Tier lists, champion builds, pro picks, and live summoner profiles — fast, trustworthy, and unapologetically data-forward.
+Tier lists, champion builds, tracked pro solo-queue picks, and live summoner profiles. Fast, trustworthy, and unapologetically data-forward.
 
 <!-- hero screenshot goes here — e.g. the LoL tier list or a summoner profile from apps/web -->
 
@@ -39,7 +39,7 @@ The live site redeploys automatically once changes land on `main`.
 
 - Tier list rankings
 - Champion analytics — win rates, builds, and matchups by role, with tier / rank / patch filters
-- Pro play insights — top picks and pro rosters by region
+- Tracked pro solo-queue insights: top picks, builds, and player rosters by region (not tournament schedules/results)
 - Summoner profiles — ranked stats, mastery, and match history with detailed post-game analytics
 - Live game detection
 - Search with prefix autosuggest, plus multi-search (up to 5 players) for champ-select — surfacing average rank, role coverage, and autofill risk

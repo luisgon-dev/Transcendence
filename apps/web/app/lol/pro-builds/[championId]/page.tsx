@@ -154,7 +154,7 @@ export default async function ProBuildsChampionPage({
   );
   const championId = Number(resolvedParams.championId);
   if (!Number.isFinite(championId) || championId <= 0) {
-    return <BackendErrorCard title="Pro Builds" message="Invalid champion id." />;
+    return <BackendErrorCard title="Pro Solo Queue Builds" message="Invalid champion id." />;
   }
 
   const roleFilter = normalizeProBuildRole(resolvedSearchParams?.role);
@@ -203,7 +203,7 @@ export default async function ProBuildsChampionPage({
   if (!winratesRes.ok && !proBuildsRes.ok) {
     return (
       <BackendErrorCard
-        title="Pro Builds"
+        title="Pro Solo Queue Builds"
         message={
           proBuildsRes.errorKind === "timeout"
             ? "This page is taking too long to load."
@@ -276,9 +276,12 @@ export default async function ProBuildsChampionPage({
           />
           <div>
             <h1 className="type-page-title">
-              Pro Builds
+              Pro Solo Queue Builds
             </h1>
-            <p className="type-ui mt-2 text-fg/75">Recent pro and high-MMR builds for {championName}</p>
+            <p className="type-ui mt-2 text-fg/75">
+              Ranked solo-queue builds from tracked pros and high-MMR specialists for {championName}.
+              Not tournament match data.
+            </p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -488,10 +491,10 @@ export default async function ProBuildsChampionPage({
       </div>
 
       <Card className="p-5">
-        <h2 className="type-section">Recent Pro Matches</h2>
+        <h2 className="type-section">Recent Tracked Solo Queue Matches</h2>
         {recentMatches.length === 0 ? (
           <p className="mt-3 text-sm text-muted">
-            No recent pro matches were found for this champion with these filters.
+            No recent tracked solo-queue matches were found for this champion with these filters.
           </p>
         ) : (
           <ul className="mt-4 grid gap-3">
@@ -583,7 +586,7 @@ export default async function ProBuildsChampionPage({
           More Ways to Explore
         </h2>
         <p className="mt-2 text-sm text-fg/90">
-          Open the main champion page or matchup view to compare pro builds with the broader player base.
+          Open the main champion page or matchup view to compare tracked solo-queue builds with the broader player base.
         </p>
         <div className="mt-4 flex flex-wrap gap-2 text-sm">
           <Link

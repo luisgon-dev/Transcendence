@@ -397,7 +397,7 @@ async function ChampionHeroMeta({
           href={`/lol/pro-builds/${championId}${linkQuery ? `?${linkQuery}` : ""}`}
           className="rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 font-medium text-primary transition-colors hover:bg-primary/20"
         >
-          Pro Builds
+          Pro Solo Queue
         </Link>
       </div>
 

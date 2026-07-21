@@ -74,7 +74,7 @@ const TIER_LINKS = [
   { label: "Item Analytics · Pick rates and champion fit", href: "/lol/items" },
   { label: "Rune Analytics · Pick rates and champion fit", href: "/lol/runes" },
   { label: "Leaderboards · Regional and champion", href: "/lol/leaderboards" },
-  { label: "Pro Builds", href: "/lol/pro-builds" },
+  { label: "Pro Solo Queue Builds", href: "/lol/pro-builds" },
   { label: "Multi-Search · Champ Select Scout", href: "/lol/multi-search" }
 ] as const;
 
@@ -617,7 +617,7 @@ export function GlobalCommandPalette() {
                           Nothing lines up with that search.
                         </p>
                         <p className="mt-2 max-w-[48ch] text-sm leading-6 text-fg/62">
-                          Try a champion name, a route like tier list or pro builds, or a full Riot ID like
+                          Try a champion name, a route like tier list or pro solo queue, or a full Riot ID like
                           <span className="font-medium text-fg/82"> Kronic#NA1</span>.
                         </p>
                       </Command.Empty>

@@ -474,7 +474,7 @@ _Discoverability, multi-mode analytics, and the champ-select hook_
   - **Fix:** Add champion synergy (co-occurrence win rate for bot-lane and jungle+lane pairs) and a 'best partners' section on champion pages, reusing the existing matchup compute pipeline.
   - **Why:** Mobalytics/u.gg offer synergy and duo/lane-partner data and team-comp tools that competitive duos rely on. Counters alone answer 'is this matchup winnable' but not 'who should I duo/pair with', a common recurring question.
   - **Where:** `Transcendence.WebAPI/Controllers/ChampionAnalyticsController.cs:223 (matchups only); grep 'synerg|duo' across source → 0 hits`
-- [ ] **No esports / pro-match coverage — 'Pro Builds' is solo-queue builds, not matches** `LOW` · `large` · ✅ verified
+- [x] **No esports / pro-match coverage — 'Pro Builds' is solo-queue builds, not matches** `LOW` · `large` · ✅ verified
   - **Fix:** If pursuing breadth, integrate an esports schedule/results feed (e.g. LoL Esports data) into a /lol/esports hub; otherwise clarify positioning so 'Pro' isn't confused with esports coverage.
   - **Why:** u.gg, Mobalytics and Blitz run esports hubs (schedules, results, pro team comps) that pull fans in daily during splits. This is a differentiator rather than table stakes, but its absence caps engagement outside of ranked players.
   - **Where:** `apps/web/app/lol/pro-builds + ProAnalyticsController.cs:25,42 (champions/players); grep 'esport|lck|lec|worlds|schedule' across source → 0 hits`

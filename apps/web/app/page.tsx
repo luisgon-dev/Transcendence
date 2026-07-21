@@ -66,8 +66,8 @@ const EXPLORE = [
   },
   {
     href: "/lol/pro-builds",
-    name: "Pro builds",
-    description: "What pros actually buy, rush, and max this patch."
+    name: "Pro solo queue",
+    description: "What tracked pros buy, rush, and max in ranked solo queue this patch."
   },
   {
     href: "/lol/items",

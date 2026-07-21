@@ -1,14 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using Transcendence.Data;
-using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
-using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.WebAPI.Models.Common;
 using Transcendence.WebAPI.Security;
 
@@ -20,7 +16,7 @@ namespace Transcendence.WebAPI.Controllers;
 [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
 public class AnalyticsController(
     IChampionAnalyticsService analyticsService,
-    TranscendenceContext db,
+    IAnalyticsPatchQueryService patchQueryService,
     IOptions<MultiRegionIngestionOptions> multiRegionOptions) : ControllerBase
 {
     /// <summary>
@@ -57,66 +53,14 @@ public class AnalyticsController(
     [ProducesResponseType(typeof(IReadOnlyList<AnalyticsPatchOptionDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetPatches(CancellationToken ct = default)
     {
-        var rankedSoloDuoMatchCounts = await db.Matches
-            .AsNoTracking()
-            .Where(m => m.Status == FetchStatus.Success)
-            .Where(m => m.Patch != null && m.Patch != string.Empty)
-            .Where(m => m.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
-                        (m.QueueId == 0 && m.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString()))
-            .GroupBy(m => m.Patch!)
-            .Select(g => new { Patch = g.Key, Count = g.Count() })
-            .ToListAsync(ct);
-
-        var matchCountsByPatch = rankedSoloDuoMatchCounts.ToDictionary(x => x.Patch, x => x.Count);
-        var patchesWithMatches = matchCountsByPatch.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var patchMetadata = await db.Patches
-            .AsNoTracking()
-            .Where(p => p.IsActive || patchesWithMatches.Contains(p.Version))
-            .Select(p => new { p.Version, p.ReleaseDate, p.DetectedAt, p.IsActive })
-            .ToListAsync(ct);
-
-        var optionsByPatch = patchMetadata
-            .Select(p => new AnalyticsPatchOptionDto(
-                p.Version,
-                p.ReleaseDate,
-                p.DetectedAt,
-                p.IsActive,
-                matchCountsByPatch.GetValueOrDefault(p.Version)))
-            .ToDictionary(x => x.Patch, StringComparer.OrdinalIgnoreCase);
-
-        foreach (var matchCount in rankedSoloDuoMatchCounts)
-        {
-            optionsByPatch.TryAdd(matchCount.Patch, new AnalyticsPatchOptionDto(
-                matchCount.Patch,
-                null,
-                null,
-                false,
-                matchCount.Count));
-        }
-
-        var options = optionsByPatch.Values
-            .OrderByDescending(x => x.IsActive)
-            .ThenByDescending(x => x.ReleasedAtUtc ?? x.DetectedAtUtc ?? DateTime.MinValue)
-            .ThenByDescending(x => x.Patch)
-            .ToList();
-
-        return Ok(options);
+        return Ok(await patchQueryService.GetPatchOptionsAsync(ct));
     }
 
     [HttpGet("status")]
     [ProducesResponseType(typeof(AnalyticsPatchStatusDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetStatus(CancellationToken ct)
     {
-        var activePatch = await db.Patches
-            .AsNoTracking()
-            .Where(p => p.IsActive)
-            .Select(p => new AnalyticsPatchStatusDto(
-                p.Version,
-                p.ReleaseDate,
-                p.DetectedAt))
-            .FirstOrDefaultAsync(ct);
-
-        return Ok(activePatch ?? new AnalyticsPatchStatusDto(null, null, null));
+        return Ok(await patchQueryService.GetActivePatchStatusAsync(ct));
     }
 
     /// <summary>

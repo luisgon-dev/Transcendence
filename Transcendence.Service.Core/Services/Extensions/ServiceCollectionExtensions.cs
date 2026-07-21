@@ -1,3 +1,6 @@
+using Microsoft.EntityFrameworkCore;
+using Transcendence.Data;
+using Transcendence.Data.Extensions;
 using Transcendence.Service.Core.Services.Admin.Implementations;
 using Transcendence.Service.Core.Services.Admin.Interfaces;
 using Transcendence.Service.Core.Services.Analysis.Implementations;
@@ -8,6 +11,8 @@ using Transcendence.Service.Core.Services.Auth.Implementations;
 using Transcendence.Service.Core.Services.Auth.Interfaces;
 using Transcendence.Service.Core.Services.Cache;
 using Transcendence.Service.Core.Services.Diagnostics;
+using Transcendence.Service.Core.Services.Database.Implementations;
+using Transcendence.Service.Core.Services.Database.Interfaces;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.Jobs.Priority;
@@ -16,8 +21,14 @@ using Transcendence.Service.Core.Services.LiveGame.Interfaces;
 using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.Implementations;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
+using Transcendence.Service.Core.Services.ProSummoners.Implementations;
+using Transcendence.Service.Core.Services.ProSummoners.Interfaces;
+using Transcendence.Service.Core.Services.Refresh.Implementations;
+using Transcendence.Service.Core.Services.Refresh.Interfaces;
 using Transcendence.Service.Core.Services.StaticData.Implementations;
 using Transcendence.Service.Core.Services.StaticData.Interfaces;
+using Transcendence.Service.Core.Services.Summoners.Implementations;
+using Transcendence.Service.Core.Services.Summoners.Interfaces;
 
 namespace Transcendence.Service.Core.Services.Extensions;
 
@@ -38,6 +49,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ILiveGameService, StoredLiveGameService>();
         services.AddScoped<ILiveGameAnalysisService, LiveGameAnalysisService>();
         services.AddScoped<IMultiSearchService, MultiSearchService>();
+        services.AddScoped<ISummonerProfileService, SummonerProfileService>();
+        services.AddScoped<ISummonerRefreshCoordinator, SummonerRefreshCoordinator>();
+        services.AddScoped<ITrackedProSummonerService, TrackedProSummonerService>();
         services.AddSingleton<IRefreshLockLifecycleTelemetry, RefreshLockLifecycleTelemetry>();
         services.AddSingleton<IIngestionThroughputTelemetry, IngestionThroughputTelemetry>();
 
@@ -47,8 +61,27 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IChampionProComputeService, ChampionProComputeService>();
         services.AddScoped<IChampionMatchupComputeService, ChampionMatchupComputeService>();
         services.AddScoped<IChampionAnalyticsService, ChampionAnalyticsService>();
+        services.AddScoped<IAnalyticsPatchQueryService, AnalyticsPatchQueryService>();
         services.AddScoped<IPrecomputedAnalyticsRefresher, PrecomputedAnalyticsRefresher>();
 
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the EF Core context, repositories, and database probe without exposing Data-layer
+    /// types to host projects. A non-pooled context avoids reusing a context while a cancelled query
+    /// is still unwinding.
+    /// </summary>
+    public static IServiceCollection AddTranscendenceData(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services.AddDbContext<TranscendenceContext>(options =>
+            options.UseNpgsql(
+                configuration.GetConnectionString("MainDatabase"),
+                builder => builder.MigrationsAssembly("Transcendence.Service")));
+        services.AddProjectSyndraRepositories();
+        services.AddScoped<IDatabaseHealthProbe, DatabaseHealthProbe>();
         return services;
     }
 

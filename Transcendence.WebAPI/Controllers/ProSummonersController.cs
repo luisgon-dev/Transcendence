@@ -1,18 +1,11 @@
 using System.Security.Claims;
-using Hangfire;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Transcendence.Data;
-using Transcendence.Data.Models.LoL.Account;
-using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Models;
-using Transcendence.Service.Core.Services.Diagnostics;
-using Transcendence.Service.Core.Services.Jobs;
-using Transcendence.Service.Core.Services.Jobs.Interfaces;
+using Transcendence.Service.Core.Services.ProSummoners.Interfaces;
+using Transcendence.Service.Core.Services.Refresh.Interfaces;
 using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.DTOs;
 using Transcendence.WebAPI.Security;
@@ -23,38 +16,15 @@ namespace Transcendence.WebAPI.Controllers;
 [Route("api/admin/pro-summoners")]
 [Authorize(Policy = AuthPolicies.AdminOnly)]
 public class ProSummonersController(
-    TranscendenceContext db,
     IAdminAuditService adminAuditService,
-    IBackgroundJobClient backgroundJobClient,
-    IRefreshLockRepository refreshLockRepository,
-    ILogger<ProSummonersController> logger) : ControllerBase
+    ITrackedProSummonerService trackedProSummonerService,
+    ISummonerRefreshCoordinator refreshCoordinator) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(List<TrackedProSummonerDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> List([FromQuery] bool? isActive = null, CancellationToken ct = default)
     {
-        var query = db.TrackedProSummoners.AsNoTracking();
-        if (isActive.HasValue)
-            query = query.Where(x => x.IsActive == isActive.Value);
-
-        var rows = await query
-            .OrderByDescending(x => x.UpdatedAtUtc)
-            .Select(x => new TrackedProSummonerDto(
-                x.Id,
-                x.Puuid,
-                x.PlatformRegion,
-                x.GameName,
-                x.TagLine,
-                x.ProName,
-                x.TeamName,
-                x.IsPro,
-                x.IsHighEloOtp,
-                x.IsActive,
-                x.CreatedAtUtc,
-                x.UpdatedAtUtc))
-            .ToListAsync(ct);
-
-        return Ok(rows);
+        return Ok(await trackedProSummonerService.ListAsync(isActive, ct));
     }
 
     [HttpPost]
@@ -64,76 +34,20 @@ public class ProSummonersController(
     public async Task<IActionResult> Create([FromBody] UpsertTrackedProSummonerRequest request,
         CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(request.GameName) || string.IsNullOrWhiteSpace(request.TagLine)
-            || string.IsNullOrWhiteSpace(request.PlatformRegion))
-            return BadRequest("gameName, tagLine, and platformRegion are required.");
+        var outcome = await trackedProSummonerService.CreateAsync(request, ct);
+        if (!outcome.IsSuccess)
+            return BadRequest(outcome.ValidationError);
 
-        var normalizedPlatform = request.PlatformRegion.Trim().ToUpperInvariant();
-
-        if (!PlatformRouteParser.TryParse(normalizedPlatform, out var platform))
-            return BadRequest($"Unsupported platform region '{request.PlatformRegion}'.");
-
-        var gameName = request.GameName.Trim();
-        var tagLine = request.TagLine.Trim();
-
-        // Resolve puuid from Riot ID
-        string normalizedPuuid;
-        if (!string.IsNullOrWhiteSpace(request.Puuid))
+        var created = outcome.Value!;
+        await WriteAuditAsync("pro-summoners.create", created.Id.ToString(), new
         {
-            normalizedPuuid = request.Puuid.Trim();
-        }
-        else
-        {
-            var normalizedGameName = gameName.Trim().ToUpperInvariant();
-            var normalizedTagLine = tagLine.Trim().ToUpperInvariant();
-            var resolved = await db.Summoners
-                .AsNoTracking()
-                .Where(x => x.PlatformRegion == normalizedPlatform
-                            && x.GameNameNormalized == normalizedGameName
-                            && x.TagLineNormalized == normalizedTagLine
-                            && x.Puuid != null)
-                .Select(x => x.Puuid)
-                .FirstOrDefaultAsync(ct);
-            if (resolved == null)
-                return BadRequest(
-                    $"Could not resolve Riot ID '{gameName}#{tagLine}' from stored data on {normalizedPlatform}. Provide puuid or refresh/store the summoner first.");
-            normalizedPuuid = resolved;
-        }
-
-        var existing = await db.TrackedProSummoners
-            .FirstOrDefaultAsync(x => x.Puuid == normalizedPuuid && x.PlatformRegion == normalizedPlatform, ct);
-        if (existing != null)
-            return BadRequest("Tracked pro summoner already exists for this puuid/platform.");
-
-        var now = DateTime.UtcNow;
-        var entity = new TrackedProSummoner
-        {
-            Id = Guid.NewGuid(),
-            Puuid = normalizedPuuid,
-            PlatformRegion = normalizedPlatform,
-            GameName = gameName,
-            TagLine = tagLine,
-            ProName = NormalizeOptional(request.ProName),
-            TeamName = NormalizeOptional(request.TeamName),
-            IsPro = request.IsPro,
-            IsHighEloOtp = request.IsHighEloOtp,
-            IsActive = request.IsActive,
-            CreatedAtUtc = now,
-            UpdatedAtUtc = now
-        };
-
-        db.TrackedProSummoners.Add(entity);
-        await db.SaveChangesAsync(ct);
-        await WriteAuditAsync("pro-summoners.create", entity.Id.ToString(), new
-        {
-            entity.Puuid,
-            entity.PlatformRegion,
-            entity.ProName,
-            entity.TeamName,
-            entity.IsActive
+            created.Puuid,
+            created.PlatformRegion,
+            created.ProName,
+            created.TeamName,
+            created.IsActive
         }, ct);
-
-        return CreatedAtAction(nameof(GetById), new { id = entity.Id }, ToDto(entity));
+        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
     [HttpGet("{id:guid}")]
@@ -141,8 +55,8 @@ public class ProSummonersController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById([FromRoute] Guid id, CancellationToken ct = default)
     {
-        var entity = await db.TrackedProSummoners.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
-        return entity == null ? NotFound() : Ok(ToDto(entity));
+        var entity = await trackedProSummonerService.GetByIdAsync(id, ct);
+        return entity == null ? NotFound() : Ok(entity);
     }
 
     [HttpPut("{id:guid}")]
@@ -152,34 +66,18 @@ public class ProSummonersController(
     public async Task<IActionResult> Update([FromRoute] Guid id, [FromBody] UpsertTrackedProSummonerRequest request,
         CancellationToken ct = default)
     {
-        var entity = await db.TrackedProSummoners.FirstOrDefaultAsync(x => x.Id == id, ct);
-        if (entity == null)
+        var updated = await trackedProSummonerService.UpdateAsync(id, request, ct);
+        if (updated == null)
             return NotFound();
-
-        if (!string.IsNullOrWhiteSpace(request.Puuid))
-            entity.Puuid = request.Puuid.Trim();
-        if (!string.IsNullOrWhiteSpace(request.PlatformRegion))
-            entity.PlatformRegion = request.PlatformRegion.Trim().ToUpperInvariant();
-
-        entity.GameName = NormalizeOptional(request.GameName);
-        entity.TagLine = NormalizeOptional(request.TagLine);
-        entity.ProName = NormalizeOptional(request.ProName);
-        entity.TeamName = NormalizeOptional(request.TeamName);
-        entity.IsPro = request.IsPro;
-        entity.IsHighEloOtp = request.IsHighEloOtp;
-        entity.IsActive = request.IsActive;
-        entity.UpdatedAtUtc = DateTime.UtcNow;
-
-        await db.SaveChangesAsync(ct);
-        await WriteAuditAsync("pro-summoners.update", entity.Id.ToString(), new
+        await WriteAuditAsync("pro-summoners.update", updated.Id.ToString(), new
         {
-            entity.Puuid,
-            entity.PlatformRegion,
-            entity.ProName,
-            entity.TeamName,
-            entity.IsActive
+            updated.Puuid,
+            updated.PlatformRegion,
+            updated.ProName,
+            updated.TeamName,
+            updated.IsActive
         }, ct);
-        return Ok(ToDto(entity));
+        return Ok(updated);
     }
 
     [HttpDelete("{id:guid}")]
@@ -188,12 +86,8 @@ public class ProSummonersController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete([FromRoute] Guid id, CancellationToken ct = default)
     {
-        var entity = await db.TrackedProSummoners.FirstOrDefaultAsync(x => x.Id == id, ct);
-        if (entity == null)
+        if (!await trackedProSummonerService.DeleteAsync(id, ct))
             return NotFound();
-
-        db.TrackedProSummoners.Remove(entity);
-        await db.SaveChangesAsync(ct);
         await WriteAuditAsync("pro-summoners.delete", id.ToString(), null, ct);
         return NoContent();
     }
@@ -209,7 +103,7 @@ public class ProSummonersController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Refresh([FromRoute] Guid id, CancellationToken ct = default)
     {
-        var entity = await db.TrackedProSummoners.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
+        var entity = await trackedProSummonerService.GetByIdAsync(id, ct);
         if (entity == null)
             return NotFound();
 
@@ -219,92 +113,20 @@ public class ProSummonersController(
         if (!PlatformRouteParser.TryParse(entity.PlatformRegion, out var platform))
             return BadRequest($"Unsupported platform region '{entity.PlatformRegion}'.");
 
-        var key = RefreshLockKeys.BuildSummonerRefreshKey(platform, entity.GameName, entity.TagLine);
-        var priorityKey = RefreshLockKeys.BuildApiPriorityKey(platform, entity.GameName, entity.TagLine);
-        var ttl = TimeSpan.FromMinutes(15);
-        var lockTelemetry = TryGetLockTelemetry();
         var pollUrl = Url.ActionLink(nameof(GetById), null, new { id });
 
-        var keyToken = await refreshLockRepository.TryAcquireOwnedAsync(key, ttl, ct);
-        var acquired = keyToken is not null;
-        if (!acquired)
-        {
-            var existing = await refreshLockRepository.GetAsync(key, ct);
-            var seconds = existing == null
-                ? (int)ttl.TotalSeconds
-                : (int)Math.Max(1, (existing.LockedUntilUtc - DateTime.UtcNow).TotalSeconds);
-            EmitTelemetry(() =>
-            {
-                lockTelemetry?.RecordLifecycleOutcome(key, "contention", "pro-summoners-controller");
-                lockTelemetry?.RecordContentionWaitHint(key, Math.Max(1, seconds), "pro-summoners-controller");
-            });
-
-            logger.LogInformation(
-                "[RefreshApi] Admin pro-summoner refresh already in progress for {GameName}#{Tag} on {Platform}. trackedId={TrackedId}, retryAfterSeconds={RetryAfterSeconds}, traceId={TraceId}.",
-                entity.GameName,
-                entity.TagLine,
-                platform,
-                entity.Id,
-                seconds,
-                HttpContext.TraceIdentifier);
-
-            return Accepted(new SummonerAcceptedResponse(
-                "Refresh in process",
-                pollUrl,
-                seconds));
-        }
-
-        EmitTelemetry(() => lockTelemetry?.RecordLifecycleOutcome(key, "acquired", "pro-summoners-controller"));
-
-        var priorityToken = await refreshLockRepository.TryAcquireOwnedAsync(priorityKey, ttl, ct);
-        var priorityAcquired = priorityToken is not null;
-        if (!priorityAcquired)
-        {
-            EmitTelemetry(() =>
-            {
-                lockTelemetry?.RecordLifecycleOutcome(priorityKey, "contention", "pro-summoners-controller");
-                lockTelemetry?.RecordContentionWaitHint(
-                    priorityKey,
-                    (int)ttl.TotalSeconds,
-                    "pro-summoners-controller");
-            });
-        }
-
-        try
-        {
-            backgroundJobClient.Enqueue<ISummonerRefreshJob>(job =>
-                job.RefreshByRiotId(entity.GameName, entity.TagLine, platform,
-                    RefreshLockKeys.BuildOwnedHandle(key, keyToken!.Value),
-                    priorityAcquired ? RefreshLockKeys.BuildOwnedHandle(priorityKey, priorityToken!.Value) : null,
-                    null, CancellationToken.None));
-        }
-        catch (Exception ex)
-        {
-            await refreshLockRepository.ReleaseOwnedAsync(key, keyToken!.Value, ct);
-            if (priorityAcquired)
-                await refreshLockRepository.ReleaseOwnedAsync(priorityKey, priorityToken!.Value, ct);
-
-            logger.LogError(
-                ex,
-                "[RefreshApi] Failed to queue admin pro-summoner refresh for {GameName}#{Tag} on {Platform}. trackedId={TrackedId}, priorityLockAcquired={PriorityLockAcquired}, traceId={TraceId}.",
-                entity.GameName,
-                entity.TagLine,
-                platform,
-                entity.Id,
-                priorityAcquired,
-                HttpContext.TraceIdentifier);
-
-            throw;
-        }
-
-        logger.LogInformation(
-            "[RefreshApi] Queued admin pro-summoner refresh for {GameName}#{Tag} on {Platform}. trackedId={TrackedId}, priorityLockAcquired={PriorityLockAcquired}, traceId={TraceId}.",
+        var outcome = await refreshCoordinator.EnqueueRefreshAsync(
             entity.GameName,
             entity.TagLine,
             platform,
-            entity.Id,
-            priorityAcquired,
-            HttpContext.TraceIdentifier);
+            pollUrl,
+            HttpContext.TraceIdentifier,
+            null,
+            "pro-summoners-controller",
+            ct);
+
+        if (!outcome.WasQueued)
+            return Accepted(new SummonerAcceptedResponse("Refresh in process", outcome.PollUrl, outcome.RetryAfterSeconds));
 
         await WriteAuditAsync("pro-summoners.refresh", entity.Id.ToString(), new
         {
@@ -316,53 +138,7 @@ public class ProSummonersController(
 
         return Accepted(new SummonerAcceptedResponse(
             "Refresh queued",
-            pollUrl));
-    }
-
-    private static TrackedProSummonerDto ToDto(TrackedProSummoner entity)
-    {
-        return new TrackedProSummonerDto(
-            entity.Id,
-            entity.Puuid,
-            entity.PlatformRegion,
-            entity.GameName,
-            entity.TagLine,
-            entity.ProName,
-            entity.TeamName,
-            entity.IsPro,
-            entity.IsHighEloOtp,
-            entity.IsActive,
-            entity.CreatedAtUtc,
-            entity.UpdatedAtUtc);
-    }
-
-    private static string? NormalizeOptional(string? value)
-    {
-        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-    }
-
-    private IRefreshLockLifecycleTelemetry? TryGetLockTelemetry()
-    {
-        try
-        {
-            return HttpContext?.RequestServices.GetService<IRefreshLockLifecycleTelemetry>();
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static void EmitTelemetry(Action emit)
-    {
-        try
-        {
-            emit();
-        }
-        catch
-        {
-            // non-blocking telemetry only
-        }
+            outcome.PollUrl));
     }
 
     private async Task WriteAuditAsync(string action, string targetId, object? metadata, CancellationToken ct)
@@ -382,30 +158,3 @@ public class ProSummonersController(
             metadata), ct);
     }
 }
-
-public record UpsertTrackedProSummonerRequest(
-    string GameName,
-    string TagLine,
-    string PlatformRegion,
-    string? Puuid = null,
-    string? ProName = null,
-    string? TeamName = null,
-    bool IsPro = true,
-    bool IsHighEloOtp = false,
-    bool IsActive = true
-);
-
-public record TrackedProSummonerDto(
-    Guid Id,
-    string Puuid,
-    string PlatformRegion,
-    string? GameName,
-    string? TagLine,
-    string? ProName,
-    string? TeamName,
-    bool IsPro,
-    bool IsHighEloOtp,
-    bool IsActive,
-    DateTime CreatedAtUtc,
-    DateTime UpdatedAtUtc
-);

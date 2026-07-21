@@ -40,6 +40,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\Transcendence.Data\Transcendence.Data.csproj" />
         <ProjectReference Include="..\Transcendence.Service.Core\Transcendence.Service.Core.csproj" />
     </ItemGroup>
 

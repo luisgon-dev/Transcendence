@@ -16,6 +16,8 @@ using Transcendence.Service.Core.Services.Auth.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Models;
 using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Jobs;
+using Transcendence.Service.Core.Services.ProSummoners.Implementations;
+using Transcendence.Service.Core.Services.Refresh.Implementations;
 using Transcendence.Service.Core.Services.RiotApi.DTOs;
 using Transcendence.WebAPI.Controllers;
 
@@ -47,11 +49,9 @@ public class ProSummonersControllerTests
         var controller = BuildController(
             db,
             refreshLockRepository.Object,
-            backgroundJobClient.Object);
+            backgroundJobClient.Object,
+            refreshLockTelemetry: lockTelemetry.Object);
         controller.Url = new StaticUrlHelper("https://localhost/api/admin/pro-summoners/tracked-id");
-        controller.ControllerContext.HttpContext.RequestServices = new ServiceCollection()
-            .AddSingleton<IRefreshLockLifecycleTelemetry>(lockTelemetry.Object)
-            .BuildServiceProvider();
 
         var result = await controller.Refresh(tracked.Id, CancellationToken.None);
 
@@ -109,11 +109,9 @@ public class ProSummonersControllerTests
             db,
             refreshLockRepository.Object,
             backgroundJobClient.Object,
-            auditService.Object);
+            auditService.Object,
+            lockTelemetry.Object);
         controller.Url = new StaticUrlHelper("https://localhost/api/admin/pro-summoners/tracked-id");
-        controller.ControllerContext.HttpContext.RequestServices = new ServiceCollection()
-            .AddSingleton<IRefreshLockLifecycleTelemetry>(lockTelemetry.Object)
-            .BuildServiceProvider();
 
         var result = await controller.Refresh(tracked.Id, CancellationToken.None);
 
@@ -152,7 +150,8 @@ public class ProSummonersControllerTests
         TranscendenceContext db,
         IRefreshLockRepository refreshLockRepository,
         IBackgroundJobClient backgroundJobClient,
-        IAdminAuditService? adminAuditService = null)
+        IAdminAuditService? adminAuditService = null,
+        IRefreshLockLifecycleTelemetry? refreshLockTelemetry = null)
     {
         var httpContext = new DefaultHttpContext();
         httpContext.User = new ClaimsPrincipal(new ClaimsIdentity(
@@ -163,11 +162,13 @@ public class ProSummonersControllerTests
         httpContext.Request.Headers["x-trn-request-id"] = "req-123";
 
         return new ProSummonersController(
-            db,
             adminAuditService ?? Mock.Of<IAdminAuditService>(),
-            backgroundJobClient,
-            refreshLockRepository,
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<ProSummonersController>.Instance)
+            new TrackedProSummonerService(db),
+            new SummonerRefreshCoordinator(
+                refreshLockRepository,
+                backgroundJobClient,
+                refreshLockTelemetry ?? Mock.Of<IRefreshLockLifecycleTelemetry>(),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<SummonerRefreshCoordinator>.Instance))
         {
             ControllerContext = new ControllerContext
             {

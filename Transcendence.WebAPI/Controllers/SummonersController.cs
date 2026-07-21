@@ -1,18 +1,12 @@
-using Camille.Enums;
-using Hangfire;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using System.Security.Claims;
-using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Analysis.Interfaces;
-using Transcendence.Service.Core.Services.Diagnostics;
-using Transcendence.Service.Core.Services.Jobs;
-using Transcendence.Service.Core.Services.Jobs.Interfaces;
+using Transcendence.Service.Core.Services.Refresh.Interfaces;
 using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.DTOs;
+using Transcendence.Service.Core.Services.Summoners.Interfaces;
 using Transcendence.WebAPI.Models.MultiSearch;
 using Transcendence.WebAPI.Security;
 
@@ -22,12 +16,9 @@ namespace Transcendence.WebAPI.Controllers;
 [Route("api/lol/summoners")]
 [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
 public class SummonersController(
-    ISummonerRepository summonerRepository,
-    IRefreshLockRepository refreshLockRepository,
-    IBackgroundJobClient backgroundJobClient,
-    ISummonerStatsService statsService,
-    IMultiSearchService multiSearchService,
-    ILogger<SummonersController> logger
+    ISummonerProfileService summonerProfileService,
+    ISummonerRefreshCoordinator refreshCoordinator,
+    IMultiSearchService multiSearchService
 ) : ControllerBase
 {
     /// <summary>
@@ -53,7 +44,7 @@ public class SummonersController(
             return BadRequest("Query must be at least 2 characters and use at most one '#' delimiter.");
 
         var safeLimit = Math.Clamp(limit ?? 8, 1, 10);
-        var candidates = await summonerRepository.SearchByPrefixAsync(
+        var candidates = await summonerProfileService.SearchByPrefixAsync(
             platform.ToString(),
             gameNamePrefix,
             tagLinePrefix,
@@ -98,178 +89,28 @@ public class SummonersController(
         if (!PlatformRouteParser.TryParse(region, out var platform))
             return BadRequest($"Unsupported region '{region}'. Use a platform like NA1, EUW1, EUN1, KR, etc.");
 
-        var platformRegion = platform.ToString();
-        var summoner = await summonerRepository.FindByRiotIdAsync(platformRegion, name, tag,
-            q => q.AsNoTracking().Include(s => s.Ranks), ct);
-        if (summoner != null)
-        {
-            // Map to response DTO with data age metadata
-            var soloRank = summoner.Ranks
-                .Where(r => IsSoloRankQueue(r.QueueType))
-                .OrderByDescending(r => r.UpdatedAt)
-                .FirstOrDefault();
-            var flexRank = summoner.Ranks
-                .Where(r => IsFlexRankQueue(r.QueueType))
-                .OrderByDescending(r => r.UpdatedAt)
-                .FirstOrDefault();
+        var profile = await summonerProfileService.GetProfileByRiotIdAsync(platform.ToString(), name, tag, ct);
+        if (profile is not null)
+            return Ok(profile);
 
-            // Keep these sequential because statsService shares a scoped DbContext, which is not thread-safe.
-            var activeSeasonStats = await statsService.GetActiveSeasonProfileStatsAsync(summoner.Id, 5, 20, ct);
-            var overview = activeSeasonStats.Overview;
-            var champions = activeSeasonStats.Champions;
-            var recent = await statsService.GetRecentMatchesAsync(summoner.Id, 1, 10, null, null, ct);
-            var playedWith = await statsService.GetPlayedWithAsync(summoner.Id, 100, 6, ct);
-            var mastery = await statsService.GetTopMasteryAsync(summoner.Id, 6, ct);
-
-            // Calculate StatsAge from most recent match
-            var mostRecentMatchDate = recent.Items.Count > 0 ? recent.Items[0].MatchDate : (long?)null;
-
-            var response = new SummonerProfileResponse
-            {
-                SummonerId = summoner.Id,
-                Puuid = summoner.Puuid ?? string.Empty,
-                GameName = summoner.GameName ?? string.Empty,
-                TagLine = summoner.TagLine ?? string.Empty,
-                SummonerLevel = (int)summoner.SummonerLevel,
-                ProfileIconId = summoner.ProfileIconId,
-
-                SoloRank = soloRank != null ? new RankInfo
-                {
-                    Tier = soloRank.Tier,
-                    Division = soloRank.RankNumber,
-                    LeaguePoints = soloRank.LeaguePoints,
-                    Wins = soloRank.Wins,
-                    Losses = soloRank.Losses
-                } : null,
-
-                FlexRank = flexRank != null ? new RankInfo
-                {
-                    Tier = flexRank.Tier,
-                    Division = flexRank.RankNumber,
-                    LeaguePoints = flexRank.LeaguePoints,
-                    Wins = flexRank.Wins,
-                    Losses = flexRank.Losses
-                } : null,
-
-                // Overview stats
-                OverviewStats = overview.TotalMatches > 0 ? new ProfileOverviewStats
-                {
-                    TotalMatches = overview.TotalMatches,
-                    Wins = overview.Wins,
-                    Losses = overview.Losses,
-                    WinRate = overview.WinRate,
-                    AvgKills = overview.AvgKills,
-                    AvgDeaths = overview.AvgDeaths,
-                    AvgAssists = overview.AvgAssists,
-                    KdaRatio = overview.KdaRatio,
-                    AvgCsPerMin = overview.AvgCsPerMin,
-                    AvgVisionScore = overview.AvgVisionScore,
-                    AvgDamageToChamps = overview.AvgDamageToChamps
-                } : null,
-
-                // Top 5 champions
-                TopChampions = champions.Select(c => new ProfileChampionStat
-                {
-                    ChampionId = c.ChampionId,
-                    Games = c.Games,
-                    Wins = c.Wins,
-                    Losses = c.Losses,
-                    WinRate = c.WinRate,
-                    KdaRatio = c.KdaRatio
-                }).ToList(),
-
-                ActiveSeason = new ProfileSeasonMetadata
-                {
-                    SeasonKey = activeSeasonStats.SeasonKey,
-                    DisplayName = activeSeasonStats.SeasonDisplayName,
-                    QueueScope = activeSeasonStats.QueueScope
-                },
-
-                FullHistory = activeSeasonStats.FullHistory != null ? new ProfileFullHistoryStatus
-                {
-                    Status = activeSeasonStats.FullHistory.Status,
-                    RequestedAtUtc = activeSeasonStats.FullHistory.RequestedAtUtc,
-                    StartedAtUtc = activeSeasonStats.FullHistory.StartedAtUtc,
-                    CompletedAtUtc = activeSeasonStats.FullHistory.CompletedAtUtc,
-                    UpdatedAtUtc = activeSeasonStats.FullHistory.UpdatedAtUtc,
-                    PagesScanned = activeSeasonStats.FullHistory.PagesScanned,
-                    MatchIdsDiscovered = activeSeasonStats.FullHistory.MatchIdsDiscovered,
-                    FactsPersisted = activeSeasonStats.FullHistory.FactsPersisted,
-                    DetailFetchFailures = activeSeasonStats.FullHistory.DetailFetchFailures,
-                    CompletedMatchCount = activeSeasonStats.FullHistory.CompletedMatchCount,
-                    RiotWins = activeSeasonStats.FullHistory.RiotWins,
-                    RiotLosses = activeSeasonStats.FullHistory.RiotLosses,
-                    RiotTotal = activeSeasonStats.FullHistory.RiotTotal,
-                    RankedCountDelta = activeSeasonStats.FullHistory.RankedCountDelta,
-                    CoverageStatus = activeSeasonStats.FullHistory.CoverageStatus,
-                    ClassifierVersion = activeSeasonStats.FullHistory.ClassifierVersion
-                } : null,
-
-                FrequentlyPlayedWith = playedWith.Select(p => new FrequentlyPlayedWithStat
-                {
-                    SummonerId = p.SummonerId,
-                    GameName = p.GameName ?? string.Empty,
-                    TagLine = p.TagLine ?? string.Empty,
-                    GamesTogether = p.GamesTogether,
-                    SameTeamGames = p.SameTeamGames,
-                    SameTeamWins = p.SameTeamWins
-                }).ToList(),
-
-                TopMastery = mastery.Select(m => new ChampionMasteryStat
-                {
-                    ChampionId = m.ChampionId,
-                    ChampionLevel = m.ChampionLevel,
-                    ChampionPoints = m.ChampionPoints,
-                    LastPlayTime = m.LastPlayTime,
-                    ChestGranted = m.ChestGranted,
-                    TokensEarned = m.TokensEarned
-                }).ToList(),
-
-                ProfileAge = new DataAgeMetadata
-                {
-                    FetchedAt = summoner.UpdatedAt
-                },
-
-                RankAge = new DataAgeMetadata
-                {
-                    FetchedAt = soloRank?.UpdatedAt ?? flexRank?.UpdatedAt ?? DateTime.UtcNow
-                },
-
-                // Stats freshness based on most recent match
-                StatsAge = mostRecentMatchDate.HasValue
-                    ? new DataAgeMetadata
-                    {
-                        FetchedAt = DateTimeOffset.FromUnixTimeMilliseconds(mostRecentMatchDate.Value).UtcDateTime
-                    }
-                    : null
-            };
-
-            return Ok(response);
-        }
-
-        // If a refresh is in progress, let the caller know
-        var refreshKey = RefreshLockKeys.BuildSummonerRefreshKey(platform, name, tag);
-        var lockRow = await refreshLockRepository.GetAsync(refreshKey, ct);
         var pollUrl = Url.ActionLink(nameof(GetByRiotId), null, new
         {
             region,
             name,
             tag
         });
-        if (lockRow != null && lockRow.LockedUntilUtc > DateTime.UtcNow)
+        var progress = await refreshCoordinator.GetProgressAsync(
+            name,
+            tag,
+            platform,
+            "summoners-controller",
+            ct);
+        if (progress is not null)
         {
-            var seconds = (int)(lockRow.LockedUntilUtc - DateTime.UtcNow).TotalSeconds;
-            EmitTelemetry(() =>
-            {
-                var lockTelemetry = TryGetLockTelemetry();
-                lockTelemetry?.RecordLifecycleOutcome(refreshKey, "contention", "summoners-controller");
-                lockTelemetry?.RecordContentionWaitHint(refreshKey, Math.Max(1, seconds), "summoners-controller");
-            });
-
             return Accepted(new SummonerAcceptedResponse(
                 "Refresh in process",
                 pollUrl,
-                Math.Max(1, seconds)));
+                progress.RetryAfterSeconds));
         }
 
         return Accepted(new SummonerAcceptedResponse(
@@ -299,100 +140,26 @@ public class SummonersController(
         if (!TryGetUserId(out var requestedByUserAccountId))
             return Unauthorized();
 
-        var key = RefreshLockKeys.BuildSummonerRefreshKey(platform, name, tag);
-        var priorityKey = RefreshLockKeys.BuildApiPriorityKey(platform, name, tag);
-        var ttl = TimeSpan.FromMinutes(15);
-        var lockTelemetry = TryGetLockTelemetry();
         var pollUrl = Url.ActionLink(nameof(GetByRiotId), null, new
         {
             region,
             name,
             tag
         });
-
-        var keyToken = await refreshLockRepository.TryAcquireOwnedAsync(key, ttl, ct);
-        var acquired = keyToken is not null;
-        if (!acquired)
-        {
-            var existing = await refreshLockRepository.GetAsync(key, ct);
-            var seconds = existing == null
-                ? (int)ttl.TotalSeconds
-                : (int)Math.Max(1, (existing.LockedUntilUtc - DateTime.UtcNow).TotalSeconds);
-            EmitTelemetry(() =>
-            {
-                lockTelemetry?.RecordLifecycleOutcome(key, "contention", "summoners-controller");
-                lockTelemetry?.RecordContentionWaitHint(key, Math.Max(1, seconds), "summoners-controller");
-            });
-
-            logger.LogInformation(
-                "[RefreshApi] LoL summoner refresh already in progress for {GameName}#{Tag} on {Platform}. retryAfterSeconds={RetryAfterSeconds}, traceId={TraceId}.",
-                name,
-                tag,
-                platform,
-                seconds,
-                HttpContext.TraceIdentifier);
-
-            return Accepted(new SummonerAcceptedResponse(
-                "Refresh in process",
-                pollUrl,
-                seconds));
-        }
-
-        EmitTelemetry(() => lockTelemetry?.RecordLifecycleOutcome(key, "acquired", "summoners-controller"));
-
-        var priorityToken = await refreshLockRepository.TryAcquireOwnedAsync(priorityKey, ttl, ct);
-        var priorityAcquired = priorityToken is not null;
-        if (!priorityAcquired)
-        {
-            EmitTelemetry(() =>
-            {
-                lockTelemetry?.RecordLifecycleOutcome(priorityKey, "contention", "summoners-controller");
-                lockTelemetry?.RecordContentionWaitHint(
-                    priorityKey,
-                    (int)ttl.TotalSeconds,
-                    "summoners-controller");
-            });
-        }
-
-        // Enqueue refresh job
-        try
-        {
-            backgroundJobClient.Enqueue<ISummonerRefreshJob>(job =>
-                job.RefreshByRiotId(name, tag, platform,
-                    RefreshLockKeys.BuildOwnedHandle(key, keyToken!.Value),
-                    priorityAcquired ? RefreshLockKeys.BuildOwnedHandle(priorityKey, priorityToken!.Value) : null,
-                    requestedByUserAccountId,
-                    CancellationToken.None));
-        }
-        catch (Exception ex)
-        {
-            await refreshLockRepository.ReleaseOwnedAsync(key, keyToken!.Value, ct);
-            if (priorityAcquired)
-                await refreshLockRepository.ReleaseOwnedAsync(priorityKey, priorityToken!.Value, ct);
-
-            logger.LogError(
-                ex,
-                "[RefreshApi] Failed to queue LoL summoner refresh for {GameName}#{Tag} on {Platform}. priorityLockAcquired={PriorityLockAcquired}, traceId={TraceId}.",
-                name,
-                tag,
-                platform,
-                priorityAcquired,
-                HttpContext.TraceIdentifier);
-
-            throw;
-        }
-
-        logger.LogInformation(
-            "[RefreshApi] Queued LoL summoner refresh for {GameName}#{Tag} on {Platform}. priorityLockAcquired={PriorityLockAcquired}, traceId={TraceId}.",
+        var outcome = await refreshCoordinator.EnqueueRefreshAsync(
             name,
             tag,
             platform,
-            priorityAcquired,
-            HttpContext.TraceIdentifier);
+            pollUrl,
+            HttpContext.TraceIdentifier,
+            requestedByUserAccountId,
+            "summoners-controller",
+            ct);
 
         return Accepted(new SummonerAcceptedResponse(
-            "Refresh queued",
-            pollUrl));
+            outcome.WasQueued ? "Refresh queued" : "Refresh in process",
+            outcome.PollUrl,
+            outcome.RetryAfterSeconds));
     }
 
     /// <summary>
@@ -475,20 +242,6 @@ public class SummonersController(
         return Ok(response);
     }
 
-    private static bool IsSoloRankQueue(string? queueType)
-    {
-        if (string.IsNullOrWhiteSpace(queueType)) return false;
-        return queueType.Equals("RANKED_SOLO_5x5", StringComparison.OrdinalIgnoreCase) ||
-               queueType.Equals("RANKED_SOLO_5X5", StringComparison.OrdinalIgnoreCase) ||
-               queueType.Equals("RANKED_SOLO_5V5", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool IsFlexRankQueue(string? queueType)
-    {
-        if (string.IsNullOrWhiteSpace(queueType)) return false;
-        return queueType.StartsWith("RANKED_FLEX", StringComparison.OrdinalIgnoreCase);
-    }
-
     private static bool TryParseSearchQuery(string? rawQuery, out string gameNamePrefix, out string? tagLinePrefix)
     {
         gameNamePrefix = string.Empty;
@@ -540,33 +293,9 @@ public class SummonersController(
         };
     }
 
-    private IRefreshLockLifecycleTelemetry? TryGetLockTelemetry()
-    {
-        try
-        {
-            return HttpContext?.RequestServices.GetService<IRefreshLockLifecycleTelemetry>();
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
     private bool TryGetUserId(out Guid userId)
     {
         var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
         return Guid.TryParse(claim, out userId);
-    }
-
-    private static void EmitTelemetry(Action emit)
-    {
-        try
-        {
-            emit();
-        }
-        catch
-        {
-            // non-blocking telemetry only
-        }
     }
 }

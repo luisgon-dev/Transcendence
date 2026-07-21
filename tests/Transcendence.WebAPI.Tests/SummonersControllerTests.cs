@@ -15,6 +15,8 @@ using Transcendence.Service.Core.Services.Analysis.Interfaces;
 using Transcendence.Service.Core.Services.Analysis.Models;
 using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Jobs;
+using Transcendence.Service.Core.Services.Refresh.Implementations;
+using Transcendence.Service.Core.Services.Summoners.Implementations;
 using Transcendence.Service.Core.Services.RiotApi.DTOs;
 using Transcendence.WebAPI.Controllers;
 
@@ -54,11 +56,10 @@ public class SummonersControllerTests
         };
 
         summonerRepository
-            .Setup(x => x.FindByRiotIdAsync(
+            .Setup(x => x.FindByRiotIdWithRanksAsync(
                 "NA1",
                 "name",
                 "tag",
-                It.IsAny<Func<IQueryable<Summoner>, IQueryable<Summoner>>?>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(summoner);
 
@@ -86,11 +87,10 @@ public class SummonersControllerTests
         var statsService = new Mock<ISummonerStatsService>();
 
         summonerRepository
-            .Setup(x => x.FindByRiotIdAsync(
+            .Setup(x => x.FindByRiotIdWithRanksAsync(
                 "NA1",
                 "name",
                 "tag",
-                It.IsAny<Func<IQueryable<Summoner>, IQueryable<Summoner>>?>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync((Summoner?)null);
 
@@ -131,11 +131,9 @@ public class SummonersControllerTests
 
         var controller = BuildController(
             refreshLockRepository: refreshLockRepository.Object,
-            backgroundJobClient: backgroundJobClient.Object);
+            backgroundJobClient: backgroundJobClient.Object,
+            refreshLockTelemetry: lockTelemetry.Object);
         controller.Url = new StaticUrlHelper("https://localhost/api/summoners/na1/name/tag");
-        controller.ControllerContext.HttpContext.RequestServices = new ServiceCollection()
-            .AddSingleton<IRefreshLockLifecycleTelemetry>(lockTelemetry.Object)
-            .BuildServiceProvider();
 
         var result = await controller.RefreshByRiotId("na1", "name", "tag", CancellationToken.None);
 
@@ -213,11 +211,9 @@ public class SummonersControllerTests
 
         var controller = BuildController(
             refreshLockRepository: refreshLockRepository.Object,
-            backgroundJobClient: backgroundJobClient.Object);
+            backgroundJobClient: backgroundJobClient.Object,
+            refreshLockTelemetry: lockTelemetry.Object);
         controller.Url = new StaticUrlHelper("https://localhost/api/summoners/na1/name/tag");
-        controller.ControllerContext.HttpContext.RequestServices = new ServiceCollection()
-            .AddSingleton<IRefreshLockLifecycleTelemetry>(lockTelemetry.Object)
-            .BuildServiceProvider();
 
         var result = await controller.RefreshByRiotId("na1", "Name", "Tag", CancellationToken.None);
 
@@ -246,15 +242,22 @@ public class SummonersControllerTests
         IRefreshLockRepository? refreshLockRepository = null,
         IBackgroundJobClient? backgroundJobClient = null,
         ISummonerStatsService? statsService = null,
-        IMultiSearchService? multiSearchService = null)
+        IMultiSearchService? multiSearchService = null,
+        IRefreshLockLifecycleTelemetry? refreshLockTelemetry = null)
     {
+        var effectiveSummonerRepository = summonerRepository ?? Mock.Of<ISummonerRepository>();
+        var effectiveRefreshLockRepository = refreshLockRepository ?? Mock.Of<IRefreshLockRepository>();
+        var effectiveBackgroundJobClient = backgroundJobClient ?? Mock.Of<IBackgroundJobClient>();
         return new SummonersController(
-            summonerRepository ?? Mock.Of<ISummonerRepository>(),
-            refreshLockRepository ?? Mock.Of<IRefreshLockRepository>(),
-            backgroundJobClient ?? Mock.Of<IBackgroundJobClient>(),
-            statsService ?? Mock.Of<ISummonerStatsService>(),
-            multiSearchService ?? Mock.Of<IMultiSearchService>(),
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<SummonersController>.Instance)
+            new SummonerProfileService(
+                effectiveSummonerRepository,
+                statsService ?? Mock.Of<ISummonerStatsService>()),
+            new SummonerRefreshCoordinator(
+                effectiveRefreshLockRepository,
+                effectiveBackgroundJobClient,
+                refreshLockTelemetry ?? Mock.Of<IRefreshLockLifecycleTelemetry>(),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<SummonerRefreshCoordinator>.Instance),
+            multiSearchService ?? Mock.Of<IMultiSearchService>())
         {
             ControllerContext = new ControllerContext
             {

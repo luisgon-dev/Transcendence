@@ -14,6 +14,9 @@ Transcendence is a backend + web monorepo:
 - Enqueues background work (Hangfire) for expensive refresh operations
 - Exposes OpenAPI/Swagger (spec is exported and committed under `openapi/`)
 - Does not hold Riot API keys and does not call Camille directly
+- Has no project reference to `Transcendence.Data`. Controllers own HTTP concerns only (authorization,
+  status/header mapping, route-link construction, and audit actor extraction) and delegate persistence,
+  projection, validation, and refresh-lock orchestration to `Transcendence.Service.Core` services.
 
 ### `Transcendence.Service`
 - Background host that runs Hangfire server and recurring jobs
@@ -72,8 +75,8 @@ Transcendence is a backend + web monorepo:
    - If missing: return `202 Accepted` indicating refresh is needed
 2. Client triggers refresh:
    - The refresh endpoint is signed-in only (`UserOnly`); the web app reaches it through `/api/trn/user/*`
-   - WebAPI acquires a refresh lock (prevents concurrent refreshes)
-   - WebAPI enqueues Hangfire job
+   - The shared `ISummonerRefreshCoordinator` acquires the refresh locks (preventing concurrent refreshes)
+   - The coordinator enqueues the Hangfire job and releases owned locks if enqueueing fails
 3. Worker performs refresh:
    - Calls Riot APIs
    - Upserts summoner/rank/match records
@@ -134,7 +137,7 @@ Operational implication:
 
 ### Refresh Lock Lifecycle Telemetry and Retention
 
-- Lock lifecycle telemetry is emitted as best-effort/non-blocking instrumentation from API controllers, repository lock operations, and the lifecycle cleanup job.
+- Lock lifecycle telemetry is emitted as best-effort/non-blocking instrumentation from the shared API refresh coordinator, repository lock operations, and the lifecycle cleanup job.
 - Shared telemetry dimensions/tags:
   - `lock_class` (for example `summoner-refresh`, `refresh-priority:api`, `refresh-lock-lifecycle`)
   - `platform_region` (for example `NA1`, `EUW1`, `GLOBAL`)

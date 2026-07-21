@@ -1,7 +1,6 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using StackExchange.Redis;
-using Transcendence.Data;
+using Transcendence.Service.Core.Services.Database.Interfaces;
 
 namespace Transcendence.WebAPI.Health;
 
@@ -9,14 +8,14 @@ namespace Transcendence.WebAPI.Health;
 /// Readiness probe for PostgreSQL — confirms the API can open a database connection.
 /// Tagged "ready" so it backs /health/ready but not the shallow /health/live.
 /// </summary>
-internal sealed class DatabaseReadinessHealthCheck(TranscendenceContext db) : IHealthCheck
+internal sealed class DatabaseReadinessHealthCheck(IDatabaseHealthProbe databaseProbe) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context, CancellationToken cancellationToken = default)
     {
         try
         {
-            return await db.Database.CanConnectAsync(cancellationToken)
+            return await databaseProbe.CanConnectAsync(cancellationToken)
                 ? HealthCheckResult.Healthy()
                 : HealthCheckResult.Unhealthy("PostgreSQL CanConnect returned false");
         }

@@ -1,9 +1,11 @@
 using FluentAssertions;
+using Hangfire;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Moq;
 using Transcendence.Data;
 using Transcendence.Data.Extensions;
 using Transcendence.Service.Core.Services.Extensions;
@@ -33,6 +35,7 @@ public class ServiceCollectionExtensionsTests
             .UseSqlite(connection)
             .Options;
         services.AddScoped<TranscendenceContext>(_ => new SqliteCompatibleTranscendenceContext(dbOptions));
+        services.AddSingleton(Mock.Of<IBackgroundJobClient>());
         services.Configure<MultiRegionIngestionOptions>(_ => { });
         services.AddProjectSyndraRepositories();
         services.AddTranscendenceCore();

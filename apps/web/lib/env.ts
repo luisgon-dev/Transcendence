@@ -35,6 +35,18 @@ export function getPublicOrigin(): string | null {
   }
 }
 
+/**
+ * Absolute public origin for metadata, canonical links, social cards, and crawl manifests.
+ * Production should set TRN_PUBLIC_ORIGIN; the hosted origin is a safe build-time fallback
+ * so a container image built without runtime env does not publish localhost URLs.
+ */
+export function getPublicSiteOrigin(): string {
+  return getPublicOrigin() ??
+    (process.env.NODE_ENV === "production"
+      ? "https://transcend.kronic.one"
+      : "http://localhost:3000");
+}
+
 export function getBackendTimeoutMs(): number {
   const raw = process.env.TRN_BACKEND_TIMEOUT_MS;
   const n = raw ? Number(raw) : NaN;

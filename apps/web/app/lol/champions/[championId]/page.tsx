@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import type { Metadata } from "next";
 import { cache, Suspense } from "react";
 import type { components } from "@transcendence/api-client";
 
@@ -34,6 +35,7 @@ import {
   fetchSummonerSpellMap
 } from "@/lib/staticData";
 import { formatEbStory } from "@/lib/confidence";
+import { socialImageUrl } from "@/lib/seo";
 import { decodeGrade, formatStrengthDelta } from "@/lib/tierlist";
 
 type ChampionWinRateDto = components["schemas"]["ChampionWinRateDto"];
@@ -48,6 +50,54 @@ type MatchupEntryDto = components["schemas"]["MatchupEntryDto"];
 type ChampionSearchParams = { role?: string; rankTier?: string; region?: string; patch?: string; sort?: string };
 
 const ROLES = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"] as const;
+
+export async function generateMetadata({
+  params,
+  searchParams
+}: {
+  params: Promise<{ championId: string }>;
+  searchParams?: Promise<ChampionSearchParams>;
+}): Promise<Metadata> {
+  const [{ championId }, resolvedSearchParams] = await Promise.all([
+    params,
+    searchParams ?? Promise.resolve({} as ChampionSearchParams)
+  ]);
+  const championNumber = Number(championId);
+  const selectedPatch = normalizeAnalyticsPatch(resolvedSearchParams.patch);
+  let championName = Number.isFinite(championNumber) ? `Champion ${championNumber}` : "Champion";
+  let patch = selectedPatch;
+
+  try {
+    const [{ champions }, patches] = await Promise.all([
+      fetchChampionMap(),
+      selectedPatch ? Promise.resolve([]) : fetchLolAnalyticsPatches()
+    ]);
+    championName = champions[championId]?.name ?? championName;
+    patch ??= patches.find((candidate) => candidate.isActive)?.patch ?? patches[0]?.patch ?? null;
+  } catch {
+    // Metadata degrades to the route identity if static data is temporarily unavailable.
+  }
+
+  const patchLabel = patch ? ` for patch ${patch}` : "";
+  const title = `${championName} Build, Runes and Counters${patchLabel}`;
+  const description = `Current ${championName} builds, runes, matchups, win rates, and role stats${patchLabel}.`;
+  const canonical = `/lol/champions/${encodeURIComponent(championId)}`;
+  const image = socialImageUrl(title, "Champion analytics", "Builds, runes, counters, and trustworthy samples");
+
+  return {
+    title,
+    description,
+    alternates: { canonical },
+    openGraph: {
+      type: "website",
+      title,
+      description,
+      url: canonical,
+      images: [{ url: image, width: 1200, height: 630, alt: `${championName} analytics` }]
+    },
+    twitter: { card: "summary_large_image", title, description, images: [image] }
+  };
+}
 
 function matchupVerdict(winRate: number | null | undefined): string {
   const pct = (winRate ?? 0) * 100;

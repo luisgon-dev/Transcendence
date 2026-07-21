@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { TierListFilterBar } from "@/components/TierListFilterBar";
@@ -21,11 +23,49 @@ import {
   rankTierDisplayLabel
 } from "@/lib/ranks";
 import { roleDisplayLabel } from "@/lib/roles";
+import { socialImageUrl } from "@/lib/seo";
 import { fetchChampionMap } from "@/lib/staticData";
 import { normalizeTierListEntries, type TierListResponseLike } from "@/lib/tierlist";
 import { UpdatedAgo } from "@/components/UpdatedAgo";
 
 type TierListResponse = TierListResponseLike;
+
+type TierListSearchParams = { role?: string; rankTier?: string; region?: string; patch?: string };
+
+export async function generateMetadata({
+  searchParams
+}: {
+  searchParams?: Promise<TierListSearchParams>;
+}): Promise<Metadata> {
+  const resolved = searchParams ? await searchParams : {};
+  const role = (resolved.role ?? "ALL").toUpperCase();
+  const rank = rankTierDisplayLabel(normalizeRankTierParam(resolved.rankTier) ?? DEFAULT_TIERLIST_RANK_TIER);
+  let patch = normalizeAnalyticsPatch(resolved.patch);
+  if (!patch) {
+    const patches = await fetchLolAnalyticsPatches();
+    patch = patches.find((candidate) => candidate.isActive)?.patch ?? patches[0]?.patch ?? null;
+  }
+
+  const roleLabel = roleDisplayLabel(role);
+  const patchLabel = patch ? ` Patch ${patch}` : "";
+  const title = `League of Legends ${roleLabel} Tier List${patchLabel}`;
+  const description = `${rank} champion rankings for ${roleLabel.toLowerCase()}, with win rates, pick rates, sample confidence, and current-patch data.`;
+  const image = socialImageUrl(title, "League tier list", `${rank}, trustworthy samples, and role-specific rankings`);
+
+  return {
+    title,
+    description,
+    alternates: { canonical: "/lol/tierlist" },
+    openGraph: {
+      type: "website",
+      title,
+      description,
+      url: "/lol/tierlist",
+      images: [{ url: image, width: 1200, height: 630, alt: title }]
+    },
+    twitter: { card: "summary_large_image", title, description, images: [image] }
+  };
+}
 
 export default async function TierListPage({
   searchParams

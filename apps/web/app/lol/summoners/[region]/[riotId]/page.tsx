@@ -1,15 +1,54 @@
+import type { Metadata } from "next";
+
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { SummonerProfileClient } from "@/components/SummonerProfileClient";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { newRequestId } from "@/lib/requestId";
 import { getSafeRequestContext } from "@/lib/requestContext";
-import { decodeRiotIdPath } from "@/lib/riotid";
+import { decodeRiotIdPath, encodeRiotIdPath } from "@/lib/riotid";
+import { socialImageUrl } from "@/lib/seo";
 import { logEvent } from "@/lib/serverLog";
 import { safeDecodeURIComponent, toCodePoints } from "@/lib/textDebug";
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
+}
+
+export async function generateMetadata({
+  params
+}: {
+  params: Promise<{ region: string; riotId: string }>;
+}): Promise<Metadata> {
+  const { region, riotId: riotIdPath } = await params;
+  const riotId = decodeRiotIdPath(riotIdPath);
+  if (!riotId) {
+    return {
+      title: "Summoner profile",
+      robots: { index: false, follow: false }
+    };
+  }
+
+  const displayName = `${riotId.gameName}#${riotId.tagLine}`;
+  const regionLabel = region.toUpperCase();
+  const title = `${displayName} Rank and Match History`;
+  const description = `View ${displayName}'s ${regionLabel} rank, match history, champion pool, performance, and recent form.`;
+  const canonical = `/lol/summoners/${encodeURIComponent(region.toLowerCase())}/${encodeRiotIdPath(riotId)}`;
+  const image = socialImageUrl(title, `${regionLabel} summoner profile`, "Rank, recent form, champion pool, and match history");
+
+  return {
+    title,
+    description,
+    alternates: { canonical },
+    openGraph: {
+      type: "profile",
+      title,
+      description,
+      url: canonical,
+      images: [{ url: image, width: 1200, height: 630, alt: `${displayName} profile` }]
+    },
+    twitter: { card: "summary_large_image", title, description, images: [image] }
+  };
 }
 
 export default async function SummonerProfilePage({

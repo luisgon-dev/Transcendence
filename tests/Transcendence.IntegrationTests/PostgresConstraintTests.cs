@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Models.LoL.Match;
@@ -35,6 +36,26 @@ public sealed class PostgresConstraintTests(PostgresIntegrationFixture fixture)
 
         await act.Should().ThrowAsync<DbUpdateException>(
             "the unique index on Summoner.Puuid must be enforced by Postgres — the InMemory provider would silently accept the duplicate");
+    }
+
+    [Fact]
+    public async Task StableRiotIdentifiers_CannotBeNull_OnPostgres()
+    {
+        await using var db = NewDb();
+
+        var nullSummonerPuuid = async () => await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "Summoners" ("Id", "Puuid", "PlatformRegion", "Region")
+            VALUES ({Guid.NewGuid()}, NULL, 'NA1', 'americas')
+            """);
+        var nullMatchId = async () => await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "Matches" ("Id", "MatchId", "MatchDate", "Duration", "QueueId", "Status", "RetryCount")
+            VALUES ({Guid.NewGuid()}, NULL, 0, 0, 0, 0, 0)
+            """);
+
+        (await nullSummonerPuuid.Should().ThrowAsync<PostgresException>())
+            .Which.SqlState.Should().Be(PostgresErrorCodes.NotNullViolation);
+        (await nullMatchId.Should().ThrowAsync<PostgresException>())
+            .Which.SqlState.Should().Be(PostgresErrorCodes.NotNullViolation);
     }
 
     [Fact]

@@ -808,9 +808,6 @@ public class SummonerRefreshJob(
 
         foreach (var match in matches)
         {
-            if (match.MatchId == null)
-                continue;
-
             if (!QueueCatalog.IsRankedAnalyticsQueue(match.QueueId))
                 continue;
 

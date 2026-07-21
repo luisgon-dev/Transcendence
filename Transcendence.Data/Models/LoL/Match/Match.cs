@@ -12,7 +12,7 @@ public enum FetchStatus
 public class Match
 {
     public Guid Id { get; set; }
-    public string? MatchId { get; set; }
+    public string MatchId { get; set; } = null!;
     public long MatchDate { get; set; }
     public int Duration { get; set; }
     public string? Patch { get; set; }

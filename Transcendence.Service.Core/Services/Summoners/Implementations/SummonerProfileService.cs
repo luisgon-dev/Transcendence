@@ -65,7 +65,7 @@ public sealed class SummonerProfileService(
         return new SummonerProfileResponse
         {
             SummonerId = summoner.Id,
-            Puuid = summoner.Puuid ?? string.Empty,
+            Puuid = summoner.Puuid,
             GameName = summoner.GameName ?? string.Empty,
             TagLine = summoner.TagLine ?? string.Empty,
             SummonerLevel = (int)summoner.SummonerLevel,

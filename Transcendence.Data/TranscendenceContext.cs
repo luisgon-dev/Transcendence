@@ -74,6 +74,10 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             .IsUnique();
 
         modelBuilder.Entity<Match>()
+            .Property(x => x.MatchId)
+            .IsRequired();
+
+        modelBuilder.Entity<Match>()
             .HasIndex(x => new
             {
                 x.MatchId
@@ -93,6 +97,10 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             .HasIndex(x => new { x.PlatformRegion, x.Status, x.Patch });
 
         // Summoner lookups by Puuid
+        modelBuilder.Entity<Summoner>()
+            .Property(s => s.Puuid)
+            .IsRequired();
+
         modelBuilder.Entity<Summoner>()
             .HasIndex(s => s.Puuid)
             .IsUnique();

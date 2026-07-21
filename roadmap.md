@@ -285,7 +285,7 @@ _Make CI test reality, fix the lock protocol, restore accessibility, and add ale
   - **Fix:** Wrap the champion pro-build feed in `<Suspense>` so the toolbar + playrate table stream immediately while the per-champion feed loads. Consider a single backend endpoint that returns the feed rather than fanning out N per-champion requests.
   - **Why:** On an ISR cache miss/revalidation the user waits for two sequential network batches (5 then 8 backend round-trips) before any content paints, delaying TTFB/LCP. Unlike the champion detail page, there is no Suspense shell to stream the header first.
   - **Where:** `apps/web/app/lol/pro-builds/page.tsx:131-197`
-- [ ] **Unoptimized full-resolution champion splash JPG loaded via CSS background on every champion page** `MED` · `small`
+- [x] **Unoptimized full-resolution champion splash JPG loaded via CSS background on every champion page** `MED` · `small`
   - **Fix:** Route it through next/image (fill + a small `sizes`) or use the smaller `_0` loading/centered crop, and/or serve it as a low-res/blurred decorative layer. Since it's purely decorative, consider `fetchpriority=low` and lazy behavior.
   - **Why:** Every champion page eagerly downloads a large full-res JPG purely for a 30%-opacity backdrop, wasting bandwidth and competing with LCP on mobile/slow connections for no data value.
   - **Where:** `apps/web/app/lol/champions/[championId]/page.tsx:163,171-175`

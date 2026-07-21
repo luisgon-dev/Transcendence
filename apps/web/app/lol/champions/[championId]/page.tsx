@@ -227,20 +227,28 @@ export default async function ChampionDetailPage({
   const champ = champions[String(championId)];
   const champName = champ?.name ?? `Champion ${championId}`;
   const champSlug = champ?.id ?? "Unknown";
-  const splashUrl = `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${champSlug}_0.jpg`;
-
   return (
     <div className="grid gap-8">
       {/* ── Champion Header (identity is instant; meta streams) ── */}
       <header className="page-hero relative p-5 md:p-8">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-30"
-          style={{
-            backgroundImage: `linear-gradient(to right, var(--t-bg) 20%, color-mix(in oklch, var(--t-bg), transparent 18%) 45%, transparent 100%), url(${splashUrl})`,
-            backgroundSize: "cover",
-            backgroundPosition: "top right"
-          }}
-        />
+        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden opacity-30">
+          <Image
+            src={`https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${champSlug}_0.jpg`}
+            alt=""
+            fill
+            sizes="(max-width: 768px) 100vw, 1400px"
+            quality={55}
+            loading="eager"
+            className="object-cover object-right-top"
+          />
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundImage:
+                "linear-gradient(to right, var(--t-bg) 20%, color-mix(in oklch, var(--t-bg), transparent 18%) 45%, transparent 100%)"
+            }}
+          />
+        </div>
 
         <div className="relative flex flex-col gap-5">
           <div className="flex items-start gap-3 sm:items-center sm:gap-4">

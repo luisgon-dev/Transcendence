@@ -53,6 +53,9 @@ Transcendence is a backend + web monorepo:
   - `/lol/tierlist`
   - `/lol/champions/*` is the unified champion surface: win rates, builds (with the full rune tree), inline matchups summary, a sortable "All Matchups" table (`?sort=winRate|games`, anchored at `#matchups`), and a quick link to pro builds. The page reads `/api/lol/analytics/champions/{championId}/profile` so the role selection, cached build aggregate, and cached matchup aggregate arrive through one backend request instead of a client-side analytics waterfall. The standalone `/lol/matchups` surface was removed; `/lol/matchups` and `/lol/matchups/:championId` now 308-redirect into `/lol/champions/*` (preserving query state) via `next.config.mjs` `redirects()`.
   - `/lol/pro-builds/*` — the index hero is a pro/high-elo champion playrate ranking with a `scope` segmented control (Pro / High-Elo / All) plus a public "Tracked Pros" roster panel. The toolbar, playrate table, roster, and champion search render from the first fetch batch; the fan-out recent-match feed and its item map stream independently behind `<Suspense>` with a stable row skeleton.
+  - `/lol/live` is the first-class live-game scout. It accepts a Riot ID, renders both teams with
+    rank/form/streak/champion-pool and loadout context, and re-checks active games every minute.
+    Profile sidebars reuse a compact version of the same card.
   - `/lol/summoners/[region]/[riotId]` is the unified LoL profile + match history surface. Its RSC resolves the profile first, then fetches the requested match-history page and rank history through server-to-server calls while the route skeleton streams behind `<Suspense>`. React-cached champion, item, spell, and rune maps are passed into the client island in the same render; browser fetches are reserved for pagination, refresh completion, and best-effort recovery when a server dependency failed.
     - Legacy `/lol/summoners/[region]/[riotId]/matches*` routes redirect into this unified view using query state (`page`, `queue`, `expandMatchId`)
 - Public LoL patch badges now read backend analytics patch status instead of raw Data Dragon latest so web patch labels match the active analytics dataset
@@ -137,6 +140,18 @@ Operational implication:
   - `refresh-low`
 - API refresh jobs run on `refresh-high`; ingestion-driven refresh jobs run on `refresh-low`.
 - Refresh locks use DB-backed lease semantics (atomic acquire/renew + explicit lease expiry on release) so concurrent lock races do not require lock-row deletion.
+
+### Live-Game Snapshot Boundary
+
+- Only the worker host owns Riot credentials and calls Spectator-V5. The keyless Web API serves the
+  latest `LiveGameSnapshot`; browser requests never bypass the ingestion priority policy.
+- Each snapshot stores its complete response as PostgreSQL `jsonb` alongside indexed
+  state/game/timing columns. This preserves participant spells/runes and computed scouting analysis
+  across the worker-to-Web-API boundary. Snapshots written before the payload column remain readable
+  through the legacy state/game fallback.
+- Participant form is bounded to the latest 20 stored matches. Champion pool entries are the top
+  three picks within that window, and streaks are signed (wins positive, losses negative). Response
+  age is recomputed when read so clients can label stale observations honestly.
 
 ### Refresh Lock Lifecycle Telemetry and Retention
 

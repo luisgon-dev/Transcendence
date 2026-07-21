@@ -4604,6 +4604,14 @@ export interface components {
             participants: components["schemas"]["LiveGameParticipantAnalysisDto"][];
             teams: components["schemas"]["TeamAnalysisDto"][];
         };
+        LiveGameChampionPoolEntryDto: {
+            /** Format: int32 */
+            championId: number;
+            /** Format: int32 */
+            games: number;
+            /** Format: double */
+            winRate: number;
+        };
         LiveGameParticipantAnalysisDto: {
             puuid: string;
             /** Format: int32 */
@@ -4620,6 +4628,11 @@ export interface components {
             recentKda?: number | null;
             /** Format: double */
             championWinRate?: number | null;
+            /** Format: int32 */
+            recentGames: number;
+            /** Format: int32 */
+            currentStreak: number;
+            championPool: components["schemas"]["LiveGameChampionPoolEntryDto"][];
         };
         LiveGameParticipantDto: {
             puuid: string;
@@ -4635,6 +4648,11 @@ export interface components {
             spell2Id: number;
             /** Format: int32 */
             profileIconId: number;
+            perkIds: number[];
+            /** Format: int32 */
+            perkStyleId?: number | null;
+            /** Format: int32 */
+            perkSubStyleId?: number | null;
         };
         LiveGameResponseDto: {
             state: string;

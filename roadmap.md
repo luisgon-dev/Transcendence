@@ -454,7 +454,7 @@ _Discoverability, multi-mode analytics, and the champ-select hook_
   - **Fix:** Add a leaderboard endpoint (top ranks by region/queue, and top players per champion+role) backed by the existing Ranks/summoner data, plus a /lol/leaderboard page with region and champion filters.
   - **Why:** Regional Challenger/GM ladders and champion-specific one-trick leaderboards are table stakes on op.gg/u.gg — they drive both discovery (players look themselves/pros up) and retention (climbers track rank). Their absence removes a whole class of return visits.
   - **Where:** `absent — searched routes under apps/web/app/lol/*, all Controllers, and Transcendence.Service.Core for 'leaderboard|ladder' → 0 product hits`
-- [ ] **Live-game scouting is shallow vs Porofessor and hard to discover (no dedicated route, not in nav)** `MED` · `large` · ✅ verified
+- [x] **Live-game scouting is shallow vs Porofessor and hard to discover (no dedicated route, not in nav)** `MED` · `large` · ✅ verified
   - **Fix:** Give live game a first-class /live entry point and enrich the DTO: per-opponent champion pool + recent streaks, chosen runes/summoners when available, and periodic refresh while in-game.
   - **Why:** Porofessor/GameLenses win the pre-game/in-game moment with deep opponent pools, tilt/streak signals and live objective tracking, and users open them every game. Transcendence's version is a static one-shot team summary buried in a profile sidebar, so it can't own that high-frequency moment.
   - **Where:** `Transcendence.Service.Core/Services/LiveGame/Models/LiveGameAnalysisDtos.cs; LiveGameController.cs:21; mounted only at apps/web/components/lol-profile/ProfileSidebar.tsx:256; SiteHeaderClient.tsx:16-18 nav has no live entry`

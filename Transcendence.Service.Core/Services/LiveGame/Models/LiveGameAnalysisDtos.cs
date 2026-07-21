@@ -1,5 +1,11 @@
 namespace Transcendence.Service.Core.Services.LiveGame.Models;
 
+public record LiveGameChampionPoolEntryDto(
+    int ChampionId,
+    int Games,
+    double WinRate
+);
+
 public record LiveGameParticipantAnalysisDto(
     string Puuid,
     int TeamId,
@@ -9,7 +15,10 @@ public record LiveGameParticipantAnalysisDto(
     int? LeaguePoints,
     double? RecentWinRate,
     double? RecentKda,
-    double? ChampionWinRate
+    double? ChampionWinRate,
+    int RecentGames,
+    int CurrentStreak,
+    List<LiveGameChampionPoolEntryDto> ChampionPool
 );
 
 public record TeamAnalysisDto(

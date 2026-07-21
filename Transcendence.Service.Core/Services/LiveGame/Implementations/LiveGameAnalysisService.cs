@@ -25,6 +25,14 @@ public class LiveGameAnalysisService(
     private const double RecentWinRateWeaknessThreshold = 0.48;
     private const double ChampionWinRateWeaknessThreshold = 0.49;
     private const double RankWeaknessThreshold = 0.35;
+    private const int RecentGamesLimit = 20;
+
+    private sealed record RecentParticipantGame(
+        int ChampionId,
+        bool Win,
+        int Kills,
+        int Deaths,
+        int Assists);
 
     private static readonly Dictionary<string, double> TierScores = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -74,19 +82,25 @@ public class LiveGameAnalysisService(
             .Distinct()
             .ToList();
 
-        var recentOverviewBySummonerId = await db.MatchParticipants
-            .AsNoTracking()
-            .Where(mp => summonerIds.Contains(mp.SummonerId))
-            .GroupBy(mp => mp.SummonerId)
-            .Select(g => new
-            {
-                SummonerId = g.Key,
-                Games = g.Count(),
-                WinRate = g.Count() > 0 ? (double)g.Sum(x => x.Win ? 1 : 0) / g.Count() * 100.0 : 0.0,
-                KdaRatio = (g.Average(x => (double)x.Kills) + g.Average(x => (double)x.Assists))
-                           / Math.Max(1.0, g.Average(x => (double)x.Deaths))
-            })
-            .ToDictionaryAsync(x => x.SummonerId, ct);
+        // Scouting signals should describe current form, not lifetime history. These queries are
+        // deliberately bounded and only run for players in an active game (at most ten).
+        var recentGamesBySummonerId = new Dictionary<Guid, List<RecentParticipantGame>>();
+        foreach (var summonerId in summonerIds)
+        {
+            recentGamesBySummonerId[summonerId] = await db.MatchParticipants
+                .AsNoTracking()
+                .Where(mp => mp.SummonerId == summonerId)
+                .OrderByDescending(mp => mp.Match.MatchDate)
+                .ThenByDescending(mp => mp.Id)
+                .Select(mp => new RecentParticipantGame(
+                    mp.ChampionId,
+                    mp.Win,
+                    mp.Kills,
+                    mp.Deaths,
+                    mp.Assists))
+                .Take(RecentGamesLimit)
+                .ToListAsync(ct);
+        }
 
         foreach (var participant in liveGame.Participants)
         {
@@ -100,6 +114,9 @@ public class LiveGameAnalysisService(
             int? lp = null;
             double? recentWinRate = null;
             double? recentKda = null;
+            var recentGames = 0;
+            var currentStreak = 0;
+            List<LiveGameChampionPoolEntryDto> championPool = [];
 
             if (summoner != null)
             {
@@ -108,10 +125,26 @@ public class LiveGameAnalysisService(
                 division = solo?.RankNumber;
                 lp = solo?.LeaguePoints;
 
-                if (recentOverviewBySummonerId.TryGetValue(summoner.Id, out var overview) && overview.Games > 0)
+                if (recentGamesBySummonerId.TryGetValue(summoner.Id, out var games) && games.Count > 0)
                 {
-                    recentWinRate = overview.WinRate;
-                    recentKda = overview.KdaRatio;
+                    recentGames = games.Count;
+                    recentWinRate = (double)games.Count(game => game.Win) / games.Count;
+                    recentKda = (games.Average(game => game.Kills) + games.Average(game => game.Assists))
+                                / Math.Max(1.0, games.Average(game => game.Deaths));
+                    var latestResult = games[0].Win;
+                    var streakLength = games.TakeWhile(game => game.Win == latestResult).Count();
+                    currentStreak = latestResult ? streakLength : -streakLength;
+                    championPool = games
+                        .GroupBy(game => game.ChampionId)
+                        .Select(group => new LiveGameChampionPoolEntryDto(
+                            group.Key,
+                            group.Count(),
+                            (double)group.Count(game => game.Win) / group.Count()))
+                        .OrderByDescending(entry => entry.Games)
+                        .ThenByDescending(entry => entry.WinRate)
+                        .ThenBy(entry => entry.ChampionId)
+                        .Take(3)
+                        .ToList();
                 }
             }
 
@@ -130,7 +163,10 @@ public class LiveGameAnalysisService(
                 lp,
                 recentWinRate,
                 recentKda,
-                championWinRate
+                championWinRate,
+                recentGames,
+                currentStreak,
+                championPool
             ));
         }
 

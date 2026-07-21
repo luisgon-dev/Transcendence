@@ -300,6 +300,7 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             entity.Property(x => x.State).IsRequired();
             entity.Property(x => x.PlatformRegion).IsRequired();
             entity.Property(x => x.Puuid).IsRequired();
+            entity.Property(x => x.PayloadJson).HasColumnType("jsonb");
         });
 
         modelBuilder.Entity<RuneVersion>(entity =>

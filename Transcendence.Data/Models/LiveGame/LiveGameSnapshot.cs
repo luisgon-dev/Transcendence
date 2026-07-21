@@ -8,6 +8,7 @@ public class LiveGameSnapshot
     public string PlatformRegion { get; set; } = string.Empty;
     public string State { get; set; } = string.Empty;
     public string? GameId { get; set; }
+    public string? PayloadJson { get; set; }
     public DateTime ObservedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime NextPollAtUtc { get; set; }
 }

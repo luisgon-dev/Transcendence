@@ -20,6 +20,7 @@ const STATIC_ROUTES: Array<{
   { path: "/lol/champions", changeFrequency: "daily", priority: 0.9 },
   { path: "/lol/leaderboards", changeFrequency: "hourly", priority: 0.9 },
   { path: "/lol/multi-search", changeFrequency: "weekly", priority: 0.8 },
+  { path: "/lol/live", changeFrequency: "weekly", priority: 0.8 },
   { path: "/lol/pro-builds", changeFrequency: "daily", priority: 0.8 }
 ];
 

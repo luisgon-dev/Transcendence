@@ -1,0 +1,27 @@
+import type { Metadata } from "next";
+
+import { LiveScoutClient } from "@/components/LiveScoutClient";
+import { socialImageUrl } from "@/lib/seo";
+
+const title = "Live Game Scout";
+const description =
+  "Scout an active League match with ranks, recent form, streaks, champion pools, spells, and runes.";
+const image = socialImageUrl(title, "Live matchup", "Ranks, streaks, champion pools, spells, and runes");
+
+export const metadata: Metadata = {
+  title,
+  description,
+  alternates: { canonical: "/lol/live" },
+  openGraph: {
+    type: "website",
+    title,
+    description,
+    url: "/lol/live",
+    images: [{ url: image, width: 1200, height: 630, alt: title }]
+  },
+  twitter: { card: "summary_large_image", title, description, images: [image] }
+};
+
+export default function LiveScoutPage() {
+  return <LiveScoutClient />;
+}

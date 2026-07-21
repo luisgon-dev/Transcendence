@@ -7,15 +7,50 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/cn";
-import { formatDurationSeconds, formatPercent, winRateColorClass } from "@/lib/format";
+import {
+  formatDurationSeconds,
+  formatPercent,
+  kdaColorClass,
+  winRateColorClass
+} from "@/lib/format";
 import { rankTierColorClass } from "@/lib/ranks";
-import { championSquareIconUrlById } from "@/lib/staticData";
+import {
+  championSquareIconUrlById,
+  runeIconUrl,
+  summonerSpellIconUrl
+} from "@/lib/staticData";
 import type { components } from "@transcendence/api-client";
 
 type LiveGameResponse = components["schemas"]["LiveGameResponseDto"];
 type LiveGameParticipant = components["schemas"]["LiveGameParticipantDto"];
 type LiveGameParticipantAnalysis = components["schemas"]["LiveGameParticipantAnalysisDto"];
 type TeamAnalysis = components["schemas"]["TeamAnalysisDto"];
+type EnrichedParticipant = LiveGameParticipant & {
+  perkIds?: number[] | null;
+  perkStyleId?: number | null;
+  perkSubStyleId?: number | null;
+};
+type ChampionPoolEntry = {
+  championId: number;
+  games: number;
+  winRate: number;
+};
+type EnrichedParticipantAnalysis = LiveGameParticipantAnalysis & {
+  recentGames?: number;
+  currentStreak?: number;
+  championPool?: ChampionPoolEntry[] | null;
+};
+type SpellStaticData = {
+  version: string;
+  spells: Record<string, { id: string; name: string }>;
+};
+type RuneStaticData = {
+  runeById: Record<string, { name: string; icon: string }>;
+};
+type LiveGameStaticData = {
+  spells: SpellStaticData | null;
+  runes: RuneStaticData | null;
+};
 
 // The BFF error envelope carries message/requestId, which the success DTO lacks.
 type LiveGameErrorFields = { message?: string | null; requestId?: string | null };
@@ -54,41 +89,118 @@ function ScoutChip({ tone, children }: { tone: "success" | "warning"; children: 
 
 function ParticipantRow({
   participant,
-  analysis
+  analysis,
+  detailed,
+  staticData
 }: {
-  participant: LiveGameParticipant;
-  analysis: LiveGameParticipantAnalysis | undefined;
+  participant: EnrichedParticipant;
+  analysis: EnrichedParticipantAnalysis | undefined;
+  detailed: boolean;
+  staticData: LiveGameStaticData;
 }) {
   const name = participant.riotId?.trim() || "Unknown player";
   const recentWinRate = analysis?.recentWinRate;
+  const streak = analysis?.currentStreak ?? 0;
+  const pool = analysis?.championPool ?? [];
+  const perkIds = participant.perkIds ?? [];
+  const visiblePerks = perkIds.filter((id) => id < 5000 || id >= 6000).slice(0, 2);
 
   return (
-    <li className="flex items-center gap-3 rounded-control border border-border bg-surface-2 px-2.5 py-2">
-      {participant.championId != null ? (
-        <Image
-          src={championSquareIconUrlById(participant.championId)}
-          alt={`Champion ${participant.championId}`}
-          width={36}
-          height={36}
-          className="size-9 shrink-0 rounded-control border border-border bg-surface"
-        />
-      ) : (
-        <span className="grid size-9 shrink-0 place-items-center rounded-control border border-border bg-surface text-[11px] font-medium text-muted">
-          ?
-        </span>
-      )}
-      <div className="min-w-0 flex-1">
-        <p className="type-ui truncate text-fg">{name}</p>
-        <p className={cn("text-xs leading-tight", rankTierColorClass(analysis?.rankTier))}>
-          {formatRankLabel(analysis)}
-        </p>
-      </div>
-      {recentWinRate != null ? (
-        <div className="shrink-0 text-right">
-          <p className={cn("text-sm font-medium tabular-nums", winRateColorClass(recentWinRate))}>
-            {formatPercent(recentWinRate, { decimals: 0 })}
+    <li className="rounded-control border border-border bg-surface-2 px-2.5 py-2">
+      <div className="flex items-center gap-3">
+        {participant.championId != null ? (
+          <Image
+            src={championSquareIconUrlById(participant.championId)}
+            alt={`Champion ${participant.championId}`}
+            width={36}
+            height={36}
+            className="size-9 shrink-0 rounded-control border border-border bg-surface"
+          />
+        ) : (
+          <span className="grid size-9 shrink-0 place-items-center rounded-control border border-border bg-surface text-[11px] font-medium text-muted">
+            ?
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="type-ui truncate text-fg">{name}</p>
+          <p className={cn("text-xs leading-tight", rankTierColorClass(analysis?.rankTier))}>
+            {formatRankLabel(analysis)}
           </p>
-          <p className="text-[10px] uppercase tracking-wide text-muted">recent WR</p>
+        </div>
+        {recentWinRate != null ? (
+          <div className="shrink-0 text-right">
+            <p className={cn("text-sm font-medium tabular-nums", winRateColorClass(recentWinRate))}>
+              {formatPercent(recentWinRate, { decimals: 0 })}
+            </p>
+            <p className="text-[10px] uppercase tracking-wide text-muted">recent WR</p>
+          </div>
+        ) : null}
+      </div>
+
+      {detailed ? (
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border/55 pt-2 text-[11px] text-muted">
+          {streak !== 0 ? (
+            <span className={streak > 0 ? "text-success" : "text-danger"}>
+              {Math.abs(streak)} {streak > 0 ? "win" : "loss"} streak
+            </span>
+          ) : null}
+          {analysis?.recentKda != null ? (
+            <span className={cn("tabular-nums", kdaColorClass(analysis.recentKda))}>
+              {analysis.recentKda.toFixed(2)} KDA
+            </span>
+          ) : null}
+          {pool.length > 0 ? (
+            <span className="inline-flex items-center gap-1" aria-label="Recent champion pool">
+              {pool.map((entry) => (
+                <span key={entry.championId} className="inline-flex items-center gap-1">
+                  <Image
+                    src={championSquareIconUrlById(entry.championId)}
+                    alt={`Champion ${entry.championId}`}
+                    width={20}
+                    height={20}
+                    className="size-5 rounded-sm border border-border"
+                  />
+                  <span className="tabular-nums">{entry.games}</span>
+                </span>
+              ))}
+            </span>
+          ) : null}
+          {staticData.spells ? (
+            <span className="inline-flex items-center gap-1" aria-label="Summoner spells">
+              {[participant.spell1Id, participant.spell2Id].map((spellId) => {
+                const spell = staticData.spells?.spells[String(spellId)];
+                return spell ? (
+                  <Image
+                    key={spellId}
+                    src={summonerSpellIconUrl(staticData.spells!.version, spell.id)}
+                    alt={spell.name}
+                    title={spell.name}
+                    width={20}
+                    height={20}
+                    className="size-5 rounded-sm border border-border"
+                  />
+                ) : null;
+              })}
+            </span>
+          ) : null}
+          {staticData.runes && visiblePerks.length > 0 ? (
+            <span className="inline-flex items-center gap-1" aria-label="Selected runes">
+              {visiblePerks.map((perkId) => {
+                const rune = staticData.runes?.runeById[String(perkId)];
+                return rune ? (
+                  <Image
+                    key={perkId}
+                    src={runeIconUrl(rune.icon)}
+                    alt={rune.name}
+                    title={rune.name}
+                    width={20}
+                    height={20}
+                    className="size-5 rounded-full bg-surface"
+                  />
+                ) : null;
+              })}
+            </span>
+          ) : null}
         </div>
       ) : null}
     </li>
@@ -99,12 +211,16 @@ function TeamBlock({
   label,
   participants,
   analysisByPuuid,
-  teamAnalysis
+  teamAnalysis,
+  detailed,
+  staticData
 }: {
   label: string;
-  participants: LiveGameParticipant[];
-  analysisByPuuid: Map<string, LiveGameParticipantAnalysis>;
+  participants: EnrichedParticipant[];
+  analysisByPuuid: Map<string, EnrichedParticipantAnalysis>;
   teamAnalysis: TeamAnalysis | undefined;
+  detailed: boolean;
+  staticData: LiveGameStaticData;
 }) {
   const strengths = teamAnalysis?.strengths ?? [];
   const weaknesses = teamAnalysis?.weaknesses ?? [];
@@ -160,6 +276,8 @@ function TeamBlock({
             key={participant.puuid ?? `${participant.championId ?? "?"}-${index}`}
             participant={participant}
             analysis={participant.puuid ? analysisByPuuid.get(participant.puuid) : undefined}
+            detailed={detailed}
+            staticData={staticData}
           />
         ))}
       </ul>
@@ -170,18 +288,41 @@ function TeamBlock({
 export function LiveGameCard({
   region,
   gameName,
-  tagLine
+  tagLine,
+  detailed = false
 }: {
   region: string;
   gameName: string;
   tagLine: string;
+  detailed?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [checked, setChecked] = useState(false);
   const [checkedAt, setCheckedAt] = useState<Date | null>(null);
   const [data, setData] = useState<LiveGameResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [staticData, setStaticData] = useState<LiveGameStaticData>({ spells: null, runes: null });
   const requestRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (!detailed) return;
+    let active = true;
+    void Promise.all([
+      fetch("/api/static/spells", { cache: "force-cache" }).then(async (response) =>
+        response.ok ? ((await response.json()) as SpellStaticData) : null
+      ),
+      fetch("/api/static/runes", { cache: "force-cache" }).then(async (response) =>
+        response.ok ? ((await response.json()) as RuneStaticData) : null
+      )
+    ])
+      .then(([spells, runes]) => {
+        if (active) setStaticData({ spells, runes });
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [detailed]);
 
   const check = useCallback(async () => {
     if (requestRef.current) return;
@@ -234,7 +375,7 @@ export function LiveGameCard({
     };
   }, [check]);
 
-  const participants = data?.participants ?? [];
+  const participants = (data?.participants ?? []) as EnrichedParticipant[];
   const inGame = data?.state === "IN_PROGRESS" || participants.length > 0;
 
   // Once a game is detected, keep the scout view fresh at a deliberately light cadence. A timeout
@@ -245,8 +386,8 @@ export function LiveGameCard({
     return () => window.clearTimeout(timer);
   }, [check, checkedAt, inGame]);
 
-  const analysisByPuuid = new Map<string, LiveGameParticipantAnalysis>();
-  for (const entry of data?.analysis?.participants ?? []) {
+  const analysisByPuuid = new Map<string, EnrichedParticipantAnalysis>();
+  for (const entry of (data?.analysis?.participants ?? []) as EnrichedParticipantAnalysis[]) {
     if (entry.puuid) analysisByPuuid.set(entry.puuid, entry);
   }
 
@@ -271,6 +412,11 @@ export function LiveGameCard({
             <p className="mt-1 text-xs tabular-nums text-muted">
               Checked {checkedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
               {inGame ? " · Auto-refreshes every 60 sec" : ""}
+            </p>
+          ) : null}
+          {data?.dataAgeSeconds != null ? (
+            <p className="mt-1 text-xs tabular-nums text-muted">
+              Worker snapshot {Math.max(0, data.dataAgeSeconds).toLocaleString()} sec old
             </p>
           ) : null}
         </div>
@@ -324,6 +470,8 @@ export function LiveGameCard({
                       participants={teamParticipants}
                       analysisByPuuid={analysisByPuuid}
                       teamAnalysis={teamAnalysisById.get(team.id)}
+                      detailed={detailed}
+                      staticData={staticData}
                     />
                   );
                 })}

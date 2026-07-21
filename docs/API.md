@@ -287,6 +287,13 @@ Response: `{ patch, region, scope, champions[], sample }` where each champion en
 ### Live Game (`AppOnly`)
 
 - `GET /api/lol/summoners/{region}/{gameName}/{tagLine}/live-game`
+- Returns the latest worker-observed snapshot. `lastUpdatedUtc` and `dataAgeSeconds` expose
+  freshness; the Web API does not call Riot directly.
+- Active-game participants include champion, summoner spells, selected perk IDs/styles, and a
+  stored-data analysis projection with Solo/Duo rank, recent-20 win rate/KDA, signed current streak
+  (positive wins, negative losses), and the three most-played champions in that recent window.
+- Team summaries are directional scouting signals derived from the stored participant sample, not
+  predictions or live objective telemetry. Offline responses contain an empty participant list.
 
 ### Operational Health
 

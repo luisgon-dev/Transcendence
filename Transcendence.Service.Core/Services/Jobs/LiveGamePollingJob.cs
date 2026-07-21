@@ -1,6 +1,7 @@
 using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
 using Transcendence.Data;
 using Transcendence.Data.Models.LiveGame;
 using Transcendence.Data.Models.LoL.Match;
@@ -181,6 +182,7 @@ public class LiveGamePollingJob(
                     PlatformRegion = summoner.PlatformRegion!,
                     State = response.State,
                     GameId = response.GameId,
+                    PayloadJson = JsonSerializer.Serialize(response),
                     ObservedAtUtc = now,
                     NextPollAtUtc = nextPollAt
                 };

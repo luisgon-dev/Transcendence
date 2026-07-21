@@ -69,7 +69,10 @@ public class RiotLiveGamePollingService(
                             ChampionId: (int)p.ChampionId,
                             Spell1Id: (int)p.Spell1Id,
                             Spell2Id: (int)p.Spell2Id,
-                            ProfileIconId: (int)p.ProfileIconId
+                            ProfileIconId: (int)p.ProfileIconId,
+                            PerkIds: p.Perks?.PerkIds?.Select(id => (int)id).ToList() ?? [],
+                            PerkStyleId: p.Perks is null ? null : (int)p.Perks.PerkStyle,
+                            PerkSubStyleId: p.Perks is null ? null : (int)p.Perks.PerkSubStyle
                         )).ToList() ?? [];
 
                     var response = new LiveGameResponseDto(

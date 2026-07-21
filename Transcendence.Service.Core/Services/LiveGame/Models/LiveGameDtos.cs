@@ -8,7 +8,10 @@ public record LiveGameParticipantDto(
     int ChampionId,
     int Spell1Id,
     int Spell2Id,
-    int ProfileIconId
+    int ProfileIconId,
+    List<int> PerkIds,
+    int? PerkStyleId,
+    int? PerkSubStyleId
 );
 
 public record LiveGameResponseDto(

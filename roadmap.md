@@ -466,7 +466,7 @@ _Discoverability, multi-mode analytics, and the champ-select hook_
   - **Fix:** Add Riot RSO login to establish a verified main summoner, auto-populate favorites/home, and personalize the landing page around the signed-in player's data.
   - **Why:** Competitors let a user link Riot once and get a personalized home (their profile, their champions, their recent games) on every visit — the strongest retention loop for a daily driver. Without it, onboarding is generic and the site never becomes 'my' dashboard.
   - **Where:** `Transcendence.WebAPI/Controllers/AuthController.cs (register/login/refresh/password-reset only); UserPreferencesController.cs favorites are manual GUID adds; grep 'rso|oauth' across source → 0 hits`
-- [ ] **No standalone item or rune analytics pages** `MED` · `medium` · ✅ verified
+- [x] **No standalone item or rune analytics pages** `MED` · `medium` · ✅ verified
   - **Fix:** Add /lol/items and /lol/runes index + detail pages driven by the existing build corpus (win rate / pick rate per item and per rune, by champion/role).
   - **Why:** u.gg and lolalytics ship item stat pages ('which champs build this, win rate by item') and rune-stats pages. These are secondary but expected exploration surfaces for theorycrafters and add indexable long-tail SEO pages. Their absence narrows the site to champion/profile only.
   - **Where:** `absent — apps/web/app/lol/ contains only champions, pro-builds, summoners, tierlist; apps/web/app/api/static/{items,runes} are Data Dragon passthrough only`

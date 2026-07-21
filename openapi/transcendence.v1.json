@@ -2439,6 +2439,324 @@
         ]
       }
     },
+    "/api/lol/analytics/items": {
+      "get": {
+        "tags": [
+          "BuildResourceAnalytics"
+        ],
+        "parameters": [
+          {
+            "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "patch",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResourceAnalyticsIndexResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResourceAnalyticsIndexResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResourceAnalyticsIndexResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lol/analytics/items/{itemId}": {
+      "get": {
+        "tags": [
+          "BuildResourceAnalytics"
+        ],
+        "parameters": [
+          {
+            "name": "itemId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "patch",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResourceAnalyticsDetailResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResourceAnalyticsDetailResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResourceAnalyticsDetailResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lol/analytics/runes": {
+      "get": {
+        "tags": [
+          "BuildResourceAnalytics"
+        ],
+        "parameters": [
+          {
+            "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "patch",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResourceAnalyticsIndexResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResourceAnalyticsIndexResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResourceAnalyticsIndexResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lol/analytics/runes/{runeId}": {
+      "get": {
+        "tags": [
+          "BuildResourceAnalytics"
+        ],
+        "parameters": [
+          {
+            "name": "runeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "patch",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResourceAnalyticsDetailResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResourceAnalyticsDetailResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResourceAnalyticsDetailResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/lol/analytics/champions/{championId}/profile": {
       "get": {
         "tags": [
@@ -6859,6 +7177,168 @@
         },
         "additionalProperties": false
       },
+      "BuildResourceAnalyticsDetailResponse": {
+        "required": [
+          "championStats",
+          "patch",
+          "region",
+          "resource",
+          "resourceType",
+          "totalParticipantGames"
+        ],
+        "type": "object",
+        "properties": {
+          "resourceType": {
+            "type": "string"
+          },
+          "patch": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "totalParticipantGames": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "resource": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BuildResourceAnalyticsEntryDto"
+              }
+            ]
+          },
+          "championStats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BuildResourceChampionStatDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "BuildResourceAnalyticsEntryDto": {
+        "required": [
+          "games",
+          "name",
+          "pickRate",
+          "resourceId",
+          "topChampions",
+          "winRate",
+          "wins"
+        ],
+        "type": "object",
+        "properties": {
+          "resourceId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "wins": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "winRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "pickRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "topChampions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BuildResourceChampionStatDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "BuildResourceAnalyticsIndexResponse": {
+        "required": [
+          "entries",
+          "patch",
+          "region",
+          "resourceType",
+          "totalParticipantGames"
+        ],
+        "type": "object",
+        "properties": {
+          "resourceType": {
+            "type": "string"
+          },
+          "patch": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "totalParticipantGames": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BuildResourceAnalyticsEntryDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "BuildResourceChampionStatDto": {
+        "required": [
+          "championId",
+          "games",
+          "pickRate",
+          "role",
+          "shareOfResourceUses",
+          "winRate",
+          "wins"
+        ],
+        "type": "object",
+        "properties": {
+          "championId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "role": {
+            "type": "string"
+          },
+          "games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "wins": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "winRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "pickRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "shareOfResourceUses": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
       "ChampionBuildDto": {
         "required": [
           "coreItems",
@@ -10738,6 +11218,9 @@
     },
     {
       "name": "Auth"
+    },
+    {
+      "name": "BuildResourceAnalytics"
     },
     {
       "name": "ChampionAnalytics"

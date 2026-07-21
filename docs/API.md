@@ -149,6 +149,10 @@ Example (`SummonerAcceptedResponse`):
 - `GET /api/lol/analytics/champions/{championId}/matchups`
 - `GET /api/lol/analytics/pro/champions`
 - `GET /api/lol/analytics/pro/players`
+- `GET /api/lol/analytics/items`
+- `GET /api/lol/analytics/items/{itemId}`
+- `GET /api/lol/analytics/runes`
+- `GET /api/lol/analytics/runes/{runeId}`
 - `POST /api/lol/analytics/cache/invalidate` (`AppOnly`)
 - `POST /api/lol/analytics/champions/cache/invalidate` (`AppOnly`)
 
@@ -223,6 +227,15 @@ Tier methodology (`GET /api/lol/analytics/tierlist`):
 - `releasedAtUtc`
 - `detectedAtUtc`
 - `isActive`
+
+Item and rune analytics are public Ranked Solo/Duo corpus reads. They accept optional `region`
+and `patch` filters with the same semantics as champion analytics. Index responses rank resources
+by observed player-games and include pick rate, win rate, and the three most common champion-role
+pairs. Detail responses expand that breakdown to the top 100 champion-role samples. Item rows are
+deduplicated per participant and restricted to completed build-impact items or upgraded boots;
+rune rows exclude stat shards. All rates are `0..1` ratios. Champion-level `pickRate` uses that
+champion-role's total games as its denominator, while `shareOfResourceUses` uses all observed uses
+of the selected item/rune. These are descriptive correlations, not causal item/rune power scores.
 - `matchCount`
 - `queueFamily`
 - `rankedSoloDuoMatchCount` (backward-compatible alias of `matchCount`; use `matchCount` for new clients)

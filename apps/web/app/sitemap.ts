@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 
 import { fetchBackendJson } from "@/lib/backendCall";
+import type { BuildResourceIndexResponse } from "@/lib/buildResources";
 import { getBackendBaseUrl, getPublicSiteOrigin } from "@/lib/env";
 import type { LeaderboardResponse } from "@/lib/leaderboards";
 import { platformRegionToSlug } from "@/lib/lolRegions";
@@ -18,6 +19,8 @@ const STATIC_ROUTES: Array<{
   { path: "/lol", changeFrequency: "daily", priority: 0.9 },
   { path: "/lol/tierlist", changeFrequency: "hourly", priority: 1 },
   { path: "/lol/champions", changeFrequency: "daily", priority: 0.9 },
+  { path: "/lol/items", changeFrequency: "daily", priority: 0.8 },
+  { path: "/lol/runes", changeFrequency: "daily", priority: 0.8 },
   { path: "/lol/leaderboards", changeFrequency: "hourly", priority: 0.9 },
   { path: "/lol/multi-search", changeFrequency: "weekly", priority: 0.8 },
   { path: "/lol/live", changeFrequency: "weekly", priority: 0.8 },
@@ -46,6 +49,27 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     );
   } catch {
     // Static routes remain crawlable when Data Dragon is temporarily unavailable.
+  }
+
+  const buildResourceIndexes = await Promise.all(
+    (["items", "runes"] as const).map(async (kind) => ({
+      kind,
+      result: await fetchBackendJson<BuildResourceIndexResponse>(
+        `${getBackendBaseUrl()}/api/lol/analytics/${kind}`,
+        { next: { revalidate: 60 * 60 } }
+      )
+    }))
+  );
+  for (const { kind, result } of buildResourceIndexes) {
+    if (!result.ok || !result.body) continue;
+    entries.push(
+      ...result.body.entries.map((entry) => ({
+        url: `${origin}/lol/${kind}/${entry.resourceId}`,
+        lastModified: now,
+        changeFrequency: "daily" as const,
+        priority: 0.65
+      }))
+    );
   }
 
   const regionalBoards = await Promise.all(

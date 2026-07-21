@@ -71,6 +71,8 @@ const TIER_LINKS = [
   { label: "Tier List · All Ranks", href: "/lol/tierlist?rankTier=all" },
   { label: "Tier List · Challenger", href: "/lol/tierlist?rankTier=CHALLENGER" },
   { label: "Champions", href: "/lol/champions" },
+  { label: "Item Analytics · Pick rates and champion fit", href: "/lol/items" },
+  { label: "Rune Analytics · Pick rates and champion fit", href: "/lol/runes" },
   { label: "Leaderboards · Regional and champion", href: "/lol/leaderboards" },
   { label: "Pro Builds", href: "/lol/pro-builds" },
   { label: "Multi-Search · Champ Select Scout", href: "/lol/multi-search" }

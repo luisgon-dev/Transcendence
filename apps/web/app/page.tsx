@@ -70,6 +70,11 @@ const EXPLORE = [
     description: "What pros actually buy, rush, and max this patch."
   },
   {
+    href: "/lol/items",
+    name: "Items & runes",
+    description: "Explore pick rates, outcomes, and the champions that use each build choice."
+  },
+  {
     href: SAMPLE_PROFILE.href,
     name: "Player profiles",
     description: `Match history, mastery, and live games for any summoner. Try ${SAMPLE_PROFILE.label}.`

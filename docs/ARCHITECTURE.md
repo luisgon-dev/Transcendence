@@ -59,6 +59,9 @@ Transcendence is a backend + web monorepo:
   - `/lol/tierlist`
   - `/lol/champions/*` is the unified champion surface: win rates, builds (with the full rune tree), inline matchups summary, a sortable "All Matchups" table (`?sort=winRate|games`, anchored at `#matchups`), and a quick link to pro builds. The page reads `/api/lol/analytics/champions/{championId}/profile` so the role selection, cached build aggregate, and cached matchup aggregate arrive through one backend request instead of a client-side analytics waterfall. The standalone `/lol/matchups` surface was removed; `/lol/matchups` and `/lol/matchups/:championId` now 308-redirect into `/lol/champions/*` (preserving query state) via `next.config.mjs` `redirects()`.
   - `/lol/pro-builds/*` — the index hero is a pro/high-elo champion playrate ranking with a `scope` segmented control (Pro / High-Elo / All) plus a public "Tracked Pros" roster panel. The toolbar, playrate table, roster, and champion search render from the first fetch batch; the fan-out recent-match feed and its item map stream independently behind `<Suspense>` with a stable row skeleton.
+  - `/lol/items/*` and `/lol/runes/*` are the Build Atlas: searchable index and detail pages for
+    resource pick rate, win rate, sample size, and champion-role fit. The indexes, detail pages,
+    header, command palette, landing discovery, and sitemap all expose the new surfaces.
   - `/lol/live` is the first-class live-game scout. It accepts a Riot ID, renders both teams with
     rank/form/streak/champion-pool and loadout context, and re-checks active games every minute.
     Profile sidebars reuse a compact version of the same card.
@@ -351,6 +354,10 @@ detail is archived off-box and pruned to keep the database from growing unbounde
 - `GET /api/lol/analytics/status` is the lightweight source of truth for the active LoL analytics patch used by public web chrome and landing surfaces.
 - `GET /api/lol/analytics/patches` lists active and historical LoL patches available to public analytics filters.
 - Public tier-list and champion analytics reads accept a queue family (`solo`, `flex`, `aram`, `arena`). Patch availability, cache keys, samples, bans, grades, and tier-list atoms are isolated by queue so a non-Solo request cannot reuse Solo/Duo data.
+- Item/rune analytics aggregate current or selected-patch Ranked Solo/Duo participants into one row
+  per participant/resource before grouping, so duplicate item slots cannot inflate pick rate. The
+  service joins static patch metadata softly, excludes non-build-impact inventory and stat shards,
+  and caches region/patch index and detail payloads in HybridCache for 24h (1h local).
 
 ### Match Queue Scope and History
 

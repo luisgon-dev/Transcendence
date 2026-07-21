@@ -2031,6 +2031,236 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/lol/analytics/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    region?: string;
+                    patch?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["BuildResourceAnalyticsIndexResponse"];
+                        "application/json": components["schemas"]["BuildResourceAnalyticsIndexResponse"];
+                        "text/json": components["schemas"]["BuildResourceAnalyticsIndexResponse"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lol/analytics/items/{itemId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    region?: string;
+                    patch?: string;
+                };
+                header?: never;
+                path: {
+                    itemId: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["BuildResourceAnalyticsDetailResponse"];
+                        "application/json": components["schemas"]["BuildResourceAnalyticsDetailResponse"];
+                        "text/json": components["schemas"]["BuildResourceAnalyticsDetailResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lol/analytics/runes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    region?: string;
+                    patch?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["BuildResourceAnalyticsIndexResponse"];
+                        "application/json": components["schemas"]["BuildResourceAnalyticsIndexResponse"];
+                        "text/json": components["schemas"]["BuildResourceAnalyticsIndexResponse"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lol/analytics/runes/{runeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    region?: string;
+                    patch?: string;
+                };
+                header?: never;
+                path: {
+                    runeId: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["BuildResourceAnalyticsDetailResponse"];
+                        "application/json": components["schemas"]["BuildResourceAnalyticsDetailResponse"];
+                        "text/json": components["schemas"]["BuildResourceAnalyticsDetailResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/lol/analytics/champions/{championId}/profile": {
         parameters: {
             query?: never;
@@ -4629,6 +4859,53 @@ export interface components {
             /** Format: date-time */
             accessTokenExpiresAtUtc: string;
             tokenType: string;
+        };
+        BuildResourceAnalyticsDetailResponse: {
+            resourceType: string;
+            patch: string;
+            region: string;
+            /** Format: int32 */
+            totalParticipantGames: number;
+            resource: components["schemas"]["BuildResourceAnalyticsEntryDto"];
+            championStats: components["schemas"]["BuildResourceChampionStatDto"][];
+        };
+        BuildResourceAnalyticsEntryDto: {
+            /** Format: int32 */
+            resourceId: number;
+            name: string;
+            description?: string | null;
+            /** Format: int32 */
+            games: number;
+            /** Format: int32 */
+            wins: number;
+            /** Format: double */
+            winRate: number;
+            /** Format: double */
+            pickRate: number;
+            topChampions: components["schemas"]["BuildResourceChampionStatDto"][];
+        };
+        BuildResourceAnalyticsIndexResponse: {
+            resourceType: string;
+            patch: string;
+            region: string;
+            /** Format: int32 */
+            totalParticipantGames: number;
+            entries: components["schemas"]["BuildResourceAnalyticsEntryDto"][];
+        };
+        BuildResourceChampionStatDto: {
+            /** Format: int32 */
+            championId: number;
+            role: string;
+            /** Format: int32 */
+            games: number;
+            /** Format: int32 */
+            wins: number;
+            /** Format: double */
+            winRate: number;
+            /** Format: double */
+            pickRate: number;
+            /** Format: double */
+            shareOfResourceUses: number;
         };
         ChampionBuildDto: {
             items: number[];

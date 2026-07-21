@@ -35,7 +35,9 @@ fi
 # The WebAPI export path still needs infrastructure and auth settings, but it no longer
 # requires Riot API keys because Riot-backed services are worker-only.
 export ConnectionStrings__MainDatabase="${ConnectionStrings__MainDatabase:-Host=localhost;Port=5432;Database=transcendence;Username=postgres;Password=changme}"
-export ConnectionStrings__Redis="${ConnectionStrings__Redis:-localhost:6379}"
+# Keep Redis unset by default. The export path does not exercise caching or readiness, and
+# injecting localhost here makes DataProtection wait for infrastructure that CI does not run.
+export ConnectionStrings__Redis="${ConnectionStrings__Redis-}"
 export Auth__Jwt__Key="${Auth__Jwt__Key:-OPENAPI_EXPORT_ONLY_CHANGE_THIS_32_PLUS_CHARS}"
 export ASPNETCORE_ENVIRONMENT="${ASPNETCORE_ENVIRONMENT:-Production}"
 export Swagger__Enable="${Swagger__Enable:-true}"

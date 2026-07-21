@@ -2230,6 +2230,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/lol/leaderboards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    region?: string;
+                    queue?: string;
+                    championId?: number;
+                    role?: string;
+                    limit?: number;
+                    minimumChampionGames?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["LeaderboardResponse"];
+                        "application/json": components["schemas"]["LeaderboardResponse"];
+                        "text/json": components["schemas"]["LeaderboardResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/lol/summoners/{region}/{gameName}/{tagLine}/live-game": {
         parameters: {
             query?: never;
@@ -4395,6 +4461,44 @@ export interface components {
             winRate: number;
             /** Format: double */
             pickRate: number;
+        };
+        LeaderboardEntry: {
+            /** Format: int32 */
+            position: number;
+            /** Format: uuid */
+            summonerId: string;
+            gameName: string;
+            tagLine: string;
+            /** Format: int32 */
+            profileIconId: number;
+            tier?: string | null;
+            division?: string | null;
+            /** Format: int32 */
+            leaguePoints?: number | null;
+            /** Format: int32 */
+            rankedWins: number;
+            /** Format: int32 */
+            rankedLosses: number;
+            /** Format: int32 */
+            championGames?: number | null;
+            /** Format: int32 */
+            championWins?: number | null;
+            /** Format: double */
+            championWinRate?: number | null;
+            /** Format: double */
+            championKda?: number | null;
+            /** Format: date-time */
+            updatedAtUtc?: string | null;
+        };
+        LeaderboardResponse: {
+            region: string;
+            queue: string;
+            /** Format: int32 */
+            championId?: number | null;
+            role?: string | null;
+            /** Format: date-time */
+            generatedAtUtc: string;
+            entries: components["schemas"]["LeaderboardEntry"][];
         };
         LiveGameAnalysisDto: {
             /** Format: date-time */

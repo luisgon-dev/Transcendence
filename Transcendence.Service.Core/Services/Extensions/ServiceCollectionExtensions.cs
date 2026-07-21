@@ -18,6 +18,8 @@ using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.Jobs.Priority;
 using Transcendence.Service.Core.Services.LiveGame.Implementations;
 using Transcendence.Service.Core.Services.LiveGame.Interfaces;
+using Transcendence.Service.Core.Services.Leaderboards.Implementations;
+using Transcendence.Service.Core.Services.Leaderboards.Interfaces;
 using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.Implementations;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
@@ -49,6 +51,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ILiveGameService, StoredLiveGameService>();
         services.AddScoped<ILiveGameAnalysisService, LiveGameAnalysisService>();
         services.AddScoped<IMultiSearchService, MultiSearchService>();
+        services.AddScoped<ILeaderboardService, LeaderboardService>();
         services.AddScoped<ISummonerProfileService, SummonerProfileService>();
         services.AddScoped<ISummonerRefreshCoordinator, SummonerRefreshCoordinator>();
         services.AddScoped<ITrackedProSummonerService, TrackedProSummonerService>();

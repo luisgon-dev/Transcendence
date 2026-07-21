@@ -152,6 +152,21 @@ Example (`SummonerAcceptedResponse`):
 - `POST /api/lol/analytics/cache/invalidate` (`AppOnly`)
 - `POST /api/lol/analytics/champions/cache/invalidate` (`AppOnly`)
 
+### LoL Leaderboards
+
+- `GET /api/lol/leaderboards`
+
+Returns a public ranked leaderboard for one platform region. Query parameters:
+
+- `region`: public region slug or platform token such as `na`, `NA1`, `euw`, or `EUW1` (default `na`)
+- `queue`: `solo` or `flex` (default `solo`)
+- `championId`: optional positive champion ID; when present, ranks tracked champion specialists from the active ranked season
+- `role`: optional `TOP|JUNGLE|MIDDLE|BOTTOM|UTILITY`; applies only with `championId`
+- `limit`: `1` to `100` (default `100`)
+- `minimumChampionGames`: `1` to `100` (default `5`)
+
+Regional boards are ordered by tier, league points, wins, and losses. Champion boards are ordered by champion-game sample, ranked tier, league points, and champion win rate. Responses include the resolved platform region and queue, generation time, profile identity, current rank and record, plus champion games, wins, win rate, and KDA when champion filters are active.
+
 Early-patch semantics:
 - Analytics endpoints default to the active patch and support a `patch` query parameter for stored historical patches.
 - Historical patch requests do not fall back to another patch; unknown patch values return empty `200 OK` payloads with the requested patch echoed.

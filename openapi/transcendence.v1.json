@@ -2769,6 +2769,126 @@
         ]
       }
     },
+    "/api/lol/leaderboards": {
+      "get": {
+        "tags": [
+          "Leaderboards"
+        ],
+        "parameters": [
+          {
+            "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "na"
+            }
+          },
+          {
+            "name": "queue",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "solo"
+            }
+          },
+          {
+            "name": "championId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 100
+            }
+          },
+          {
+            "name": "minimumChampionGames",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 5
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaderboardResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaderboardResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaderboardResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/lol/summoners/{region}/{gameName}/{tagLine}/live-game": {
       "get": {
         "tags": [
@@ -7038,6 +7158,122 @@
         },
         "additionalProperties": false
       },
+      "LeaderboardEntry": {
+        "required": [
+          "gameName",
+          "position",
+          "profileIconId",
+          "rankedLosses",
+          "rankedWins",
+          "summonerId",
+          "tagLine"
+        ],
+        "type": "object",
+        "properties": {
+          "position": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "summonerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "gameName": {
+            "type": "string"
+          },
+          "tagLine": {
+            "type": "string"
+          },
+          "profileIconId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "tier": {
+            "type": "string",
+            "nullable": true
+          },
+          "division": {
+            "type": "string",
+            "nullable": true
+          },
+          "leaguePoints": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "rankedWins": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "rankedLosses": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "championGames": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "championWins": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "championWinRate": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "championKda": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "updatedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "LeaderboardResponse": {
+        "required": [
+          "entries",
+          "generatedAtUtc",
+          "queue",
+          "region"
+        ],
+        "type": "object",
+        "properties": {
+          "region": {
+            "type": "string"
+          },
+          "queue": {
+            "type": "string"
+          },
+          "championId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "role": {
+            "type": "string",
+            "nullable": true
+          },
+          "generatedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LeaderboardEntry"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
       "LiveGameAnalysisDto": {
         "required": [
           "generatedAtUtc",
@@ -9675,6 +9911,9 @@
     },
     {
       "name": "ChampionAnalytics"
+    },
+    {
+      "name": "Leaderboards"
     },
     {
       "name": "LiveGame"

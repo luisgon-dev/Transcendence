@@ -21,6 +21,7 @@ const EXAMPLE_SUMMONER_HREF = "/lol/summoners/kr/Hide%20on%20bush-KR1";
 
 const SECONDARY_LINKS = [
   { label: "Champions", href: "/lol/champions" },
+  { label: "Leaderboards", href: "/lol/leaderboards" },
   { label: "Multi-Search", href: "/lol/multi-search" },
   { label: "Pro Builds", href: "/lol/pro-builds" }
 ] as const;
@@ -225,8 +226,15 @@ export default async function HomePage({
             <p className="type-kicker text-fg/56">Player Tools</p>
             <div className="mt-4 grid gap-3 border-t border-border/25 pt-4">
               <Link
-                href={hrefWithRegion("/lol/champions")}
+                href={hrefWithRegion("/lol/leaderboards")}
                 className="type-ui inline-flex items-center justify-between gap-3 text-fg/84 transition hover:text-fg"
+              >
+                <span>Leaderboards</span>
+                <span className="text-fg/40" aria-hidden="true">/</span>
+              </Link>
+              <Link
+                href={hrefWithRegion("/lol/champions")}
+                className="type-ui inline-flex items-center justify-between gap-3 border-t border-border/20 pt-3 text-fg/84 transition hover:text-fg"
               >
                 <span>Champions</span>
                 <span className="text-fg/40" aria-hidden="true">/</span>

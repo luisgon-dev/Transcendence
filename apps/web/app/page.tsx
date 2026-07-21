@@ -47,12 +47,17 @@ const SAMPLE_PROFILE = {
 
 // The League surfaces a visitor can browse from the home page. Tier List is the
 // hero's secondary action and the picks-panel link, so it is intentionally not
-// repeated here — this list covers the other three surfaces.
+// repeated here.
 const EXPLORE = [
   {
     href: "/lol/champions",
     name: "Champions",
     description: "Win rates, builds, runes, and matchups for every champion and role."
+  },
+  {
+    href: "/lol/leaderboards",
+    name: "Leaderboards",
+    description: "Regional ladders and champion specialists across ranked queues."
   },
   {
     href: "/lol/pro-builds",

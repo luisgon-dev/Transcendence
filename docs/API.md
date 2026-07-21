@@ -272,7 +272,7 @@ Response includes:
 - `scope`
 - `recentProMatches[]` — items are returned in **purchase order** (timeline-derived, final inventory as fallback); each match also carries `spell1Id`/`spell2Id` and an optional `skillOrder`
 - `topPlayers[]`
-- `commonBuilds[]` — items in purchase order
+- `commonBuilds[]` — non-empty item sets in purchase order, ranked by games and then win rate (empty inventories remain available only on their raw `recentProMatches[]` rows)
 
 `GET /api/lol/analytics/pro/champions` (public) returns champions ranked by pick/play frequency among tracked pro / high-elo players (the "Pro Builds" home ranking). Optional filters:
 - `region` (`ALL` or supported platform-region token such as `NA1|EUW1|EUN1|KR`)

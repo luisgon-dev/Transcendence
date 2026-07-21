@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
+using Transcendence.Service.Core.Services.StaticData.Models;
 
 namespace Transcendence.Service.Core.Services.Jobs;
 
@@ -157,7 +158,7 @@ public class RuneSelectionIntegrityBackfillJob(
             .ToList();
 
         var primaryPathId = resolved
-            .Where(r => r.PathId is > 0 and < 5000)
+            .Where(r => RunePathIds.IsRealRunePath(r.PathId))
             .GroupBy(r => r.PathId)
             .OrderByDescending(g => g.Count())
             .ThenBy(g => g.Key)
@@ -165,7 +166,7 @@ public class RuneSelectionIntegrityBackfillJob(
             .FirstOrDefault();
 
         var secondaryPathId = resolved
-            .Where(r => r.PathId is > 0 and < 5000 && r.PathId != primaryPathId)
+            .Where(r => RunePathIds.IsRealRunePath(r.PathId) && r.PathId != primaryPathId)
             .GroupBy(r => r.PathId)
             .OrderByDescending(g => g.Count())
             .ThenBy(g => g.Key)
@@ -175,7 +176,7 @@ public class RuneSelectionIntegrityBackfillJob(
         var provisional = new List<ProvisionalRuneRow>(resolved.Count);
         foreach (var row in resolved)
         {
-            if (row.PathId >= 5000)
+            if (RunePathIds.IsStatModPath(row.PathId))
             {
                 provisional.Add(new ProvisionalRuneRow(row, RuneSelectionTree.StatShards, 0));
                 continue;

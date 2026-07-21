@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Service.Core.Services.Analytics.Models;
+using Transcendence.Service.Core.Services.StaticData.Models;
 
 namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 
@@ -407,14 +408,14 @@ internal sealed class ChampionBuildPathBuilder
 
             if (primaryStyleId == 0 && primaryRunes.Count > 0 &&
                 runeMetadata.TryGetValue(primaryRunes[0], out var primaryMeta) &&
-                primaryMeta.RunePathId is > 0 and < 5000)
+                RunePathIds.IsRealRunePath(primaryMeta.RunePathId))
             {
                 primaryStyleId = primaryMeta.RunePathId;
             }
 
             if (subStyleId == 0 && subRunes.Count > 0 &&
                 runeMetadata.TryGetValue(subRunes[0], out var subMeta) &&
-                subMeta.RunePathId is > 0 and < 5000)
+                RunePathIds.IsRealRunePath(subMeta.RunePathId))
             {
                 subStyleId = subMeta.RunePathId;
             }
@@ -437,14 +438,14 @@ internal sealed class ChampionBuildPathBuilder
         }
 
         var statShardsFallback = runesByPath
-            .Where(kvp => kvp.Key >= 5000)
+            .Where(kvp => RunePathIds.IsStatModPath(kvp.Key))
             .SelectMany(kvp => kvp.Value)
             .OrderBy(x => x.Slot)
             .Select(x => x.RuneId)
             .ToList();
 
         var nonStatPaths = runesByPath
-            .Where(kvp => kvp.Key > 0 && kvp.Key < 5000)
+            .Where(kvp => RunePathIds.IsRealRunePath(kvp.Key))
             .Select(kvp => new { PathId = kvp.Key, Runes = kvp.Value.OrderBy(x => x.Slot).ToList() })
             .OrderByDescending(x => x.Runes.Count)
             .ThenBy(x => x.PathId)

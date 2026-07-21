@@ -10,6 +10,7 @@ using Transcendence.Service.Core.Services.Analysis.Interfaces;
 using Transcendence.Service.Core.Services.Analysis.Models;
 using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.DTOs;
+using Transcendence.Service.Core.Services.StaticData.Models;
 using RuneSelectionTree = Transcendence.Data.Models.LoL.Match.RuneSelectionTree;
 
 namespace Transcendence.Service.Core.Services.Analysis.Implementations;
@@ -1328,11 +1329,13 @@ public class SummonerStatsService(
                 .FirstOrDefault();
 
             if (primaryStyleId == 0 && primarySelections.Count > 0 &&
-                runeMetadata.TryGetValue(primarySelections[0], out var primaryMeta))
+                runeMetadata.TryGetValue(primarySelections[0], out var primaryMeta) &&
+                RunePathIds.IsRealRunePath(primaryMeta.PathId))
                 primaryStyleId = primaryMeta.PathId;
 
             if (subStyleId == 0 && subSelections.Count > 0 &&
-                runeMetadata.TryGetValue(subSelections[0], out var subMeta))
+                runeMetadata.TryGetValue(subSelections[0], out var subMeta) &&
+                RunePathIds.IsRealRunePath(subMeta.PathId))
                 subStyleId = subMeta.PathId;
 
             return new ParticipantRunesDto(
@@ -1353,7 +1356,7 @@ public class SummonerStatsService(
             .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Slot).ToList());
 
         var statPath = runesByPath
-            .Where(kvp => kvp.Key >= 5000)
+            .Where(kvp => RunePathIds.IsStatModPath(kvp.Key))
             .SelectMany(kvp => kvp.Value)
             .OrderBy(x => x.Slot)
             .Select(x => x.RuneId)
@@ -1361,7 +1364,7 @@ public class SummonerStatsService(
             .ToList();
 
         var nonStatPaths = runesByPath
-            .Where(kvp => kvp.Key > 0 && kvp.Key < 5000)
+            .Where(kvp => RunePathIds.IsRealRunePath(kvp.Key))
             .Select(kvp => new { PathId = kvp.Key, Runes = kvp.Value })
             .OrderByDescending(x => x.Runes.Count)
             .ThenBy(x => x.PathId)
@@ -1520,7 +1523,7 @@ public class SummonerStatsService(
             if (primaryStyleId == 0 && primarySelections.Count > 0 &&
                 TryGetRuneMetadata(primarySelections[0], normalizedPatch, runeMetadataByPatch, runeMetadataByRuneId,
                     out var primaryMeta) &&
-                primaryMeta.PathId is > 0 and < 5000)
+                RunePathIds.IsRealRunePath(primaryMeta.PathId))
             {
                 primaryStyleId = primaryMeta.PathId;
             }
@@ -1528,7 +1531,7 @@ public class SummonerStatsService(
             if (subStyleId == 0 && subSelections.Count > 0 &&
                 TryGetRuneMetadata(subSelections[0], normalizedPatch, runeMetadataByPatch, runeMetadataByRuneId,
                     out var subMeta) &&
-                subMeta.PathId is > 0 and < 5000)
+                RunePathIds.IsRealRunePath(subMeta.PathId))
             {
                 subStyleId = subMeta.PathId;
             }
@@ -1548,14 +1551,14 @@ public class SummonerStatsService(
             .ToList();
 
         var statShardsFallback = resolvedRunes
-            .Where(r => r.PathId >= 5000)
+            .Where(r => RunePathIds.IsStatModPath(r.PathId))
             .OrderBy(r => r.Slot)
             .Select(r => r.RuneId)
             .Take(3)
             .ToList();
 
         var nonStatPaths = resolvedRunes
-            .Where(r => r.PathId > 0 && r.PathId < 5000)
+            .Where(r => RunePathIds.IsRealRunePath(r.PathId))
             .GroupBy(r => r.PathId)
             .Select(g => new
             {

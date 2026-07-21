@@ -547,7 +547,7 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Split along seams: a SummonerStatsService (overview/champions/roles/season), a SummonerMatchHistoryService (recent matches + match detail/timeline), and a shared RuneSelectionMapper. Each becomes independently testable.
   - **Why:** SRP is broken: a change to match-timeline aggregation and a change to rune parsing touch the same 1600-line file, raising merge-conflict and regression surface. The rune-mapping block is the very code duplicated in ChampionBuildPathBuilder, so its being buried here also hides the reuse opportunity.
   - **Where:** `Transcendence.Service.Core/Services/Analysis/Implementations/SummonerStatsService.cs:17-1642`
-- [ ] **The '5000' stat-mod rune-path threshold is a bare literal repeated in 13+ sites across 4 files** `MED` · `small`
+- [x] **The '5000' stat-mod rune-path threshold is a bare literal repeated in 13+ sites across 4 files** `MED` · `small`
   - **Fix:** Define `public const int StatModPathId = 5000;` (and helpers `IsStatModPath` / `IsRealRunePath`) in one shared static, e.g. alongside the rune metadata types, and reference it everywhere including the StaticDataService assignment.
   - **Why:** The meaning ('5000 == synthetic stat-mod path id') lives nowhere as a name, so a reader must reverse-engineer it, and if Riot's data scheme ever shifts, the value must be found and changed correctly in a dozen places across four files. Classic primitive-obsession / magic-number smell.
   - **Where:** `Transcendence.Service.Core/Services/StaticData/Implementations/StaticDataService.cs:401; SummonerStatsService.cs:1328,1336,1495,1503,1523,1530; ChampionBuildPathBuilder.cs:410,417,440,447; RuneSelectionIntegrityBackfillJob.cs:160,168,178`

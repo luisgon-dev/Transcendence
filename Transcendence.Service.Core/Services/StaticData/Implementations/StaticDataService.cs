@@ -9,6 +9,7 @@ using Transcendence.Service.Core.Services.Cache;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.StaticData.DTOs;
 using Transcendence.Service.Core.Services.StaticData.Interfaces;
+using Transcendence.Service.Core.Services.StaticData.Models;
 
 namespace Transcendence.Service.Core.Services.StaticData.Implementations;
 
@@ -398,7 +399,7 @@ public class StaticDataService(
             foreach (var slot in style.Slots)
             {
                 var isStatSlot = string.Equals(slot.Type, "kStatMod", StringComparison.OrdinalIgnoreCase);
-                var resolvedPathId = isStatSlot ? 5000 : style.Id;
+                var resolvedPathId = isStatSlot ? RunePathIds.StatMods : style.Id;
                 var resolvedPathName = isStatSlot ? "Stat Mods" : style.Name;
                 var resolvedSlot = isStatSlot ? statSlot : nonStatSlot;
 

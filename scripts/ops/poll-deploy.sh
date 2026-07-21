@@ -36,6 +36,14 @@ COMPOSE_PROJECT="transcendence"
 ENV_FILE="${COMPOSE_DIR}/stack.env"
 COMPOSE_FILE="${COMPOSE_DIR}/docker-compose.yml"
 LOCK_FILE="/run/transcendence-deploy.lock"
+STATE_DIR="${POLL_DEPLOY_STATE_DIR:-/var/lib/transcendence-deploy}"
+RESOLUTION_ALERT_THRESHOLD="${POLL_DEPLOY_RESOLUTION_ALERT_THRESHOLD:-3}"
+HEALTH_TIMEOUT_SECONDS="${POLL_DEPLOY_HEALTH_TIMEOUT_SECONDS:-420}"
+HEALTH_POLL_SECONDS="${POLL_DEPLOY_HEALTH_POLL_SECONDS:-5}"
+
+[[ "$RESOLUTION_ALERT_THRESHOLD" =~ ^[1-9][0-9]*$ ]] || RESOLUTION_ALERT_THRESHOLD=3
+[[ "$HEALTH_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]] || HEALTH_TIMEOUT_SECONDS=420
+[[ "$HEALTH_POLL_SECONDS" =~ ^[1-9][0-9]*$ ]] || HEALTH_POLL_SECONDS=5
 
 # service (compose) : container name : ghcr image repo
 SERVICES=(
@@ -79,12 +87,74 @@ notify() {
     -d "$(printf '{"content":"%s"}' "$msg")" "$url" >/dev/null 2>&1 || true
 }
 
+record_resolution_failure() {
+  local svc="$1" kind="$2" state_file count=0
+  mkdir -p "$STATE_DIR"
+  state_file="${STATE_DIR}/${svc}-${kind}.count"
+  if [ -r "$state_file" ]; then
+    read -r count <"$state_file" || count=0
+  fi
+  [[ "$count" =~ ^[0-9]+$ ]] || count=0
+  count=$((count + 1))
+  printf '%s\n' "$count" >"$state_file"
+
+  if [ "$count" -eq "$RESOLUTION_ALERT_THRESHOLD" ]; then
+    log "ERROR ${svc}: ${kind} digest resolution failed ${count} consecutive times"
+    notify "🚨 deploy poll: ${svc} ${kind} digest resolution failed ${count} consecutive times"
+  elif [ "$count" -gt "$RESOLUTION_ALERT_THRESHOLD" ]; then
+    log "WARN ${svc}: ${kind} digest resolution still failing (${count} consecutive; alerted at ${RESOLUTION_ALERT_THRESHOLD})"
+  else
+    log "WARN ${svc}: could not resolve ${kind} digest (${count}/${RESOLUTION_ALERT_THRESHOLD})"
+  fi
+}
+
+clear_resolution_failure() {
+  local svc="$1" kind="$2"
+  rm -f "${STATE_DIR}/${svc}-${kind}.count"
+}
+
+container_health_status() {
+  local container="$1"
+  docker inspect "$container" \
+    --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck:{{.State.Status}}{{end}}' \
+    2>/dev/null
+}
+
+wait_for_healthy() {
+  local svc="$1" container="$2" started status detail
+  started=$SECONDS
+
+  while (( SECONDS - started < HEALTH_TIMEOUT_SECONDS )); do
+    status="$(container_health_status "$container")"
+    case "$status" in
+      healthy)
+        log "HEALTHY ${svc}: container passed its healthcheck"
+        return 0
+        ;;
+      unhealthy|exited|dead|no-healthcheck:exited|no-healthcheck:dead)
+        break
+        ;;
+      no-healthcheck:*)
+        log "ERROR ${svc}: deployed image has no container healthcheck (${status#no-healthcheck:})"
+        return 1
+        ;;
+    esac
+    sleep "$HEALTH_POLL_SECONDS"
+  done
+
+  detail="$(docker inspect "$container" --format '{{if .State.Health}}{{range .State.Health.Log}}{{.Output}}{{end}}{{else}}{{.State.Error}}{{end}}' 2>/dev/null | tail -c 500)"
+  log "ERROR ${svc}: health verification failed after ${HEALTH_TIMEOUT_SECONDS}s (status=${status:-missing}${detail:+; detail=${detail}})"
+  return 1
+}
+
 deploy_one() {
   local svc="$1" container="$2" repo="$3" remote current
   remote="$(remote_digest "$repo")"
-  if [ -z "$remote" ]; then log "WARN ${svc}: could not resolve remote digest; skipping"; return 0; fi
+  if [ -z "$remote" ]; then record_resolution_failure "$svc" remote; return 1; fi
+  clear_resolution_failure "$svc" remote
   current="$(local_digest "$container")"
-  if [ -z "$current" ]; then log "WARN ${svc}: could not read local digest; skipping"; return 0; fi
+  if [ -z "$current" ]; then record_resolution_failure "$svc" local; return 1; fi
+  clear_resolution_failure "$svc" local
   if [ "$remote" = "$current" ]; then return 0; fi
 
   log "UPDATE ${svc}: ${current:0:19} -> ${remote:0:19}; deploying"
@@ -94,6 +164,10 @@ deploy_one() {
   fi
   if ! docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --no-deps "$svc" >/dev/null 2>&1; then
     log "ERROR ${svc}: up -d failed"; notify "🚨 deploy: ${svc} up -d FAILED"; return 1
+  fi
+  if ! wait_for_healthy "$svc" "$container"; then
+    notify "🚨 deploy: ${svc} failed post-deploy health verification"
+    return 1
   fi
   local rev
   rev="$(docker inspect "$container" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' 2>/dev/null)"
@@ -116,4 +190,6 @@ main() {
   exit $rc
 }
 
-main "$@"
+if [ "${POLL_DEPLOY_LIB_ONLY:-0}" != "1" ]; then
+  main "$@"
+fi

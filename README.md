@@ -136,6 +136,7 @@ Then open:
 | URL | What |
 | --- | --- |
 | http://localhost:3000 | Web app |
+| http://localhost:3000/api/health | Web process liveness |
 | http://localhost:8080 | Web API |
 | http://localhost:8080/health/ready | Health — readiness |
 | http://localhost:8080/health/live | Health — liveness |

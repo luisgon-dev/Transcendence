@@ -8,7 +8,7 @@ public static class RunePathIds
 {
     public const int StatMods = 5000;
 
-    public static bool IsRealRunePath(int pathId) => pathId is > 0 and < StatMods;
+    public static bool IsRealRunePath(int pathId) => pathId > 0 && pathId != StatMods;
 
-    public static bool IsStatModPath(int pathId) => pathId >= StatMods;
+    public static bool IsStatModPath(int pathId) => pathId == StatMods;
 }

@@ -5,6 +5,7 @@ using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Service.Core.Queries;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
+using Transcendence.Service.Core.Services.StaticData.Models;
 
 namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 
@@ -115,7 +116,7 @@ public sealed class ChampionProComputeService : IChampionProComputeService
                 mp.Summoner.GameName,
                 mp.Summoner.TagLine,
                 Items = mp.Items.Select(i => i.ItemId).ToList(),
-                Runes = mp.Runes.Select(r => new ChampionBuildPathBuilder.StoredRuneSelection(
+                Runes = mp.Runes.Select(r => new StoredRuneSelection(
                     r.RuneId,
                     r.SelectionTree,
                     r.SelectionIndex,
@@ -139,7 +140,7 @@ public sealed class ChampionProComputeService : IChampionProComputeService
             .AsNoTracking()
             .Where(rv => allRuneIds.Contains(rv.RuneId) && rv.PatchVersion == patch)
             .Select(rv => new { rv.RuneId, rv.RunePathId, rv.Slot })
-            .ToDictionaryAsync(rv => rv.RuneId, rv => new ChampionBuildPathBuilder.RuneMetadata(rv.RunePathId, rv.Slot), ct);
+            .ToDictionaryAsync(rv => rv.RuneId, rv => new RuneSelectionMetadata(rv.RunePathId, rv.Slot), ct);
 
         // Ordered build path + skill orders for the projected pro matches (timeline-derived).
         var proMatchGuids = rows.Select(r => r.MatchGuid).Distinct().ToList();

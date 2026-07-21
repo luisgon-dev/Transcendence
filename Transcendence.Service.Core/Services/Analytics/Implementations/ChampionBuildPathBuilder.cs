@@ -345,17 +345,6 @@ internal sealed class ChampionBuildPathBuilder
     }
 
     /// <summary>
-    /// Helper record for rune metadata lookup result.
-    /// </summary>
-    internal readonly record struct RuneMetadata(int RunePathId, int Slot);
-
-    internal readonly record struct StoredRuneSelection(
-        int RuneId,
-        RuneSelectionTree SelectionTree,
-        int SelectionIndex,
-        int StyleId);
-
-    /// <summary>
     /// Helper record for rune information grouping.
     /// </summary>
     internal record RuneInfoResult(
@@ -372,119 +361,19 @@ internal sealed class ChampionBuildPathBuilder
     /// </summary>
     internal static RuneInfoResult BuildRuneInfo(
         List<StoredRuneSelection> selections,
-        Dictionary<int, RuneMetadata> runeMetadata)
+        Dictionary<int, RuneSelectionMetadata> runeMetadata)
     {
-        if (selections.Count == 0)
-        {
-            return new RuneInfoResult("0:|0:|", 0, 0, [], [], []);
-        }
-
-        if (HasStructuredSelections(selections))
-        {
-            var primaryRunes = selections
-                .Where(s => s.SelectionTree == RuneSelectionTree.Primary)
-                .OrderBy(s => s.SelectionIndex)
-                .Select(s => s.RuneId)
-                .ToList();
-            var subRunes = selections
-                .Where(s => s.SelectionTree == RuneSelectionTree.Secondary)
-                .OrderBy(s => s.SelectionIndex)
-                .Select(s => s.RuneId)
-                .ToList();
-            var statShards = selections
-                .Where(s => s.SelectionTree == RuneSelectionTree.StatShards)
-                .OrderBy(s => s.SelectionIndex)
-                .Select(s => s.RuneId)
-                .ToList();
-
-            var primaryStyleId = selections
-                .Where(s => s.SelectionTree == RuneSelectionTree.Primary && s.StyleId > 0)
-                .Select(s => s.StyleId)
-                .FirstOrDefault();
-            var subStyleId = selections
-                .Where(s => s.SelectionTree == RuneSelectionTree.Secondary && s.StyleId > 0)
-                .Select(s => s.StyleId)
-                .FirstOrDefault();
-
-            if (primaryStyleId == 0 && primaryRunes.Count > 0 &&
-                runeMetadata.TryGetValue(primaryRunes[0], out var primaryMeta) &&
-                RunePathIds.IsRealRunePath(primaryMeta.RunePathId))
-            {
-                primaryStyleId = primaryMeta.RunePathId;
-            }
-
-            if (subStyleId == 0 && subRunes.Count > 0 &&
-                runeMetadata.TryGetValue(subRunes[0], out var subMeta) &&
-                RunePathIds.IsRealRunePath(subMeta.RunePathId))
-            {
-                subStyleId = subMeta.RunePathId;
-            }
-
-            var key =
-                $"{primaryStyleId}:{string.Join(",", primaryRunes)}|{subStyleId}:{string.Join(",", subRunes)}|{string.Join(",", statShards)}";
-            return new RuneInfoResult(key, primaryStyleId, subStyleId, primaryRunes, subRunes, statShards);
-        }
-
-        // Legacy fallback for rows missing explicit tree/index/style.
-        var runesByPath = new Dictionary<int, List<(int RuneId, int Slot)>>();
-        foreach (var selection in selections)
-        {
-            if (!runeMetadata.TryGetValue(selection.RuneId, out var meta))
-                continue;
-
-            if (!runesByPath.ContainsKey(meta.RunePathId))
-                runesByPath[meta.RunePathId] = [];
-            runesByPath[meta.RunePathId].Add((selection.RuneId, meta.Slot));
-        }
-
-        var statShardsFallback = runesByPath
-            .Where(kvp => RunePathIds.IsStatModPath(kvp.Key))
-            .SelectMany(kvp => kvp.Value)
-            .OrderBy(x => x.Slot)
-            .Select(x => x.RuneId)
-            .ToList();
-
-        var nonStatPaths = runesByPath
-            .Where(kvp => RunePathIds.IsRealRunePath(kvp.Key))
-            .Select(kvp => new { PathId = kvp.Key, Runes = kvp.Value.OrderBy(x => x.Slot).ToList() })
-            .OrderByDescending(x => x.Runes.Count)
-            .ThenBy(x => x.PathId)
-            .ToList();
-
-        var primaryPath = nonStatPaths.FirstOrDefault();
-        var secondaryPath = nonStatPaths.Skip(1).FirstOrDefault();
-
-        var primaryRunesFallback = primaryPath?.Runes.Select(r => r.RuneId).ToList() ?? [];
-        var subRunesFallback = secondaryPath?.Runes.Select(r => r.RuneId).ToList() ?? [];
-        var keyFallback =
-            $"{primaryPath?.PathId ?? 0}:{string.Join(",", primaryRunesFallback)}|{secondaryPath?.PathId ?? 0}:{string.Join(",", subRunesFallback)}|{string.Join(",", statShardsFallback)}";
-
+        var mapped = RuneSelectionMapper.Map(
+            selections,
+            runeId => runeMetadata.TryGetValue(runeId, out var metadata) ? metadata : null);
+        var key =
+            $"{mapped.PrimaryStyleId}:{string.Join(",", mapped.PrimaryRunes)}|{mapped.SubStyleId}:{string.Join(",", mapped.SubRunes)}|{string.Join(",", mapped.StatShards)}";
         return new RuneInfoResult(
-            keyFallback,
-            primaryPath?.PathId ?? 0,
-            secondaryPath?.PathId ?? 0,
-            primaryRunesFallback,
-            subRunesFallback,
-            statShardsFallback);
-    }
-
-    private static bool HasStructuredSelections(List<StoredRuneSelection> selections)
-    {
-        if (selections.Count == 0)
-            return false;
-
-        var hasNonDefaultHierarchy = selections.Any(s =>
-            s.SelectionTree != RuneSelectionTree.Primary ||
-            s.StyleId != 0);
-
-        if (!hasNonDefaultHierarchy)
-            return false;
-
-        var uniqueSlots = selections
-            .Select(s => (s.SelectionTree, s.SelectionIndex))
-            .Distinct()
-            .Count();
-
-        return uniqueSlots == selections.Count;
+            key,
+            mapped.PrimaryStyleId,
+            mapped.SubStyleId,
+            mapped.PrimaryRunes,
+            mapped.SubRunes,
+            mapped.StatShards);
     }
 }

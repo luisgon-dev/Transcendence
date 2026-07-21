@@ -900,7 +900,6 @@ public class SummonerStatsService(
                 g => g
                     .Select(r => new StoredRuneSelection(
                         r.RuneId,
-                        r.PatchVersion,
                         r.SelectionTree,
                         r.SelectionIndex,
                         r.StyleId))
@@ -931,7 +930,7 @@ public class SummonerStatsService(
                 g =>
                 {
                     var first = g.First();
-                    return new RuneMetadata(first.RunePathId, first.Slot);
+                    return new RuneSelectionMetadata(first.RunePathId, first.Slot);
                 });
 
         var runeMetadataByRuneId = runeMetadataRows
@@ -941,7 +940,7 @@ public class SummonerStatsService(
                 g =>
                 {
                     var first = g.First();
-                    return new RuneMetadata(first.RunePathId, first.Slot);
+                    return new RuneSelectionMetadata(first.RunePathId, first.Slot);
                 });
 
         // Map to final DTOs
@@ -1207,7 +1206,7 @@ public class SummonerStatsService(
                 g =>
                 {
                     var first = g.First();
-                    return new RuneMetadata(first.RunePathId, first.Slot);
+                    return new RuneSelectionMetadata(first.RunePathId, first.Slot);
                 });
 
         var participants = match.Participants.Select(p => MapParticipant(p, runeMetadata)).ToList();
@@ -1250,7 +1249,7 @@ public class SummonerStatsService(
 
     private static ParticipantDetailDto MapParticipant(
         Data.Models.LoL.Match.MatchParticipant p,
-        Dictionary<int, RuneMetadata> runeMetadata)
+        Dictionary<int, RuneSelectionMetadata> runeMetadata)
     {
         var items = p.Items
             .OrderBy(i => i.SlotIndex)
@@ -1261,7 +1260,6 @@ public class SummonerStatsService(
         var runes = BuildRunesDto(
             p.Runes.Select(r => new StoredRuneSelection(
                 r.RuneId,
-                r.PatchVersion,
                 r.SelectionTree,
                 r.SelectionIndex,
                 r.StyleId)).ToList(),
@@ -1296,110 +1294,17 @@ public class SummonerStatsService(
 
     private static ParticipantRunesDto BuildRunesDto(
         List<StoredRuneSelection> selections,
-        Dictionary<int, RuneMetadata> runeMetadata)
+        Dictionary<int, RuneSelectionMetadata> runeMetadata)
     {
-        if (selections.Count == 0)
-            return new ParticipantRunesDto(0, 0, [], [], []);
-
-        if (HasStructuredSelections(selections))
-        {
-            var primarySelections = selections
-                .Where(s => s.SelectionTree == RuneSelectionTree.Primary)
-                .OrderBy(s => s.SelectionIndex)
-                .Select(s => s.RuneId)
-                .ToList();
-            var subSelections = selections
-                .Where(s => s.SelectionTree == RuneSelectionTree.Secondary)
-                .OrderBy(s => s.SelectionIndex)
-                .Select(s => s.RuneId)
-                .ToList();
-            var statShards = selections
-                .Where(s => s.SelectionTree == RuneSelectionTree.StatShards)
-                .OrderBy(s => s.SelectionIndex)
-                .Select(s => s.RuneId)
-                .ToList();
-
-            var primaryStyleId = selections
-                .Where(s => s.SelectionTree == RuneSelectionTree.Primary && s.StyleId > 0)
-                .Select(s => s.StyleId)
-                .FirstOrDefault();
-            var subStyleId = selections
-                .Where(s => s.SelectionTree == RuneSelectionTree.Secondary && s.StyleId > 0)
-                .Select(s => s.StyleId)
-                .FirstOrDefault();
-
-            if (primaryStyleId == 0 && primarySelections.Count > 0 &&
-                runeMetadata.TryGetValue(primarySelections[0], out var primaryMeta) &&
-                RunePathIds.IsRealRunePath(primaryMeta.PathId))
-                primaryStyleId = primaryMeta.PathId;
-
-            if (subStyleId == 0 && subSelections.Count > 0 &&
-                runeMetadata.TryGetValue(subSelections[0], out var subMeta) &&
-                RunePathIds.IsRealRunePath(subMeta.PathId))
-                subStyleId = subMeta.PathId;
-
-            return new ParticipantRunesDto(
-                primaryStyleId,
-                subStyleId,
-                primarySelections,
-                subSelections,
-                statShards
-            );
-        }
-
-        // Legacy fallback: infer trees by path/slot metadata.
-        var runesByPath = selections
-            .Select(s => runeMetadata.TryGetValue(s.RuneId, out var meta)
-                ? (RuneId: s.RuneId, PathId: meta.PathId, Slot: meta.Slot)
-                : (RuneId: s.RuneId, PathId: 0, Slot: s.SelectionIndex))
-            .GroupBy(x => x.PathId)
-            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Slot).ToList());
-
-        var statPath = runesByPath
-            .Where(kvp => RunePathIds.IsStatModPath(kvp.Key))
-            .SelectMany(kvp => kvp.Value)
-            .OrderBy(x => x.Slot)
-            .Select(x => x.RuneId)
-            .Take(3)
-            .ToList();
-
-        var nonStatPaths = runesByPath
-            .Where(kvp => RunePathIds.IsRealRunePath(kvp.Key))
-            .Select(kvp => new { PathId = kvp.Key, Runes = kvp.Value })
-            .OrderByDescending(x => x.Runes.Count)
-            .ThenBy(x => x.PathId)
-            .ToList();
-
-        var primaryPath = nonStatPaths.FirstOrDefault();
-        var secondaryPath = nonStatPaths.Skip(1).FirstOrDefault();
-
+        var mapped = RuneSelectionMapper.Map(
+            selections,
+            runeId => runeMetadata.TryGetValue(runeId, out var metadata) ? metadata : null);
         return new ParticipantRunesDto(
-            primaryPath?.PathId ?? 0,
-            secondaryPath?.PathId ?? 0,
-            primaryPath?.Runes.Select(r => r.RuneId).ToList() ?? [],
-            secondaryPath?.Runes.Select(r => r.RuneId).ToList() ?? [],
-            statPath
-        );
-    }
-
-    private static bool HasStructuredSelections(List<StoredRuneSelection> selections)
-    {
-        if (selections.Count == 0)
-            return false;
-
-        var hasNonDefaultHierarchy = selections.Any(s =>
-            s.SelectionTree != RuneSelectionTree.Primary ||
-            s.StyleId != 0);
-
-        if (!hasNonDefaultHierarchy)
-            return false;
-
-        var uniqueSlots = selections
-            .Select(s => (s.SelectionTree, s.SelectionIndex))
-            .Distinct()
-            .Count();
-
-        return uniqueSlots == selections.Count;
+            mapped.PrimaryStyleId,
+            mapped.SubStyleId,
+            mapped.PrimaryRunes,
+            mapped.SubRunes,
+            mapped.StatShards);
     }
 
     private static double CalcKdaRatio(double kills, double deaths, double assists)
@@ -1472,8 +1377,8 @@ public class SummonerStatsService(
     private static MatchRuneSummary BuildRuneSummary(
         List<StoredRuneSelection> selections,
         string? patchVersion,
-        Dictionary<RunePatchKey, RuneMetadata> runeMetadata,
-        IReadOnlyDictionary<int, RuneMetadata> runeMetadataByRuneId)
+        Dictionary<RunePatchKey, RuneSelectionMetadata> runeMetadata,
+        IReadOnlyDictionary<int, RuneSelectionMetadata> runeMetadataByRuneId)
     {
         var detail = BuildRuneDetail(selections, patchVersion, runeMetadata, runeMetadataByRuneId);
         return new MatchRuneSummary(
@@ -1485,108 +1390,34 @@ public class SummonerStatsService(
     private static MatchRuneDetail BuildRuneDetail(
         List<StoredRuneSelection> selections,
         string? patchVersion,
-        Dictionary<RunePatchKey, RuneMetadata> runeMetadataByPatch,
-        IReadOnlyDictionary<int, RuneMetadata> runeMetadataByRuneId)
+        Dictionary<RunePatchKey, RuneSelectionMetadata> runeMetadataByPatch,
+        IReadOnlyDictionary<int, RuneSelectionMetadata> runeMetadataByRuneId)
     {
-        if (selections.Count == 0)
-            return new MatchRuneDetail(0, 0, [], [], []);
-
         var normalizedPatch = NormalizePatchVersion(patchVersion);
-
-        if (HasStructuredSelections(selections))
-        {
-            var primarySelections = selections
-                .Where(s => s.SelectionTree == RuneSelectionTree.Primary)
-                .OrderBy(s => s.SelectionIndex)
-                .Select(s => s.RuneId)
-                .ToList();
-            var subSelections = selections
-                .Where(s => s.SelectionTree == RuneSelectionTree.Secondary)
-                .OrderBy(s => s.SelectionIndex)
-                .Select(s => s.RuneId)
-                .ToList();
-            var statShards = selections
-                .Where(s => s.SelectionTree == RuneSelectionTree.StatShards)
-                .OrderBy(s => s.SelectionIndex)
-                .Select(s => s.RuneId)
-                .ToList();
-
-            var primaryStyleId = selections
-                .Where(s => s.SelectionTree == RuneSelectionTree.Primary && s.StyleId > 0)
-                .Select(s => s.StyleId)
-                .FirstOrDefault();
-            var subStyleId = selections
-                .Where(s => s.SelectionTree == RuneSelectionTree.Secondary && s.StyleId > 0)
-                .Select(s => s.StyleId)
-                .FirstOrDefault();
-
-            if (primaryStyleId == 0 && primarySelections.Count > 0 &&
-                TryGetRuneMetadata(primarySelections[0], normalizedPatch, runeMetadataByPatch, runeMetadataByRuneId,
-                    out var primaryMeta) &&
-                RunePathIds.IsRealRunePath(primaryMeta.PathId))
-            {
-                primaryStyleId = primaryMeta.PathId;
-            }
-
-            if (subStyleId == 0 && subSelections.Count > 0 &&
-                TryGetRuneMetadata(subSelections[0], normalizedPatch, runeMetadataByPatch, runeMetadataByRuneId,
-                    out var subMeta) &&
-                RunePathIds.IsRealRunePath(subMeta.PathId))
-            {
-                subStyleId = subMeta.PathId;
-            }
-
-            return new MatchRuneDetail(primaryStyleId, subStyleId, primarySelections, subSelections, statShards);
-        }
-
-        // Legacy fallback: infer trees/styles by path metadata.
-        var resolvedRunes = selections
-            .Select(s =>
-            {
-                return TryGetRuneMetadata(s.RuneId, normalizedPatch, runeMetadataByPatch, runeMetadataByRuneId,
-                    out var meta)
-                    ? (RuneId: s.RuneId, PathId: meta.PathId, Slot: meta.Slot)
-                    : (RuneId: s.RuneId, PathId: 0, Slot: s.SelectionIndex);
-            })
-            .ToList();
-
-        var statShardsFallback = resolvedRunes
-            .Where(r => RunePathIds.IsStatModPath(r.PathId))
-            .OrderBy(r => r.Slot)
-            .Select(r => r.RuneId)
-            .Take(3)
-            .ToList();
-
-        var nonStatPaths = resolvedRunes
-            .Where(r => RunePathIds.IsRealRunePath(r.PathId))
-            .GroupBy(r => r.PathId)
-            .Select(g => new
-            {
-                PathId = g.Key,
-                Runes = g.OrderBy(x => x.Slot).ToList()
-            })
-            .OrderByDescending(x => x.Runes.Count)
-            .ThenBy(x => x.PathId)
-            .ToList();
-
-        var primaryPath = nonStatPaths.FirstOrDefault();
-        var secondaryPath = nonStatPaths.Skip(1).FirstOrDefault();
-
+        var mapped = RuneSelectionMapper.Map(
+            selections,
+            runeId => TryGetRuneMetadata(
+                runeId,
+                normalizedPatch,
+                runeMetadataByPatch,
+                runeMetadataByRuneId,
+                out var metadata)
+                    ? metadata
+                    : null);
         return new MatchRuneDetail(
-            primaryPath?.PathId ?? 0,
-            secondaryPath?.PathId ?? 0,
-            primaryPath?.Runes.Select(r => r.RuneId).ToList() ?? [],
-            secondaryPath?.Runes.Select(r => r.RuneId).ToList() ?? [],
-            statShardsFallback
-        );
+            mapped.PrimaryStyleId,
+            mapped.SubStyleId,
+            mapped.PrimaryRunes,
+            mapped.SubRunes,
+            mapped.StatShards);
     }
 
     private static bool TryGetRuneMetadata(
         int runeId,
         string normalizedPatch,
-        IReadOnlyDictionary<RunePatchKey, RuneMetadata> runeMetadataByPatch,
-        IReadOnlyDictionary<int, RuneMetadata> runeMetadataByRuneId,
-        out RuneMetadata metadata)
+        IReadOnlyDictionary<RunePatchKey, RuneSelectionMetadata> runeMetadataByPatch,
+        IReadOnlyDictionary<int, RuneSelectionMetadata> runeMetadataByRuneId,
+        out RuneSelectionMetadata metadata)
     {
         if (runeMetadataByPatch.TryGetValue(new RunePatchKey(runeId, normalizedPatch), out metadata))
             return true;
@@ -1599,14 +1430,6 @@ public class SummonerStatsService(
     /// </summary>
     private readonly record struct RunePatchKey(int RuneId, string PatchVersion);
 
-    private readonly record struct StoredRuneSelection(
-        int RuneId,
-        string? PatchVersion,
-        RuneSelectionTree SelectionTree,
-        int SelectionIndex,
-        int StyleId);
-
-    private readonly record struct RuneMetadata(int PathId, int Slot);
     private sealed record RecentMatchMatchProjection(
         Guid Id,
         string? MatchId,

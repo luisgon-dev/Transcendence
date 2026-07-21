@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
+import { isAllowedAppProxyPath } from "@/lib/appProxyAllowlist";
 import { getBackendApiKey } from "@/lib/env";
 import { logEvent } from "@/lib/serverLog";
 import { proxyToBackend } from "@/lib/trnProxy";
@@ -17,14 +18,6 @@ function resolveApiKey() {
 }
 
 type Ctx = { params: Promise<{ path: string[] }> };
-
-function isAllowedAppProxyPath(method: string, path: string[]) {
-  if (method !== "GET") return false;
-  if (path.length !== 5) return false;
-  if (path[0] !== "summoners") return false;
-  if (path[4] !== "live-game") return false;
-  return true;
-}
 
 async function handler(req: NextRequest, ctx: Ctx) {
   const key = resolveApiKey();

@@ -21,6 +21,7 @@ const EXAMPLE_SUMMONER_HREF = "/lol/summoners/kr/Hide%20on%20bush-KR1";
 
 const SECONDARY_LINKS = [
   { label: "Champions", href: "/lol/champions" },
+  { label: "Multi-Search", href: "/lol/multi-search" },
   { label: "Pro Builds", href: "/lol/pro-builds" }
 ] as const;
 

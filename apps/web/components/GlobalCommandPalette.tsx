@@ -15,6 +15,7 @@ import {
   type GlobalSearchOpenOrigin
 } from "@/lib/globalSearch";
 import { buildLolPublicSummonerSearchPath } from "@/lib/lolPublicApi";
+import { LOL_REGION_OPTIONS } from "@/lib/lolRegions";
 import { DEFAULT_TIERLIST_RANK_TIER, rankTierDisplayLabel } from "@/lib/ranks";
 import { encodeRiotIdPath, parseRiotIdInput } from "@/lib/riotid";
 import { championIconUrl } from "@/lib/staticData";
@@ -41,20 +42,6 @@ type SummonerSearchItem = {
 type SummonerSearchResponse = {
   items: SummonerSearchItem[];
 };
-
-const REGIONS = [
-  { value: "na", label: "NA" },
-  { value: "euw", label: "EUW" },
-  { value: "eune", label: "EUNE" },
-  { value: "kr", label: "KR" },
-  { value: "br", label: "BR" },
-  { value: "lan", label: "LAN" },
-  { value: "las", label: "LAS" },
-  { value: "oce", label: "OCE" },
-  { value: "jp", label: "JP" },
-  { value: "tr", label: "TR" },
-  { value: "ru", label: "RU" }
-] as const;
 
 const TIER_LINKS = [
   {
@@ -84,7 +71,8 @@ const TIER_LINKS = [
   { label: "Tier List · All Ranks", href: "/lol/tierlist?rankTier=all" },
   { label: "Tier List · Challenger", href: "/lol/tierlist?rankTier=CHALLENGER" },
   { label: "Champions", href: "/lol/champions" },
-  { label: "Pro Builds", href: "/lol/pro-builds" }
+  { label: "Pro Builds", href: "/lol/pro-builds" },
+  { label: "Multi-Search · Champ Select Scout", href: "/lol/multi-search" }
 ] as const;
 
 const RESULT_ITEM_CLASS =
@@ -469,7 +457,7 @@ export function GlobalCommandPalette() {
     navigate(`/lol/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`);
   }
 
-  const regionLabel = REGIONS.find((item) => item.value === region)?.label ?? region.toUpperCase();
+  const regionLabel = LOL_REGION_OPTIONS.find((item) => item.value === region)?.label ?? region.toUpperCase();
   const directOpenPath = parsedRiotId
     ? `/lol/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`
     : null;
@@ -631,7 +619,7 @@ export function GlobalCommandPalette() {
                       <Select
                         value={region}
                         onValueChange={setRegion}
-                        options={[...REGIONS]}
+                        options={[...LOL_REGION_OPTIONS]}
                         ariaLabel="Summoner region"
                         className="h-12 w-full rounded-control border-border/65 bg-surface-2/55 text-fg shadow-inset"
                       />

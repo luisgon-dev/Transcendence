@@ -15,6 +15,7 @@ type NavLink = { href: string; label: string; mobileLabel?: string };
 const NAV_LINKS: NavLink[] = [
   { href: "/lol/tierlist", label: "Tier List" },
   { href: "/lol/champions", label: "Champions" },
+  { href: "/lol/multi-search", label: "Multi-Search", mobileLabel: "Scout" },
   { href: "/lol/pro-builds", label: "Pro Builds", mobileLabel: "Pro" }
 ];
 

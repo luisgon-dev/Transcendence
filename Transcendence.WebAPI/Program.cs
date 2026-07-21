@@ -10,7 +10,6 @@ using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using StackExchange.Redis;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration.Json;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
@@ -18,8 +17,6 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading.RateLimiting;
 using System.Text;
-using Transcendence.Data;
-using Transcendence.Data.Extensions;
 using Transcendence.WebAPI.Health;
 using Transcendence.Service.Core.Services.Auth.Implementations;
 using Transcendence.Service.Core.Services.Auth.Interfaces;
@@ -151,9 +148,7 @@ builder.Services.AddSwaggerGen(options =>
 // unwound, surfacing "A second operation was started on this context instance". A fresh per-scope
 // context is disposed at scope end and never reused, eliminating that race. The analytics reads are
 // cache-backed so the lost pooling has negligible throughput impact.
-builder.Services.AddDbContext<TranscendenceContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("MainDatabase"),
-        b => b.MigrationsAssembly("Transcendence.Service")));
+builder.Services.AddTranscendenceData(builder.Configuration);
 // Readiness checks (tagged "ready") back /health/ready; /health/live stays shallow
 // (process-up only). Redis check is registered only when Redis is configured so the
 // keyless OpenAPI export / api:check boot (no Redis) does not fail.
@@ -220,7 +215,6 @@ builder.Services.AddHybridCache(options =>
 
 // Register keyless application services used by the WebAPI host.
 builder.Services.AddTranscendenceCore();
-builder.Services.AddProjectSyndraRepositories();
 builder.Services.Configure<ChampionAnalyticsComputeOptions>(builder.Configuration.GetSection("Analytics:Compute"));
 builder.Services.Configure<TieringOptions>(builder.Configuration.GetSection("Analytics:Tiering"));
 builder.Services.Configure<ChampionAnalyticsIngestionJobOptions>(
@@ -229,6 +223,8 @@ builder.Services.Configure<MultiRegionIngestionOptions>(builder.Configuration.Ge
 builder.Services.Configure<WorkerJobScheduleOptions>(builder.Configuration.GetSection("Jobs:Schedule"));
 builder.Services.Configure<WorkerSchedulingProfileOptions>(builder.Configuration.GetSection("Jobs:SchedulingProfiles"));
 builder.Services.Configure<AdminBootstrapOptions>(builder.Configuration.GetSection("Auth:AdminBootstrap"));
+builder.Services.Configure<PasswordResetOptions>(builder.Configuration.GetSection("Auth:PasswordReset"));
+builder.Services.Configure<RiotRsoOptions>(builder.Configuration.GetSection("Auth:RiotRso"));
 builder.Services.AddSingleton<IWorkerRecurringJobPolicy, WorkerRecurringJobPolicy>();
 builder.Services.AddAdminOperationsFacades();
 builder.Services.AddSingleton<IAdaptiveThroughputBudgetPolicy, AdaptiveThroughputBudgetPolicy>();

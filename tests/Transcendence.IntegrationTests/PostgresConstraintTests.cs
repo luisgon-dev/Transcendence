@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Models.LoL.Match;
@@ -35,6 +36,74 @@ public sealed class PostgresConstraintTests(PostgresIntegrationFixture fixture)
 
         await act.Should().ThrowAsync<DbUpdateException>(
             "the unique index on Summoner.Puuid must be enforced by Postgres — the InMemory provider would silently accept the duplicate");
+    }
+
+    [Fact]
+    public async Task StableRiotIdentifiers_CannotBeNull_OnPostgres()
+    {
+        await using var db = NewDb();
+
+        var nullSummonerPuuid = async () => await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "Summoners" ("Id", "Puuid", "PlatformRegion", "Region")
+            VALUES ({Guid.NewGuid()}, NULL, 'NA1', 'americas')
+            """);
+        var nullMatchId = async () => await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "Matches" ("Id", "MatchId", "MatchDate", "Duration", "QueueId", "Status", "RetryCount")
+            VALUES ({Guid.NewGuid()}, NULL, 0, 0, 0, 0, 0)
+            """);
+
+        (await nullSummonerPuuid.Should().ThrowAsync<PostgresException>())
+            .Which.SqlState.Should().Be(PostgresErrorCodes.NotNullViolation);
+        (await nullMatchId.Should().ThrowAsync<PostgresException>())
+            .Which.SqlState.Should().Be(PostgresErrorCodes.NotNullViolation);
+    }
+
+    [Fact]
+    public async Task MatchFacts_DoNotRequireStaticDataRows_OnPostgres()
+    {
+        var patch = $"missing-{Guid.NewGuid():N}";
+        await using var db = NewDb();
+        var summoner = MakeSummoner(Guid.NewGuid().ToString("N"));
+        var match = MakeMatch(FetchStatus.Success, patch);
+        var participant = new MatchParticipant
+        {
+            Id = Guid.NewGuid(),
+            MatchId = match.Id,
+            Match = match,
+            SummonerId = summoner.Id,
+            Summoner = summoner,
+            Puuid = summoner.Puuid,
+            ParticipantId = 1,
+            TeamId = 100,
+            ChampionId = 100,
+            Win = true
+        };
+        participant.Items.Add(new MatchParticipantItem
+        {
+            MatchParticipantId = participant.Id,
+            MatchParticipant = participant,
+            SlotIndex = 0,
+            ItemId = 999_001,
+            PatchVersion = patch
+        });
+        participant.Runes.Add(new MatchParticipantRune
+        {
+            MatchParticipantId = participant.Id,
+            MatchParticipant = participant,
+            RuneId = 999_002,
+            PatchVersion = patch,
+            SelectionTree = RuneSelectionTree.Primary,
+            SelectionIndex = 0,
+            StyleId = 999_003
+        });
+
+        db.MatchParticipants.Add(participant);
+        await db.SaveChangesAsync();
+
+        (await db.MatchParticipantItems.CountAsync(x => x.MatchParticipantId == participant.Id))
+            .Should().Be(1, "partial item metadata must not reject immutable match facts");
+        (await db.MatchParticipantRunes.CountAsync(x => x.MatchParticipantId == participant.Id))
+            .Should().Be(1, "partial rune metadata must not reject immutable match facts");
     }
 
     [Fact]

@@ -58,8 +58,10 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<UserAccount> UserAccounts { get; set; }
     public DbSet<UserRole> UserRoles { get; set; }
     public DbSet<UserRefreshToken> UserRefreshTokens { get; set; }
+    public DbSet<UserPasswordResetToken> UserPasswordResetTokens { get; set; }
     public DbSet<UserFavoriteSummoner> UserFavoriteSummoners { get; set; }
     public DbSet<UserPreferences> UserPreferences { get; set; }
+    public DbSet<UserRiotAccount> UserRiotAccounts { get; set; }
     public DbSet<AdminAuditEvent> AdminAuditEvents { get; set; }
     public DbSet<LiveGameSnapshot> LiveGameSnapshots { get; set; }
 
@@ -72,6 +74,10 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
                 x.QueueType
             })
             .IsUnique();
+
+        modelBuilder.Entity<Match>()
+            .Property(x => x.MatchId)
+            .IsRequired();
 
         modelBuilder.Entity<Match>()
             .HasIndex(x => new
@@ -93,6 +99,10 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             .HasIndex(x => new { x.PlatformRegion, x.Status, x.Patch });
 
         // Summoner lookups by Puuid
+        modelBuilder.Entity<Summoner>()
+            .Property(s => s.Puuid)
+            .IsRequired();
+
         modelBuilder.Entity<Summoner>()
             .HasIndex(s => s.Puuid)
             .IsUnique();
@@ -211,6 +221,21 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             entity.Property(x => x.Email).IsRequired();
             entity.Property(x => x.EmailNormalized).IsRequired();
             entity.Property(x => x.PasswordHash).IsRequired();
+            entity.Property(x => x.DisplayName).HasMaxLength(128);
+        });
+
+        modelBuilder.Entity<UserRiotAccount>(entity =>
+        {
+            entity.HasKey(x => x.UserAccountId);
+            entity.HasIndex(x => x.Puuid).IsUnique();
+            entity.Property(x => x.Puuid).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.GameName).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.TagLine).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.PlatformRegion).HasMaxLength(16).IsRequired();
+            entity.HasOne(x => x.UserAccount)
+                .WithOne(x => x.RiotAccount)
+                .HasForeignKey<UserRiotAccount>(x => x.UserAccountId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<UserRole>(entity =>
@@ -232,6 +257,19 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
 
             entity.HasOne(x => x.UserAccount)
                 .WithMany(x => x.RefreshTokens)
+                .HasForeignKey(x => x.UserAccountId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UserPasswordResetToken>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.HasIndex(x => new { x.UserAccountId, x.ExpiresAtUtc });
+            entity.Property(x => x.TokenHash).IsRequired();
+
+            entity.HasOne(x => x.UserAccount)
+                .WithMany(x => x.PasswordResetTokens)
                 .HasForeignKey(x => x.UserAccountId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
@@ -278,6 +316,7 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             entity.Property(x => x.State).IsRequired();
             entity.Property(x => x.PlatformRegion).IsRequired();
             entity.Property(x => x.Puuid).IsRequired();
+            entity.Property(x => x.PayloadJson).HasColumnType("jsonb");
         });
 
         modelBuilder.Entity<RuneVersion>(entity =>
@@ -330,14 +369,9 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
                 .WithMany(mp => mp.Runes)
                 .HasForeignKey(mpr => mpr.MatchParticipantId);
 
-            entity.HasOne(mpr => mpr.RuneVersion)
-                .WithMany()
-                .HasForeignKey(mpr => new
-                {
-                    mpr.RuneId,
-                    mpr.PatchVersion
-                });
-
+            // RuneId + PatchVersion are immutable historical facts. Static-data metadata is
+            // intentionally resolved with a soft join so a missing/reseeded RuneVersion cannot
+            // reject or cascade-delete match history.
             entity.HasIndex(mpr => new { mpr.RuneId, mpr.PatchVersion });
         });
 
@@ -468,15 +502,10 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
                 .WithMany(mp => mp.Items)
                 .HasForeignKey(mpi => mpi.MatchParticipantId);
 
-            entity.HasOne(mpi => mpi.ItemVersion)
-                .WithMany()
-                .HasForeignKey(mpi => new
-                {
-                    mpi.ItemId,
-                    mpi.PatchVersion
-                });
-
+            // ItemId + PatchVersion remain indexed for soft metadata joins, but are not a hard FK:
+            // match ingestion must survive partial static-data syncs and static-data reseeds.
             entity.HasIndex(mpi => new { mpi.MatchParticipantId, mpi.ItemId });
+            entity.HasIndex(mpi => new { mpi.ItemId, mpi.PatchVersion });
 
         });
 
@@ -612,37 +641,41 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
         modelBuilder.Entity<ChampionRoleTierStat>(entity =>
         {
             entity.HasKey(x => x.Id);
-            entity.HasIndex(x => new { x.Patch, x.PlatformRegion, x.RankTier, x.ChampionId, x.Role })
+            entity.Property(x => x.QueueFamily).HasDefaultValue("RANKED_SOLO_DUO");
+            entity.HasIndex(x => new { x.Patch, x.QueueFamily, x.PlatformRegion, x.RankTier, x.ChampionId, x.Role })
                 .IsUnique();
             // Win-rate read: a single champion across its roles/tiers/regions.
-            entity.HasIndex(x => new { x.Patch, x.ChampionId, x.Role });
+            entity.HasIndex(x => new { x.Patch, x.QueueFamily, x.ChampionId, x.Role });
             // Tier-list + role-rank/pick-rate population read: every champion in a role/tier/region scope.
-            entity.HasIndex(x => new { x.Patch, x.Role, x.RankTier });
+            entity.HasIndex(x => new { x.Patch, x.QueueFamily, x.Role, x.RankTier });
         });
 
         modelBuilder.Entity<ScopeMatchCountStat>(entity =>
         {
             entity.HasKey(x => x.Id);
-            entity.HasIndex(x => new { x.Patch, x.PlatformRegion, x.RankScope }).IsUnique();
+            entity.Property(x => x.QueueFamily).HasDefaultValue("RANKED_SOLO_DUO");
+            entity.HasIndex(x => new { x.Patch, x.QueueFamily, x.PlatformRegion, x.RankScope }).IsUnique();
         });
 
         modelBuilder.Entity<ChampionBanScopeStat>(entity =>
         {
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.QueueFamily).HasDefaultValue("RANKED_SOLO_DUO");
             // Doubles as the UPSERT target and the point-lookup: a specific (region|"ALL", scope, champion).
             // Its (Patch, PlatformRegion, RankScope) prefix also serves the tier-list all-champions read.
-            entity.HasIndex(x => new { x.Patch, x.PlatformRegion, x.RankScope, x.ChampionId }).IsUnique();
+            entity.HasIndex(x => new { x.Patch, x.QueueFamily, x.PlatformRegion, x.RankScope, x.ChampionId }).IsUnique();
         });
 
         modelBuilder.Entity<ChampionScopeGradeStat>(entity =>
         {
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.QueueFamily).HasDefaultValue("RANKED_SOLO_DUO");
             // UPSERT conflict target + per-champion point lookup (the detail-page hero grade).
-            entity.HasIndex(x => new { x.Patch, x.PlatformRegion, x.RankScope, x.Role, x.ChampionId })
+            entity.HasIndex(x => new { x.Patch, x.QueueFamily, x.PlatformRegion, x.RankScope, x.Role, x.ChampionId })
                 .IsUnique();
             // Tier-list read: every champion in a (region, scope, role) — its prefix also serves the
             // previous-patch movement lookup.
-            entity.HasIndex(x => new { x.Patch, x.PlatformRegion, x.RankScope, x.Role });
+            entity.HasIndex(x => new { x.Patch, x.QueueFamily, x.PlatformRegion, x.RankScope, x.Role });
         });
 
         modelBuilder.Entity<ChampionMatchupStat>(entity =>

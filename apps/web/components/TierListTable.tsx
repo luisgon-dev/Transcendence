@@ -98,6 +98,8 @@ export function TierListTable({
   rankTierValue,
   activeRegion,
   activePatch,
+  activeQueue = "solo",
+  showRoles = true,
   minGames
 }: {
   entries: TierListTableEntry[];
@@ -106,6 +108,8 @@ export function TierListTable({
   rankTierValue: string | null;
   activeRegion: string;
   activePatch?: string | null;
+  activeQueue?: string;
+  showRoles?: boolean;
   /** Games floor at which a row reads as a "Stable" sample (from the response sample). */
   minGames?: number;
 }) {
@@ -271,7 +275,8 @@ export function TierListTable({
   }
 
   function renderHeader() {
-    const cols = showTierColumn ? COLUMNS : COLUMNS.filter((column) => column.label !== "Tier");
+    const cols = COLUMNS.filter((column) =>
+      (showTierColumn || column.label !== "Tier") && (showRoles || column.label !== "Lane"));
     return (
       <thead className="type-overline text-muted">
         <tr className="border-b border-border/60">
@@ -321,7 +326,9 @@ export function TierListTable({
     const championName = champion?.name ?? `Champion ${entry.championId}`;
     const championSlug = champion?.id ?? "Unknown";
     const championSubtitle = champion?.title ?? "";
-    const rowParams = new URLSearchParams({ role: entry.role });
+    const rowParams = new URLSearchParams();
+    if (showRoles) rowParams.set("role", entry.role);
+    if (activeQueue !== "solo") rowParams.set("queue", activeQueue);
     if (rankTierValue) rowParams.set("rankTier", rankTierValue);
     if (activeRegion !== "ALL") rowParams.set("region", activeRegion);
     if (activePatch) rowParams.set("patch", activePatch);
@@ -380,12 +387,12 @@ export function TierListTable({
             ) : null}
           </div>
         </td>
-        <td className="hidden px-2 py-2.5 sm:table-cell md:px-3">
+        {showRoles ? <td className="hidden px-2 py-2.5 sm:table-cell md:px-3">
           <span className="inline-flex items-center gap-1.5 text-xs text-muted">
             <LaneIcon role={entry.role} className="size-[18px] shrink-0 text-fg/55" />
             <span className="hidden md:inline">{roleDisplayLabel(entry.role)}</span>
           </span>
-        </td>
+        </td> : null}
         <td className="px-2 py-2.5 text-right md:px-3">
           <DataBar value={entry.winRate} games={entry.games} decimals={2} className="justify-end" />
         </td>
@@ -432,11 +439,11 @@ export function TierListTable({
         </td>
         <td className="hidden px-3 py-2.5 text-right md:table-cell">
           <Link
-            href={`/lol/champions/${entry.championId}?${rowQuery}#matchups`}
+            href={`/lol/champions/${entry.championId}?${rowQuery}${showRoles ? "#matchups" : ""}`}
             prefetch={false}
             className="type-ui font-medium text-fg/70 transition-colors hover:text-primary hover:underline"
           >
-            Analyze
+            {showRoles ? "Analyze" : "View"}
           </Link>
         </td>
       </tr>

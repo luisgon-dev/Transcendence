@@ -8,6 +8,7 @@ using Moq;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Static;
 using Transcendence.Data.Models.LoL.Match;
+using Transcendence.Data.Models.LoL.Analytics;
 using Transcendence.Service.Core.Services.Analytics.Implementations;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
@@ -237,6 +238,98 @@ public class ChampionAnalyticsServiceTests
             "15.2",
             It.IsAny<CancellationToken>()));
     }
+
+    [Fact]
+    public async Task GetTierListAsync_ReportsResolvedFlatAndInsufficientScopeConfidence()
+    {
+        await using var harness = await Harness.CreateAsync();
+        harness.SetActivePatch("15.2", DateTime.UtcNow.AddHours(-6));
+        await harness.Db.SaveChangesAsync();
+
+        harness.WinRateService
+            .Setup(x => x.ComputeTierListFromStatsAsync(
+                "ALL", null, "ALL", "15.2", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([TierEntry(1, TierGrade.B, isLowSample: true)]);
+        harness.WinRateService
+            .Setup(x => x.ComputeTierListFromStatsAsync(
+                "TOP", null, "ALL", "15.2", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                TierEntry(1, TierGrade.B, isLowSample: false),
+                TierEntry(2, TierGrade.B, isLowSample: false)
+            ]);
+        harness.WinRateService
+            .Setup(x => x.ComputeTierListFromStatsAsync(
+                "MIDDLE", null, "ALL", "15.2", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                TierEntry(1, TierGrade.A, isLowSample: false),
+                TierEntry(2, TierGrade.B, isLowSample: false)
+            ]);
+
+        var insufficient = await harness.Service.GetTierListAsync("ALL", null, null, null, CancellationToken.None);
+        var flat = await harness.Service.GetTierListAsync("TOP", null, null, null, CancellationToken.None);
+        var resolved = await harness.Service.GetTierListAsync("MIDDLE", null, null, null, CancellationToken.None);
+
+        insufficient.Confidence.Should().Be(TierScopeConfidence.INSUFFICIENT);
+        flat.Confidence.Should().Be(TierScopeConfidence.FLAT);
+        resolved.Confidence.Should().Be(TierScopeConfidence.RESOLVED);
+    }
+
+    private static TierListEntry TierEntry(int championId, TierGrade tier, bool isLowSample) => new(
+        ChampionId: championId,
+        Role: "TOP",
+        Tier: tier,
+        StrengthScore: tier == TierGrade.A ? 0.02 : 0,
+        WinRate: 0.5,
+        PickRate: 0.1,
+        BanRate: 0.01,
+        Games: 100,
+        Movement: null,
+        PreviousTier: null,
+        IsLowSample: isLowSample);
+
+    [Fact]
+    public async Task GetTrendAsync_ReturnsDurablePatchHistoryInReleaseOrderAndQueueScope()
+    {
+        await using var harness = await Harness.CreateAsync();
+        var now = DateTime.UtcNow;
+        harness.SetInactivePatch("15.1", now.AddDays(-14));
+        harness.SetActivePatch("15.2", now);
+        harness.Db.ChampionScopeGradeStats.AddRange(
+            TrendGrade("15.2", "ARAM", "ALL", 0.54, 120),
+            TrendGrade("15.1", "ARAM", "ALL", 0.51, 80),
+            TrendGrade("15.2", "RANKED_SOLO_DUO", "MIDDLE", 0.60, 999));
+        await harness.Db.SaveChangesAsync();
+
+        var result = await harness.Service.GetTrendAsync(
+            103, null, "EMERALD_PLUS", "aram", CancellationToken.None);
+
+        result.QueueFamily.Should().Be("ARAM");
+        result.Role.Should().Be("ALL");
+        result.Points.Select(point => point.Patch).Should().Equal("15.1", "15.2");
+        result.Points.Select(point => point.WinRate).Should().Equal(0.51, 0.54);
+    }
+
+    private static ChampionScopeGradeStat TrendGrade(
+        string patch, string queueFamily, string role, double winRate, int games) => new()
+    {
+        Id = Guid.NewGuid(),
+        Patch = patch,
+        QueueFamily = queueFamily,
+        PlatformRegion = "ALL",
+        RankScope = "EMERALD_PLUS",
+        Role = role,
+        ChampionId = 103,
+        PrimaryRole = role,
+        Tier = (int)TierGrade.A,
+        Games = games,
+        Wins = (int)Math.Round(games * winRate),
+        WinRate = winRate,
+        PickRate = 0.1,
+        BanRate = 0.02,
+        StrengthScore = winRate - 0.5,
+        RoleBaseline = 0.5,
+        ComputedAtUtc = DateTime.UtcNow
+    };
 
     [Fact]
     public async Task RefreshDefaultProfileCacheAsync_WarmsTheKeysTheDefaultProfileReadsHit()

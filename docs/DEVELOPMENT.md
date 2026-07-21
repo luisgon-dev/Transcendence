@@ -54,7 +54,7 @@ Optional (admin bootstrap):
 Optional:
 - `TRN_BACKEND_TIMEOUT_MS=10000` (server-side backend timeout, milliseconds)
 - `TRN_ERROR_VERBOSITY=safe|verbose` (controls user-visible error detail from Next route handlers)
-- `TRN_PUBLIC_ORIGIN=https://transcend.kronic.one` (optional; canonical public origin for the admin BFF same-origin/CSRF check. Set in production so the check can't be influenced by a client-supplied `X-Forwarded-Host`; unset falls back to header-derived comparison for local dev)
+- `TRN_PUBLIC_ORIGIN=https://transcend.kronic.one` (optional locally, required in production; canonical public origin for metadata, social cards, sitemap/robots URLs, and the admin BFF same-origin/CSRF check. Setting it prevents canonical URLs or the CSRF comparison from being influenced by client-supplied host headers; local development falls back to `http://localhost:3000`)
 
 5. Run the web app:
 
@@ -113,11 +113,28 @@ dotnet user-secrets set "Auth:Jwt:RequireKeyInDevelopment" "false" --project Tra
 dotnet user-secrets set "Auth:AdminBootstrap:Emails:0" "admin@example.com" --project Transcendence.WebAPI
 dotnet user-secrets set "Auth:BootstrapApiKey" "trn_bootstrap_dev_key" --project Transcendence.WebAPI
 dotnet user-secrets set "Auth:BootstrapApiKeyEnabledInDevelopmentOnly" "true" --project Transcendence.WebAPI
+# Optional password recovery (use a local SMTP catcher or real provider)
+dotnet user-secrets set "Auth:PasswordReset:Enabled" "true" --project Transcendence.WebAPI
+dotnet user-secrets set "Auth:PasswordReset:PublicBaseUrl" "http://localhost:3000" --project Transcendence.WebAPI
+dotnet user-secrets set "Auth:PasswordReset:Smtp:Host" "localhost" --project Transcendence.WebAPI
+dotnet user-secrets set "Auth:PasswordReset:Smtp:Port" "1025" --project Transcendence.WebAPI
+dotnet user-secrets set "Auth:PasswordReset:Smtp:EnableSsl" "false" --project Transcendence.WebAPI
+dotnet user-secrets set "Auth:PasswordReset:Smtp:FromAddress" "no-reply@local.dev" --project Transcendence.WebAPI
+# Optional Riot Sign On (requires an approved production RSO client)
+dotnet user-secrets set "Auth:RiotRso:Enabled" "true" --project Transcendence.WebAPI
+dotnet user-secrets set "Auth:RiotRso:ClientId" "your-rso-client-id" --project Transcendence.WebAPI
+dotnet user-secrets set "Auth:RiotRso:ClientSecret" "your-rso-client-secret" --project Transcendence.WebAPI
+dotnet user-secrets set "Auth:RiotRso:RedirectUri" "http://localhost:3000/api/session/riot/callback" --project Transcendence.WebAPI
 ```
 
 Security notes:
 - `Auth:Jwt:Key` is required outside `Development`; startup fails if missing or if the known development placeholder is used.
 - `Auth:BootstrapApiKeyEnabledInDevelopmentOnly=true` rejects bootstrap API key auth outside `Development`.
+- Password recovery remains unavailable until `Auth:PasswordReset:Enabled=true`, a valid public base URL, SMTP host, and from-address are all configured. SMTP credentials are optional for trusted local relays; never commit them. Docker uses the matching `PASSWORD_RESET_*` variables documented in `.env.example`.
+- Riot Sign On remains unavailable until `Auth:RiotRso:Enabled=true` and an approved RSO client ID,
+  client secret, and exact registered callback URI are configured. Production endpoints/callbacks must
+  use HTTPS; loopback HTTP is accepted only for local development. The matching Docker variables are
+  `RIOT_RSO_*` in `.env.example`. RSO credentials belong only on the Web API host, never in `apps/web`.
 
 `Transcendence.Service`:
 
@@ -584,18 +601,20 @@ Analytics sampling thresholds are configurable in both API and worker hosts:
 
 ### Champion Tier Methodology (`Analytics:Tiering`)
 
-Tuning knobs for the per-role-first, empirical-Bayes champion tier scorer (`ChampionTierScorer`), bound in both hosts. Defaults are baked in (no config required to run); these are expected to get one calibration pass against a live patch before `S`/`D` are trusted. All values are overridable without a logic redeploy:
+Tuning knobs for the per-role-first, empirical-Bayes champion tier scorer (`ChampionTierScorer`), bound in both hosts. Defaults are baked in (no config required to run) and calibrated against live patch 16.14 scope volumes. All values are overridable without a logic redeploy:
 
 - `Analytics:Tiering:Cutoffs:SMin` (default `0.03`) — strength-delta (win rate vs role baseline) floor for `S`
 - `Analytics:Tiering:Cutoffs:AMin` (default `0.015`) — floor for `A`
 - `Analytics:Tiering:Cutoffs:BMin` (default `-0.015`) — floor for `B`
 - `Analytics:Tiering:Cutoffs:CMin` (default `-0.03`) — floor for `C` (below → `D`)
 - `Analytics:Tiering:PriorStrengthMin` / `PriorStrengthMax` (default `50` / `2000`) — clamp on the empirical-Bayes prior strength `k`
-- `Analytics:Tiering:PriorFitMinGames` (default `200`) — minimum games for a champion to participate in the Beta prior fit
-- `Analytics:Tiering:GradeMinGamesFloor` (default `500`) — below this a champion is flagged low-sample and capped at `B`
+- `Analytics:Tiering:PriorFitMinGamesFloor` / `PriorFitMinGamesCeiling` (default `20` / `200`) — bounds for the adaptive Beta-prior fit gate
+- `Analytics:Tiering:PriorFitRoleVolumeShare` (default `0.0012`) — share of total role games used to scale that gate between its bounds
+- `Analytics:Tiering:GradeMinGamesFloor` / `GradeMinGamesCeiling` (default `50` / `500`) — bounds for the adaptive S/A eligibility gate; below the resolved gate a champion is flagged low-sample and capped at `B`
+- `Analytics:Tiering:GradeRoleVolumeShare` (default `0.003`) — share of total role games used to scale the grade gate between its bounds
 - `Analytics:Tiering:ContestPickWeight` / `ContestBanWeight` (default `1` / `1`) — weights in the `contestedScore` popularity index
 
-The computed grade is persisted in the `ChampionScopeGradeStats` table (added by the `AddChampionScopeGradeStat` migration). Because grades are recomputed on read (and re-persisted hourly), changing any of these knobs takes effect on the next refresh — no re-ingestion or backfill.
+The computed grade is persisted in the `ChampionScopeGradeStats` table (added by the `AddChampionScopeGradeStat` migration). Because grades are recomputed on read (and re-persisted hourly), changing any of these knobs takes effect on the next refresh — no re-ingestion or backfill. Tier-list responses also expose `confidence` (`RESOLVED`, `FLAT`, or `INSUFFICIENT`) so a thin or uniform scope is not presented as a confidently balanced meta.
 
 ### Analytics Response Sampling
 

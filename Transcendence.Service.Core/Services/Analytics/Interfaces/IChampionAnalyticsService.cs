@@ -28,6 +28,14 @@ public interface IChampionAnalyticsService
         string? patch,
         CancellationToken ct);
 
+    Task<TierListResponse> GetTierListAsync(
+        string? role,
+        string? rankTier,
+        string? region,
+        string? queueFamily,
+        string? patch,
+        CancellationToken ct);
+
     /// <summary>
     /// Gets the champion's tier grade for a specific role (and rank/region/patch scope) — the same grade the
     /// tier list shows. Reads the cached per-role tier list and projects this champion's entry, so the detail
@@ -41,6 +49,15 @@ public interface IChampionAnalyticsService
         string? patch,
         CancellationToken ct);
 
+    Task<ChampionGradeDto?> GetGradeAsync(
+        int championId,
+        string role,
+        string? rankTier,
+        string? region,
+        string? queueFamily,
+        string? patch,
+        CancellationToken ct);
+
     /// <summary>
     /// Gets top 3 builds for a champion in a role with caching.
     /// Data is cached for 24 hours.
@@ -50,6 +67,15 @@ public interface IChampionAnalyticsService
         string role,
         string? rankTier,
         string? region,
+        string? patch,
+        CancellationToken ct);
+
+    Task<ChampionBuildsResponse> GetBuildsAsync(
+        int championId,
+        string role,
+        string? rankTier,
+        string? region,
+        string? queueFamily,
         string? patch,
         CancellationToken ct);
 
@@ -88,6 +114,25 @@ public interface IChampionAnalyticsService
         string role,
         string? rankTier,
         string? region,
+        string? patch,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Gets durable patch-over-patch champion performance from the persisted global grade history.
+    /// </summary>
+    Task<ChampionTrendResponse> GetTrendAsync(
+        int championId,
+        string? role,
+        string? rankTier,
+        string? queueFamily,
+        CancellationToken ct);
+
+    Task<ChampionMatchupsResponse> GetMatchupsAsync(
+        int championId,
+        string role,
+        string? rankTier,
+        string? region,
+        string? queueFamily,
         string? patch,
         CancellationToken ct);
 

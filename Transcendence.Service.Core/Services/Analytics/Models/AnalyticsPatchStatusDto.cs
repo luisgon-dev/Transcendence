@@ -11,5 +11,9 @@ public record AnalyticsPatchOptionDto(
     DateTime? ReleasedAtUtc,
     DateTime? DetectedAtUtc,
     bool IsActive,
-    int RankedSoloDuoMatchCount
-);
+    int RankedSoloDuoMatchCount,
+    string QueueFamily = RiotApi.QueueCatalog.QueueFamilyRankedSoloDuo
+)
+{
+    public int MatchCount => RankedSoloDuoMatchCount;
+}

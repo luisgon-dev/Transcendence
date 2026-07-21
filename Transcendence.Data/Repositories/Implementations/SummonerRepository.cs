@@ -131,6 +131,20 @@ public class SummonerRepository(TranscendenceContext context, IRankRepository ra
             cancellationToken);
     }
 
+    public Task<Summoner?> FindByRiotIdWithRanksAsync(
+        string platformRegion,
+        string gameName,
+        string tagLine,
+        CancellationToken cancellationToken = default)
+    {
+        return FindByRiotIdAsync(
+            platformRegion,
+            gameName,
+            tagLine,
+            query => query.AsNoTracking().Include(s => s.Ranks),
+            cancellationToken);
+    }
+
     public async Task<Summoner> AddOrUpdateSummonerAsync(Summoner summoner, CancellationToken cancellationToken)
     {
         summoner.GameName = NormalizeValue(summoner.GameName);

@@ -21,6 +21,15 @@ public interface IChampionMatchupComputeService
         string patch,
         CancellationToken ct);
 
+    Task<ChampionMatchupsResponse> ComputeMatchupsAsync(
+        int championId,
+        string role,
+        string? rankTier,
+        string? region,
+        string queueFamily,
+        string patch,
+        CancellationToken ct);
+
     /// <summary>
     /// Matchups served from the precomputed <c>ChampionMatchupStat</c> aggregates (all-region scope), rolled
     /// up to the requested rank scope. Falls back to <see cref="ComputeMatchupsAsync"/> for a specific region
@@ -31,6 +40,15 @@ public interface IChampionMatchupComputeService
         string role,
         string? rankTier,
         string? region,
+        string patch,
+        CancellationToken ct);
+
+    Task<ChampionMatchupsResponse> ComputeMatchupsFromStatsAsync(
+        int championId,
+        string role,
+        string? rankTier,
+        string? region,
+        string queueFamily,
         string patch,
         CancellationToken ct);
 }

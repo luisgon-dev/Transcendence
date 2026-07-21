@@ -1,15 +1,68 @@
+import type { Metadata } from "next";
+import { Suspense } from "react";
+
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { SummonerProfileClient } from "@/components/SummonerProfileClient";
+import type {
+  MatchSummary,
+  PagedResultDto,
+  RankHistoryEntry
+} from "@/components/lol-profile/shared";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { newRequestId } from "@/lib/requestId";
 import { getSafeRequestContext } from "@/lib/requestContext";
-import { decodeRiotIdPath } from "@/lib/riotid";
+import { decodeRiotIdPath, encodeRiotIdPath } from "@/lib/riotid";
+import { socialImageUrl } from "@/lib/seo";
 import { logEvent } from "@/lib/serverLog";
+import {
+  fetchChampionMap,
+  fetchItemMap,
+  fetchRunesReforged,
+  fetchSummonerSpellMap
+} from "@/lib/staticData";
 import { safeDecodeURIComponent, toCodePoints } from "@/lib/textDebug";
+
+import Loading from "./loading";
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
+}
+
+export async function generateMetadata({
+  params
+}: {
+  params: Promise<{ region: string; riotId: string }>;
+}): Promise<Metadata> {
+  const { region, riotId: riotIdPath } = await params;
+  const riotId = decodeRiotIdPath(riotIdPath);
+  if (!riotId) {
+    return {
+      title: "Summoner profile",
+      robots: { index: false, follow: false }
+    };
+  }
+
+  const displayName = `${riotId.gameName}#${riotId.tagLine}`;
+  const regionLabel = region.toUpperCase();
+  const title = `${displayName} Rank and Match History`;
+  const description = `View ${displayName}'s ${regionLabel} rank, match history, champion pool, performance, and recent form.`;
+  const canonical = `/lol/summoners/${encodeURIComponent(region.toLowerCase())}/${encodeRiotIdPath(riotId)}`;
+  const image = socialImageUrl(title, `${regionLabel} summoner profile`, "Rank, recent form, champion pool, and match history");
+
+  return {
+    title,
+    description,
+    alternates: { canonical },
+    openGraph: {
+      type: "profile",
+      title,
+      description,
+      url: canonical,
+      images: [{ url: image, width: 1200, height: 630, alt: `${displayName} profile` }]
+    },
+    twitter: { card: "summary_large_image", title, description, images: [image] }
+  };
 }
 
 export default async function SummonerProfilePage({
@@ -27,39 +80,24 @@ export default async function SummonerProfilePage({
 }) {
   const resolvedParams = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
-  const verbosity = getErrorVerbosity();
-  const ctx = verbosity === "verbose" ? await getSafeRequestContext() : null;
-  const pageRequestId =
-    verbosity === "verbose"
-      ? (ctx?.headers["x-trn-request-id"] ?? newRequestId())
-      : null;
+  const initialPage = Math.max(1, Number(resolvedSearchParams?.page ?? "1") || 1);
 
   // Some environments appear to provide the dynamic param key with different casing.
   const paramsAny = resolvedParams as unknown as Record<string, unknown>;
   const riotIdRaw = (paramsAny.riotId ?? paramsAny.riotid) as unknown;
   const riotIdPath =
     typeof riotIdRaw === "string" ? riotIdRaw : riotIdRaw == null ? "" : String(riotIdRaw);
-
-  if (verbosity === "verbose") {
-    logEvent("info", "summoner page invoked", {
-      requestId: pageRequestId,
-      route: "summoners/[region]/[riotId]",
-      region: resolvedParams.region,
-      paramsKeys: Object.keys(paramsAny),
-      riotIdRaw: riotIdRaw ?? null,
-      riotIdRawCodePoints: toCodePoints(riotIdRaw),
-      riotIdRawString: riotIdPath,
-      ...ctx
-    });
-  }
-
   const riotId = decodeRiotIdPath(riotIdPath);
+
   if (!riotId) {
+    const verbosity = getErrorVerbosity();
+    const ctx = verbosity === "verbose" ? await getSafeRequestContext() : null;
+    const pageRequestId =
+      verbosity === "verbose" ? (ctx?.headers["x-trn-request-id"] ?? newRequestId()) : null;
+
     if (verbosity === "verbose") {
       const decoded = safeDecodeURIComponent(riotIdRaw);
       const decodedValue = decoded.ok ? decoded.value : null;
-      const decodedCodePoints = decodedValue ? toCodePoints(decodedValue) : null;
-
       logEvent("error", "riotId decode failed", {
         requestId: pageRequestId,
         route: "summoners/[region]/[riotId]",
@@ -69,7 +107,7 @@ export default async function SummonerProfilePage({
         riotIdRawCodePoints: toCodePoints(riotIdRaw),
         riotIdRawString: riotIdPath,
         decoded: decodedValue,
-        decodedCodePoints,
+        decodedCodePoints: decodedValue ? toCodePoints(decodedValue) : null,
         decodeError: decoded.ok ? null : decoded.error,
         asciiDashIndex: decodedValue ? decodedValue.lastIndexOf("-") : null,
         hashIndex: decodedValue ? decodedValue.lastIndexOf("#") : null,
@@ -101,10 +139,77 @@ export default async function SummonerProfilePage({
     );
   }
 
+  return (
+    <Suspense fallback={<Loading />}>
+      <SummonerProfileData
+        region={resolvedParams.region}
+        riotIdPath={riotIdPath}
+        riotId={riotId}
+        paramsKeys={Object.keys(paramsAny)}
+        riotIdRaw={riotIdRaw}
+        initialPage={initialPage}
+        initialQueue={resolvedSearchParams?.queue ?? "ALL"}
+        initialSort={resolvedSearchParams?.sort ?? "DATE_DESC"}
+        initialChampion={resolvedSearchParams?.champion ?? ""}
+        initialExpandMatchId={resolvedSearchParams?.expandMatchId ?? null}
+      />
+    </Suspense>
+  );
+}
+
+async function SummonerProfileData({
+  region,
+  riotIdPath,
+  riotId,
+  paramsKeys,
+  riotIdRaw,
+  initialPage,
+  initialQueue,
+  initialSort,
+  initialChampion,
+  initialExpandMatchId
+}: {
+  region: string;
+  riotIdPath: string;
+  riotId: { gameName: string; tagLine: string };
+  paramsKeys: string[];
+  riotIdRaw: unknown;
+  initialPage: number;
+  initialQueue: string;
+  initialSort: string;
+  initialChampion: string;
+  initialExpandMatchId: string | null;
+}) {
+  const verbosity = getErrorVerbosity();
+  const ctx = verbosity === "verbose" ? await getSafeRequestContext() : null;
+  const pageRequestId =
+    verbosity === "verbose"
+      ? (ctx?.headers["x-trn-request-id"] ?? newRequestId())
+      : null;
+
+  if (verbosity === "verbose") {
+    logEvent("info", "summoner page invoked", {
+      requestId: pageRequestId,
+      route: "summoners/[region]/[riotId]",
+      region,
+      paramsKeys,
+      riotIdRaw: riotIdRaw ?? null,
+      riotIdRawCodePoints: toCodePoints(riotIdRaw),
+      riotIdRawString: riotIdPath,
+      ...ctx
+    });
+  }
+
   const url = `${getBackendBaseUrl()}/api/lol/summoners/${encodeURIComponent(
-    resolvedParams.region
+    region
   )}/${encodeURIComponent(riotId.gameName)}/${encodeURIComponent(riotId.tagLine)}`;
 
+  const staticDataPromise = Promise.allSettled([
+    fetchChampionMap(),
+    fetchItemMap(),
+    fetchSummonerSpellMap(),
+    fetchRunesReforged()
+  ]);
   const result = await fetchBackendJson<unknown>(url, { cache: "no-store" });
 
   let initialStatus = result.status;
@@ -154,18 +259,48 @@ export default async function SummonerProfilePage({
     initialBody = { ...initialBody, requestId: result.requestId };
   }
 
+  let initialHistory: PagedResultDto<MatchSummary> | null = null;
+  let initialRankHistory: RankHistoryEntry[] | null = null;
+
+  if (initialStatus === 200 && isRecord(initialBody) && typeof initialBody.summonerId === "string") {
+    const summonerId = encodeURIComponent(initialBody.summonerId);
+    const baseUrl = `${getBackendBaseUrl()}/api/lol/summoners/${summonerId}`;
+    const [historyResult, rankHistoryResult] = await Promise.all([
+      fetchBackendJson<PagedResultDto<MatchSummary>>(
+        `${baseUrl}/matches/recent?page=${initialPage}&pageSize=20`,
+        { cache: "no-store" }
+      ),
+      fetchBackendJson<RankHistoryEntry[]>(`${baseUrl}/stats/rank-history`, {
+        cache: "no-store"
+      })
+    ]);
+
+    if (historyResult.ok) initialHistory = historyResult.body;
+    if (rankHistoryResult.ok && Array.isArray(rankHistoryResult.body)) {
+      initialRankHistory = rankHistoryResult.body;
+    }
+  }
+
+  const [championResult, itemResult, spellResult, runeResult] = await staticDataPromise;
+
   return (
     <SummonerProfileClient
-      region={resolvedParams.region}
+      region={region}
       gameName={riotId.gameName}
       tagLine={riotId.tagLine}
       initialStatus={initialStatus}
       initialBody={initialBody}
-      initialPage={Math.max(1, Number(resolvedSearchParams?.page ?? "1") || 1)}
-      initialQueue={resolvedSearchParams?.queue ?? "ALL"}
-      initialSort={resolvedSearchParams?.sort ?? "DATE_DESC"}
-      initialChampion={resolvedSearchParams?.champion ?? ""}
-      initialExpandMatchId={resolvedSearchParams?.expandMatchId ?? null}
+      initialPage={initialPage}
+      initialQueue={initialQueue}
+      initialSort={initialSort}
+      initialChampion={initialChampion}
+      initialExpandMatchId={initialExpandMatchId}
+      initialHistory={initialHistory}
+      initialRankHistory={initialRankHistory}
+      initialChampionStatic={championResult.status === "fulfilled" ? championResult.value : null}
+      initialItemStatic={itemResult.status === "fulfilled" ? itemResult.value : null}
+      initialSpellStatic={spellResult.status === "fulfilled" ? spellResult.value : null}
+      initialRuneStatic={runeResult.status === "fulfilled" ? runeResult.value : null}
     />
   );
 }

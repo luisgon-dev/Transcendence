@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PasswordInput } from "@/components/ui/PasswordInput";
-
-const GITHUB_REPO_URL = "https://github.com/luisgon-dev/Transcendence";
+import { RiotAuthNotice } from "@/components/RiotAuthNotice";
+import { RiotRsoButton } from "@/components/RiotRsoButton";
 
 export default function LoginPage() {
   const [state, formAction, pending] = useActionState(
@@ -41,8 +41,8 @@ export default function LoginPage() {
               <p className="type-ui mt-2 text-fg/84">Jump back into current-patch research without rebuilding your path every visit.</p>
             </div>
             <div className="surface-subtle rounded-card p-4">
-              <p className="type-kicker text-fg/56">No Riot auth</p>
-              <p className="type-ui mt-2 text-fg/84">Your Transcendence account only manages saved site state and account actions.</p>
+              <p className="type-kicker text-fg/56">Verified main</p>
+              <p className="type-ui mt-2 text-fg/84">Use Riot Sign On to verify your main without sharing your Riot password.</p>
             </div>
           </div>
 
@@ -70,7 +70,21 @@ export default function LoginPage() {
               Sign in to keep favorite players and saved pages close.
             </p>
 
-            <form action={formAction} className="mt-6 grid gap-4">
+            <RiotAuthNotice />
+            <div className="mt-6">
+              <RiotRsoButton mode="login" returnTo="/account/favorites" label="Continue with Riot" />
+            </div>
+            <p className="mt-2 text-xs leading-5 text-muted">
+              Riot returns your verified Riot ID and PUUID. Transcendence uses the authorization
+              once and does not store Riot access or refresh tokens.
+            </p>
+            <div className="my-5 flex items-center gap-3 text-xs uppercase tracking-[0.16em] text-muted">
+              <span className="h-px flex-1 bg-border" />
+              <span>or use email</span>
+              <span className="h-px flex-1 bg-border" />
+            </div>
+
+            <form action={formAction} className="grid gap-4">
               <label className="grid gap-1.5">
                 <span className="field-label">Email</span>
                 <Input
@@ -87,10 +101,7 @@ export default function LoginPage() {
                     Password
                   </label>
                   <Link
-                    href={`${GITHUB_REPO_URL}/issues`}
-                    target="_blank"
-                    rel="noreferrer"
-                    title="Password recovery is handled through our support tracker."
+                    href="/account/forgot-password"
                     className="type-meta rounded-sm font-semibold text-fg/62 transition hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/24 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
                   >
                     Forgot password?

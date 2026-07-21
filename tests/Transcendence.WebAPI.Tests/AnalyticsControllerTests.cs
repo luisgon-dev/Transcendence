@@ -7,6 +7,7 @@ using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Models.LoL.Static;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
+using Transcendence.Service.Core.Services.Analytics.Implementations;
 using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.WebAPI.Controllers;
@@ -32,7 +33,7 @@ public class AnalyticsControllerTests
 
         var controller = new AnalyticsController(
             Mock.Of<IChampionAnalyticsService>(),
-            db,
+            new AnalyticsPatchQueryService(db),
             Options.Create(new MultiRegionIngestionOptions()));
 
         var result = await controller.GetStatus(CancellationToken.None);
@@ -85,10 +86,10 @@ public class AnalyticsControllerTests
 
         var controller = new AnalyticsController(
             Mock.Of<IChampionAnalyticsService>(),
-            db,
+            new AnalyticsPatchQueryService(db),
             Options.Create(new MultiRegionIngestionOptions()));
 
-        var result = await controller.GetPatches(CancellationToken.None);
+        var result = await controller.GetPatches(null, CancellationToken.None);
 
         var ok = result.Should().BeOfType<OkObjectResult>().Subject;
         var payload = ok.Value.Should().BeAssignableTo<IReadOnlyList<AnalyticsPatchOptionDto>>().Subject;
@@ -99,22 +100,52 @@ public class AnalyticsControllerTests
     }
 
     [Fact]
-    public async Task GetTierList_ForwardsPatchFilter()
+    public async Task GetPatches_RejectsUnsupportedQueue()
+    {
+        await using var db = CreateDbContext();
+        var controller = new AnalyticsController(
+            Mock.Of<IChampionAnalyticsService>(),
+            new AnalyticsPatchQueryService(db),
+            Options.Create(new MultiRegionIngestionOptions()));
+
+        var result = await controller.GetPatches("normal", CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task GetTierList_ForwardsPatchAndQueueFilters()
     {
         await using var db = CreateDbContext();
         var service = new Mock<IChampionAnalyticsService>();
         service
-            .Setup(x => x.GetTierListAsync("TOP", "EMERALD_PLUS", "KR", "15.1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TierListResponse("15.1", "TOP", "EMERALD_PLUS", "KR", []));
+            .Setup(x => x.GetTierListAsync("TOP", "EMERALD_PLUS", "KR", "aram", "15.1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TierListResponse("15.1", "ALL", "EMERALD_PLUS", "KR", [], QueueFamily: "ARAM"));
         var controller = new AnalyticsController(
             service.Object,
-            db,
+            new AnalyticsPatchQueryService(db),
             Options.Create(new MultiRegionIngestionOptions()));
 
-        var result = await controller.GetTierList("TOP", "EMERALD_PLUS", "KR", "15.1", CancellationToken.None);
+        var result = await controller.GetTierList("TOP", "EMERALD_PLUS", "KR", "aram", "15.1", CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
-        service.Verify(x => x.GetTierListAsync("TOP", "EMERALD_PLUS", "KR", "15.1", It.IsAny<CancellationToken>()), Times.Once);
+        service.Verify(x => x.GetTierListAsync("TOP", "EMERALD_PLUS", "KR", "aram", "15.1", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetTierList_RejectsUnsupportedQueue()
+    {
+        await using var db = CreateDbContext();
+        var service = new Mock<IChampionAnalyticsService>();
+        var controller = new AnalyticsController(
+            service.Object,
+            new AnalyticsPatchQueryService(db),
+            Options.Create(new MultiRegionIngestionOptions()));
+
+        var result = await controller.GetTierList(null, null, null, "normal", null, CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+        service.VerifyNoOtherCalls();
     }
 
     private static TranscendenceContext CreateDbContext()

@@ -1,5 +1,3 @@
-﻿using Transcendence.Data.Models.LoL.Account;
-
 namespace Transcendence.Data.Models.LoL.Match;
 
 public enum FetchStatus
@@ -14,7 +12,7 @@ public enum FetchStatus
 public class Match
 {
     public Guid Id { get; set; }
-    public string? MatchId { get; set; }
+    public string MatchId { get; set; } = null!;
     public long MatchDate { get; set; }
     public int Duration { get; set; }
     public string? Patch { get; set; }
@@ -31,7 +29,6 @@ public class Match
     public DateTime? LastAttemptAt { get; set; }
     public string? LastErrorMessage { get; set; }
 
-    public List<Summoner> Summoners { get; set; } = [];
     public ICollection<MatchParticipant> Participants { get; set; } = new List<MatchParticipant>();
     public ICollection<MatchBan> Bans { get; set; } = new List<MatchBan>();
     public ICollection<MatchTeamObjective> TeamObjectives { get; set; } = new List<MatchTeamObjective>();

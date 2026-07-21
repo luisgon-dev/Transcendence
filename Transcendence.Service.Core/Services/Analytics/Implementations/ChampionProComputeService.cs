@@ -237,6 +237,7 @@ public sealed class ChampionProComputeService : IChampionProComputeService
         // Group by the item set (sorted key) for stable grouping, but display a representative
         // member's purchase-ordered items.
         var commonBuilds = projectedRows
+            .Where(r => r.Items.Count > 0)
             .GroupBy(r => string.Join(",", r.Items.OrderBy(i => i)))
             .Select(g => new CommonProBuildDto(
                 g.First().Items,

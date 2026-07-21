@@ -5,6 +5,7 @@ import "@/app/globals.css";
 import { GlobalCommandPaletteLoader } from "@/components/GlobalCommandPaletteLoader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
+import { getMetadataBase, SITE_NAME, socialImageUrl } from "@/lib/seo";
 
 const displayFont = Bricolage_Grotesque({
   subsets: ["latin"],
@@ -25,8 +26,47 @@ const monoFont = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Transcendence",
+  metadataBase: getMetadataBase(),
+  title: {
+    default: SITE_NAME,
+    template: `%s | ${SITE_NAME}`
+  },
   description: "League of Legends stats, builds, runes, and player profiles.",
+  applicationName: SITE_NAME,
+  alternates: {
+    canonical: "/"
+  },
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    title: SITE_NAME,
+    description: "League of Legends stats, builds, runes, and player profiles.",
+    url: "/",
+    images: [
+      {
+        url: socialImageUrl(
+          "League analytics you can trust",
+          SITE_NAME,
+          "Tier lists, builds, matchups, and player profiles"
+        ),
+        width: 1200,
+        height: 630,
+        alt: "Transcendence League of Legends analytics"
+      }
+    ]
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_NAME,
+    description: "League of Legends stats, builds, runes, and player profiles.",
+    images: [
+      socialImageUrl(
+        "League analytics you can trust",
+        SITE_NAME,
+        "Tier lists, builds, matchups, and player profiles"
+      )
+    ]
+  },
   icons: {
     icon: [
       { url: "/favicon.ico" },

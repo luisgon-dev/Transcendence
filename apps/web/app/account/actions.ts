@@ -11,6 +11,11 @@ type AuthActionState = {
   error: string | null;
 };
 
+export type PasswordResetActionState = {
+  error: string | null;
+  message: string | null;
+};
+
 function normalizeCredential(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -80,6 +85,75 @@ export async function registerAction(
   formData: FormData
 ): Promise<AuthActionState> {
   return authenticate("/api/auth/register", formData);
+}
+
+export async function requestPasswordResetAction(
+  _prevState: PasswordResetActionState,
+  formData: FormData
+): Promise<PasswordResetActionState> {
+  const email = normalizeCredential(formData.get("email"));
+  if (!email) return { error: "Email is required.", message: null };
+
+  try {
+    const { data, error, response } = await getTrnClient().POST("/api/auth/password-reset", {
+      body: { email }
+    });
+    if (!data) {
+      const detail = (error as { detail?: string; title?: string } | undefined)?.detail;
+      return {
+        error: detail ?? (response.status === 503
+          ? "Password recovery is temporarily unavailable. Try again later."
+          : "We couldn't start password recovery. Try again."),
+        message: null
+      };
+    }
+  } catch (caught: unknown) {
+    logEvent("warn", "password reset request failed", { error: caught });
+    return { error: "We couldn't reach password recovery right now. Try again.", message: null };
+  }
+
+  return {
+    error: null,
+    message: "If that account exists, a reset link is on its way. Check your inbox and spam folder."
+  };
+}
+
+export async function completePasswordResetAction(
+  _prevState: PasswordResetActionState,
+  formData: FormData
+): Promise<PasswordResetActionState> {
+  const token = normalizeCredential(formData.get("token"));
+  const newPassword = normalizeCredential(formData.get("password"));
+  const confirmPassword = normalizeCredential(formData.get("confirmPassword"));
+
+  if (!token) return { error: "This reset link is missing its token.", message: null };
+  if (newPassword.length < 12) {
+    return { error: "Password must be at least 12 characters.", message: null };
+  }
+  if (newPassword !== confirmPassword) {
+    return { error: "Passwords do not match.", message: null };
+  }
+
+  try {
+    const { response, error } = await getTrnClient().POST("/api/auth/password-reset/complete", {
+      body: { token, newPassword }
+    });
+    if (!response.ok) {
+      return {
+        error: (error as { detail?: string; title?: string } | undefined)?.detail ??
+          "This reset link is invalid or expired. Request a new one.",
+        message: null
+      };
+    }
+  } catch (caught: unknown) {
+    logEvent("warn", "password reset completion failed", { error: caught });
+    return { error: "We couldn't update your password right now. Try again.", message: null };
+  }
+
+  return {
+    error: null,
+    message: "Password updated. Existing sessions were signed out; you can now sign in with the new password."
+  };
 }
 
 export async function logoutAction() {

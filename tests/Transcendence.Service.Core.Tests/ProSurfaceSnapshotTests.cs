@@ -47,7 +47,12 @@ public class ProSurfaceSnapshotTests
             var raw = await pro.ComputeProBuildsAsync(266, null, "TOP", scope, Patch, CancellationToken.None);
             var stats = await pro.ComputeProBuildsFromStatsAsync(266, null, "TOP", scope, Patch, CancellationToken.None);
             stats.Should().BeEquivalentTo(raw, $"pro-builds scope={scope}");
+            raw.CommonBuilds.Should().OnlyContain(build => build.Items.Count > 0);
         }
+
+        var allBuilds = await pro.ComputeProBuildsAsync(266, null, "TOP", "all", Patch, CancellationToken.None);
+        allBuilds.CommonBuilds.Should().ContainSingle();
+        allBuilds.CommonBuilds[0].Items.Should().Equal(3078);
 
         // A specific region is not precomputed → falls back to live compute.
         var rawNa = await pro.ComputeProBuildsAsync(266, "NA1", "TOP", "all", Patch, CancellationToken.None);
@@ -104,18 +109,33 @@ public class ProSurfaceSnapshotTests
         await db.Database.EnsureCreatedAsync();
 
         db.Patches.Add(new Patch { Version = Patch, ReleaseDate = DateTime.UtcNow.AddDays(-2), DetectedAt = DateTime.UtcNow.AddDays(-2), IsActive = true });
+        db.ItemVersions.Add(new ItemVersion
+        {
+            ItemId = 3078,
+            PatchVersion = Patch,
+            Name = "Trinity Force",
+            PriceTotal = 3333
+        });
 
         db.TrackedProSummoners.Add(new TrackedProSummoner { Id = Guid.NewGuid(), Puuid = "pro-puuid", PlatformRegion = "NA1", ProName = "Pro", TeamName = "Team", IsPro = true, IsHighEloOtp = false, IsActive = true });
         db.TrackedProSummoners.Add(new TrackedProSummoner { Id = Guid.NewGuid(), Puuid = "otp-puuid", PlatformRegion = "NA1", IsPro = false, IsHighEloOtp = true, IsActive = true });
 
-        SeedProMatch(db, "pro-puuid", "Pro", "NA1_PRO", championId: 266, role: "TOP", matchDate: 2_000);
-        SeedProMatch(db, "otp-puuid", "Otp", "NA1_OTP", championId: 266, role: "TOP", matchDate: 1_000);
+        SeedProMatch(db, "pro-puuid", "Pro", "NA1_PRO", championId: 266, role: "TOP", matchDate: 2_000, finalItems: [3078]);
+        SeedProMatch(db, "otp-puuid", "Otp", "NA1_OTP", championId: 266, role: "TOP", matchDate: 1_000, finalItems: []);
 
         await db.SaveChangesAsync();
         return new SeededContext(connection, db);
     }
 
-    private static void SeedProMatch(TranscendenceContext db, string puuid, string name, string matchId, int championId, string role, long matchDate)
+    private static void SeedProMatch(
+        TranscendenceContext db,
+        string puuid,
+        string name,
+        string matchId,
+        int championId,
+        string role,
+        long matchDate,
+        IReadOnlyList<int> finalItems)
     {
         var summoner = new Summoner
         {
@@ -144,7 +164,7 @@ public class ProSurfaceSnapshotTests
         };
         db.Summoners.Add(summoner);
         db.Matches.Add(match);
-        db.MatchParticipants.Add(new MatchParticipant
+        var participant = new MatchParticipant
         {
             Id = Guid.NewGuid(),
             MatchId = match.Id,
@@ -159,7 +179,20 @@ public class ProSurfaceSnapshotTests
             Win = true,
             SummonerSpell1Id = 4,
             SummonerSpell2Id = 12
-        });
+        };
+        db.MatchParticipants.Add(participant);
+
+        for (var slot = 0; slot < finalItems.Count; slot++)
+        {
+            db.MatchParticipantItems.Add(new MatchParticipantItem
+            {
+                MatchParticipantId = participant.Id,
+                MatchParticipant = participant,
+                SlotIndex = slot,
+                ItemId = finalItems[slot],
+                PatchVersion = Patch
+            });
+        }
     }
 
     private sealed class SeededContext(SqliteConnection connection, TranscendenceContext db) : IAsyncDisposable

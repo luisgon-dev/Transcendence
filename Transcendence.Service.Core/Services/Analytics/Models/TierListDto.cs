@@ -28,6 +28,19 @@ public enum TierGrade
     S, A, B, C, D
 }
 
+/// <summary>How much separating signal the selected tier-list scope currently carries.</summary>
+public enum TierScopeConfidence
+{
+    /// <summary>At least one champion cleared the adaptive floor and the scope contains multiple tiers.</summary>
+    RESOLVED,
+
+    /// <summary>Champions cleared the adaptive floor, but every champion landed in the same tier.</summary>
+    FLAT,
+
+    /// <summary>No champion cleared the adaptive floor, or the scope is empty.</summary>
+    INSUFFICIENT
+}
+
 /// <summary>
 /// Single champion entry in tier list. For the unified ("All Roles") view each entry is the champion at its
 /// primary role; <see cref="Role"/> carries that graded role. Movement is only populated for the persisted
@@ -60,5 +73,7 @@ public record TierListResponse(
     List<TierListEntry> Entries,
     AnalyticsSampleMetadata? Sample = null,
     // When the precomputed analytics for this patch were last refreshed (null while serving live compute).
-    DateTime? ComputedAtUtc = null
+    DateTime? ComputedAtUtc = null,
+    string QueueFamily = "RANKED_SOLO_DUO",
+    TierScopeConfidence Confidence = TierScopeConfidence.INSUFFICIENT
 );

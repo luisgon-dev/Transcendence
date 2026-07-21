@@ -95,6 +95,26 @@ public class ChampionAnalyticsStatsEquivalenceTests
     }
 
     [Fact]
+    public async Task Aram_StatsPath_EqualsRawCompute_AndCollapsesRoles()
+    {
+        await using var ctx = await SeededAsync();
+        await Refresh(ctx.Db);
+        var svc = Service(ctx.Db);
+        var filter = new ChampionAnalyticsFilter(Region: "NA1", Role: "TOP", QueueFamily: "aram");
+
+        var rawWinRates = await svc.ComputeWinRatesAsync(100, filter, Patch, CancellationToken.None);
+        var statsWinRates = await svc.ComputeWinRatesFromStatsAsync(100, filter, Patch, CancellationToken.None);
+        statsWinRates.Should().BeEquivalentTo(rawWinRates, options => options.WithStrictOrdering());
+        statsWinRates.Should().OnlyContain(row => row.Role == "ALL");
+
+        var rawTierList = await svc.ComputeTierListAsync(null, null, "NA1", "aram", Patch, CancellationToken.None);
+        var statsTierList = await svc.ComputeTierListFromStatsAsync(null, null, "NA1", "aram", Patch, CancellationToken.None);
+        statsTierList.Should().BeEquivalentTo(rawTierList, options => options.WithStrictOrdering()
+            .Excluding(row => row.Movement).Excluding(row => row.PreviousTier));
+        statsTierList.Should().OnlyContain(row => row.Role == "ALL");
+    }
+
+    [Fact]
     public async Task StatsPath_FallsBackToRawCompute_WhenNoAggregatesForPatch()
     {
         await using var ctx = await SeededAsync();
@@ -192,6 +212,10 @@ public class ChampionAnalyticsStatsEquivalenceTests
         AddGames(db, "EUW1", "EMERALD", 300, "TOP", wins: 0, losses: 1);
         AddGames(db, "EUW1", "GOLD", 200, "TOP", wins: 1, losses: 1);
 
+        AddGames(db, "NA1", "EMERALD", 100, "", wins: 3, losses: 1, queueId: 450, queueFamily: "ARAM");
+        AddGames(db, "NA1", "EMERALD", 200, "", wins: 1, losses: 2, queueId: 450, queueFamily: "ARAM");
+        AddGames(db, "NA1", "DIAMOND", 300, "", wins: 2, losses: 1, queueId: 450, queueFamily: "ARAM");
+
         // Bans across regions/tiers (champ 999 never played; champ 100 also banned somewhere).
         var banA = AddGames(db, "NA1", "EMERALD", 400, "JUNGLE", wins: 1, losses: 0).Single();
         var banB = AddGames(db, "NA1", "EMERALD", 400, "JUNGLE", wins: 0, losses: 1).Single();
@@ -207,16 +231,31 @@ public class ChampionAnalyticsStatsEquivalenceTests
     }
 
     private static List<Transcendence.Data.Models.LoL.Match.Match> AddGames(
-        TranscendenceContext db, string region, string? tier, int champ, string role, int wins, int losses)
+        TranscendenceContext db,
+        string region,
+        string? tier,
+        int champ,
+        string role,
+        int wins,
+        int losses,
+        int queueId = 420,
+        string queueFamily = "RANKED_SOLO_DUO")
     {
         var matches = new List<Transcendence.Data.Models.LoL.Match.Match>();
         for (var i = 0; i < wins + losses; i++)
-            matches.Add(AddGame(db, region, tier, champ, role, win: i < wins));
+            matches.Add(AddGame(db, region, tier, champ, role, i < wins, queueId, queueFamily));
         return matches;
     }
 
     private static Transcendence.Data.Models.LoL.Match.Match AddGame(
-        TranscendenceContext db, string region, string? tier, int champ, string role, bool win)
+        TranscendenceContext db,
+        string region,
+        string? tier,
+        int champ,
+        string role,
+        bool win,
+        int queueId,
+        string queueFamily)
     {
         var summoner = new Summoner
         {
@@ -239,9 +278,9 @@ public class ChampionAnalyticsStatsEquivalenceTests
             MatchDate = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
             Duration = 1800,
             Patch = Patch,
-            QueueId = 420,
-            QueueFamily = "RANKED_SOLO_DUO",
-            QueueType = "420",
+            QueueId = queueId,
+            QueueFamily = queueFamily,
+            QueueType = queueId.ToString(),
             Status = FetchStatus.Success,
             PlatformRegion = region,
             FetchedAt = DateTime.UtcNow

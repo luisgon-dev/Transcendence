@@ -60,11 +60,13 @@ function proFeedErrorMessage(result: BackendJsonResult<ChampionProBuildsResponse
 function ProItemsRow({
   itemIds,
   itemVersion,
-  items
+  items,
+  size = 28
 }: {
   itemIds: number[];
   itemVersion: string;
   items: Record<string, { name: string; plaintext?: string }>;
+  size?: number;
 }) {
   const cleaned = itemIds.filter((itemId) => Number.isFinite(itemId) && itemId > 0);
   if (cleaned.length === 0) {
@@ -84,14 +86,23 @@ function ProItemsRow({
             src={itemIconUrl(itemVersion, itemId)}
             alt={meta?.name ?? `Item ${itemId}`}
             title={title}
-            width={28}
-            height={28}
+            width={size}
+            height={size}
+            sizes={`${size}px`}
             className="rounded-md border border-border/50"
           />
         );
       })}
     </div>
   );
+}
+
+function itemSetKey(itemIds: number[]) {
+  return itemIds
+    .filter((itemId) => Number.isFinite(itemId) && itemId > 0)
+    .slice()
+    .sort((a, b) => a - b)
+    .join(",");
 }
 
 function ProSpellPair({
@@ -227,6 +238,14 @@ export default async function ProBuildsChampionPage({
   const recentMatches = proBuilds?.recentProMatches ?? [];
   const topPlayers = proBuilds?.topPlayers ?? [];
   const commonBuilds = proBuilds?.commonBuilds ?? [];
+  // Older cached responses can still contain the former empty-inventory aggregate.
+  // Never promote that placeholder into the answer-first recommendation.
+  const usableCommonBuilds = commonBuilds.filter((build) => itemSetKey(build.items ?? []).length > 0);
+  const recommendedBuild = usableCommonBuilds[0] ?? null;
+  const recommendedMatch = recommendedBuild
+    ? recentMatches.find((match) => itemSetKey(match.items ?? []) === itemSetKey(recommendedBuild.items ?? [])) ?? null
+    : null;
+  const alternativeBuilds = usableCommonBuilds.slice(1);
   const roleExtraParams: Record<string, string> = {};
   if (regionFilter !== "ALL") roleExtraParams.region = regionFilter;
   if (scopeFilter !== "all") roleExtraParams.scope = scopeFilter;
@@ -337,6 +356,73 @@ export default async function ProBuildsChampionPage({
 
       {proBuildsRes.ok ? (
         <>
+      {recommendedBuild ? (
+        <Card className="border-primary/35 bg-primary/[0.06] p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <Badge className="border-primary/45 bg-primary/10 text-primary">Recommended</Badge>
+                <span className="type-overline text-muted">Most played in this scope</span>
+              </div>
+              <h2 className="type-section">{championName} pro build</h2>
+              <p className="type-ui mt-1 text-muted">
+                The most common completed item path among tracked {SCOPE_LABEL[effectiveScope].toLowerCase()}.
+              </p>
+            </div>
+            <p className="type-tabular tabular-nums text-sm text-muted">
+              <WinRateText value={recommendedBuild.winRate} decimals={1} games={recommendedBuild.games} />
+            </p>
+          </div>
+
+          <div className="mt-4">
+            <ProItemsRow
+              itemIds={recommendedBuild.items ?? []}
+              itemVersion={itemStatic.version}
+              items={itemStatic.items}
+              size={38}
+            />
+          </div>
+
+          {recommendedMatch ? (
+            <div className="mt-4 grid gap-4 border-t border-border/40 pt-4 lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)]">
+              <div>
+                <p className="type-overline text-muted">Spells & skill priority</p>
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <ProSpellPair
+                    spell1Id={recommendedMatch.spell1Id ?? 0}
+                    spell2Id={recommendedMatch.spell2Id ?? 0}
+                    spellVersion={spellStatic.version}
+                    spells={spellStatic.spells}
+                  />
+                  {recommendedMatch.skillOrder?.maxOrder ? (
+                    <span className="type-ui font-medium text-fg/80">
+                      {recommendedMatch.skillOrder.maxOrder}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              <div>
+                <p className="type-overline text-muted">Representative rune page</p>
+                <div className="mt-2">
+                  <RuneSetupDisplay
+                    primaryStyleId={recommendedMatch.primaryStyleId ?? 0}
+                    subStyleId={recommendedMatch.subStyleId ?? 0}
+                    primarySelections={recommendedMatch.primaryRunes ?? []}
+                    subSelections={recommendedMatch.subRunes ?? []}
+                    statShards={recommendedMatch.statShards ?? []}
+                    runeById={runeStatic.runeById}
+                    styleById={runeStatic.styleById}
+                    runeSortById={runeStatic.runeSortById}
+                    iconSize={20}
+                    density="compact"
+                  />
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </Card>
+      ) : null}
+
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="p-5">
           <h2 className="type-section">Top Players</h2>
@@ -369,20 +455,22 @@ export default async function ProBuildsChampionPage({
         </Card>
 
         <Card className="p-5">
-          <h2 className="type-section">Common Builds</h2>
-          {commonBuilds.length === 0 ? (
+          <h2 className="type-section">Other Common Builds</h2>
+          {alternativeBuilds.length === 0 ? (
             <p className="mt-3 text-sm text-muted">
-              No repeat build patterns are available for these filters yet.
+              {recommendedBuild
+                ? "No other repeat build patterns have enough support yet."
+                : "No repeat build patterns are available for these filters yet."}
             </p>
           ) : (
             <div className="mt-3 grid gap-3">
-              {commonBuilds.map((build, idx) => (
+              {alternativeBuilds.map((build, idx) => (
                 <div
                   key={`common-build-${idx}`}
                   className="surface-subtle rounded-card p-3"
                 >
                   <div className="mb-2 flex items-center justify-between gap-2">
-                    <p className="text-xs text-muted">Build #{idx + 1}</p>
+                    <p className="text-xs text-muted">Alternative {idx + 1}</p>
                     <p className="text-xs text-muted">
                       <WinRateText value={build.winRate} decimals={1} games={build.games} />
                     </p>

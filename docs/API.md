@@ -30,7 +30,7 @@ Read-heavy endpoints are protected by server-side fixed-window rate limiting and
 
 - `429 Too Many Requests`
 
-Auth endpoints use dedicated per-client rate limits: `/api/auth/register` (`auth-register`), `/api/auth/login` (`auth-login`), and `/api/auth/refresh` + `/api/auth/logout` (shared `auth-refresh`). `/api/auth/password-reset` is not rate-limited.
+Auth endpoints use dedicated per-client rate limits: `/api/auth/register`, `/api/auth/password-reset`, and `/api/auth/password-reset/complete` share the conservative `auth-register` policy; `/api/auth/login` uses `auth-login`; `/api/auth/refresh` + `/api/auth/logout` share `auth-refresh`.
 
 ## Error Model
 
@@ -63,7 +63,7 @@ Default stats scope:
 - `stats/overview`, `stats/champions`, and `stats/roles` are computed from ranked solo/duo sample data.
 - `GET /api/lol/summoners/{region}/{name}/{tag}` uses the active season for profile overview and champion stats. When a signed-in manual refresh has produced full-history facts, those profile stats use the durable active-season aggregate; otherwise they fall back to retained match detail currently present in the database.
 - `matches/recent` defaults to full stored history and can be filtered by queue metadata.
-- `stats/rank-history` is app-observed history from stored snapshots. Riot League-V4 exposes current league entries, not an official per-account past-season rank history endpoint.
+- `stats/rank-history` is app-observed history from stored snapshots. Riot League-V4 exposes current league entries, not an official per-account past-season rank history endpoint. The web profile converts tier + division + LP into a monotonic ladder-points series so promotions do not look like LP resets, labels it as observed (not per-game Riot history), and appends the current rank only when it differs from the latest snapshot.
 - Profile champion entries (`topChampions[]`, `topMastery[]`) carry `championId` only; champion display names are resolved client-side from static (DDragon) data, so `championId` is the single source of truth.
 
 Profile responses include additional season/history metadata:
@@ -147,10 +147,30 @@ Example (`SummonerAcceptedResponse`):
 - `GET /api/lol/analytics/champions/{championId}/builds`
 - `GET /api/lol/analytics/champions/{championId}/pro-builds`
 - `GET /api/lol/analytics/champions/{championId}/matchups`
+- `GET /api/lol/analytics/champions/{championId}/synergies`
 - `GET /api/lol/analytics/pro/champions`
 - `GET /api/lol/analytics/pro/players`
+- `GET /api/lol/analytics/items`
+- `GET /api/lol/analytics/items/{itemId}`
+- `GET /api/lol/analytics/runes`
+- `GET /api/lol/analytics/runes/{runeId}`
 - `POST /api/lol/analytics/cache/invalidate` (`AppOnly`)
 - `POST /api/lol/analytics/champions/cache/invalidate` (`AppOnly`)
+
+### LoL Leaderboards
+
+- `GET /api/lol/leaderboards`
+
+Returns a public ranked leaderboard for one platform region. Query parameters:
+
+- `region`: public region slug or platform token such as `na`, `NA1`, `euw`, or `EUW1` (default `na`)
+- `queue`: `solo` or `flex` (default `solo`)
+- `championId`: optional positive champion ID; when present, ranks tracked champion specialists from the active ranked season
+- `role`: optional `TOP|JUNGLE|MIDDLE|BOTTOM|UTILITY`; applies only with `championId`
+- `limit`: `1` to `100` (default `100`)
+- `minimumChampionGames`: `1` to `100` (default `5`)
+
+Regional boards are ordered by tier, league points, wins, and losses. Champion boards are ordered by champion-game sample, ranked tier, league points, and champion win rate. Responses include the resolved platform region and queue, generation time, profile identity, current rank and record, plus champion games, wins, win rate, and KDA when champion filters are active.
 
 Early-patch semantics:
 - Analytics endpoints default to the active patch and support a `patch` query parameter for stored historical patches.
@@ -166,11 +186,21 @@ Early-patch semantics:
 - `low_sample` and `no_data` are expected during early patch windows while ingestion ramps up.
 - Tier-list entries carry `movement` / `previousTier` for the persisted region=ALL default scopes (rank scope `all` or `EMERALD_PLUS`); they are omitted (movement `SAME`/null) for specific-region or exact-tier views (computed live) and when no previous patch exists.
 
+`queue` query semantics across tier list, patch options, champion profile, win rates, builds, and matchups:
+- `solo` (or omitted): Ranked Solo/Duo (`RANKED_SOLO_DUO`)
+- `flex`: Ranked Flex (`RANKED_FLEX`)
+- `aram`: ARAM (`ARAM`)
+- `arena`: Arena (`ARENA`)
+- Unsupported values return `400 Bad Request` instead of silently falling back to Solo/Duo.
+- Solo/Duo and Flex retain lane roles. ARAM and Arena use the synthetic role `ALL`; their champion pages hide lane-only matchup UI and return an empty matchup collection because those modes have no stable lane pairing.
+- Flex rank scopes use current Flex rank. ARAM/Arena rank scopes use current Solo/Duo rank as a player-skill segment.
+
 Tier methodology (`GET /api/lol/analytics/tierlist`):
 - Tiers are **per-role-first**: a champion is graded only against same-role peers. The unified ("All Roles", `role` omitted) list shows each champion at its **primary (most-played) role**; `role` on each entry is that graded role.
-- The grade is driven by **strength = win-rate delta vs the role baseline**, with empirical-Bayes shrinkage toward that baseline (low-sample champions shrink to ~0 delta). Tiers are **absolute cutoffs** on that delta (config-driven), so `S` means a real, sample-resolvable edge and `S` may be **empty on a balanced patch**. `isLowSample=true` champions are capped at `B`.
+- The grade is driven by **strength = win-rate delta vs the role baseline**, with empirical-Bayes shrinkage toward that baseline (low-sample champions shrink to ~0 delta). Tiers are **absolute cutoffs** on that delta (config-driven), so `S` means a real, sample-resolvable edge and `S` may be **empty on a balanced patch**. The prior-fit and S/A eligibility gates scale with the selected role volume between calibrated safety bounds; `isLowSample=true` champions are capped at `B`.
 - Pick rate and ban rate are **not** in the strength score — they feed a separate popularity axis (`contestedScore`).
-- New `TierListEntry` fields: `strengthScore` (signed delta vs role baseline), `contestedScore` (popularity/meta-presence index), `roleBaseline` (the role's baseline win rate), `isLowSample`. `compositeScore` is retained as a back-compat alias of `strengthScore` and is slated for removal.
+- `TierListResponse.confidence` reports whether the selected scope has a meaningful tier spread: `RESOLVED` (multiple tiers and at least one champion over the adaptive floor), `FLAT` (adequate samples but one tier), or `INSUFFICIENT` (no champion clears the floor / no data).
+- `TierListEntry` fields include `strengthScore` (signed delta vs role baseline), `contestedScore` (popularity/meta-presence index), `roleBaseline` (the role's baseline win rate), and `isLowSample`. `compositeScore` is retained as a back-compat alias of `strengthScore` and is slated for removal.
 
 `rankTier` query semantics across tier list, win rates, builds, and matchups:
 - `all` (or omitted): no rank filter
@@ -198,9 +228,30 @@ Tier methodology (`GET /api/lol/analytics/tierlist`):
 - `releasedAtUtc`
 - `detectedAtUtc`
 - `isActive`
-- `rankedSoloDuoMatchCount`
+- `matchCount`
+- `queueFamily`
+- `rankedSoloDuoMatchCount` (backward-compatible alias of `matchCount`; use `matchCount` for new clients)
+
+Item and rune analytics are public Ranked Solo/Duo corpus reads. They accept optional `region`
+and `patch` filters with the same semantics as champion analytics. Index responses rank resources
+by observed player-games and include pick rate, win rate, and the three most common champion-role
+pairs. Detail responses expand that breakdown to the top 100 champion-role samples. Item rows are
+deduplicated per participant and restricted to completed build-impact items or upgraded boots;
+rune rows exclude stat shards. All rates are `0..1` ratios. Champion-level `pickRate` uses that
+champion-role's total games as its denominator, while `shareOfResourceUses` uses all observed uses
+of the selected item/rune. These are descriptive correlations, not causal item/rune power scores.
+
+`GET /api/lol/analytics/champions/{championId}/synergies` accepts `role`, `rankTier`,
+`region`, `queue`, and `patch`. It measures actionable same-team role pairs: Bottom+Utility,
+Jungle+lane, and lane+Jungle. Each partner includes games, wins, pair win rate, pick rate within
+the focal champion-role sample, raw win-rate delta from that focal baseline, and a Wilson
+confidence score. `bestPartners` is ordered by confidence-adjusted lift so tiny lucky samples do
+not outrank supported pairings. The same `synergies` payload is included by the aggregate
+`/profile` response; roleless queues return an empty pairing set.
 
 `GET /api/lol/analytics/champions/{championId}/builds` includes full rune setup per build:
+
+- `builds[]` is ordered by `games × winRate` (observed wins), balancing sample support and results rather than sorting by raw win rate alone. A later variant can therefore have a higher rate on fewer games.
 - `primaryStyleId`, `subStyleId`
 - `primaryRunes` (4), `subRunes` (2), `statShards` (3)
 - Each build (and each build-path variant below) carries `games`, `winRate`, and `pickRate`. `pickRate` is the share of scoped games using that variant (0–1): main `builds[]` vs the champion+role+scope total; build-path sections vs their own section denominator. It is additive and defaults to `0` for snapshots computed before the field existed (clients hide a `0` pick rate); real values populate on the next analytics refresh.
@@ -216,14 +267,15 @@ Tier methodology (`GET /api/lol/analytics/tierlist`):
 - These sections degrade gracefully: champions/patches without ingested timeline build data return the existing build rows with the new fields null.
 
 `GET /api/lol/analytics/champions/{championId}/profile` returns the champion detail payload in one request:
-- Query filters: `role`, `rankTier`, `region`, `patch`
-- Response: `{ championId, effectiveRole, winRates, builds, matchups, grade }`
+- Query filters: `role`, `rankTier`, `region`, `queue`, `patch`
+- Response: `{ championId, effectiveRole, winRates, builds, matchups, grade, queueFamily, trend }`
 - `grade` (`ChampionGradeDto`, nullable) is the champion's tier grade for the resolved `effectiveRole` + scope — the **same** grade the tier list shows for that champion in that role (so the detail page hero is consistent with the list). It carries `tier`, `strengthScore`, `winRate`, `pickRate`, `banRate`, `contestedScore`, `games`, `roleBaseline`, `isLowSample`, `movement`, `previousTier`, `role`, `rankScope`. Null when the champion is not graded in scope (render "Unrated").
-- The endpoint reuses the cached winrate, build, matchup, and tier-list aggregates. When `role` is omitted, it chooses the most-played role from winrates; if a scoped rank filter has no winrate rows, it uses all-rank winrates only to choose the role while keeping the requested rank filter for build and matchup data.
+- The endpoint reuses the cached winrate, build, matchup, and tier-list aggregates. For Solo/Duo and Flex, when `role` is omitted it chooses the most-played role from winrates; if a scoped rank filter has no winrate rows, it uses all-rank winrates only to choose the role while keeping the requested rank filter for build and matchup data. ARAM/Arena resolve `effectiveRole=ALL`.
 - The build and matchup reads run in separate backend scopes so their cached aggregate reads can execute concurrently without sharing an EF `DbContext`.
+- `trend` is the last 12 durable patch-grade points for the same champion, queue, role, and rank scope at the global region grain. Each point carries `patch`, `releasedAtUtc`, `tier`, `games`, `winRate`, `pickRate`, `banRate`, `strengthScore`, and `isLowSample`; it is empty for exact-tier scopes that are not persisted. The champion page renders a real patch-over-patch win-rate chart only when at least two points exist.
 
 Additional analytics fields:
-- Tier list and champion winrate surfaces now include `banRate` (ranked solo queue denominator).
+- Tier list and champion winrate surfaces include queue-scoped `banRate`.
 - Champion winrate rows include `roleRank` and `rolePopulation` when resolvable.
 - Matchups include timeline-derived `avgGoldDiffAt15`, optional `avgXpDiffAt15`, and `allMatchups[]` in addition to `counters[]` and `favorableMatchups[]`.
 - Matchup responses include timeline quality metadata:
@@ -243,7 +295,7 @@ Response includes:
 - `scope`
 - `recentProMatches[]` — items are returned in **purchase order** (timeline-derived, final inventory as fallback); each match also carries `spell1Id`/`spell2Id` and an optional `skillOrder`
 - `topPlayers[]`
-- `commonBuilds[]` — items in purchase order
+- `commonBuilds[]` — non-empty item sets in purchase order, ranked by games and then win rate (empty inventories remain available only on their raw `recentProMatches[]` rows)
 
 `GET /api/lol/analytics/pro/champions` (public) returns champions ranked by pick/play frequency among tracked pro / high-elo players (the "Pro Builds" home ranking). Optional filters:
 - `region` (`ALL` or supported platform-region token such as `NA1|EUW1|EUN1|KR`)
@@ -257,6 +309,13 @@ Response: `{ patch, region, scope, champions[], sample }` where each champion en
 ### Live Game (`AppOnly`)
 
 - `GET /api/lol/summoners/{region}/{gameName}/{tagLine}/live-game`
+- Returns the latest worker-observed snapshot. `lastUpdatedUtc` and `dataAgeSeconds` expose
+  freshness; the Web API does not call Riot directly.
+- Active-game participants include champion, summoner spells, selected perk IDs/styles, and a
+  stored-data analysis projection with Solo/Duo rank, recent-20 win rate/KDA, signed current streak
+  (positive wins, negative losses), and the three most-played champions in that recent window.
+- Team summaries are directional scouting signals derived from the stored participant sample, not
+  predictions or live objective telemetry. Offline responses contain an empty participant list.
 
 ### Operational Health
 
@@ -269,16 +328,26 @@ Response: `{ patch, region, scope, champions[], sample }` where each champion en
 - `POST /api/auth/login`
 - `POST /api/auth/refresh`
 - `POST /api/auth/logout`
-- `POST /api/auth/password-reset` (anonymous; always returns a generic `200 OK` whether or not the account exists)
+- `POST /api/auth/password-reset` (anonymous; returns the same generic `200 OK` for existing and unknown accounts; `503` when SMTP recovery is disabled/unconfigured)
+- `POST /api/auth/password-reset/complete` (anonymous; consumes a one-time token and returns `204`; invalid/expired tokens return `400`)
+- `POST /api/auth/riot/authorize` (anonymous; returns the configured Riot OAuth authorization URL for a caller-generated state value; `503` while RSO is disabled/unconfigured)
+- `POST /api/auth/riot/complete` (anonymous; exchanges a one-time Riot code, signs in an existing linked account or creates a Riot-only account, and returns site tokens)
 - `GET /api/auth/me` (`AppOrUser`)
 - `GET /api/auth/keys` (`AdminOnly`)
 - `POST /api/auth/keys` (`AdminOnly`)
 - `POST /api/auth/keys/{id}/revoke` (`AdminOnly`)
 - `POST /api/auth/keys/{id}/rotate` (`AdminOnly`)
 
+Riot account linking (`UserOnly`):
+- `GET /api/users/me/riot-account` returns the verified main or `404` when none is linked.
+- `POST /api/users/me/riot-account/complete` exchanges a one-time Riot code and links its verified PUUID to the signed-in account. A PUUID can belong to only one account.
+- `DELETE /api/users/me/riot-account` unlinks only when the user has an email/password credential; Riot-only accounts cannot remove their sole sign-in method.
+- Riot access/refresh tokens are never persisted. Only PUUID, Riot ID, selected platform region, and link/verification timestamps are stored.
+
 Auth behavior notes:
 - Registration duplicate-email responses are intentionally generic (`Registration failed.`).
 - Password minimum length is 12 characters.
+- Password-reset tokens are random, stored only as SHA-256 hashes, expire after the configured lifetime (30 minutes by default), and are single-use. Completing a reset revokes every active refresh token for the account.
 
 ### Admin Operations (`AdminOnly`)
 

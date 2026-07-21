@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Analytics;
 using Transcendence.Service.Core.Queries;
+using Transcendence.Service.Core.Services.Analytics;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
 
@@ -42,6 +43,8 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
     {
         var minimumGamesRequired = await AnalyticsSampleThreshold.ResolveAsync(_context, _options, patch, ct);
         var rankTierScope = AnalyticsScopeMath.ParseRankTierScope(filter.RankTier);
+        var queueFamily = AnalyticsQueueCatalog.Normalize(filter.QueueFamily);
+        var hasRoles = AnalyticsQueueCatalog.HasRoles(queueFamily);
 
         // Base query: Match participants for this champion in this patch
         var baseQuery = _context.MatchParticipants
@@ -49,27 +52,25 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
             .Where(mp => mp.ChampionId == championId)
             .OnPatch(patch)
             .FromSuccessfulMatches()
-            .InRankedSoloQueue()
-            .WithAssignedRole();
+            .InAnalyticsQueue(queueFamily)
+            .WithAnalyticsRole(queueFamily);
 
         // Apply region filter if specified
         baseQuery = baseQuery.InPlatformRegion(filter.Region);
 
         // Apply role filter if specified
-        if (!string.IsNullOrEmpty(filter.Role))
+        if (hasRoles && !string.IsNullOrEmpty(filter.Role))
         {
             baseQuery = baseQuery.Where(mp => mp.TeamPosition == filter.Role);
         }
 
         var participantRanks = from mp in baseQuery
-                               join rank in _context.Ranks
-                                   .AsNoTracking()
-                                   .Where(r => r.QueueType == "RANKED_SOLO_5x5")
+                               join rank in _context.Ranks.AsNoTracking().InAnalyticsRankQueue(queueFamily)
                                    on mp.SummonerId equals rank.SummonerId into rankGroup
                                from soloRank in rankGroup.DefaultIfEmpty()
                                select new
                                {
-                                   mp.TeamPosition,
+                                   Role = hasRoles ? mp.TeamPosition! : AnalyticsQueueCatalog.AllRoles,
                                    mp.Win,
                                    mp.MatchId,
                                    RankTier = soloRank != null ? soloRank.Tier : "UNRANKED"
@@ -97,10 +98,10 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
         var effectiveMinimumGames = AnalyticsScopeMath.ResolveEffectiveSampleSize(minimumGamesRequired, totalGames, floor: 3);
 
         var groupedData = await participantRanks
-            .GroupBy(pr => new { pr.TeamPosition, pr.RankTier })
+            .GroupBy(pr => new { pr.Role, pr.RankTier })
             .Select(g => new
             {
-                Role = g.Key.TeamPosition!,
+                g.Key.Role,
                 RankTier = g.Key.RankTier,
                 Games = g.Count(),
                 Wins = g.Sum(pr => pr.Win ? 1 : 0)
@@ -125,7 +126,7 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
         // intersected each group's *played* matches with this champion's *banned* matches, which is
         // structurally ~0 (a banned champion is never picked in that match), so ban rate always read
         // as 0. Stays in SQL: a subquery COUNT plus a Contains-subquery, no id set is materialised.
-        var scopedMatchIds = BuildScopedMatchIdQuery(patch, filter.Region, rankTierScope);
+        var scopedMatchIds = BuildScopedMatchIdQuery(patch, filter.Region, rankTierScope, queueFamily);
         var totalMatchesInScope = await scopedMatchIds.CountAsync(ct);
         var bannedMatches = totalMatchesInScope == 0
             ? 0
@@ -148,16 +149,16 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
                     .AsNoTracking()
                     .OnPatch(patch)
                     .FromSuccessfulMatches()
-                    .InRankedSoloQueue()
-                    .WithAssignedRole()
+                    .InAnalyticsQueue(queueFamily)
+                    .WithAnalyticsRole(queueFamily)
                     .InPlatformRegion(filter.Region)
-                    .Where(mp => relevantRoles.Contains(mp.TeamPosition!))
-                join rank in _context.Ranks.AsNoTracking().Where(r => r.QueueType == "RANKED_SOLO_5x5")
+                    .Where(mp => !hasRoles || relevantRoles.Contains(mp.TeamPosition!))
+                join rank in _context.Ranks.AsNoTracking().InAnalyticsRankQueue(queueFamily)
                     on mp.SummonerId equals rank.SummonerId into rankGroup
                 from soloRank in rankGroup.DefaultIfEmpty()
                 select new
                 {
-                    mp.TeamPosition,
+                    Role = hasRoles ? mp.TeamPosition! : AnalyticsQueueCatalog.AllRoles,
                     mp.ChampionId,
                     mp.Win,
                     RankTier = soloRank != null ? soloRank.Tier : "UNRANKED"
@@ -169,10 +170,10 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
             populationRanks = populationRanks.Where(pr => pr.RankTier == rankTierScope.ExactTier);
 
         var standingsRows = await populationRanks
-            .GroupBy(pr => new { pr.TeamPosition, pr.RankTier, pr.ChampionId })
+            .GroupBy(pr => new { pr.Role, pr.RankTier, pr.ChampionId })
             .Select(g => new
             {
-                g.Key.TeamPosition,
+                g.Key.Role,
                 g.Key.RankTier,
                 g.Key.ChampionId,
                 Games = g.Count(),
@@ -183,7 +184,7 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
         // Per (role, tier): champions ranked by win rate (then games, then id) → this champion's rank +
         // population; sum of games → the true pick-rate denominator. Identical to ComputeRoleRankAsync.
         var standingsByRoleTier = standingsRows
-            .GroupBy(x => (Role: x.TeamPosition!, Tier: x.RankTier))
+            .GroupBy(x => (x.Role, Tier: x.RankTier))
             .ToDictionary(
                 g => g.Key,
                 g => new
@@ -244,10 +245,19 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
     /// Computes tier list ranking champions by composite score.
     /// S = top 10%, A = 10-30%, B = 30-60%, C = 60-85%, D = 85%+
     /// </summary>
+    public Task<List<TierListEntry>> ComputeTierListAsync(
+        string? role,
+        string? rankTier,
+        string? region,
+        string patch,
+        CancellationToken ct) =>
+        ComputeTierListAsync(role, rankTier, region, null, patch, ct);
+
     public async Task<List<TierListEntry>> ComputeTierListAsync(
         string? role,
         string? rankTier,
         string? region,
+        string? queueFamily,
         string patch,
         CancellationToken ct)
     {
@@ -255,14 +265,21 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
         var isUnifiedRole = normalizedRole == "ALL";
         var rankTierScope = AnalyticsScopeMath.ParseRankTierScope(rankTier);
         var regionFilter = AnalyticsRegionCatalog.NormalizeToFilter(region);
+        var normalizedQueue = AnalyticsQueueCatalog.Normalize(queueFamily);
+        var hasRoles = AnalyticsQueueCatalog.HasRoles(normalizedQueue);
+        if (!hasRoles)
+        {
+            normalizedRole = AnalyticsQueueCatalog.AllRoles;
+            isUnifiedRole = true;
+        }
 
         // Step 1: Build base query for match participants in this patch
         var baseQuery = _context.MatchParticipants
             .AsNoTracking()
             .OnPatch(patch)
             .FromSuccessfulMatches()
-            .InRankedSoloQueue()
-            .WithAssignedRole();
+            .InAnalyticsQueue(normalizedQueue)
+            .WithAnalyticsRole(normalizedQueue);
 
         // Apply role filter (if not unified "ALL")
         if (!isUnifiedRole)
@@ -274,9 +291,16 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
 
         // Only apply rank join semantics when a tier filter is requested.
         // Unfiltered views intentionally keep unranked participants.
-        baseQuery = AnalyticsScopeMath.ApplyRankTierScopeToParticipants(baseQuery, rankTierScope, _context.Ranks.AsNoTracking());
+        baseQuery = AnalyticsScopeMath.ApplyRankTierScopeToParticipants(
+            baseQuery, rankTierScope, _context.Ranks.AsNoTracking(), normalizedQueue);
 
-        var query = baseQuery.Select(mp => new { mp.ChampionId, mp.TeamPosition, mp.Win, mp.MatchId });
+        var query = baseQuery.Select(mp => new
+        {
+            mp.ChampionId,
+            Role = hasRoles ? mp.TeamPosition! : AnalyticsQueueCatalog.AllRoles,
+            mp.Win,
+            mp.MatchId
+        });
         var totalParticipants = await query.CountAsync(ct);
         if (totalParticipants == 0)
             return [];
@@ -302,18 +326,18 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
         // Always aggregate per (champion, role); per-role-first scoring needs role-resolved rows even for
         // the unified ("ALL") request, which the shared scorer then collapses to a primary-role overview.
         var aggregatedChampionStats = await query
-            .GroupBy(x => new { x.ChampionId, x.TeamPosition })
+            .GroupBy(x => new { x.ChampionId, x.Role })
             .Select(g => new
             {
                 g.Key.ChampionId,
-                TeamPosition = g.Key.TeamPosition!,
+                g.Key.Role,
                 Games = g.Count(),
                 Wins = g.Count(x => x.Win)
             })
             .ToListAsync(ct);
 
         var aggregated = aggregatedChampionStats
-            .Select(x => new ChampionTierScorer.RoleGames(x.ChampionId, x.TeamPosition, x.Games, x.Wins))
+            .Select(x => new ChampionTierScorer.RoleGames(x.ChampionId, x.Role, x.Games, x.Wins))
             .ToList();
 
         // Raw/live path: previous-patch movement is intentionally omitted (it lives only on the persisted
@@ -362,18 +386,23 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
     // Distinct match IDs for the full (all-champion) rank-scoped ranked-solo population in a
     // patch/region — the denominator population for champion-level ban rate. Returned as IQueryable
     // so callers compose CountAsync / Contains in SQL without materialising the (large) id set.
-    private IQueryable<Guid> BuildScopedMatchIdQuery(string patch, string? region, AnalyticsScopeMath.RankTierScope rankTierScope)
+    private IQueryable<Guid> BuildScopedMatchIdQuery(
+        string patch,
+        string? region,
+        AnalyticsScopeMath.RankTierScope rankTierScope,
+        string queueFamily)
     {
         var scope = _context.MatchParticipants
             .AsNoTracking()
             .OnPatch(patch)
             .FromSuccessfulMatches()
-            .InRankedSoloQueue()
-            .WithAssignedRole();
+            .InAnalyticsQueue(queueFamily)
+            .WithAnalyticsRole(queueFamily);
 
         scope = scope.InPlatformRegion(region);
 
-        scope = AnalyticsScopeMath.ApplyRankTierScopeToParticipants(scope, rankTierScope, _context.Ranks.AsNoTracking());
+        scope = AnalyticsScopeMath.ApplyRankTierScopeToParticipants(
+            scope, rankTierScope, _context.Ranks.AsNoTracking(), queueFamily);
 
         return scope.Select(mp => mp.MatchId).Distinct();
     }
@@ -384,7 +413,8 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
         string patch,
         CancellationToken ct)
     {
-        if (!await HasStatsAsync(patch, ct))
+        var queueFamily = AnalyticsQueueCatalog.Normalize(filter.QueueFamily);
+        if (!await HasStatsAsync(patch, queueFamily, ct))
             return await ComputeWinRatesAsync(championId, filter, patch, ct);
 
         var minimumGamesRequired = await AnalyticsSampleThreshold.ResolveAsync(_context, _options, patch, ct);
@@ -392,11 +422,13 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
         var scopeToken = AnalyticsScopeMath.ScopeTokenOf(rankTierScope);
         var tierFilter = RankTierCatalog.ResolveScopeTiers(scopeToken);
         var region = filter.Region;                                  // already normalized to a platform or null (ALL)
-        var roleFilter = string.IsNullOrEmpty(filter.Role) ? null : filter.Role;
+        var roleFilter = AnalyticsQueueCatalog.HasRoles(queueFamily) && !string.IsNullOrEmpty(filter.Role)
+            ? filter.Role
+            : null;
 
         // Champion's per-(role, tier) Games/Wins, summed over the platform regions in scope.
         var champQuery = _context.ChampionRoleTierStats.AsNoTracking()
-            .Where(x => x.Patch == patch && x.ChampionId == championId);
+            .Where(x => x.Patch == patch && x.QueueFamily == queueFamily && x.ChampionId == championId);
         champQuery = ApplyStatScope(champQuery, region, tierFilter);
         if (roleFilter != null)
             champQuery = champQuery.Where(x => x.Role == roleFilter);
@@ -417,12 +449,13 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
 
         // Champion-level, role-independent ban rate by point lookup (matching the live BuildScopedMatchIdQuery,
         // which never role-filters). Region=ALL reads the synthetic "ALL" row; never summed.
-        var banRate = await LookupBanRateAsync(patch, region, scopeToken, championId, ct);
+        var banRate = await LookupBanRateAsync(patch, queueFamily, region, scopeToken, championId, ct);
 
         // Standings (role-rank + pick-rate denominator): every champion in the same (role, tier) scope.
         var relevantRoles = winRateData.Select(x => x.Role).Distinct().ToList();
         var standingsQuery = ApplyStatScope(
-            _context.ChampionRoleTierStats.AsNoTracking().Where(x => x.Patch == patch && relevantRoles.Contains(x.Role)),
+            _context.ChampionRoleTierStats.AsNoTracking().Where(x =>
+                x.Patch == patch && x.QueueFamily == queueFamily && relevantRoles.Contains(x.Role)),
             region, tierFilter);
 
         var standingsRows = await standingsQuery
@@ -482,18 +515,33 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
             .ToList();
     }
 
-    public async Task<List<TierListEntry>> ComputeTierListFromStatsAsync(
+    public Task<List<TierListEntry>> ComputeTierListFromStatsAsync(
         string? role,
         string? rankTier,
         string? region,
         string patch,
+        CancellationToken ct) =>
+        ComputeTierListFromStatsAsync(role, rankTier, region, null, patch, ct);
+
+    public async Task<List<TierListEntry>> ComputeTierListFromStatsAsync(
+        string? role,
+        string? rankTier,
+        string? region,
+        string? queueFamily,
+        string patch,
         CancellationToken ct)
     {
-        if (!await HasStatsAsync(patch, ct))
-            return await ComputeTierListAsync(role, rankTier, region, patch, ct);
+        var normalizedQueue = AnalyticsQueueCatalog.Normalize(queueFamily);
+        if (!await HasStatsAsync(patch, normalizedQueue, ct))
+            return await ComputeTierListAsync(role, rankTier, region, normalizedQueue, patch, ct);
 
         var normalizedRole = string.IsNullOrWhiteSpace(role) ? "ALL" : role.ToUpperInvariant();
         var isUnifiedRole = normalizedRole == "ALL";
+        if (!AnalyticsQueueCatalog.HasRoles(normalizedQueue))
+        {
+            normalizedRole = AnalyticsQueueCatalog.AllRoles;
+            isUnifiedRole = true;
+        }
         var rankTierScope = AnalyticsScopeMath.ParseRankTierScope(rankTier);
         var scopeToken = AnalyticsScopeMath.ScopeTokenOf(rankTierScope);
         var tierFilter = RankTierCatalog.ResolveScopeTiers(scopeToken);
@@ -503,13 +551,13 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
         // (region=ALL with scope ALL or EMERALD_PLUS) and the only place patch-over-patch movement exists.
         var isPersistedScope = regionFilter == null
             && (scopeToken == RankTierCatalog.AllScope || scopeToken == RankTierCatalog.EmeraldPlusScope);
-        if (isPersistedScope && await HasGradesAsync(patch, scopeToken, ct))
-            return await ReadGradeTableAsync(patch, scopeToken, isUnifiedRole ? "ALL" : normalizedRole, ct);
+        if (isPersistedScope && await HasGradesAsync(patch, normalizedQueue, scopeToken, ct))
+            return await ReadGradeTableAsync(patch, normalizedQueue, scopeToken, isUnifiedRole ? "ALL" : normalizedRole, ct);
 
         // Fallback (specific region or exact tier — or a patch not yet graded): roll the atoms up to the
         // requested scope and score live through the same scorer (no movement).
         var query = ApplyStatScope(
-            _context.ChampionRoleTierStats.AsNoTracking().Where(x => x.Patch == patch),
+            _context.ChampionRoleTierStats.AsNoTracking().Where(x => x.Patch == patch && x.QueueFamily == normalizedQueue),
             regionFilter, tierFilter);
         if (!isUnifiedRole)
             query = query.Where(x => x.Role == normalizedRole);
@@ -525,29 +573,31 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
 
         var regionKey = regionFilter ?? PrecomputedAnalyticsRefresher.AllRegion;
         var totalMatchesInScope = await _context.ScopeMatchCountStats.AsNoTracking()
-            .Where(x => x.Patch == patch && x.PlatformRegion == regionKey && x.RankScope == scopeToken)
+            .Where(x => x.Patch == patch && x.QueueFamily == normalizedQueue && x.PlatformRegion == regionKey && x.RankScope == scopeToken)
             .Select(x => (int?)x.TotalMatches)
             .FirstOrDefaultAsync(ct) ?? 0;
         var banCountsByChampion = totalMatchesInScope == 0
             ? new Dictionary<int, int>()
             : await _context.ChampionBanScopeStats.AsNoTracking()
-                .Where(x => x.Patch == patch && x.PlatformRegion == regionKey && x.RankScope == scopeToken)
+                .Where(x => x.Patch == patch && x.QueueFamily == normalizedQueue && x.PlatformRegion == regionKey && x.RankScope == scopeToken)
                 .ToDictionaryAsync(x => x.ChampionId, x => x.BannedMatches, ct);
 
         return ScoreToEntries(isUnifiedRole, aggregated, banCountsByChampion, totalMatchesInScope);
     }
 
-    private Task<bool> HasGradesAsync(string patch, string scopeToken, CancellationToken ct) =>
+    private Task<bool> HasGradesAsync(string patch, string queueFamily, string scopeToken, CancellationToken ct) =>
         _context.ChampionScopeGradeStats.AsNoTracking()
             .AnyAsync(x => x.Patch == patch
+                && x.QueueFamily == queueFamily
                 && x.PlatformRegion == PrecomputedAnalyticsRefresher.AllRegion
                 && x.RankScope == scopeToken, ct);
 
     private async Task<List<TierListEntry>> ReadGradeTableAsync(
-        string patch, string scopeToken, string roleKey, CancellationToken ct)
+        string patch, string queueFamily, string scopeToken, string roleKey, CancellationToken ct)
     {
         var rows = await _context.ChampionScopeGradeStats.AsNoTracking()
             .Where(x => x.Patch == patch
+                && x.QueueFamily == queueFamily
                 && x.PlatformRegion == PrecomputedAnalyticsRefresher.AllRegion
                 && x.RankScope == scopeToken
                 && x.Role == roleKey)
@@ -575,18 +625,26 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
             .ToList();
     }
 
-    public Task<DateTime?> GetAnalyticsComputedAtAsync(string patch, CancellationToken ct) =>
+    public Task<DateTime?> GetAnalyticsComputedAtAsync(string patch, string? queueFamily, CancellationToken ct)
+    {
+        var normalizedQueue = AnalyticsQueueCatalog.Normalize(queueFamily);
+        return
         _context.ChampionRoleTierStats
             .AsNoTracking()
-            .Where(x => x.Patch == patch)
+            .Where(x => x.Patch == patch && x.QueueFamily == normalizedQueue)
             .OrderByDescending(x => x.ComputedAtUtc)
             .Select(x => (DateTime?)x.ComputedAtUtc)
             .FirstOrDefaultAsync(ct);
+    }
+
+    public Task<DateTime?> GetAnalyticsComputedAtAsync(string patch, CancellationToken ct) =>
+        GetAnalyticsComputedAtAsync(patch, null, ct);
 
     // ---- shared helpers for the stats path ----
 
-    private Task<bool> HasStatsAsync(string patch, CancellationToken ct) =>
-        _context.ChampionRoleTierStats.AsNoTracking().AnyAsync(x => x.Patch == patch, ct);
+    private Task<bool> HasStatsAsync(string patch, string queueFamily, CancellationToken ct) =>
+        _context.ChampionRoleTierStats.AsNoTracking()
+            .AnyAsync(x => x.Patch == patch && x.QueueFamily == queueFamily, ct);
 
     /// <summary>Applies the region (null = ALL → sum every platform) + tier-scope (null = all tiers) filters.</summary>
     private static IQueryable<ChampionRoleTierStat> ApplyStatScope(
@@ -600,18 +658,18 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
     }
 
     private async Task<double> LookupBanRateAsync(
-        string patch, string? region, string scopeToken, int championId, CancellationToken ct)
+        string patch, string queueFamily, string? region, string scopeToken, int championId, CancellationToken ct)
     {
         var regionKey = region ?? PrecomputedAnalyticsRefresher.AllRegion;
         var totalMatchesInScope = await _context.ScopeMatchCountStats.AsNoTracking()
-            .Where(x => x.Patch == patch && x.PlatformRegion == regionKey && x.RankScope == scopeToken)
+            .Where(x => x.Patch == patch && x.QueueFamily == queueFamily && x.PlatformRegion == regionKey && x.RankScope == scopeToken)
             .Select(x => (int?)x.TotalMatches)
             .FirstOrDefaultAsync(ct) ?? 0;
         if (totalMatchesInScope == 0)
             return 0.0;
 
         var bannedMatches = await _context.ChampionBanScopeStats.AsNoTracking()
-            .Where(x => x.Patch == patch && x.PlatformRegion == regionKey && x.RankScope == scopeToken && x.ChampionId == championId)
+            .Where(x => x.Patch == patch && x.QueueFamily == queueFamily && x.PlatformRegion == regionKey && x.RankScope == scopeToken && x.ChampionId == championId)
             .Select(x => (int?)x.BannedMatches)
             .FirstOrDefaultAsync(ct) ?? 0;
         return (double)bannedMatches / totalMatchesInScope;

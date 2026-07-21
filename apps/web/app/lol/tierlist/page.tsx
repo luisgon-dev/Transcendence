@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
+
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { TierListFilterBar } from "@/components/TierListFilterBar";
 import { TierListTable } from "@/components/TierListTable";
 import { Badge } from "@/components/ui/Badge";
+import { Card } from "@/components/ui/Card";
 import { Toolbar } from "@/components/ui/Toolbar";
 import {
   fetchWithGlobalAnalyticsRegionFallback,
@@ -11,6 +14,7 @@ import {
 import { fetchBackendJson } from "@/lib/backendCall";
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { normalizeAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyticsSample";
+import { analyticsQueueOption, normalizeAnalyticsQueue } from "@/lib/analyticsQueues";
 import { GLOBAL_ANALYTICS_REGION } from "@/lib/analyticsRegionShared";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { fetchLolAnalyticsPatches } from "@/lib/lolAnalyticsPatches";
@@ -21,22 +25,68 @@ import {
   rankTierDisplayLabel
 } from "@/lib/ranks";
 import { roleDisplayLabel } from "@/lib/roles";
+import { socialImageUrl } from "@/lib/seo";
 import { fetchChampionMap } from "@/lib/staticData";
-import { normalizeTierListEntries, type TierListResponseLike } from "@/lib/tierlist";
+import {
+  decodeTierScopeConfidence,
+  deriveTierScopeConfidence,
+  normalizeTierListEntries,
+  type TierListResponseLike
+} from "@/lib/tierlist";
 import { UpdatedAgo } from "@/components/UpdatedAgo";
 
 type TierListResponse = TierListResponseLike;
 
+type TierListSearchParams = { role?: string; rankTier?: string; region?: string; patch?: string; queue?: string };
+
+export async function generateMetadata({
+  searchParams
+}: {
+  searchParams?: Promise<TierListSearchParams>;
+}): Promise<Metadata> {
+  const resolved = searchParams ? await searchParams : {};
+  const role = (resolved.role ?? "ALL").toUpperCase();
+  const queue = analyticsQueueOption(resolved.queue);
+  const rank = rankTierDisplayLabel(normalizeRankTierParam(resolved.rankTier) ?? DEFAULT_TIERLIST_RANK_TIER);
+  let patch = normalizeAnalyticsPatch(resolved.patch);
+  if (!patch) {
+    const patches = await fetchLolAnalyticsPatches(queue.value);
+    patch = patches.find((candidate) => candidate.isActive)?.patch ?? patches[0]?.patch ?? null;
+  }
+
+  const roleLabel = roleDisplayLabel(role);
+  const patchLabel = patch ? ` Patch ${patch}` : "";
+  const title = `League of Legends ${queue.label} ${queue.hasRoles ? `${roleLabel} ` : ""}Tier List${patchLabel}`;
+  const description = `${rank} ${queue.label} champion rankings${queue.hasRoles ? ` for ${roleLabel.toLowerCase()}` : ""}, with win rates, pick rates, sample confidence, and current-patch data.`;
+  const image = socialImageUrl(title, "League tier list", `${rank}, trustworthy samples, and role-specific rankings`);
+
+  return {
+    title,
+    description,
+    alternates: { canonical: "/lol/tierlist" },
+    openGraph: {
+      type: "website",
+      title,
+      description,
+      url: "/lol/tierlist",
+      images: [{ url: image, width: 1200, height: 630, alt: title }]
+    },
+    twitter: { card: "summary_large_image", title, description, images: [image] }
+  };
+}
+
 export default async function TierListPage({
   searchParams
 }: {
-  searchParams?: Promise<{ role?: string; rankTier?: string; region?: string; patch?: string }>;
+  searchParams?: Promise<TierListSearchParams>;
 }) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const activeQueue = normalizeAnalyticsQueue(resolvedSearchParams?.queue);
+  const queueOption = analyticsQueueOption(activeQueue);
   const { activeRegion, activeRegionLabel, options: regionOptions } = await resolveAnalyticsRegion(
     resolvedSearchParams?.region
   );
-  const roleParam = (resolvedSearchParams?.role ?? "").toUpperCase();
+  const roleParam = queueOption.hasRoles ? (resolvedSearchParams?.role ?? "").toUpperCase() : "ALL";
   const rawRankParam = resolvedSearchParams?.rankTier ?? null;
   const normalizedRankParam = normalizeRankTierParam(rawRankParam);
   const selectedPatch = normalizeAnalyticsPatch(resolvedSearchParams?.patch);
@@ -50,6 +100,7 @@ export default async function TierListPage({
     if (effectiveRankParam) requestQuery.set("rankTier", effectiveRankParam);
     if (region !== GLOBAL_ANALYTICS_REGION) requestQuery.set("region", region);
     if (selectedPatch) requestQuery.set("patch", selectedPatch);
+    if (activeQueue !== "solo") requestQuery.set("queue", activeQueue);
 
     return fetchBackendJson<TierListResponse>(
       `${getBackendBaseUrl()}/api/lol/analytics/tierlist?${requestQuery.toString()}`,
@@ -65,8 +116,11 @@ export default async function TierListPage({
     effectiveRegionLabel,
     fallbackMessage
   } = resolveAnalyticsRegionPresentation(activeRegion, activeRegionLabel, regionOptions, usedGlobalFallback);
-  const patchOptions = await fetchLolAnalyticsPatches();
-  const sharedFilterParams = selectedPatch ? { patch: selectedPatch } : {};
+  const patchOptions = await fetchLolAnalyticsPatches(activeQueue);
+  const sharedFilterParams = {
+    ...(selectedPatch ? { patch: selectedPatch } : {}),
+    ...(activeQueue !== "solo" ? { queue: activeQueue } : {})
+  };
 
   if (!res.ok) {
     return (
@@ -97,6 +151,8 @@ export default async function TierListPage({
             activeRegion={activeRegion}
             patchOptions={patchOptions}
             activePatch={selectedPatch}
+            activeQueue={activeQueue}
+            showRoles={queueOption.hasRoles}
             extraParams={sharedFilterParams}
             baseHref="/lol/tierlist"
             className="mt-0"
@@ -133,6 +189,8 @@ export default async function TierListPage({
     ...entry,
     roleBaseline: roleBaselineByKey.get(`${entry.championId}-${entry.role.toUpperCase()}`) ?? 0
   }));
+  const tierScopeConfidence =
+    decodeTierScopeConfidence(tierlist.confidence) ?? deriveTierScopeConfidence(entriesWithBaseline);
 
   return (
     <div className="grid gap-4">
@@ -149,10 +207,12 @@ export default async function TierListPage({
             <Badge className="border-primary/40 bg-primary/10 text-primary">
               Patch {tierlist.patch ?? "Unknown"}
             </Badge>
+            <span>{queueOption.label}</span>
+            <span aria-hidden="true">·</span>
             <span>{effectiveRegionLabel}</span>
             <span aria-hidden="true">·</span>
-            <span>{roleDisplayLabel(tierlist.role ?? "ALL")}</span>
-            <span aria-hidden="true">·</span>
+            {queueOption.hasRoles ? <span>{roleDisplayLabel(tierlist.role ?? "ALL")}</span> : null}
+            {queueOption.hasRoles ? <span aria-hidden="true">·</span> : null}
             <span>{rankTierDisplayLabel(rankTierValue ?? "all")}</span>
             <span aria-hidden="true">·</span>
             <span className="type-tabular tabular-nums">{normalizedEntries.length} champions</span>
@@ -172,6 +232,8 @@ export default async function TierListPage({
             activeRegion={effectiveRegion}
             patchOptions={patchOptions}
             activePatch={selectedPatch}
+            activeQueue={activeQueue}
+            showRoles={queueOption.hasRoles}
             extraParams={sharedFilterParams}
             baseHref="/lol/tierlist"
             className="mt-0 w-full border-0 bg-transparent p-0 shadow-none"
@@ -189,6 +251,26 @@ export default async function TierListPage({
         className="rounded-lg border border-border bg-surface/92 px-3 py-2 shadow-soft"
       />
 
+      {tierScopeConfidence !== "RESOLVED" ? (
+        <Card
+          role="status"
+          className="border-warning/40 bg-warning/10 px-4 py-3"
+          data-testid="tier-scope-confidence"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className="border-warning/40 bg-warning/20 text-fg">Scope confidence</Badge>
+            <span className="type-ui font-semibold text-fg">
+              {tierScopeConfidence === "INSUFFICIENT" ? "Insufficient data" : "Flat tier signal"}
+            </span>
+          </div>
+          <p className="mt-1.5 type-ui text-fg/75">
+            {tierScopeConfidence === "INSUFFICIENT"
+              ? "No champion has cleared this scope's adaptive confidence floor yet. Treat these grades as provisional or widen the rank and region filters."
+              : "This scope has enough games, but every champion currently resolves to the same tier. The data does not support a meaningful tier spread yet."}
+          </p>
+        </Card>
+      ) : null}
+
       <TierListTable
         entries={entriesWithBaseline}
         champions={champions}
@@ -196,6 +278,8 @@ export default async function TierListPage({
         rankTierValue={rankTierValue}
         activeRegion={effectiveRegion}
         activePatch={selectedPatch}
+        activeQueue={activeQueue}
+        showRoles={queueOption.hasRoles}
         minGames={minGames}
       />
     </div>

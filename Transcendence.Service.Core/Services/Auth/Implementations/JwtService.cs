@@ -23,6 +23,7 @@ public class JwtService(IConfiguration configuration, IHostEnvironment hostEnvir
 
     public string GenerateAccessToken(UserAccount user)
     {
+        var displayName = string.IsNullOrWhiteSpace(user.DisplayName) ? user.Email : user.DisplayName;
         var credentials = new SigningCredentials(
             new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_signingKey)),
             SecurityAlgorithms.HmacSha256);
@@ -32,7 +33,7 @@ public class JwtService(IConfiguration configuration, IHostEnvironment hostEnvir
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.Email, user.Email),
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new Claim(ClaimTypes.Name, user.Email)
+            new Claim(ClaimTypes.Name, displayName)
         };
 
         foreach (var role in user.Roles.Select(x => x.Role).Distinct(StringComparer.Ordinal))

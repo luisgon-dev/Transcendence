@@ -9,5 +9,8 @@ public record ChampionProfileAnalyticsResponse(
     ChampionWinRateSummary WinRates,
     ChampionBuildsResponse Builds,
     ChampionMatchupsResponse Matchups,
-    ChampionGradeDto? Grade = null
+    ChampionGradeDto? Grade = null,
+    string QueueFamily = "RANKED_SOLO_DUO",
+    ChampionTrendResponse? Trend = null,
+    ChampionSynergiesResponse? Synergies = null
 );

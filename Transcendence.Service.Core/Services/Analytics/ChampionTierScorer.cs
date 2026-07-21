@@ -59,53 +59,7 @@ internal static class ChampionTierScorer
     /// <summary>The full scored output for one scope: every per-role row plus the primary-role overview.</summary>
     internal sealed record ScopeScore(
         IReadOnlyList<ScoredChampion> PerRole,
-        IReadOnlyList<ScoredChampion> Overview)
-    {
-        /// <summary>
-        /// Coarse confidence in this scope's tier spread, derived purely from the already-graded overview rows
-        /// (adds no state, changes no grade). It exists because the uncalibrated defaults (the S/A games floor
-        /// and the prior-fit floor) make a thin scope collapse toward the role baseline and grade almost
-        /// everything B — which looks identical to a genuinely balanced meta. This lets a caller tell the two
-        /// apart and render an "insufficient data" hint instead of a misleadingly uniform tier list.
-        /// </summary>
-        public ScopeConfidence Confidence => DeriveConfidence(Overview);
-    }
-
-    /// <summary>Whole-scope confidence signal (see <see cref="ScopeScore.Confidence"/>). Not a grade — a hint.</summary>
-    internal enum ScopeConfidence
-    {
-        /// <summary>At least one champion cleared the games floor and the scope shows a spread of tiers.</summary>
-        Resolved = 0,
-
-        /// <summary>Some champions cleared the floor, yet every graded champion landed on the same tier — the
-        /// list carries no separating signal (a possibly-balanced patch, but treat as low-information).</summary>
-        Flat = 1,
-
-        /// <summary>No champion in the scope reached the S/A games floor (or the scope is empty): every grade is
-        /// a pure shrinkage artifact, not a resolved edge. The strongest "not enough data" signal.</summary>
-        Insufficient = 2,
-    }
-
-    /// <summary>Derives <see cref="ScopeConfidence"/> from graded rows. Total: never throws.</summary>
-    private static ScopeConfidence DeriveConfidence(IReadOnlyList<ScoredChampion> rows)
-    {
-        if (rows.Count == 0)
-            return ScopeConfidence.Insufficient;
-
-        var anyAboveFloor = false;
-        var allOneTier = true;
-        var firstTier = rows[0].Tier;
-        foreach (var r in rows)
-        {
-            if (!r.IsLowSample) anyAboveFloor = true;
-            if (r.Tier != firstTier) allOneTier = false;
-        }
-
-        if (!anyAboveFloor)
-            return ScopeConfidence.Insufficient;
-
-        return allOneTier ? ScopeConfidence.Flat : ScopeConfidence.Resolved;
-    }
+        IReadOnlyList<ScoredChampion> Overview);
 
     /// <summary>
     /// The single shared entry point. Takes the per-<c>(champion, role)</c> games/wins for a whole scope
@@ -171,8 +125,18 @@ internal static class ChampionTierScorer
         if (sumGames == 0)
             return [];
 
-        var roleBaseline = (double)sumWins / sumGames;        // mu
-        var priorStrength = FitPriorStrength(ordered, options); // k
+        var roleBaseline = (double)sumWins / sumGames; // mu
+        var gradeMinGames = ResolveAdaptiveThreshold(
+            totalRoleGames,
+            options.GradeRoleVolumeShare,
+            options.GradeMinGamesFloor,
+            options.GradeMinGamesCeiling);
+        var priorFitMinGames = ResolveAdaptiveThreshold(
+            totalRoleGames,
+            options.PriorFitRoleVolumeShare,
+            options.PriorFitMinGamesFloor,
+            options.PriorFitMinGamesCeiling);
+        var priorStrength = FitPriorStrength(ordered, options, priorFitMinGames); // k
 
         var results = new List<ScoredChampion>(ordered.Count);
         foreach (var c in ordered)
@@ -185,7 +149,7 @@ internal static class ChampionTierScorer
             if (double.IsNaN(strength) || double.IsInfinity(strength))
                 strength = 0.0;
 
-            var isLowSample = c.Games < options.GradeMinGamesFloor;
+            var isLowSample = c.Games < gradeMinGames;
             var tier = ResolveTier(strength, options.Cutoffs, isLowSample);
 
             var pickRate = totalRoleGames > 0 ? (double)c.Games / totalRoleGames : 0.0;
@@ -255,11 +219,14 @@ internal static class ChampionTierScorer
     /// clamps to <see cref="TieringOptions.PriorStrengthMax"/> — maximal shrinkage toward the baseline — so the
     /// scorer is always total.
     /// </summary>
-    private static double FitPriorStrength(IReadOnlyList<ChampionAggregate> ordered, TieringOptions options)
+    private static double FitPriorStrength(
+        IReadOnlyList<ChampionAggregate> ordered,
+        TieringOptions options,
+        int priorFitMinGames)
     {
         var rates = new List<double>();
         foreach (var c in ordered)
-            if (c.Games >= options.PriorFitMinGames && c.Games > 0)
+            if (c.Games >= priorFitMinGames && c.Games > 0)
                 rates.Add((double)c.Wins / c.Games);
 
         if (rates.Count < 2)
@@ -283,5 +250,25 @@ internal static class ChampionTierScorer
             return options.PriorStrengthMax;
 
         return Math.Clamp(k, options.PriorStrengthMin, options.PriorStrengthMax);
+    }
+
+    /// <summary>
+    /// Scales a sample gate with the role population while preserving configured safety bounds. The live
+    /// 16.14 calibration keeps broad global scopes at their former 500/200 gates, while exact-rank and
+    /// single-region scopes can resolve signal at the 50/20 lower bounds instead of collapsing to all B.
+    /// Total for malformed configuration: negative/non-finite shares become zero and inverted bounds clamp.
+    /// </summary>
+    internal static int ResolveAdaptiveThreshold(
+        int totalRoleGames,
+        double roleVolumeShare,
+        int configuredFloor,
+        int configuredCeiling)
+    {
+        var floor = Math.Max(1, configuredFloor);
+        var ceiling = Math.Max(floor, configuredCeiling);
+        var share = double.IsFinite(roleVolumeShare) && roleVolumeShare > 0 ? roleVolumeShare : 0;
+        var scaled = Math.Ceiling(Math.Max(0, totalRoleGames) * share);
+        var boundedScaled = scaled >= int.MaxValue ? int.MaxValue : (int)scaled;
+        return Math.Clamp(boundedScaled, floor, ceiling);
     }
 }

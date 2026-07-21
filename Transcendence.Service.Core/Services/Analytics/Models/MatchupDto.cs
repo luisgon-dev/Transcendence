@@ -105,4 +105,7 @@ public record ChampionMatchupsResponse
     /// Sample coverage metadata for early-patch / low-sample messaging.
     /// </summary>
     public AnalyticsSampleMetadata? Sample { get; init; }
+
+    /// <summary>The queue family represented by this response.</summary>
+    public string QueueFamily { get; init; } = "RANKED_SOLO_DUO";
 }

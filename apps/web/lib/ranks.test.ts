@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   normalizeRankTierParam,
   rankEmblemUrl,
+  rankToLadderPoints,
   rankTierDisplayLabel,
   resolveDefaultedRankTier
 } from "@/lib/ranks";
@@ -55,5 +56,17 @@ describe("rankEmblemUrl", () => {
   it("returns null for non-ranked scope tokens", () => {
     expect(rankEmblemUrl("EMERALD_PLUS")).toBeNull();
     expect(rankEmblemUrl("UNRANKED")).toBeNull();
+  });
+});
+
+describe("rankToLadderPoints", () => {
+  it("stays monotonic across division and tier promotions", () => {
+    expect(rankToLadderPoints("GOLD", "I", 90)).toBeLessThan(rankToLadderPoints("PLATINUM", "IV", 0)!);
+    expect(rankToLadderPoints("PLATINUM", "IV", 80)).toBeLessThan(rankToLadderPoints("PLATINUM", "III", 0)!);
+  });
+
+  it("uses apex LP within the tier band and rejects unknown tiers", () => {
+    expect(rankToLadderPoints("MASTER", null, 250)).toBeGreaterThan(rankToLadderPoints("MASTER", null, 100)!);
+    expect(rankToLadderPoints("UNRANKED", null, 0)).toBeNull();
   });
 });

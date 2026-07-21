@@ -17,6 +17,8 @@ public class ChampionBanScopeStat
 
     public string Patch { get; set; } = "";
 
+    public string QueueFamily { get; set; } = "RANKED_SOLO_DUO";
+
     /// <summary>Concrete platform (e.g. "NA1") or the synthetic global <c>"ALL"</c> row.</summary>
     public string PlatformRegion { get; set; } = "";
 

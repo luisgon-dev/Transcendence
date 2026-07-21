@@ -16,10 +16,20 @@ with a deterministic, **outbound-only** digest poll:
    (the packages are public).
 2. Compare it to the digest the running container was pulled at.
 3. If they differ, `docker compose pull` + `up -d --no-deps <svc>` (postgres/redis are
-   never touched), then post a Discord notification via `ALERTS_WEBHOOK_URL`.
+   never touched), then wait for that image's container healthcheck to pass before posting
+   the success notification via `ALERTS_WEBHOOK_URL`. A failed or missing healthcheck makes
+   the systemd run fail and sends a deploy-failure notification.
 
 No inbound exposure, no CI secret, no self-hosted runner. A `flock` guard prevents
-overlapping runs. Runs every ~60s via the systemd timer (≈ wud's old cadence).
+overlapping runs. Runs every ~60s via the systemd timer (≈ wud's old cadence). Remote and
+local digest-resolution failures are counted per service under `/var/lib/transcendence-deploy`;
+the third consecutive failure sends one Discord alert, and a successful resolution resets the
+counter. The bounded health wait defaults to 420 seconds so the worker's four-minute startup
+grace can complete.
+
+Optional overrides are `POLL_DEPLOY_RESOLUTION_ALERT_THRESHOLD`,
+`POLL_DEPLOY_HEALTH_TIMEOUT_SECONDS`, `POLL_DEPLOY_HEALTH_POLL_SECONDS`, and
+`POLL_DEPLOY_STATE_DIR`.
 
 ### Install (on prod, as root)
 
@@ -38,6 +48,7 @@ systemctl enable --now transcendence-deploy.timer
 systemctl list-timers transcendence-deploy.timer   # next/last run
 journalctl -u transcendence-deploy.service -n 50   # deploy history
 /root/deploy/poll-deploy.sh                         # force a poll now
+docker inspect transcendence-web --format '{{.State.Health.Status}}' # current gate state
 systemctl disable --now transcendence-deploy.timer  # pause auto-deploy (e.g. during an incident)
 ```
 

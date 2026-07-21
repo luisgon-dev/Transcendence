@@ -10,8 +10,66 @@ namespace Transcendence.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/auth")]
-public class AuthController(IUserAuthService userAuthService) : ControllerBase
+public class AuthController(
+    IUserAuthService userAuthService,
+    IPasswordResetService passwordResetService,
+    IRiotRsoService riotRsoService) : ControllerBase
 {
+    [HttpPost("riot/authorize")]
+    [EnableRateLimiting("auth-login")]
+    [ProducesResponseType(typeof(RiotAuthorizationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public IActionResult RiotAuthorize([FromBody] RiotAuthorizationRequest request)
+    {
+        try
+        {
+            return Ok(riotRsoService.CreateAuthorization(request.State));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (RiotRsoUnavailableException)
+        {
+            return Problem(
+                title: "Riot sign-in unavailable",
+                detail: "Riot account linking is not configured right now.",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+    }
+
+    [HttpPost("riot/complete")]
+    [EnableRateLimiting("auth-login")]
+    [ProducesResponseType(typeof(RiotRsoAuthResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> CompleteRiotLogin(
+        [FromBody] RiotRsoCompleteRequest request,
+        CancellationToken ct)
+    {
+        try
+        {
+            return Ok(await riotRsoService.CompleteLoginAsync(request.Code, request.Region, ct));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (RiotRsoUnavailableException)
+        {
+            return Problem(
+                title: "Riot sign-in unavailable",
+                detail: "Riot account linking is not configured right now.",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+        catch (RiotRsoExchangeException ex)
+        {
+            return Unauthorized(ex.Message);
+        }
+    }
+
     [HttpPost("register")]
     [EnableRateLimiting("auth-register")]
     [ProducesResponseType(typeof(AuthTokenResponse), StatusCodes.Status200OK)]
@@ -66,11 +124,30 @@ public class AuthController(IUserAuthService userAuthService) : ControllerBase
     }
 
     [HttpPost("password-reset")]
+    [EnableRateLimiting("auth-register")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> InitiatePasswordReset([FromBody] PasswordResetRequest request, CancellationToken ct)
     {
-        await userAuthService.InitiatePasswordResetAsync(request, ct);
+        if (!await passwordResetService.InitiateAsync(request, ct))
+            return Problem(
+                title: "Password recovery unavailable",
+                detail: "Password recovery is not configured right now. Please try again later.",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
         return Ok(new { message = "If the account exists, a reset flow has been initiated." });
+    }
+
+    [HttpPost("password-reset/complete")]
+    [EnableRateLimiting("auth-register")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> CompletePasswordReset(
+        [FromBody] PasswordResetCompleteRequest request,
+        CancellationToken ct)
+    {
+        if (!await passwordResetService.CompleteAsync(request, ct))
+            return BadRequest("The reset link is invalid or expired, or the password does not meet requirements.");
+        return NoContent();
     }
 
     [HttpGet("me")]

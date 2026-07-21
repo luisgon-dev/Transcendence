@@ -39,7 +39,7 @@ export default function RegisterPage() {
             </div>
             <div className="surface-subtle rounded-card p-4">
               <p className="type-kicker text-fg/56">Private scope</p>
-              <p className="type-ui mt-2 text-fg/84">The account is for site preferences and favorites. It does not require Riot sign-in.</p>
+              <p className="type-ui mt-2 text-fg/84">Email remains available; Riot Sign On is optional and never shares your Riot password.</p>
             </div>
             <div className="surface-subtle rounded-card p-4">
               <p className="type-kicker text-fg/56">Built for reuse</p>

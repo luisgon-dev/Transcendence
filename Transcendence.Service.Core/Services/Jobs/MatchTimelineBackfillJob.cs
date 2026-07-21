@@ -79,7 +79,7 @@ public class MatchTimelineBackfillJob(
                 s.Status == MatchTimelineFetchStatus.PermanentlyFailed))
             .OrderByDescending(m => m.MatchDate)
             .ThenByDescending(m => m.MatchId)
-            .Select(m => new { m.Id, MatchId = m.MatchId! })
+            .Select(m => new { m.Id, m.MatchId })
             .Take(take)
             .ToListAsync(ct);
 

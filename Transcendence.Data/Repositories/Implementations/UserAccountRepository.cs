@@ -59,6 +59,38 @@ public class UserAccountRepository(TranscendenceContext db) : IUserAccountReposi
         await db.Set<UserRefreshToken>().AddAsync(refreshToken, ct);
     }
 
+    public async Task AddPasswordResetTokenAsync(UserPasswordResetToken resetToken, CancellationToken ct = default)
+    {
+        await db.Set<UserPasswordResetToken>().AddAsync(resetToken, ct);
+    }
+
+    public Task<UserPasswordResetToken?> GetActivePasswordResetTokenAsync(
+        string tokenHash,
+        CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow;
+        return db.Set<UserPasswordResetToken>()
+            .Include(x => x.UserAccount)
+            .FirstOrDefaultAsync(x =>
+                x.TokenHash == tokenHash &&
+                x.UsedAtUtc == null &&
+                x.ExpiresAtUtc > now,
+                ct);
+    }
+
+    public async Task<int> RevokeActivePasswordResetTokensForUserAsync(
+        Guid userAccountId,
+        CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow;
+        var tokens = await db.Set<UserPasswordResetToken>()
+            .Where(x => x.UserAccountId == userAccountId && x.UsedAtUtc == null)
+            .ToListAsync(ct);
+        foreach (var token in tokens)
+            token.UsedAtUtc = now;
+        return tokens.Count;
+    }
+
     public Task<UserRefreshToken?> GetActiveRefreshTokenAsync(string tokenHash, CancellationToken ct = default)
     {
         var now = DateTime.UtcNow;

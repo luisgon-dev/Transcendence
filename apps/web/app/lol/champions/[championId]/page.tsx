@@ -1,11 +1,14 @@
 import Image from "next/image";
 import Link from "next/link";
+import type { Metadata } from "next";
 import { cache, Suspense } from "react";
 import type { components } from "@transcendence/api-client";
 
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { BuildBreakdown } from "@/components/BuildBreakdown";
+import { ChampionTrendChart, type ChampionTrend } from "@/components/ChampionTrendChart";
+import { ChampionSynergyPanel } from "@/components/ChampionSynergyPanel";
 import { FilterBar } from "@/components/FilterBar";
 import { MatchupsTable, type MatchupRow } from "@/components/MatchupsTable";
 import { ItemBuildDisplay } from "@/components/ItemBuildDisplay";
@@ -18,6 +21,7 @@ import { Card } from "@/components/ui/Card";
 import { DataBar } from "@/components/ui/DataBar";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { fetchBackendJson } from "@/lib/backendCall";
+import { analyticsQueueOption, normalizeAnalyticsQueue } from "@/lib/analyticsQueues";
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { pickMostSevereAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
@@ -34,6 +38,7 @@ import {
   fetchSummonerSpellMap
 } from "@/lib/staticData";
 import { formatEbStory } from "@/lib/confidence";
+import { socialImageUrl } from "@/lib/seo";
 import { decodeGrade, formatStrengthDelta } from "@/lib/tierlist";
 
 type ChampionWinRateDto = components["schemas"]["ChampionWinRateDto"];
@@ -42,12 +47,70 @@ type ChampionWinRateDto = components["schemas"]["ChampionWinRateDto"];
 type ChampionWinRateSummary = components["schemas"]["ChampionWinRateSummary"] & {
   computedAtUtc?: string | null;
 };
-type ChampionProfileAnalyticsResponse = components["schemas"]["ChampionProfileAnalyticsResponse"];
+type ChampionProfileAnalyticsResponse = components["schemas"]["ChampionProfileAnalyticsResponse"] & {
+  trend?: ChampionTrend | null;
+};
 type MatchupEntryDto = components["schemas"]["MatchupEntryDto"];
 
-type ChampionSearchParams = { role?: string; rankTier?: string; region?: string; patch?: string; sort?: string };
+type ChampionSearchParams = {
+  role?: string;
+  rankTier?: string;
+  region?: string;
+  patch?: string;
+  queue?: string;
+  sort?: string;
+};
 
 const ROLES = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"] as const;
+
+export async function generateMetadata({
+  params,
+  searchParams
+}: {
+  params: Promise<{ championId: string }>;
+  searchParams?: Promise<ChampionSearchParams>;
+}): Promise<Metadata> {
+  const [{ championId }, resolvedSearchParams] = await Promise.all([
+    params,
+    searchParams ?? Promise.resolve({} as ChampionSearchParams)
+  ]);
+  const championNumber = Number(championId);
+  const queue = analyticsQueueOption(resolvedSearchParams.queue);
+  const selectedPatch = normalizeAnalyticsPatch(resolvedSearchParams.patch);
+  let championName = Number.isFinite(championNumber) ? `Champion ${championNumber}` : "Champion";
+  let patch = selectedPatch;
+
+  try {
+    const [{ champions }, patches] = await Promise.all([
+      fetchChampionMap(),
+      selectedPatch ? Promise.resolve([]) : fetchLolAnalyticsPatches(queue.value)
+    ]);
+    championName = champions[championId]?.name ?? championName;
+    patch ??= patches.find((candidate) => candidate.isActive)?.patch ?? patches[0]?.patch ?? null;
+  } catch {
+    // Metadata degrades to the route identity if static data is temporarily unavailable.
+  }
+
+  const patchLabel = patch ? ` for patch ${patch}` : "";
+  const title = `${championName} ${queue.label} Build, Runes${queue.hasRoles ? " and Counters" : ""}${patchLabel}`;
+  const description = `Current ${queue.label} ${championName} builds, runes, win rates${queue.hasRoles ? ", matchups, and role stats" : ""}${patchLabel}.`;
+  const canonical = `/lol/champions/${encodeURIComponent(championId)}`;
+  const image = socialImageUrl(title, "Champion analytics", "Builds, runes, counters, and trustworthy samples");
+
+  return {
+    title,
+    description,
+    alternates: { canonical },
+    openGraph: {
+      type: "website",
+      title,
+      description,
+      url: canonical,
+      images: [{ url: image, width: 1200, height: 630, alt: `${championName} analytics` }]
+    },
+    twitter: { card: "summary_large_image", title, description, images: [image] }
+  };
+}
 
 function matchupVerdict(winRate: number | null | undefined): string {
   const pct = (winRate ?? 0) * 100;
@@ -97,7 +160,9 @@ const loadChampionData = cache(async (championId: number, sp: ChampionSearchPara
   const { activeRegion, activeRegionLabel, options: regionOptions } =
     await resolveAnalyticsRegion(sp.region);
 
-  const explicitRole = normalizeRole(sp.role);
+  const activeQueue = normalizeAnalyticsQueue(sp.queue);
+  const queueOption = analyticsQueueOption(activeQueue);
+  const explicitRole = queueOption.hasRoles ? normalizeRole(sp.role) : null;
   // Champion pages default to Emerald+ unless a rank is in the URL; an explicit
   // ?rankTier=all resolves to null (all ranks). See resolveDefaultedRankTier.
   const normalizedRankTier = resolveDefaultedRankTier(sp.rankTier);
@@ -108,13 +173,14 @@ const loadChampionData = cache(async (championId: number, sp: ChampionSearchPara
   if (activeRegion !== "ALL") winrateQuery.set("region", activeRegion);
   if (selectedPatch) winrateQuery.set("patch", selectedPatch);
   if (explicitRole) winrateQuery.set("role", explicitRole);
+  if (activeQueue !== "solo") winrateQuery.set("queue", activeQueue);
   const profileQuery = winrateQuery.toString() ? `?${winrateQuery.toString()}` : "";
 
   const [itemStatic, runeStatic, spellStatic, patchOptions, profileRes] = await Promise.all([
     fetchItemMap(),
     fetchRunesReforged(),
     fetchSummonerSpellMap(),
-    fetchLolAnalyticsPatches(),
+    fetchLolAnalyticsPatches(activeQueue),
     fetchBackendJson<ChampionProfileAnalyticsResponse>(
       `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/profile${profileQuery}`,
       { next: { revalidate: 60 * 60 } }
@@ -125,6 +191,8 @@ const loadChampionData = cache(async (championId: number, sp: ChampionSearchPara
     activeRegion,
     activeRegionLabel,
     regionOptions,
+    activeQueue,
+    queueOption,
     explicitRole,
     normalizedRankTier,
     selectedPatch,
@@ -160,20 +228,28 @@ export default async function ChampionDetailPage({
   const champ = champions[String(championId)];
   const champName = champ?.name ?? `Champion ${championId}`;
   const champSlug = champ?.id ?? "Unknown";
-  const splashUrl = `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${champSlug}_0.jpg`;
-
   return (
     <div className="grid gap-8">
       {/* ── Champion Header (identity is instant; meta streams) ── */}
       <header className="page-hero relative p-5 md:p-8">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-30"
-          style={{
-            backgroundImage: `linear-gradient(to right, var(--t-bg) 20%, color-mix(in oklch, var(--t-bg), transparent 18%) 45%, transparent 100%), url(${splashUrl})`,
-            backgroundSize: "cover",
-            backgroundPosition: "top right"
-          }}
-        />
+        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden opacity-30">
+          <Image
+            src={`https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${champSlug}_0.jpg`}
+            alt=""
+            fill
+            sizes="(max-width: 768px) 100vw, 1400px"
+            quality={55}
+            loading="eager"
+            className="object-cover object-right-top"
+          />
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundImage:
+                "linear-gradient(to right, var(--t-bg) 20%, color-mix(in oklch, var(--t-bg), transparent 18%) 45%, transparent 100%)"
+            }}
+          />
+        </div>
 
         <div className="relative flex flex-col gap-5">
           <div className="flex items-start gap-3 sm:items-center sm:gap-4">
@@ -182,6 +258,7 @@ export default async function ChampionDetailPage({
               alt={champName}
               width={64}
               height={64}
+              priority
               className="h-12 w-12 rounded-xl border border-border/60 sm:h-16 sm:w-16"
             />
             <div className="min-w-0">
@@ -224,6 +301,8 @@ async function ChampionHeroMeta({
     activeRegion,
     activeRegionLabel,
     regionOptions,
+    activeQueue,
+    queueOption,
     explicitRole,
     normalizedRankTier,
     selectedPatch,
@@ -240,8 +319,9 @@ async function ChampionHeroMeta({
   const winrates = profile.winRates ?? null;
   const builds = profile.builds ?? null;
   const matchups = profile.matchups ?? null;
-  const effectiveRole =
-    normalizeRole(profile.effectiveRole) ?? explicitRole ?? pickMostPlayedRole(winrates) ?? "MIDDLE";
+  const effectiveRole = queueOption.hasRoles
+    ? normalizeRole(profile.effectiveRole) ?? explicitRole ?? pickMostPlayedRole(winrates) ?? "MIDDLE"
+    : "ALL";
   const heroEntry = pickBestEntry(winrates, effectiveRole);
   // The hero grade is the SAME grade the tier list shows (read off the profile payload), not a locally
   // re-derived one — so a champion reads identically on the list and on its own page.
@@ -257,7 +337,10 @@ async function ChampionHeroMeta({
   if (activeRegion !== "ALL") linkParams.set("region", activeRegion);
   if (selectedPatch) linkParams.set("patch", selectedPatch);
   const linkQuery = linkParams.toString();
-  const sharedFilterParams = selectedPatch ? { patch: selectedPatch } : {};
+  const sharedFilterParams = {
+    ...(selectedPatch ? { patch: selectedPatch } : {}),
+    ...(activeQueue !== "solo" ? { queue: activeQueue } : {})
+  };
 
   return (
     <>
@@ -284,7 +367,7 @@ async function ChampionHeroMeta({
           </span>
         )}
         <p className="text-sm text-muted">
-          {roleDisplayLabel(effectiveRole)} &middot; {rankTierDisplayLabel(normalizedRankTier ?? "all")} &middot; {activeRegionLabel}
+          {queueOption.hasRoles ? `${roleDisplayLabel(effectiveRole)} · ` : ""}{queueOption.label} &middot; {rankTierDisplayLabel(normalizedRankTier ?? "all")} &middot; {activeRegionLabel}
         </p>
         {(winrates as ChampionWinRateSummary | null)?.computedAtUtc ? (
           <UpdatedAgo
@@ -294,12 +377,22 @@ async function ChampionHeroMeta({
         ) : null}
       </div>
       <div className="-mt-2 flex flex-wrap items-center gap-2 text-xs">
-        <Link
-          href="#matchups"
-          className="rounded-lg border border-border/60 bg-surface-2/50 px-2.5 py-1 font-medium text-fg/80 transition-colors hover:bg-surface-2/80"
-        >
-          Matchups
-        </Link>
+        {queueOption.hasRoles ? (
+          <>
+            <Link
+              href="#synergies"
+              className="rounded-lg border border-border/60 bg-surface-2/50 px-2.5 py-1 font-medium text-fg/80 transition-colors hover:bg-surface-2/80"
+            >
+              Partners
+            </Link>
+            <Link
+              href="#matchups"
+              className="rounded-lg border border-border/60 bg-surface-2/50 px-2.5 py-1 font-medium text-fg/80 transition-colors hover:bg-surface-2/80"
+            >
+              Matchups
+            </Link>
+          </>
+        ) : null}
         <Link
           href={`/lol/pro-builds/${championId}${linkQuery ? `?${linkQuery}` : ""}`}
           className="rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 font-medium text-primary transition-colors hover:bg-primary/20"
@@ -325,6 +418,8 @@ async function ChampionHeroMeta({
         activeRegion={activeRegion}
         patchOptions={patchOptions}
         activePatch={selectedPatch}
+        activeQueue={activeQueue}
+        showRoles={queueOption.hasRoles}
         extraParams={sharedFilterParams}
         explicitAllRank
         baseHref={`/lol/champions/${championId}`}
@@ -353,6 +448,8 @@ async function ChampionSections({
   const data = await loadChampionData(championId, searchParams);
   const {
     activeRegion,
+    activeQueue,
+    queueOption,
     explicitRole,
     normalizedRankTier,
     selectedPatch,
@@ -401,8 +498,11 @@ async function ChampionSections({
   const winrates = profile.winRates ?? null;
   const builds = profile.builds ?? null;
   const matchups = profile.matchups ?? null;
-  const effectiveRole =
-    normalizeRole(profile.effectiveRole) ?? explicitRole ?? pickMostPlayedRole(winrates) ?? "MIDDLE";
+  const trend = profile.trend ?? null;
+  const synergies = profile.synergies ?? null;
+  const effectiveRole = queueOption.hasRoles
+    ? normalizeRole(profile.effectiveRole) ?? explicitRole ?? pickMostPlayedRole(winrates) ?? "MIDDLE"
+    : "ALL";
   // Show only the active role's win rates (broken down by rank) so the table stays compact and
   // doesn't dominate the page — other roles are reachable via the role filter. When a role is in the
   // URL the backend already returns just that role, so this is a no-op there; on the default view it
@@ -440,10 +540,23 @@ async function ChampionSections({
   if (normalizedRankTier) linkParams.set("rankTier", normalizedRankTier);
   if (activeRegion !== "ALL") linkParams.set("region", activeRegion);
   if (selectedPatch) linkParams.set("patch", selectedPatch);
+  if (activeQueue !== "solo") linkParams.set("queue", activeQueue);
   const linkQuery = linkParams.toString();
 
   return (
     <>
+      <ChampionTrendChart championName={champName} trend={trend} />
+
+      {queueOption.hasRoles ? (
+        <ChampionSynergyPanel
+          championName={champName}
+          synergies={synergies}
+          champions={champions}
+          version={version}
+          linkQuery={linkQuery}
+        />
+      ) : null}
+
       {/* ── Win rate by rank — compact strip. Keeps the per-rank win-rate signal (with the
              DataBar's sample-size whisker) without a full table pushing the builds below the
              fold. Overall win/pick/matches live in the hero StatsBar; per-rank pick rate and a
@@ -453,7 +566,9 @@ async function ChampionSections({
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2.5">
           <span className="type-overline shrink-0 text-muted">
             Win rate by rank
-            <span className="ml-1.5 text-fg/45">{roleDisplayLabel(effectiveRole)}</span>
+            <span className="ml-1.5 text-fg/45">
+              {queueOption.hasRoles ? roleDisplayLabel(effectiveRole) : queueOption.label}
+            </span>
           </span>
           {!winrates ? (
             <span className="type-note text-muted">Win-rate data is unavailable right now.</span>
@@ -482,7 +597,7 @@ async function ChampionSections({
       </section>
 
       {/* ── Builds + Matchups (balanced two-up; matchups owned by the single sortable table) ── */}
-      <div className="grid min-w-0 gap-6 lg:grid-cols-2 lg:items-start">
+      <div className={queueOption.hasRoles ? "grid min-w-0 gap-6 lg:grid-cols-2 lg:items-start" : "grid min-w-0 gap-6"}>
         {/* ── Builds ── */}
         <Card className="min-w-0 p-5" id="builds">
           <h2 className="type-section">
@@ -494,7 +609,7 @@ async function ChampionSections({
               <p className="mt-1 text-xs text-muted">Try selecting a different region or check back after patch data has been processed.</p>
             </div>
           ) : buildRows.length === 0 ? (
-            <p className="mt-2 text-sm text-fg/75">There are not enough games for this role yet.</p>
+            <p className="mt-2 text-sm text-fg/75">There are not enough games for this queue yet.</p>
           ) : (
             <div className="mt-4 grid gap-4">
               {/* Sectioned, timing-aware build path (spells, skills, starters, boots, core, situational) */}
@@ -523,6 +638,11 @@ async function ChampionSections({
                 />
               ) : null}
 
+              <p className="type-note text-muted">
+                Recommended balances sample size and results (games × win rate). An alternative may
+                show a higher rate from fewer games.
+              </p>
+
               {buildRows.map((b, idx) => (
                 <details
                   key={idx}
@@ -546,7 +666,7 @@ async function ChampionSections({
                           strokeLinejoin="round"
                         />
                       </svg>
-                      {idx === 0 ? "Recommended Build" : `Alternative ${idx}`}
+                      {idx === 0 ? "Recommended Build · Most proven" : `Alternative ${idx}`}
                     </span>
                     <span className="text-xs text-muted">
                       <WinRateText value={b.winRate} decimals={1} games={b.games} />
@@ -587,7 +707,7 @@ async function ChampionSections({
         </Card>
 
         {/* ── Matchups (one sortable table owns matchups; no redundant lists) ── */}
-        <Card className="min-w-0 p-5" id="matchups">
+        {queueOption.hasRoles ? <Card className="min-w-0 p-5" id="matchups">
           {!matchups ? (
             <>
               <h2 className="type-section">Matchups</h2>
@@ -605,7 +725,7 @@ async function ChampionSections({
               linkQuery={linkQuery}
             />
           )}
-        </Card>
+        </Card> : null}
       </div>
     </>
   );

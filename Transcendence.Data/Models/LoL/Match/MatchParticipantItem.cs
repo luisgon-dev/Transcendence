@@ -1,5 +1,3 @@
-using Transcendence.Data.Models.LoL.Static;
-
 namespace Transcendence.Data.Models.LoL.Match;
 
 public class MatchParticipantItem
@@ -10,5 +8,4 @@ public class MatchParticipantItem
     public string PatchVersion { get; set; } = string.Empty;
 
     public MatchParticipant MatchParticipant { get; set; } = null!;
-    public ItemVersion ItemVersion { get; set; } = null!;
 }

@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Transcendence.Service.Core.Queries;
+using Transcendence.Service.Core.Services.RiotApi;
 
 namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 
@@ -37,21 +39,22 @@ internal static class AnalyticsScopeMath
     internal static IQueryable<Data.Models.LoL.Match.MatchParticipant> ApplyRankTierScopeToParticipants(
         IQueryable<Data.Models.LoL.Match.MatchParticipant> query,
         RankTierScope scope,
-        IQueryable<Data.Models.LoL.Account.Rank> ranks)
+        IQueryable<Data.Models.LoL.Account.Rank> ranks,
+        string queueFamily = QueueCatalog.QueueFamilyRankedSoloDuo)
     {
         if (!scope.HasFilter)
             return query;
 
+        ranks = ranks.InAnalyticsRankQueue(queueFamily);
+
         if (scope.IsEmeraldPlus)
         {
             return query.Where(mp => ranks.Any(r =>
-                r.QueueType == "RANKED_SOLO_5x5" &&
                 r.SummonerId == mp.SummonerId &&
                 RankTierCatalog.EmeraldPlusTiers.Contains(r.Tier)));
         }
 
         return query.Where(mp => ranks.Any(r =>
-            r.QueueType == "RANKED_SOLO_5x5" &&
             r.SummonerId == mp.SummonerId &&
             r.Tier == scope.ExactTier));
     }

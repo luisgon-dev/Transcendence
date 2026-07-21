@@ -15,6 +15,7 @@ import {
   type GlobalSearchOpenOrigin
 } from "@/lib/globalSearch";
 import { buildLolPublicSummonerSearchPath } from "@/lib/lolPublicApi";
+import { LOL_REGION_OPTIONS } from "@/lib/lolRegions";
 import { DEFAULT_TIERLIST_RANK_TIER, rankTierDisplayLabel } from "@/lib/ranks";
 import { encodeRiotIdPath, parseRiotIdInput } from "@/lib/riotid";
 import { championIconUrl } from "@/lib/staticData";
@@ -41,20 +42,6 @@ type SummonerSearchItem = {
 type SummonerSearchResponse = {
   items: SummonerSearchItem[];
 };
-
-const REGIONS = [
-  { value: "na", label: "NA" },
-  { value: "euw", label: "EUW" },
-  { value: "eune", label: "EUNE" },
-  { value: "kr", label: "KR" },
-  { value: "br", label: "BR" },
-  { value: "lan", label: "LAN" },
-  { value: "las", label: "LAS" },
-  { value: "oce", label: "OCE" },
-  { value: "jp", label: "JP" },
-  { value: "tr", label: "TR" },
-  { value: "ru", label: "RU" }
-] as const;
 
 const TIER_LINKS = [
   {
@@ -84,7 +71,11 @@ const TIER_LINKS = [
   { label: "Tier List · All Ranks", href: "/lol/tierlist?rankTier=all" },
   { label: "Tier List · Challenger", href: "/lol/tierlist?rankTier=CHALLENGER" },
   { label: "Champions", href: "/lol/champions" },
-  { label: "Pro Builds", href: "/lol/pro-builds" }
+  { label: "Item Analytics · Pick rates and champion fit", href: "/lol/items" },
+  { label: "Rune Analytics · Pick rates and champion fit", href: "/lol/runes" },
+  { label: "Leaderboards · Regional and champion", href: "/lol/leaderboards" },
+  { label: "Pro Builds", href: "/lol/pro-builds" },
+  { label: "Multi-Search · Champ Select Scout", href: "/lol/multi-search" }
 ] as const;
 
 const RESULT_ITEM_CLASS =
@@ -129,21 +120,6 @@ function getPanelTopOffset() {
 function getPanelWidth() {
   if (typeof window === "undefined") return 880;
   return Math.max(320, Math.min(880, window.innerWidth - 24));
-}
-
-function getOverlayBackground(origin: GlobalSearchOpenOrigin | null) {
-  if (typeof window === "undefined") return undefined;
-
-  const spotlightX = origin?.centerX ?? window.innerWidth / 2;
-  const spotlightY = origin?.centerY ?? Math.max(96, window.innerHeight * 0.18);
-
-  return {
-    background: `
-      radial-gradient(480px 280px at ${spotlightX}px ${spotlightY}px, color-mix(in oklch, var(--t-primary), transparent 86%), transparent 60%),
-      radial-gradient(760px 340px at 50% 0%, color-mix(in oklch, var(--t-fg), transparent 96%), transparent 68%),
-      oklch(0.12 0.02 264 / 0.72)
-    `
-  };
 }
 
 function getPanelEnterState(
@@ -469,7 +445,7 @@ export function GlobalCommandPalette() {
     navigate(`/lol/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`);
   }
 
-  const regionLabel = REGIONS.find((item) => item.value === region)?.label ?? region.toUpperCase();
+  const regionLabel = LOL_REGION_OPTIONS.find((item) => item.value === region)?.label ?? region.toUpperCase();
   const directOpenPath = parsedRiotId
     ? `/lol/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`
     : null;
@@ -479,7 +455,6 @@ export function GlobalCommandPalette() {
     summonerResults.length === 0 &&
     !parsedRiotId;
   const panelEnterState = getPanelEnterState(openOrigin, prefersReducedMotion);
-  const overlayStyle = getOverlayBackground(openOrigin);
   const sectionVariants = prefersReducedMotion
     ? {
         hidden: { opacity: 0 },
@@ -502,8 +477,7 @@ export function GlobalCommandPalette() {
             <div className="command-palette-overlay fixed inset-0 z-50">
               <Dialog.Overlay asChild forceMount>
                 <motion.div
-                  className="absolute inset-0 backdrop-blur-md"
-                  style={overlayStyle}
+                  className="absolute inset-0 bg-bg/80 backdrop-blur-md"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
@@ -567,9 +541,7 @@ export function GlobalCommandPalette() {
               <VisuallyHidden.Root asChild>
                 <Dialog.Title>Global search</Dialog.Title>
               </VisuallyHidden.Root>
-              <Command shouldFilter={false} className="relative w-full">
-                <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-primary/75 to-transparent" />
-
+              <Command label="Global search input" shouldFilter={false} className="relative w-full">
                 <motion.div
                   variants={resultsContainerVariants}
                   initial="hidden"
@@ -577,41 +549,14 @@ export function GlobalCommandPalette() {
                   exit="exit"
                   className="border-b border-border/50 px-4 pb-4 pt-4 sm:px-5 sm:pb-5 sm:pt-5"
                 >
-                  <motion.div
-                    variants={sectionVariants}
-                    className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start"
-                  >
-                    <div className="grid max-w-[34rem] gap-1">
-                      <p className="type-kicker text-primary">Global Search</p>
-                      <p className="type-ui measure text-fg/78">
-                        Jump to champions, meta routes, and player pages without leaving the current screen.
-                      </p>
-                    </div>
-                    <div className="hidden items-center gap-2 self-start lg:flex">
-                      <span className="type-kicker surface-chip rounded-full px-2.5 py-1 text-fg/68">
-                        Enter to open
-                      </span>
-                      <span className="type-kicker surface-chip rounded-full px-2.5 py-1 text-fg/68">
-                        Esc to close
-                      </span>
-                    </div>
-                  </motion.div>
-
-                  <motion.div variants={sectionVariants} className="mt-4 flex flex-wrap gap-2">
-                    <span className="type-kicker surface-chip-accent rounded-full px-2.5 py-1 text-primary/92">
-                      {query.trim() ? "Filtering live" : "Ready for instant route"}
-                    </span>
-                    <span className="type-kicker surface-chip rounded-full px-2.5 py-1 text-fg/68">
-                      {championsLoaded ? `${championResults.length} champion routes` : "Loading champion index"}
-                    </span>
-                    <span className="type-kicker surface-chip rounded-full px-2.5 py-1 text-fg/68">
-                      {summonerLoading ? `Checking ${regionLabel}` : `Region ${regionLabel}`}
-                    </span>
+                  <motion.div variants={sectionVariants} className="flex items-center justify-between gap-3">
+                    <p className="type-kicker text-primary">Search</p>
+                    <span className="type-caption hidden text-muted sm:inline">Esc to close</span>
                   </motion.div>
 
                   <motion.div
                     variants={sectionVariants}
-                    className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end"
+                    className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end"
                   >
                     <div className="relative flex-1">
                       <SearchIcon className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary/75" />
@@ -631,7 +576,7 @@ export function GlobalCommandPalette() {
                       <Select
                         value={region}
                         onValueChange={setRegion}
-                        options={[...REGIONS]}
+                        options={[...LOL_REGION_OPTIONS]}
                         ariaLabel="Summoner region"
                         className="h-12 w-full rounded-control border-border/65 bg-surface-2/55 text-fg shadow-inset"
                       />
@@ -824,7 +769,7 @@ export function GlobalCommandPalette() {
 
                       <motion.div variants={sectionVariants}>
                         <SearchSection
-                          title="Meta Pages"
+                          title="Pages"
                           countLabel={`${tierResults.length}`}
                         >
                           {tierResults.length > 0 ? (
@@ -843,14 +788,14 @@ export function GlobalCommandPalette() {
                                   <div className="min-w-0 flex-1">
                                     <p className="type-ui truncate font-medium text-fg">{parts.title}</p>
                                     <p className="type-caption truncate text-fg/65">
-                                      {parts.detail ?? "Quick route into the meta surface"}
+                                      {parts.detail ?? "Open page"}
                                     </p>
                                   </div>
                                 </Command.Item>
                               );
                             })
                           ) : (
-                            <SearchHint>No meta routes match that search.</SearchHint>
+                            <SearchHint>No pages match that search.</SearchHint>
                           )}
                         </SearchSection>
                       </motion.div>

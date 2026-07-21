@@ -14,6 +14,9 @@ Transcendence is a backend + web monorepo:
 - Enqueues background work (Hangfire) for expensive refresh operations
 - Exposes OpenAPI/Swagger (spec is exported and committed under `openapi/`)
 - Does not hold Riot API keys and does not call Camille directly
+- Has no project reference to `Transcendence.Data`. Controllers own HTTP concerns only (authorization,
+  status/header mapping, route-link construction, and audit actor extraction) and delegate persistence,
+  projection, validation, and refresh-lock orchestration to `Transcendence.Service.Core` services.
 
 ### `Transcendence.Service`
 - Background host that runs Hangfire server and recurring jobs
@@ -44,12 +47,25 @@ Transcendence is a backend + web monorepo:
   - `/api/diagnostics/backend` is a server-side backend connectivity probe (GETs the analytics tier-list endpoint) that always returns HTTP `200` with `{ ok, backend, requestId, durationMs }`
 - Tailwind styling, SSR-first pages where possible
 - **Auth token refresh runs in `proxy.ts` (Next 16 middleware), not during render.** Auth uses a short-lived access token + a single-use, rotated refresh token (the backend revokes the presented refresh token on every `/api/auth/refresh`, no grace window). Refreshing inside a Server Component render can't persist the rotated cookie (cookie writes are illegal during render), which would burn the refresh token and silently log users out. So `proxy.ts` refreshes a stale access token on page navigations and writes the rotated cookies to **both** the forwarded request (so the SSR render reads the fresh token and doesn't refresh again) and the response (so the browser persists them). It is fail-safe: it only acts when a refresh token exists and the access token is stale, skips prefetch requests (so a speculative prefetch can't burn the single-use token), and on any failure (401/5xx/network/timeout/malformed) passes through **without** clearing cookies. The matcher excludes `/api/*` (route handlers refresh + clear in their own writable context via `getAccessTokenOrRefresh`/`getSessionMe`), `_next`, and static files. Pure helpers live in `lib/proxyAuth.ts`; cookie names + the staleness check in `lib/authCookieShared.ts`.
+- Riot Sign On uses two same-origin route handlers: `/api/session/riot/start` creates a 256-bit
+  correlation state in an HttpOnly, SameSite=Lax, ten-minute cookie; `/api/session/riot/callback`
+  validates it with a constant-time comparison before sending the one-time code to the backend.
+  The backend performs Client Secret Basic token exchange and Account-V1 identity verification,
+  then discards Riot tokens. Durable state is limited to the one-to-one verified PUUID/Riot ID link.
+  RSO is optional and fails closed while its approved production-client credentials are absent.
+- `getSessionMe` is React-`cache()` wrapped so server consumers share one `/api/auth/me` lookup per render. The header renders `AccountNav` behind a fixed-size `<Suspense>` fallback, keeping session resolution off the document-shell critical path.
 - Admin dashboard routes under `/admin/*` for ops controls/reports (JWT `admin` role required)
 - Frontend analysis routes:
   - `/lol/tierlist`
-  - `/lol/champions/*` is the unified champion surface: win rates, builds (with the full rune tree), inline matchups summary, a sortable "All Matchups" table (`?sort=winRate|games`, anchored at `#matchups`), and a quick link to pro builds. The page reads `/api/lol/analytics/champions/{championId}/profile` so the role selection, cached build aggregate, and cached matchup aggregate arrive through one backend request instead of a client-side analytics waterfall. The standalone `/lol/matchups` surface was removed; `/lol/matchups` and `/lol/matchups/:championId` now 308-redirect into `/lol/champions/*` (preserving query state) via `next.config.mjs` `redirects()`.
-  - `/lol/pro-builds/*` — the index hero is a pro/high-elo champion playrate ranking with a `scope` segmented control (Pro / High-Elo / All) plus a public "Tracked Pros" roster panel, retaining champion search and the recent-pro-matches feed.
-  - `/lol/summoners/[region]/[riotId]` is the unified LoL profile + match history surface
+  - `/lol/champions/*` is the unified champion surface: win rates, builds (with the full rune tree), confidence-ranked same-team partner synergy, inline matchups summary, a sortable "All Matchups" table (`?sort=winRate|games`, anchored at `#matchups`), and a quick link to pro builds. The page reads `/api/lol/analytics/champions/{championId}/profile` so the role selection, cached build, synergy, and matchup aggregates arrive through one backend request instead of a client-side analytics waterfall. The standalone `/lol/matchups` surface was removed; `/lol/matchups` and `/lol/matchups/:championId` now 308-redirect into `/lol/champions/*` (preserving query state) via `next.config.mjs` `redirects()`.
+  - `/lol/pro-builds/*` — the index hero is a pro/high-elo champion playrate ranking with a `scope` segmented control (Pro / High-Elo / All) plus a public "Tracked Pros" roster panel. The toolbar, playrate table, roster, and champion search render from the first fetch batch; the fan-out recent-match feed and its item map stream independently behind `<Suspense>` with a stable row skeleton.
+  - `/lol/items/*` and `/lol/runes/*` are the Build Atlas: searchable index and detail pages for
+    resource pick rate, win rate, sample size, and champion-role fit. The indexes, detail pages,
+    header, command palette, landing discovery, and sitemap all expose the new surfaces.
+  - `/lol/live` is the first-class live-game scout. It accepts a Riot ID, renders both teams with
+    rank/form/streak/champion-pool and loadout context, and re-checks active games every minute.
+    Profile sidebars reuse a compact version of the same card.
+  - `/lol/summoners/[region]/[riotId]` is the unified LoL profile + match history surface. Its RSC resolves the profile first, then fetches the requested match-history page and rank history through server-to-server calls while the route skeleton streams behind `<Suspense>`. React-cached champion, item, spell, and rune maps are passed into the client island in the same render; browser fetches are reserved for pagination, refresh completion, and best-effort recovery when a server dependency failed.
     - Legacy `/lol/summoners/[region]/[riotId]/matches*` routes redirect into this unified view using query state (`page`, `queue`, `expandMatchId`)
 - Public LoL patch badges now read backend analytics patch status instead of raw Data Dragon latest so web patch labels match the active analytics dataset
 - LoL analytics pages (tier list, champion, pro-builds) carry a historical patch selector (`AnalyticsPatchFilter`, backed by `lib/lolPatchFilters.ts` + `lib/lolAnalyticsPatches.ts`, surfaced via `FilterBar`) that reads `GET /api/lol/analytics/patches` and drives the `patch` query parameter
@@ -58,6 +74,7 @@ Transcendence is a backend + web monorepo:
   - Lane selectors site-wide use `LANE_ROLES` (`lib/roles.ts`) — the five lanes, no "All" tab. Pages that aggregate across lanes (tier list, pro-builds) do so via an absent `role` param (no lane highlighted), not a selectable tab.
   - Navigation/filter pending feedback uses Next 16 primitives: segment-level `loading.tsx` skeletons (champion, tier list, pro-builds) for instant route fallback + partial prefetch, `useLinkStatus` spinners on lane/role `<Link>` tabs (`components/ui/LinkPendingDot.tsx`), and `useTransition` `isPending` spinners on the rank/region/patch controls.
   - The champion detail page (`/lol/champions/[championId]`) streams: the champion identity shell (icon/name/title, from cached Data Dragon static data) renders immediately, while the profile-dependent regions (tier badge + stats + filters, and the win-rate/builds/matchups sections) stream behind `<Suspense>` so a cold backend profile (3–6s) no longer blocks first paint. A single `cache()`-wrapped loader is shared by the two streamed regions so the profile is fetched once.
+  - Its splash backdrop uses responsive `next/image` optimization at quality 55 instead of a full-resolution CSS background. It loads eagerly because browser verification identifies that visual as the page's LCP; the small identity icon remains prioritized as well.
   - Data Dragon static fetchers (`lib/staticData.ts` — champion/item/rune maps, version lookup — and `lib/lolAnalyticsPatches.ts`) are wrapped in React `cache()` so the version lookup + heavy JSON transform run once per render and dedupe across the page and sibling components (they previously re-ran per fetcher and per page).
   - The unified LoL profile hero backdrop uses the most-played champion's splash; a stable per-summoner skin is only used once its splash art loads (some skin `num`s lack art and would blank the backdrop), otherwise the base `_0` splash.
 
@@ -72,8 +89,8 @@ Transcendence is a backend + web monorepo:
    - If missing: return `202 Accepted` indicating refresh is needed
 2. Client triggers refresh:
    - The refresh endpoint is signed-in only (`UserOnly`); the web app reaches it through `/api/trn/user/*`
-   - WebAPI acquires a refresh lock (prevents concurrent refreshes)
-   - WebAPI enqueues Hangfire job
+   - The shared `ISummonerRefreshCoordinator` acquires the refresh locks (preventing concurrent refreshes)
+   - The coordinator enqueues the Hangfire job and releases owned locks if enqueueing fails
 3. Worker performs refresh:
    - Calls Riot APIs
    - Upserts summoner/rank/match records
@@ -92,6 +109,7 @@ Transcendence is a backend + web monorepo:
 - Active-season profile overview/champion stats are materialized into `SummonerSeasonOverviewStats` and `SummonerSeasonChampionStats` for ranked solo/duo. The profile read uses these aggregates when present and falls back to retained raw `MatchParticipants` for players that have not completed a backfill.
 - `SummonerSeasonCoverages` compares the stored completed ranked solo/duo fact count to the current Riot ranked total (`Rank.Wins + Rank.Losses`) and records the delta/status. The first classifier version counts queue 420, `GameComplete`, and excludes early-ended matches using Riot's early-surrender signal; the classifier version is persisted so future interpretation changes are auditable.
 - Riot's public league API exposes current league entries, not a historical per-player season-rank ledger. Existing `HistoricalRank` data is therefore app-observed snapshots only; season labels like "Season 2025 Diamond IV" can only be produced from snapshots the app captured.
+- The profile LP progression preserves that provenance: the web normalizes observed tier/division/LP snapshots onto a monotonic ladder-points scale, reports the observation window and net LP-equivalent change, and explicitly avoids presenting it as Riot per-game history.
 - Profile season windows are resolved from `RankedSeasons` when configured, with a calendar-year fallback. This keeps the active-season profile surface independent from the analytics patch selector.
 
 ## Riot Identifier Policy
@@ -105,6 +123,8 @@ Current app usage follows that policy:
 - LoL search/autosuggest uses stored normalized Riot ID fields plus match participation presence.
 - LoL profile GET resolves by Riot ID first, then uses the local summoner GUID for stats and matches.
 - Favorites, pro-roster rows, and live-game snapshots key on `Puuid` or local IDs rather than encrypted Riot identifiers.
+- `UserRiotAccount` makes a verified PUUID unique across site accounts. Linked identity personalizes
+  the landing-page main-profile shortcut and account dashboard; it does not alter public analytics.
 
 Operational implication:
 - Riot API key swaps should not invalidate stored gameplay data as long as `Puuid` and Riot ID fields remain intact.
@@ -132,9 +152,21 @@ Operational implication:
 - API refresh jobs run on `refresh-high`; ingestion-driven refresh jobs run on `refresh-low`.
 - Refresh locks use DB-backed lease semantics (atomic acquire/renew + explicit lease expiry on release) so concurrent lock races do not require lock-row deletion.
 
+### Live-Game Snapshot Boundary
+
+- Only the worker host owns Riot credentials and calls Spectator-V5. The keyless Web API serves the
+  latest `LiveGameSnapshot`; browser requests never bypass the ingestion priority policy.
+- Each snapshot stores its complete response as PostgreSQL `jsonb` alongside indexed
+  state/game/timing columns. This preserves participant spells/runes and computed scouting analysis
+  across the worker-to-Web-API boundary. Snapshots written before the payload column remain readable
+  through the legacy state/game fallback.
+- Participant form is bounded to the latest 20 stored matches. Champion pool entries are the top
+  three picks within that window, and streaks are signed (wins positive, losses negative). Response
+  age is recomputed when read so clients can label stale observations honestly.
+
 ### Refresh Lock Lifecycle Telemetry and Retention
 
-- Lock lifecycle telemetry is emitted as best-effort/non-blocking instrumentation from API controllers, repository lock operations, and the lifecycle cleanup job.
+- Lock lifecycle telemetry is emitted as best-effort/non-blocking instrumentation from the shared API refresh coordinator, repository lock operations, and the lifecycle cleanup job.
 - Shared telemetry dimensions/tags:
   - `lock_class` (for example `summoner-refresh`, `refresh-priority:api`, `refresh-lock-lifecycle`)
   - `platform_region` (for example `NA1`, `EUW1`, `GLOBAL`)
@@ -229,13 +261,14 @@ The discovery lane stalls when all workers park on a few long, non-stoppable job
 - `RefreshChampionAnalyticsJob` pre-warms win-rate/build/matchup (and, bounded, pro-build) aggregates for the top champions per role **at the page-default tier** — `Jobs:RefreshChampionAnalytics:PreWarmRankTier` (default `EMERALD_PLUS`), the same tier the champion page reads — instead of the all-ranks key the page never requests by default. Win rates are warmed with no role filter (the profile endpoint reads the full by-role table to resolve the most-played lane).
 - Pro-builds pre-warming is gated by `PreWarmProBuilds` and bounded separately by `ProBuildChampionsPerRoleToPreWarm` (default 8, lower than the standard `ChampionsPerRoleToPreWarm`) because the pro-builds compute is heavier; it warms the role-scoped (most-played-lane) default that the pro-builds page lands on.
 - Routine refreshes invalidate **only the current patch's** entries (`InvalidateAnalyticsCacheForPatchAsync`, the `patch:{version}` tag) so re-ingesting current-patch matches does not cold-start every cached entry (other patches, pro roster, pro playrate) at once. The admin `POST /cache/invalidate` still clears the whole `analytics` tag.
-- **Champion tier grade (single source of truth).** Tiers are scored by one shared pure scorer (`ChampionTierScorer`) that every path calls — the raw live compute, the precomputed-stats read, and the hourly refresher — so a champion's grade is identical on the tier list, the champions grid, and the champion detail hero, and the raw-vs-stats equivalence holds by construction. Methodology: **per-role-first** (champions compared only to same-role peers; the unified view shows each champion at its primary role), **strength = win-rate delta vs the role baseline** with empirical-Bayes shrinkage (Beta prior fit per role via method-of-moments; tuned by `Analytics:Tiering:*`), **absolute cutoffs** on that delta (so `S` can be empty on a balanced patch), and pick/ban kept on a separate `contestedScore` popularity axis. The computed grade is **persisted** as `ChampionScopeGradeStat` by `PrecomputedAnalyticsRefresher.RefreshTabularCoreAsync` in the same delete+insert transaction as the raw atoms — for region=ALL and rank scopes `{ALL, EMERALD_PLUS}` only (the scopes every web surface defaults to), per lane role plus a primary-role overview row, with patch-over-patch `movement` resolved against the previous patch (by `Patches.ReleaseDate`). The tier-list read serves this persisted grade directly for those default scopes; a specific region or exact tier recomputes live via the same scorer (no movement), mirroring `ChampionMatchupStat`'s all-region-persisted / region-filtered-live pattern. The champion profile endpoint projects this champion's tier-list entry into a `grade` field so the detail hero renders the list grade (no frontend re-derivation). The tier-list cache key is `analytics:tierlist:v3:` (bumped from `v2` so stale percentile-composite payloads are not served).
+- **Champion tier grade (single source of truth).** Tiers are scored by one shared pure scorer (`ChampionTierScorer`) that every path calls — the raw live compute, the precomputed-stats read, and the hourly refresher — so a champion's grade is identical on the tier list, the champions grid, and the champion detail hero, and the raw-vs-stats equivalence holds by construction. Methodology: **per-role-first** (champions compared only to same-role peers; the unified view shows each champion at its primary role), **strength = win-rate delta vs the role baseline** with empirical-Bayes shrinkage (Beta prior fit per role via method-of-moments; tuned by `Analytics:Tiering:*`), **role-volume-adaptive sample gates** (live-calibrated bounds keep broad scopes conservative while thin scopes can resolve real signal), **absolute cutoffs** on the delta (so `S` can be empty on a balanced patch), and pick/ban kept on a separate `contestedScore` popularity axis. The computed grade is **persisted** as `ChampionScopeGradeStat` by `PrecomputedAnalyticsRefresher.RefreshTabularCoreAsync` in the same delete+insert transaction as the raw atoms — for region=ALL and rank scopes `{ALL, EMERALD_PLUS}` only (the scopes every web surface defaults to), per lane role plus a primary-role overview row, with patch-over-patch `movement` resolved against the previous patch (by `Patches.ReleaseDate`). The tier-list read serves this persisted grade directly for those default scopes; a specific region or exact tier recomputes live via the same scorer (no movement), mirroring `ChampionMatchupStat`'s all-region-persisted / region-filtered-live pattern. `TierListResponse.confidence` distinguishes a resolved spread from a flat or insufficient scope so the UI does not present uniform B as confident balance. The champion profile endpoint projects this champion's tier-list entry into a `grade` field so the detail hero renders the list grade (no frontend re-derivation). The tier-list cache key is `analytics:tierlist:v4:` (bumped from `v3` for the calibrated grades and confidence contract).
+- **Champion patch trends.** The profile endpoint also projects up to 12 historical `ChampionScopeGradeStat` rows joined to `Patches.ReleaseDate` for the same champion/queue/role/global rank scope. This reuses the already-durable grade history instead of introducing a duplicate time-series table; the web renders the chart only with at least two real patch points.
 - **Dedicated hourly default-profile warm** (`WarmDefaultChampionProfilesJob`, cron `Jobs:Schedule:WarmDefaultChampionProfilesCron` = `0 * * * *`, low-priority `refresh-low` queue): keeps **every** champion's default profile page warm and fresh, not just the top-N the adaptive refresh covers. For each champion with ≥ `Jobs:WarmDefaultChampionProfiles:MinimumGamesToWarm` games on the active patch it calls `IChampionAnalyticsService.RefreshDefaultProfileCacheAsync`, which **recomputes** win rates (Emerald+, region=ALL, no role) → resolves the most-played lane exactly as the profile endpoint does → recomputes builds + matchups (and, when `IncludeProBuilds`, the lane-scoped pro-builds) for that lane, then **overwrites** the exact cache keys via `HybridCache.SetAsync`. SetAsync is gap-free refresh-ahead — the old value keeps serving until the fresh one lands, so there is no invalidate-then-cold window. With L2 (Redis) TTL 24h and a 1h refresh, every default profile stays a permanent Redis hit (warm read ≈ tens of ms vs 3–6s cold) with ≤1h-old stats. The job runs on its own DI scope per champion (isolated `DbContext`) with bounded `MaxConcurrency`, so it yields DB to ingestion/API demand. NB: the worker process populates the shared L2 (Redis); the WebAPI process reads its own (cold) L1 then hits that warm Redis entry.
 - **Reserved worker pool.** The "keep analytics warm/fresh" jobs (`WarmDefaultChampionProfilesJob` + the adaptive `RefreshChampionAnalyticsJob`) run on a dedicated Hangfire queue, `HangfireQueues.AnalyticsWarm` (`"analytics-warm"`), served by a **second `BackgroundJobServer`** with its own small worker pool (`Transcendence.Service/Program.cs`). The main 24-worker server pulls its queues highest-priority-first and does **not** serve `analytics-warm`, so a saturated `refresh-*`/`default` backlog can never starve these jobs of workers — they always run on schedule. (This isolates worker *slots*; both servers still share the Hangfire/Postgres storage.) Other queue names remain inline literals at the host; only this reserved lane is a shared constant because it is referenced from both the server registration and the jobs' `[Queue]` attributes.
 
 ### Deployment & rollback
 
-The stack ships continuously: a push to `main` triggers the `Docker Images` workflow, which builds and pushes the changed component images to GHCR tagged both `:main` (the moving tag) and `:sha-<short>` (immutable, one per commit). On the prod host (`root@192.168.0.221`) a **systemd-timer digest poller** (`scripts/ops/poll-deploy.sh`, every ~60s — see `scripts/ops/README.md`, the authoritative deploy runbook) resolves the current `:main` manifest digest from GHCR and, when it changes, runs `docker compose pull` + `up -d --no-deps` for just that app service (postgres/redis untouched), so a merge is live within a few minutes. **wud is retired for the app containers** (wud 8.2.2 silently failed to resolve the GHCR digest for these packages); it may still linger in the stack but does not deploy `web`/`webapi`/`service`. On startup the **worker host** applies any pending EF migrations (`Database:AutoMigrate`, enabled in `config/backend.shared.json`) — only the worker can, since it is the migrations assembly; the WebAPI relies on it. So a migration-bearing deploy no longer needs a manual `dotnet ef database update` — which makes the CI **hot-table DDL gate** more important, since a migration that compiles but blocks on a hot table would still auto-apply on the worker. Hot-table index migrations remain the exception and must be applied out-of-band before the deploy (see DEVELOPMENT.md); the CI `migration-apply` job additionally applies the full chain to an ephemeral Postgres on every PR.
+The stack ships continuously: a push to `main` triggers the `Docker Images` workflow, which builds and pushes the changed component images to GHCR tagged both `:main` (the moving tag) and `:sha-<short>` (immutable, one per commit). On the prod host (`root@192.168.0.221`) a **systemd-timer digest poller** (`scripts/ops/poll-deploy.sh`, every ~60s — see `scripts/ops/README.md`, the authoritative deploy runbook) resolves the current `:main` manifest digest from GHCR and, when it changes, runs `docker compose pull` + `up -d --no-deps` for just that app service (postgres/redis untouched). The poller then gates success on the image's container healthcheck (web `/api/health`, WebAPI `/health/ready`, worker heartbeat) for a bounded window; only a healthy replacement emits the success notification. Pull, recreate, missing-healthcheck, and health-timeout failures make the systemd run fail and send Discord failures. Digest-resolution failures persist per-service counters and alert after three consecutive misses instead of silently freezing deploys. **wud is retired for the app containers** (wud 8.2.2 silently failed to resolve the GHCR digest for these packages); it may still linger in the stack but does not deploy `web`/`webapi`/`service`. On startup the **worker host** applies any pending EF migrations (`Database:AutoMigrate`, enabled in `config/backend.shared.json`) — only the worker can, since it is the migrations assembly; the WebAPI relies on it. So a migration-bearing deploy no longer needs a manual `dotnet ef database update` — which makes the CI **hot-table DDL gate** more important, since a migration that compiles but blocks on a hot table would still auto-apply on the worker. Hot-table index migrations remain the exception and must be applied out-of-band before the deploy (see DEVELOPMENT.md); the CI `migration-apply` job additionally applies the full chain to an ephemeral Postgres on every PR.
 
 **Rollback (break-glass).** Because every build also publishes an immutable `:sha-<short>` tag, rolling back is re-pointing the stack at a known-good commit instead of reverting and waiting for a rebuild:
 
@@ -254,7 +287,7 @@ The WebAPI (`/metrics`, ASP.NET Core exporter) and worker (`:9464`, standalone P
 - **Contact point** (`config/monitoring/grafana/provisioning/alerting/contactpoints.yml`): a Grafana-native `discord` receiver whose URL is interpolated from the `DISCORD_ALERT_WEBHOOK_URL` env var on the grafana container, so no secret is committed. Grafana 13 refuses to *start* on an empty contact-point URL, so unset falls back to a no-op placeholder URL (Grafana boots; alerts don't deliver anywhere real). Set it in prod (reuse the same webhook as the worker's `Alerts:Webhook:Url`).
 - **Postgres/Redis have no Prometheus target of their own** (only webapi + worker are scraped), so their loss is covered *indirectly*: the worker crash-loops without the DB (→ `Worker down`) and DB/cache faults surface as API 5xx (→ `API 5xx error ratio high`). Add `postgres_exporter`/`redis_exporter` if dedicated DB/Redis-down alerts are ever needed.
 
-This complements — but does not replace — the deploy pipeline: poll-deploy still performs no post-deploy `/health/ready` verification, so a recovering-then-crashing container is caught here rather than at deploy time.
+This complements the deploy pipeline: poll-deploy catches startup/readiness failures before reporting success, while Grafana catches later regressions and a service that fails after the bounded deploy window.
 
 ### Match Detail Retention and Archival
 
@@ -269,7 +302,7 @@ detail is archived off-box and pruned to keep the database from growing unbounde
   players' deeper profile insights.
 - **Archival job** (`scripts/ops/archive-old-patches.sh`, weekly cron on the Docker host): for each eligible
   patch it streams `Matches` + all cascade children (`MatchParticipants`, `MatchParticipantItems`,
-  `MatchParticipantRunes`, `MatchBans`, `MatchSummoner`, `MatchParticipantTimelineSnapshots`,
+  `MatchParticipantRunes`, `MatchBans`, `MatchParticipantTimelineSnapshots`,
   `MatchTimelineFetchStates`) out via Postgres `COPY` → `gzip` → `ssh` to the NAS, verifies each archive
   (gzip integrity + exact row count) and only then prunes (one cascading `DELETE` on `Matches`, batched).
   Restore is `zcat <Table>.csv.gz | psql -c "COPY \"<Table>\" FROM STDIN WITH (FORMAT csv, HEADER true)"`
@@ -320,12 +353,23 @@ detail is archived off-box and pruned to keep the database from growing unbounde
 - Responses include sample metadata (`sampleStatus`, `sampleSize`, `minimumRecommendedSampleSize`, `patchAgeHours`, `isEarlyPatchWindow`) so web surfaces can show selected-patch low-sample/no-data states explicitly.
 - `GET /api/lol/analytics/status` is the lightweight source of truth for the active LoL analytics patch used by public web chrome and landing surfaces.
 - `GET /api/lol/analytics/patches` lists active and historical LoL patches available to public analytics filters.
+- Public tier-list and champion analytics reads accept a queue family (`solo`, `flex`, `aram`, `arena`). Patch availability, cache keys, samples, bans, grades, and tier-list atoms are isolated by queue so a non-Solo request cannot reuse Solo/Duo data.
+- Item/rune analytics aggregate current or selected-patch Ranked Solo/Duo participants into one row
+  per participant/resource before grouping, so duplicate item slots cannot inflate pick rate. The
+  service joins static patch metadata softly, excludes non-build-impact inventory and stat shards,
+  and caches region/patch index and detail payloads in HybridCache for 24h (1h local).
+- Champion synergy analytics self-joins the focal champion-role to same-match, same-team partners,
+  then keeps only actionable Bottom/Utility and Jungle/lane pairings. Results are filtered by the
+  same rank, region, queue, and patch scopes as the champion page and ranked by Wilson lower-bound
+  lift over the focal baseline. The hourly default-profile warm also fills the synergy cache in an
+  isolated per-champion DI scope, preserving the no-shared-DbContext concurrency rule.
 
 ### Match Queue Scope and History
 
 - Match rows now persist queue metadata (`queueId`, `queueFamily`, `queueType` label).
 - Summoner history API defaults to all stored history and supports queue filtering by family or explicit queue IDs.
-- Ranked analytics compute paths explicitly filter to ranked solo/duo queue data, so non-ranked ingestion does not contaminate tier/winrate/build/matchup analytics.
+- Analytics compute paths explicitly filter to the requested queue family. The precomputed tabular grain includes `QueueFamily` on role/tier, match-count, ban, and grade atoms; existing rows migrate as `RANKED_SOLO_DUO`.
+- Solo/Duo and Flex preserve lane roles. ARAM and Arena collapse to the synthetic role `ALL` and use their own tier baselines/sample populations. Flex rank scoping reads Flex rank; the casual queues use Solo/Duo rank as a skill segment. Lane-pair matchups are intentionally unavailable for roleless queues, while queue-specific builds fall back to the live compute outside the durable Solo/Duo build snapshots.
 - Non-ranked backfill now advances with per-summoner ingestion cursors (`SummonerIngestionCursors`) so progress remains monotonic and does not skip older windows during preemption/failures.
 - Match records now persist team bans (`MatchBans`) to support champion `banRate` surfaces.
 
@@ -368,6 +412,7 @@ detail is archived off-box and pruned to keep the database from growing unbounde
   - `SelectionIndex`: slot order inside each tree
   - `StyleId`: rune path for primary/secondary trees
 - Static rune data ingestion now maps each rune to canonical path/slot metadata using CommunityDragon `perkstyles` + `perks`.
+- Rune match facts retain `RuneId` + `PatchVersion` as indexed scalar columns but deliberately do not foreign-key to `RuneVersions`. Readers soft-join metadata so an incomplete static-data sync or later static-data reseed cannot reject or delete immutable match history.
 - Analytics build computation and summoner match summaries use explicit selection hierarchy first, then fallback to static metadata only for legacy rows.
 - API payloads expose:
   - compact rune summary for list views
@@ -377,6 +422,7 @@ detail is archived off-box and pruned to keep the database from growing unbounde
 
 - Match participant items are persisted with explicit `SlotIndex` (0-6) plus `ItemId`.
 - This preserves final inventory order and allows duplicate item IDs in different slots.
+- Item match facts retain `ItemId` + `PatchVersion` as indexed scalar columns but deliberately do not foreign-key to `ItemVersions`; static metadata is enrichment, not an ingestion prerequisite or cascade owner for historical facts.
 - Champion build analytics post-processes persisted items against static item metadata and only counts completed, in-store, build-impact items (filters out components/trinkets/wards/consumables).
 - Build endpoint requests do not trigger static-data network refresh; patch item metadata is refreshed by background jobs.
 - If metadata coverage is temporarily incomplete for a patch, analytics uses a legacy exclusion fallback to avoid empty build responses.
@@ -395,6 +441,7 @@ The web app never exposes backend tokens to browser JS:
 - AppOnly proxy route `/api/trn/app/*` is explicitly allowlisted for approved paths (not a generic arbitrary AppOnly relay).
 - Anonymous public proxy route `/api/trn/public/*` is explicitly allowlisted (`lib/publicProxyAllowlist.ts`): only LoL summoner reads (`lol/summoners/**` GET) are relayed; anything else (admin, user, auth, analytics writes, refresh POSTs, arbitrary paths, `PUT`/`DELETE`) is rejected `404`. It forwards no credentials, so it is a narrow read surface, not a generic anonymous relay. Signed-in profile refreshes go through `/api/trn/user/*`, where the BFF attaches the user's JWT.
 - Logout flow revokes refresh tokens server-side via `POST /api/auth/logout` before cookie clear.
+- Password recovery stores only a SHA-256 hash of each random one-time token in `UserPasswordResetTokens`; SMTP delivers the raw token in a short-lived `/account/reset-password` link. Issuing a newer token invalidates older links, and completing a reset atomically updates the PBKDF2 password hash, clears account lockout, consumes outstanding reset tokens, and revokes all refresh sessions. Initiation responses do not reveal whether an email is registered.
 - **Client-IP forwarding for rate limiting.** The BFF resolves the real client IP (`lib/clientIp.ts`: `cf-connecting-ip` → `x-real-ip` → the rightmost, edge-appended `X-Forwarded-For` entry) and forwards it so the backend's per-IP limiters partition on the true client. The `/api/trn/*` proxy **strips** any client-supplied `X-Forwarded-For` and re-sets that single trusted value, so a forged chain can't spoof the per-IP read caps or masquerade as internal. The auth routes (`login`/`register`/`refresh`) reach the backend via the generated client rather than the proxy, so they forward the same header explicitly — without it, every auth request collapsed onto the BFF's own address (one global window = a trivial site-wide login/refresh DoS and defeated per-attacker brute-force isolation).
 
 ## Admin Surface and Security
@@ -452,7 +499,7 @@ in-memory schema, not repository mocks). The policy is therefore:
    without value.
 2. **Reusable read predicates are composable query-objects**, not copy-paste. A `Where(...)` clause used
    in more than one place becomes an `IQueryable<T>` extension under `Transcendence.Service.Core/Queries`
-   — e.g. `MatchParticipantQueries`: `participants.InRankedSoloQueue().OnPatch(patch).FromSuccessfulMatches()`.
+   — e.g. `MatchParticipantQueries`: `participants.InAnalyticsQueue(queueFamily).OnPatch(patch).FromSuccessfulMatches()`.
    Each is a pure `Where` that EF folds into one SQL `WHERE`, so they commute and compose. (This replaced
    the ranked-solo-queue predicate that had been duplicated 20+ times across the analytics/stats services.)
    A genuinely single-use predicate stays inline — query-objects are for *reuse*, not premature abstraction.

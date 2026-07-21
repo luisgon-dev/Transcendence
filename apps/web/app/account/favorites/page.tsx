@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Toolbar } from "@/components/ui/Toolbar";
+import { RiotAccountPanel } from "@/components/RiotAccountPanel";
 import { encodeRiotIdPath, parseRiotIdInput } from "@/lib/riotid";
 
 type FavoriteSummonerDto = {
@@ -86,6 +87,8 @@ export default function FavoritesPage() {
         title="Favorites"
         meta={<span>Your saved players from League profiles</span>}
       />
+
+      <RiotAccountPanel />
 
       {error ? (
         <Card className="p-5">

@@ -6,21 +6,8 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/cn";
+import { LOL_REGION_OPTIONS } from "@/lib/lolRegions";
 import { encodeRiotIdPath, parseRiotIdInput } from "@/lib/riotid";
-
-const REGIONS = [
-  { value: "na", label: "NA" },
-  { value: "euw", label: "EUW" },
-  { value: "eune", label: "EUNE" },
-  { value: "kr", label: "KR" },
-  { value: "br", label: "BR" },
-  { value: "lan", label: "LAN" },
-  { value: "las", label: "LAS" },
-  { value: "oce", label: "OCE" },
-  { value: "jp", label: "JP" },
-  { value: "tr", label: "TR" },
-  { value: "ru", label: "RU" }
-];
 
 export function SearchBar({ className }: { className?: string }) {
   const router = useRouter();
@@ -79,7 +66,7 @@ export function SearchBar({ className }: { className?: string }) {
           onChange={(e) => setRegion(e.target.value)}
           aria-label="Region"
         >
-          {REGIONS.map((r) => (
+          {LOL_REGION_OPTIONS.map((r) => (
             <option key={r.value} value={r.value}>
               {r.label}
             </option>

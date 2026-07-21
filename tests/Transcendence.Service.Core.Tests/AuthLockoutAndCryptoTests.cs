@@ -1,7 +1,11 @@
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Cryptography;
 using Transcendence.Data.Models.Auth;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Implementations;
@@ -20,14 +24,18 @@ public sealed class AuthLockoutAndCryptoTests
 
     // A UserAuthService wired to an in-memory single-account repo that mutates the stored account in
     // place, so state (failed-attempt counter, lockout) carries across successive Login calls.
-    private static UserAuthService BuildService()
+    private static UserAuthService BuildService(IJwtService? jwtService = null)
     {
         var repo = new Mock<IUserAccountRepository>();
-        var jwt = new Mock<IJwtService>();
-        jwt.Setup(x => x.GenerateAccessToken(It.IsAny<UserAccount>())).Returns("access");
-        jwt.Setup(x => x.GetAccessTokenExpirationUtc()).Returns(DateTime.UtcNow.AddMinutes(15));
-        jwt.Setup(x => x.GenerateRefreshToken()).Returns("refresh");
-        jwt.Setup(x => x.HashRefreshToken(It.IsAny<string>())).Returns("refresh-hash");
+        if (jwtService == null)
+        {
+            var jwt = new Mock<IJwtService>();
+            jwt.Setup(x => x.GenerateAccessToken(It.IsAny<UserAccount>())).Returns("access");
+            jwt.Setup(x => x.GetAccessTokenExpirationUtc()).Returns(DateTime.UtcNow.AddMinutes(15));
+            jwt.Setup(x => x.GenerateRefreshToken()).Returns("refresh");
+            jwt.Setup(x => x.HashRefreshToken(It.IsAny<string>())).Returns("refresh-hash");
+            jwtService = jwt.Object;
+        }
 
         UserAccount? stored = null;
         repo.Setup(x => x.GetByEmailNormalizedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -36,7 +44,7 @@ public sealed class AuthLockoutAndCryptoTests
             .Callback<UserAccount, CancellationToken>((u, _) => stored = u)
             .Returns(Task.CompletedTask);
 
-        return new UserAuthService(repo.Object, jwt.Object,
+        return new UserAuthService(repo.Object, jwtService,
             Options.Create(new AdminBootstrapOptions()), NullLogger<UserAuthService>.Instance);
     }
 
@@ -57,6 +65,67 @@ public sealed class AuthLockoutAndCryptoTests
         await svc.RegisterAsync(new RegisterRequest(Email, Password), default);
 
         (await svc.LoginAsync(new LoginRequest(Email, WrongPassword), default)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Login_with_real_jwt_service_handles_unknown_bad_and_success_paths()
+    {
+        var environment = new Mock<IHostEnvironment>();
+        environment.SetupGet(x => x.EnvironmentName).Returns("Production");
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Auth:Jwt:Issuer"] = "Transcendence.Tests",
+                ["Auth:Jwt:Audience"] = "Transcendence.TestClients",
+                ["Auth:Jwt:Key"] = "test-signing-key-with-at-least-thirty-two-bytes"
+            })
+            .Build();
+        var svc = BuildService(new JwtService(configuration, environment.Object));
+
+        (await svc.LoginAsync(new LoginRequest(Email, Password), default)).Should().BeNull();
+        await svc.RegisterAsync(new RegisterRequest(Email, Password), default);
+        (await svc.LoginAsync(new LoginRequest(Email, WrongPassword), default)).Should().BeNull();
+
+        var result = await svc.LoginAsync(new LoginRequest(Email, Password), default);
+
+        result.Should().NotBeNull();
+        new JwtSecurityTokenHandler().ReadJwtToken(result!.AccessToken).Issuer
+            .Should().Be("Transcendence.Tests");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("not-a-password-hash")]
+    [InlineData("pbkdf2$not-an-int$c2FsdA==$aGFzaA==")]
+    [InlineData("pbkdf2$0$c2FsdA==$aGFzaA==")]
+    [InlineData("pbkdf2$1000$not-base64$also-not-base64")]
+    [InlineData("pbkdf2$1000$$")]
+    public async Task Login_with_malformed_stored_hash_rejects_without_throwing(string storedHash)
+    {
+        var user = BuildUser(storedHash);
+        var (svc, repo) = BuildService(user);
+
+        var act = async () => await svc.LoginAsync(new LoginRequest(Email, Password), default);
+
+        (await act.Should().NotThrowAsync()).Which.Should().BeNull();
+        user.FailedLoginAttempts.Should().Be(1);
+        repo.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Login_with_legacy_cost_hash_upgrades_to_current_iterations()
+    {
+        const int legacyIterations = 10_000;
+        var user = BuildUser(HashPassword(Password, legacyIterations));
+        var originalHash = user.PasswordHash;
+        var (svc, repo) = BuildService(user);
+
+        var result = await svc.LoginAsync(new LoginRequest(Email, Password), default);
+
+        result.Should().NotBeNull();
+        user.PasswordHash.Should().NotBe(originalHash);
+        user.PasswordHash.Should().StartWith("pbkdf2$310000$");
+        repo.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -86,5 +155,45 @@ public sealed class AuthLockoutAndCryptoTests
         await svc.LoginAsync(new LoginRequest(Email, WrongPassword), default);
         (await svc.LoginAsync(new LoginRequest(Email, Password), default))
             .Should().NotBeNull("a successful login reset the failed-attempt counter");
+    }
+
+    private static (UserAuthService Service, Mock<IUserAccountRepository> Repository) BuildService(
+        UserAccount stored)
+    {
+        var repo = new Mock<IUserAccountRepository>();
+        var jwt = new Mock<IJwtService>();
+        jwt.Setup(x => x.GenerateAccessToken(stored)).Returns("access");
+        jwt.Setup(x => x.GetAccessTokenExpirationUtc()).Returns(DateTime.UtcNow.AddMinutes(15));
+        jwt.Setup(x => x.GenerateRefreshToken()).Returns("refresh");
+        jwt.Setup(x => x.HashRefreshToken("refresh")).Returns("refresh-hash");
+        repo.Setup(x => x.GetByEmailNormalizedAsync(Email.ToUpperInvariant(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(stored);
+
+        var service = new UserAuthService(
+            repo.Object,
+            jwt.Object,
+            Options.Create(new AdminBootstrapOptions()),
+            NullLogger<UserAuthService>.Instance);
+        return (service, repo);
+    }
+
+    private static UserAccount BuildUser(string passwordHash) => new()
+    {
+        Id = Guid.NewGuid(),
+        Email = Email,
+        EmailNormalized = Email.ToUpperInvariant(),
+        PasswordHash = passwordHash
+    };
+
+    private static string HashPassword(string password, int iterations)
+    {
+        var salt = RandomNumberGenerator.GetBytes(16);
+        var hash = Rfc2898DeriveBytes.Pbkdf2(
+            password,
+            salt,
+            iterations,
+            HashAlgorithmName.SHA256,
+            32);
+        return $"pbkdf2${iterations}${Convert.ToBase64String(salt)}${Convert.ToBase64String(hash)}";
     }
 }

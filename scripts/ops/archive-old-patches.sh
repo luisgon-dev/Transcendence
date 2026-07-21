@@ -51,7 +51,7 @@ pgq()   { docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -v ON_ER
 pgx()   { docker exec -i "${PGENV[@]}" "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 "$@"; }    # planner per $PGENV
 pgval() { pgq -tAc "$1"; }            # planner-neutral scalar reads
 
-TABLES=(Matches MatchParticipants MatchParticipantItems MatchParticipantRunes MatchBans MatchSummoner MatchParticipantTimelineSnapshots MatchTimelineFetchStates)
+TABLES=(Matches MatchParticipants MatchParticipantItems MatchParticipantRunes MatchBans MatchParticipantTimelineSnapshots MatchTimelineFetchStates)
 # Row source for table $1 — every table joined to the frozen per-patch work table of match IDs.
 sel_for() { case "$1" in
   Matches)                           echo "SELECT m.* FROM \"Matches\" m JOIN ${WORK} a ON m.\"Id\"=a.\"Id\"";;
@@ -59,7 +59,6 @@ sel_for() { case "$1" in
   MatchParticipantItems)             echo "SELECT i.* FROM \"MatchParticipantItems\" i JOIN \"MatchParticipants\" mp ON i.\"MatchParticipantId\"=mp.\"Id\" JOIN ${WORK} a ON mp.\"MatchId\"=a.\"Id\"";;
   MatchParticipantRunes)             echo "SELECT r.* FROM \"MatchParticipantRunes\" r JOIN \"MatchParticipants\" mp ON r.\"MatchParticipantId\"=mp.\"Id\" JOIN ${WORK} a ON mp.\"MatchId\"=a.\"Id\"";;
   MatchBans)                         echo "SELECT b.* FROM \"MatchBans\" b JOIN ${WORK} a ON b.\"MatchId\"=a.\"Id\"";;
-  MatchSummoner)                     echo "SELECT ms.* FROM \"MatchSummoner\" ms JOIN ${WORK} a ON ms.\"MatchesId\"=a.\"Id\"";;
   MatchParticipantTimelineSnapshots) echo "SELECT ts.* FROM \"MatchParticipantTimelineSnapshots\" ts JOIN ${WORK} a ON ts.\"MatchId\"=a.\"Id\"";;
   MatchTimelineFetchStates)          echo "SELECT fs.* FROM \"MatchTimelineFetchStates\" fs JOIN ${WORK} a ON fs.\"MatchId\"=a.\"Id\"";;
 esac; }

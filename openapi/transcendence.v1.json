@@ -1223,6 +1223,13 @@
             }
           },
           {
+            "name": "queue",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "patch",
             "in": "query",
             "schema": {
@@ -1336,6 +1343,15 @@
       "get": {
         "tags": [
           "Analytics"
+        ],
+        "parameters": [
+          {
+            "name": "queue",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
           "429": {
@@ -1769,6 +1785,192 @@
         ]
       }
     },
+    "/api/auth/riot/authorize": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RiotAuthorizationRequest"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RiotAuthorizationRequest"
+                  }
+                ]
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RiotAuthorizationRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiotAuthorizationResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiotAuthorizationResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiotAuthorizationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
+    "/api/auth/riot/complete": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RiotRsoCompleteRequest"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RiotRsoCompleteRequest"
+                  }
+                ]
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RiotRsoCompleteRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiotRsoAuthResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiotRsoAuthResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiotRsoAuthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
     "/api/auth/register": {
       "post": {
         "tags": [
@@ -2111,6 +2313,72 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "503": {
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
+    "/api/auth/password-reset/complete": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PasswordResetCompleteRequest"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PasswordResetCompleteRequest"
+                  }
+                ]
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PasswordResetCompleteRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -2171,6 +2439,324 @@
         ]
       }
     },
+    "/api/lol/analytics/items": {
+      "get": {
+        "tags": [
+          "BuildResourceAnalytics"
+        ],
+        "parameters": [
+          {
+            "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "patch",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResourceAnalyticsIndexResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResourceAnalyticsIndexResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResourceAnalyticsIndexResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lol/analytics/items/{itemId}": {
+      "get": {
+        "tags": [
+          "BuildResourceAnalytics"
+        ],
+        "parameters": [
+          {
+            "name": "itemId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "patch",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResourceAnalyticsDetailResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResourceAnalyticsDetailResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResourceAnalyticsDetailResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lol/analytics/runes": {
+      "get": {
+        "tags": [
+          "BuildResourceAnalytics"
+        ],
+        "parameters": [
+          {
+            "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "patch",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResourceAnalyticsIndexResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResourceAnalyticsIndexResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResourceAnalyticsIndexResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lol/analytics/runes/{runeId}": {
+      "get": {
+        "tags": [
+          "BuildResourceAnalytics"
+        ],
+        "parameters": [
+          {
+            "name": "runeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "patch",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResourceAnalyticsDetailResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResourceAnalyticsDetailResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResourceAnalyticsDetailResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/lol/analytics/champions/{championId}/profile": {
       "get": {
         "tags": [
@@ -2202,6 +2788,13 @@
           },
           {
             "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "queue",
             "in": "query",
             "schema": {
               "type": "string"
@@ -2279,6 +2872,124 @@
         }
       }
     },
+    "/api/lol/analytics/champions/{championId}/synergies": {
+      "get": {
+        "tags": [
+          "ChampionAnalytics"
+        ],
+        "parameters": [
+          {
+            "name": "championId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rankTier",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "queue",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "patch",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChampionSynergiesResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChampionSynergiesResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChampionSynergiesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
     "/api/lol/analytics/champions/{championId}/winrates": {
       "get": {
         "tags": [
@@ -2317,6 +3028,13 @@
           },
           {
             "name": "patch",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "queue",
             "in": "query",
             "schema": {
               "type": "string"
@@ -2418,6 +3136,13 @@
           },
           {
             "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "queue",
             "in": "query",
             "schema": {
               "type": "string"
@@ -2640,6 +3365,13 @@
             }
           },
           {
+            "name": "queue",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "patch",
             "in": "query",
             "schema": {
@@ -2767,6 +3499,126 @@
         "security": [
           { }
         ]
+      }
+    },
+    "/api/lol/leaderboards": {
+      "get": {
+        "tags": [
+          "Leaderboards"
+        ],
+        "parameters": [
+          {
+            "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "na"
+            }
+          },
+          {
+            "name": "queue",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "solo"
+            }
+          },
+          {
+            "name": "championId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 100
+            }
+          },
+          {
+            "name": "minimumChampionGames",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 5
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaderboardResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaderboardResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaderboardResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/lol/summoners/{region}/{gameName}/{tagLine}/live-game": {
@@ -4614,6 +5466,215 @@
         }
       }
     },
+    "/api/users/me/riot-account": {
+      "get": {
+        "tags": [
+          "UserPreferences"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiotAccountLinkDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiotAccountLinkDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiotAccountLinkDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          { }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "UserPreferences"
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          { }
+        ]
+      }
+    },
+    "/api/users/me/riot-account/complete": {
+      "post": {
+        "tags": [
+          "UserPreferences"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RiotRsoCompleteRequest"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RiotRsoCompleteRequest"
+                  }
+                ]
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RiotRsoCompleteRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiotAccountLinkDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiotAccountLinkDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiotAccountLinkDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          { }
+        ]
+      }
+    },
     "/api/users/me/favorites": {
       "get": {
         "tags": [
@@ -5946,7 +7007,9 @@
       "AnalyticsPatchOptionDto": {
         "required": [
           "isActive",
+          "matchCount",
           "patch",
+          "queueFamily",
           "rankedSoloDuoMatchCount"
         ],
         "type": "object",
@@ -5970,6 +7033,14 @@
           "rankedSoloDuoMatchCount": {
             "type": "integer",
             "format": "int32"
+          },
+          "queueFamily": {
+            "type": "string"
+          },
+          "matchCount": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
           }
         },
         "additionalProperties": false
@@ -6224,6 +7295,168 @@
         },
         "additionalProperties": false
       },
+      "BuildResourceAnalyticsDetailResponse": {
+        "required": [
+          "championStats",
+          "patch",
+          "region",
+          "resource",
+          "resourceType",
+          "totalParticipantGames"
+        ],
+        "type": "object",
+        "properties": {
+          "resourceType": {
+            "type": "string"
+          },
+          "patch": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "totalParticipantGames": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "resource": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BuildResourceAnalyticsEntryDto"
+              }
+            ]
+          },
+          "championStats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BuildResourceChampionStatDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "BuildResourceAnalyticsEntryDto": {
+        "required": [
+          "games",
+          "name",
+          "pickRate",
+          "resourceId",
+          "topChampions",
+          "winRate",
+          "wins"
+        ],
+        "type": "object",
+        "properties": {
+          "resourceId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "wins": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "winRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "pickRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "topChampions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BuildResourceChampionStatDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "BuildResourceAnalyticsIndexResponse": {
+        "required": [
+          "entries",
+          "patch",
+          "region",
+          "resourceType",
+          "totalParticipantGames"
+        ],
+        "type": "object",
+        "properties": {
+          "resourceType": {
+            "type": "string"
+          },
+          "patch": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "totalParticipantGames": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BuildResourceAnalyticsEntryDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "BuildResourceChampionStatDto": {
+        "required": [
+          "championId",
+          "games",
+          "pickRate",
+          "role",
+          "shareOfResourceUses",
+          "winRate",
+          "wins"
+        ],
+        "type": "object",
+        "properties": {
+          "championId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "role": {
+            "type": "string"
+          },
+          "games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "wins": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "winRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "pickRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "shareOfResourceUses": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
       "ChampionBuildDto": {
         "required": [
           "coreItems",
@@ -6311,6 +7544,7 @@
           "championId",
           "globalCoreItems",
           "patch",
+          "queueFamily",
           "rankTier",
           "region",
           "role"
@@ -6396,6 +7630,9 @@
               "$ref": "#/components/schemas/SituationalSlotDto"
             },
             "nullable": true
+          },
+          "queueFamily": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -6523,6 +7760,7 @@
           "counters",
           "favorableMatchups",
           "patch",
+          "queueFamily",
           "region",
           "role",
           "timelineSampleSize"
@@ -6585,6 +7823,9 @@
               }
             ],
             "nullable": true
+          },
+          "queueFamily": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -6653,6 +7894,7 @@
           "championId",
           "effectiveRole",
           "matchups",
+          "queueFamily",
           "winRates"
         ],
         "type": "object",
@@ -6689,6 +7931,25 @@
             "allOf": [
               {
                 "$ref": "#/components/schemas/ChampionGradeDto"
+              }
+            ],
+            "nullable": true
+          },
+          "queueFamily": {
+            "type": "string"
+          },
+          "trend": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ChampionTrendResponse"
+              }
+            ],
+            "nullable": true
+          },
+          "synergies": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ChampionSynergiesResponse"
               }
             ],
             "nullable": true
@@ -6764,6 +8025,198 @@
         },
         "additionalProperties": false
       },
+      "ChampionSynergiesResponse": {
+        "required": [
+          "baselineWinRate",
+          "bestPartners",
+          "championId",
+          "patch",
+          "queueFamily",
+          "rankTier",
+          "region",
+          "role",
+          "totalGames",
+          "totalWins"
+        ],
+        "type": "object",
+        "properties": {
+          "championId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "role": {
+            "type": "string"
+          },
+          "rankTier": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "patch": {
+            "type": "string"
+          },
+          "queueFamily": {
+            "type": "string"
+          },
+          "totalGames": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWins": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "baselineWinRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "bestPartners": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChampionSynergyEntryDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChampionSynergyEntryDto": {
+        "required": [
+          "confidenceScore",
+          "games",
+          "partnerChampionId",
+          "partnerRole",
+          "pickRate",
+          "winRate",
+          "winRateDelta",
+          "wins"
+        ],
+        "type": "object",
+        "properties": {
+          "partnerChampionId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "partnerRole": {
+            "type": "string"
+          },
+          "games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "wins": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "winRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "pickRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "winRateDelta": {
+            "type": "number",
+            "format": "double"
+          },
+          "confidenceScore": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChampionTrendPointDto": {
+        "required": [
+          "banRate",
+          "games",
+          "isLowSample",
+          "patch",
+          "pickRate",
+          "releasedAtUtc",
+          "strengthScore",
+          "tier",
+          "winRate"
+        ],
+        "type": "object",
+        "properties": {
+          "patch": {
+            "type": "string"
+          },
+          "releasedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "tier": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TierGrade"
+              }
+            ]
+          },
+          "games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "winRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "pickRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "banRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "strengthScore": {
+            "type": "number",
+            "format": "double"
+          },
+          "isLowSample": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChampionTrendResponse": {
+        "required": [
+          "championId",
+          "points",
+          "queueFamily",
+          "rankScope",
+          "region",
+          "role"
+        ],
+        "type": "object",
+        "properties": {
+          "championId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "queueFamily": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "rankScope": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChampionTrendPointDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
       "ChampionWinRateDto": {
         "required": [
           "banRate",
@@ -6828,7 +8281,8 @@
         "required": [
           "byRoleTier",
           "championId",
-          "patch"
+          "patch",
+          "queueFamily"
         ],
         "type": "object",
         "properties": {
@@ -6857,6 +8311,9 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "queueFamily": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -7038,6 +8495,122 @@
         },
         "additionalProperties": false
       },
+      "LeaderboardEntry": {
+        "required": [
+          "gameName",
+          "position",
+          "profileIconId",
+          "rankedLosses",
+          "rankedWins",
+          "summonerId",
+          "tagLine"
+        ],
+        "type": "object",
+        "properties": {
+          "position": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "summonerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "gameName": {
+            "type": "string"
+          },
+          "tagLine": {
+            "type": "string"
+          },
+          "profileIconId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "tier": {
+            "type": "string",
+            "nullable": true
+          },
+          "division": {
+            "type": "string",
+            "nullable": true
+          },
+          "leaguePoints": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "rankedWins": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "rankedLosses": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "championGames": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "championWins": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "championWinRate": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "championKda": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "updatedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "LeaderboardResponse": {
+        "required": [
+          "entries",
+          "generatedAtUtc",
+          "queue",
+          "region"
+        ],
+        "type": "object",
+        "properties": {
+          "region": {
+            "type": "string"
+          },
+          "queue": {
+            "type": "string"
+          },
+          "championId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "role": {
+            "type": "string",
+            "nullable": true
+          },
+          "generatedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LeaderboardEntry"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
       "LiveGameAnalysisDto": {
         "required": [
           "generatedAtUtc",
@@ -7065,10 +8638,36 @@
         },
         "additionalProperties": false
       },
+      "LiveGameChampionPoolEntryDto": {
+        "required": [
+          "championId",
+          "games",
+          "winRate"
+        ],
+        "type": "object",
+        "properties": {
+          "championId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "winRate": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
       "LiveGameParticipantAnalysisDto": {
         "required": [
           "championId",
+          "championPool",
+          "currentStreak",
           "puuid",
+          "recentGames",
           "teamId"
         ],
         "type": "object",
@@ -7111,6 +8710,20 @@
             "type": "number",
             "format": "double",
             "nullable": true
+          },
+          "recentGames": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "currentStreak": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "championPool": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LiveGameChampionPoolEntryDto"
+            }
           }
         },
         "additionalProperties": false
@@ -7118,6 +8731,7 @@
       "LiveGameParticipantDto": {
         "required": [
           "championId",
+          "perkIds",
           "profileIconId",
           "puuid",
           "spell1Id",
@@ -7156,6 +8770,23 @@
           "profileIconId": {
             "type": "integer",
             "format": "int32"
+          },
+          "perkIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "perkStyleId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "perkSubStyleId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -7962,6 +9593,22 @@
         },
         "additionalProperties": false
       },
+      "PasswordResetCompleteRequest": {
+        "required": [
+          "newPassword",
+          "token"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "newPassword": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "PasswordResetRequest": {
         "required": [
           "email"
@@ -8726,6 +10373,112 @@
         },
         "additionalProperties": false
       },
+      "RiotAccountLinkDto": {
+        "required": [
+          "canUnlink",
+          "gameName",
+          "linkedAtUtc",
+          "platformRegion",
+          "puuid",
+          "tagLine",
+          "verifiedAtUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "puuid": {
+            "type": "string"
+          },
+          "gameName": {
+            "type": "string"
+          },
+          "tagLine": {
+            "type": "string"
+          },
+          "platformRegion": {
+            "type": "string"
+          },
+          "linkedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "verifiedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "canUnlink": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RiotAuthorizationRequest": {
+        "required": [
+          "state"
+        ],
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RiotAuthorizationResponse": {
+        "required": [
+          "authorizationUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "authorizationUrl": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RiotRsoAuthResponse": {
+        "required": [
+          "createdAccount",
+          "riotAccount",
+          "tokens"
+        ],
+        "type": "object",
+        "properties": {
+          "tokens": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AuthTokenResponse"
+              }
+            ]
+          },
+          "riotAccount": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RiotAccountLinkDto"
+              }
+            ]
+          },
+          "createdAccount": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RiotRsoCompleteRequest": {
+        "required": [
+          "code",
+          "region"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "RoleStatDto": {
         "required": [
           "games",
@@ -9372,8 +11125,10 @@
       },
       "TierListResponse": {
         "required": [
+          "confidence",
           "entries",
           "patch",
+          "queueFamily",
           "region"
         ],
         "type": "object",
@@ -9410,6 +11165,16 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "queueFamily": {
+            "type": "string"
+          },
+          "confidence": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TierScopeConfidence"
+              }
+            ]
           }
         },
         "additionalProperties": false
@@ -9420,6 +11185,15 @@
           1,
           2,
           3
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "TierScopeConfidence": {
+        "enum": [
+          0,
+          1,
+          2
         ],
         "type": "integer",
         "format": "int32"
@@ -9674,7 +11448,13 @@
       "name": "Auth"
     },
     {
+      "name": "BuildResourceAnalytics"
+    },
+    {
       "name": "ChampionAnalytics"
+    },
+    {
+      "name": "Leaderboards"
     },
     {
       "name": "LiveGame"

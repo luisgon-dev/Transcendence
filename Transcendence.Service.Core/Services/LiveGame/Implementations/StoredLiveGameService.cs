@@ -1,4 +1,5 @@
 using Transcendence.Data.Repositories.Interfaces;
+using System.Text.Json;
 using Transcendence.Service.Core.Services.LiveGame.Interfaces;
 using Transcendence.Service.Core.Services.LiveGame.Models;
 
@@ -27,6 +28,26 @@ public class StoredLiveGameService(
         }
 
         var observedAtUtc = snapshot.ObservedAtUtc;
+        if (!string.IsNullOrWhiteSpace(snapshot.PayloadJson))
+        {
+            try
+            {
+                var stored = JsonSerializer.Deserialize<LiveGameResponseDto>(snapshot.PayloadJson);
+                if (stored != null)
+                {
+                    return stored with
+                    {
+                        LastUpdatedUtc = observedAtUtc,
+                        DataAgeSeconds = Math.Max(0, (int)(DateTime.UtcNow - observedAtUtc).TotalSeconds)
+                    };
+                }
+            }
+            catch (JsonException)
+            {
+                // Legacy or partially written snapshots still retain the state/game fallback below.
+            }
+        }
+
         return new LiveGameResponseDto(
             snapshot.State,
             platformRegion,

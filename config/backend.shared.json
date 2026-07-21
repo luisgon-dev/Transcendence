@@ -6,6 +6,31 @@
   "Database": {
     "AutoMigrate": true
   },
+  "Auth": {
+    "RiotRso": {
+      "Enabled": false,
+      "ClientId": "",
+      "ClientSecret": "",
+      "RedirectUri": "https://transcend.kronic.one/api/session/riot/callback",
+      "AuthorizationEndpoint": "https://auth.riotgames.com/authorize",
+      "TokenEndpoint": "https://auth.riotgames.com/token",
+      "AccountEndpoint": "https://americas.api.riotgames.com/riot/account/v1/accounts/me"
+    },
+    "PasswordReset": {
+      "Enabled": false,
+      "PublicBaseUrl": "https://transcend.kronic.one",
+      "TokenLifetimeMinutes": 30,
+      "Smtp": {
+        "Host": "",
+        "Port": 587,
+        "EnableSsl": true,
+        "Username": "",
+        "Password": "",
+        "FromAddress": "",
+        "FromName": "Transcendence"
+      }
+    }
+  },
   "RiotApi": {
     "League": {
       "ApiKey": "RGAPI-00000000-0000-0000-0000-000000000000"

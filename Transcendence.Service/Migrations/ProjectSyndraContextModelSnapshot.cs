@@ -23,21 +23,6 @@ namespace Transcendence.Service.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("MatchSummoner", b =>
-                {
-                    b.Property<Guid>("MatchesId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("SummonersId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("MatchesId", "SummonersId");
-
-                    b.HasIndex("SummonersId");
-
-                    b.ToTable("MatchSummoner");
-                });
-
             modelBuilder.Entity("Transcendence.Data.Models.Auth.AdminAuditEvent", b =>
                 {
                     b.Property<Guid>("Id")
@@ -137,6 +122,10 @@ namespace Transcendence.Service.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("DisplayName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasColumnType("text");
@@ -200,6 +189,38 @@ namespace Transcendence.Service.Migrations
                     b.ToTable("UserFavoriteSummoners");
                 });
 
+            modelBuilder.Entity("Transcendence.Data.Models.Auth.UserPasswordResetToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UsedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserAccountId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserAccountId", "ExpiresAtUtc");
+
+                    b.ToTable("UserPasswordResetTokens");
+                });
+
             modelBuilder.Entity("Transcendence.Data.Models.Auth.UserPreferences", b =>
                 {
                     b.Property<Guid>("UserAccountId")
@@ -257,6 +278,45 @@ namespace Transcendence.Service.Migrations
                     b.ToTable("UserRefreshTokens");
                 });
 
+            modelBuilder.Entity("Transcendence.Data.Models.Auth.UserRiotAccount", b =>
+                {
+                    b.Property<Guid>("UserAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("GameName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime>("LinkedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PlatformRegion")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Puuid")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("TagLine")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("VerifiedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserAccountId");
+
+                    b.HasIndex("Puuid")
+                        .IsUnique();
+
+                    b.ToTable("UserRiotAccounts");
+                });
+
             modelBuilder.Entity("Transcendence.Data.Models.Auth.UserRole", b =>
                 {
                     b.Property<Guid>("UserAccountId")
@@ -293,6 +353,9 @@ namespace Transcendence.Service.Migrations
 
                     b.Property<DateTime>("ObservedAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PayloadJson")
+                        .HasColumnType("jsonb");
 
                     b.Property<string>("PlatformRegion")
                         .IsRequired()
@@ -481,6 +544,7 @@ namespace Transcendence.Service.Migrations
                         .HasColumnType("integer");
 
                     b.Property<string>("Puuid")
+                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<string>("Region")
@@ -1120,13 +1184,19 @@ namespace Transcendence.Service.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("QueueFamily")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("RANKED_SOLO_DUO");
+
                     b.Property<string>("RankScope")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Patch", "PlatformRegion", "RankScope", "ChampionId")
+                    b.HasIndex("Patch", "QueueFamily", "PlatformRegion", "RankScope", "ChampionId")
                         .IsUnique();
 
                     b.ToTable("ChampionBanScopeStats");
@@ -1246,6 +1316,12 @@ namespace Transcendence.Service.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("QueueFamily")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("RANKED_SOLO_DUO");
+
                     b.Property<string>("RankTier")
                         .IsRequired()
                         .HasColumnType("text");
@@ -1259,11 +1335,11 @@ namespace Transcendence.Service.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Patch", "ChampionId", "Role");
+                    b.HasIndex("Patch", "QueueFamily", "ChampionId", "Role");
 
-                    b.HasIndex("Patch", "Role", "RankTier");
+                    b.HasIndex("Patch", "QueueFamily", "Role", "RankTier");
 
-                    b.HasIndex("Patch", "PlatformRegion", "RankTier", "ChampionId", "Role")
+                    b.HasIndex("Patch", "QueueFamily", "PlatformRegion", "RankTier", "ChampionId", "Role")
                         .IsUnique();
 
                     b.ToTable("ChampionRoleTierStats");
@@ -1317,6 +1393,12 @@ namespace Transcendence.Service.Migrations
                     b.Property<double>("PriorStrength")
                         .HasColumnType("double precision");
 
+                    b.Property<string>("QueueFamily")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("RANKED_SOLO_DUO");
+
                     b.Property<string>("RankScope")
                         .IsRequired()
                         .HasColumnType("text");
@@ -1342,10 +1424,11 @@ namespace Transcendence.Service.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Patch", "PlatformRegion", "RankScope", "Role");
+                    b.HasIndex("Patch", "QueueFamily", "PlatformRegion", "RankScope", "Role");
 
-                    b.HasIndex("Patch", "PlatformRegion", "RankScope", "Role", "ChampionId")
-                        .IsUnique();
+                    b.HasIndex("Patch", "QueueFamily", "PlatformRegion", "RankScope", "Role", "ChampionId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ChampionScopeGradeStats_Patch_QueueFamily_PlatformRegion_R~1");
 
                     b.ToTable("ChampionScopeGradeStats");
                 });
@@ -1367,6 +1450,12 @@ namespace Transcendence.Service.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("QueueFamily")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("RANKED_SOLO_DUO");
+
                     b.Property<string>("RankScope")
                         .IsRequired()
                         .HasColumnType("text");
@@ -1376,7 +1465,7 @@ namespace Transcendence.Service.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Patch", "PlatformRegion", "RankScope")
+                    b.HasIndex("Patch", "QueueFamily", "PlatformRegion", "RankScope")
                         .IsUnique();
 
                     b.ToTable("ScopeMatchCountStats");
@@ -1407,6 +1496,7 @@ namespace Transcendence.Service.Migrations
                         .HasColumnType("bigint");
 
                     b.Property<string>("MatchId")
+                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<string>("Patch")
@@ -2021,25 +2111,21 @@ namespace Transcendence.Service.Migrations
                     b.ToTable("RefreshLocks");
                 });
 
-            modelBuilder.Entity("MatchSummoner", b =>
-                {
-                    b.HasOne("Transcendence.Data.Models.LoL.Match.Match", null)
-                        .WithMany()
-                        .HasForeignKey("MatchesId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Transcendence.Data.Models.LoL.Account.Summoner", null)
-                        .WithMany()
-                        .HasForeignKey("SummonersId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Transcendence.Data.Models.Auth.UserFavoriteSummoner", b =>
                 {
                     b.HasOne("Transcendence.Data.Models.Auth.UserAccount", "UserAccount")
                         .WithMany("FavoriteSummoners")
+                        .HasForeignKey("UserAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("UserAccount");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Auth.UserPasswordResetToken", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.Auth.UserAccount", "UserAccount")
+                        .WithMany("PasswordResetTokens")
                         .HasForeignKey("UserAccountId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -2063,6 +2149,17 @@ namespace Transcendence.Service.Migrations
                     b.HasOne("Transcendence.Data.Models.Auth.UserAccount", "UserAccount")
                         .WithMany("RefreshTokens")
                         .HasForeignKey("UserAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("UserAccount");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Auth.UserRiotAccount", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.Auth.UserAccount", "UserAccount")
+                        .WithOne("RiotAccount")
+                        .HasForeignKey("Transcendence.Data.Models.Auth.UserRiotAccount", "UserAccountId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -2226,14 +2323,6 @@ namespace Transcendence.Service.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Transcendence.Data.Models.LoL.Static.ItemVersion", "ItemVersion")
-                        .WithMany()
-                        .HasForeignKey("ItemId", "PatchVersion")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("ItemVersion");
-
                     b.Navigation("MatchParticipant");
                 });
 
@@ -2256,15 +2345,7 @@ namespace Transcendence.Service.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Transcendence.Data.Models.LoL.Static.RuneVersion", "RuneVersion")
-                        .WithMany()
-                        .HasForeignKey("RuneId", "PatchVersion")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.Navigation("MatchParticipant");
-
-                    b.Navigation("RuneVersion");
                 });
 
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.MatchParticipantSkillOrder", b =>
@@ -2344,9 +2425,13 @@ namespace Transcendence.Service.Migrations
                 {
                     b.Navigation("FavoriteSummoners");
 
+                    b.Navigation("PasswordResetTokens");
+
                     b.Navigation("Preferences");
 
                     b.Navigation("RefreshTokens");
+
+                    b.Navigation("RiotAccount");
 
                     b.Navigation("Roles");
                 });

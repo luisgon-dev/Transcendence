@@ -10,7 +10,7 @@ public class Summoner
     public int ProfileIconId { get; set; }
     public long SummonerLevel { get; set; }
     public long RevisionDate { get; set; }
-    public string? Puuid { get; set; }
+    public string Puuid { get; set; } = null!;
     public string? GameName { get; set; }
     public string? TagLine { get; set; }
     public string? GameNameNormalized { get; set; }
@@ -23,7 +23,6 @@ public class Summoner
     // signal for candidate selection (distinct from UpdatedAt, which is fetch/coverage recency).
     // Null until the summoner next appears in an ingested match. Maintained in MatchService.
     public DateTime? LastActiveAtUtc { get; set; }
-    public List<Match.Match> Matches { get; } = [];
     public ICollection<MatchParticipant> MatchParticipants { get; } = [];
     public ICollection<SummonerIngestionCursor> IngestionCursors { get; } = [];
     public ICollection<Rank> Ranks { get; set; } = new List<Rank>();

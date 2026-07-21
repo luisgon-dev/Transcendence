@@ -43,15 +43,33 @@ export function ProfileSidebar({
   gameName: string;
   tagLine: string;
 }) {
-  // Solo/Duo LP progression: recorded snapshots (oldest→newest) + the current rank
-  // appended as the latest point. Sparkline self-hides below 2 points.
+  // Solo/Duo progression uses the durable app-observed snapshots, normalized across
+  // tier/division boundaries into one monotonic ladder-points scale.
   const soloRank = rankedEntries.find((entry) => entry.label === "Solo/Duo")?.rank;
-  const soloSeries = [
-    ...(rankHistory ?? [])
-      .filter((entry) => (entry.queueType ?? "").toUpperCase().includes("SOLO"))
-      .map((entry) => rankToLadderPoints(entry.tier, entry.rankNumber, entry.leaguePoints)),
-    soloRank ? rankToLadderPoints(soloRank.tier, soloRank.division, soloRank.leaguePoints) : null
-  ].filter((value): value is number => value != null);
+  const soloHistoryPoints = (rankHistory ?? [])
+    .filter((entry) => (entry.queueType ?? "").toUpperCase().includes("SOLO"))
+    .map((entry) => ({
+      value: rankToLadderPoints(entry.tier, entry.rankNumber, entry.leaguePoints),
+      label: `${rankTierDisplayLabel(entry.tier)} ${entry.rankNumber ?? ""} · ${entry.leaguePoints} LP`,
+      recordedAt: entry.dateRecorded
+    }))
+    .filter((point): point is { value: number; label: string; recordedAt: string } => point.value != null);
+  const currentLadderPoints = soloRank
+    ? rankToLadderPoints(soloRank.tier, soloRank.division, soloRank.leaguePoints)
+    : null;
+  const lastObserved = soloHistoryPoints.at(-1)?.value;
+  const soloProgression = currentLadderPoints != null && currentLadderPoints !== lastObserved
+    ? [
+        ...soloHistoryPoints,
+        {
+          value: currentLadderPoints,
+          label: `${rankTierDisplayLabel(soloRank?.tier)} ${soloRank?.division ?? ""} · ${soloRank?.leaguePoints ?? 0} LP (current)`,
+          recordedAt: new Date().toISOString()
+        }
+      ]
+    : soloHistoryPoints;
+  const soloSeries = soloProgression.map((point) => point.value);
+  const soloDelta = soloSeries.length >= 2 ? soloSeries.at(-1)! - soloSeries[0] : null;
 
   return (
     <aside className="grid content-start gap-5 xl:sticky xl:top-24">
@@ -119,12 +137,29 @@ export function ProfileSidebar({
           </div>
         )}
         {soloSeries.length >= 2 ? (
-          <div className="surface-subtle mt-4 flex items-center justify-between gap-3 rounded-card px-3 py-2.5">
-            <div>
-              <p className="type-overline text-muted">Solo/Duo progression</p>
-              <p className="type-caption text-muted">{soloSeries.length} snapshots</p>
+          <div className="surface-subtle mt-4 grid gap-3 rounded-card px-3 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="type-overline text-muted">Solo/Duo progression</p>
+                <p className="type-caption text-muted">
+                  {soloSeries.length} observed snapshots · {new Date(soloProgression[0].recordedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}–{new Date(soloProgression.at(-1)!.recordedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                </p>
+              </div>
+              <p className={soloDelta != null && soloDelta >= 0 ? "type-caption font-semibold text-success" : "type-caption font-semibold text-danger"}>
+                {soloDelta != null && soloDelta >= 0 ? "+" : ""}{soloDelta} LP-equivalent
+              </p>
             </div>
-            <Sparkline values={soloSeries} width={104} height={30} />
+            <Sparkline values={soloSeries} width={240} height={44} className="h-11 w-full" />
+            <div>
+              <p className="type-note text-muted">
+                Observed rank changes, normalized across divisions; not a Riot per-game LP ledger.
+              </p>
+              <ol className="sr-only">
+                {soloProgression.map((point, index) => (
+                  <li key={`${point.recordedAt}-${index}`}>{new Date(point.recordedAt).toLocaleDateString()}: {point.label}</li>
+                ))}
+              </ol>
+            </div>
           </div>
         ) : null}
 
@@ -138,6 +173,10 @@ export function ProfileSidebar({
           </div>
         ) : null}
       </Card>
+
+      {/* Time-sensitive scouting belongs immediately after rank context, before mastery/pool/duo
+          exploration on mobile and desktop. The card auto-checks on mount. */}
+      <LiveGameCard region={region} gameName={gameName} tagLine={tagLine} />
 
       {(profile.topMastery?.length ?? 0) > 0 ? (
         <Card className="profile-section-card p-5">
@@ -252,8 +291,6 @@ export function ProfileSidebar({
           </div>
         </Card>
       ) : null}
-
-      <LiveGameCard region={region} gameName={gameName} tagLine={tagLine} />
     </aside>
   );
 }

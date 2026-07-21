@@ -264,7 +264,7 @@ _Make CI test reality, fix the lock protocol, restore accessibility, and add ale
   - **Fix:** Pass the static maps down from the server render as props (they are already React-cached server-side), or at minimum add `cache: "force-cache"`/an explicit browser max-age so repeat navigations don't re-fetch. Consider only shipping the item/champion subset actually referenced by the loaded matches.
   - **Why:** Four extra client round-trips plus parsing of large JSON payloads on each profile load, and no reliable browser caching between visits. The server render already has these maps cached via `fetchChampionMap`/`fetchItemMap`, so this is pure duplicated work shipped to the client.
   - **Where:** `apps/web/components/SummonerProfileUnified.tsx:207-212`
-- [ ] **getSessionMe is not request-deduplicated and blocks the document shell** `MED` · `small`
+- [x] **getSessionMe is not request-deduplicated and blocks the document shell** `MED` · `small`
   - **Fix:** Wrap getSessionMe in React `cache()` to collapse the duplicate calls within a request, and wrap <AccountNav/> in a Suspense boundary (with a lightweight fallback) so session resolution never blocks the page shell.
   - **Why:** Redundant backend /me round-trips per render for logged-in users, and a global TTFB tax that undercuts the deliberate Suspense streaming elsewhere (the champion page can't stream its shell until AccountNav's /me resolves).
   - **Where:** `apps/web/lib/session.ts:33`

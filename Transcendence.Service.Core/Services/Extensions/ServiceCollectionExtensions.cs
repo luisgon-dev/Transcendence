@@ -47,6 +47,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAdminBootstrapService, AdminBootstrapService>();
         services.AddScoped<IJwtService, JwtService>();
         services.AddScoped<IUserAuthService, UserAuthService>();
+        services.AddScoped<IPasswordResetService, PasswordResetService>();
+        services.AddScoped<IPasswordResetEmailSender, SmtpPasswordResetEmailSender>();
         services.AddScoped<IUserPreferencesService, UserPreferencesService>();
         services.AddScoped<ILiveGameService, StoredLiveGameService>();
         services.AddScoped<ILiveGameAnalysisService, LiveGameAnalysisService>();

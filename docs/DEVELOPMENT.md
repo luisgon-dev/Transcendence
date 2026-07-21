@@ -113,11 +113,19 @@ dotnet user-secrets set "Auth:Jwt:RequireKeyInDevelopment" "false" --project Tra
 dotnet user-secrets set "Auth:AdminBootstrap:Emails:0" "admin@example.com" --project Transcendence.WebAPI
 dotnet user-secrets set "Auth:BootstrapApiKey" "trn_bootstrap_dev_key" --project Transcendence.WebAPI
 dotnet user-secrets set "Auth:BootstrapApiKeyEnabledInDevelopmentOnly" "true" --project Transcendence.WebAPI
+# Optional password recovery (use a local SMTP catcher or real provider)
+dotnet user-secrets set "Auth:PasswordReset:Enabled" "true" --project Transcendence.WebAPI
+dotnet user-secrets set "Auth:PasswordReset:PublicBaseUrl" "http://localhost:3000" --project Transcendence.WebAPI
+dotnet user-secrets set "Auth:PasswordReset:Smtp:Host" "localhost" --project Transcendence.WebAPI
+dotnet user-secrets set "Auth:PasswordReset:Smtp:Port" "1025" --project Transcendence.WebAPI
+dotnet user-secrets set "Auth:PasswordReset:Smtp:EnableSsl" "false" --project Transcendence.WebAPI
+dotnet user-secrets set "Auth:PasswordReset:Smtp:FromAddress" "no-reply@local.dev" --project Transcendence.WebAPI
 ```
 
 Security notes:
 - `Auth:Jwt:Key` is required outside `Development`; startup fails if missing or if the known development placeholder is used.
 - `Auth:BootstrapApiKeyEnabledInDevelopmentOnly=true` rejects bootstrap API key auth outside `Development`.
+- Password recovery remains unavailable until `Auth:PasswordReset:Enabled=true`, a valid public base URL, SMTP host, and from-address are all configured. SMTP credentials are optional for trusted local relays; never commit them. Docker uses the matching `PASSWORD_RESET_*` variables documented in `.env.example`.
 
 `Transcendence.Service`:
 

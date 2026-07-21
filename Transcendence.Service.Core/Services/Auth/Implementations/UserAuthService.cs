@@ -15,6 +15,7 @@ public class UserAuthService(
 {
     private const int RefreshTokenDays = 7;
     private const int PasswordIterations = 310_000;
+    internal const int MinimumPasswordLength = 12;
     // Per-account brute-force lockout, independent of the per-IP rate limiter.
     private const int MaxFailedLoginAttempts = 10;
     private const int LockoutDurationMinutes = 15;
@@ -166,14 +167,6 @@ public class UserAuthService(
             await userAccountRepository.SaveChangesAsync(ct);
     }
 
-    public Task InitiatePasswordResetAsync(PasswordResetRequest request, CancellationToken ct = default)
-    {
-        // Placeholder for email integration in a later phase.
-        // Intentionally does not disclose whether an account exists.
-        logger.LogInformation("Password reset requested for {Email}", request.Email?.Trim());
-        return Task.CompletedTask;
-    }
-
     private async Task<AuthTokenResponse> IssueTokensAsync(UserAccount user, CancellationToken ct)
     {
         var accessToken = jwtService.GenerateAccessToken(user);
@@ -207,8 +200,8 @@ public class UserAuthService(
     {
         if (string.IsNullOrWhiteSpace(email))
             throw new ArgumentException("Email is required.", nameof(email));
-        if (string.IsNullOrWhiteSpace(password) || password.Length < 12)
-            throw new ArgumentException("Password must be at least 12 characters.", nameof(password));
+        if (string.IsNullOrWhiteSpace(password) || password.Length < MinimumPasswordLength)
+            throw new ArgumentException($"Password must be at least {MinimumPasswordLength} characters.", nameof(password));
     }
 
     private static string HashPassword(string password)
@@ -223,6 +216,8 @@ public class UserAuthService(
 
         return $"pbkdf2${PasswordIterations}${Convert.ToBase64String(salt)}${Convert.ToBase64String(hash)}";
     }
+
+    internal static string HashPasswordForStorage(string password) => HashPassword(password);
 
     private static bool VerifyPassword(string password, string storedHash, out int storedIterations)
     {

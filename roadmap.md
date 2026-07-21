@@ -348,7 +348,7 @@ _Make CI test reality, fix the lock protocol, restore accessibility, and add ale
   - **Fix:** Cut the status-chip row and the explanatory paragraph (a keyboard hint footer is enough), rename "Meta Pages"/"routes" to plain "Pages"/section names, and reserve the red spotlight/hairline for genuine emphasis to keep the one-accent discipline.
   - **Why:** The primary navigation surface carries the most decoration and the least data-forward copy on the whole site; on short viewports the chrome pushes actual results below the fold and the "routes/Meta Pages" language is more machine-voiced than the clean labels used elsewhere.
   - **Where:** `apps/web/components/GlobalCommandPalette.tsx:557-583,803-806,132-144`
-- [ ] **Login has no password-recovery or account-recovery path** `MED` · `medium`
+- [x] **Login has no password-recovery or account-recovery path** `MED` · `medium`
   - **Fix:** Add a "Forgot password?" link next to the password field wired to a reset flow (or, if reset is intentionally unsupported, state that explicitly so users understand the account is disposable).
   - **Why:** A user who forgets their password is fully locked out of their saved favorites and account state with no self-service recovery — a dead-end flow. Severity is bounded because the account only manages site state (per the page's own copy), not game data.
   - **Where:** `apps/web/app/account/login/page.tsx:70-111`
@@ -394,7 +394,7 @@ _Make CI test reality, fix the lock protocol, restore accessibility, and add ale
   - **Fix:** When `error && !profile`, replace the skeleton card with a dedicated EmptyState (the primitive exists) — e.g. "We couldn't find <RiotId> in <REGION>" with a Search CTA and a Retry action — instead of an endless Skeleton. Only render the skeleton while `polling`/`busy`.
   - **Why:** A not-found or errored profile looks half-broken/still-loading rather than clearly "we couldn't find this player." Undermines trust on exactly the failure path where clarity matters most, and offers no recovery action (search again, retry).
   - **Where:** `apps/web/components/SummonerProfileUnified.tsx:441-444`
-- [ ] **Auth flow is incomplete: no password recovery, no reveal toggle, no confirm-password** `MED` · `medium`
+- [x] **Auth flow is incomplete: no password recovery, no reveal toggle, no confirm-password** `MED` · `medium`
   - **Fix:** Add a "Forgot password?" link + reset flow (or explicitly state recovery isn't available if intentionally omitted). Add a password show/hide toggle to both forms and a confirm-password field to register. Keep the email-only stance if desired.
   - **Why:** A user who forgets their password has zero in-product recovery path; lockout forces a second account. No reveal toggle raises entry friction on the enforced 12-char passwords, and no confirm field means a signup typo silently locks the new account. The "No Riot auth" stance is a fine deliberate choice; the missing recovery is the real gap.
   - **Where:** `apps/web/app/account/login/page.tsx:70-111`

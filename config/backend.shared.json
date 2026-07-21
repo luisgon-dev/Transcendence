@@ -6,6 +6,22 @@
   "Database": {
     "AutoMigrate": true
   },
+  "Auth": {
+    "PasswordReset": {
+      "Enabled": false,
+      "PublicBaseUrl": "https://transcend.kronic.one",
+      "TokenLifetimeMinutes": 30,
+      "Smtp": {
+        "Host": "",
+        "Port": 587,
+        "EnableSsl": true,
+        "Username": "",
+        "Password": "",
+        "FromAddress": "",
+        "FromName": "Transcendence"
+      }
+    }
+  },
   "RiotApi": {
     "League": {
       "ApiKey": "RGAPI-00000000-0000-0000-0000-000000000000"

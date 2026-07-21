@@ -18,6 +18,7 @@ public class UserAccount
 
     public ICollection<UserRole> Roles { get; set; } = new List<UserRole>();
     public ICollection<UserRefreshToken> RefreshTokens { get; set; } = new List<UserRefreshToken>();
+    public ICollection<UserPasswordResetToken> PasswordResetTokens { get; set; } = new List<UserPasswordResetToken>();
     public ICollection<UserFavoriteSummoner> FavoriteSummoners { get; set; } = new List<UserFavoriteSummoner>();
     public UserPreferences? Preferences { get; set; }
 }

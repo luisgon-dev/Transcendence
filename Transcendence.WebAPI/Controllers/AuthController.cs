@@ -10,7 +10,9 @@ namespace Transcendence.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/auth")]
-public class AuthController(IUserAuthService userAuthService) : ControllerBase
+public class AuthController(
+    IUserAuthService userAuthService,
+    IPasswordResetService passwordResetService) : ControllerBase
 {
     [HttpPost("register")]
     [EnableRateLimiting("auth-register")]
@@ -66,11 +68,30 @@ public class AuthController(IUserAuthService userAuthService) : ControllerBase
     }
 
     [HttpPost("password-reset")]
+    [EnableRateLimiting("auth-register")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> InitiatePasswordReset([FromBody] PasswordResetRequest request, CancellationToken ct)
     {
-        await userAuthService.InitiatePasswordResetAsync(request, ct);
+        if (!await passwordResetService.InitiateAsync(request, ct))
+            return Problem(
+                title: "Password recovery unavailable",
+                detail: "Password recovery is not configured right now. Please try again later.",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
         return Ok(new { message = "If the account exists, a reset flow has been initiated." });
+    }
+
+    [HttpPost("password-reset/complete")]
+    [EnableRateLimiting("auth-register")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> CompletePasswordReset(
+        [FromBody] PasswordResetCompleteRequest request,
+        CancellationToken ct)
+    {
+        if (!await passwordResetService.CompleteAsync(request, ct))
+            return BadRequest("The reset link is invalid or expired, or the password does not meet requirements.");
+        return NoContent();
     }
 
     [HttpGet("me")]

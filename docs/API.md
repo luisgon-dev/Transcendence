@@ -30,7 +30,7 @@ Read-heavy endpoints are protected by server-side fixed-window rate limiting and
 
 - `429 Too Many Requests`
 
-Auth endpoints use dedicated per-client rate limits: `/api/auth/register` (`auth-register`), `/api/auth/login` (`auth-login`), and `/api/auth/refresh` + `/api/auth/logout` (shared `auth-refresh`). `/api/auth/password-reset` is not rate-limited.
+Auth endpoints use dedicated per-client rate limits: `/api/auth/register`, `/api/auth/password-reset`, and `/api/auth/password-reset/complete` share the conservative `auth-register` policy; `/api/auth/login` uses `auth-login`; `/api/auth/refresh` + `/api/auth/logout` share `auth-refresh`.
 
 ## Error Model
 
@@ -298,7 +298,8 @@ Response: `{ patch, region, scope, champions[], sample }` where each champion en
 - `POST /api/auth/login`
 - `POST /api/auth/refresh`
 - `POST /api/auth/logout`
-- `POST /api/auth/password-reset` (anonymous; always returns a generic `200 OK` whether or not the account exists)
+- `POST /api/auth/password-reset` (anonymous; returns the same generic `200 OK` for existing and unknown accounts; `503` when SMTP recovery is disabled/unconfigured)
+- `POST /api/auth/password-reset/complete` (anonymous; consumes a one-time token and returns `204`; invalid/expired tokens return `400`)
 - `GET /api/auth/me` (`AppOrUser`)
 - `GET /api/auth/keys` (`AdminOnly`)
 - `POST /api/auth/keys` (`AdminOnly`)
@@ -308,6 +309,7 @@ Response: `{ patch, region, scope, champions[], sample }` where each champion en
 Auth behavior notes:
 - Registration duplicate-email responses are intentionally generic (`Registration failed.`).
 - Password minimum length is 12 characters.
+- Password-reset tokens are random, stored only as SHA-256 hashes, expire after the configured lifetime (30 minutes by default), and are single-use. Completing a reset revokes every active refresh token for the account.
 
 ### Admin Operations (`AdminOnly`)
 

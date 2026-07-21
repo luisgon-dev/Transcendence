@@ -9,8 +9,6 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 
-const GITHUB_REPO_URL = "https://github.com/luisgon-dev/Transcendence";
-
 export default function LoginPage() {
   const [state, formAction, pending] = useActionState(
     loginAction,
@@ -87,10 +85,7 @@ export default function LoginPage() {
                     Password
                   </label>
                   <Link
-                    href={`${GITHUB_REPO_URL}/issues`}
-                    target="_blank"
-                    rel="noreferrer"
-                    title="Password recovery is handled through our support tracker."
+                    href="/account/forgot-password"
                     className="type-meta rounded-sm font-semibold text-fg/62 transition hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/24 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
                   >
                     Forgot password?

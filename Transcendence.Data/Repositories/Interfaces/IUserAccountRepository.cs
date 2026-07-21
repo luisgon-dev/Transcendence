@@ -12,6 +12,9 @@ public interface IUserAccountRepository
     Task AddRoleAsync(UserRole role, CancellationToken ct = default);
     Task<bool> HasRoleAsync(Guid userAccountId, string role, CancellationToken ct = default);
     Task AddRefreshTokenAsync(UserRefreshToken refreshToken, CancellationToken ct = default);
+    Task AddPasswordResetTokenAsync(UserPasswordResetToken resetToken, CancellationToken ct = default);
+    Task<UserPasswordResetToken?> GetActivePasswordResetTokenAsync(string tokenHash, CancellationToken ct = default);
+    Task<int> RevokeActivePasswordResetTokensForUserAsync(Guid userAccountId, CancellationToken ct = default);
     Task<UserRefreshToken?> GetActiveRefreshTokenAsync(string tokenHash, CancellationToken ct = default);
     /// <summary>Looks up a refresh token by hash regardless of its revoked/expired state (for reuse detection).</summary>
     Task<UserRefreshToken?> GetRefreshTokenByHashAsync(string tokenHash, CancellationToken ct = default);

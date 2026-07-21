@@ -8,5 +8,4 @@ public interface IUserAuthService
     Task<AuthTokenResponse?> LoginAsync(LoginRequest request, CancellationToken ct = default);
     Task<AuthTokenResponse?> RefreshAsync(RefreshRequest request, CancellationToken ct = default);
     Task LogoutAsync(RefreshRequest request, CancellationToken ct = default);
-    Task InitiatePasswordResetAsync(PasswordResetRequest request, CancellationToken ct = default);
 }

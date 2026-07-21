@@ -58,6 +58,7 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<UserAccount> UserAccounts { get; set; }
     public DbSet<UserRole> UserRoles { get; set; }
     public DbSet<UserRefreshToken> UserRefreshTokens { get; set; }
+    public DbSet<UserPasswordResetToken> UserPasswordResetTokens { get; set; }
     public DbSet<UserFavoriteSummoner> UserFavoriteSummoners { get; set; }
     public DbSet<UserPreferences> UserPreferences { get; set; }
     public DbSet<AdminAuditEvent> AdminAuditEvents { get; set; }
@@ -240,6 +241,19 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
 
             entity.HasOne(x => x.UserAccount)
                 .WithMany(x => x.RefreshTokens)
+                .HasForeignKey(x => x.UserAccountId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UserPasswordResetToken>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.HasIndex(x => new { x.UserAccountId, x.ExpiresAtUtc });
+            entity.Property(x => x.TokenHash).IsRequired();
+
+            entity.HasOne(x => x.UserAccount)
+                .WithMany(x => x.PasswordResetTokens)
                 .HasForeignKey(x => x.UserAccountId)
                 .OnDelete(DeleteBehavior.Cascade);
         });

@@ -103,6 +103,16 @@ services:
       Auth__Jwt__AccessTokenMinutes: ${JWT_ACCESS_TOKEN_MINUTES}
       Auth__AdminBootstrap__Emails__0: ${ADMIN_BOOTSTRAP_EMAIL_0:-}
       Auth__BootstrapApiKey: ${AUTH_BOOTSTRAP_API_KEY}
+      Auth__PasswordReset__Enabled: ${PASSWORD_RESET_ENABLED:-false}
+      Auth__PasswordReset__PublicBaseUrl: ${PASSWORD_RESET_PUBLIC_BASE_URL:-https://transcend.kronic.one}
+      Auth__PasswordReset__TokenLifetimeMinutes: ${PASSWORD_RESET_TOKEN_LIFETIME_MINUTES:-30}
+      Auth__PasswordReset__Smtp__Host: ${PASSWORD_RESET_SMTP_HOST:-}
+      Auth__PasswordReset__Smtp__Port: ${PASSWORD_RESET_SMTP_PORT:-587}
+      Auth__PasswordReset__Smtp__EnableSsl: ${PASSWORD_RESET_SMTP_ENABLE_SSL:-true}
+      Auth__PasswordReset__Smtp__Username: ${PASSWORD_RESET_SMTP_USERNAME:-}
+      Auth__PasswordReset__Smtp__Password: ${PASSWORD_RESET_SMTP_PASSWORD:-}
+      Auth__PasswordReset__Smtp__FromAddress: ${PASSWORD_RESET_SMTP_FROM_ADDRESS:-}
+      Auth__PasswordReset__Smtp__FromName: ${PASSWORD_RESET_SMTP_FROM_NAME:-Transcendence}
       OperationalLogs__DirectoryPath: /var/log/transcendence
       <<: *app-env
     ports:

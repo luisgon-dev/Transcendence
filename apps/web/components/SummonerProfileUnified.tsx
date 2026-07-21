@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { useReducedMotion } from "framer-motion";
 
 import { MatchHistorySection } from "@/components/lol-profile/MatchHistorySection";
@@ -61,7 +61,13 @@ export function SummonerProfileClient({
   initialQueue = "ALL",
   initialExpandMatchId = null,
   initialSort = "DATE_DESC",
-  initialChampion = ""
+  initialChampion = "",
+  initialHistory = null,
+  initialRankHistory = null,
+  initialChampionStatic = null,
+  initialItemStatic = null,
+  initialSpellStatic = null,
+  initialRuneStatic = null
 }: {
   region: string;
   gameName: string;
@@ -73,8 +79,13 @@ export function SummonerProfileClient({
   initialExpandMatchId?: string | null;
   initialSort?: string;
   initialChampion?: string;
+  initialHistory?: PagedResultDto<MatchSummary> | null;
+  initialRankHistory?: RankHistoryEntry[] | null;
+  initialChampionStatic?: ChampionStatic | null;
+  initialItemStatic?: ItemStatic | null;
+  initialSpellStatic?: SpellStatic | null;
+  initialRuneStatic?: RuneStatic | null;
 }) {
-  const router = useRouter();
   const pathname = usePathname();
   const prefersReducedMotion = useReducedMotion();
   const title = `${gameName}#${tagLine}`;
@@ -92,22 +103,32 @@ export function SummonerProfileClient({
   const [polling, setPolling] = useState(initialStatus === 202);
   const [pollDelayMs, setPollDelayMs] = useState(2000);
   const [pollAttempts, setPollAttempts] = useState(0);
-  const [championStatic, setChampionStatic] = useState<ChampionStatic | null>(null);
-  const [itemStatic, setItemStatic] = useState<ItemStatic | null>(null);
-  const [spellStatic, setSpellStatic] = useState<SpellStatic | null>(null);
-  const [runeStatic, setRuneStatic] = useState<RuneStatic | null>(null);
+  const [championStatic, setChampionStatic] = useState<ChampionStatic | null>(initialChampionStatic);
+  const [itemStatic, setItemStatic] = useState<ItemStatic | null>(initialItemStatic);
+  const [spellStatic, setSpellStatic] = useState<SpellStatic | null>(initialSpellStatic);
+  const [runeStatic, setRuneStatic] = useState<RuneStatic | null>(initialRuneStatic);
 
   const [page, setPage] = useState(Math.max(1, initialPage));
   const [queue, setQueue] = useState(normalizeInitialQueue(initialQueue));
   const [expandedMatchId, setExpandedMatchId] = useState<string | null>(initialExpandMatchId);
   const [sort, setSort] = useState<MatchSortOption>(normalizeInitialSort(initialSort));
   const [championFilter, setChampionFilter] = useState(initialChampion.trim());
-  const [history, setHistory] = useState<PagedResultDto<MatchSummary> | null>(null);
+  const [history, setHistory] = useState<PagedResultDto<MatchSummary> | null>(initialHistory);
   const [historyBusy, setHistoryBusy] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [details, setDetails] = useState<Record<string, MatchDetail | null>>({});
   const [detailBusy, setDetailBusy] = useState<Record<string, boolean>>({});
-  const [rankHistory, setRankHistory] = useState<RankHistoryEntry[] | null>(null);
+  const [rankHistory, setRankHistory] = useState<RankHistoryEntry[] | null>(initialRankHistory);
+  const serverHistoryKey = useRef(
+    initialHistory && initialStatus === 200
+      ? `${(initialBody as SummonerProfileResponse).summonerId}:${initialHistory.page}`
+      : null
+  );
+  const serverRankHistorySummonerId = useRef(
+    initialRankHistory && initialStatus === 200
+      ? (initialBody as SummonerProfileResponse).summonerId
+      : null
+  );
 
   const queueOptions = useMemo<QueueOption[]>(() => {
     const optionMap = new Map<string, QueueOption>();
@@ -202,8 +223,12 @@ export function SummonerProfileClient({
     if (championFilter.trim()) params.set("champion", championFilter.trim());
     if (expandedMatchId) params.set("expandMatchId", expandedMatchId);
     const next = params.toString();
-    router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
-  }, [championFilter, expandedMatchId, page, pathname, queue, router, sort]);
+    window.history.replaceState(
+      window.history.state,
+      "",
+      next ? `${pathname}?${next}` : pathname
+    );
+  }, [championFilter, expandedMatchId, page, pathname, queue, sort]);
 
   useEffect(() => {
     let cancelled = false;
@@ -211,30 +236,30 @@ export function SummonerProfileClient({
     async function loadStatic() {
       try {
         const [champRes, itemRes, spellRes, runeRes] = await Promise.all([
-          fetch("/api/static/champions"),
-          fetch("/api/static/items"),
-          fetch("/api/static/spells"),
-          fetch("/api/static/runes")
+          championStatic ? null : fetch("/api/static/champions"),
+          itemStatic ? null : fetch("/api/static/items"),
+          spellStatic ? null : fetch("/api/static/spells"),
+          runeStatic ? null : fetch("/api/static/runes")
         ]);
 
         if (cancelled) return;
 
-        if (champRes.ok) {
+        if (champRes?.ok) {
           const json = (await champRes.json()) as ChampionStatic;
           if (!cancelled) setChampionStatic(json);
         }
 
-        if (itemRes.ok) {
+        if (itemRes?.ok) {
           const json = (await itemRes.json()) as ItemStatic;
           if (!cancelled) setItemStatic(json);
         }
 
-        if (spellRes.ok) {
+        if (spellRes?.ok) {
           const json = (await spellRes.json()) as SpellStatic;
           if (!cancelled) setSpellStatic(json);
         }
 
-        if (runeRes.ok) {
+        if (runeRes?.ok) {
           const json = (await runeRes.json()) as RuneStatic;
           if (!cancelled) setRuneStatic(json);
         }
@@ -247,7 +272,7 @@ export function SummonerProfileClient({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [championStatic, itemStatic, runeStatic, spellStatic]);
 
   const fetchProfileOnce = useCallback(async () => {
     const res = await fetch(buildLolPublicSummonerByRiotIdPath(region, gameName, tagLine), {
@@ -296,6 +321,9 @@ export function SummonerProfileClient({
   useEffect(() => {
     const summonerId = profile?.summonerId;
     if (!summonerId) return;
+    const historyKey = `${summonerId}:${page}`;
+    if (serverHistoryKey.current === historyKey) return;
+    serverHistoryKey.current = null;
     let cancelled = false;
 
     async function load(id: string) {
@@ -339,6 +367,7 @@ export function SummonerProfileClient({
   useEffect(() => {
     const summonerId = profile?.summonerId;
     if (!summonerId) return;
+    if (serverRankHistorySummonerId.current === summonerId) return;
     let cancelled = false;
 
     (async () => {

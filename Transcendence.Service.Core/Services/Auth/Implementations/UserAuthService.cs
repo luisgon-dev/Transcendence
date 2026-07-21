@@ -231,19 +231,40 @@ public class UserAuthService(
         if (parts.Length != 4 || !parts[0].Equals("pbkdf2", StringComparison.OrdinalIgnoreCase))
             return false;
 
-        if (!int.TryParse(parts[1], out var iterations))
+        if (!int.TryParse(parts[1], out var iterations) || iterations <= 0)
             return false;
+
+        byte[] salt;
+        byte[] expectedHash;
+        try
+        {
+            salt = Convert.FromBase64String(parts[2]);
+            expectedHash = Convert.FromBase64String(parts[3]);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+
+        if (salt.Length == 0 || expectedHash.Length == 0)
+            return false;
+
+        byte[] actualHash;
+        try
+        {
+            actualHash = Rfc2898DeriveBytes.Pbkdf2(
+                password,
+                salt,
+                iterations,
+                HashAlgorithmName.SHA256,
+                expectedHash.Length);
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+
         storedIterations = iterations;
-
-        var salt = Convert.FromBase64String(parts[2]);
-        var expectedHash = Convert.FromBase64String(parts[3]);
-        var actualHash = Rfc2898DeriveBytes.Pbkdf2(
-            password,
-            salt,
-            iterations,
-            HashAlgorithmName.SHA256,
-            expectedHash.Length);
-
         return CryptographicOperations.FixedTimeEquals(expectedHash, actualHash);
     }
 

@@ -10,19 +10,45 @@ namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 public sealed class AnalyticsPatchQueryService(TranscendenceContext db) : IAnalyticsPatchQueryService
 {
     public async Task<IReadOnlyList<AnalyticsPatchOptionDto>> GetPatchOptionsAsync(
+        CancellationToken ct = default) =>
+        await GetPatchOptionsAsync(QueueCatalog.QueueFamilyRankedSoloDuo, ct);
+
+    public async Task<IReadOnlyList<AnalyticsPatchOptionDto>> GetPatchOptionsAsync(
+        string? queueFamily,
         CancellationToken ct = default)
     {
-        var rankedSoloDuoMatchCounts = await db.Matches
+        var normalizedQueue = AnalyticsQueueCatalog.Normalize(queueFamily);
+        var queueMatches = db.Matches
             .AsNoTracking()
             .Where(m => m.Status == FetchStatus.Success)
-            .Where(m => m.Patch != null && m.Patch != string.Empty)
-            .Where(m => m.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
-                        (m.QueueId == 0 && m.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString()))
+            .Where(m => m.Patch != null && m.Patch != string.Empty);
+
+        queueMatches = normalizedQueue switch
+        {
+            QueueCatalog.QueueFamilyAram => queueMatches.Where(m =>
+                m.QueueFamily == QueueCatalog.QueueFamilyAram ||
+                m.QueueId == 450 ||
+                (m.QueueId == 0 && m.QueueType == "450")),
+            QueueCatalog.QueueFamilyArena => queueMatches.Where(m =>
+                m.QueueFamily == QueueCatalog.QueueFamilyArena ||
+                m.QueueId == 1700 || m.QueueId == 1710 || m.QueueId == 1810 ||
+                m.QueueId == 1820 || m.QueueId == 1830 || m.QueueId == 1840),
+            QueueCatalog.QueueFamilyRankedFlex => queueMatches.Where(m =>
+                m.QueueFamily == QueueCatalog.QueueFamilyRankedFlex ||
+                m.QueueId == QueueCatalog.RankedFlexQueueId ||
+                (m.QueueId == 0 && m.QueueType == QueueCatalog.RankedFlexQueueId.ToString())),
+            _ => queueMatches.Where(m =>
+                m.QueueFamily == QueueCatalog.QueueFamilyRankedSoloDuo ||
+                m.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
+                (m.QueueId == 0 && m.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString()))
+        };
+
+        var matchCounts = await queueMatches
             .GroupBy(m => m.Patch!)
             .Select(g => new PatchMatchCount(g.Key, g.Count()))
             .ToListAsync(ct);
 
-        var matchCountsByPatch = rankedSoloDuoMatchCounts.ToDictionary(x => x.Patch, x => x.Count);
+        var matchCountsByPatch = matchCounts.ToDictionary(x => x.Patch, x => x.Count);
         var patchesWithMatches = matchCountsByPatch.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var patchMetadata = await db.Patches
             .AsNoTracking()
@@ -36,17 +62,19 @@ public sealed class AnalyticsPatchQueryService(TranscendenceContext db) : IAnaly
                 p.ReleaseDate,
                 p.DetectedAt,
                 p.IsActive,
-                matchCountsByPatch.GetValueOrDefault(p.Version)))
+                matchCountsByPatch.GetValueOrDefault(p.Version),
+                normalizedQueue))
             .ToDictionary(x => x.Patch, StringComparer.OrdinalIgnoreCase);
 
-        foreach (var matchCount in rankedSoloDuoMatchCounts)
+        foreach (var matchCount in matchCounts)
         {
             optionsByPatch.TryAdd(matchCount.Patch, new AnalyticsPatchOptionDto(
                 matchCount.Patch,
                 null,
                 null,
                 false,
-                matchCount.Count));
+                matchCount.Count,
+                normalizedQueue));
         }
 
         return optionsByPatch.Values

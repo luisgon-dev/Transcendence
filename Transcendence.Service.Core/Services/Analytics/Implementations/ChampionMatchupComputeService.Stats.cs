@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Transcendence.Service.Core.Services.Analytics.Models;
+using Transcendence.Service.Core.Services.RiotApi;
 
 namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 
@@ -19,13 +20,27 @@ public partial class ChampionMatchupComputeService
         string? rankTier,
         string? region,
         string patch,
+        CancellationToken ct) =>
+        await ComputeMatchupsFromStatsAsync(
+            championId, role, rankTier, region, QueueCatalog.QueueFamilyRankedSoloDuo, patch, ct);
+
+    public async Task<ChampionMatchupsResponse> ComputeMatchupsFromStatsAsync(
+        int championId,
+        string role,
+        string? rankTier,
+        string? region,
+        string queueFamily,
+        string patch,
         CancellationToken ct)
     {
+        var normalizedQueue = AnalyticsQueueCatalog.Normalize(queueFamily);
         var regionFilter = AnalyticsRegionCatalog.NormalizeToFilter(region);
         // Only the all-region scope is precomputed; a specific region or an un-refreshed patch falls back
         // to the raw self-join compute.
-        if (regionFilter != null || !await HasMatchupStatsAsync(patch, ct))
-            return await ComputeMatchupsAsync(championId, role, rankTier, region, patch, ct);
+        if (normalizedQueue != QueueCatalog.QueueFamilyRankedSoloDuo ||
+            regionFilter != null ||
+            !await HasMatchupStatsAsync(patch, ct))
+            return await ComputeMatchupsAsync(championId, role, rankTier, region, normalizedQueue, patch, ct);
 
         var rankTierScope = AnalyticsScopeMath.ParseRankTierScope(rankTier);
         var scopeToken = AnalyticsScopeMath.ScopeTokenOf(rankTierScope);

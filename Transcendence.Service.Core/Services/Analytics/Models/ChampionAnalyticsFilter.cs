@@ -7,9 +7,11 @@ namespace Transcendence.Service.Core.Services.Analytics.Models;
 /// <param name="Region">Optional region filter (default: global)</param>
 /// <param name="Role">TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY</param>
 /// <param name="Patch">Optional analytics patch version. Defaults to active patch.</param>
+/// <param name="QueueFamily">Ranked Solo/Duo, ARAM, Arena, or Ranked Flex. Defaults to Ranked Solo/Duo.</param>
 public record ChampionAnalyticsFilter(
     string? RankTier = null,
     string? Region = null,
     string? Role = null,
-    string? Patch = null
+    string? Patch = null,
+    string? QueueFamily = null
 );

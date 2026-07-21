@@ -13,6 +13,7 @@ import {
 import { fetchBackendJson } from "@/lib/backendCall";
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { normalizeAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyticsSample";
+import { analyticsQueueOption, normalizeAnalyticsQueue } from "@/lib/analyticsQueues";
 import { GLOBAL_ANALYTICS_REGION } from "@/lib/analyticsRegionShared";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { fetchLolAnalyticsPatches } from "@/lib/lolAnalyticsPatches";
@@ -30,7 +31,7 @@ import { UpdatedAgo } from "@/components/UpdatedAgo";
 
 type TierListResponse = TierListResponseLike;
 
-type TierListSearchParams = { role?: string; rankTier?: string; region?: string; patch?: string };
+type TierListSearchParams = { role?: string; rankTier?: string; region?: string; patch?: string; queue?: string };
 
 export async function generateMetadata({
   searchParams
@@ -39,17 +40,18 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const resolved = searchParams ? await searchParams : {};
   const role = (resolved.role ?? "ALL").toUpperCase();
+  const queue = analyticsQueueOption(resolved.queue);
   const rank = rankTierDisplayLabel(normalizeRankTierParam(resolved.rankTier) ?? DEFAULT_TIERLIST_RANK_TIER);
   let patch = normalizeAnalyticsPatch(resolved.patch);
   if (!patch) {
-    const patches = await fetchLolAnalyticsPatches();
+    const patches = await fetchLolAnalyticsPatches(queue.value);
     patch = patches.find((candidate) => candidate.isActive)?.patch ?? patches[0]?.patch ?? null;
   }
 
   const roleLabel = roleDisplayLabel(role);
   const patchLabel = patch ? ` Patch ${patch}` : "";
-  const title = `League of Legends ${roleLabel} Tier List${patchLabel}`;
-  const description = `${rank} champion rankings for ${roleLabel.toLowerCase()}, with win rates, pick rates, sample confidence, and current-patch data.`;
+  const title = `League of Legends ${queue.label} ${queue.hasRoles ? `${roleLabel} ` : ""}Tier List${patchLabel}`;
+  const description = `${rank} ${queue.label} champion rankings${queue.hasRoles ? ` for ${roleLabel.toLowerCase()}` : ""}, with win rates, pick rates, sample confidence, and current-patch data.`;
   const image = socialImageUrl(title, "League tier list", `${rank}, trustworthy samples, and role-specific rankings`);
 
   return {
@@ -70,13 +72,15 @@ export async function generateMetadata({
 export default async function TierListPage({
   searchParams
 }: {
-  searchParams?: Promise<{ role?: string; rankTier?: string; region?: string; patch?: string }>;
+  searchParams?: Promise<TierListSearchParams>;
 }) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const activeQueue = normalizeAnalyticsQueue(resolvedSearchParams?.queue);
+  const queueOption = analyticsQueueOption(activeQueue);
   const { activeRegion, activeRegionLabel, options: regionOptions } = await resolveAnalyticsRegion(
     resolvedSearchParams?.region
   );
-  const roleParam = (resolvedSearchParams?.role ?? "").toUpperCase();
+  const roleParam = queueOption.hasRoles ? (resolvedSearchParams?.role ?? "").toUpperCase() : "ALL";
   const rawRankParam = resolvedSearchParams?.rankTier ?? null;
   const normalizedRankParam = normalizeRankTierParam(rawRankParam);
   const selectedPatch = normalizeAnalyticsPatch(resolvedSearchParams?.patch);
@@ -90,6 +94,7 @@ export default async function TierListPage({
     if (effectiveRankParam) requestQuery.set("rankTier", effectiveRankParam);
     if (region !== GLOBAL_ANALYTICS_REGION) requestQuery.set("region", region);
     if (selectedPatch) requestQuery.set("patch", selectedPatch);
+    if (activeQueue !== "solo") requestQuery.set("queue", activeQueue);
 
     return fetchBackendJson<TierListResponse>(
       `${getBackendBaseUrl()}/api/lol/analytics/tierlist?${requestQuery.toString()}`,
@@ -105,8 +110,11 @@ export default async function TierListPage({
     effectiveRegionLabel,
     fallbackMessage
   } = resolveAnalyticsRegionPresentation(activeRegion, activeRegionLabel, regionOptions, usedGlobalFallback);
-  const patchOptions = await fetchLolAnalyticsPatches();
-  const sharedFilterParams = selectedPatch ? { patch: selectedPatch } : {};
+  const patchOptions = await fetchLolAnalyticsPatches(activeQueue);
+  const sharedFilterParams = {
+    ...(selectedPatch ? { patch: selectedPatch } : {}),
+    ...(activeQueue !== "solo" ? { queue: activeQueue } : {})
+  };
 
   if (!res.ok) {
     return (
@@ -137,6 +145,8 @@ export default async function TierListPage({
             activeRegion={activeRegion}
             patchOptions={patchOptions}
             activePatch={selectedPatch}
+            activeQueue={activeQueue}
+            showRoles={queueOption.hasRoles}
             extraParams={sharedFilterParams}
             baseHref="/lol/tierlist"
             className="mt-0"
@@ -189,10 +199,12 @@ export default async function TierListPage({
             <Badge className="border-primary/40 bg-primary/10 text-primary">
               Patch {tierlist.patch ?? "Unknown"}
             </Badge>
+            <span>{queueOption.label}</span>
+            <span aria-hidden="true">·</span>
             <span>{effectiveRegionLabel}</span>
             <span aria-hidden="true">·</span>
-            <span>{roleDisplayLabel(tierlist.role ?? "ALL")}</span>
-            <span aria-hidden="true">·</span>
+            {queueOption.hasRoles ? <span>{roleDisplayLabel(tierlist.role ?? "ALL")}</span> : null}
+            {queueOption.hasRoles ? <span aria-hidden="true">·</span> : null}
             <span>{rankTierDisplayLabel(rankTierValue ?? "all")}</span>
             <span aria-hidden="true">·</span>
             <span className="type-tabular tabular-nums">{normalizedEntries.length} champions</span>
@@ -212,6 +224,8 @@ export default async function TierListPage({
             activeRegion={effectiveRegion}
             patchOptions={patchOptions}
             activePatch={selectedPatch}
+            activeQueue={activeQueue}
+            showRoles={queueOption.hasRoles}
             extraParams={sharedFilterParams}
             baseHref="/lol/tierlist"
             className="mt-0 w-full border-0 bg-transparent p-0 shadow-none"
@@ -236,6 +250,8 @@ export default async function TierListPage({
         rankTierValue={rankTierValue}
         activeRegion={effectiveRegion}
         activePatch={selectedPatch}
+        activeQueue={activeQueue}
+        showRoles={queueOption.hasRoles}
         minGames={minGames}
       />
     </div>

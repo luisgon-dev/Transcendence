@@ -87,7 +87,8 @@ public record ChampionBuildsResponse(
     List<StarterItemSetDto>? StartingItems = null,
     List<ItemChoiceDto>? Boots = null,
     List<CoreItemStepDto>? CoreBuildPath = null,
-    List<SituationalSlotDto>? SituationalSlots = null
+    List<SituationalSlotDto>? SituationalSlots = null,
+    string QueueFamily = "RANKED_SOLO_DUO"
 );
 
 public record ProMatchBuildDto(

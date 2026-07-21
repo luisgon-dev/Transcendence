@@ -1,5 +1,8 @@
 "use client";
 
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+
+import { ANALYTICS_QUEUE_OPTIONS, type AnalyticsQueue } from "@/lib/analyticsQueues";
 import { cn } from "@/lib/cn";
 import { type AnalyticsRegionOption } from "@/lib/analyticsRegionShared";
 import { type LolAnalyticsPatchOption } from "@/lib/lolPatchFilters";
@@ -10,6 +13,7 @@ import { AnalyticsPatchFilter } from "./AnalyticsPatchFilter";
 import { AnalyticsRegionFilter } from "./AnalyticsRegionFilter";
 import { RankFilterDropdown } from "./RankFilterDropdown";
 import { RoleFilterTabs } from "./RoleFilterTabs";
+import { Select } from "./ui/Select";
 
 const DEFAULT_ROLES = LANE_ROLES;
 const DEFAULT_RANKS = RANK_TIER_FILTERS;
@@ -23,6 +27,8 @@ export function FilterBar({
   activeRegion,
   patchOptions,
   activePatch,
+  activeQueue = "solo",
+  showRoles = true,
   extraParams,
   explicitAllRank = false,
   baseHref,
@@ -36,12 +42,17 @@ export function FilterBar({
   activeRegion?: string;
   patchOptions?: readonly LolAnalyticsPatchOption[];
   activePatch?: string | null;
+  activeQueue?: AnalyticsQueue;
+  showRoles?: boolean;
   extraParams?: Record<string, string | null | undefined>;
   /** Keep "All Ranks" selectable on pages whose absent-param default is Emerald+. */
   explicitAllRank?: boolean;
   baseHref: string;
   className?: string;
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const sharedExtraParams: Record<string, string> = {};
   if (extraParams) {
     for (const [key, value] of Object.entries(extraParams)) {
@@ -61,13 +72,28 @@ export function FilterBar({
 
   return (
     <div className={cn("flex flex-wrap items-center gap-3", className)}>
-      <RoleFilterTabs
-        roles={roles}
-        activeRole={activeRole}
-        baseHref={baseHref}
-        extraParams={roleExtraParams}
-        keepRankAll={explicitAllRank}
+      <Select
+        value={activeQueue}
+        onValueChange={(queue) => {
+          const next = new URLSearchParams(searchParams.toString());
+          if (queue === "solo") next.delete("queue");
+          else next.set("queue", queue);
+          if (queue === "aram" || queue === "arena") next.delete("role");
+          router.push(`${pathname}?${next.toString()}`, { scroll: false });
+        }}
+        options={ANALYTICS_QUEUE_OPTIONS.map(({ value, label }) => ({ value, label }))}
+        ariaLabel="Analytics queue"
+        className="w-full sm:w-44"
       />
+      {showRoles ? (
+        <RoleFilterTabs
+          roles={roles}
+          activeRole={activeRole}
+          baseHref={baseHref}
+          extraParams={roleExtraParams}
+          keepRankAll={explicitAllRank}
+        />
+      ) : null}
       <RankFilterDropdown
         ranks={ranks}
         activeRank={activeRank}

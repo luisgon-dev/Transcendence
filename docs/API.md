@@ -181,6 +181,15 @@ Early-patch semantics:
 - `low_sample` and `no_data` are expected during early patch windows while ingestion ramps up.
 - Tier-list entries carry `movement` / `previousTier` for the persisted region=ALL default scopes (rank scope `all` or `EMERALD_PLUS`); they are omitted (movement `SAME`/null) for specific-region or exact-tier views (computed live) and when no previous patch exists.
 
+`queue` query semantics across tier list, patch options, champion profile, win rates, builds, and matchups:
+- `solo` (or omitted): Ranked Solo/Duo (`RANKED_SOLO_DUO`)
+- `flex`: Ranked Flex (`RANKED_FLEX`)
+- `aram`: ARAM (`ARAM`)
+- `arena`: Arena (`ARENA`)
+- Unsupported values return `400 Bad Request` instead of silently falling back to Solo/Duo.
+- Solo/Duo and Flex retain lane roles. ARAM and Arena use the synthetic role `ALL`; their champion pages hide lane-only matchup UI and return an empty matchup collection because those modes have no stable lane pairing.
+- Flex rank scopes use current Flex rank. ARAM/Arena rank scopes use current Solo/Duo rank as a player-skill segment.
+
 Tier methodology (`GET /api/lol/analytics/tierlist`):
 - Tiers are **per-role-first**: a champion is graded only against same-role peers. The unified ("All Roles", `role` omitted) list shows each champion at its **primary (most-played) role**; `role` on each entry is that graded role.
 - The grade is driven by **strength = win-rate delta vs the role baseline**, with empirical-Bayes shrinkage toward that baseline (low-sample champions shrink to ~0 delta). Tiers are **absolute cutoffs** on that delta (config-driven), so `S` means a real, sample-resolvable edge and `S` may be **empty on a balanced patch**. `isLowSample=true` champions are capped at `B`.
@@ -213,7 +222,9 @@ Tier methodology (`GET /api/lol/analytics/tierlist`):
 - `releasedAtUtc`
 - `detectedAtUtc`
 - `isActive`
-- `rankedSoloDuoMatchCount`
+- `matchCount`
+- `queueFamily`
+- `rankedSoloDuoMatchCount` (backward-compatible alias of `matchCount`; use `matchCount` for new clients)
 
 `GET /api/lol/analytics/champions/{championId}/builds` includes full rune setup per build:
 - `primaryStyleId`, `subStyleId`
@@ -231,14 +242,14 @@ Tier methodology (`GET /api/lol/analytics/tierlist`):
 - These sections degrade gracefully: champions/patches without ingested timeline build data return the existing build rows with the new fields null.
 
 `GET /api/lol/analytics/champions/{championId}/profile` returns the champion detail payload in one request:
-- Query filters: `role`, `rankTier`, `region`, `patch`
-- Response: `{ championId, effectiveRole, winRates, builds, matchups, grade }`
+- Query filters: `role`, `rankTier`, `region`, `queue`, `patch`
+- Response: `{ championId, effectiveRole, winRates, builds, matchups, grade, queueFamily }`
 - `grade` (`ChampionGradeDto`, nullable) is the champion's tier grade for the resolved `effectiveRole` + scope — the **same** grade the tier list shows for that champion in that role (so the detail page hero is consistent with the list). It carries `tier`, `strengthScore`, `winRate`, `pickRate`, `banRate`, `contestedScore`, `games`, `roleBaseline`, `isLowSample`, `movement`, `previousTier`, `role`, `rankScope`. Null when the champion is not graded in scope (render "Unrated").
-- The endpoint reuses the cached winrate, build, matchup, and tier-list aggregates. When `role` is omitted, it chooses the most-played role from winrates; if a scoped rank filter has no winrate rows, it uses all-rank winrates only to choose the role while keeping the requested rank filter for build and matchup data.
+- The endpoint reuses the cached winrate, build, matchup, and tier-list aggregates. For Solo/Duo and Flex, when `role` is omitted it chooses the most-played role from winrates; if a scoped rank filter has no winrate rows, it uses all-rank winrates only to choose the role while keeping the requested rank filter for build and matchup data. ARAM/Arena resolve `effectiveRole=ALL`.
 - The build and matchup reads run in separate backend scopes so their cached aggregate reads can execute concurrently without sharing an EF `DbContext`.
 
 Additional analytics fields:
-- Tier list and champion winrate surfaces now include `banRate` (ranked solo queue denominator).
+- Tier list and champion winrate surfaces include queue-scoped `banRate`.
 - Champion winrate rows include `roleRank` and `rolePopulation` when resolvable.
 - Matchups include timeline-derived `avgGoldDiffAt15`, optional `avgXpDiffAt15`, and `allMatchups[]` in addition to `counters[]` and `favorableMatchups[]`.
 - Matchup responses include timeline quality metadata:

@@ -92,6 +92,27 @@ public sealed class AnalyticsEquivalenceRealPostgresTests(PostgresIntegrationFix
             "at least some tier-list scopes must be non-empty so the comparisons are load-bearing");
     }
 
+    [Fact]
+    public async Task AramTierList_StatsPath_EqualsRawCompute_OnRealPostgres()
+    {
+        var patch = UniquePatch();
+        await using var db = NewDb();
+        await SeedAsync(db, patch);
+        await RefreshAsync(db, patch);
+        var svc = WinRateService(db);
+
+        (await db.ChampionRoleTierStats.CountAsync(x => x.Patch == patch && x.QueueFamily == "ARAM"))
+            .Should().BeGreaterThan(0, "the queue-aware refresher must materialize ARAM atoms");
+
+        var raw = await svc.ComputeTierListAsync(null, "EMERALD_PLUS", "NA1", "ARAM", patch, CancellationToken.None);
+        var stats = await svc.ComputeTierListFromStatsAsync(null, "EMERALD_PLUS", "NA1", "ARAM", patch, CancellationToken.None);
+
+        raw.Should().NotBeEmpty();
+        stats.Should().BeEquivalentTo(raw, options => options.WithStrictOrdering()
+            .Excluding(row => row.Movement).Excluding(row => row.PreviousTier));
+        stats.Should().OnlyContain(row => row.Role == "ALL");
+    }
+
     // ---- harness (ported from ChampionAnalyticsStatsEquivalenceTests, real Npgsql context) ----
 
     private TranscendenceContext NewDb() =>
@@ -138,6 +159,9 @@ public sealed class AnalyticsEquivalenceRealPostgresTests(PostgresIntegrationFix
         AddGames(db, patch, "EUW1", "EMERALD", 300, "TOP", wins: 0, losses: 1);
         AddGames(db, patch, "EUW1", "GOLD", 200, "TOP", wins: 1, losses: 1);
 
+        AddGames(db, patch, "NA1", "EMERALD", 100, "", wins: 3, losses: 1, queueId: 450, queueFamily: "ARAM");
+        AddGames(db, patch, "NA1", "EMERALD", 200, "", wins: 1, losses: 2, queueId: 450, queueFamily: "ARAM");
+
         var banA = AddGames(db, patch, "NA1", "EMERALD", 400, "JUNGLE", wins: 1, losses: 0).Single();
         var banB = AddGames(db, patch, "NA1", "EMERALD", 400, "JUNGLE", wins: 0, losses: 1).Single();
         var banC = AddGames(db, patch, "EUW1", "EMERALD", 400, "JUNGLE", wins: 1, losses: 0).Single();
@@ -151,16 +175,20 @@ public sealed class AnalyticsEquivalenceRealPostgresTests(PostgresIntegrationFix
     }
 
     private static List<Match> AddGames(
-        TranscendenceContext db, string patch, string region, string? tier, int champ, string role, int wins, int losses)
+        TranscendenceContext db, string patch, string region, string? tier, int champ, string role, int wins, int losses,
+        int queueId = 420, string queueFamily = "RANKED_SOLO_DUO")
     {
         var matches = new List<Match>();
         for (var i = 0; i < wins + losses; i++)
-            matches.Add(AddGame(db, patch, region, tier, champ, role, win: i < wins));
+            matches.Add(AddGame(
+                db, patch, region, tier, champ, role, win: i < wins,
+                queueId: queueId, queueFamily: queueFamily));
         return matches;
     }
 
     private static Match AddGame(
-        TranscendenceContext db, string patch, string region, string? tier, int champ, string role, bool win)
+        TranscendenceContext db, string patch, string region, string? tier, int champ, string role, bool win,
+        int queueId, string queueFamily)
     {
         var summoner = new Summoner
         {
@@ -183,9 +211,9 @@ public sealed class AnalyticsEquivalenceRealPostgresTests(PostgresIntegrationFix
             MatchDate = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
             Duration = 1800,
             Patch = patch,
-            QueueId = 420,
-            QueueFamily = "RANKED_SOLO_DUO",
-            QueueType = "420",
+            QueueId = queueId,
+            QueueFamily = queueFamily,
+            QueueType = queueId.ToString(),
             Status = FetchStatus.Success,
             PlatformRegion = region,
             FetchedAt = DateTime.UtcNow

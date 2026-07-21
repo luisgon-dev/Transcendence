@@ -4,8 +4,10 @@ using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
+using Transcendence.Service.Core.Services.Analytics;
 using Transcendence.Service.Core.Services.Cache;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
+using Transcendence.Service.Core.Services.RiotApi;
 
 namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 
@@ -91,10 +93,15 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
     /// signal), cached briefly per patch since it only advances on the hourly refresh. Null while a patch is
     /// still served by live compute (no aggregates yet).
     /// </summary>
-    private async Task<DateTime?> ResolveAnalyticsFreshnessAsync(string patch, CancellationToken ct) =>
+    private async Task<DateTime?> ResolveAnalyticsFreshnessAsync(
+        string patch,
+        string queueFamily,
+        CancellationToken ct) =>
         await _cache.GetOrCreateAsync(
-            $"analytics:freshness:v1:{patch}",
-            async cancel => await _winRateService.GetAnalyticsComputedAtAsync(patch, cancel),
+            $"analytics:freshness:v2:{queueFamily}:{patch}",
+            async cancel => queueFamily == QueueCatalog.QueueFamilyRankedSoloDuo
+                ? await _winRateService.GetAnalyticsComputedAtAsync(patch, cancel)
+                : await _winRateService.GetAnalyticsComputedAtAsync(patch, queueFamily, cancel),
             ActivePatchCacheOptions,
             tags: new[] { AnalyticsCacheTag, CacheTags.ForPatch(patch) },
             cancellationToken: ct);
@@ -152,11 +159,15 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 
         var currentPatch = patchContext.Patch!;
         var normalizedRankTier = NormalizeRankTier(filter.RankTier);
+        var normalizedQueue = AnalyticsQueueCatalog.Normalize(filter.QueueFamily);
         var normalizedFilter = filter with
         {
             RankTier = normalizedRankTier == "all" ? null : normalizedRankTier,
             Region = AnalyticsRegionCatalog.NormalizeToFilter(NormalizeAnalyticsRegion(filter.Region)),
-            Role = string.IsNullOrWhiteSpace(filter.Role) ? null : filter.Role.Trim().ToUpperInvariant(),
+            Role = AnalyticsQueueCatalog.HasRoles(normalizedQueue) && !string.IsNullOrWhiteSpace(filter.Role)
+                ? filter.Role.Trim().ToUpperInvariant()
+                : null,
+            QueueFamily = normalizedQueue,
             Patch = currentPatch
         };
 
@@ -179,7 +190,8 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             Patch: currentPatch,
             ByRoleTier: winRates,
             Sample: BuildSampleMetadata(sampleSize, patchContext),
-            ComputedAtUtc: await ResolveAnalyticsFreshnessAsync(currentPatch, ct)
+            ComputedAtUtc: await ResolveAnalyticsFreshnessAsync(currentPatch, normalizedQueue, ct),
+            QueueFamily: normalizedQueue
         );
     }
 
@@ -188,10 +200,20 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         string? rankTier,
         string? region,
         string? patch,
+        CancellationToken ct) =>
+        await GetTierListAsync(role, rankTier, region, null, patch, ct);
+
+    public async Task<TierListResponse> GetTierListAsync(
+        string? role,
+        string? rankTier,
+        string? region,
+        string? queueFamily,
+        string? patch,
         CancellationToken ct)
     {
         var patchContext = await ResolvePatchContextAsync(patch, ct);
         var normalizedRegion = NormalizeAnalyticsRegion(region);
+        var normalizedQueue = AnalyticsQueueCatalog.Normalize(queueFamily);
         if (string.IsNullOrWhiteSpace(patchContext.Patch))
         {
             return new TierListResponse(
@@ -200,30 +222,32 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
                 RankTier: rankTier,
                 Region: normalizedRegion,
                 Entries: new List<TierListEntry>(),
-                Sample: BuildSampleMetadata(0, patchContext)
+                Sample: BuildSampleMetadata(0, patchContext),
+                QueueFamily: normalizedQueue
             );
         }
 
         var currentPatch = patchContext.Patch!;
         // Normalize parameters
         var normalizedRole = string.IsNullOrEmpty(role) ? "ALL" : role.ToUpperInvariant();
+        if (!AnalyticsQueueCatalog.HasRoles(normalizedQueue))
+            normalizedRole = AnalyticsQueueCatalog.AllRoles;
         var normalizedTier = NormalizeRankTier(rankTier);
         var tierFilter = normalizedTier == "all" ? null : normalizedTier;
 
         // Build cache key
-        var cacheKey = $"{TierListCacheKeyPrefix}{normalizedRole}:{normalizedTier}:{normalizedRegion}:{currentPatch}";
+        var cacheKey = $"{TierListCacheKeyPrefix}{normalizedQueue}:{normalizedRole}:{normalizedTier}:{normalizedRegion}:{currentPatch}";
         var tags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(currentPatch), "tierlist" };
 
         // Serve from the precomputed aggregate tables (falls back to the raw compute until a patch's
         // aggregates exist). HybridCache stays the hot tier in front.
         var entries = await _cache.GetOrCreateAsync(
             cacheKey,
-            async cancel => await _winRateService.ComputeTierListFromStatsAsync(
-                normalizedRole,
-                tierFilter,
-                normalizedRegion,
-                currentPatch,
-                cancel),
+            async cancel => normalizedQueue == QueueCatalog.QueueFamilyRankedSoloDuo
+                ? await _winRateService.ComputeTierListFromStatsAsync(
+                    normalizedRole, tierFilter, normalizedRegion, currentPatch, cancel)
+                : await _winRateService.ComputeTierListFromStatsAsync(
+                    normalizedRole, tierFilter, normalizedRegion, normalizedQueue, currentPatch, cancel),
             AnalyticsCacheOptions,
             tags: tags,
             cancellationToken: ct
@@ -237,7 +261,8 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             Region: normalizedRegion,
             Entries: entries,
             Sample: BuildSampleMetadata(sampleSize, patchContext),
-            ComputedAtUtc: await ResolveAnalyticsFreshnessAsync(currentPatch, ct)
+            ComputedAtUtc: await ResolveAnalyticsFreshnessAsync(currentPatch, normalizedQueue, ct),
+            QueueFamily: normalizedQueue
         );
     }
 
@@ -247,6 +272,17 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         string? rankTier,
         string? region,
         string? patch,
+        CancellationToken ct) =>
+        await GetGradeAsync(
+            championId, role, rankTier, region, QueueCatalog.QueueFamilyRankedSoloDuo, patch, ct);
+
+    public async Task<ChampionGradeDto?> GetGradeAsync(
+        int championId,
+        string role,
+        string? rankTier,
+        string? region,
+        string? queueFamily,
+        string? patch,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(role))
@@ -254,7 +290,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 
         // The grade IS the champion's entry in the per-role tier list — reuse its cache so the detail-page
         // hero is guaranteed to match the list (and carries the persisted region=ALL movement).
-        var tierList = await GetTierListAsync(role, rankTier, region, patch, ct);
+        var tierList = await GetTierListAsync(role, rankTier, region, queueFamily, patch, ct);
         var entry = tierList.Entries.FirstOrDefault(e => e.ChampionId == championId);
         if (entry == null)
             return null;
@@ -281,10 +317,24 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         string? rankTier,
         string? region,
         string? patch,
+        CancellationToken ct) =>
+        await GetBuildsAsync(
+            championId, role, rankTier, region, QueueCatalog.QueueFamilyRankedSoloDuo, patch, ct);
+
+    public async Task<ChampionBuildsResponse> GetBuildsAsync(
+        int championId,
+        string role,
+        string? rankTier,
+        string? region,
+        string? queueFamily,
+        string? patch,
         CancellationToken ct)
     {
+        var normalizedQueue = AnalyticsQueueCatalog.Normalize(queueFamily);
         var patchContext = await ResolvePatchContextAsync(patch, ct);
-        var normalizedRole = role.ToUpperInvariant();
+        var normalizedRole = AnalyticsQueueCatalog.HasRoles(normalizedQueue)
+            ? role.ToUpperInvariant()
+            : AnalyticsQueueCatalog.AllRoles;
         var normalizedTier = NormalizeRankTier(rankTier);
         var normalizedRegion = NormalizeAnalyticsRegion(region);
 
@@ -297,11 +347,13 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
                 "Unknown",
                 [],
                 [],
-                BuildSampleMetadata(0, patchContext));
+                BuildSampleMetadata(0, patchContext),
+                QueueFamily: normalizedQueue);
 
         var selectedPatch = patchContext.Patch!;
 
-        var cacheKey = BuildBuildsKey(championId, normalizedRole, normalizedTier, normalizedRegion, selectedPatch);
+        var cacheKey = BuildBuildsKey(
+            championId, normalizedRole, normalizedTier, normalizedRegion, normalizedQueue, selectedPatch);
         var tags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(selectedPatch), "builds" };
 
         var response = await _cache.GetOrCreateAsync(
@@ -311,6 +363,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
                 normalizedRole,
                 normalizedTier == "all" ? null : normalizedTier,
                 normalizedRegion,
+                normalizedQueue,
                 selectedPatch,
                 cancel),
             AnalyticsCacheOptions,
@@ -427,10 +480,24 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         string? rankTier,
         string? region,
         string? patch,
+        CancellationToken ct) =>
+        await GetMatchupsAsync(
+            championId, role, rankTier, region, QueueCatalog.QueueFamilyRankedSoloDuo, patch, ct);
+
+    public async Task<ChampionMatchupsResponse> GetMatchupsAsync(
+        int championId,
+        string role,
+        string? rankTier,
+        string? region,
+        string? queueFamily,
+        string? patch,
         CancellationToken ct)
     {
+        var normalizedQueue = AnalyticsQueueCatalog.Normalize(queueFamily);
         var patchContext = await ResolvePatchContextAsync(patch, ct);
-        var normalizedRole = role.ToUpperInvariant();
+        var normalizedRole = AnalyticsQueueCatalog.HasRoles(normalizedQueue)
+            ? role.ToUpperInvariant()
+            : AnalyticsQueueCatalog.AllRoles;
         var normalizedTier = NormalizeRankTier(rankTier);
         var normalizedRegion = NormalizeAnalyticsRegion(region);
 
@@ -446,12 +513,14 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
                 Counters = [],
                 FavorableMatchups = [],
                 AllMatchups = [],
-                Sample = BuildSampleMetadata(0, patchContext)
+                Sample = BuildSampleMetadata(0, patchContext),
+                QueueFamily = normalizedQueue
             };
         }
 
         var selectedPatch = patchContext.Patch!;
-        var cacheKey = BuildMatchupsKey(championId, normalizedRole, normalizedTier, normalizedRegion, selectedPatch);
+        var cacheKey = BuildMatchupsKey(
+            championId, normalizedRole, normalizedTier, normalizedRegion, normalizedQueue, selectedPatch);
         var tags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(selectedPatch), "matchups" };
 
         // Serve from the precomputed matchup aggregates (all-region scope; falls back to the raw self-join
@@ -463,6 +532,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
                 normalizedRole,
                 normalizedTier == "all" ? null : normalizedTier,
                 normalizedRegion,
+                normalizedQueue,
                 selectedPatch,
                 cancel),
             AnalyticsCacheOptions,
@@ -538,13 +608,17 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         effectiveRole ??= "MIDDLE"; // mirror GetProfile's final fallback so the key always matches
 
         // ── Builds + matchups for the resolved lane (region=ALL, given tier) ──
-        var buildsKey = BuildBuildsKey(championId, effectiveRole, normalizedTier, normalizedRegion, currentPatch);
+        var buildsKey = BuildBuildsKey(
+            championId, effectiveRole, normalizedTier, normalizedRegion,
+            QueueCatalog.QueueFamilyRankedSoloDuo, currentPatch);
         var buildsTags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(currentPatch), "builds" };
         var builds = await _buildService.ComputeBuildsFromStatsAsync(
             championId, effectiveRole, tierForCompute, normalizedRegion, currentPatch, ct);
         await _cache.SetAsync(buildsKey, builds, AnalyticsCacheOptions, buildsTags, ct);
 
-        var matchupsKey = BuildMatchupsKey(championId, effectiveRole, normalizedTier, normalizedRegion, currentPatch);
+        var matchupsKey = BuildMatchupsKey(
+            championId, effectiveRole, normalizedTier, normalizedRegion,
+            QueueCatalog.QueueFamilyRankedSoloDuo, currentPatch);
         var matchupsTags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(currentPatch), "matchups" };
         var matchups = await _matchupService.ComputeMatchupsFromStatsAsync(
             championId, effectiveRole, tierForCompute, normalizedRegion, currentPatch, ct);
@@ -627,11 +701,13 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
     // Shared cache-key builders — the reader path (GetBuildsAsync/GetProBuildsAsync/GetMatchupsAsync)
     // and the warm writer (RefreshDefaultProfileCacheAsync) MUST produce byte-identical keys or the
     // warmed entry never gets hit. Keep these as the single source of truth (mirrors BuildCacheKey).
-    private static string BuildBuildsKey(int championId, string role, string tier, string region, string patch)
-        => $"{BuildsCacheKeyPrefix}{championId}:{role}:{tier}:{region}:{patch}";
+    private static string BuildBuildsKey(
+        int championId, string role, string tier, string region, string queueFamily, string patch)
+        => $"{BuildsCacheKeyPrefix}{championId}:{role}:{tier}:{region}:{queueFamily}:{patch}";
 
-    private static string BuildMatchupsKey(int championId, string role, string tier, string region, string patch)
-        => $"{MatchupsCacheKeyPrefix}{championId}:{role}:{tier}:{region}:{patch}";
+    private static string BuildMatchupsKey(
+        int championId, string role, string tier, string region, string queueFamily, string patch)
+        => $"{MatchupsCacheKeyPrefix}{championId}:{role}:{tier}:{region}:{queueFamily}:{patch}";
 
     private static string BuildProBuildsKey(int championId, string region, string role, string scope, string patch)
         => $"{ProBuildsCacheKeyPrefix}{championId}:{region}:{role}:{scope}:{patch}";
@@ -652,6 +728,8 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 
         if (!string.IsNullOrEmpty(filter.Role))
             keyParts.Add($"role:{filter.Role}");
+
+        keyParts.Add($"queue:{AnalyticsQueueCatalog.Normalize(filter.QueueFamily)}");
 
         return string.Join(":", keyParts);
     }

@@ -38,6 +38,28 @@ public class AnalyticsPatchQueryServiceTests
     }
 
     [Fact]
+    public async Task GetPatchOptionsAsync_FiltersMatchesByRequestedQueue()
+    {
+        await using var harness = await AnalyticsPatchHarness.CreateAsync();
+        var now = DateTime.UtcNow;
+        harness.Db.Patches.AddRange(
+            new Patch { Version = "15.2", ReleaseDate = now, DetectedAt = now, IsActive = true },
+            new Patch { Version = "15.1", ReleaseDate = now.AddDays(-14), DetectedAt = now.AddDays(-14) });
+        harness.Db.Matches.AddRange(
+            NewMatch("15.1", 450, "ARAM", FetchStatus.Success),
+            NewMatch("15.1", 450, "ARAM", FetchStatus.Success),
+            NewMatch("14.24", 420, "RANKED_SOLO_5x5", FetchStatus.Success));
+        await harness.Db.SaveChangesAsync();
+
+        var result = await harness.Service.GetPatchOptionsAsync("aram");
+
+        result.Select(x => x.Patch).Should().Equal("15.2", "15.1");
+        var aramPatch = result.Single(x => x.Patch == "15.1");
+        aramPatch.MatchCount.Should().Be(2);
+        aramPatch.QueueFamily.Should().Be("ARAM");
+    }
+
+    [Fact]
     public async Task GetActivePatchStatusAsync_WhenNoActivePatch_ReturnsEmptyContract()
     {
         await using var harness = await AnalyticsPatchHarness.CreateAsync();

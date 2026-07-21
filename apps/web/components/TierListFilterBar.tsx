@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/cn";
+import { ANALYTICS_QUEUE_OPTIONS, type AnalyticsQueue } from "@/lib/analyticsQueues";
 import { type AnalyticsRegionOption } from "@/lib/analyticsRegionShared";
 import { type LolAnalyticsPatchOption } from "@/lib/lolPatchFilters";
 import { RANK_TIER_FILTERS } from "@/lib/ranks";
@@ -10,6 +11,8 @@ import { LaneTabs } from "./LaneTabs";
 import { AnalyticsPatchFilter } from "./AnalyticsPatchFilter";
 import { AnalyticsRegionFilter } from "./AnalyticsRegionFilter";
 import { RankFilterDropdown } from "./RankFilterDropdown";
+import { Select } from "./ui/Select";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 // Lead with an explicit "All" tab so the unified (per-role-first → primary-role overview) view is a
 // selectable affordance, not just the absence of a ?role param — you can always get back to it.
@@ -33,6 +36,8 @@ export function TierListFilterBar({
   activeRegion,
   patchOptions,
   activePatch,
+  activeQueue = "solo",
+  showRoles = true,
   extraParams,
   baseHref,
   className
@@ -45,10 +50,15 @@ export function TierListFilterBar({
   activeRegion?: string;
   patchOptions?: readonly LolAnalyticsPatchOption[];
   activePatch?: string | null;
+  activeQueue?: AnalyticsQueue;
+  showRoles?: boolean;
   extraParams?: Record<string, string | null | undefined>;
   baseHref: string;
   className?: string;
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const sharedExtraParams: Record<string, string> = {};
   if (extraParams) {
     for (const [key, value] of Object.entries(extraParams)) {
@@ -70,6 +80,22 @@ export function TierListFilterBar({
     <div className={cn("grid gap-4", className)}>
       {/* Rank · Region · Patch — quiet refinement controls. */}
       <div className="flex flex-wrap items-end gap-x-7 gap-y-4">
+        <label className="grid gap-1.5">
+          <span className="type-kicker text-fg/55">Queue</span>
+          <Select
+            value={activeQueue}
+            onValueChange={(queue) => {
+              const next = new URLSearchParams(searchParams.toString());
+              if (queue === "solo") next.delete("queue");
+              else next.set("queue", queue);
+              if (queue === "aram" || queue === "arena") next.delete("role");
+              router.push(`${pathname}?${next.toString()}`, { scroll: false });
+            }}
+            options={ANALYTICS_QUEUE_OPTIONS.map(({ value, label }) => ({ value, label }))}
+            ariaLabel="Analytics queue"
+            className="w-full sm:w-44"
+          />
+        </label>
         <label className="grid gap-1.5">
           <span className="type-kicker text-fg/55">Rank</span>
           <RankFilterDropdown
@@ -106,7 +132,7 @@ export function TierListFilterBar({
       </div>
 
       {/* Lane — the prominent primary choice, pinned to the table edge. */}
-      <div className="-mx-1 flex items-end gap-x-3 border-b border-border/40 px-1">
+      {showRoles ? <div className="-mx-1 flex items-end gap-x-3 border-b border-border/40 px-1">
         <span className="type-kicker hidden shrink-0 pb-3 text-fg/45 sm:block">Lane</span>
         <LaneTabs
           roles={roles}
@@ -115,7 +141,7 @@ export function TierListFilterBar({
           extraParams={roleExtraParams}
           className="-mb-px"
         />
-      </div>
+      </div> : null}
     </div>
   );
 }

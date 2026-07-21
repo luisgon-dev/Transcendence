@@ -4,6 +4,8 @@ export type LolAnalyticsPatchOption = {
   detectedAtUtc?: string | null;
   isActive: boolean;
   rankedSoloDuoMatchCount: number;
+  matchCount?: number;
+  queueFamily?: string;
 };
 
 const DEFAULT_VISIBLE_HISTORICAL_PATCH_COUNT = 3;

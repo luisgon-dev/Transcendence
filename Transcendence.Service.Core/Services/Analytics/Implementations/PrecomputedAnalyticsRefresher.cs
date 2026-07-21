@@ -6,8 +6,10 @@ using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Models.LoL.Analytics;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Service.Core.Queries;
+using Transcendence.Service.Core.Services.Analytics;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
+using Transcendence.Service.Core.Services.RiotApi;
 
 namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 
@@ -73,11 +75,22 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
     {
         var computedAt = DateTime.UtcNow;
 
-        var roleTierRows = await BuildRoleTierStatsAsync(patch, computedAt, ct);
-        var (scopeMatchRows, banRows) = await BuildScopeStatsAsync(patch, computedAt, ct);
+        var roleTierRows = new List<ChampionRoleTierStat>();
+        var scopeMatchRows = new List<ScopeMatchCountStat>();
+        var banRows = new List<ChampionBanScopeStat>();
+        var gradeRows = new List<ChampionScopeGradeStat>();
+        foreach (var queueFamily in AnalyticsQueueCatalog.SupportedQueueFamilies)
+        {
+            var queueRoleTierRows = await BuildRoleTierStatsAsync(patch, queueFamily, computedAt, ct);
+            var (queueScopeMatchRows, queueBanRows) = await BuildScopeStatsAsync(patch, queueFamily, computedAt, ct);
+            roleTierRows.AddRange(queueRoleTierRows);
+            scopeMatchRows.AddRange(queueScopeMatchRows);
+            banRows.AddRange(queueBanRows);
+            gradeRows.AddRange(await BuildScopeGradeStatsAsync(
+                patch, queueFamily, computedAt, queueRoleTierRows, queueScopeMatchRows, queueBanRows, ct));
+        }
         // Tier grades are scored from the atoms just built (no extra DB round-trip) and persisted in the same
         // transaction so a region=ALL read never sees new atoms paired with a stale/absent grade.
-        var gradeRows = await BuildScopeGradeStatsAsync(patch, computedAt, roleTierRows, scopeMatchRows, banRows, ct);
 
         await using var tx = await _context.Database.BeginTransactionAsync(ct);
 
@@ -231,7 +244,7 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
         // Played (champion, role) pairs with enough games to produce a build (mirrors the build sample floor).
         var pairs = await _context.ChampionRoleTierStats
             .AsNoTracking()
-            .Where(x => x.Patch == patch)
+            .Where(x => x.Patch == patch && x.QueueFamily == QueueCatalog.QueueFamilyRankedSoloDuo)
             .GroupBy(x => new { x.ChampionId, x.Role })
             .Select(g => new { g.Key.ChampionId, g.Key.Role, Games = g.Sum(x => x.Games) })
             .Where(x => x.Games >= MinBuildGames)
@@ -340,13 +353,15 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
     // ---- ChampionRoleTierStat: per (region, current-tier, champion, role) Games/Wins (additive) ----
 
     private async Task<List<ChampionRoleTierStat>> BuildRoleTierStatsAsync(
-        string patch, DateTime computedAt, CancellationToken ct)
+        string patch, string queueFamily, DateTime computedAt, CancellationToken ct)
     {
-        var participants = BaseParticipants(patch);
+        var participants = BaseParticipants(patch, queueFamily);
+        var ranks = _context.Ranks.AsNoTracking().InAnalyticsRankQueue(queueFamily);
+        var hasRoles = AnalyticsQueueCatalog.HasRoles(queueFamily);
 
         var grouped = await (
             from mp in participants
-            join rank in _context.Ranks.AsNoTracking().Where(r => r.QueueType == RankedSoloQueueType)
+            join rank in ranks
                 on mp.SummonerId equals rank.SummonerId into rankGroup
             from soloRank in rankGroup.DefaultIfEmpty()
             select new
@@ -354,7 +369,7 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
                 Region = mp.Summoner.PlatformRegion,
                 Tier = soloRank != null ? soloRank.Tier : RankTierCatalog.Unranked,
                 mp.ChampionId,
-                Role = mp.TeamPosition!,
+                Role = hasRoles ? mp.TeamPosition! : AnalyticsQueueCatalog.AllRoles,
                 mp.Win
             })
             .GroupBy(x => new { x.Region, x.Tier, x.ChampionId, x.Role })
@@ -373,6 +388,7 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
             .Select(g => new ChampionRoleTierStat
             {
                 Patch = patch,
+                QueueFamily = queueFamily,
                 PlatformRegion = g.Region ?? "",
                 RankTier = g.Tier,
                 ChampionId = g.ChampionId,
@@ -387,14 +403,14 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
     // ---- ScopeMatchCountStat + ChampionBanScopeStat: distinct-match denominators/numerators per scope ----
 
     private async Task<(List<ScopeMatchCountStat> ScopeMatches, List<ChampionBanScopeStat> Bans)> BuildScopeStatsAsync(
-        string patch, DateTime computedAt, CancellationToken ct)
+        string patch, string queueFamily, DateTime computedAt, CancellationToken ct)
     {
         var scopeMatchRows = new List<ScopeMatchCountStat>();
         var banRows = new List<ChampionBanScopeStat>();
 
         foreach (var scope in RankTierCatalog.RankScopeTokens)
         {
-            var scoped = ApplyScope(BaseParticipants(patch), scope);
+            var scoped = ApplyScope(BaseParticipants(patch, queueFamily), scope, queueFamily);
 
             // (region, matchId) distinct pairs in scope — region from the participant's summoner.
             var regionMatches = scoped
@@ -412,6 +428,7 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
                 scopeMatchRows.Add(new ScopeMatchCountStat
                 {
                     Patch = patch,
+                    QueueFamily = queueFamily,
                     PlatformRegion = r.Region ?? "",
                     RankScope = scope,
                     TotalMatches = r.Total,
@@ -427,6 +444,7 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
                 scopeMatchRows.Add(new ScopeMatchCountStat
                 {
                     Patch = patch,
+                    QueueFamily = queueFamily,
                     PlatformRegion = AllRegion,
                     RankScope = scope,
                     TotalMatches = allTotal,
@@ -452,6 +470,7 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
                 banRows.Add(new ChampionBanScopeStat
                 {
                     Patch = patch,
+                    QueueFamily = queueFamily,
                     PlatformRegion = b.Region ?? "",
                     RankScope = scope,
                     ChampionId = b.ChampionId,
@@ -473,6 +492,7 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
                 banRows.Add(new ChampionBanScopeStat
                 {
                     Patch = patch,
+                    QueueFamily = queueFamily,
                     PlatformRegion = AllRegion,
                     RankScope = scope,
                     ChampionId = b.ChampionId,
@@ -495,13 +515,14 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
     /// </summary>
     private async Task<List<ChampionScopeGradeStat>> BuildScopeGradeStatsAsync(
         string patch,
+        string queueFamily,
         DateTime computedAt,
         List<ChampionRoleTierStat> roleTierRows,
         List<ScopeMatchCountStat> scopeMatchRows,
         List<ChampionBanScopeStat> banRows,
         CancellationToken ct)
     {
-        var previousGrades = await LoadPreviousPatchGradesAsync(patch, ct);
+        var previousGrades = await LoadPreviousPatchGradesAsync(patch, queueFamily, ct);
         var gradeRows = new List<ChampionScopeGradeStat>();
 
         foreach (var scope in GradedScopes)
@@ -530,10 +551,13 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
 
             var score = ChampionTierScorer.ScoreScope(aggregated, banByChampion, totalScopeMatches, _tieringOptions);
 
-            foreach (var s in score.PerRole)
-                gradeRows.Add(MapGrade(patch, scope, s.Role, s, computedAt, previousGrades));
+            if (AnalyticsQueueCatalog.HasRoles(queueFamily))
+            {
+                foreach (var s in score.PerRole)
+                    gradeRows.Add(MapGrade(patch, queueFamily, scope, s.Role, s, computedAt, previousGrades));
+            }
             foreach (var s in score.Overview)
-                gradeRows.Add(MapGrade(patch, scope, OverviewRole, s, computedAt, previousGrades));
+                gradeRows.Add(MapGrade(patch, queueFamily, scope, OverviewRole, s, computedAt, previousGrades));
         }
 
         return gradeRows;
@@ -541,7 +565,7 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
 
     /// <summary>Previous patch (by release date) grade tiers keyed by (scope, role, champion), for movement.</summary>
     private async Task<Dictionary<(string Scope, string Role, int ChampionId), int>> LoadPreviousPatchGradesAsync(
-        string patch, CancellationToken ct)
+        string patch, string queueFamily, CancellationToken ct)
     {
         var currentReleaseDate = await _context.Patches.AsNoTracking()
             .Where(p => p.Version == patch)
@@ -559,7 +583,7 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
             return [];
 
         var rows = await _context.ChampionScopeGradeStats.AsNoTracking()
-            .Where(x => x.Patch == previousPatch && x.PlatformRegion == AllRegion)
+            .Where(x => x.Patch == previousPatch && x.QueueFamily == queueFamily && x.PlatformRegion == AllRegion)
             .Select(x => new { x.RankScope, x.Role, x.ChampionId, x.Tier })
             .ToListAsync(ct);
 
@@ -570,7 +594,7 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
     }
 
     private static ChampionScopeGradeStat MapGrade(
-        string patch, string scope, string roleKey, ChampionTierScorer.ScoredChampion s,
+        string patch, string queueFamily, string scope, string roleKey, ChampionTierScorer.ScoredChampion s,
         DateTime computedAt, IReadOnlyDictionary<(string Scope, string Role, int ChampionId), int> previousGrades)
     {
         int? previousTier = previousGrades.TryGetValue((scope, roleKey, s.ChampionId), out var pt) ? pt : null;
@@ -581,6 +605,7 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
         return new ChampionScopeGradeStat
         {
             Patch = patch,
+            QueueFamily = queueFamily,
             PlatformRegion = AllRegion,
             RankScope = scope,
             Role = roleKey,
@@ -609,36 +634,39 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
         newTier > previousTier ? TierMovement.DOWN :
         TierMovement.SAME;
 
-    private IQueryable<MatchParticipant> BaseParticipants(string patch) =>
+    private IQueryable<MatchParticipant> BaseParticipants(
+        string patch,
+        string queueFamily = QueueCatalog.QueueFamilyRankedSoloDuo) =>
         _context.MatchParticipants
             .AsNoTracking()
             .OnPatch(patch)
             .FromSuccessfulMatches()
-            .InRankedSoloQueue()
-            .WithAssignedRole();
+            .InAnalyticsQueue(queueFamily)
+            .WithAnalyticsRole(queueFamily);
 
     /// <summary>
     /// Restricts participants to those whose <i>own</i> current solo rank is in the scope, mirroring the
     /// live <c>ApplyRankTierScopeToParticipants</c> EXISTS form. "ALL" applies no filter (includes unranked).
     /// </summary>
-    private IQueryable<MatchParticipant> ApplyScope(IQueryable<MatchParticipant> query, string scope)
+    private IQueryable<MatchParticipant> ApplyScope(
+        IQueryable<MatchParticipant> query,
+        string scope,
+        string queueFamily)
     {
         if (scope == RankTierCatalog.AllScope)
             return query;
 
-        var ranks = _context.Ranks.AsNoTracking();
+        var ranks = _context.Ranks.AsNoTracking().InAnalyticsRankQueue(queueFamily);
 
         if (scope == RankTierCatalog.EmeraldPlusScope)
         {
             return query.Where(mp => ranks.Any(r =>
-                r.QueueType == RankedSoloQueueType &&
                 r.SummonerId == mp.SummonerId &&
                 RankTierCatalog.EmeraldPlusTiers.Contains(r.Tier)));
         }
 
         // Exact tier.
         return query.Where(mp => ranks.Any(r =>
-            r.QueueType == RankedSoloQueueType &&
             r.SummonerId == mp.SummonerId &&
             r.Tier == scope));
     }

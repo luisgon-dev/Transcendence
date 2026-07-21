@@ -71,6 +71,21 @@ public class ChampionBuildSnapshotTests
         stats.Should().BeEquivalentTo(raw);
     }
 
+    [Fact]
+    public async Task BuildsFromStats_UsesRequestedRolelessQueue_WithoutSoloSnapshotLeakage()
+    {
+        await using var ctx = await SeededAsync();
+        var svc = Service(ctx.Db);
+
+        var aram = await svc.ComputeBuildsFromStatsAsync(
+            ChampionId, Role, null, null, "ARAM", Patch, CancellationToken.None);
+
+        aram.QueueFamily.Should().Be("ARAM");
+        aram.Role.Should().Be("ALL");
+        aram.Builds.Should().NotBeEmpty();
+        aram.Builds.Sum(build => build.Games).Should().BeLessThan(30, "Solo/Duo snapshots must not bleed into ARAM");
+    }
+
     private static ChampionBuildComputeService Service(TranscendenceContext db) =>
         new(db,
             Options.Create(new ChampionAnalyticsComputeOptions
@@ -123,13 +138,27 @@ public class ChampionBuildSnapshotTests
         for (var i = 0; i < 30; i++)
             SeedBuild(db, $"NA1_B{i}", win: i < 18, finalItems: [6672, 3031, 3072, 6694], purchases: purchases);
 
+        for (var i = 0; i < 3; i++)
+            SeedBuild(
+                db,
+                $"NA1_ARAM_{i}",
+                win: i < 2,
+                finalItems: [6672, 3031, 3072, 6694],
+                purchases: purchases,
+                queueId: 450,
+                queueFamily: "ARAM",
+                role: "");
+
         await db.SaveChangesAsync();
         return new SeededContext(connection, db);
     }
 
     private static void SeedBuild(
         TranscendenceContext db, string matchId, bool win, int[] finalItems,
-        (int ItemId, int TimestampMs, BuildItemCategory Category)[] purchases)
+        (int ItemId, int TimestampMs, BuildItemCategory Category)[] purchases,
+        int queueId = 420,
+        string queueFamily = "RANKED_SOLO_DUO",
+        string role = Role)
     {
         var summoner = new Summoner
         {
@@ -149,9 +178,9 @@ public class ChampionBuildSnapshotTests
             MatchDate = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
             Duration = 1800,
             Patch = Patch,
-            QueueId = 420,
-            QueueFamily = "RANKED_SOLO_DUO",
-            QueueType = "420",
+            QueueId = queueId,
+            QueueFamily = queueFamily,
+            QueueType = queueId.ToString(),
             Status = FetchStatus.Success,
             PlatformRegion = "NA1",
             FetchedAt = DateTime.UtcNow
@@ -167,7 +196,7 @@ public class ChampionBuildSnapshotTests
             ParticipantId = 1,
             TeamId = 100,
             ChampionId = ChampionId,
-            TeamPosition = Role,
+            TeamPosition = role,
             Win = win,
             SummonerSpell1Id = 4,
             SummonerSpell2Id = 12

@@ -323,12 +323,14 @@ detail is archived off-box and pruned to keep the database from growing unbounde
 - Responses include sample metadata (`sampleStatus`, `sampleSize`, `minimumRecommendedSampleSize`, `patchAgeHours`, `isEarlyPatchWindow`) so web surfaces can show selected-patch low-sample/no-data states explicitly.
 - `GET /api/lol/analytics/status` is the lightweight source of truth for the active LoL analytics patch used by public web chrome and landing surfaces.
 - `GET /api/lol/analytics/patches` lists active and historical LoL patches available to public analytics filters.
+- Public tier-list and champion analytics reads accept a queue family (`solo`, `flex`, `aram`, `arena`). Patch availability, cache keys, samples, bans, grades, and tier-list atoms are isolated by queue so a non-Solo request cannot reuse Solo/Duo data.
 
 ### Match Queue Scope and History
 
 - Match rows now persist queue metadata (`queueId`, `queueFamily`, `queueType` label).
 - Summoner history API defaults to all stored history and supports queue filtering by family or explicit queue IDs.
-- Ranked analytics compute paths explicitly filter to ranked solo/duo queue data, so non-ranked ingestion does not contaminate tier/winrate/build/matchup analytics.
+- Analytics compute paths explicitly filter to the requested queue family. The precomputed tabular grain includes `QueueFamily` on role/tier, match-count, ban, and grade atoms; existing rows migrate as `RANKED_SOLO_DUO`.
+- Solo/Duo and Flex preserve lane roles. ARAM and Arena collapse to the synthetic role `ALL` and use their own tier baselines/sample populations. Flex rank scoping reads Flex rank; the casual queues use Solo/Duo rank as a skill segment. Lane-pair matchups are intentionally unavailable for roleless queues, while queue-specific builds fall back to the live compute outside the durable Solo/Duo build snapshots.
 - Non-ranked backfill now advances with per-summoner ingestion cursors (`SummonerIngestionCursors`) so progress remains monotonic and does not skip older windows during preemption/failures.
 - Match records now persist team bans (`MatchBans`) to support champion `banRate` surfaces.
 
@@ -455,7 +457,7 @@ in-memory schema, not repository mocks). The policy is therefore:
    without value.
 2. **Reusable read predicates are composable query-objects**, not copy-paste. A `Where(...)` clause used
    in more than one place becomes an `IQueryable<T>` extension under `Transcendence.Service.Core/Queries`
-   — e.g. `MatchParticipantQueries`: `participants.InRankedSoloQueue().OnPatch(patch).FromSuccessfulMatches()`.
+   — e.g. `MatchParticipantQueries`: `participants.InAnalyticsQueue(queueFamily).OnPatch(patch).FromSuccessfulMatches()`.
    Each is a pure `Where` that EF folds into one SQL `WHERE`, so they commute and compose. (This replaced
    the ranked-solo-queue predicate that had been duplicated 20+ times across the analytics/stats services.)
    A genuinely single-use predicate stays inline — query-objects are for *reuse*, not premature abstraction.

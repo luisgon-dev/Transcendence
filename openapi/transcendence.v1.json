@@ -1223,6 +1223,13 @@
             }
           },
           {
+            "name": "queue",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "patch",
             "in": "query",
             "schema": {
@@ -1336,6 +1343,15 @@
       "get": {
         "tags": [
           "Analytics"
+        ],
+        "parameters": [
+          {
+            "name": "queue",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
           "429": {
@@ -2208,6 +2224,13 @@
             }
           },
           {
+            "name": "queue",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "patch",
             "in": "query",
             "schema": {
@@ -2321,6 +2344,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "queue",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2418,6 +2448,13 @@
           },
           {
             "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "queue",
             "in": "query",
             "schema": {
               "type": "string"
@@ -2634,6 +2671,13 @@
           },
           {
             "name": "region",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "queue",
             "in": "query",
             "schema": {
               "type": "string"
@@ -6066,7 +6110,9 @@
       "AnalyticsPatchOptionDto": {
         "required": [
           "isActive",
+          "matchCount",
           "patch",
+          "queueFamily",
           "rankedSoloDuoMatchCount"
         ],
         "type": "object",
@@ -6090,6 +6136,14 @@
           "rankedSoloDuoMatchCount": {
             "type": "integer",
             "format": "int32"
+          },
+          "queueFamily": {
+            "type": "string"
+          },
+          "matchCount": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
           }
         },
         "additionalProperties": false
@@ -6431,6 +6485,7 @@
           "championId",
           "globalCoreItems",
           "patch",
+          "queueFamily",
           "rankTier",
           "region",
           "role"
@@ -6516,6 +6571,9 @@
               "$ref": "#/components/schemas/SituationalSlotDto"
             },
             "nullable": true
+          },
+          "queueFamily": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -6643,6 +6701,7 @@
           "counters",
           "favorableMatchups",
           "patch",
+          "queueFamily",
           "region",
           "role",
           "timelineSampleSize"
@@ -6705,6 +6764,9 @@
               }
             ],
             "nullable": true
+          },
+          "queueFamily": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -6773,6 +6835,7 @@
           "championId",
           "effectiveRole",
           "matchups",
+          "queueFamily",
           "winRates"
         ],
         "type": "object",
@@ -6812,6 +6875,9 @@
               }
             ],
             "nullable": true
+          },
+          "queueFamily": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -6948,7 +7014,8 @@
         "required": [
           "byRoleTier",
           "championId",
-          "patch"
+          "patch",
+          "queueFamily"
         ],
         "type": "object",
         "properties": {
@@ -6977,6 +7044,9 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "queueFamily": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -9610,6 +9680,7 @@
         "required": [
           "entries",
           "patch",
+          "queueFamily",
           "region"
         ],
         "type": "object",
@@ -9646,6 +9717,9 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "queueFamily": {
+            "type": "string"
           }
         },
         "additionalProperties": false

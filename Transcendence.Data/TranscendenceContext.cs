@@ -612,37 +612,41 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
         modelBuilder.Entity<ChampionRoleTierStat>(entity =>
         {
             entity.HasKey(x => x.Id);
-            entity.HasIndex(x => new { x.Patch, x.PlatformRegion, x.RankTier, x.ChampionId, x.Role })
+            entity.Property(x => x.QueueFamily).HasDefaultValue("RANKED_SOLO_DUO");
+            entity.HasIndex(x => new { x.Patch, x.QueueFamily, x.PlatformRegion, x.RankTier, x.ChampionId, x.Role })
                 .IsUnique();
             // Win-rate read: a single champion across its roles/tiers/regions.
-            entity.HasIndex(x => new { x.Patch, x.ChampionId, x.Role });
+            entity.HasIndex(x => new { x.Patch, x.QueueFamily, x.ChampionId, x.Role });
             // Tier-list + role-rank/pick-rate population read: every champion in a role/tier/region scope.
-            entity.HasIndex(x => new { x.Patch, x.Role, x.RankTier });
+            entity.HasIndex(x => new { x.Patch, x.QueueFamily, x.Role, x.RankTier });
         });
 
         modelBuilder.Entity<ScopeMatchCountStat>(entity =>
         {
             entity.HasKey(x => x.Id);
-            entity.HasIndex(x => new { x.Patch, x.PlatformRegion, x.RankScope }).IsUnique();
+            entity.Property(x => x.QueueFamily).HasDefaultValue("RANKED_SOLO_DUO");
+            entity.HasIndex(x => new { x.Patch, x.QueueFamily, x.PlatformRegion, x.RankScope }).IsUnique();
         });
 
         modelBuilder.Entity<ChampionBanScopeStat>(entity =>
         {
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.QueueFamily).HasDefaultValue("RANKED_SOLO_DUO");
             // Doubles as the UPSERT target and the point-lookup: a specific (region|"ALL", scope, champion).
             // Its (Patch, PlatformRegion, RankScope) prefix also serves the tier-list all-champions read.
-            entity.HasIndex(x => new { x.Patch, x.PlatformRegion, x.RankScope, x.ChampionId }).IsUnique();
+            entity.HasIndex(x => new { x.Patch, x.QueueFamily, x.PlatformRegion, x.RankScope, x.ChampionId }).IsUnique();
         });
 
         modelBuilder.Entity<ChampionScopeGradeStat>(entity =>
         {
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.QueueFamily).HasDefaultValue("RANKED_SOLO_DUO");
             // UPSERT conflict target + per-champion point lookup (the detail-page hero grade).
-            entity.HasIndex(x => new { x.Patch, x.PlatformRegion, x.RankScope, x.Role, x.ChampionId })
+            entity.HasIndex(x => new { x.Patch, x.QueueFamily, x.PlatformRegion, x.RankScope, x.Role, x.ChampionId })
                 .IsUnique();
             // Tier-list read: every champion in a (region, scope, role) — its prefix also serves the
             // previous-patch movement lookup.
-            entity.HasIndex(x => new { x.Patch, x.PlatformRegion, x.RankScope, x.Role });
+            entity.HasIndex(x => new { x.Patch, x.QueueFamily, x.PlatformRegion, x.RankScope, x.Role });
         });
 
         modelBuilder.Entity<ChampionMatchupStat>(entity =>

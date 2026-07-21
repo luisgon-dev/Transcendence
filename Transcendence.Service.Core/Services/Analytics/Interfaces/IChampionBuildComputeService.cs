@@ -23,6 +23,15 @@ public interface IChampionBuildComputeService
         string patch,
         CancellationToken ct);
 
+    Task<ChampionBuildsResponse> ComputeBuildsAsync(
+        int championId,
+        string role,
+        string? rankTier,
+        string? region,
+        string queueFamily,
+        string patch,
+        CancellationToken ct);
+
     /// <summary>
     /// Builds served from the durable <c>ChampionBuildSnapshot</c> (the persisted live response for the
     /// common all-region scopes), falling back to <see cref="ComputeBuildsAsync"/> for a specific tier/region
@@ -33,6 +42,15 @@ public interface IChampionBuildComputeService
         string role,
         string? rankTier,
         string? region,
+        string patch,
+        CancellationToken ct);
+
+    Task<ChampionBuildsResponse> ComputeBuildsFromStatsAsync(
+        int championId,
+        string role,
+        string? rankTier,
+        string? region,
+        string queueFamily,
         string patch,
         CancellationToken ct);
 }

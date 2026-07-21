@@ -3,6 +3,7 @@ using Transcendence.Data;
 using Transcendence.Service.Core.Queries;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
+using Transcendence.Service.Core.Services.RiotApi;
 
 namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 
@@ -32,19 +33,41 @@ public partial class ChampionMatchupComputeService : IChampionMatchupComputeServ
         string? rankTier,
         string? region,
         string patch,
+        CancellationToken ct) =>
+        await ComputeMatchupsAsync(
+            championId, role, rankTier, region, QueueCatalog.QueueFamilyRankedSoloDuo, patch, ct);
+
+    public async Task<ChampionMatchupsResponse> ComputeMatchupsAsync(
+        int championId,
+        string role,
+        string? rankTier,
+        string? region,
+        string queueFamily,
+        string patch,
         CancellationToken ct)
     {
+        var normalizedQueue = AnalyticsQueueCatalog.Normalize(queueFamily);
         var rankTierScope = AnalyticsScopeMath.ParseRankTierScope(rankTier);
         const int minuteMark = 15;
         var normalizedRegion = AnalyticsRegionCatalog.NormalizeOrDefault(region);
         var regionFilter = AnalyticsRegionCatalog.NormalizeToFilter(region);
+
+        if (!AnalyticsQueueCatalog.HasRoles(normalizedQueue))
+            return BuildMatchupsResponse(
+                championId,
+                AnalyticsQueueCatalog.AllRoles,
+                rankTierScope,
+                normalizedRegion,
+                patch,
+                [],
+                normalizedQueue);
 
         var championQuery = _context.MatchParticipants
             .AsNoTracking()
             .Where(mp => mp.ChampionId == championId && mp.TeamPosition == role)
             .OnPatch(patch)
             .FromSuccessfulMatches()
-            .InRankedSoloQueue();
+            .InAnalyticsQueue(normalizedQueue);
 
         championQuery = championQuery.InPlatformRegion(regionFilter);
 
@@ -52,7 +75,8 @@ public partial class ChampionMatchupComputeService : IChampionMatchupComputeServ
         championQuery = AnalyticsScopeMath.ApplyRankTierScopeToParticipants(
             championQuery,
             rankTierScope,
-            _context.Ranks.AsNoTracking());
+            _context.Ranks.AsNoTracking(),
+            normalizedQueue);
 
         var lanePairsQuery = championQuery
             .Join(
@@ -116,7 +140,7 @@ public partial class ChampionMatchupComputeService : IChampionMatchupComputeServ
                 m.AvgGoldDiffAt15, m.AvgXpDiffAt15, m.LatestTimelineAtUtc))
             .ToList();
 
-        return BuildMatchupsResponse(championId, role, rankTierScope, normalizedRegion, patch, aggregates);
+        return BuildMatchupsResponse(championId, role, rankTierScope, normalizedRegion, patch, aggregates, normalizedQueue);
     }
 
     /// <summary>Per-opponent matchup aggregate — the shared shape both the raw self-join and the stats roll-up
@@ -145,7 +169,8 @@ public partial class ChampionMatchupComputeService : IChampionMatchupComputeServ
         AnalyticsScopeMath.RankTierScope rankTierScope,
         string normalizedRegion,
         string patch,
-        List<MatchupAggregate> matchupData)
+        List<MatchupAggregate> matchupData,
+        string queueFamily = QueueCatalog.QueueFamilyRankedSoloDuo)
     {
         var totalMatchupGames = matchupData.Sum(m => m.Games);
         var totalTimelineGames = matchupData.Sum(m => m.TimelineGames);
@@ -217,7 +242,8 @@ public partial class ChampionMatchupComputeService : IChampionMatchupComputeServ
             AllMatchups = allMatchups,
             TimelineCoverageRatio = timelineCoverage,
             TimelineSampleSize = totalTimelineGames,
-            TimelineDataFreshnessUtc = timelineFreshness
+            TimelineDataFreshnessUtc = timelineFreshness,
+            QueueFamily = queueFamily
         };
     }
 }

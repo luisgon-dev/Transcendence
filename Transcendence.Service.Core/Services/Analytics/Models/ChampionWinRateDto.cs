@@ -26,5 +26,6 @@ public record ChampionWinRateSummary(
     List<ChampionWinRateDto> ByRoleTier,
     AnalyticsSampleMetadata? Sample = null,
     // When the precomputed analytics for this patch were last refreshed (null while serving live compute).
-    DateTime? ComputedAtUtc = null
+    DateTime? ComputedAtUtc = null,
+    string QueueFamily = "RANKED_SOLO_DUO"
 );

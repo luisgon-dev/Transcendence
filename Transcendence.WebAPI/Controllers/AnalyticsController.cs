@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
+using Transcendence.Service.Core.Services.Analytics;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.WebAPI.Models.Common;
 using Transcendence.WebAPI.Security;
@@ -35,10 +36,14 @@ public class AnalyticsController(
         [FromQuery] string? role = null,
         [FromQuery] string? rankTier = null,
         [FromQuery] string? region = null,
+        [FromQuery] string? queue = null,
         [FromQuery] string? patch = null,
         CancellationToken ct = default)
     {
-        var tierList = await analyticsService.GetTierListAsync(role, rankTier, region, patch, ct);
+        if (!AnalyticsQueueCatalog.IsSupported(queue))
+            return BadRequest("Invalid queue. Expected solo, aram, arena, or flex.");
+
+        var tierList = await analyticsService.GetTierListAsync(role, rankTier, region, queue, patch, ct);
         return Ok(tierList);
     }
 
@@ -51,9 +56,14 @@ public class AnalyticsController(
 
     [HttpGet("patches")]
     [ProducesResponseType(typeof(IReadOnlyList<AnalyticsPatchOptionDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetPatches(CancellationToken ct = default)
+    public async Task<IActionResult> GetPatches(
+        [FromQuery] string? queue = null,
+        CancellationToken ct = default)
     {
-        return Ok(await patchQueryService.GetPatchOptionsAsync(ct));
+        if (!AnalyticsQueueCatalog.IsSupported(queue))
+            return BadRequest("Invalid queue. Expected solo, aram, arena, or flex.");
+
+        return Ok(await patchQueryService.GetPatchOptionsAsync(queue, ct));
     }
 
     [HttpGet("status")]

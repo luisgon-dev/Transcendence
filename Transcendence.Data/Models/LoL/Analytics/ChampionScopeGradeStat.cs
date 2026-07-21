@@ -25,6 +25,8 @@ public class ChampionScopeGradeStat
     /// <summary>Game version, e.g. "15.12" — matches <c>Match.Patch</c>.</summary>
     public string Patch { get; set; } = "";
 
+    public string QueueFamily { get; set; } = "RANKED_SOLO_DUO";
+
     /// <summary>Persisted region scope — currently always the synthetic global <c>"ALL"</c>.</summary>
     public string PlatformRegion { get; set; } = "";
 

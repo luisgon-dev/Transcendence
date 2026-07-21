@@ -1055,6 +1055,7 @@ export interface paths {
                     role?: string;
                     rankTier?: string;
                     region?: string;
+                    queue?: string;
                     patch?: string;
                 };
                 header?: never;
@@ -1152,7 +1153,9 @@ export interface paths {
         };
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    queue?: string;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -1851,6 +1854,7 @@ export interface paths {
                     role?: string;
                     rankTier?: string;
                     region?: string;
+                    queue?: string;
                     patch?: string;
                 };
                 header?: never;
@@ -1918,6 +1922,7 @@ export interface paths {
                     region?: string;
                     role?: string;
                     patch?: string;
+                    queue?: string;
                 };
                 header?: never;
                 path: {
@@ -1983,6 +1988,7 @@ export interface paths {
                     role?: string;
                     rankTier?: string;
                     region?: string;
+                    queue?: string;
                     patch?: string;
                 };
                 header?: never;
@@ -2115,6 +2121,7 @@ export interface paths {
                     role?: string;
                     rankTier?: string;
                     region?: string;
+                    queue?: string;
                     patch?: string;
                 };
                 header?: never;
@@ -4163,6 +4170,9 @@ export interface components {
             isActive: boolean;
             /** Format: int32 */
             rankedSoloDuoMatchCount: number;
+            queueFamily: string;
+            /** Format: int32 */
+            readonly matchCount: number;
         };
         /**
          * Format: int32
@@ -4274,6 +4284,7 @@ export interface components {
             boots?: components["schemas"]["ItemChoiceDto"][] | null;
             coreBuildPath?: components["schemas"]["CoreItemStepDto"][] | null;
             situationalSlots?: components["schemas"]["SituationalSlotDto"][] | null;
+            queueFamily: string;
         };
         ChampionGradeDto: {
             tier: components["schemas"]["TierGrade"];
@@ -4327,6 +4338,7 @@ export interface components {
             /** Format: date-time */
             timelineDataFreshnessUtc?: string | null;
             sample?: components["schemas"]["AnalyticsSampleMetadata"] | null;
+            queueFamily: string;
         };
         ChampionProBuildsResponse: {
             /** Format: int32 */
@@ -4348,6 +4360,7 @@ export interface components {
             builds: components["schemas"]["ChampionBuildsResponse"];
             matchups: components["schemas"]["ChampionMatchupsResponse"];
             grade?: components["schemas"]["ChampionGradeDto"] | null;
+            queueFamily: string;
         };
         ChampionStatDto: {
             /** Format: int32 */
@@ -4404,6 +4417,7 @@ export interface components {
             sample?: components["schemas"]["AnalyticsSampleMetadata"] | null;
             /** Format: date-time */
             computedAtUtc?: string | null;
+            queueFamily: string;
         };
         CommonProBuildDto: {
             items: number[];
@@ -5187,6 +5201,7 @@ export interface components {
             sample?: components["schemas"]["AnalyticsSampleMetadata"] | null;
             /** Format: date-time */
             computedAtUtc?: string | null;
+            queueFamily: string;
         };
         /**
          * Format: int32

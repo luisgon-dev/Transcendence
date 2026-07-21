@@ -5,6 +5,7 @@ using Transcendence.Data;
 using Transcendence.Service.Core.Queries;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
+using Transcendence.Service.Core.Services.RiotApi;
 
 namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 
@@ -44,8 +45,23 @@ public sealed class ChampionBuildComputeService : IChampionBuildComputeService
         string? rankTier,
         string? region,
         string patch,
+        CancellationToken ct) =>
+        await ComputeBuildsAsync(
+            championId, role, rankTier, region, QueueCatalog.QueueFamilyRankedSoloDuo, patch, ct);
+
+    public async Task<ChampionBuildsResponse> ComputeBuildsAsync(
+        int championId,
+        string role,
+        string? rankTier,
+        string? region,
+        string queueFamily,
+        string patch,
         CancellationToken ct)
     {
+        var normalizedQueue = AnalyticsQueueCatalog.Normalize(queueFamily);
+        var effectiveRole = AnalyticsQueueCatalog.HasRoles(normalizedQueue)
+            ? role.ToUpperInvariant()
+            : AnalyticsQueueCatalog.AllRoles;
         var minimumGamesRequired = await AnalyticsSampleThreshold.ResolveAsync(_context, _options, patch, ct);
         var rankTierScope = AnalyticsScopeMath.ParseRankTierScope(rankTier);
         var normalizedRegion = AnalyticsRegionCatalog.NormalizeOrDefault(region);
@@ -57,14 +73,18 @@ public sealed class ChampionBuildComputeService : IChampionBuildComputeService
             .AsSplitQuery()
             .Include(mp => mp.Items)
             .Include(mp => mp.Runes)
-            .Where(mp => mp.ChampionId == championId && mp.TeamPosition == role)
+            .Where(mp => mp.ChampionId == championId)
             .OnPatch(patch)
             .FromSuccessfulMatches()
-            .InRankedSoloQueue();
+            .InAnalyticsQueue(normalizedQueue);
+
+        if (AnalyticsQueueCatalog.HasRoles(normalizedQueue))
+            baseQuery = baseQuery.Where(mp => mp.TeamPosition == effectiveRole);
 
         baseQuery = baseQuery.InPlatformRegion(regionFilter);
 
-        baseQuery = AnalyticsScopeMath.ApplyRankTierScopeToParticipants(baseQuery, rankTierScope, _context.Ranks.AsNoTracking());
+        baseQuery = AnalyticsScopeMath.ApplyRankTierScopeToParticipants(
+            baseQuery, rankTierScope, _context.Ranks.AsNoTracking(), normalizedQueue);
 
         var matchData = await baseQuery
             .Select(mp => new
@@ -124,7 +144,7 @@ public sealed class ChampionBuildComputeService : IChampionBuildComputeService
                 "No item metadata found for patch {Patch} while computing builds for champion {ChampionId}/{Role}. Using legacy build-item fallback.",
                 patch,
                 championId,
-                role);
+                effectiveRole);
         }
         else if (useLegacyFallback)
         {
@@ -133,7 +153,7 @@ public sealed class ChampionBuildComputeService : IChampionBuildComputeService
                 itemMetadataCoverage,
                 patch,
                 championId,
-                role);
+                effectiveRole);
         }
 
         var buildEligibleMatches = matchData
@@ -148,8 +168,8 @@ public sealed class ChampionBuildComputeService : IChampionBuildComputeService
 
         var effectiveMinimumGames = AnalyticsScopeMath.ResolveEffectiveSampleSize(minimumGamesRequired, buildEligibleMatches.Count, floor: 3);
         if (buildEligibleMatches.Count < effectiveMinimumGames)
-            return new ChampionBuildsResponse(championId, role, rankTierScope.CacheToken, normalizedRegion, patch,
-                new List<int>(), new List<ChampionBuildDto>());
+            return new ChampionBuildsResponse(championId, effectiveRole, rankTierScope.CacheToken, normalizedRegion, patch,
+                new List<int>(), new List<ChampionBuildDto>(), QueueFamily: normalizedQueue);
 
         // Step 2: Calculate global core items from completed build-impact items.
         var totalGames = buildEligibleMatches.Count;
@@ -252,7 +272,7 @@ public sealed class ChampionBuildComputeService : IChampionBuildComputeService
 
         return new ChampionBuildsResponse(
             championId,
-            role,
+            effectiveRole,
             rankTierScope.CacheToken,
             normalizedRegion,
             patch,
@@ -263,7 +283,8 @@ public sealed class ChampionBuildComputeService : IChampionBuildComputeService
             StartingItems: sections.StartingItems,
             Boots: sections.Boots,
             CoreBuildPath: sections.CoreBuildPath,
-            SituationalSlots: sections.SituationalSlots
+            SituationalSlots: sections.SituationalSlots,
+            QueueFamily: normalizedQueue
         );
     }
 
@@ -273,14 +294,27 @@ public sealed class ChampionBuildComputeService : IChampionBuildComputeService
         string? rankTier,
         string? region,
         string patch,
+        CancellationToken ct) =>
+        await ComputeBuildsFromStatsAsync(
+            championId, role, rankTier, region, QueueCatalog.QueueFamilyRankedSoloDuo, patch, ct);
+
+    public async Task<ChampionBuildsResponse> ComputeBuildsFromStatsAsync(
+        int championId,
+        string role,
+        string? rankTier,
+        string? region,
+        string queueFamily,
+        string patch,
         CancellationToken ct)
     {
+        var normalizedQueue = AnalyticsQueueCatalog.Normalize(queueFamily);
         var regionFilter = AnalyticsRegionCatalog.NormalizeToFilter(region);
         var scopeToken = AnalyticsScopeMath.ScopeTokenOf(AnalyticsScopeMath.ParseRankTierScope(rankTier));
 
         // Only EMERALD_PLUS + ALL are precomputed, at the all-region scope; a specific tier/region (or a
         // missing/un-refreshed snapshot) falls back to the live build compute.
-        if (regionFilter == null &&
+        if (normalizedQueue == QueueCatalog.QueueFamilyRankedSoloDuo &&
+            regionFilter == null &&
             (scopeToken == RankTierCatalog.EmeraldPlusScope || scopeToken == RankTierCatalog.AllScope))
         {
             var payload = await _context.ChampionBuildSnapshots.AsNoTracking()
@@ -296,6 +330,6 @@ public sealed class ChampionBuildComputeService : IChampionBuildComputeService
             }
         }
 
-        return await ComputeBuildsAsync(championId, role, rankTier, region, patch, ct);
+        return await ComputeBuildsAsync(championId, role, rankTier, region, normalizedQueue, patch, ct);
     }
 }

@@ -19,6 +19,8 @@ public class ChampionRoleTierStat
     /// <summary>Game version, e.g. "15.12" — matches <c>Match.Patch</c>.</summary>
     public string Patch { get; set; } = "";
 
+    public string QueueFamily { get; set; } = "RANKED_SOLO_DUO";
+
     /// <summary>Summoner platform region, e.g. "NA1"/"EUW1"/"KR" (from <c>Summoner.PlatformRegion</c>).</summary>
     public string PlatformRegion { get; set; } = "";
 

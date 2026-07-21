@@ -377,6 +377,7 @@ detail is archived off-box and pruned to keep the database from growing unbounde
   - `SelectionIndex`: slot order inside each tree
   - `StyleId`: rune path for primary/secondary trees
 - Static rune data ingestion now maps each rune to canonical path/slot metadata using CommunityDragon `perkstyles` + `perks`.
+- Rune match facts retain `RuneId` + `PatchVersion` as indexed scalar columns but deliberately do not foreign-key to `RuneVersions`. Readers soft-join metadata so an incomplete static-data sync or later static-data reseed cannot reject or delete immutable match history.
 - Analytics build computation and summoner match summaries use explicit selection hierarchy first, then fallback to static metadata only for legacy rows.
 - API payloads expose:
   - compact rune summary for list views
@@ -386,6 +387,7 @@ detail is archived off-box and pruned to keep the database from growing unbounde
 
 - Match participant items are persisted with explicit `SlotIndex` (0-6) plus `ItemId`.
 - This preserves final inventory order and allows duplicate item IDs in different slots.
+- Item match facts retain `ItemId` + `PatchVersion` as indexed scalar columns but deliberately do not foreign-key to `ItemVersions`; static metadata is enrichment, not an ingestion prerequisite or cascade owner for historical facts.
 - Champion build analytics post-processes persisted items against static item metadata and only counts completed, in-store, build-impact items (filters out components/trinkets/wards/consumables).
 - Build endpoint requests do not trigger static-data network refresh; patch item metadata is refreshed by background jobs.
 - If metadata coverage is temporarily incomplete for a patch, analytics uses a legacy exclusion fallback to avoid empty build responses.

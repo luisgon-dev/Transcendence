@@ -1,5 +1,3 @@
-using Transcendence.Data.Models.LoL.Static;
-
 namespace Transcendence.Data.Models.LoL.Match;
 
 public enum RuneSelectionTree
@@ -19,5 +17,4 @@ public class MatchParticipantRune
     public int StyleId { get; set; }
 
     public MatchParticipant MatchParticipant { get; set; } = null!;
-    public RuneVersion RuneVersion { get; set; } = null!;
 }

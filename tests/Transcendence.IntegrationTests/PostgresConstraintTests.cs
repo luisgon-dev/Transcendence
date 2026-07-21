@@ -59,6 +59,54 @@ public sealed class PostgresConstraintTests(PostgresIntegrationFixture fixture)
     }
 
     [Fact]
+    public async Task MatchFacts_DoNotRequireStaticDataRows_OnPostgres()
+    {
+        var patch = $"missing-{Guid.NewGuid():N}";
+        await using var db = NewDb();
+        var summoner = MakeSummoner(Guid.NewGuid().ToString("N"));
+        var match = MakeMatch(FetchStatus.Success, patch);
+        var participant = new MatchParticipant
+        {
+            Id = Guid.NewGuid(),
+            MatchId = match.Id,
+            Match = match,
+            SummonerId = summoner.Id,
+            Summoner = summoner,
+            Puuid = summoner.Puuid,
+            ParticipantId = 1,
+            TeamId = 100,
+            ChampionId = 100,
+            Win = true
+        };
+        participant.Items.Add(new MatchParticipantItem
+        {
+            MatchParticipantId = participant.Id,
+            MatchParticipant = participant,
+            SlotIndex = 0,
+            ItemId = 999_001,
+            PatchVersion = patch
+        });
+        participant.Runes.Add(new MatchParticipantRune
+        {
+            MatchParticipantId = participant.Id,
+            MatchParticipant = participant,
+            RuneId = 999_002,
+            PatchVersion = patch,
+            SelectionTree = RuneSelectionTree.Primary,
+            SelectionIndex = 0,
+            StyleId = 999_003
+        });
+
+        db.MatchParticipants.Add(participant);
+        await db.SaveChangesAsync();
+
+        (await db.MatchParticipantItems.CountAsync(x => x.MatchParticipantId == participant.Id))
+            .Should().Be(1, "partial item metadata must not reject immutable match facts");
+        (await db.MatchParticipantRunes.CountAsync(x => x.MatchParticipantId == participant.Id))
+            .Should().Be(1, "partial rune metadata must not reject immutable match facts");
+    }
+
+    [Fact]
     public async Task DeletingMatch_CascadeDeletesParticipants_ViaPostgresForeignKey()
     {
         Guid matchId;

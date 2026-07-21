@@ -338,14 +338,9 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
                 .WithMany(mp => mp.Runes)
                 .HasForeignKey(mpr => mpr.MatchParticipantId);
 
-            entity.HasOne(mpr => mpr.RuneVersion)
-                .WithMany()
-                .HasForeignKey(mpr => new
-                {
-                    mpr.RuneId,
-                    mpr.PatchVersion
-                });
-
+            // RuneId + PatchVersion are immutable historical facts. Static-data metadata is
+            // intentionally resolved with a soft join so a missing/reseeded RuneVersion cannot
+            // reject or cascade-delete match history.
             entity.HasIndex(mpr => new { mpr.RuneId, mpr.PatchVersion });
         });
 
@@ -476,15 +471,10 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
                 .WithMany(mp => mp.Items)
                 .HasForeignKey(mpi => mpi.MatchParticipantId);
 
-            entity.HasOne(mpi => mpi.ItemVersion)
-                .WithMany()
-                .HasForeignKey(mpi => new
-                {
-                    mpi.ItemId,
-                    mpi.PatchVersion
-                });
-
+            // ItemId + PatchVersion remain indexed for soft metadata joins, but are not a hard FK:
+            // match ingestion must survive partial static-data syncs and static-data reseeds.
             entity.HasIndex(mpi => new { mpi.MatchParticipantId, mpi.ItemId });
+            entity.HasIndex(mpi => new { mpi.ItemId, mpi.PatchVersion });
 
         });
 

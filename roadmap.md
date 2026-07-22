@@ -787,7 +787,7 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Hoist a single `RadixTooltip.Provider` to the root layout (or the table root) and make the Tooltip wrapper render only Root/Trigger/Content. Correct the misleading comment.
   - **Why:** Hundreds of redundant Radix context Providers per tier-list render inflate the client component tree, hydration work, and memory, compounding the unvirtualized-list problem above. The pattern repeats anywhere Tooltip is used inside a list.
   - **Where:** `apps/web/components/ui/Tooltip.tsx:21-40 (used at TierListTable.tsx:365)`
-- [ ] **Hundreds of tiny immutable ddragon icons routed through the Next image optimizer with no format/TTL tuning** `LOW` · `small`
+- [x] **Hundreds of tiny immutable ddragon icons routed through the Next image optimizer with no format/TTL tuning** `LOW` · `small`
   - **Fix:** Consider `unoptimized` for the tiny fixed-size icons (or a lightweight custom loader hitting ddragon directly) and set `images.minimumCacheTTL` to a long value for the ones that stay optimized. Add explicit `formats` if AVIF/WebP is desired.
   - **Why:** Optimizing hundreds of ~24-64px immutable PNGs adds origin CPU + optimizer-cache churn for marginal byte savings (these files are already tiny), and without `minimumCacheTTL` the optimizer honors upstream cache headers only. This is a server-efficiency tradeoff more than a client CWV issue.
   - **Where:** `apps/web/next.config.mjs:4-32 ; apps/web/lib/staticData.ts:179-235`

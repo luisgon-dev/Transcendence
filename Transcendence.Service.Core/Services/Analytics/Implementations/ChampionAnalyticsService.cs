@@ -29,7 +29,6 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
     private const string ProRosterCacheKeyPrefix = "analytics:proroster:";
     private const string MatchupsCacheKeyPrefix = "analytics:matchups:";
     private const string AnalyticsCacheTag = "analytics";
-    private const string ActivePatchCacheKey = "analytics:active-patch:v1";
 
     // Active-patch metadata changes ~biweekly; a short cache removes the per-request Patches lookup
     // that every analytics endpoint runs (cutting DB round-trips so reads degrade less under load).
@@ -740,7 +739,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         }
 
         var activePatch = await _cache.GetOrCreateAsync(
-            ActivePatchCacheKey,
+            AnalyticsCacheKeys.ActivePatch,
             async cancel =>
             {
                 var row = await _context.Patches

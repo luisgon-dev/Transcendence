@@ -124,6 +124,8 @@ public class StaticDataService(
         row.IsActive = true;
         await context.SaveChangesAsync(cancellationToken);
 
+        await cacheService.RemoveAsync(AnalyticsCacheKeys.ActivePatch, cancellationToken);
+
         if (previous != null)
             await cacheService.RemoveByTagAsync(CacheTags.ForPatch(previous.Version), cancellationToken);
     }

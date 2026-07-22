@@ -640,7 +640,7 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > The caching layer is fundamentally sound: it uses HybridCache (10.2.0, .NET 10) with a shared Redis L2 across the WebAPI and Worker hosts, consistent logical tag-based invalidation (which the .NET docs confirm works cross-node for multi-server setups), correct write-then-invalidate ordering, versioned key prefixes bumped on payload-shape changes, and no negative caching of thrown errors. The most material issues are staleness/negative-caching bugs rather than collisions or security problems: match timelines cache an empty result with no invalidation path, empty/thin analytics get a 24h TTL bounded only by a 2h–24h refresh cadence, and the analytics warm-writer reconstructs cache keys by hand (drift risk against the readers). No critical (data-loss/security) issues were found in this dimension. All findings are correctness/maintainability-grade.
 
-- [ ] **Patch rollover does not invalidate the cached active-patch pointer** `LOW` · `trivial`
+- [x] **Patch rollover does not invalidate the cached active-patch pointer** `LOW` · `trivial`
   - **Fix:** Have PromotePatchAsync also invalidate the active-patch key (or the 'analytics' tag) so the new active patch is picked up immediately rather than after the TTL.
   - **Why:** For up to ~5 minutes after a new patch is promoted, every analytics endpoint continues to resolve the OLD patch version from the cached pointer, briefly serving old-patch analytics. Self-heals on the 5-min TTL and is partly benign (a just-promoted patch has little data), so impact is small.
   - **Where:** `Transcendence.Service.Core/Services/Analytics/Implementations/ChampionAnalyticsService.cs:546-559`

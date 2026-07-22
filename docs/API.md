@@ -155,8 +155,9 @@ Example (`SummonerAcceptedResponse`):
 - `GET /api/lol/analytics/items/{itemId}`
 - `GET /api/lol/analytics/runes`
 - `GET /api/lol/analytics/runes/{runeId}`
-- `POST /api/lol/analytics/cache/invalidate` (`AppOnly`)
-- `POST /api/lol/analytics/champions/cache/invalidate` (`AppOnly`)
+
+Analytics cache invalidation is intentionally exposed only through the audited
+`POST /api/admin/cache/invalidate` operation.
 
 ### LoL Leaderboards
 

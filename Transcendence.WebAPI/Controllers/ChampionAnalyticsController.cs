@@ -1,12 +1,9 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Analytics;
-using Transcendence.WebAPI.Models.Common;
-using Transcendence.WebAPI.Security;
 
 namespace Transcendence.WebAPI.Controllers;
 
@@ -316,19 +313,6 @@ public class ChampionAnalyticsController(
         var result = await analyticsService.GetMatchupsAsync(
             championId, role, rankTier, region, normalizedQueue, patch, ct);
         return Ok(result);
-    }
-
-    /// <summary>
-    /// Invalidates all analytics cache entries.
-    /// Used when patch changes or significant data updates occur.
-    /// </summary>
-    [HttpPost("cache/invalidate")]
-    [Authorize(Policy = AuthPolicies.AppOnly)]
-    [ProducesResponseType(typeof(OperationResult), StatusCodes.Status200OK)]
-    public async Task<IActionResult> InvalidateCache(CancellationToken ct)
-    {
-        await analyticsService.InvalidateAnalyticsCacheAsync(ct);
-        return Ok(new OperationResult("Analytics cache invalidated successfully"));
     }
 
     private async Task<T> RunInAnalyticsScopeAsync<T>(Func<IChampionAnalyticsService, Task<T>> action)

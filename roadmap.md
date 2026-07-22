@@ -665,15 +665,15 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Consider modeling absence explicitly (e.g. 404 for not-stored, 200 with a `status`/`stale` discriminator field, or a dedicated `?refresh` sub-resource) so the success path is a single typed 200 shape.
   - **Why:** A read endpoint that returns 202 with an alternate body is an unusual contract that most typed HTTP clients model awkwardly; here it pushed the frontend to hand-roll status handling instead of the generated client, eroding the client's value.
   - **Where:** `Transcendence.WebAPI/Controllers/SummonersController.cs:89-96,271-279; apps/web/app/lol/summoners/[region]/[riotId]/page.tsx:113,153`
-- [ ] **Three redundant analytics cache-invalidate endpoints** `LOW` · `trivial`
+- [x] **Three redundant analytics cache-invalidate endpoints** `LOW` · `trivial`
   - **Fix:** Consolidate to a single canonical endpoint (admin-scoped) and remove the duplicates, or clearly differentiate scope (all vs champion-only) if that distinction is real.
   - **Why:** Three public routes for one operation (with two different auth policies: AppOnly vs AdminOnly) bloat the contract and blur the intended entry point / authorization story for cache invalidation.
   - **Where:** `Transcendence.WebAPI/Controllers/AdminOperationsController.cs:305; AnalyticsController.cs:130; ChampionAnalyticsController.cs:250`
-- [ ] **201 Created Location for API-key creation points at the collection with a spurious `?id=` query** `LOW` · `trivial`
+- [x] **201 Created Location for API-key creation points at the collection with a spurious `?id=` query** `LOW` · `trivial`
   - **Fix:** Add a GET /api/auth/keys/{id} and reference it, or return 200/Created without a misleading Location.
   - **Why:** The 201 Location header violates REST expectations (does not address the new resource); clients that follow Location land on the full list with an ignored query param.
   - **Where:** `Transcendence.WebAPI/Controllers/ApiKeysController.cs:40`
-- [ ] **PUT pro-summoner lacks the required-field validation the POST enforces** `LOW` · `small`
+- [x] **PUT pro-summoner lacks the required-field validation the POST enforces** `LOW` · `small`
   - **Fix:** Apply the same required-field validation in Update (or add DataAnnotations to UpsertTrackedProSummonerRequest and rely on [ApiController] model validation for both).
   - **Why:** Inconsistent write contract for the same resource; a full-replacement PUT can degrade a record to a state the API refuses to create, and the difference is invisible in the contract.
   - **Where:** `Transcendence.WebAPI/Controllers/ProSummonersController.cs:159-171 vs 67-69`

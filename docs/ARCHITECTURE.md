@@ -505,6 +505,15 @@ The WebAPI controller and profile facade inject only the surfaces they consume. 
 fallback aggregates share the same optional `(startMatchDateMs, endMatchDateMs)` query path, preventing
 the two scopes from drifting while keeping the aggregation server-side.
 
+Service.Core folder convention is proportional rather than universal: domain areas with several
+consumer-facing contracts use `Interfaces/`, `Implementations/`, and `Models/`. Small cross-cutting
+utility areas may remain flat until they have more than one implementation or a public model family.
+`Jobs/` is the deliberate large exception: executable Hangfire job types stay at its root for one-place
+operational discovery, while their contracts and configuration live in `Jobs/Interfaces/` and
+`Jobs/Configuration/`; reusable scheduling policies live in `Jobs/Priority/`. `Diagnostics/` is likewise
+flat because its types are host-level telemetry/logging primitives rather than one interchangeable
+service family. New code should follow the domain layout unless it clearly fits one of those exceptions.
+
 The codebase deliberately does **not** route all persistence through a repository layer. EF Core's
 `DbContext` is already a unit-of-work + repository, and testability is provided by substituting the
 provider (`SqliteCompatibleTranscendenceContext` backs the analytics/service tests against a real

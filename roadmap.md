@@ -526,7 +526,7 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Inject IRefreshLockLifecycleTelemetry via the constructor (it is always registered) or fold telemetry into the proposed refresh orchestrator; drop the service-locator and the empty catch.
   - **Why:** Hides a real dependency from the constructor (harder to see/test), and the blanket catch would silently mask a genuine misconfiguration where the telemetry service is missing. Combined with the duplicated refresh logic, it signals the orchestration was pasted rather than shared.
   - **Where:** `Transcendence.WebAPI/Controllers/SummonersController.cs:550-560,568-578; duplicated in Transcendence.WebAPI/Controllers/ProSummonersController.cs`
-- [ ] **Inconsistent Interfaces/Implementations/Models folder convention across Service.Core service areas** `LOW` · `medium`
+- [x] **Inconsistent Interfaces/Implementations/Models folder convention across Service.Core service areas** `LOW` · `medium`
   - **Fix:** Either document these as intentional exceptions (small/cross-cutting areas stay flat) or normalize the larger areas (Diagnostics, Jobs) to the Interfaces/Implementations/Models layout used elsewhere.
   - **Why:** Discoverability cost: contributors cannot rely on a single rule for where an interface vs implementation lives, and the repo-map's stated convention does not hold uniformly. Low risk, purely maintainability.
   - **Where:** `Transcendence.Service.Core/Services/{Cache,Diagnostics,Database,Jobs} vs {Admin,Analysis,Auth,LiveGame,StaticData,RiotApi}`

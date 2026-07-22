@@ -648,7 +648,7 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Standardize on one region representation for all analytics cache keys (either always the code or always the filter form) and document why the win-rate filter differs if it must.
   - **Why:** No collision or drift today because read and warm each use the same scheme consistently per key-type, but the split invites future bugs: a change to one normalizer, or a copy-paste of one key format into another, can silently produce keys that never match. Purely a clarity/robustness smell.
   - **Where:** `Transcendence.Service.Core/Services/Analytics/Implementations/ChampionAnalyticsService.cs:112,168,258,303,408`
-- [ ] **No cross-process stampede coordination — post-invalidation both hosts can recompute the same key** `INFO` · `medium`
+- [x] **No cross-process stampede coordination — post-invalidation both hosts can recompute the same key** `INFO` · `medium`
   - **Fix:** No action needed while compute stays cheap; if a payload's factory ever becomes expensive again, consider a short distributed lock or letting the warm job own (re)population without an overlapping read-through window.
   - **Why:** At most one duplicate compute per key per invalidation across the two hosts. Because reads now serve from precomputed aggregate tables (30–225ms per the analytics-layer memory) rather than the old 7s compute, the duplicate cost is small. Noted for completeness since the dimension calls out thundering-herd protection.
   - **Where:** `Transcendence.WebAPI/Program.cs:195-205`

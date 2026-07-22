@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDurationSeconds, formatPercent } from "@/lib/format";
+import {
+  formatCompactNumber,
+  formatDurationSeconds,
+  formatPercent,
+  matchupVerdict,
+  winRateColorClass
+} from "@/lib/format";
 
 describe("formatPercent", () => {
   it("formats ratio inputs as percent", () => {
@@ -34,3 +40,27 @@ describe("formatDurationSeconds", () => {
   });
 });
 
+describe("formatCompactNumber", () => {
+  it("uses a stable thousands suffix", () => {
+    expect(formatCompactNumber(999)).toBe("999");
+    expect(formatCompactNumber(1_000)).toBe("1.0k");
+    expect(formatCompactNumber(12_345)).toBe("12.3k");
+    expect(formatCompactNumber(-2_500)).toBe("-2.5k");
+  });
+
+  it("supports caller-specific invalid fallbacks", () => {
+    expect(formatCompactNumber(undefined)).toBe("—");
+    expect(formatCompactNumber(Number.NaN, { fallback: "-" })).toBe("-");
+  });
+});
+
+describe("shared win-rate thresholds", () => {
+  it("keeps verdicts and colors aligned at the boundaries", () => {
+    expect(matchupVerdict(0.52)).toBe("Favored");
+    expect(winRateColorClass(0.52)).toBe("text-wr-high");
+    expect(matchupVerdict(0.48)).toBe("Even");
+    expect(winRateColorClass(0.48)).toBe("");
+    expect(matchupVerdict(47.9)).toBe("Unfavored");
+    expect(winRateColorClass(47.9)).toBe("text-wr-low");
+  });
+});

@@ -3,7 +3,7 @@ import { DataBar } from "@/components/ui/DataBar";
 import { LaneIcon } from "@/components/ui/LaneIcon";
 import { Stat } from "@/components/ui/Stat";
 import { cn } from "@/lib/cn";
-import { formatGames, plural } from "@/lib/format";
+import { formatCompactNumber, formatGames, plural } from "@/lib/format";
 import { LANE_ROLES, roleDisplayLabel } from "@/lib/roles";
 
 import {
@@ -27,14 +27,6 @@ type RoleRow = {
 function formatStat(value: number | null | undefined, decimals: number): string {
   if (value == null || !Number.isFinite(value)) return "—";
   return value.toFixed(decimals);
-}
-
-// Damage-to-champions averages run ~5k–40k; compact to keep the stat row tabular
-// and scannable rather than a wall of digits.
-function formatCompactNumber(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return "—";
-  if (value >= 1000) return `${(value / 1000).toFixed(1)}k`;
-  return Math.round(value).toLocaleString();
 }
 
 function formatHistoryCoverage(history: ProfileFullHistoryStatus | null | undefined): string | null {

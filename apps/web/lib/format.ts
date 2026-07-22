@@ -1,5 +1,8 @@
 export type PercentInput = "auto" | "ratio" | "percent";
 
+export const FAVORABLE_WIN_RATE_PERCENT = 52;
+export const UNFAVORABLE_WIN_RATE_PERCENT = 48;
+
 export function formatPercent(
   value: number | null | undefined,
   {
@@ -43,11 +46,18 @@ export function toWinPercent(value: number | null | undefined): number | null {
   return Math.abs(value) >= 1.5 ? value : value * 100;
 }
 
+export function matchupVerdict(value: number | null | undefined): "Favored" | "Even" | "Unfavored" {
+  const pct = toWinPercent(value);
+  if (pct != null && pct >= FAVORABLE_WIN_RATE_PERCENT) return "Favored";
+  if (pct != null && pct < UNFAVORABLE_WIN_RATE_PERCENT) return "Unfavored";
+  return "Even";
+}
+
 export function winRateColorClass(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return "";
-  const pct = Math.abs(value) >= 1.5 ? value : value * 100;
-  if (pct >= 52) return "text-wr-high";
-  if (pct < 48) return "text-wr-low";
+  const pct = toWinPercent(value);
+  if (pct == null) return "";
+  if (pct >= FAVORABLE_WIN_RATE_PERCENT) return "text-wr-high";
+  if (pct < UNFAVORABLE_WIN_RATE_PERCENT) return "text-wr-low";
   return "";
 }
 
@@ -61,6 +71,15 @@ export function kdaColorClass(kda: number | null | undefined): string {
 export function formatGames(count: number | null | undefined): string {
   if (count == null || !Number.isFinite(count)) return "-";
   return Math.floor(count).toLocaleString();
+}
+
+export function formatCompactNumber(
+  value: number | null | undefined,
+  { fallback = "—", decimals = 1 }: { fallback?: string; decimals?: number } = {}
+): string {
+  if (value == null || !Number.isFinite(value)) return fallback;
+  if (Math.abs(value) >= 1000) return `${(value / 1000).toFixed(decimals)}k`;
+  return Math.round(value).toLocaleString();
 }
 
 // Count-agreeing noun: plural(1, "game") → "game", plural(3, "game") → "games".
@@ -96,4 +115,3 @@ export function formatDateTimeMs(value: number | null | undefined) {
     return String(value);
   }
 }
-

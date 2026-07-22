@@ -5,6 +5,7 @@ import { ParticipantRuneCard } from "@/components/lol-profile/ParticipantRuneCar
 import { TableScroll, Table, Th, Td } from "@/components/ui/Table";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/cn";
+import { formatCompactNumber } from "@/lib/format";
 import { encodeRiotIdPath } from "@/lib/riotid";
 import { roleDisplayLabel } from "@/lib/roles";
 import {
@@ -30,10 +31,6 @@ import {
 const ROLE_ORDER: Record<string, number> = { TOP: 0, JUNGLE: 1, MIDDLE: 2, BOTTOM: 3, UTILITY: 4 };
 
 export type ScoreboardDensity = "compact" | "full";
-
-function formatGold(gold: number): string {
-  return gold >= 1000 ? `${(gold / 1000).toFixed(1)}k` : String(gold);
-}
 
 function RuneTrigger({
   participant,
@@ -248,7 +245,7 @@ function ScoreboardRow({
           </Td>
 
           <Td align="right" className="hidden whitespace-nowrap text-sm tabular-nums text-fg/82 sm:table-cell">
-            {formatGold(participant.goldEarned)}
+            {formatCompactNumber(participant.goldEarned)}
           </Td>
         </>
       ) : null}
@@ -353,7 +350,7 @@ export function ScoreboardTeamTable({
           ) : null}
           <div className="type-caption flex items-center gap-3 text-muted tabular-nums">
             <span>{totalKills} kills</span>
-            <span>{formatGold(totalGold)} gold</span>
+            <span>{formatCompactNumber(totalGold)} gold</span>
           </div>
         </div>
       </div>

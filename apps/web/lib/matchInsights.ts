@@ -1,4 +1,4 @@
-import { formatDurationSeconds } from "@/lib/format";
+import { formatCompactNumber, formatDurationSeconds } from "@/lib/format";
 import {
   isCurrentProfilePlayer,
   normalizeRoleKey,
@@ -139,13 +139,13 @@ export function deriveMatchTakeaways(input: {
     if (minDiff <= -2500) {
       candidates.push({
         tone: "bad",
-        text: `Down ${(Math.abs(minDiff) / 1000).toFixed(1)}k gold at ${formatDurationSeconds(minFrame.minuteMark * 60)}`,
+        text: `Down ${formatCompactNumber(Math.abs(minDiff))} gold at ${formatDurationSeconds(minFrame.minuteMark * 60)}`,
         salience: Math.abs(minDiff) / 2000
       });
     } else if (endDiff >= 2500 && me.win) {
       candidates.push({
         tone: "good",
-        text: `Closed out a ${(endDiff / 1000).toFixed(1)}k gold lead`,
+        text: `Closed out a ${formatCompactNumber(endDiff)} gold lead`,
         salience: endDiff / 2000
       });
     }

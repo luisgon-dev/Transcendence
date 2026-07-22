@@ -25,7 +25,7 @@ import { analyticsQueueOption, normalizeAnalyticsQueue } from "@/lib/analyticsQu
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { pickMostSevereAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
-import { formatGames } from "@/lib/format";
+import { formatGames, matchupVerdict } from "@/lib/format";
 import { fetchLolAnalyticsPatches } from "@/lib/lolAnalyticsPatches";
 import { normalizeAnalyticsPatch } from "@/lib/lolPatchFilters";
 import { resolveDefaultedRankTier, rankTierDisplayLabel, rankTierLadderOrdinal } from "@/lib/ranks";
@@ -110,13 +110,6 @@ export async function generateMetadata({
     },
     twitter: { card: "summary_large_image", title, description, images: [image] }
   };
-}
-
-function matchupVerdict(winRate: number | null | undefined): string {
-  const pct = (winRate ?? 0) * 100;
-  if (pct >= 52) return "Favored";
-  if (pct < 48) return "Unfavored";
-  return "Even";
 }
 
 function normalizeRole(role: string | null | undefined) {

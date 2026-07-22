@@ -766,7 +766,7 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Put the static-data bundle (champion/item/spell/rune maps + versions) behind a StaticDataContext provider mounted once in SummonerProfileClient; consumers read via a hook. Groups the remaining callbacks/state into a couple of cohesive objects.
   - **Why:** Signature churn: adding one static map touches every layer. Intermediate components (MatchHistorySection, MatchScoreboard) accept props they never read, only forward — pure passthrough noise that obscures which component actually consumes what.
   - **Where:** `apps/web/components/lol-profile/MatchHistorySection.tsx:48-78 (props type); apps/web/components/SummonerProfileUnified.tsx:465-504`
-- [ ] **Duplicated constants and formatting that belong in lib/ (regions, k-suffix, win-rate thresholds)** `LOW` · `small`
+- [x] **Duplicated constants and formatting that belong in lib/ (regions, k-suffix, win-rate thresholds)** `LOW` · `small`
   - **Fix:** Move REGIONS to a lib/regions module, add a formatCompact()/thousands helper to lib/format, and derive matchupVerdict from a shared threshold constant alongside winRateColorClass.
   - **Why:** Drift risk: a new region or a threshold tweak must be applied in multiple files; the 52/48 verdict boundary and the color boundary can silently diverge.
   - **Where:** `apps/web/components/SearchBar.tsx:11-23 & GlobalCommandPalette.tsx:43-55; ScoreboardTeamTable.tsx:34-36 & PerformanceCard.tsx:34-38 (& matchInsights.ts:142,148); app/lol/champions/[championId]/page.tsx:52-57`
@@ -774,7 +774,7 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Key build variants by a stable identity (primaryStyleId+coreItems hash or a server-provided variant id) rather than array index.
   - **Why:** If build order ever changes across a re-render (e.g. re-sort or partial update), React reconciles by position, which can misassociate the uncontrolled `<details open>` state and animations. Low today because these lists are recomputed whole per navigation.
   - **Where:** `apps/web/app/lol/champions/[championId]/page.tsx:526-528; apps/web/app/lol/pro-builds/page.tsx:319,493`
-- [ ] **GlobalCommandPalette reads window layout during render and recomputes helpers every render** `LOW` · `small`
+- [x] **GlobalCommandPalette reads window layout during render and recomputes helpers every render** `LOW` · `small`
   - **Fix:** Compute the open-origin geometry once on open (in the open event handler / a ref) instead of every render; prefer deriving activeTierSection during render or clamping it inline over a syncing effect.
   - **Why:** Minor: reading layout during render is fragile (values captured once at open, stale on resize) and adds avoidable work per keystroke while the palette is open. The tier-list derived-state-in-effect causes an extra render pass when visibleTiers changes.
   - **Where:** `apps/web/components/GlobalCommandPalette.tsx:122-184, 476-487`

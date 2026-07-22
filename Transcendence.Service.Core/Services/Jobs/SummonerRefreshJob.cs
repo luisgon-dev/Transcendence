@@ -379,7 +379,7 @@ public class SummonerRefreshJob(
             }
 
             var start = page * pageSize;
-            var pageIds = (await riotMatchIdsClient.GetMatchIdsByPuuidAsync(
+            var matchIdPage = await riotMatchIdsClient.GetMatchIdsByPuuidAsync(
                     regional,
                     puuid,
                     pageSize,
@@ -388,7 +388,18 @@ public class SummonerRefreshJob(
                     startTimeEpochSeconds,
                     start,
                     type,
-                    ct))
+                    ct);
+            if (matchIdPage == null)
+            {
+                logger.LogInformation(
+                    "[Refresh] Match-id window deferred for {GameName}#{Tag} on {Platform}; preserving paging state for the next refresh.",
+                    gameName,
+                    tagLine,
+                    platformRoute);
+                break;
+            }
+
+            var pageIds = matchIdPage
                 .Where(id => !string.IsNullOrWhiteSpace(id))
                 .Where(id => seenIds.Add(id))
                 .ToList();
@@ -566,7 +577,7 @@ public class SummonerRefreshJob(
             }
 
             var start = page * pageSize;
-            var pageIds = (await riotMatchIdsClient.GetMatchIdsByPuuidAsync(
+            var matchIdPage = await riotMatchIdsClient.GetMatchIdsByPuuidAsync(
                     regional,
                     puuid,
                     pageSize,
@@ -575,7 +586,19 @@ public class SummonerRefreshJob(
                     startTimeEpochSeconds: null,
                     start: start,
                     type: null,
-                    ct))
+                    ct);
+            if (matchIdPage == null)
+            {
+                stoppedEarly = true;
+                logger.LogInformation(
+                    "[Refresh] Non-ranked match-id backfill deferred for {GameName}#{Tag} on {Platform}; preserving its cursor.",
+                    gameName,
+                    tagLine,
+                    platformRoute);
+                break;
+            }
+
+            var pageIds = matchIdPage
                 .Where(id => !string.IsNullOrWhiteSpace(id))
                 .Where(id => seenIds.Add(id))
                 .ToList();

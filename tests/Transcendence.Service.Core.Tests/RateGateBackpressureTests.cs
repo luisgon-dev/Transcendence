@@ -1,14 +1,21 @@
 using FluentAssertions;
+using Hangfire;
+using Hangfire.Common;
+using Hangfire.States;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Transcendence.Data;
+using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
+using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.Implementations;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
@@ -36,6 +43,108 @@ public sealed class RateGateBackpressureTests
         var context = new SqliteCompatibleTranscendenceContext(options);
         await context.Database.EnsureCreatedAsync();
         return context;
+    }
+
+    [Fact]
+    public async Task MatchIdClient_WhenRateGateExhausted_ReturnsDeferredSentinelInsteadOfEmptyPage()
+    {
+        var rateGate = new Mock<IRiotRateGate>();
+        rateGate
+            .Setup(g => g.AcquireAsync("AMERICAS", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        var client = new RiotMatchIdsClient(null!, rateGate.Object);
+
+        var result = await client.GetMatchIdsByPuuidAsync(
+            Camille.Enums.RegionalRoute.AMERICAS,
+            "puuid",
+            100,
+            null,
+            null,
+            null,
+            0,
+            null);
+
+        result.Should().BeNull("null is the explicit retry-later outcome; an empty page means end-of-history");
+    }
+
+    [Fact]
+    public async Task FullHistoryBackfill_WhenMatchIdPageIsDeferred_RemainsRunningAndEnqueuesContinuation()
+    {
+        await using var context = await CreateContextAsync();
+        var summoner = new Summoner
+        {
+            Id = Guid.NewGuid(),
+            Puuid = "puuid-deferred",
+            GameName = "Deferred",
+            TagLine = "NA1",
+            PlatformRegion = "NA1",
+            Region = "AMERICAS"
+        };
+        context.Summoners.Add(summoner);
+        await context.SaveChangesAsync();
+
+        var matchIds = new Mock<IRiotMatchIdsClient>();
+        matchIds
+            .Setup(client => client.GetMatchIdsByPuuidAsync(
+                It.IsAny<Camille.Enums.RegionalRoute>(),
+                summoner.Puuid,
+                It.IsAny<int>(),
+                It.IsAny<long?>(),
+                It.IsAny<Camille.Enums.Queue?>(),
+                It.IsAny<long?>(),
+                It.IsAny<int>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<string>?)null);
+
+        var locks = new Mock<IRefreshLockRepository>();
+        locks
+            .Setup(repository => repository.TryAcquireAsync(
+                It.IsAny<string>(),
+                It.IsAny<TimeSpan>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        locks
+            .Setup(repository => repository.ReleaseAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var backgroundJobs = new Mock<IBackgroundJobClient>();
+        backgroundJobs
+            .Setup(client => client.Create(It.IsAny<Job>(), It.IsAny<IState>()))
+            .Returns("continuation-job");
+
+        var serviceCollection = new ServiceCollection();
+        serviceCollection.AddLogging();
+        serviceCollection.AddHybridCache();
+        await using var services = serviceCollection.BuildServiceProvider();
+        var job = new FullHistoryBackfillJob(
+            context,
+            null!,
+            Mock.Of<IRiotRateGate>(),
+            matchIds.Object,
+            backgroundJobs.Object,
+            services.GetRequiredService<HybridCache>(),
+            Options.Create(new FullHistoryBackfillJobOptions
+            {
+                Enabled = true,
+                PageSize = 100,
+                MaxPagesPerRun = 1,
+                MaxFailureRetriesPerRun = 0,
+                MinimumMatchStartEpochSeconds = 0
+            }),
+            locks.Object,
+            NullLogger<FullHistoryBackfillJob>.Instance);
+
+        await job.ProcessAsync(summoner.Id, null, CancellationToken.None);
+
+        var backfill = await context.SummonerFullHistoryBackfills.SingleAsync();
+        backfill.Status.Should().Be(SummonerFullHistoryBackfillStatuses.Running);
+        backfill.CompletedAtUtc.Should().BeNull();
+        backfill.PagesScanned.Should().Be(0);
+        backgroundJobs.Verify(
+            client => client.Create(It.IsAny<Job>(), It.IsAny<IState>()),
+            Times.Once,
+            "a deferred page must be retried instead of terminating the backfill");
     }
 
     [Fact]

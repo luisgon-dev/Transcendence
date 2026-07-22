@@ -7,7 +7,7 @@ namespace Transcendence.Service.Core.Services.Jobs;
 
 public sealed class RiotMatchIdsClient(LeagueRiotApiContext riotApiContext, IRiotRateGate rateGate) : IRiotMatchIdsClient
 {
-    public async Task<IReadOnlyList<string>> GetMatchIdsByPuuidAsync(
+    public async Task<IReadOnlyList<string>?> GetMatchIdsByPuuidAsync(
         RegionalRoute regionalRoute,
         string puuid,
         int count,
@@ -18,10 +18,10 @@ public sealed class RiotMatchIdsClient(LeagueRiotApiContext riotApiContext, IRio
         string? type,
         CancellationToken ct = default)
     {
-        // Pace under the per-region Riot budget. An empty list means "no new ids this run" to the caller,
-        // which simply ends paging — safe to return when the region's budget is momentarily exhausted.
+        // An empty Riot page is a real end-of-window signal. Gate exhaustion is a deferral, so return
+        // null and force callers to preserve their cursor rather than silently completing a backfill.
         if (!await rateGate.AcquireAsync(regionalRoute.ToString(), ct))
-            return [];
+            return null;
 
         return await riotApiContext.Api.MatchV5()
             .GetMatchIdsByPUUIDAsync(

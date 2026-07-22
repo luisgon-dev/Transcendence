@@ -129,7 +129,7 @@ public sealed class FullHistoryBackfillJob(
         {
             ct.ThrowIfCancellationRequested();
 
-            var pageIds = (await riotMatchIdsClient.GetMatchIdsByPuuidAsync(
+            var matchIdPage = await riotMatchIdsClient.GetMatchIdsByPuuidAsync(
                     regionalRoute,
                     summoner.Puuid!,
                     pageSize,
@@ -138,7 +138,23 @@ public sealed class FullHistoryBackfillJob(
                     startTimeEpochSeconds: lowerBoundEpochSeconds,
                     start: 0,
                     type: null,
-                    ct))
+                    ct);
+            if (matchIdPage == null)
+            {
+                // This is rate-gate backpressure, not end-of-history. Keep the row Running and enqueue
+                // the normal continuation so a momentary budget miss can never mark the backfill done.
+                backfill.Status = SummonerFullHistoryBackfillStatuses.Running;
+                backfill.UpdatedAtUtc = now;
+                await db.SaveChangesAsync(ct);
+                shouldContinue = true;
+                logger.LogInformation(
+                    "[FullHistory] Match-id page deferred for summoner {SummonerId}; preserving cursor {Cursor} and retrying later.",
+                    summonerId,
+                    backfill.CursorEndEpochSeconds);
+                break;
+            }
+
+            var pageIds = matchIdPage
                 .Where(id => !string.IsNullOrWhiteSpace(id))
                 .Distinct(StringComparer.Ordinal)
                 .ToList();

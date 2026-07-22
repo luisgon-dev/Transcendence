@@ -741,11 +741,11 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Render the page as a server component that fetches the initial favorites list (via the session-aware backend call), and keep a small client island only for the interactive remove/add actions.
   - **Why:** Extra client round-trip and a loading flash on an authenticated route whose first paint could be data-complete; minor but inconsistent with the server-first pattern the analytics pages follow.
   - **Where:** `apps/web/app/account/favorites/page.tsx:20-58`
-- [ ] **Unique per-call x-trn-request-id header defeats Next fetch memoization; some hot fetches lack the compensating cache() wrapper** `LOW` · `small`
+- [x] **Unique per-call x-trn-request-id header defeats Next fetch memoization; some hot fetches lack the compensating cache() wrapper** `LOW` · `small`
   - **Fix:** Either move the request-id header out of the memoization key path (e.g. attach it in the middleware/proxy layer rather than per fetchBackendJson call) or systematically wrap shared read fetchers (status included) in React `cache()`.
   - **Why:** Duplicated backend work where the cache() wrapper is missing (the data cache may absorb the second network hit, but that is not guaranteed and the pattern is fragile — every new call site must remember to add cache()).
   - **Where:** `apps/web/lib/backendCall.ts:44`
-- [ ] **user BFF proxy lacks the same-origin guard the admin proxy enforces** `INFO` · `trivial`
+- [x] **user BFF proxy lacks the same-origin guard the admin proxy enforces** `INFO` · `trivial`
   - **Fix:** For consistency and belt-and-suspenders CSRF protection, apply the same `isSameOrigin` check to non-safe methods in the user proxy handler.
   - **Why:** Defense-in-depth parity gap rather than an open vulnerability; SameSite=Lax mitigates classic CSRF for the mutating user endpoints today.
   - **Where:** `apps/web/app/api/trn/user/[...path]/route.ts:13-41`

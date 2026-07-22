@@ -1,6 +1,7 @@
 import "server-only";
 
 import { cookies } from "next/headers";
+import { cache } from "react";
 
 import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl } from "@/lib/env";
@@ -21,7 +22,8 @@ const FALLBACK_OPTIONS: AnalyticsRegionOption[] = [
   { code: "KR", label: "Korea" }
 ];
 
-export async function fetchAnalyticsRegions(): Promise<AnalyticsRegionOption[]> {
+// Deduplicate region options shared by layouts and page-level selectors in one render.
+export const fetchAnalyticsRegions = cache(async (): Promise<AnalyticsRegionOption[]> => {
   const result = await fetchBackendJson<AnalyticsRegionOption[]>(
     `${getBackendBaseUrl()}/api/lol/analytics/regions`,
     { next: { revalidate: 60 * 60 } }
@@ -32,7 +34,7 @@ export async function fetchAnalyticsRegions(): Promise<AnalyticsRegionOption[]> 
   }
 
   return result.body ?? FALLBACK_OPTIONS;
-}
+});
 
 export async function resolveAnalyticsRegion(
   regionParam: string | null | undefined

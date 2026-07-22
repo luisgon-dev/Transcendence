@@ -657,7 +657,7 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > The API is resource-oriented, uses purpose-built DTOs/records with no raw EF-entity leakage, and — importantly — is gated by a real CI drift check (`pnpm api:check`) so the committed OpenAPI spec cannot silently diverge from the code. The load-bearing weakness is fidelity, not structure: Swashbuckle is not configured for C# nullable-reference-type / required-property support, so the generated TypeScript client (whose `components` types the frontend imports everywhere) systematically misrepresents nullability in both directions and marks nothing required. Secondary issues are a genuinely inconsistent error model (RFC7807 ProblemDetails everywhere except admin endpoints, which return an undocumented `{message,detail}` shape), many untyped success bodies, a missing validation-error schema, and a shipped placeholder field in the profile contract.
 
-- [ ] **ProblemDetails content-type in the spec (`application/json`/`text/plain`) does not match runtime `application/problem+json`** `LOW` · `small`
+- [x] **ProblemDetails content-type in the spec (`application/json`/`text/plain`) does not match runtime `application/problem+json`** `LOW` · `small`
   - **Fix:** Annotate error responses with the `application/problem+json` content type (via a ProducesResponseType/operation filter or [Produces]) so the declared and actual media types align.
   - **Why:** A strict client that content-negotiates or matches on media type will mis-handle error bodies; the contract misrepresents the RFC 7807 media type the server actually returns.
   - **Where:** `Transcendence.WebAPI/Errors/ProblemDetailsErrorBodyFilter.cs:36-40; openapi/transcendence.v1.json`
@@ -677,7 +677,7 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Apply the same required-field validation in Update (or add DataAnnotations to UpsertTrackedProSummonerRequest and rely on [ApiController] model validation for both).
   - **Why:** Inconsistent write contract for the same resource; a full-replacement PUT can degrade a record to a state the API refuses to create, and the difference is invisible in the contract.
   - **Where:** `Transcendence.WebAPI/Controllers/ProSummonersController.cs:159-171 vs 67-69`
-- [ ] **No API version segment in routes despite an OpenAPI 'v1' document** `INFO` · `medium`
+- [x] **No API version segment in routes despite an OpenAPI 'v1' document** `INFO` · `medium`
   - **Fix:** If external consumers are ever expected, adopt URL or header versioning (e.g. Asp.Versioning) before the surface stabilizes; otherwise document that the contract is intentionally internal/unversioned.
   - **Why:** Any breaking change to a route or payload is a hard break with no negotiated coexistence path. Impact is bounded because the API is internal and consumed by a single lock-step-generated client, but there is no runway for external/mobile consumers or staged rollouts.
   - **Where:** `openapi/transcendence.v1.json (info.version "v1"); all controller [Route] attributes (e.g. SummonersController.cs:22 "api/lol/summoners")`

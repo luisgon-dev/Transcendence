@@ -140,6 +140,7 @@ builder.Services.AddSwaggerGen(options =>
     });
 
     options.OperationFilter<AuthPolicyOperationFilter>();
+    options.OperationFilter<ProblemDetailsContentTypeOperationFilter>();
 });
 
 // Infrastructure: DbContext, HTTP, domain services, repositories.

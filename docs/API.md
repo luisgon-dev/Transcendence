@@ -39,6 +39,12 @@ All error responses use RFC 7807 **ProblemDetails** (`application/problem+json`)
 - Empty-body `4xx/5xx` (e.g. `NotFound()`), model-validation failures, and unhandled exceptions are ProblemDetails automatically.
 - Body-carrying errors are normalized: a bare string body (`BadRequest("…")`) is rewrapped as ProblemDetails `detail`, and admin operations return `Problem(title, detail, status)` rather than the legacy `{ message, detail }` object.
 - Model-validation failures (e.g. `POST /api/lol/summoners/multi-search`) return **`ValidationProblemDetails`** — ProblemDetails plus a per-field `errors` map. The schema is published in the OpenAPI contract.
+- The OpenAPI document declares only `application/problem+json` for these error schemas, matching the runtime response rather than the ordinary JSON/text formatter list.
+
+The service's routes are intentionally unversioned because the API is an internal contract consumed
+by the lock-step web app and generated client. The OpenAPI document's `v1` label versions the
+published schema snapshot; introduce negotiated URL or header versioning before supporting an
+independently deployed external client.
 
 Side-effecting operations that acknowledge success with a message return a typed **`OperationResult`** (`{ message, id? }`) instead of an anonymous body, so the shape is documented in the contract and typed in the generated client. Pure side-effect operations may return `204 No Content`.
 

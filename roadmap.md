@@ -580,7 +580,7 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Add HasMaxLength to the analytics key columns to match the summoner-stat conventions (e.g. Patch 32, PlatformRegion 16, RankScope/Role/Feature 64).
   - **Why:** Functionally harmless on Postgres (text == varchar performance), but these are short enum-like codes participating in composite unique indexes; leaving them unbounded is inconsistent, weakens self-documentation, and removes a cheap guard against accidental oversized values.
   - **Where:** `Transcendence.Data/TranscendenceContext.cs:610-669 (ChampionRoleTierStat/ChampionScopeGradeStat/ChampionBanScopeStat/ChampionMatchupStat/ChampionBuildSnapshot/AnalyticsResponseSnapshot); contrast SummonerMatchFact config at :531-554`
-- [ ] **`Summoner.PlatformRegion` / `Region` declared `required string?` (required modifier on a nullable type)** `INFO` · `trivial`
+- [x] **`Summoner.PlatformRegion` / `Region` declared `required string?` (required modifier on a nullable type)** `INFO` · `trivial`
   - **Fix:** Drop the nullable `?` (make it `required string`) so the type matches the intent and the DB column is NOT NULL.
   - **Why:** Contradictory intent: the field is meant to be mandatory yet the type allows null, and PlatformRegion drives the region-scoped indexes (IX_Summoners_Region_UpdatedAt, search-prefix) and candidate selection — a null-region row silently falls outside all per-region queries. Low practical risk since ingestion always sets a region.
   - **Where:** `Transcendence.Data/Models/LoL/Account/Summoner.cs:19-20`

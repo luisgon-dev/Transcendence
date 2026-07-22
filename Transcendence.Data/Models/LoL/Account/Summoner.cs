@@ -16,8 +16,8 @@ public class Summoner
     public string? GameNameNormalized { get; set; }
     public string? TagLineNormalized { get; set; }
     public string? AccountId { get; set; }
-    public required string? PlatformRegion { get; set; }
-    public required string? Region { get; set; }
+    public string? PlatformRegion { get; set; }
+    public string? Region { get; set; }
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;  // When summoner profile was last fetched (also the analytics coverage timestamp)
     // Most recent game-creation time across this summoner's ingested matches — a true activity
     // signal for candidate selection (distinct from UpdatedAt, which is fetch/coverage recency).

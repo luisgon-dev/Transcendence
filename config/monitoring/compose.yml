@@ -7,7 +7,7 @@
 # Prometheus can scrape webapi/service by name.
 #
 # Local:  docker compose -f config/monitoring/compose.yml up -d          (needs the app network up)
-# Prod:   docker compose -f compose.yml -f compose.prod.yml up -d        (adds the admin-password file secret)
+# Prod:   docker compose -f compose.yml -f compose.prod.yml up -d        (overlay retained for compatibility)
 #
 # Environment-specific values come from ./.env (see .env.example); defaults here are local-friendly.
 services:
@@ -36,9 +36,9 @@ services:
     restart: unless-stopped
     environment:
       GF_SECURITY_ADMIN_USER: "${GRAFANA_ADMIN_USER:-admin}"
-      # No admin password set here on purpose: Grafana defaults to admin/admin locally, and prod
-      # supplies it via GF_SECURITY_ADMIN_PASSWORD__FILE (compose.prod.yml). Grafana rejects having
-      # BOTH the plain and __FILE forms set (they are mutually exclusive), so the base must not set it.
+      # Both local and prod fail closed on a file-backed password. Copy the committed example to
+      # secrets/grafana_admin_password and replace its placeholder before starting this stack.
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_ROOT_URL: "${GRAFANA_ROOT_URL:-http://localhost:3300}"
       GF_SECURITY_COOKIE_SECURE: "${GRAFANA_COOKIE_SECURE:-false}"
@@ -50,6 +50,7 @@ services:
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./secrets/grafana_admin_password:/run/secrets/grafana_admin_password:ro
       - grafana_data:/var/lib/grafana
     ports:
       - "${GRAFANA_PORT:-3300}:3000"

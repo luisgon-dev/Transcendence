@@ -162,7 +162,9 @@ Riot API key model:
 Prometheus + Grafana are their own stack — the single source of truth for both local dev and prod — at [`config/monitoring/`](../config/monitoring/README.md) (separate from the app `compose.yml`). Bring the app stack up first (it creates the shared `transcendence_transcendence-net` network), then:
 
 ```bash
-# Grafana → http://localhost:3300 (admin/admin), Prometheus → http://localhost:9090
+# Copy config/monitoring/secrets/grafana_admin_password.example to
+# config/monitoring/secrets/grafana_admin_password and replace the placeholder.
+# Grafana → http://localhost:3300 (admin + file-backed password), Prometheus → http://localhost:9090
 docker compose -f config/monitoring/compose.yml up -d
 ```
 

@@ -804,11 +804,11 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Pin base images by digest (renovate/dependabot can bump them), and re-evaluate whether provenance/sbom can be re-enabled now that wud is gone — poll-deploy resolves the moving :main digest via explicit Accept headers regardless.
   - **Why:** Builds are not byte-reproducible and a mutated/compromised upstream tag silently changes prod; disabling SBOM/provenance forfeits supply-chain attestation even though the pipeline otherwise pins Actions by SHA and cosign-signs images (rigor applied unevenly).
   - **Where:** `apps/web/Dockerfile:1,27; Transcendence.WebAPI/Dockerfile:1,7; Transcendence.Service/Dockerfile:1,5; .github/workflows/docker-images.yml:163-164`
-- [ ] **compose.yml (the documented 'safe deploy source') ships TRN_ERROR_VERBOSITY=verbose for the web service, leaking internal exception text to clients** `LOW` · `trivial`
+- [x] **compose.yml (the documented 'safe deploy source') ships TRN_ERROR_VERBOSITY=verbose for the web service, leaking internal exception text to clients** `LOW` · `trivial`
   - **Fix:** Default the deploy compose to `safe` (verbose is a debugging opt-in) or scope verbose to non-prod, so a deploy from this file doesn't leak internals.
   - **Why:** Raw internal error messages (upstream host, connection/DNS detail, stack fragments) are exposed to end users in a compose file explicitly described (compose.yml:9-13) as a safe prod deploy source. Minor information disclosure and inconsistent with a production posture.
   - **Where:** `compose.yml:81; apps/web/lib/env.ts:15-21; apps/web/lib/trnProxy.ts:81-95,122-133`
-- [ ] **Grafana admin defaults to admin/admin when GRAFANA_ADMIN_PASSWORD is unset, with the port published** `LOW` · `trivial`
+- [x] **Grafana admin defaults to admin/admin when GRAFANA_ADMIN_PASSWORD is unset, with the port published** `LOW` · `trivial`
   - **Fix:** Drop the `:-admin` password default (fail closed / require the var) and add GRAFANA_ADMIN_PASSWORD to .env.example so it's an explicit, non-default secret.
   - **Why:** If the ops-tools profile is enabled without setting the password (and .env.example doesn't remind you to), the metrics UI — which exposes operational internals — is reachable with default credentials on the published port.
   - **Where:** `compose.yml:191-207`

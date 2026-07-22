@@ -22,8 +22,11 @@ Bring the app stack up first (it creates the `transcendence_transcendence-net` n
 
 ```bash
 cp config/monitoring/.env.example config/monitoring/.env   # optional; defaults work
+cp config/monitoring/secrets/grafana_admin_password.example \
+  config/monitoring/secrets/grafana_admin_password
+# Replace the placeholder in secrets/grafana_admin_password before continuing.
 docker compose -f config/monitoring/compose.yml up -d
-# Grafana → http://localhost:3300  (admin/admin)   Prometheus → http://localhost:9090
+# Grafana → http://localhost:3300  (admin + file-backed password)   Prometheus → http://localhost:9090
 ```
 
 ## Prod

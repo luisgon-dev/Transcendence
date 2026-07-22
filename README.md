@@ -170,9 +170,11 @@ docker compose --profile ops-tools up      # Dozzle (container log viewer) → h
 Prometheus and Grafana run from the dedicated monitoring stack after the app network exists:
 
 ```bash
+# First copy config/monitoring/secrets/grafana_admin_password.example to
+# config/monitoring/secrets/grafana_admin_password and replace the placeholder.
 docker compose -f config/monitoring/compose.yml up -d
 # Prometheus → http://localhost:9090
-# Grafana → http://localhost:3300 (local default: admin/admin)
+# Grafana → http://localhost:3300 (admin + file-backed password)
 ```
 
 Grafana provisions five dashboards (fleet overview, read API, worker runtime, Riot API, and ingestion

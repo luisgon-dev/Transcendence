@@ -76,6 +76,27 @@ public class PrecomputedAnalyticsRefresherTests
     }
 
     [Fact]
+    public async Task RefreshTabularCore_RegionUsesHistoricalMatchInsteadOfTransferredSummoner()
+    {
+        await using var ctx = await SeededAsync();
+        var transferredParticipant = await ctx.Db.MatchParticipants
+            .Include(x => x.Match)
+            .Include(x => x.Summoner)
+            .FirstAsync(x => x.Match.PlatformRegion == "NA1");
+        transferredParticipant.Summoner.PlatformRegion = "EUW1";
+        await ctx.Db.SaveChangesAsync();
+
+        await Refresh(ctx.Db);
+
+        var rows = await ctx.Db.ScopeMatchCountStats.AsNoTracking()
+            .Where(x => x.RankScope == "ALL")
+            .ToListAsync();
+        Total(rows, "NA1", "ALL").Should().Be(6);
+        Total(rows, "EUW1", "ALL").Should().Be(2);
+        Total(rows, "ALL", "ALL").Should().Be(8);
+    }
+
+    [Fact]
     public async Task RefreshTabularCore_BanCounts_DistinctPerScopeWithGlobalAllRow()
     {
         await using var ctx = await SeededAsync();

@@ -281,18 +281,19 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
             .InAnalyticsQueue(normalizedQueue)
             .WithAnalyticsRole(normalizedQueue);
 
-        // Apply role filter (if not unified "ALL")
-        if (!isUnifiedRole)
-        {
-            baseQuery = baseQuery.Where(mp => mp.TeamPosition == normalizedRole);
-        }
-
         baseQuery = baseQuery.InPlatformRegion(regionFilter);
 
         // Only apply rank join semantics when a tier filter is requested.
         // Unfiltered views intentionally keep unranked participants.
         baseQuery = AnalyticsScopeMath.ApplyRankTierScopeToParticipants(
             baseQuery, rankTierScope, _context.Ranks.AsNoTracking(), normalizedQueue);
+
+        // Ban and contested-presence denominators are properties of the whole rank/region scope, not
+        // only the selected lane. Keep this cross-role query intact and apply the role filter solely to
+        // the champion rows that are displayed/scored.
+        var scopeQuery = baseQuery;
+        if (!isUnifiedRole)
+            baseQuery = baseQuery.Where(mp => mp.TeamPosition == normalizedRole);
 
         var query = baseQuery.Select(mp => new
         {
@@ -307,8 +308,8 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
 
         // Keep the scope's distinct match-id set as an IQueryable subquery so the ban rollup stays
         // entirely in SQL (a COUNT subquery + a Contains-subquery), never materialising the (large)
-        // id set into app memory. Derived from `query` so the role filter above stays in scope.
-        var scopeMatchIds = query.Select(x => x.MatchId).Distinct();
+        // id set into app memory. The match population intentionally remains cross-role.
+        var scopeMatchIds = scopeQuery.Select(x => x.MatchId).Distinct();
         var totalMatchesInScope = await scopeMatchIds.CountAsync(ct);
         var banCountsByChampion = totalMatchesInScope == 0
             ? new Dictionary<int, int>()
@@ -339,10 +340,21 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
         var aggregated = aggregatedChampionStats
             .Select(x => new ChampionTierScorer.RoleGames(x.ChampionId, x.Role, x.Games, x.Wins))
             .ToList();
+        var scopeGamesByChampion = isUnifiedRole
+            ? null
+            : await scopeQuery
+                .GroupBy(x => x.ChampionId)
+                .Select(g => new { ChampionId = g.Key, Games = g.Count() })
+                .ToDictionaryAsync(x => x.ChampionId, x => x.Games, ct);
 
         // Raw/live path: previous-patch movement is intentionally omitted (it lives only on the persisted
         // region=ALL grades). Empirical-Bayes shrinkage + absolute cutoffs are applied by the shared scorer.
-        return ScoreToEntries(isUnifiedRole, aggregated, banCountsByChampion, totalMatchesInScope);
+        return ScoreToEntries(
+            isUnifiedRole,
+            aggregated,
+            banCountsByChampion,
+            totalMatchesInScope,
+            scopeGamesByChampion);
     }
 
     // ---- shared scorer plumbing (used by the raw path and the stats fallback) ----
@@ -356,12 +368,18 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
         bool isUnifiedRole,
         IReadOnlyList<ChampionTierScorer.RoleGames> aggregated,
         IReadOnlyDictionary<int, int> banByChampion,
-        int totalMatchesInScope)
+        int totalMatchesInScope,
+        IReadOnlyDictionary<int, int>? scopeGamesByChampion = null)
     {
         if (aggregated.Count == 0)
             return [];
 
-        var score = ChampionTierScorer.ScoreScope(aggregated, banByChampion, totalMatchesInScope, _tieringOptions);
+        var score = ChampionTierScorer.ScoreScope(
+            aggregated,
+            banByChampion,
+            totalMatchesInScope,
+            _tieringOptions,
+            scopeGamesByChampion);
         var rows = isUnifiedRole ? score.Overview : score.PerRole;
         return rows.Select(s => MapScoredToEntry(s, movement: null, previousTier: null)).ToList();
     }
@@ -556,9 +574,10 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
 
         // Fallback (specific region or exact tier — or a patch not yet graded): roll the atoms up to the
         // requested scope and score live through the same scorer (no movement).
-        var query = ApplyStatScope(
+        var scopeQuery = ApplyStatScope(
             _context.ChampionRoleTierStats.AsNoTracking().Where(x => x.Patch == patch && x.QueueFamily == normalizedQueue),
             regionFilter, tierFilter);
+        var query = scopeQuery;
         if (!isUnifiedRole)
             query = query.Where(x => x.Role == normalizedRole);
 
@@ -581,8 +600,19 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
             : await _context.ChampionBanScopeStats.AsNoTracking()
                 .Where(x => x.Patch == patch && x.QueueFamily == normalizedQueue && x.PlatformRegion == regionKey && x.RankScope == scopeToken)
                 .ToDictionaryAsync(x => x.ChampionId, x => x.BannedMatches, ct);
+        var scopeGamesByChampion = isUnifiedRole
+            ? null
+            : await scopeQuery
+                .GroupBy(x => x.ChampionId)
+                .Select(g => new { ChampionId = g.Key, Games = g.Sum(x => x.Games) })
+                .ToDictionaryAsync(x => x.ChampionId, x => x.Games, ct);
 
-        return ScoreToEntries(isUnifiedRole, aggregated, banCountsByChampion, totalMatchesInScope);
+        return ScoreToEntries(
+            isUnifiedRole,
+            aggregated,
+            banCountsByChampion,
+            totalMatchesInScope,
+            scopeGamesByChampion);
     }
 
     private Task<bool> HasGradesAsync(string patch, string queueFamily, string scopeToken, CancellationToken ct) =>

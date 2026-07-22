@@ -69,7 +69,7 @@ public class ChampionAnalyticsStatsEquivalenceTests
     }
 
     [Fact]
-    public async Task TierList_RoleFiltered_StatsPath_EqualsRawCompute_ExceptIntentionallyRoleIndependentBanRate()
+    public async Task TierList_RoleFiltered_StatsPath_EqualsRawCompute_IncludingBanRateAndContestedScore()
     {
         await using var ctx = await SeededAsync();
         await Refresh(ctx.Db);
@@ -82,12 +82,9 @@ public class ChampionAnalyticsStatsEquivalenceTests
             var raw = await svc.ComputeTierListAsync(role, tier, region, Patch, CancellationToken.None);
             var stats = await svc.ComputeTierListFromStatsAsync(role, tier, region, Patch, CancellationToken.None);
 
-            // Tiering/ordering/win/pick rates match exactly. BanRate AND ContestedScore are excluded: the raw
-            // role-filtered path scopes its distinct-match denominator and cross-role presence to the role,
-            // while the persisted/atom denominators are role-independent. Movement is persisted-only.
+            // Role filtering changes the displayed/scored rows, but ban rate and contested presence retain
+            // the full cross-role scope denominator on both paths. Movement is persisted-only.
             stats.Should().BeEquivalentTo(raw, o => o.WithStrictOrdering()
-                    .Excluding(e => e.BanRate)
-                    .Excluding(e => e.ContestedScore)
                     .Excluding(e => e.Movement)
                     .Excluding(e => e.PreviousTier),
                 $"role-filtered tier list role={role} tier={tier ?? "ALL"} region={region ?? "ALL"}");

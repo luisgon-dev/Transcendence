@@ -27,7 +27,7 @@ namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 /// per-platform rows; the read point-looks-up, never sums. Scope membership uses the same EXISTS form as
 /// the live <c>ApplyRankTierScopeToParticipants</c>.</item>
 /// </list>
-/// Region "ALL" is a reserved synthetic token; <see cref="AllRegion"/>. A null Summoner.PlatformRegion is
+/// Region "ALL" is a reserved synthetic token; <see cref="AllRegion"/>. A null Match.PlatformRegion is
 /// coalesced to "" (a bucket only the region=ALL roll-up ever includes).
 /// </summary>
 public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
@@ -366,7 +366,7 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
             from soloRank in rankGroup.DefaultIfEmpty()
             select new
             {
-                Region = mp.Summoner.PlatformRegion,
+                Region = mp.Match.PlatformRegion,
                 Tier = soloRank != null ? soloRank.Tier : RankTierCatalog.Unranked,
                 mp.ChampionId,
                 Role = hasRoles ? mp.TeamPosition! : AnalyticsQueueCatalog.AllRoles,
@@ -412,9 +412,10 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
         {
             var scoped = ApplyScope(BaseParticipants(patch, queueFamily), scope, queueFamily);
 
-            // (region, matchId) distinct pairs in scope — region from the participant's summoner.
+            // Match region is immutable historical context. Using each participant's current summoner
+            // region can split one match into multiple regional denominators after an account transfer.
             var regionMatches = scoped
-                .Select(mp => new { Region = mp.Summoner.PlatformRegion, mp.MatchId })
+                .Select(mp => new { Region = mp.Match.PlatformRegion, mp.MatchId })
                 .Distinct();
 
             // Per-platform distinct-match counts.
@@ -436,8 +437,8 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
                 });
             }
 
-            // Global (region=ALL): distinct over the scope ignoring region — NOT the per-region sum, since a
-            // match whose participants span regions would be counted once globally but once per region.
+            // Global (region=ALL): distinct over the scope ignoring region. Per-region rows are also now
+            // single-valued by match, so a transferred participant cannot double-count one match.
             var allTotal = await scoped.Select(mp => mp.MatchId).Distinct().CountAsync(ct);
             if (allTotal > 0)
             {

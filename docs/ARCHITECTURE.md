@@ -476,7 +476,7 @@ The web app never exposes backend tokens to browser JS:
 
 - Public analytics now treat region as explicit UI state instead of an implicit backend assumption.
 - `GET /api/lol/analytics/regions` exposes the enabled ingestion regions plus `ALL`/global for the web app.
-- Tier list, builds, matchup, and winrate queries accept the same platform-region tokens and use `PlatformRegion` filtering so region-scoped pages match the ingestion model.
+- Tier list, builds, matchup, and winrate queries accept the same platform-region tokens and use the match's immutable `PlatformRegion` so an account transfer cannot split one historical match across regional aggregates or double-count a regional distinct-match denominator.
 - The web app persists the last selected analytics region in client storage/cookie and best-effort syncs it to `UserPreferences.PreferredRegion`.
 
 ### Operational Logging

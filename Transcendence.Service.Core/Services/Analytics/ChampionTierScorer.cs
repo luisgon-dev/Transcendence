@@ -72,15 +72,21 @@ internal static class ChampionTierScorer
         IReadOnlyList<RoleGames> aggregated,
         IReadOnlyDictionary<int, int> banByChampion,
         int totalScopeMatches,
-        TieringOptions options)
+        TieringOptions options,
+        IReadOnlyDictionary<int, int>? scopeGamesByChampion = null)
     {
         if (aggregated.Count == 0)
             return new ScopeScore([], []);
 
         // Champion presence numerator for the contested index: total games across all roles in the scope.
-        var champTotalGames = new Dictionary<int, int>();
-        foreach (var a in aggregated)
-            champTotalGames[a.ChampionId] = champTotalGames.GetValueOrDefault(a.ChampionId) + a.Games;
+        var champTotalGames = scopeGamesByChampion == null
+            ? new Dictionary<int, int>()
+            : new Dictionary<int, int>(scopeGamesByChampion);
+        if (scopeGamesByChampion == null)
+        {
+            foreach (var a in aggregated)
+                champTotalGames[a.ChampionId] = champTotalGames.GetValueOrDefault(a.ChampionId) + a.Games;
+        }
 
         var perRole = new List<ScoredChampion>(aggregated.Count);
         foreach (var roleGroup in aggregated.GroupBy(x => x.Role))

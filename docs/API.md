@@ -217,7 +217,8 @@ Tier methodology (`GET /api/lol/analytics/tierlist`):
 
 `region` query semantics across tier list, win rates, builds, and matchups:
 - `ALL` (or omitted): global aggregate across enabled ingestion regions
-- Concrete platform region token: for example `NA1|EUW1|EUN1|KR`
+- Concrete platform region token: for example `NA1|EUW1|EUN1|KR`. Historical analytics are keyed by
+  the match's recorded platform region, not a participant account's current region after a transfer.
 - Supported public region tokens are discoverable via `GET /api/lol/analytics/regions`
 - Tier list, builds, and matchup responses now echo the resolved `region` field so the UI can badge active scope without guessing
 

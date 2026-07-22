@@ -58,6 +58,7 @@ This is a navigational summary; the OpenAPI spec is the source of truth.
 - `GET /api/lol/summoners/{summonerId}/stats/rank-history`
 - `GET /api/lol/summoners/{summonerId}/matches/recent`
 - `GET /api/lol/summoners/{summonerId}/matches/{matchId}`
+- `GET /api/lol/summoners/{summonerId}/matches/{matchId}/timeline` (public, `expensive-read` rate limit; per-minute team gold/XP and difference curves, or `404` before timeline ingestion)
 
 Default stats scope:
 - `stats/overview`, `stats/champions`, and `stats/roles` are computed from ranked solo/duo sample data.

@@ -21,7 +21,8 @@ pnpm api:gen          # generate TS client from OpenAPI spec
 pnpm api:check        # verify spec is in sync
 
 # Docker
-docker compose up --build      # full stack (API + worker + web + Postgres + Redis)
+pnpm dev:stack:up              # full stack in background (API + worker + web + Postgres + Redis)
+pnpm dev:stack:down            # stop the full stack
 
 # E2E
 pnpm e2e:stack        # start stack for E2E tests
@@ -90,7 +91,7 @@ If you are not sure which doc to update, add a short note to the PR explaining w
 
 Agents can use `playwright-cli` to take screenshots and interact with the live site for frontend debugging:
 
-- Use `playwright-cli open https://kronic.one` to open the live site
+- Use `playwright-cli open https://transcend.kronic.one` to open the live site
 - Use `playwright-cli screenshot` to capture current state
 - Use `playwright-cli snapshot` to get a DOM snapshot with element refs
 

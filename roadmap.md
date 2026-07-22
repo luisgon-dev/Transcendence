@@ -817,27 +817,27 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > Documentation quality is above average and the recent TFT removal was executed cleanly (zero stale TFT references anywhere in docs or the OpenAPI spec). Env-var/compose mappings, referenced files, and the API.md endpoint list are almost entirely accurate, and DEVELOPMENT.md/ARCHITECTURE.md contain genuinely excellent operational runbook content. The most serious problem is a canonical doc (ARCHITECTURE.md) that still describes the old, explicitly-retired prod deploy mechanism (wud) — an ops runbook that would actively misdirect during an incident. Secondary gaps: a fully committed Prometheus/Grafana observability stack is undocumented despite ~60 documented metric names, plus a scatter of smaller inaccuracies (endpoint count, one undocumented endpoint, a wrong host URL).
 
-- [ ] **Committed Prometheus/Grafana observability stack is entirely undocumented despite extensive metric docs** `MED` · `small` · ✅ verified
+- [x] **Committed Prometheus/Grafana observability stack is entirely undocumented despite extensive metric docs** `MED` · `small` · ✅ verified
   - **Fix:** Add an 'Observability' subsection to DEVELOPMENT.md (and the README dev-tooling block) documenting the ops-tools Prometheus/Grafana stack, the 5 dashboards, ports (:9090/:3001), and admin creds; add PROMETHEUS_PORT/GRAFANA_PORT/GRAFANA_ADMIN_* to .env.example.
   - **Why:** The heavily documented metrics have no consumer story: a new operator cannot discover the dashboards exist, how to bring them up, or what URL/credentials to use. The telemetry documentation reads as dead-end reference with no path to actually view it.
   - **Where:** `compose.yml:175-211 & config/monitoring/grafana/dashboards/ (vs README.md:159-169, docs/DEVELOPMENT.md telemetry sections)`
-- [ ] **README misdescribes what the 'ops-tools' compose profile launches** `MED` · `trivial` · ✅ verified
+- [x] **README misdescribes what the 'ops-tools' compose profile launches** `MED` · `trivial` · ✅ verified
   - **Fix:** Update the README ops-tools line to list all three services and their ports, or split observability into its own documented command.
   - **Why:** A developer running the documented command gets an unexpected Prometheus + Grafana boot (extra containers, ports 9090/3001) with no explanation, and conversely won't realize those tools are available. Factual inaccuracy in a command table.
   - **Where:** `README.md:166 (vs compose.yml:160,175,191 all profiles:['ops-tools'])`
-- [ ] **OpenAPI spec exposes a match-timeline endpoint that docs/API.md never lists** `LOW` · `trivial` · ✅ verified
+- [x] **OpenAPI spec exposes a match-timeline endpoint that docs/API.md never lists** `LOW` · `trivial` · ✅ verified
   - **Fix:** Add the matches/{matchId}/timeline endpoint (auth + response shape) to the API.md summoner section.
   - **Why:** API.md declares itself a navigational summary with OpenAPI as source of truth but omits a live public endpoint, so a consumer relying on the human-readable list would miss it. Minor completeness gap, not a contract error.
   - **Where:** `docs/API.md:41-50 (vs openapi/transcendence.v1.json path /api/lol/summoners/{summonerId}/matches/{matchId}/timeline)`
-- [ ] **README overstates the API surface as '80+ endpoints'** `LOW` · `trivial`
+- [x] **README overstates the API surface as '80+ endpoints'** `LOW` · `trivial`
   - **Fix:** Change to '60+ endpoints' (or drop the count) to match the committed spec.
   - **Why:** The headline number in the canonical README is ~27% higher than the actual committed contract, eroding trust in the doc's precision, at odds with the product's stated 'precise' brand.
   - **Where:** `README.md:55`
-- [ ] **AGENTS.md points frontend debugging at the wrong host (apex kronic.one, not transcend.kronic.one)** `LOW` · `trivial`
+- [x] **AGENTS.md points frontend debugging at the wrong host (apex kronic.one, not transcend.kronic.one)** `LOW` · `trivial`
   - **Fix:** Fix AGENTS.md:93 to use https://transcend.kronic.one for consistency with the rest of the file.
   - **Why:** An agent following the debugging instructions verbatim opens the wrong (or a redirecting/unrelated) host, then screenshots/asserts against the wrong page.
   - **Where:** `AGENTS.md:93 (vs AGENTS.md:98,105 and README.md:20)`
-- [ ] **Inconsistent 'bring up the stack' command across canonical docs** `INFO` · `trivial`
+- [x] **Inconsistent 'bring up the stack' command across canonical docs** `INFO` · `trivial`
   - **Fix:** Pick one canonical command (the pnpm script) and reference it uniformly, or explicitly note the foreground-vs-detached tradeoff once.
   - **Why:** Minor onboarding friction: a new dev sees two different 'correct' ways to start the stack and the foreground variant blocks the terminal.
   - **Where:** `AGENTS.md:24 & docs/DEVELOPMENT.md:20 (vs README.md:131 / package.json:28)`

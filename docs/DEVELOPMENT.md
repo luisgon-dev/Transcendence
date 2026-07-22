@@ -17,8 +17,11 @@ This repo contains a .NET backend (API + background worker) and a Next.js web fr
 
 ```bash
 cp .env.example .env
-docker compose up --build
+pnpm dev:stack:up
 ```
+
+`dev:stack:up` runs `docker compose up --build -d`, so the full stack starts in the background. Use
+`pnpm dev:stack:down` to stop it.
 
 Compose reads local backend credentials from the repo-root [`.env.example`](../.env.example). Copy it to an untracked `.env` before first run. The current Riot key variable is:
 
@@ -163,7 +166,9 @@ Prometheus + Grafana are their own stack — the single source of truth for both
 docker compose -f config/monitoring/compose.yml up -d
 ```
 
-Grafana is file-provisioned from `config/monitoring/grafana/provisioning` (datasource, dashboards, and `alerting/rules.yml` + `alerting/contactpoints.yml`). The provisioned rules (WebAPI/worker down, API 5xx ratio, API p95 latency) evaluate against Prometheus and notify a Discord/Slack-compatible webhook:
+Grafana is file-provisioned from `config/monitoring/grafana/provisioning`, including five dashboards
+(fleet overview, read API, worker runtime, Riot API, and ingestion rate gate), its datasource, and
+`alerting/rules.yml` + `alerting/contactpoints.yml`. The provisioned rules (WebAPI/worker down, API 5xx ratio, API p95 latency) evaluate against Prometheus and notify a Discord/Slack-compatible webhook:
 
 - **`DISCORD_ALERT_WEBHOOK_URL`** (in `config/monitoring/.env`, see `.env.example`) — the `discord` contact point's URL is interpolated from it (`$VAR` provisioning interpolation). Grafana 13 **refuses to start** on an empty contact-point URL, so when unset the base compose falls back to a no-op placeholder URL: Grafana boots and the rules are visible in Grafana → Alerting, but alerts don't deliver anywhere real. In prod, set it to the same incoming webhook the worker's ingestion alerter uses (`Alerts__Webhook__Url`). Locally the `up == 0` rules go `pending`/`Alerting` because no webapi/worker target is scraped — expected.
 

@@ -52,7 +52,7 @@ The live site redeploys automatically once changes land on `main`.
 - Email auth — register, login, token refresh, password reset
 - User preferences + saved favorite summoners with fresh "live now" surfacing
 - Admin dashboard — Hangfire queue visibility, recurring-job controls, audit logs, cache invalidation, service logs, and analysis metrics
-- 80+ endpoints behind a committed OpenAPI contract
+- 60+ endpoints behind a committed OpenAPI contract
 - Per-surface rate limiting and health probes
 
 </td>
@@ -158,14 +158,26 @@ pnpm web:test     # Vitest
 </details>
 
 <details>
-<summary><strong>Optional: developer tooling (pgAdmin, container logs)</strong></summary>
+<summary><strong>Optional: developer tooling and observability</strong></summary>
 
-Two extra services ship in `compose.yml` behind profiles:
+Two utility services ship in the app `compose.yml` behind profiles:
 
 ```bash
 docker compose --profile local-tools up   # pgAdmin → http://localhost:5050
 docker compose --profile ops-tools up      # Dozzle (container log viewer) → http://localhost:9999
 ```
+
+Prometheus and Grafana run from the dedicated monitoring stack after the app network exists:
+
+```bash
+docker compose -f config/monitoring/compose.yml up -d
+# Prometheus → http://localhost:9090
+# Grafana → http://localhost:3300 (local default: admin/admin)
+```
+
+Grafana provisions five dashboards (fleet overview, read API, worker runtime, Riot API, and ingestion
+rate gate) plus alert rules. See [`config/monitoring/README.md`](config/monitoring/README.md) for local
+configuration and the production secret/deploy workflow.
 
 </details>
 

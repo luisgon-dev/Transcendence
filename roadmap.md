@@ -707,7 +707,7 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Keep the watchdog, but make the operations it can interrupt crash-safe (fix #2 with a transaction). Optionally have the watchdog request a bounded graceful stop before Environment.Exit, and dispose the CTS in a StopAsync/IDisposable.
   - **Why:** The watchdog is the concrete crash vector that turns finding #2 from a transient window into a lasting data gap. Low on its own; the coupling with the non-transactional recompute is the actual risk.
   - **Where:** `Transcendence.Service.Core/Services/Diagnostics/WorkerWatchdog.cs:91,42,102-106`
-- [ ] **SummonerMaintenanceJob releases the lock on enqueue failure using the possibly-cancelled request token** `LOW` · `trivial`
+- [x] **SummonerMaintenanceJob releases the lock on enqueue failure using the possibly-cancelled request token** `LOW` · `trivial`
   - **Fix:** Route this release through the same dedicated-timeout-CTS helper used by ChampionAnalyticsIngestionJob/SummonerRefreshJob so lock release never depends on the caller's cancellation token.
   - **Why:** On a cancellation-triggered enqueue failure the summoner-refresh lock is held until its TTL expires (delaying re-processing of that one summoner). Self-heals via TTL; narrow path (Hangfire enqueue rarely throws).
   - **Where:** `Transcendence.Service.Core/Services/Jobs/SummonerMaintenanceJob.cs:387-391`

@@ -715,7 +715,7 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** If you want to remove the latent hazard, replace the GetOrAdd + indexer write with a single _modeStates.AddOrUpdate whose update delegate computes the resolved mode, making the transition atomic.
   - **Why:** If it ever occurred, at most one throttling cycle would pick a slightly-wrong hysteresis mode, self-correcting the next tick. Recorded because it is a genuine shared-state check-then-act; impact is cosmetic pacing jitter.
   - **Where:** `Transcendence.Service.Core/Services/Jobs/Priority/AdaptiveThroughputBudgetPolicy.cs:10,92,122-123`
-- [ ] **RefreshLockLifecycleTelemetry writes gauge-dimension fields without a memory barrier while the metrics thread reads them** `INFO` · `trivial`
+- [x] **RefreshLockLifecycleTelemetry writes gauge-dimension fields without a memory barrier while the metrics thread reads them** `INFO` · `trivial`
   - **Fix:** Mark the two string fields volatile (or fold class+region+counts into a single immutable record swapped via Volatile.Write/Interlocked.Exchange) so the gauge always reads a consistent snapshot.
   - **Why:** Cosmetic: a metrics data point can carry stale dimension labels for a moment. No functional effect.
   - **Where:** `Transcendence.Service.Core/Services/Diagnostics/RefreshLockLifecycleTelemetry.cs:47-48,195-196,216-228`

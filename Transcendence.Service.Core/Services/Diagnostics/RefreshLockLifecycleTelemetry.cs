@@ -44,11 +44,12 @@ public sealed class RefreshLockLifecycleTelemetry : IRefreshLockLifecycleTelemet
     private readonly Histogram<double> contentionWaitHintSeconds;
     private readonly Histogram<double> cleanupDurationMilliseconds;
 
-    private string snapshotLockClass = DefaultCleanupLockClass;
-    private string snapshotPlatformRegion = DefaultGlobalPlatformRegion;
-    private long latestActiveCount;
-    private long latestExpiredCount;
-    private long latestDeletedCount;
+    private GrowthSnapshot latestGrowthSnapshot = new(
+        DefaultCleanupLockClass,
+        DefaultGlobalPlatformRegion,
+        ActiveCount: 0,
+        ExpiredCount: 0,
+        DeletedCount: 0);
 
     public RefreshLockLifecycleTelemetry(ILogger<RefreshLockLifecycleTelemetry> logger)
     {
@@ -189,11 +190,12 @@ public sealed class RefreshLockLifecycleTelemetry : IRefreshLockLifecycleTelemet
             if (normalizedDeletedCount > 0)
                 cleanupDeletedCounter.Add(normalizedDeletedCount, tags);
 
-            Interlocked.Exchange(ref latestActiveCount, normalizedActiveCount);
-            Interlocked.Exchange(ref latestExpiredCount, normalizedExpiredCount);
-            Interlocked.Exchange(ref latestDeletedCount, normalizedDeletedCount);
-            snapshotLockClass = normalizedLockClass;
-            snapshotPlatformRegion = normalizedPlatformRegion;
+            Volatile.Write(ref latestGrowthSnapshot, new GrowthSnapshot(
+                normalizedLockClass,
+                normalizedPlatformRegion,
+                normalizedActiveCount,
+                normalizedExpiredCount,
+                normalizedDeletedCount));
 
             logger.LogDebug(
                 "event=refresh_lock.growth_snapshot lock_class={LockClass} platform_region={PlatformRegion} outcome=snapshot source={Source} active_count={ActiveCount} expired_count={ExpiredCount} deleted_count={DeletedCount}",
@@ -213,20 +215,23 @@ public sealed class RefreshLockLifecycleTelemetry : IRefreshLockLifecycleTelemet
 
     private IEnumerable<Measurement<long>> ObserveActiveLocks()
     {
-        var tags = BuildTags(snapshotLockClass, snapshotPlatformRegion, "active", "lifecycle-job");
-        yield return new Measurement<long>(Interlocked.Read(ref latestActiveCount), tags);
+        var snapshot = Volatile.Read(ref latestGrowthSnapshot);
+        var tags = BuildTags(snapshot.LockClass, snapshot.PlatformRegion, "active", "lifecycle-job");
+        yield return new Measurement<long>(snapshot.ActiveCount, tags);
     }
 
     private IEnumerable<Measurement<long>> ObserveExpiredLocks()
     {
-        var tags = BuildTags(snapshotLockClass, snapshotPlatformRegion, "expired", "lifecycle-job");
-        yield return new Measurement<long>(Interlocked.Read(ref latestExpiredCount), tags);
+        var snapshot = Volatile.Read(ref latestGrowthSnapshot);
+        var tags = BuildTags(snapshot.LockClass, snapshot.PlatformRegion, "expired", "lifecycle-job");
+        yield return new Measurement<long>(snapshot.ExpiredCount, tags);
     }
 
     private IEnumerable<Measurement<long>> ObserveDeletedLocks()
     {
-        var tags = BuildTags(snapshotLockClass, snapshotPlatformRegion, "deleted_last_run", "lifecycle-job");
-        yield return new Measurement<long>(Interlocked.Read(ref latestDeletedCount), tags);
+        var snapshot = Volatile.Read(ref latestGrowthSnapshot);
+        var tags = BuildTags(snapshot.LockClass, snapshot.PlatformRegion, "deleted_last_run", "lifecycle-job");
+        yield return new Measurement<long>(snapshot.DeletedCount, tags);
     }
 
     private void EmitNonBlocking(string eventName, Action emit)
@@ -306,4 +311,10 @@ public sealed class RefreshLockLifecycleTelemetry : IRefreshLockLifecycleTelemet
     }
 
     private readonly record struct LockDimensions(string LockClass, string PlatformRegion);
+    private sealed record GrowthSnapshot(
+        string LockClass,
+        string PlatformRegion,
+        long ActiveCount,
+        long ExpiredCount,
+        long DeletedCount);
 }

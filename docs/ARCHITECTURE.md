@@ -165,6 +165,11 @@ Operational implication:
   - `refresh-low`
 - API refresh jobs run on `refresh-high`; ingestion-driven refresh jobs run on `refresh-low`.
 - Refresh locks use DB-backed lease semantics (atomic acquire/renew + explicit lease expiry on release) so concurrent lock races do not require lock-row deletion.
+- The worker watchdog treats a stale producer heartbeat as a shutdown request first: it calls the
+  generic host's `StopApplication`, allowing Hangfire and scoped writes to unwind, and waits up to
+  `Worker:Watchdog:GracefulShutdownTimeout` (15 seconds by default). `Environment.Exit(70)` remains
+  only as the bounded fallback for a host too wedged to enter `StopAsync`; the watchdog thread and
+  cancellation source are joined/disposed during normal shutdown.
 
 ### Live-Game Snapshot Boundary
 

@@ -163,9 +163,9 @@ builder.Services.AddSingleton<IStartupPatchRolloverService, StartupPatchRollover
 builder.Services.AddSingleton<IAdaptiveThroughputBudgetPolicy, AdaptiveThroughputBudgetPolicy>();
 builder.Services.AddSingleton<IStarvationGuardrailPolicy, StarvationGuardrailPolicy>();
 
-// Worker liveness: producers beat IWorkerHeartbeat each dispatcher tick; the watchdog exits the
-// process when the beat goes stale so restart:unless-stopped recreates a hung worker (a Docker
-// HEALTHCHECK only marks unhealthy, it does not restart). Disable with Worker__Watchdog__Enabled=false.
+// Worker liveness: producers beat IWorkerHeartbeat each dispatcher tick; a stale beat requests a
+// bounded graceful host stop before the watchdog's hard-exit fallback lets restart:unless-stopped
+// recreate a truly hung worker. Disable with Worker__Watchdog__Enabled=false.
 builder.Services.Configure<WorkerWatchdogOptions>(builder.Configuration.GetSection("Worker:Watchdog"));
 builder.Services.AddSingleton<IWorkerHeartbeat, WorkerHeartbeat>();
 builder.Services.AddHostedService<WorkerWatchdogService>();

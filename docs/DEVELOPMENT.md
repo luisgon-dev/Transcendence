@@ -369,6 +369,11 @@ Which recurring jobs are active is determined by:
 
 The base `appsettings.json` ships `Jobs:Schedule:Profile = "stable"` (there is no `appsettings.Development.json`), so a local worker resolves the **same `stable` profile as production** unless you override `Jobs:Schedule:Profile` (or individual `Enable*` / `JobOverrides` values) via user-secrets or environment variables. Under `stable` the enabled jobs are the LoL analytics-coverage set (adaptive analytics refresh, champion-analytics ingestion, summoner maintenance, each a single self-pacing job that tightens cadence during the new-patch ramp window, plus match-timeline backfill, live-game polling for opted-in favorites, and high-elo profile refresh), plus the baseline jobs (`detect-patch`, `retry-failed-matches`, `refresh-lock-lifecycle-cleanup`); `rune-selection-integrity-backfill` and the daily `refresh-champion-analytics` are disabled.
 
+The worker watchdog requests graceful generic-host shutdown on a stale producer heartbeat, waiting
+`Worker:Watchdog:GracefulShutdownTimeout` (default `00:00:15`) before its hard-exit/container-restart
+fallback. Override it with `Worker__Watchdog__GracefulShutdownTimeout`; keep it long enough for an
+ordinary Hangfire scope and transaction to observe cancellation and unwind.
+
 `DevelopmentWorker`'s only environment-specific startup actions are: removing legacy/invalid recurring jobs (old `cache-warmup*` ids), an optional full Hangfire purge when `Jobs:Schedule:CleanupOnStartup=true` (default `false`), and a startup integrity check that fail-fasts on mandatory-baseline job failures. It does **not** run the production startup bootstrap described below.
 
 ### Production Startup Bootstrap

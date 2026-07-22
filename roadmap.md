@@ -711,7 +711,7 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Route this release through the same dedicated-timeout-CTS helper used by ChampionAnalyticsIngestionJob/SummonerRefreshJob so lock release never depends on the caller's cancellation token.
   - **Why:** On a cancellation-triggered enqueue failure the summoner-refresh lock is held until its TTL expires (delaying re-processing of that one summoner). Self-heals via TTL; narrow path (Hangfire enqueue rarely throws).
   - **Where:** `Transcendence.Service.Core/Services/Jobs/SummonerMaintenanceJob.cs:387-391`
-- [ ] **AdaptiveThroughputBudgetPolicy singleton has a check-then-act race on its shared _modeStates dictionary** `LOW` · `trivial`
+- [x] **AdaptiveThroughputBudgetPolicy singleton has a check-then-act race on its shared _modeStates dictionary** `LOW` · `trivial`
   - **Fix:** If you want to remove the latent hazard, replace the GetOrAdd + indexer write with a single _modeStates.AddOrUpdate whose update delegate computes the resolved mode, making the transition atomic.
   - **Why:** If it ever occurred, at most one throttling cycle would pick a slightly-wrong hysteresis mode, self-correcting the next tick. Recorded because it is a genuine shared-state check-then-act; impact is cosmetic pacing jitter.
   - **Where:** `Transcendence.Service.Core/Services/Jobs/Priority/AdaptiveThroughputBudgetPolicy.cs:10,92,122-123`

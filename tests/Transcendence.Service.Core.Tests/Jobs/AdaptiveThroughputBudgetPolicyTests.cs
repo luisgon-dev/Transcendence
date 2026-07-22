@@ -173,6 +173,30 @@ public class AdaptiveThroughputBudgetPolicyTests
         backToBalanced.QueueTarget.Should().BeInRange(2, 6);
     }
 
+    [Fact]
+    public async Task ComputeBudget_ConcurrentTransitionsForOneProducerRemainValid()
+    {
+        var policy = CreatePolicy(new AdaptiveThroughputBudgetOptions
+        {
+            ModeSwitchCooldownMinutes = 0,
+            HighPressureCooldownMinutes = 0,
+            CatchUpHoldMinutes = 0,
+            CatchUpCoverageThreshold = 0.8d,
+            CatchUpBacklogAgeMinutes = 120
+        });
+        var now = new DateTime(2026, 3, 5, 20, 0, 0, DateTimeKind.Utc);
+
+        var decisions = await Task.WhenAll(Enumerable.Range(0, 100).Select(index => Task.Run(() =>
+            policy.ComputeBudget(CreateInput(
+                now.AddSeconds(index),
+                isApiPriorityDemandActive: index % 2 == 0)))));
+
+        decisions.Should().HaveCount(100);
+        decisions.All(decision =>
+            (decision.Mode is AdaptiveThroughputBudgetMode.HighPressure or AdaptiveThroughputBudgetMode.Balanced) &&
+            decision.QueueTarget >= 0).Should().BeTrue();
+    }
+
     private static AdaptiveThroughputBudgetPolicy CreatePolicy(AdaptiveThroughputBudgetOptions options) =>
         new(Options.Create(options));
 

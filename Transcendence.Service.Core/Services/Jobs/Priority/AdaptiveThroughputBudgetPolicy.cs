@@ -89,40 +89,46 @@ public class AdaptiveThroughputBudgetPolicy(IOptions<AdaptiveThroughputBudgetOpt
         AdaptiveThroughputBudgetOptions options)
     {
         var key = string.IsNullOrWhiteSpace(producerKey) ? "default" : producerKey.Trim();
-        var currentState = _modeStates.GetOrAdd(key, _ => new ModeState(AdaptiveThroughputBudgetMode.Balanced, evaluationUtc));
-
-        if (currentState.Mode == desiredMode)
-            return desiredMode;
-
-        var elapsedMinutes = Math.Max(0d, (evaluationUtc - currentState.LastTransitionUtc).TotalMinutes);
         var modeSwitchCooldown = Math.Max(0, options.ModeSwitchCooldownMinutes);
         var highPressureCooldown = Math.Max(0, options.HighPressureCooldownMinutes);
         var catchUpHoldMinutes = Math.Max(0, options.CatchUpHoldMinutes);
 
-        var resolvedMode = desiredMode;
-        if (currentState.Mode == AdaptiveThroughputBudgetMode.HighPressure &&
-            !isApiPriorityDemandActive &&
-            elapsedMinutes < highPressureCooldown)
+        ModeState ResolveNextState(ModeState currentState)
         {
-            resolvedMode = AdaptiveThroughputBudgetMode.HighPressure;
-        }
-        else if (currentState.Mode == AdaptiveThroughputBudgetMode.CatchUp &&
-                 desiredMode == AdaptiveThroughputBudgetMode.Balanced &&
-                 elapsedMinutes < catchUpHoldMinutes)
-        {
-            resolvedMode = AdaptiveThroughputBudgetMode.CatchUp;
-        }
-        else if (currentState.Mode == AdaptiveThroughputBudgetMode.Balanced &&
-                 desiredMode == AdaptiveThroughputBudgetMode.CatchUp &&
-                 elapsedMinutes < modeSwitchCooldown)
-        {
-            resolvedMode = AdaptiveThroughputBudgetMode.Balanced;
+            if (currentState.Mode == desiredMode)
+                return currentState;
+
+            var elapsedMinutes = Math.Max(0d, (evaluationUtc - currentState.LastTransitionUtc).TotalMinutes);
+            var resolvedMode = desiredMode;
+            if (currentState.Mode == AdaptiveThroughputBudgetMode.HighPressure &&
+                !isApiPriorityDemandActive &&
+                elapsedMinutes < highPressureCooldown)
+            {
+                resolvedMode = AdaptiveThroughputBudgetMode.HighPressure;
+            }
+            else if (currentState.Mode == AdaptiveThroughputBudgetMode.CatchUp &&
+                     desiredMode == AdaptiveThroughputBudgetMode.Balanced &&
+                     elapsedMinutes < catchUpHoldMinutes)
+            {
+                resolvedMode = AdaptiveThroughputBudgetMode.CatchUp;
+            }
+            else if (currentState.Mode == AdaptiveThroughputBudgetMode.Balanced &&
+                     desiredMode == AdaptiveThroughputBudgetMode.CatchUp &&
+                     elapsedMinutes < modeSwitchCooldown)
+            {
+                resolvedMode = AdaptiveThroughputBudgetMode.Balanced;
+            }
+
+            return resolvedMode == currentState.Mode
+                ? currentState
+                : new ModeState(resolvedMode, evaluationUtc);
         }
 
-        if (resolvedMode != currentState.Mode)
-            _modeStates[key] = new ModeState(resolvedMode, evaluationUtc);
-
-        return resolvedMode;
+        var state = _modeStates.AddOrUpdate(
+            key,
+            _ => ResolveNextState(new ModeState(AdaptiveThroughputBudgetMode.Balanced, evaluationUtc)),
+            (_, currentState) => ResolveNextState(currentState));
+        return state.Mode;
     }
 
     private static int ResolveQueueTarget(

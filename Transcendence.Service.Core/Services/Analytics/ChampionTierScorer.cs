@@ -206,8 +206,9 @@ internal static class ChampionTierScorer
             strength >= cutoffs.CMin ? TierGrade.C :
             TierGrade.D;
 
-        // A thin sample cannot earn a top tier even if its shrunk delta clears the bar.
-        if (isLowSample && (tier == TierGrade.S || tier == TierGrade.A))
+        // A thin sample cannot justify either a top or bottom tier, even if its shrunk delta clears a bar.
+        // Clamp both directions to B so sampling noise is not treated as evidence of strength or weakness.
+        if (isLowSample)
             tier = TierGrade.B;
 
         return tier;

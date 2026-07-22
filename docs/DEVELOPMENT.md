@@ -610,7 +610,7 @@ Tuning knobs for the per-role-first, empirical-Bayes champion tier scorer (`Cham
 - `Analytics:Tiering:PriorStrengthMin` / `PriorStrengthMax` (default `50` / `2000`) — clamp on the empirical-Bayes prior strength `k`
 - `Analytics:Tiering:PriorFitMinGamesFloor` / `PriorFitMinGamesCeiling` (default `20` / `200`) — bounds for the adaptive Beta-prior fit gate
 - `Analytics:Tiering:PriorFitRoleVolumeShare` (default `0.0012`) — share of total role games used to scale that gate between its bounds
-- `Analytics:Tiering:GradeMinGamesFloor` / `GradeMinGamesCeiling` (default `50` / `500`) — bounds for the adaptive S/A eligibility gate; below the resolved gate a champion is flagged low-sample and capped at `B`
+- `Analytics:Tiering:GradeMinGamesFloor` / `GradeMinGamesCeiling` (default `50` / `500`) — bounds for the adaptive tier eligibility gate; below the resolved gate a champion is flagged low-sample and clamped to `B`
 - `Analytics:Tiering:GradeRoleVolumeShare` (default `0.003`) — share of total role games used to scale the grade gate between its bounds
 - `Analytics:Tiering:ContestPickWeight` / `ContestBanWeight` (default `1` / `1`) — weights in the `contestedScore` popularity index
 

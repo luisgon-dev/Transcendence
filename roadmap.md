@@ -593,7 +593,7 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Aggregate in SQL: GroupBy(ChampionId) selecting Count(), Sum(Win) and a distinct-Puuid count, returning only the per-champion rows.
   - **Why:** Bounded by roster size and precompute-backed for region=ALL, but the region-specific / uncached path scans and ships every tracked-pro participant row for the patch to compute a small ranked list.
   - **Where:** `Transcendence.Service.Core/Services/Analytics/Implementations/ChampionProComputeService.cs:299-326`
-- [ ] **Active-season resolution runs an uncached DB query on every profile-stats request** `LOW` · `trivial`
+- [x] **Active-season resolution runs an uncached DB query on every profile-stats request** `LOW` · `trivial`
   - **Fix:** Wrap the active-season resolution in a short HybridCache entry (minutes) keyed on the current time bucket, mirroring ActivePatchCacheOptions.
   - **Why:** Even when a profile's stats are fully cache-warm, every load still round-trips to RankedSeasons. The table is tiny and indexed (StartUtc/EndUtc index), so cost per call is small, but it defeats part of the caching intent on a hot path and is inconsistent with the patch-lookup treatment.
   - **Where:** `Transcendence.Service.Core/Services/Analysis/Implementations/SummonerStatsService.cs:222; Transcendence.Service.Core/Services/Analysis/RankedSeasonResolver.cs:16-26`

@@ -18,6 +18,33 @@ namespace Transcendence.Service.Core.Tests;
 public class SummonerStatsServiceTests
 {
     [Fact]
+    public async Task ResolveActiveSeasonAsync_ReusesSeasonResolutionWithinTimeBucket()
+    {
+        await using var harness = await SummonerStatsHarness.CreateAsync();
+        var now = DateTime.UtcNow;
+        var season = new RankedSeason
+        {
+            SeasonKey = "2026-s1",
+            DisplayName = "Season One",
+            StartUtc = now.AddDays(-30),
+            EndUtc = now.AddDays(30),
+            IsActive = true
+        };
+        harness.Db.RankedSeasons.Add(season);
+        await harness.Db.SaveChangesAsync();
+
+        var first = await harness.Service.ResolveActiveSeasonAsync(now, CancellationToken.None);
+
+        season.DisplayName = "Changed after first lookup";
+        await harness.Db.SaveChangesAsync();
+
+        var second = await harness.Service.ResolveActiveSeasonAsync(now, CancellationToken.None);
+
+        first.DisplayName.Should().Be("Season One");
+        second.DisplayName.Should().Be("Season One");
+    }
+
+    [Fact]
     public async Task GetSummonerOverviewAsync_FiltersToRankedSoloQueue()
     {
         await using var harness = await SummonerStatsHarness.CreateAsync();

@@ -26,6 +26,7 @@ public class SummonerStatsService(
     private const string ChampionsCacheKeyPrefix = "stats:champions:";
     private const string RolesCacheKeyPrefix = "stats:roles:";
     private const string RankHistoryCacheKeyPrefix = "stats:rank-history:";
+    private const string ActiveSeasonCacheKeyPrefix = "stats:active-season:";
     private const string ActiveSeasonProfileCacheKeyPrefix = "stats:active-season-profile:";
     private const string PlayedWithCacheKeyPrefix = "stats:played-with:";
     private const string MasteryCacheKeyPrefix = "stats:mastery:";
@@ -38,6 +39,15 @@ public class SummonerStatsService(
     private static readonly HybridCacheEntryOptions StatsCacheOptions = new()
     {
         Expiration = TimeSpan.FromMinutes(5),
+        LocalCacheExpiration = TimeSpan.FromMinutes(2)
+    };
+
+    // Season configuration changes rarely. A time-bucketed key removes the otherwise unconditional
+    // RankedSeasons query while naturally rolling over at season boundaries or after config edits.
+    private static readonly TimeSpan ActiveSeasonCacheBucket = TimeSpan.FromMinutes(5);
+    private static readonly HybridCacheEntryOptions ActiveSeasonCacheOptions = new()
+    {
+        Expiration = ActiveSeasonCacheBucket,
         LocalCacheExpiration = TimeSpan.FromMinutes(2)
     };
 
@@ -225,7 +235,7 @@ public class SummonerStatsService(
         if (topChampions <= 0) topChampions = 5;
         if (recentGamesCount <= 0) recentGamesCount = 20;
 
-        var season = await RankedSeasonResolver.GetActiveSeasonAsync(db, DateTime.UtcNow, ct);
+        var season = await ResolveActiveSeasonAsync(DateTime.UtcNow, ct);
         var cacheKey = $"{ActiveSeasonProfileCacheKeyPrefix}{summonerId}:{season.SeasonKey}:{topChampions}:{recentGamesCount}";
         return await ExecuteStatsRequestAsync(
             "Failed to compute active-season profile stats.",
@@ -241,6 +251,16 @@ public class SummonerStatsService(
                 tags: new[] { BuildSummonerStatsTag(summonerId) },
                 cancellationToken: token),
             ct);
+    }
+
+    internal async Task<RankedSeasonWindow> ResolveActiveSeasonAsync(DateTime nowUtc, CancellationToken ct)
+    {
+        var bucket = nowUtc.Ticks / ActiveSeasonCacheBucket.Ticks;
+        return await cache.GetOrCreateAsync(
+            $"{ActiveSeasonCacheKeyPrefix}{bucket}",
+            async cancel => await RankedSeasonResolver.GetActiveSeasonAsync(db, nowUtc, cancel),
+            ActiveSeasonCacheOptions,
+            cancellationToken: ct);
     }
 
     private async Task<SummonerSeasonProfileStats> ComputeActiveSeasonProfileStatsAsync(

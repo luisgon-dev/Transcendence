@@ -79,8 +79,8 @@ public class ChampionAnalyticsController(
 
         var effectiveRole = hasRoles
             ? normalizedRole
-              ?? PickMostPlayedRole(winRates)
-              ?? PickMostPlayedRole(fallbackWinRates)
+              ?? ChampionRoleResolver.PickMostPlayed(winRates.ByRoleTier)
+              ?? ChampionRoleResolver.PickMostPlayed(fallbackWinRates?.ByRoleTier)
               ?? "MIDDLE"
             : AnalyticsQueueCatalog.AllRoles;
 
@@ -278,7 +278,7 @@ public class ChampionAnalyticsController(
                 championId,
                 new ChampionAnalyticsFilter(Region: region, Patch: patch),
                 ct);
-            effectiveRole = PickMostPlayedRole(winRates);
+            effectiveRole = ChampionRoleResolver.PickMostPlayed(winRates.ByRoleTier);
         }
 
         var result = await analyticsService.GetProBuildsAsync(championId, region, effectiveRole, scope, patch, ct);
@@ -381,27 +381,4 @@ public class ChampionAnalyticsController(
         return !string.Equals(rankTier.Trim(), "all", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string? PickMostPlayedRole(ChampionWinRateSummary? summary)
-    {
-        if (summary?.ByRoleTier.Count is null or 0)
-            return null;
-
-        return summary.ByRoleTier
-            .Where(row => !string.IsNullOrWhiteSpace(row.Role))
-            .Select(row => new
-            {
-                Role = NormalizeRole(row.Role),
-                row.Games
-            })
-            .Where(row => row.Role != null)
-            .GroupBy(row => row.Role!)
-            .Select(group => new
-            {
-                Role = group.Key,
-                Games = group.Sum(row => Math.Max(0, row.Games))
-            })
-            .OrderByDescending(row => row.Games)
-            .Select(row => row.Role)
-            .FirstOrDefault();
-    }
 }

@@ -563,7 +563,7 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Have the fetch helpers return the boolean cacheability they already compute, and pass it to a cache API that supports 'compute-but-don't-store' (or gate the SetAsync on the flag) instead of throwing.
   - **Why:** Exceptions-as-control-flow obscures the happy path, costs stack-unwinding on a routine branch, and couples the two helpers through a private exception type rather than an explicit return contract.
   - **Where:** `Transcendence.Service.Core/Services/StaticData/Implementations/StaticDataService.cs:186-202, 162-184`
-- [ ] **Cache-key strings are hand-built in multiple places and must match a controller method by convention only** `LOW` · `medium`
+- [x] **Cache-key strings are hand-built in multiple places and must match a controller method by convention only** `LOW` · `medium`
   - **Fix:** Centralize each cache-key shape in a single builder (extend the existing BuildCacheKey pattern to builds/matchups/probuilds) and share the most-played-lane resolver so warmer and reader provably agree.
   - **Why:** If a key format or the lane-selection heuristic changes in one location, the cache-warming path silently writes keys the read path never queries (cold cache, wasted compute) with no compile-time or test failure. Fragile coupling.
   - **Where:** `Transcendence.Service.Core/Services/Analytics/Implementations/ChampionAnalyticsService.cs:258,303,408,495,501,512,618-628`
@@ -644,7 +644,7 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Have PromotePatchAsync also invalidate the active-patch key (or the 'analytics' tag) so the new active patch is picked up immediately rather than after the TTL.
   - **Why:** For up to ~5 minutes after a new patch is promoted, every analytics endpoint continues to resolve the OLD patch version from the cached pointer, briefly serving old-patch analytics. Self-heals on the 5-min TTL and is partly benign (a just-promoted patch has little data), so impact is small.
   - **Where:** `Transcendence.Service.Core/Services/Analytics/Implementations/ChampionAnalyticsService.cs:546-559`
-- [ ] **Two different region-normalization schemes feed analytics cache keys** `LOW` · `small`
+- [x] **Two different region-normalization schemes feed analytics cache keys** `LOW` · `small`
   - **Fix:** Standardize on one region representation for all analytics cache keys (either always the code or always the filter form) and document why the win-rate filter differs if it must.
   - **Why:** No collision or drift today because read and warm each use the same scheme consistently per key-type, but the split invites future bugs: a change to one normalizer, or a copy-paste of one key format into another, can silently produce keys that never match. Purely a clarity/robustness smell.
   - **Where:** `Transcendence.Service.Core/Services/Analytics/Implementations/ChampionAnalyticsService.cs:112,168,258,303,408`

@@ -1,6 +1,17 @@
 namespace Transcendence.Service.Core.Services.Analysis.Models;
 
-public record PagedResult<T>(IReadOnlyList<T> Items, int Page, int PageSize, int TotalCount)
+public record MatchHistoryQueueFacet(int QueueId, string QueueType, string QueueFamily);
+
+public record MatchHistoryFacets(
+    IReadOnlyList<MatchHistoryQueueFacet> Queues,
+    IReadOnlyList<int> ChampionIds);
+
+public record PagedResult<T>(
+    IReadOnlyList<T> Items,
+    int Page,
+    int PageSize,
+    int TotalCount,
+    MatchHistoryFacets? Facets = null)
 {
     public int TotalPages => (int)Math.Ceiling((double)TotalCount / PageSize);
 }

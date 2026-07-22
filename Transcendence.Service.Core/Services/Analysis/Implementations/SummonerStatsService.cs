@@ -733,6 +733,8 @@ public class SummonerMatchHistoryService(
         int pageSize,
         string? queueFamily,
         IReadOnlyCollection<int>? queueIds,
+        int? championId,
+        bool includeFacets,
         CancellationToken ct)
     {
         if (page <= 0) page = 1;
@@ -743,7 +745,7 @@ public class SummonerMatchHistoryService(
             ? string.Join(",", normalizedQueueIds)
             : "-";
         var cacheKey =
-            $"{RecentMatchesCacheKeyPrefix}{summonerId}:{page}:{pageSize}:{normalizedFamily}:{queueIdsCacheKey}";
+            $"{RecentMatchesCacheKeyPrefix}{summonerId}:{page}:{pageSize}:{normalizedFamily}:{queueIdsCacheKey}:{championId?.ToString() ?? "-"}:{includeFacets}";
         return await ExecuteStatsRequestAsync(
             "Failed to compute recent matches.",
             async token => await cache.GetOrCreateAsync(
@@ -754,6 +756,8 @@ public class SummonerMatchHistoryService(
                     pageSize,
                     normalizedFamily,
                     normalizedQueueIds,
+                    championId is > 0 ? championId : null,
+                    includeFacets,
                     cancel),
                 StatsCacheOptions,
                 tags: new[] { BuildSummonerStatsTag(summonerId) },
@@ -767,14 +771,21 @@ public class SummonerMatchHistoryService(
         int pageSize,
         string queueFamily,
         IReadOnlyList<int> queueIds,
+        int? championId,
+        bool includeFacets,
         CancellationToken ct)
     {
+        var baseQuery = db.MatchParticipants
+            .AsNoTracking()
+            .Where(mp => mp.SummonerId == summonerId);
+        var facets = includeFacets
+            ? await LoadMatchHistoryFacetsAsync(baseQuery, ct)
+            : null;
         var query = ApplyRecentMatchFilters(
-                db.MatchParticipants
-                    .AsNoTracking()
-                    .Where(mp => mp.SummonerId == summonerId),
+                baseQuery,
                 queueFamily,
-                queueIds)
+                queueIds,
+                championId)
             .AsNoTracking()
             .OrderByDescending(mp => mp.Match.MatchDate)
             .ThenByDescending(mp => mp.Match.MatchId);
@@ -820,7 +831,7 @@ public class SummonerMatchHistoryService(
         }
 
         if (participantData.Count == 0)
-            return new PagedResult<RecentMatchSummary>([], page, pageSize, total);
+            return new PagedResult<RecentMatchSummary>([], page, pageSize, total, facets);
 
         // Get items and runes for these participants
         var participantIds = participantData.Select(p => p.ParticipantId).Distinct().ToList();
@@ -945,7 +956,35 @@ public class SummonerMatchHistoryService(
             );
         }).ToList();
 
-        return new PagedResult<RecentMatchSummary>(items, page, pageSize, total);
+        return new PagedResult<RecentMatchSummary>(items, page, pageSize, total, facets);
+    }
+
+    private static async Task<MatchHistoryFacets> LoadMatchHistoryFacetsAsync(
+        IQueryable<Data.Models.LoL.Match.MatchParticipant> query,
+        CancellationToken ct)
+    {
+        var queues = await query
+            .Select(mp => new { mp.Match.QueueId, mp.Match.QueueType, mp.Match.QueueFamily })
+            .Distinct()
+            .OrderBy(value => value.QueueId)
+            .ThenBy(value => value.QueueType)
+            .ToListAsync(ct);
+        var championIds = await query
+            .Select(mp => mp.ChampionId)
+            .Distinct()
+            .OrderBy(value => value)
+            .ToListAsync(ct);
+
+        return new MatchHistoryFacets(
+            queues.Select(value => new MatchHistoryQueueFacet(
+                value.QueueId,
+                !string.IsNullOrWhiteSpace(value.QueueType)
+                    ? value.QueueType
+                    : QueueCatalog.ResolveQueueLabel(value.QueueId),
+                !string.IsNullOrWhiteSpace(value.QueueFamily)
+                    ? value.QueueFamily
+                    : QueueCatalog.ResolveQueueFamily(value.QueueId))).ToList(),
+            championIds);
     }
 
     private async Task<List<RecentMatchProjection>> LoadRecentMatchPageConservativelyAsync(
@@ -1298,7 +1337,8 @@ public class SummonerMatchHistoryService(
     private static IQueryable<Data.Models.LoL.Match.MatchParticipant> ApplyRecentMatchFilters(
         IQueryable<Data.Models.LoL.Match.MatchParticipant> query,
         string queueFamily,
-        IReadOnlyList<int> queueIds)
+        IReadOnlyList<int> queueIds,
+        int? championId)
     {
         if (queueIds.Count > 0)
         {
@@ -1311,6 +1351,9 @@ public class SummonerMatchHistoryService(
 
         if (!string.Equals(queueFamily, QueueCatalog.QueueFamilyAll, StringComparison.Ordinal))
             query = query.Where(mp => mp.Match.QueueFamily == queueFamily);
+
+        if (championId is > 0)
+            query = query.Where(mp => mp.ChampionId == championId.Value);
 
         return query;
     }

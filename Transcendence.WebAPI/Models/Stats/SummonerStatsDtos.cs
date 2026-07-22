@@ -98,4 +98,16 @@ public record MatchRuneDetailDto(
     IReadOnlyList<int> StatShards
 );
 
-public record PagedResultDto<T>(IReadOnlyList<T> Items, int Page, int PageSize, int TotalCount, int TotalPages);
+public record MatchHistoryQueueFacetDto(int QueueId, string QueueType, string QueueFamily);
+
+public record MatchHistoryFacetsDto(
+    IReadOnlyList<MatchHistoryQueueFacetDto> Queues,
+    IReadOnlyList<int> ChampionIds);
+
+public record PagedResultDto<T>(
+    IReadOnlyList<T> Items,
+    int Page,
+    int PageSize,
+    int TotalCount,
+    int TotalPages,
+    MatchHistoryFacetsDto? Facets = null);

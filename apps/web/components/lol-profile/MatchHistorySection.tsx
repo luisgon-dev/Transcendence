@@ -12,6 +12,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { ChevronRightIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 import { MatchScoreboard } from "@/components/lol-profile/MatchScoreboard";
+import { useStaticData } from "@/components/lol-profile/StaticDataContext";
 import {
   formatDateTimeMs,
   formatDurationSeconds,
@@ -31,15 +32,11 @@ import {
   matchKdaRatio,
   normalizeInitialSort,
   sortRuneSelections,
-  type ChampionStatic,
-  type ItemStatic,
   type MatchDetail,
   type MatchSortOption,
   type MatchSummary,
   type PagedResultDto,
-  type QueueOption,
-  type RuneStatic,
-  type SpellStatic
+  type QueueOption
 } from "@/components/lol-profile/shared";
 
 type ChampionOption = {
@@ -47,36 +44,48 @@ type ChampionOption = {
   label: string;
 };
 
-type MatchHistorySectionProps = {
+export type MatchHistoryIdentity = {
   region: string;
   gameName: string;
   tagLine: string;
   summonerId: string;
-  page: number;
+};
+
+export type MatchHistoryFilters = {
   queue: string;
   championFilter: string;
   sort: MatchSortOption;
+  queueOptions: QueueOption[];
+  championOptions: ChampionOption[];
+  sortOptions: Array<{ value: MatchSortOption; label: string }>;
+  onQueueChange(value: string): void;
+  onChampionFilterChange(value: string): void;
+  onSortChange(value: MatchSortOption): void;
+};
+
+export type MatchHistoryPageState = {
+  page: number;
   history: PagedResultDto<MatchSummary> | null;
   historyBusy: boolean;
   historyError: string | null;
   visibleMatches: MatchSummary[];
-  queueOptions: QueueOption[];
-  championOptions: ChampionOption[];
-  sortOptions: Array<{ value: MatchSortOption; label: string }>;
+  onPreviousPage(): void;
+  onNextPage(): void;
+};
+
+export type MatchHistoryExpansion = {
   expandedMatchId: string | null;
   details: Record<string, MatchDetail | null>;
   detailBusy: Record<string, boolean>;
-  championStatic: ChampionStatic | null;
-  itemStatic: ItemStatic | null;
-  spellStatic: SpellStatic | null;
-  runeStatic: RuneStatic | null;
-  prefersReducedMotion: boolean;
-  onQueueChange(value: string): void;
-  onChampionFilterChange(value: string): void;
-  onSortChange(value: MatchSortOption): void;
   onToggleExpanded(matchId: string): void | Promise<void>;
-  onPreviousPage(): void;
-  onNextPage(): void;
+};
+
+type MatchHistorySectionProps = {
+  identity: MatchHistoryIdentity;
+  filters: MatchHistoryFilters;
+  pageState: MatchHistoryPageState;
+  expansion: MatchHistoryExpansion;
+  prefersReducedMotion: boolean;
 };
 
 function MatchHistoryCard({
@@ -89,10 +98,6 @@ function MatchHistoryCard({
   gameName,
   tagLine,
   summonerId,
-  championStatic,
-  itemStatic,
-  spellStatic,
-  runeStatic,
   onToggleExpanded
 }: {
   match: MatchSummary;
@@ -104,12 +109,9 @@ function MatchHistoryCard({
   gameName: string;
   tagLine: string;
   summonerId: string;
-  championStatic: ChampionStatic | null;
-  itemStatic: ItemStatic | null;
-  spellStatic: SpellStatic | null;
-  runeStatic: RuneStatic | null;
   onToggleExpanded(matchId: string): void | Promise<void>;
 }) {
+  const { championStatic, itemStatic, spellStatic, runeStatic } = useStaticData();
   const queueLabel = formatQueueLabel(match.queueType, match.queueId);
   const champion = championStatic?.champions[String(match.championId)];
   const championName = champion?.name ?? `Champion ${match.championId}`;
@@ -339,10 +341,6 @@ function MatchHistoryCard({
                   region={region}
                   gameName={gameName}
                   tagLine={tagLine}
-                  championStatic={championStatic}
-                  itemStatic={itemStatic}
-                  spellStatic={spellStatic}
-                  runeStatic={runeStatic}
                 />
               ) : null}
             </div>
@@ -354,35 +352,29 @@ function MatchHistoryCard({
 }
 
 export function MatchHistorySection({
-  region,
-  gameName,
-  tagLine,
-  summonerId,
-  page,
-  queue,
-  championFilter,
-  sort,
-  history,
-  historyBusy,
-  historyError,
-  visibleMatches,
-  queueOptions,
-  championOptions,
-  sortOptions,
-  expandedMatchId,
-  details,
-  detailBusy,
-  championStatic,
-  itemStatic,
-  spellStatic,
-  runeStatic,
+  identity: { region, gameName, tagLine, summonerId },
+  filters: {
+    queue,
+    championFilter,
+    sort,
+    queueOptions,
+    championOptions,
+    sortOptions,
+    onQueueChange,
+    onChampionFilterChange,
+    onSortChange
+  },
+  pageState: {
+    page,
+    history,
+    historyBusy,
+    historyError,
+    visibleMatches,
+    onPreviousPage,
+    onNextPage
+  },
+  expansion: { expandedMatchId, details, detailBusy, onToggleExpanded },
   prefersReducedMotion,
-  onQueueChange,
-  onChampionFilterChange,
-  onSortChange,
-  onToggleExpanded,
-  onPreviousPage,
-  onNextPage
 }: MatchHistorySectionProps) {
   return (
     <section className="flex flex-col gap-5">
@@ -458,10 +450,6 @@ export function MatchHistorySection({
               gameName={gameName}
               tagLine={tagLine}
               summonerId={summonerId}
-              championStatic={championStatic}
-              itemStatic={itemStatic}
-              spellStatic={spellStatic}
-              runeStatic={runeStatic}
               onToggleExpanded={onToggleExpanded}
             />
           ))}

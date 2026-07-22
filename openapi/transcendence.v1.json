@@ -4382,6 +4382,14 @@
                 "format": "int32"
               }
             }
+          },
+          {
+            "name": "championId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
           }
         ],
         "responses": {
@@ -8022,6 +8030,50 @@
         },
         "additionalProperties": false
       },
+      "MatchHistoryFacetsDto": {
+        "required": [
+          "championIds",
+          "queues"
+        ],
+        "type": "object",
+        "properties": {
+          "queues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MatchHistoryQueueFacetDto"
+            }
+          },
+          "championIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "MatchHistoryQueueFacetDto": {
+        "required": [
+          "queueFamily",
+          "queueId",
+          "queueType"
+        ],
+        "type": "object",
+        "properties": {
+          "queueId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "queueType": {
+            "type": "string"
+          },
+          "queueFamily": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "MatchRuneDetailDto": {
         "required": [
           "primarySelections",
@@ -9391,6 +9443,14 @@
           "totalPages": {
             "type": "integer",
             "format": "int32"
+          },
+          "facets": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MatchHistoryFacetsDto"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false

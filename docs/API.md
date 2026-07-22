@@ -85,6 +85,9 @@ Profile responses include additional season/history metadata:
 - `page` / `pageSize`
 - `queueFamily` (optional; e.g. `ALL`, `RANKED_SOLO_DUO`, `RANKED_FLEX`, `NORMAL_SR`, `ARAM`, `CLASH`, `ARENA`, `ROTATING`, `BOT`, `CUSTOM`, `OTHER`)
 - `queueIds` (optional repeated query param for explicit queue IDs)
+- `championId` (optional; filters before pagination)
+- Responses include stable `facets.queues` and `facets.championIds` collected across the summoner's
+  full stored history, independent of the current page and active filters.
 
 `GET /api/lol/summoners/search` supports:
 - `region` (required; platform route or alias such as `NA1` or `na`)

@@ -1,5 +1,6 @@
 import { RuneTreeDisplay } from "@/components/RuneTreeDisplay";
-import { hasRunes, type MatchParticipant, type RuneStatic } from "@/components/lol-profile/shared";
+import { useStaticData } from "@/components/lol-profile/StaticDataContext";
+import { hasRunes, type MatchParticipant } from "@/components/lol-profile/shared";
 import { cn } from "@/lib/cn";
 
 // Single source of the participant.runes → RuneTreeDisplay mapping. Shared by the
@@ -9,13 +10,12 @@ import { cn } from "@/lib/cn";
 // per-card "Show Runes" toggle caused.
 export function ParticipantRuneCard({
   participant,
-  runeStatic,
   className
 }: {
   participant: MatchParticipant;
-  runeStatic: RuneStatic | null;
   className?: string;
 }) {
+  const { runeStatic } = useStaticData();
   if (!runeStatic || !hasRunes(participant.runes)) {
     return <p className={cn("type-caption text-muted", className)}>Runes unavailable.</p>;
   }

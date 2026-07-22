@@ -57,7 +57,8 @@ public sealed class SummonerProfileService(
 
         // These calls share a scoped DbContext and must remain sequential.
         var activeSeasonStats = await statsService.GetActiveSeasonProfileStatsAsync(summoner.Id, 5, 20, ct);
-        var recent = await matchHistoryService.GetRecentMatchesAsync(summoner.Id, 1, 10, null, null, ct);
+        var recent = await matchHistoryService.GetRecentMatchesAsync(
+            summoner.Id, 1, 10, null, null, null, includeFacets: false, ct);
         var playedWith = await statsService.GetPlayedWithAsync(summoner.Id, 100, 6, ct);
         var mastery = await statsService.GetTopMasteryAsync(summoner.Id, 6, ct);
         var overview = activeSeasonStats.Overview;

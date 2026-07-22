@@ -115,7 +115,7 @@ public class SummonerStatsServiceTests
             assists: 9,
             win: false);
 
-        harness.AddParticipant(
+        var aramParticipant = harness.AddParticipant(
             summoner,
             queueId: 450,
             queueFamily: QueueCatalog.QueueFamilyAram,
@@ -126,6 +126,7 @@ public class SummonerStatsServiceTests
             deaths: 2,
             assists: 14,
             win: true);
+        aramParticipant.ChampionId = 103;
 
         await harness.Db.SaveChangesAsync();
 
@@ -135,6 +136,8 @@ public class SummonerStatsServiceTests
             pageSize: 999,
             queueFamily: "not-valid",
             queueIds: [QueueCatalog.RankedSoloDuoQueueId],
+            championId: null,
+            includeFacets: true,
             CancellationToken.None);
 
         result.Page.Should().Be(1);
@@ -142,6 +145,20 @@ public class SummonerStatsServiceTests
         result.TotalCount.Should().Be(2);
         result.Items.Should().OnlyContain(x => x.QueueId == 420 || x.QueueType == "420");
         result.Items.Should().OnlyContain(x => x.Items.Count == 7);
+        result.Facets!.Queues.Should().HaveCount(3);
+        result.Facets.ChampionIds.Should().HaveCount(2);
+
+        var championFiltered = await harness.MatchHistory.GetRecentMatchesAsync(
+            summoner.Id,
+            page: 1,
+            pageSize: 20,
+            queueFamily: null,
+            queueIds: null,
+            championId: 103,
+            includeFacets: false,
+            CancellationToken.None);
+        championFiltered.Items.Should().ContainSingle();
+        championFiltered.Items[0].ChampionId.Should().Be(103);
     }
 
     [Fact]

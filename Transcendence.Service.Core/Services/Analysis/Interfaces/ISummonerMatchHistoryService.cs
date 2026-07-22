@@ -15,6 +15,8 @@ public interface ISummonerMatchHistoryService
         int pageSize,
         string? queueFamily,
         IReadOnlyCollection<int>? queueIds,
+        int? championId,
+        bool includeFacets,
         CancellationToken ct);
 
     Task<MatchDetailDto?> GetMatchDetailAsync(string matchId, CancellationToken ct);

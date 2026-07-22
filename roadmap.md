@@ -754,15 +754,15 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > The frontend is, on balance, well-crafted: pure logic is factored into `lib/` with careful scale-normalization, accessibility is genuinely handled (aria-sort, aria-expanded, focus rings, reduced-motion gating), and fetch effects cancel correctly. The quality debt is concentrated in the summoner-profile subtree: `SummonerProfileClient` is a 510-line orchestration god-component (23 `useState`, 7 `useEffect`) that then prop-drills ~29 props into `MatchHistorySection`, and a static-data bundle is threaded five components deep. Secondary issues: unsafe casts of untrusted/undertyped payloads that mask OpenAPI-client type drift, and inline filters that only see the current 20-match page.
 
-- [ ] **Inline queue/champion filters and their option lists only cover the current 20-match page** `MED` · `medium` · ✅ verified
+- [x] **Inline queue/champion filters and their option lists only cover the current 20-match page** `MED` · `medium` · ✅ verified
   - **Fix:** Either move queue/champion filtering server-side (pass filter params into the recent-matches request) or make the intended scope explicit in the UI copy ("filtering this page"). Deriving filter options from a single page also makes the dropdown contents flicker as you page.
   - **Why:** A user who filters by e.g. ARAM can see "0 shown" even when ARAM games exist on later pages, and the queue dropdown lists only queues present in the current 20 matches. The filter reads as global but is page-local — a subtle correctness/UX trap.
   - **Where:** `apps/web/components/SummonerProfileUnified.tsx:106-179, 290-331`
-- [ ] **SummonerProfileClient is a 510-line orchestration god-component (23 useState, 7 useEffect)** `LOW` · `large` · ☑︎ partly-verified
+- [x] **SummonerProfileClient is a 510-line orchestration god-component (23 useState, 7 useEffect)** `LOW` · `large` · ☑︎ partly-verified
   - **Fix:** Extract cohesive hooks: useSummonerRefreshPolling, useMatchHistory(page), useRankHistory, useMatchDetails, useStaticData, and useSyncedProfileQuery (URL). The JSX component then composes hooks and shrinks to a layout shell.
   - **Why:** Very hard to test, reason about, or change in isolation; a bug in one concern (e.g. poll backoff) forces re-reading the whole file. High re-render surface — any of 23 state slices re-runs the whole component and its memo graph.
   - **Where:** `apps/web/components/SummonerProfileUnified.tsx:48-510 (state 76-104; effects 185-352)`
-- [ ] **Heavy prop drilling: ~29 props into MatchHistorySection and a static-data bundle threaded 5 levels deep** `LOW` · `medium` · ✅ verified
+- [x] **Heavy prop drilling: ~29 props into MatchHistorySection and a static-data bundle threaded 5 levels deep** `LOW` · `medium` · ✅ verified
   - **Fix:** Put the static-data bundle (champion/item/spell/rune maps + versions) behind a StaticDataContext provider mounted once in SummonerProfileClient; consumers read via a hook. Groups the remaining callbacks/state into a couple of cohesive objects.
   - **Why:** Signature churn: adding one static map touches every layer. Intermediate components (MatchHistorySection, MatchScoreboard) accept props they never read, only forward — pure passthrough noise that obscures which component actually consumes what.
   - **Where:** `apps/web/components/lol-profile/MatchHistorySection.tsx:48-78 (props type); apps/web/components/SummonerProfileUnified.tsx:465-504`

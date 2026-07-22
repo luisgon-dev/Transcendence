@@ -3678,6 +3678,7 @@ export interface paths {
                     pageSize?: number;
                     queueFamily?: string;
                     queueIds?: number[];
+                    championId?: number;
                 };
                 header?: never;
                 path: {
@@ -5168,6 +5169,16 @@ export interface components {
             bans: components["schemas"]["TeamBansDto"][];
             objectives: components["schemas"]["TeamObjectivesDto"][];
         };
+        MatchHistoryFacetsDto: {
+            queues: components["schemas"]["MatchHistoryQueueFacetDto"][];
+            championIds: number[];
+        };
+        MatchHistoryQueueFacetDto: {
+            /** Format: int32 */
+            queueId: number;
+            queueType: string;
+            queueFamily: string;
+        };
         MatchRuneDetailDto: {
             /** Format: int32 */
             primaryStyleId: number;
@@ -5573,6 +5584,7 @@ export interface components {
             totalCount: number;
             /** Format: int32 */
             totalPages: number;
+            facets?: components["schemas"]["MatchHistoryFacetsDto"] | null;
         };
         RecentPerformanceDto: {
             matchId: string;

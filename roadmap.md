@@ -770,7 +770,7 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Move REGIONS to a lib/regions module, add a formatCompact()/thousands helper to lib/format, and derive matchupVerdict from a shared threshold constant alongside winRateColorClass.
   - **Why:** Drift risk: a new region or a threshold tweak must be applied in multiple files; the 52/48 verdict boundary and the color boundary can silently diverge.
   - **Where:** `apps/web/components/SearchBar.tsx:11-23 & GlobalCommandPalette.tsx:43-55; ScoreboardTeamTable.tsx:34-36 & PerformanceCard.tsx:34-38 (& matchInsights.ts:142,148); app/lol/champions/[championId]/page.tsx:52-57`
-- [ ] **Index-based React keys on dynamic lists** `LOW` · `trivial`
+- [x] **Index-based React keys on dynamic lists** `LOW` · `trivial`
   - **Fix:** Key build variants by a stable identity (primaryStyleId+coreItems hash or a server-provided variant id) rather than array index.
   - **Why:** If build order ever changes across a re-render (e.g. re-sort or partial update), React reconciles by position, which can misassociate the uncontrolled `<details open>` state and animations. Low today because these lists are recomputed whole per navigation.
   - **Where:** `apps/web/app/lol/champions/[championId]/page.tsx:526-528; apps/web/app/lol/pro-builds/page.tsx:319,493`
@@ -783,7 +783,7 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > The frontend is thoughtfully built on server components + ISR with backend precompute, streaming on the champion detail page, paginated match history, and consistently CLS-safe images (explicit width/height, next/font swap). The dominant risk is the Tier List: the entire ~170-row champion ladder renders in a single "use client" component with no virtualization, and each row mounts heavy per-row subcomponents including a self-contained Radix Tooltip.Provider — inflating hydration, TBT, and memory. Secondary risks are a site-wide first-load JS penalty from eagerly bundling framer-motion + cmdk in the root layout, a fully-blocking multi-fetch waterfall on the pro-builds index (no streaming), an unoptimized full-resolution splash JPG on every champion page, and over-eager Link prefetch across the dense tier-list table.
 
-- [ ] **Per-row Radix Tooltip.Provider anti-pattern (one Provider mounted per tier-list row)** `LOW` · `small` · ✅ verified
+- [x] **Per-row Radix Tooltip.Provider anti-pattern (one Provider mounted per tier-list row)** `LOW` · `small` · ✅ verified
   - **Fix:** Hoist a single `RadixTooltip.Provider` to the root layout (or the table root) and make the Tooltip wrapper render only Root/Trigger/Content. Correct the misleading comment.
   - **Why:** Hundreds of redundant Radix context Providers per tier-list render inflate the client component tree, hydration work, and memory, compounding the unvirtualized-list problem above. The pattern repeats anywhere Tooltip is used inside a list.
   - **Where:** `apps/web/components/ui/Tooltip.tsx:21-40 (used at TierListTable.tsx:365)`
@@ -791,7 +791,7 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Consider `unoptimized` for the tiny fixed-size icons (or a lightweight custom loader hitting ddragon directly) and set `images.minimumCacheTTL` to a long value for the ones that stay optimized. Add explicit `formats` if AVIF/WebP is desired.
   - **Why:** Optimizing hundreds of ~24-64px immutable PNGs adds origin CPU + optimizer-cache churn for marginal byte savings (these files are already tiny), and without `minimumCacheTTL` the optimizer honors upstream cache headers only. This is a server-efficiency tradeoff more than a client CWV issue.
   - **Where:** `apps/web/next.config.mjs:4-32 ; apps/web/lib/staticData.ts:179-235`
-- [ ] **Stacked backdrop-blur sticky layers during tier-list scroll** `LOW` · `trivial`
+- [x] **Stacked backdrop-blur sticky layers during tier-list scroll** `LOW` · `trivial`
   - **Fix:** Use a solid/translucent (non-blur) background for the sticky table heads, reserving backdrop-blur for the single floating banner, per the design doc's own 'blur reserved for genuinely floating layers' rule.
   - **Why:** Backdrop-blur is GPU-expensive to repaint during scroll; multiple stacked blur layers on a long scrolling ladder can cause jank on low-end devices. Minor relative to the unvirtualized-list cost.
   - **Where:** `apps/web/app/globals.css:536-540 ; apps/web/app/lol/tierlist/page.tsx:180-184`
@@ -850,7 +850,7 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Read the resolved theme synchronously from the `dark` class during render (or from the same source the FOUC head script uses) so the icon and aria-label are correct on first paint.
   - **Why:** A brief empty-icon flash on load, and assistive tech reading the toggle in the pre-hydration window may get an aria-label opposite to the actual theme. Cosmetic/minor, but on a control the design calls out as a signature.
   - **Where:** `apps/web/components/ui/ThemeToggle.tsx:18-49`
-- [ ] **Hero copy promises "matchup" search that the palette can't fulfill** `LOW` · `trivial`
+- [x] **Hero copy promises "matchup" search that the palette can't fulfill** `LOW` · `trivial`
   - **Fix:** Either add a matchup result/route (matchups live inside champion pages, so a "Champion X matchups" quick route would suffice) or drop "or matchup" from the headline to match what search actually returns.
   - **Why:** The single most prominent promise on the site names a capability the primary search does not surface, so a first-run user who takes the headline literally hits an empty result and mild distrust.
   - **Where:** `apps/web/app/page.tsx:112; apps/web/components/GlobalCommandPalette.tsx:667-834`
@@ -859,15 +859,15 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > The champion detail page is genuinely strong: op.gg/u.gg-class density with far higher polish, a well-orchestrated progressive-disclosure Builds card (timing-aware sectioned breakdown + open "Recommended" and collapsed alternatives), diverging DataBars with real 95% CI whiskers, and a plain-English sample banner. The main problems are (1) a systemic keyboard-accessibility gap — the global reset strips focus outlines and the shared tab/pill/button controls on these exact pages add none back; (2) the "which build do I actually use?" answer is undermined by a "Recommended" build showing a lower win rate than a collapsed "Alternative," and by the Pro Builds detail page being a raw data dump rather than a synthesized build; and (3) several comprehensibility rough edges (jumbled win-rate-by-rank order, cryptic Confidence pips, redundant error stacking). Nothing here is data-loss/security; severity tops out at High for the focus-visible failure.
 
-- [ ] **Action-red accent used decoratively for navigation emphasis (violates one-accent-with-intent)** `LOW` · `trivial`
+- [x] **Action-red accent used decoratively for navigation emphasis (violates one-accent-with-intent)** `LOW` · `trivial`
   - **Fix:** Make the two hero nav links visually equal (neutral), or justify red only on a genuine primary action. Restyle the 'More Ways to Explore' card as a neutral surface with standard secondary links; drop the `data-active` hack.
   - **Why:** CLAUDE.md principle 3: 'When the action red appears, it should mean act here … nothing decorative wears it.' Here red arbitrarily prioritizes Pro Builds over the equally-actionable Matchups link and paints a whole informational CTA card, diluting the 'act here' signal the rest of the system carefully reserves.
   - **Where:** `apps/web/app/lol/champions/[championId]/page.tsx:297-308; apps/web/app/lol/pro-builds/[championId]/page.tsx:489-510`
-- [ ] **Pro Builds region filter renders 11+ wrapping tabs while the champion page uses a compact Select** `LOW` · `trivial`
+- [x] **Pro Builds region filter renders 11+ wrapping tabs while the champion page uses a compact Select** `LOW` · `trivial`
   - **Fix:** Use `variant="select"` for region on the pro-builds pages to match the champion page, or collapse to a Select below a breakpoint.
   - **Why:** Inconsistent IA for the identical control, and on a phone 11 tabs wrap to several rows of chrome above the data — heavy for a filter that is usually left at Global. It also makes the pro-builds Filters block visually noisier than the champion page.
   - **Where:** `apps/web/app/lol/pro-builds/[championId]/page.tsx:288 and app/lol/pro-builds/page.tsx:266 (default variant="tabs") vs apps/web/components/FilterBar.tsx:79 (variant="select")`
-- [ ] **Matchup table sort lacks a direction indicator and aria-sort; "Sort by Win Rate" quietly means worst-first, and DataBars vanish on mobile** `LOW` · `small`
+- [x] **Matchup table sort lacks a direction indicator and aria-sort; "Sort by Win Rate" quietly means worst-first, and DataBars vanish on mobile** `LOW` · `small`
   - **Fix:** Add a direction caret + `aria-sort` to the sort controls (reuse the accessible Table header pattern) and label the default order ('Toughest first'). Consider a minimal inline bar (or the whisker as a tiny mark) on mobile so the confidence signal survives.
   - **Why:** Screen-reader users get no sort state; sighted users get no direction cue and may misread 'Sort by Win Rate' as best-first. On mobile the 'core data language' (diverging bar) and the only per-row confidence signal (the CI whisker) are gone exactly where the audience is largest.
   - **Where:** `apps/web/components/MatchupsTable.tsx:38-44,74-80; apps/web/components/ui/DataBar.tsx:53-54`
@@ -876,11 +876,11 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > The profile and auth surfaces show high craft and a coherent "Ladder" system: colorblind-safe recent-form pips (fill+shape redundancy), small-n win-rate guards, reduced-motion-gated expand animations, deep-linkable URL state, and layout-matching skeletons. The two biggest UX defects are (1) the mobile DOM order buries the primary content — match history sits below five secondary sidebar cards — and (2) a failed/not-found profile renders a permanent loading skeleton beneath the error banner, which reads as "broken" rather than "not found". Auth is functional but incomplete (no password recovery, no reveal toggle), the Favorite control has no persistent/toggle state, and several ad-hoc low-opacity text tints drop below WCAG AA in the light theme.
 
-- [ ] **Empty match history always blames the filters, even when the player has zero matches** `LOW` · `trivial`
+- [x] **Empty match history always blames the filters, even when the player has zero matches** `LOW` · `trivial`
   - **Fix:** Distinguish the two cases: if queue===ALL and championFilter is empty, show a true empty state ("No ranked matches recorded yet" + Update Now hint); only mention filters when one is actually active.
   - **Why:** Misleading copy for genuinely empty profiles; a new player sees filter-troubleshooting text that doesn't apply and gets no guidance (e.g. "Update Now" to trigger ingestion).
   - **Where:** `apps/web/components/lol-profile/MatchHistorySection.tsx:461-465`
-- [ ] **Champion filter substring-matches numeric champion IDs, producing surprising results** `LOW` · `trivial`
+- [x] **Champion filter substring-matches numeric champion IDs, producing surprising results** `LOW` · `trivial`
   - **Fix:** Match names by substring but require an exact/leading numeric match for IDs (or drop ID matching and rely on the name datalist), so digit input behaves predictably.
   - **Why:** Minor: the datalist offers names so most users type names, but numeric input yields opaque, unexpected filtering with no explanation.
   - **Where:** `apps/web/components/SummonerProfileUnified.tsx:161-167`

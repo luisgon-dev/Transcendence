@@ -189,7 +189,7 @@ export function SummonerProfileClient({
             const championName =
               championStatic?.champions[String(match.championId)]?.name.toLowerCase() ?? "";
             return (
-              championIdToken.includes(normalizedChampionFilter) ||
+              championIdToken === normalizedChampionFilter ||
               championName.includes(normalizedChampionFilter)
             );
           });

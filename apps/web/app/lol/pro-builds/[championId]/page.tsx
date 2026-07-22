@@ -307,7 +307,7 @@ export default async function ProBuildsChampionPage({
             baseHref={`/lol/pro-builds/${championId}`}
             extraParams={roleExtraParams}
           />
-          <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />
+          <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} variant="select" />
           <div role="group" aria-label="Pro pool scope" className="flex flex-wrap gap-x-3 gap-y-3 sm:gap-x-4 sm:gap-y-2">
             {SCOPE_OPTIONS.map((option) => (
               <Link
@@ -469,7 +469,7 @@ export default async function ProBuildsChampionPage({
             <div className="mt-3 grid gap-3">
               {alternativeBuilds.map((build, idx) => (
                 <div
-                  key={`common-build-${idx}`}
+                  key={`common-build-${(build.items ?? []).join("-")}`}
                   className="surface-subtle rounded-card p-3"
                 >
                   <div className="mb-2 flex items-center justify-between gap-2">
@@ -498,13 +498,13 @@ export default async function ProBuildsChampionPage({
           </p>
         ) : (
           <ul className="mt-4 grid gap-3">
-            {recentMatches.map((match, idx) => {
+            {recentMatches.map((match) => {
               const playedAt = match.playedAt ?? 0;
               const hasTimestamp = Number.isFinite(playedAt) && playedAt > 0;
               const resultClass = match.win ? "text-wr-high" : "text-wr-low";
               return (
                 <li
-                  key={`${match.matchId ?? "match"}-${idx}`}
+                  key={`${match.matchId ?? "match"}-${match.playerName ?? "player"}`}
                   className="surface-subtle rounded-card p-3"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -581,8 +581,8 @@ export default async function ProBuildsChampionPage({
         </>
       ) : null}
 
-      <Card className="border-primary/40 bg-primary/10 p-5">
-        <h2 className="type-section text-primary">
+      <Card className="p-5">
+        <h2 className="type-section">
           More Ways to Explore
         </h2>
         <p className="mt-2 text-sm text-fg/90">
@@ -591,8 +591,7 @@ export default async function ProBuildsChampionPage({
         <div className="mt-4 flex flex-wrap gap-2 text-sm">
           <Link
             href={`/lol/champions/${championId}`}
-            className="control-tab type-ui font-semibold"
-            data-active="true"
+            className="control-tab type-ui"
           >
             Open Champion Details
           </Link>

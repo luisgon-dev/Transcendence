@@ -468,7 +468,11 @@ export function MatchHistorySection({
 
           {!historyBusy && visibleMatches.length === 0 ? (
             <p className="surface-subtle rounded-card px-4 py-4 text-sm text-fg/80">
-              No matches found for the current queue/champion filters.
+              {queue !== "ALL" || championFilter.trim() ? (
+                "No matches found for the current queue/champion filters."
+              ) : (
+                "No ranked matches are recorded yet. Use Update Now to fetch the latest history."
+              )}
             </p>
           ) : null}
         </div>

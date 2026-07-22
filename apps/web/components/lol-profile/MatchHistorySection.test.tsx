@@ -43,11 +43,16 @@ function props(overrides: Partial<React.ComponentProps<typeof MatchHistorySectio
 }
 
 describe("MatchHistorySection", () => {
-  it("distinguishes loading from an empty filtered result", () => {
+  it("distinguishes loading, a genuinely empty history, and an empty filtered result", () => {
     const { rerender } = render(<MatchHistorySection {...props({ historyBusy: true })} />);
     expect(screen.queryByText("No matches found for the current queue/champion filters.")).toBeNull();
 
     rerender(<MatchHistorySection {...props()} />);
+    expect(
+      screen.getByText("No ranked matches are recorded yet. Use Update Now to fetch the latest history.")
+    ).toBeTruthy();
+
+    rerender(<MatchHistorySection {...props({ queue: "RANKED_SOLO_DUO" })} />);
     expect(screen.getByText("No matches found for the current queue/champion filters.")).toBeTruthy();
   });
 

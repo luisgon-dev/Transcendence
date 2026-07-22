@@ -395,7 +395,7 @@ async function ChampionHeroMeta({
         ) : null}
         <Link
           href={`/lol/pro-builds/${championId}${linkQuery ? `?${linkQuery}` : ""}`}
-          className="rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 font-medium text-primary transition-colors hover:bg-primary/20"
+          className="rounded-lg border border-border/60 bg-surface-2/50 px-2.5 py-1 font-medium text-fg/80 transition-colors hover:bg-surface-2/80"
         >
           Pro Solo Queue
         </Link>
@@ -643,7 +643,7 @@ async function ChampionSections({
 
               {buildRows.map((b, idx) => (
                 <details
-                  key={idx}
+                  key={`${b.primaryStyleId ?? 0}-${b.subStyleId ?? 0}-${(b.coreItems ?? []).join("-")}-${(b.items ?? []).join("-")}`}
                   open={idx === 0}
                   className="group rounded-lg border border-border/60 bg-surface-2/40"
                 >

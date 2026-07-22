@@ -226,7 +226,7 @@ export default async function ProBuildsIndexPage({
             ) : null}
           </>
         }
-        filters={<AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />}
+        filters={<AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} variant="select" />}
       />
       <AnalyticsSampleBanner
         sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}

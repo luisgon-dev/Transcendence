@@ -144,7 +144,7 @@ export default async function LandingPage() {
         {verifiedMain ? (
           <p className="type-kicker mb-3 text-primary">Welcome back, {verifiedMain.gameName}</p>
         ) : null}
-        <h1 className="type-display max-w-3xl">Look up any League player, champion, or matchup.</h1>
+        <h1 className="type-display max-w-3xl">Look up any League player or champion.</h1>
         <p className="type-lead mt-5 max-w-2xl">
           Current-patch tier lists, builds, and live profiles, refreshed continuously from ranked
           games.

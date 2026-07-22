@@ -11,6 +11,7 @@ using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
 using Transcendence.Service.Core.Services.StaticData.Interfaces;
 using Match = Transcendence.Data.Models.LoL.Match.Match;
+using Summoner = Transcendence.Data.Models.LoL.Account.Summoner;
 
 namespace Transcendence.Service.Core.Services.RiotApi.Implementations;
 
@@ -53,127 +54,23 @@ public class MatchService(
         }
 
         var info = matchDto.Info;
-        var metadata = matchDto.Metadata;
-
-        // Build match entity (do not persist here; caller handles persistence)
-        var match = new DataMatch
-        {
-            MatchId = metadata.MatchId,
-            MatchDate = info.GameCreation, // epoch ms
-            Duration = (int)info.GameDuration,
-            Patch = NormalizePatch(info.GameVersion),
-            EndOfGameResult = info.EndOfGameResult,
-            PlatformRegion = platformRoute.ToString(),
-            Status = FetchStatus.Success,
-            FetchedAt = DateTime.UtcNow
-        };
-        ApplyQueueMetadata(match, (int)info.QueueId);
-        PopulateMatchBans(match, info);
-        PopulateTeamObjectives(match, info);
+        // Build match entity (do not persist here; caller handles persistence).
+        var match = CreateMatch(matchDto.Metadata.MatchId, info, platformRoute);
 
         // Ensure static data for this match patch exists
-        await staticDataService.EnsureStaticDataForPatchAsync(match.Patch, cancellationToken);
+        await staticDataService.EnsureStaticDataForPatchAsync(match.Patch!, cancellationToken);
 
         var summonersByPuuid = await ResolveSummonersByPuuidAsync(
             info.Participants.Select(p => p.Puuid),
             platformRoute,
             cancellationToken);
 
-        var missingPuuidParticipants = info.Participants.Count(p => string.IsNullOrWhiteSpace(p.Puuid));
-        var unresolvedPuuids = info.Participants
-            .Select(p => p.Puuid)
-            .Where(puuid => !string.IsNullOrWhiteSpace(puuid))
-            .Select(puuid => puuid!)
-            .Distinct(StringComparer.Ordinal)
-            .Where(puuid => !summonersByPuuid.ContainsKey(puuid))
-            .ToList();
-
-        if (missingPuuidParticipants > 0 || unresolvedPuuids.Count > 0)
-        {
-            logger.LogWarning(
-                "Aborting match {MatchId} preparation due to unresolved participants. MissingPuuidParticipants={MissingCount}, UnresolvedPuuids={UnresolvedCount}, Sample={UnresolvedSample}",
-                matchId,
-                missingPuuidParticipants,
-                unresolvedPuuids.Count,
-                unresolvedPuuids.Take(5).ToArray());
-
-            throw new InvalidOperationException(
-                $"Unable to resolve all participants for match {matchId}. MissingPuuidParticipants={missingPuuidParticipants}, UnresolvedPuuids={unresolvedPuuids.Count}.");
-        }
-
-        var skippedDuplicateParticipants = 0;
-        var seenSummonerIds = new HashSet<Guid>();
-        var seenParticipantIds = new HashSet<int>();
-
-        // Ensure Summoners exist, build participants and relationships
-        foreach (var p in info.Participants)
-        {
-            var summoner = summonersByPuuid[p.Puuid!];
-            TouchLastActive(summoner, match.MatchDate);
-
-            if (!seenSummonerIds.Add(summoner.Id) || !seenParticipantIds.Add(p.ParticipantId))
-            {
-                skippedDuplicateParticipants++;
-                logger.LogWarning(
-                    "Skipping duplicate participant while preparing match {MatchId}. ParticipantId={ParticipantId}, Puuid={Puuid}, SummonerId={SummonerId}",
-                    matchId,
-                    p.ParticipantId,
-                    p.Puuid,
-                    summoner.Id);
-                continue;
-            }
-
-            // Create participant
-            var participant = new MatchParticipant
-            {
-                Match = match,
-                Summoner = summoner,
-                Puuid = p.Puuid,
-                ParticipantId = p.ParticipantId,
-                TeamId = (int)p.TeamId,
-                ChampionId = (int)p.ChampionId,
-                TeamPosition = !string.IsNullOrWhiteSpace(p.TeamPosition) ? p.TeamPosition : p.IndividualPosition,
-                Win = p.Win,
-                GameEndedInEarlySurrender = p.GameEndedInEarlySurrender,
-                GameEndedInSurrender = p.GameEndedInSurrender,
-                TeamEarlySurrendered = p.TeamEarlySurrendered,
-                Kills = p.Kills,
-                Deaths = p.Deaths,
-                Assists = p.Assists,
-                ChampLevel = p.ChampLevel,
-                GoldEarned = p.GoldEarned,
-                TotalDamageDealtToChampions = p.TotalDamageDealtToChampions,
-                // keep the damage split in sync across all 3 participant-mapping blocks
-                PhysicalDamageDealtToChampions = p.PhysicalDamageDealtToChampions,
-                MagicDamageDealtToChampions = p.MagicDamageDealtToChampions,
-                TrueDamageDealtToChampions = p.TrueDamageDealtToChampions,
-                VisionScore = p.VisionScore,
-                TotalMinionsKilled = p.TotalMinionsKilled,
-                NeutralMinionsKilled = p.NeutralMinionsKilled,
-                SummonerSpell1Id = p.Summoner1Id,
-                SummonerSpell2Id = p.Summoner2Id
-            };
-
-            participant.Runes = CreateMatchParticipantRunes(p.Perks, match.Patch);
-            participant.Items = CreateMatchParticipantItems(p, match.Patch);
-
-            match.Participants.Add(participant);
-        }
-
-        var expectedParticipants = seenSummonerIds.Count;
-        if (match.Participants.Count != expectedParticipants)
-        {
-            throw new InvalidOperationException(
-                $"Participant integrity check failed for match {matchId}. Expected {expectedParticipants} participants, resolved {match.Participants.Count}.");
-        }
-
-        if (skippedDuplicateParticipants > 0)
-        {
-            logger.LogWarning(
-                "Prepared match {MatchId} after skipping {SkippedCount} duplicate participant rows.",
-                matchId,
-                skippedDuplicateParticipants);
-        }
+        BuildParticipants(
+            info.Participants,
+            puuid => summonersByPuuid.GetValueOrDefault(puuid),
+            match,
+            operation: "full match preparation",
+            requireAllParticipants: true);
 
         logger.LogDebug(
             "Prepared match {MatchId} with {Count} participants for persistence.",
@@ -203,24 +100,9 @@ public class MatchService(
         }
 
         var info = matchDto.Info;
-        var metadata = matchDto.Metadata;
+        var match = CreateMatch(matchDto.Metadata.MatchId, info, platformRoute);
 
-        var match = new DataMatch
-        {
-            MatchId = metadata.MatchId,
-            MatchDate = info.GameCreation,
-            Duration = (int)info.GameDuration,
-            Patch = NormalizePatch(info.GameVersion),
-            EndOfGameResult = info.EndOfGameResult,
-            PlatformRegion = platformRoute.ToString(),
-            Status = FetchStatus.Success,
-            FetchedAt = DateTime.UtcNow
-        };
-        ApplyQueueMetadata(match, (int)info.QueueId);
-        PopulateMatchBans(match, info);
-        PopulateTeamObjectives(match, info);
-
-        await staticDataService.EnsureStaticDataForPatchAsync(match.Patch, cancellationToken);
+        await staticDataService.EnsureStaticDataForPatchAsync(match.Patch!, cancellationToken);
 
         // Batch lookup all participant PUUIDs in a single query instead of N+1
         var participantPuuids = info.Participants
@@ -257,19 +139,12 @@ public class MatchService(
                     .First(),
                 StringComparer.Ordinal);
 
-        var skippedLightweightDuplicates = 0;
-        var seenLightweightSummonerIds = new HashSet<Guid>();
-        var seenLightweightParticipantIds = new HashSet<int>();
-
+        // Lightweight ingestion resolves from local state and creates minimal stubs; the shared
+        // participant builder below owns all entity mapping, duplicate checks, and relationships.
         foreach (var p in info.Participants)
         {
             if (string.IsNullOrWhiteSpace(p.Puuid))
-            {
-                logger.LogWarning(
-                    "[Lightweight] Skipping participant with missing PUUID in match {MatchId}.",
-                    matchId);
                 continue;
-            }
 
             if (!existingSummoners.TryGetValue(p.Puuid, out var summoner))
             {
@@ -294,64 +169,14 @@ public class MatchService(
                 summoner = await summonerRepository.AddOrUpdateSummonerAsync(stubSummoner, cancellationToken);
                 existingSummoners[p.Puuid] = summoner;
             }
-
-            TouchLastActive(summoner, match.MatchDate);
-
-            if (!seenLightweightSummonerIds.Add(summoner.Id) || !seenLightweightParticipantIds.Add(p.ParticipantId))
-            {
-                skippedLightweightDuplicates++;
-                logger.LogWarning(
-                    "[Lightweight] Skipping duplicate participant while preparing match {MatchId}. ParticipantId={ParticipantId}, Puuid={Puuid}, SummonerId={SummonerId}",
-                    matchId,
-                    p.ParticipantId,
-                    p.Puuid,
-                    summoner.Id);
-                continue;
-            }
-
-            var participant = new MatchParticipant
-            {
-                Match = match,
-                Summoner = summoner,
-                Puuid = p.Puuid,
-                ParticipantId = p.ParticipantId,
-                TeamId = (int)p.TeamId,
-                ChampionId = (int)p.ChampionId,
-                TeamPosition = !string.IsNullOrWhiteSpace(p.TeamPosition) ? p.TeamPosition : p.IndividualPosition,
-                Win = p.Win,
-                GameEndedInEarlySurrender = p.GameEndedInEarlySurrender,
-                GameEndedInSurrender = p.GameEndedInSurrender,
-                TeamEarlySurrendered = p.TeamEarlySurrendered,
-                Kills = p.Kills,
-                Deaths = p.Deaths,
-                Assists = p.Assists,
-                ChampLevel = p.ChampLevel,
-                GoldEarned = p.GoldEarned,
-                TotalDamageDealtToChampions = p.TotalDamageDealtToChampions,
-                // keep the damage split in sync across all 3 participant-mapping blocks
-                PhysicalDamageDealtToChampions = p.PhysicalDamageDealtToChampions,
-                MagicDamageDealtToChampions = p.MagicDamageDealtToChampions,
-                TrueDamageDealtToChampions = p.TrueDamageDealtToChampions,
-                VisionScore = p.VisionScore,
-                TotalMinionsKilled = p.TotalMinionsKilled,
-                NeutralMinionsKilled = p.NeutralMinionsKilled,
-                SummonerSpell1Id = p.Summoner1Id,
-                SummonerSpell2Id = p.Summoner2Id
-            };
-
-            participant.Runes = CreateMatchParticipantRunes(p.Perks, match.Patch);
-            participant.Items = CreateMatchParticipantItems(p, match.Patch);
-
-            match.Participants.Add(participant);
         }
 
-        if (skippedLightweightDuplicates > 0)
-        {
-            logger.LogWarning(
-                "[Lightweight] Prepared match {MatchId} after skipping {SkippedCount} duplicate participant rows.",
-                matchId,
-                skippedLightweightDuplicates);
-        }
+        BuildParticipants(
+            info.Participants,
+            puuid => existingSummoners.GetValueOrDefault(puuid),
+            match,
+            operation: "lightweight match preparation",
+            requireAllParticipants: false);
 
         logger.LogDebug(
             "[Lightweight] Prepared match {MatchId} with {Count} participants for persistence.",
@@ -434,120 +259,22 @@ public class MatchService(
 
             // Parse and store match data
             var info = matchDto.Info;
-            var metadata = matchDto.Metadata;
-
-            match.MatchId = metadata.MatchId;
-            match.MatchDate = info.GameCreation;
-            match.Duration = (int)info.GameDuration;
-            match.Patch = NormalizePatch(info.GameVersion);
-            match.EndOfGameResult = info.EndOfGameResult;
-            match.PlatformRegion = platformRoute.ToString();
-            ApplyQueueMetadata(match, (int)info.QueueId);
-            PopulateMatchBans(match, info);
-            PopulateTeamObjectives(match, info);
+            ApplyMatchFields(match, matchDto.Metadata.MatchId, info, platformRoute);
 
             // Ensure static data for this match patch exists
-            await staticDataService.EnsureStaticDataForPatchAsync(match.Patch, cancellationToken);
+            await staticDataService.EnsureStaticDataForPatchAsync(match.Patch!, cancellationToken);
 
             var summonersByPuuid = await ResolveSummonersByPuuidAsync(
                 info.Participants.Select(p => p.Puuid),
                 platformRoute,
                 cancellationToken);
 
-            var missingPuuidParticipants = info.Participants.Count(p => string.IsNullOrWhiteSpace(p.Puuid));
-            var unresolvedPuuids = info.Participants
-                .Select(p => p.Puuid)
-                .Where(puuid => !string.IsNullOrWhiteSpace(puuid))
-                .Select(puuid => puuid!)
-                .Distinct(StringComparer.Ordinal)
-                .Where(puuid => !summonersByPuuid.ContainsKey(puuid))
-                .ToList();
-
-            if (missingPuuidParticipants > 0 || unresolvedPuuids.Count > 0)
-            {
-                logger.LogWarning(
-                    "Aborting retry match fetch {MatchId} due to unresolved participants. MissingPuuidParticipants={MissingCount}, UnresolvedPuuids={UnresolvedCount}, Sample={UnresolvedSample}",
-                    matchId,
-                    missingPuuidParticipants,
-                    unresolvedPuuids.Count,
-                    unresolvedPuuids.Take(5).ToArray());
-
-                throw new InvalidOperationException(
-                    $"Unable to resolve all participants for retry match fetch {matchId}. MissingPuuidParticipants={missingPuuidParticipants}, UnresolvedPuuids={unresolvedPuuids.Count}.");
-            }
-
-            var skippedRetryDuplicates = 0;
-            var seenRetrySummonerIds = new HashSet<Guid>();
-            var seenRetryParticipantIds = new HashSet<int>();
-
-            // Ensure Summoners exist, build participants and relationships
-            foreach (var p in info.Participants)
-            {
-                var summoner = summonersByPuuid[p.Puuid!];
-                TouchLastActive(summoner, match.MatchDate);
-
-                if (!seenRetrySummonerIds.Add(summoner.Id) || !seenRetryParticipantIds.Add(p.ParticipantId))
-                {
-                    skippedRetryDuplicates++;
-                    logger.LogWarning(
-                        "Skipping duplicate participant while retry-fetching match {MatchId}. ParticipantId={ParticipantId}, Puuid={Puuid}, SummonerId={SummonerId}",
-                        matchId,
-                        p.ParticipantId,
-                        p.Puuid,
-                        summoner.Id);
-                    continue;
-                }
-
-                var participant = new MatchParticipant
-                {
-                    Match = match,
-                    Summoner = summoner,
-                    Puuid = p.Puuid,
-                    ParticipantId = p.ParticipantId,
-                    TeamId = (int)p.TeamId,
-                    ChampionId = (int)p.ChampionId,
-                    TeamPosition = !string.IsNullOrWhiteSpace(p.TeamPosition) ? p.TeamPosition : p.IndividualPosition,
-                    Win = p.Win,
-                    GameEndedInEarlySurrender = p.GameEndedInEarlySurrender,
-                    GameEndedInSurrender = p.GameEndedInSurrender,
-                    TeamEarlySurrendered = p.TeamEarlySurrendered,
-                    Kills = p.Kills,
-                    Deaths = p.Deaths,
-                    Assists = p.Assists,
-                    ChampLevel = p.ChampLevel,
-                    GoldEarned = p.GoldEarned,
-                    TotalDamageDealtToChampions = p.TotalDamageDealtToChampions,
-                    // keep the damage split in sync across all 3 participant-mapping blocks
-                    PhysicalDamageDealtToChampions = p.PhysicalDamageDealtToChampions,
-                    MagicDamageDealtToChampions = p.MagicDamageDealtToChampions,
-                    TrueDamageDealtToChampions = p.TrueDamageDealtToChampions,
-                    VisionScore = p.VisionScore,
-                    TotalMinionsKilled = p.TotalMinionsKilled,
-                    NeutralMinionsKilled = p.NeutralMinionsKilled,
-                    SummonerSpell1Id = p.Summoner1Id,
-                    SummonerSpell2Id = p.Summoner2Id
-                };
-
-                participant.Runes = CreateMatchParticipantRunes(p.Perks, match.Patch);
-                participant.Items = CreateMatchParticipantItems(p, match.Patch);
-
-                match.Participants.Add(participant);
-            }
-
-            var expectedParticipants = seenRetrySummonerIds.Count;
-            if (match.Participants.Count != expectedParticipants)
-            {
-                throw new InvalidOperationException(
-                    $"Participant integrity check failed for retry match fetch {matchId}. Expected {expectedParticipants} participants, resolved {match.Participants.Count}.");
-            }
-
-            if (skippedRetryDuplicates > 0)
-            {
-                logger.LogWarning(
-                    "Retry fetch prepared match {MatchId} after skipping {SkippedCount} duplicate participant rows.",
-                    matchId,
-                    skippedRetryDuplicates);
-            }
+            BuildParticipants(
+                info.Participants,
+                puuid => summonersByPuuid.GetValueOrDefault(puuid),
+                match,
+                operation: "retry match fetch",
+                requireAllParticipants: true);
 
             match.Status = FetchStatus.Success;
             match.FetchedAt = DateTime.UtcNow;
@@ -599,6 +326,165 @@ public class MatchService(
             await context.SaveChangesAsync(cancellationToken);
             return false;
         }
+    }
+
+    private static DataMatch CreateMatch(string matchId, Info info, PlatformRoute platformRoute)
+    {
+        var match = new DataMatch
+        {
+            Status = FetchStatus.Success,
+            FetchedAt = DateTime.UtcNow
+        };
+        ApplyMatchFields(match, matchId, info, platformRoute);
+        return match;
+    }
+
+    private static void ApplyMatchFields(
+        DataMatch match,
+        string matchId,
+        Info info,
+        PlatformRoute platformRoute)
+    {
+        match.MatchId = matchId;
+        match.MatchDate = info.GameCreation;
+        match.Duration = (int)info.GameDuration;
+        match.Patch = NormalizePatch(info.GameVersion);
+        match.EndOfGameResult = info.EndOfGameResult;
+        match.PlatformRegion = platformRoute.ToString();
+        ApplyQueueMetadata(match, (int)info.QueueId);
+        PopulateMatchBans(match, info);
+        PopulateTeamObjectives(match, info);
+    }
+
+    private void BuildParticipants(
+        IEnumerable<Participant> participants,
+        Func<string, Summoner?> resolveSummoner,
+        DataMatch match,
+        string operation,
+        bool requireAllParticipants)
+    {
+        var participantRows = participants.ToList();
+        var missingPuuidParticipants = participantRows.Count(p => string.IsNullOrWhiteSpace(p.Puuid));
+        var resolvedSummoners = new Dictionary<string, Summoner?>(StringComparer.Ordinal);
+
+        foreach (var puuid in participantRows
+                     .Select(p => p.Puuid)
+                     .Where(puuid => !string.IsNullOrWhiteSpace(puuid))
+                     .Select(puuid => puuid!)
+                     .Distinct(StringComparer.Ordinal))
+        {
+            resolvedSummoners[puuid] = resolveSummoner(puuid);
+        }
+
+        var unresolvedPuuids = resolvedSummoners
+            .Where(entry => entry.Value == null)
+            .Select(entry => entry.Key)
+            .ToList();
+
+        if (requireAllParticipants && (missingPuuidParticipants > 0 || unresolvedPuuids.Count > 0))
+        {
+            logger.LogWarning(
+                "Aborting {Operation} for match {MatchId} due to unresolved participants. MissingPuuidParticipants={MissingCount}, UnresolvedPuuids={UnresolvedCount}, Sample={UnresolvedSample}",
+                operation,
+                match.MatchId,
+                missingPuuidParticipants,
+                unresolvedPuuids.Count,
+                unresolvedPuuids.Take(5).ToArray());
+
+            throw new InvalidOperationException(
+                $"Unable to resolve all participants during {operation} for match {match.MatchId}. MissingPuuidParticipants={missingPuuidParticipants}, UnresolvedPuuids={unresolvedPuuids.Count}.");
+        }
+
+        var skippedDuplicateParticipants = 0;
+        var seenSummonerIds = new HashSet<Guid>();
+        var seenParticipantIds = new HashSet<int>();
+
+        foreach (var participantRow in participantRows)
+        {
+            if (string.IsNullOrWhiteSpace(participantRow.Puuid)
+                || !resolvedSummoners.TryGetValue(participantRow.Puuid, out var summoner)
+                || summoner == null)
+            {
+                logger.LogWarning(
+                    "Skipping unresolved participant during {Operation} for match {MatchId}. ParticipantId={ParticipantId}, Puuid={Puuid}",
+                    operation,
+                    match.MatchId,
+                    participantRow.ParticipantId,
+                    participantRow.Puuid);
+                continue;
+            }
+
+            TouchLastActive(summoner, match.MatchDate);
+
+            if (!seenSummonerIds.Add(summoner.Id) || !seenParticipantIds.Add(participantRow.ParticipantId))
+            {
+                skippedDuplicateParticipants++;
+                logger.LogWarning(
+                    "Skipping duplicate participant during {Operation} for match {MatchId}. ParticipantId={ParticipantId}, Puuid={Puuid}, SummonerId={SummonerId}",
+                    operation,
+                    match.MatchId,
+                    participantRow.ParticipantId,
+                    participantRow.Puuid,
+                    summoner.Id);
+                continue;
+            }
+
+            match.Participants.Add(MapParticipant(participantRow, match, summoner));
+        }
+
+        var expectedParticipants = seenSummonerIds.Count;
+        if (match.Participants.Count != expectedParticipants)
+        {
+            throw new InvalidOperationException(
+                $"Participant integrity check failed during {operation} for match {match.MatchId}. Expected {expectedParticipants} participants, resolved {match.Participants.Count}.");
+        }
+
+        if (skippedDuplicateParticipants > 0)
+        {
+            logger.LogWarning(
+                "Completed {Operation} for match {MatchId} after skipping {SkippedCount} duplicate participant rows.",
+                operation,
+                match.MatchId,
+                skippedDuplicateParticipants);
+        }
+    }
+
+    private MatchParticipant MapParticipant(Participant participant, DataMatch match, Summoner summoner)
+    {
+        var mapped = new MatchParticipant
+        {
+            Match = match,
+            Summoner = summoner,
+            Puuid = participant.Puuid,
+            ParticipantId = participant.ParticipantId,
+            TeamId = (int)participant.TeamId,
+            ChampionId = (int)participant.ChampionId,
+            TeamPosition = !string.IsNullOrWhiteSpace(participant.TeamPosition)
+                ? participant.TeamPosition
+                : participant.IndividualPosition,
+            Win = participant.Win,
+            GameEndedInEarlySurrender = participant.GameEndedInEarlySurrender,
+            GameEndedInSurrender = participant.GameEndedInSurrender,
+            TeamEarlySurrendered = participant.TeamEarlySurrendered,
+            Kills = participant.Kills,
+            Deaths = participant.Deaths,
+            Assists = participant.Assists,
+            ChampLevel = participant.ChampLevel,
+            GoldEarned = participant.GoldEarned,
+            TotalDamageDealtToChampions = participant.TotalDamageDealtToChampions,
+            PhysicalDamageDealtToChampions = participant.PhysicalDamageDealtToChampions,
+            MagicDamageDealtToChampions = participant.MagicDamageDealtToChampions,
+            TrueDamageDealtToChampions = participant.TrueDamageDealtToChampions,
+            VisionScore = participant.VisionScore,
+            TotalMinionsKilled = participant.TotalMinionsKilled,
+            NeutralMinionsKilled = participant.NeutralMinionsKilled,
+            SummonerSpell1Id = participant.Summoner1Id,
+            SummonerSpell2Id = participant.Summoner2Id
+        };
+
+        mapped.Runes = CreateMatchParticipantRunes(participant.Perks, match.Patch!);
+        mapped.Items = CreateMatchParticipantItems(participant, match.Patch!);
+        return mapped;
     }
 
     private async Task<Dictionary<string, Data.Models.LoL.Account.Summoner>> ResolveSummonersByPuuidAsync(

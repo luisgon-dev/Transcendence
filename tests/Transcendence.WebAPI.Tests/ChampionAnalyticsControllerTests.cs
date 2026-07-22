@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
@@ -64,22 +65,16 @@ public class ChampionAnalyticsControllerTests
     }
 
     [Fact]
-    public async Task GetSynergies_ForwardsScopeFilters()
+    public async Task GetSynergies_ReturnsServiceUnavailable_WhenSynergyServiceIsNotRegistered()
     {
         var analytics = new Mock<IChampionAnalyticsService>();
-        var synergy = new Mock<IChampionSynergyService>();
-        synergy.Setup(x => x.GetSynergiesAsync(
-                103, "MIDDLE", "EMERALD_PLUS", "KR", "flex", "15.1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ChampionSynergiesResponse(
-                103, "MIDDLE", "EMERALD_PLUS", "KR", "15.1", "RANKED_FLEX", 0, 0, 0, []));
-        var controller = new ChampionAnalyticsController(analytics.Object, null, synergy.Object);
+        var controller = new ChampionAnalyticsController(analytics.Object, null);
 
         var result = await controller.GetSynergies(
             103, "MIDDLE", "EMERALD_PLUS", "KR", "flex", "15.1", CancellationToken.None);
 
-        result.Result.Should().BeOfType<OkObjectResult>();
-        synergy.Verify(x => x.GetSynergiesAsync(
-            103, "MIDDLE", "EMERALD_PLUS", "KR", "flex", "15.1", It.IsAny<CancellationToken>()), Times.Once);
+        var unavailable = result.Result.Should().BeOfType<StatusCodeResult>().Subject;
+        unavailable.StatusCode.Should().Be(StatusCodes.Status503ServiceUnavailable);
     }
 
     [Fact]
@@ -183,24 +178,17 @@ public class ChampionAnalyticsControllerTests
     }
 
     [Fact]
-    public async Task GetWinRates_ForwardsPatchAndQueueFilters()
+    public async Task GetWinRates_RejectsUnsupportedQueueBeforeCallingService()
     {
         var service = new Mock<IChampionAnalyticsService>();
-        service
-            .Setup(x => x.GetWinRatesAsync(
-                103,
-                It.Is<ChampionAnalyticsFilter>(filter => filter.Patch == "15.1" && filter.QueueFamily == "arena"),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ChampionWinRateSummary(103, "15.1", []));
         var controller = new ChampionAnalyticsController(service.Object, null);
 
-        var result = await controller.GetWinRates(103, "EMERALD_PLUS", "KR", "MIDDLE", "15.1", "arena", CancellationToken.None);
+        var result = await controller.GetWinRates(
+            103, "EMERALD_PLUS", "KR", "MIDDLE", "15.1", "twisted-treeline", CancellationToken.None);
 
-        result.Should().BeOfType<OkObjectResult>();
+        result.Should().BeOfType<BadRequestObjectResult>();
         service.Verify(x => x.GetWinRatesAsync(
-            103,
-            It.Is<ChampionAnalyticsFilter>(filter => filter.Patch == "15.1" && filter.QueueFamily == "arena"),
-            It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<int>(), It.IsAny<ChampionAnalyticsFilter>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

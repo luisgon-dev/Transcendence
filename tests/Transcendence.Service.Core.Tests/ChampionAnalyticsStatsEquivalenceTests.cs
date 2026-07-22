@@ -5,7 +5,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Account;
+using Transcendence.Data.Models.LoL.Analytics;
 using Transcendence.Data.Models.LoL.Match;
+using Transcendence.Data.Models.LoL.Static;
 using Transcendence.Service.Core.Services.Analytics.Implementations;
 using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Tests.Support;
@@ -89,6 +91,51 @@ public class ChampionAnalyticsStatsEquivalenceTests
                     .Excluding(e => e.PreviousTier),
                 $"role-filtered tier list role={role} tier={tier ?? "ALL"} region={region ?? "ALL"}");
         }
+    }
+
+    [Fact]
+    public async Task TierList_StatsPath_HasExpectedAbsolutePresenceAndPatchMovement()
+    {
+        await using var ctx = await SeededAsync();
+        ctx.Db.Patches.AddRange(
+            new Patch
+            {
+                Version = "15.1",
+                ReleaseDate = DateTime.UtcNow.AddDays(-21),
+                DetectedAt = DateTime.UtcNow.AddDays(-21),
+                IsActive = false
+            },
+            new Patch
+            {
+                Version = Patch,
+                ReleaseDate = DateTime.UtcNow.AddDays(-2),
+                DetectedAt = DateTime.UtcNow.AddDays(-2),
+                IsActive = true
+            });
+        ctx.Db.ChampionScopeGradeStats.Add(new ChampionScopeGradeStat
+        {
+            Id = Guid.NewGuid(),
+            Patch = "15.1",
+            PlatformRegion = "ALL",
+            RankScope = "ALL",
+            Role = "TOP",
+            ChampionId = 100,
+            PrimaryRole = "TOP",
+            Tier = (int)TierGrade.C,
+            ComputedAtUtc = DateTime.UtcNow.AddDays(-21)
+        });
+        await ctx.Db.SaveChangesAsync();
+        await Refresh(ctx.Db);
+
+        var stats = await Service(ctx.Db).ComputeTierListFromStatsAsync(
+            "TOP", null, null, Patch, CancellationToken.None);
+        var champion = stats.Single(entry => entry.ChampionId == 100);
+
+        // 9 appearances and 1 ban across the 24 distinct matches in the ALL scope.
+        champion.BanRate.Should().BeApproximately(1d / 24d, 1e-12);
+        champion.ContestedScore.Should().BeApproximately(10d / 24d, 1e-12);
+        champion.PreviousTier.Should().Be(TierGrade.C);
+        champion.Movement.Should().Be(TierMovement.UP);
     }
 
     [Fact]

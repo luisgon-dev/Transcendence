@@ -724,11 +724,11 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > The backend suite is sizeable (207 xUnit facts/theories across ~44 files, plus 20 frontend vitest files) and contains several genuinely high-value tests: a rigorous raw-vs-precompute equivalence gate for analytics, incident-driven regression guards, and strong refresh-token-rotation coverage. However, the correctness of the two most safety-critical areas is essentially unverified: (1) all authentication crypto — hand-rolled PBKDF2 password hashing/verification, JWT signing, and the API-key auth handler — is entirely untested and merely mocked away; and (2) the entire data layer is validated only against SQLite (via EnsureCreated) and the EF InMemory provider, never a real PostgreSQL, so Postgres/Npgsql translation, migrations, and the authorization boundary are all unexercised. Assertion quality in the seeded service tests is good; a minority of controller tests are near-tautological forwarding checks.
 
-- [ ] **Several controller tests are near-tautological forwarding checks (over-mocking)** `LOW` · `trivial`
+- [x] **Several controller tests are near-tautological forwarding checks (over-mocking)** `LOW` · `trivial`
   - **Fix:** Fold the pure pass-through cases into the behavior-rich tests, or replace them with tests that assert a real decision (parameter normalization, defaulting, error mapping). Not harmful, but low ROI.
   - **Why:** Low value-per-test: they pad the count and give a false sense of coverage without testing meaningful branching. (By contrast, the same file's most-played-role resolution and RejectsUnknownRole tests, lines 12-124, are genuinely valuable.)
   - **Where:** `tests/Transcendence.WebAPI.Tests/ChampionAnalyticsControllerTests.cs:126-182`
-- [ ] **Analytics equivalence gate excludes ban-rate/contested/movement fields, leaving persisted-path denominators outside the correctness comparison** `INFO` · `small`
+- [x] **Analytics equivalence gate excludes ban-rate/contested/movement fields, leaving persisted-path denominators outside the correctness comparison** `INFO` · `small`
   - **Fix:** Add targeted assertions on expected absolute ban-rate/contested/movement values for the seeded dataset (independent of the raw-vs-stats comparison) so those persisted fields have direct coverage.
   - **Why:** A defect specific to the persisted role-independent ban-rate denominator or the movement/previous-tier computation would not be caught by the equivalence tests — those fields are trusted rather than verified here.
   - **Where:** `tests/Transcendence.Service.Core.Tests/ChampionAnalyticsStatsEquivalenceTests.cs:65-93`

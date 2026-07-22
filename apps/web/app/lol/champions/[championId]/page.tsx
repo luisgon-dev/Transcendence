@@ -545,8 +545,6 @@ async function ChampionSections({
 
   return (
     <>
-      <ChampionTrendChart championName={champName} trend={trend} />
-
       {queueOption.hasRoles ? (
         <ChampionSynergyPanel
           championName={champName}
@@ -727,6 +725,9 @@ async function ChampionSections({
           )}
         </Card> : null}
       </div>
+
+      {/* Patch history is useful context, but secondary to the current-patch decisions above. */}
+      <ChampionTrendChart championName={champName} trend={trend} />
     </>
   );
 }
@@ -749,14 +750,7 @@ function ChampionHeroMetaSkeleton() {
 function ChampionSectionsSkeleton() {
   return (
     <>
-      <Card className="p-5">
-        <Skeleton className="h-6 w-28" />
-        <div className="mt-4 grid gap-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-10 w-full rounded-md" />
-          ))}
-        </div>
-      </Card>
+      <Skeleton className="h-12 w-full rounded-card" />
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="p-5">
@@ -775,6 +769,11 @@ function ChampionSectionsSkeleton() {
           </div>
         </Card>
       </div>
+
+      <Card className="p-5">
+        <Skeleton className="h-6 w-28" />
+        <Skeleton className="mt-4 h-32 w-full rounded-lg" />
+      </Card>
     </>
   );
 }

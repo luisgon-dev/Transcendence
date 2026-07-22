@@ -15,6 +15,11 @@ public class UserAuthService(
 {
     private const int RefreshTokenDays = 7;
     private const int PasswordIterations = 310_000;
+    // A syntactically valid current-cost hash. The actual hash bytes are deliberately arbitrary:
+    // unknown-account logins verify against it only to consume the same PBKDF2 work as a bad
+    // password for an existing account, without keeping a usable dummy credential in the binary.
+    private const string DummyPasswordHash =
+        "pbkdf2$310000$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
     internal const int MinimumPasswordLength = 12;
     // Per-account brute-force lockout, independent of the per-IP rate limiter.
     private const int MaxFailedLoginAttempts = 10;
@@ -56,7 +61,11 @@ public class UserAuthService(
         var now = DateTime.UtcNow;
         var emailNormalized = NormalizeEmail(request.Email);
         var user = await userAccountRepository.GetByEmailNormalizedAsync(emailNormalized, ct);
-        if (user == null) return null;
+        if (user == null)
+        {
+            _ = VerifyPassword(request.Password, DummyPasswordHash, out _);
+            return null;
+        }
 
         // Per-account lockout: a distributed/rotating-IP brute force against ONE account is throttled
         // here even when each individual IP stays under its own rate-limit partition.

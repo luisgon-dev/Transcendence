@@ -355,6 +355,8 @@ Riot account linking (`UserOnly`):
 Auth behavior notes:
 - Registration duplicate-email responses are intentionally generic (`Registration failed.`).
 - Password minimum length is 12 characters.
+- Login performs a current-cost dummy PBKDF2 verification when the email is unknown, so the invalid-credential response does not reveal account existence through a cheap early return.
+- Registration still returns `409 Conflict` for an existing address. This is an intentional product tradeoff until an email-verification flow can provide a genuinely uniform accepted response without returning a session for an existing account.
 - Password-reset tokens are random, stored only as SHA-256 hashes, expire after the configured lifetime (30 minutes by default), and are single-use. Completing a reset revokes every active refresh token for the account.
 
 ### Admin Operations (`AdminOnly`)

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Cryptography;
+using System.Diagnostics;
 using Transcendence.Data.Models.Auth;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Implementations;
@@ -65,6 +66,20 @@ public sealed class AuthLockoutAndCryptoTests
         await svc.RegisterAsync(new RegisterRequest(Email, Password), default);
 
         (await svc.LoginAsync(new LoginRequest(Email, WrongPassword), default)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Login_with_unknown_account_still_runs_current_cost_password_derivation()
+    {
+        var svc = BuildService();
+        var stopwatch = Stopwatch.StartNew();
+
+        (await svc.LoginAsync(new LoginRequest("missing@example.com", WrongPassword), default)).Should().BeNull();
+
+        stopwatch.Stop();
+        stopwatch.Elapsed.Should().BeGreaterThan(
+            TimeSpan.FromMilliseconds(10),
+            "the unknown-account path must not skip the 310,000-iteration PBKDF2 timing defense");
     }
 
     [Fact]

@@ -172,6 +172,7 @@ public sealed class RateGateBackpressureTests
             summonerRepository: Mock.Of<ISummonerRepository>(),
             staticDataService: Mock.Of<IStaticDataService>(),
             rateGate: rateGate.Object,
+            fetchOptions: Options.Create(new MatchFetchOptions()),
             logger: NullLogger<MatchService>.Instance);
 
         var result = await service.FetchMatchWithRetryAsync("NA1_1000000001", "AMERICAS", CancellationToken.None);
@@ -182,6 +183,84 @@ public sealed class RateGateBackpressureTests
         saved.Status.Should().Be(FetchStatus.TemporaryFailure);
         saved.RetryCount.Should().Be(0, "rate-gate backpressure is transient and must never count as a failed attempt");
         saved.Status.Should().NotBe(FetchStatus.PermanentlyUnfetchable);
+    }
+
+    [Fact]
+    public async Task FetchMatchWithRetryAsync_UsesConfiguredRetentionWindow()
+    {
+        await using var context = await CreateContextAsync();
+        var match = new DataMatch
+        {
+            Id = Guid.NewGuid(),
+            MatchId = "NA1_OLD",
+            MatchDate = DateTimeOffset.UtcNow.AddDays(-2).ToUnixTimeMilliseconds(),
+            Status = FetchStatus.Unfetched
+        };
+        context.Matches.Add(match);
+        await context.SaveChangesAsync();
+
+        var repository = new Mock<IMatchRepository>();
+        repository
+            .Setup(r => r.GetMatchByIdAsync(match.MatchId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(match);
+        var gate = new Mock<IRiotRateGate>(MockBehavior.Strict);
+        var service = new MatchService(
+            null!,
+            context,
+            repository.Object,
+            Mock.Of<ISummonerService>(),
+            Mock.Of<ISummonerRepository>(),
+            Mock.Of<IStaticDataService>(),
+            gate.Object,
+            Options.Create(new MatchFetchOptions { RetentionDays = 1, MaxRetryAttempts = 5 }),
+            NullLogger<MatchService>.Instance);
+
+        var result = await service.FetchMatchWithRetryAsync(match.MatchId, "AMERICAS");
+
+        result.Should().BeFalse();
+        match.Status.Should().Be(FetchStatus.OutsideRetentionWindow);
+        match.LastErrorMessage.Should().Contain("1 days");
+        gate.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task FetchMatchWithRetryAsync_UsesConfiguredTerminalRetryCount()
+    {
+        await using var context = await CreateContextAsync();
+        var match = new DataMatch
+        {
+            Id = Guid.NewGuid(),
+            MatchId = "NA1_RETRY",
+            Status = FetchStatus.TemporaryFailure,
+            RetryCount = 1
+        };
+        context.Matches.Add(match);
+        await context.SaveChangesAsync();
+
+        var repository = new Mock<IMatchRepository>();
+        repository
+            .Setup(r => r.GetMatchByIdAsync(match.MatchId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(match);
+        var gate = new Mock<IRiotRateGate>();
+        gate
+            .Setup(g => g.AcquireAsync("AMERICAS", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        var service = new MatchService(
+            null!,
+            context,
+            repository.Object,
+            Mock.Of<ISummonerService>(),
+            Mock.Of<ISummonerRepository>(),
+            Mock.Of<IStaticDataService>(),
+            gate.Object,
+            Options.Create(new MatchFetchOptions { RetentionDays = 730, MaxRetryAttempts = 2 }),
+            NullLogger<MatchService>.Instance);
+
+        var result = await service.FetchMatchWithRetryAsync(match.MatchId, "AMERICAS");
+
+        result.Should().BeFalse();
+        match.RetryCount.Should().Be(2);
+        match.Status.Should().Be(FetchStatus.PermanentlyUnfetchable);
     }
 
     [Fact]

@@ -2,9 +2,11 @@ using Camille.Enums;
 using Camille.RiotGames;
 using Camille.RiotGames.MatchV5;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Repositories.Interfaces;
+using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
 using Transcendence.Service.Core.Services.StaticData.Interfaces;
@@ -22,8 +24,11 @@ public class MatchService(
     ISummonerRepository summonerRepository,
     IStaticDataService staticDataService,
     IRiotRateGate rateGate,
+    IOptions<MatchFetchOptions> fetchOptions,
     ILogger<MatchService> logger) : IMatchService
 {
+    private readonly MatchFetchOptions _fetchOptions = fetchOptions.Value;
+
     public async Task<DataMatch?> GetMatchDetailsAsync(
         string matchId,
         RegionalRoute regionalRoute,
@@ -364,11 +369,12 @@ public class MatchService(
         if (match.MatchDate > 0)
         {
             var matchAge = DateTime.UtcNow - DateTimeOffset.FromUnixTimeMilliseconds(match.MatchDate).UtcDateTime;
-            if (matchAge.TotalDays > 730) // 2 years
+            if (matchAge.TotalDays > Math.Max(1, _fetchOptions.RetentionDays))
             {
                 match.Status = FetchStatus.OutsideRetentionWindow;
                 match.LastAttemptAt = DateTime.UtcNow;
-                match.LastErrorMessage = "Match data outside Riot API 2-year retention window";
+                match.LastErrorMessage =
+                    $"Match data outside configured Riot API retention window ({Math.Max(1, _fetchOptions.RetentionDays)} days).";
 
                 if (match.Id == Guid.Empty)
                 {
@@ -566,7 +572,7 @@ public class MatchService(
             match.RetryCount++;
             match.LastErrorMessage = ex.Message;
 
-            if (match.RetryCount >= 5)
+            if (match.RetryCount >= Math.Max(1, _fetchOptions.MaxRetryAttempts))
             {
                 match.Status = FetchStatus.PermanentlyUnfetchable;
                 logger.LogWarning("Match {MatchId} marked unfetchable after {RetryCount} attempts: {Error}",

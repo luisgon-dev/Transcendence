@@ -146,6 +146,7 @@ builder.Services.Configure<IngestionPriorityPolicyOptions>(
     builder.Configuration.GetSection("Jobs:IngestionPriorityPolicy"));
 builder.Services.Configure<MatchIngestionOptions>(builder.Configuration.GetSection("Jobs:MatchIngestion"));
 builder.Services.Configure<FullHistoryBackfillJobOptions>(builder.Configuration.GetSection("Jobs:FullHistoryBackfill"));
+builder.Services.Configure<MatchFetchOptions>(builder.Configuration.GetSection("Jobs:MatchFetch"));
 builder.Services.Configure<PatchPromotionOptions>(builder.Configuration.GetSection("Jobs:PatchPromotion"));
 builder.Services.Configure<RiotRateGateOptions>(builder.Configuration.GetSection("Jobs:RiotRateGate"));
 builder.Services.Configure<TimelineIngestionOptions>(builder.Configuration.GetSection("Jobs:TimelineIngestion"));

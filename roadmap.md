@@ -555,7 +555,7 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Parameterize a single private method with optional `(long? startMs, long? endMs)` bounds (null = all-time) feeding a shared aggregate projection, and delete the season-specific copies.
   - **Why:** ~130 lines of duplicated aggregation logic. The two champion-stat copies have already drifted in style -- the first uses a `0, // fill KDA after` placeholder then a second `x with` pass (193, 205-210) while the second computes KDA inline (445) -- showing the copies are maintained independently.
   - **Where:** `Transcendence.Service.Core/Services/Analysis/Implementations/SummonerStatsService.cs:66-144 vs 314-394; and 161-211 vs 396-453`
-- [ ] **Operational tunables in MatchService are hardcoded literals while sibling policies are options-bound** `MED` · `small`
+- [x] **Operational tunables in MatchService are hardcoded literals while sibling policies are options-bound** `MED` · `small`
   - **Fix:** Move these into an options record (e.g. MatchFetchOptions { RetentionDays, MaxRetries, BackoffSeconds[] }) bound from appsettings, mirroring PatchPromotionOptions.
   - **Why:** Changing the Riot retention window (a Riot-API policy, not a code invariant) or tuning retry behavior requires a code change + redeploy, and the '730 == 2 years' relationship is only documented in a comment. Inconsistent with the codebase's own configuration convention.
   - **Where:** `Transcendence.Service.Core/Services/RiotApi/Implementations/MatchService.cs:373,549,560-561`

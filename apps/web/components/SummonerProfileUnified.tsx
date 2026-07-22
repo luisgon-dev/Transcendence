@@ -21,8 +21,7 @@ import {
   type RankInfo,
   type RuneStatic,
   type SpellStatic,
-  type SummonerLookupResponse,
-  type SummonerProfileResponse
+  type SummonerLookupResponse
 } from "@/components/lol-profile/shared";
 import {
   useMatchHistory,
@@ -135,13 +134,13 @@ export function SummonerProfileClient({
     if (lookup.profile?.soloRank) entries.push({ label: "Solo/Duo", rank: lookup.profile.soloRank });
     if (lookup.profile?.flexRank) entries.push({ label: "Flex", rank: lookup.profile.flexRank });
     return entries;
-  }, [lookup.profile?.flexRank, lookup.profile?.soloRank]);
+  }, [lookup.profile]);
   const unrankedQueues = useMemo(() => {
     const queues: string[] = [];
     if (!lookup.profile?.soloRank) queues.push("Solo/Duo: Unranked");
     if (!lookup.profile?.flexRank) queues.push("Flex: Unranked");
     return queues;
-  }, [lookup.profile?.flexRank, lookup.profile?.soloRank]);
+  }, [lookup.profile]);
   const dataAge = lookup.profile?.profileAge?.ageDescription ?? "updated recently";
 
   return (

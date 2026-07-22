@@ -40,8 +40,12 @@ public sealed class SummonerConcurrencyTests(PostgresIntegrationFixture fixture)
         var first = await firstContext.Summoners.SingleAsync(x => x.Id == id);
         var second = await secondContext.Summoners.SingleAsync(x => x.Id == id);
         first.Version.Should().NotBe(0, "the uint row-version is populated from PostgreSQL xmin");
-        var earlier = DateTime.UtcNow.AddMinutes(-2);
-        var later = DateTime.UtcNow.AddMinutes(-1);
+        // PostgreSQL timestamp columns persist microseconds while DateTime can carry 100 ns ticks.
+        // Align the fixture values to the provider's real precision so this remains an ordering test,
+        // not a platform-dependent sub-microsecond serialization assertion.
+        var now = TruncateToPostgresPrecision(DateTime.UtcNow);
+        var earlier = now.AddMinutes(-2);
+        var later = now.AddMinutes(-1);
 
         first.LastActiveAtUtc = earlier;
         second.LastActiveAtUtc = later;
@@ -52,6 +56,9 @@ public sealed class SummonerConcurrencyTests(PostgresIntegrationFixture fixture)
         var persisted = await verificationContext.Summoners.AsNoTracking().SingleAsync(x => x.Id == id);
         persisted.LastActiveAtUtc.Should().Be(later);
     }
+
+    private static DateTime TruncateToPostgresPrecision(DateTime value) =>
+        new(value.Ticks - value.Ticks % 10, value.Kind);
 
     private async Task<Guid> SeedSummonerAsync()
     {

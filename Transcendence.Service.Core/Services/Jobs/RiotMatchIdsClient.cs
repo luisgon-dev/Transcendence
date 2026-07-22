@@ -23,16 +23,24 @@ public sealed class RiotMatchIdsClient(LeagueRiotApiContext riotApiContext, IRio
         if (!await rateGate.AcquireAsync(regionalRoute.ToString(), ct))
             return null;
 
-        return await riotApiContext.Api.MatchV5()
-            .GetMatchIdsByPUUIDAsync(
-                regionalRoute,
-                puuid,
-                count,
-                endTimeEpochSeconds,
-                queue,
-                startTimeEpochSeconds,
-                start,
-                type,
-                ct);
+        try
+        {
+            return await riotApiContext.Api.MatchV5()
+                .GetMatchIdsByPUUIDAsync(
+                    regionalRoute,
+                    puuid,
+                    count,
+                    endTimeEpochSeconds,
+                    queue,
+                    startTimeEpochSeconds,
+                    start,
+                    type,
+                    ct);
+        }
+        catch (Exception ex) when (RiotRateLimitHandling.TryGetRetryAfter(ex, out var retryAfter))
+        {
+            rateGate.Pause(regionalRoute.ToString(), retryAfter);
+            return null;
+        }
     }
 }

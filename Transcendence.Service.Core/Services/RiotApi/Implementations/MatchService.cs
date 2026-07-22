@@ -11,6 +11,7 @@ using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
 using Transcendence.Service.Core.Services.StaticData.Interfaces;
 using Match = Transcendence.Data.Models.LoL.Match.Match;
+using RiotMatch = Camille.RiotGames.MatchV5.Match;
 using Summoner = Transcendence.Data.Models.LoL.Account.Summoner;
 
 namespace Transcendence.Service.Core.Services.RiotApi.Implementations;
@@ -29,6 +30,7 @@ public class MatchService(
     ILogger<MatchService> logger) : IMatchService
 {
     private readonly MatchFetchOptions _fetchOptions = fetchOptions.Value;
+    private sealed record RiotMatchFetchResult(RiotMatch? Match, bool DeferredByRateLimit);
 
     public async Task<DataMatch?> GetMatchDetailsAsync(
         string matchId,
@@ -44,9 +46,11 @@ public class MatchService(
             return null;
         }
 
-        // Fetch match from Riot
-        var matchDto = await riotApiContext.Api.MatchV5()
-            .GetMatchAsync(regionalRoute, matchId, cancellationToken);
+        var fetchResult = await FetchMatchAsync(regionalRoute, matchId, cancellationToken);
+        if (fetchResult.DeferredByRateLimit)
+            return null;
+
+        var matchDto = fetchResult.Match;
         if (matchDto == null)
         {
             logger.LogWarning("Riot API returned null for match {MatchId}", matchId);
@@ -91,8 +95,11 @@ public class MatchService(
             return null;
         }
 
-        var matchDto = await riotApiContext.Api.MatchV5()
-            .GetMatchAsync(regionalRoute, matchId, cancellationToken);
+        var fetchResult = await FetchMatchAsync(regionalRoute, matchId, cancellationToken);
+        if (fetchResult.DeferredByRateLimit)
+            return null;
+
+        var matchDto = fetchResult.Match;
         if (matchDto == null)
         {
             logger.LogWarning("[Lightweight] Riot API returned null for match {MatchId}", matchId);
@@ -238,7 +245,18 @@ public class MatchService(
                 return false;
             }
 
-            var matchDto = await riotApiContext.Api.MatchV5().GetMatchAsync(regionalRoute, matchId, cancellationToken);
+            var fetchResult = await FetchMatchAsync(regionalRoute, matchId, cancellationToken);
+            if (fetchResult.DeferredByRateLimit)
+            {
+                match.Status = FetchStatus.TemporaryFailure;
+                match.LastErrorMessage = "Deferred: Riot returned 429; honoring Retry-After.";
+                if (match.Id == Guid.Empty)
+                    context.Matches.Add(match);
+                await context.SaveChangesAsync(cancellationToken);
+                return false;
+            }
+
+            var matchDto = fetchResult.Match;
 
             if (matchDto == null)
             {
@@ -325,6 +343,29 @@ public class MatchService(
 
             await context.SaveChangesAsync(cancellationToken);
             return false;
+        }
+    }
+
+    private async Task<RiotMatchFetchResult> FetchMatchAsync(
+        RegionalRoute regionalRoute,
+        string matchId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var match = await riotApiContext.Api.MatchV5()
+                .GetMatchAsync(regionalRoute, matchId, cancellationToken);
+            return new RiotMatchFetchResult(match, DeferredByRateLimit: false);
+        }
+        catch (Exception ex) when (RiotRateLimitHandling.TryGetRetryAfter(ex, out var retryAfter))
+        {
+            rateGate.Pause(regionalRoute.ToString(), retryAfter);
+            logger.LogWarning(
+                "Riot returned 429 for match {MatchId} ({Region}); pausing that region for {RetryAfterSeconds:F0}s and deferring without a failure.",
+                matchId,
+                regionalRoute,
+                retryAfter.TotalSeconds);
+            return new RiotMatchFetchResult(null, DeferredByRateLimit: true);
         }
     }
 

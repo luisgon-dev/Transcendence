@@ -46,6 +46,17 @@ public class RiotRateGateTests
     }
 
     [Fact]
+    public async Task Pause_DrainsOnlyTheAffectedRegionUntilRetryAfterExpires()
+    {
+        using var gate = Build(burst: 2);
+
+        gate.Pause("AMERICAS", TimeSpan.FromMinutes(1));
+
+        Assert.False(await gate.AcquireAsync("AMERICAS"));
+        Assert.True(await gate.AcquireAsync("EUROPE"));
+    }
+
+    [Fact]
     public async Task NullOrEmptyRoutingKey_DoesNotThrow()
     {
         using var gate = Build(burst: 2);

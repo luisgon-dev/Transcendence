@@ -179,6 +179,28 @@ public class MatchTimelineIngestionJob(
             await db.SaveChangesAsync(ct);
             await writeTx.CommitAsync(ct);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (RiotRateLimitHandling.TryGetRetryAfter(ex, out var retryAfter))
+        {
+            rateGate.Pause(regionalRoute.ToString(), retryAfter);
+            state.LastAttemptAtUtc = DateTime.UtcNow;
+            state.LastError = "Deferred: Riot returned 429; honoring Retry-After.";
+            state.SourcePatch = match.Patch;
+            state.Status = MatchTimelineFetchStatus.TemporaryFailure;
+            await db.SaveChangesAsync(ct);
+
+            backgroundJobClient.Schedule<MatchTimelineIngestionJob>(
+                job => job.IngestMatchTimelineAsync(matchId, CancellationToken.None),
+                retryAfter);
+            logger.LogWarning(
+                "[Timeline] Riot returned 429 for {MatchId} ({Region}); pausing that region for {RetryAfterSeconds:F0}s without consuming a retry attempt.",
+                matchId,
+                regionalRoute,
+                retryAfter.TotalSeconds);
+        }
         catch (Exception ex)
         {
             state.RetryCount++;

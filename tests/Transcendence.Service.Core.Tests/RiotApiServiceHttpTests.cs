@@ -6,6 +6,7 @@ using Camille.RiotGames;
 using Camille.RiotGames.Util;
 using FluentAssertions;
 using Moq;
+using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.Implementations;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
@@ -64,6 +65,34 @@ public class RiotApiServiceHttpTests
     }
 
     [Fact]
+    public async Task MatchIds_OnTooManyRequests_PausesRegionAndReturnsDeferredSentinel()
+    {
+        using var stub = new RiotApiStub
+        {
+            Response = (HttpStatusCode.TooManyRequests, null),
+            RetryAfterSeconds = 7
+        };
+        var gate = new Mock<IRiotRateGate>();
+        gate.Setup(x => x.AcquireAsync("AMERICAS", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        var client = new RiotMatchIdsClient(stub.BuildContext(), gate.Object);
+
+        var result = await client.GetMatchIdsByPuuidAsync(
+            RegionalRoute.AMERICAS,
+            "PUUID-123",
+            20,
+            null,
+            null,
+            null,
+            0,
+            null);
+
+        result.Should().BeNull("a final 429 is retry-later, not end-of-history");
+        gate.Verify(
+            x => x.Pause("AMERICAS", It.Is<TimeSpan>(delay => delay == TimeSpan.FromSeconds(7))),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task GetSummonerByRiotIdAsync_WhenAccountNotFound_ThrowsRiotAccountNotFound()
     {
         // AccountV1 404 -> Camille returns a null account -> service maps it to the typed
@@ -81,12 +110,13 @@ public class RiotApiServiceHttpTests
     /// (the tests above each make a single Riot call before asserting). Camille's <c>ApiUrl</c> has no
     /// <c>{0}</c> placeholder, so the regional route is ignored and every call hits this stub verbatim.
     /// </summary>
-    private sealed class RiotApiStub : IDisposable
+    internal sealed class RiotApiStub : IDisposable
     {
         private readonly HttpListener _listener = new();
         private readonly string _baseUrl;
 
         public (HttpStatusCode Status, string? Body) Response { get; set; } = (HttpStatusCode.OK, "{}");
+        public int? RetryAfterSeconds { get; set; }
 
         public RiotApiStub()
         {
@@ -118,6 +148,8 @@ public class RiotApiServiceHttpTests
 
                 var (status, body) = Response;
                 ctx.Response.StatusCode = (int)status;
+                if (RetryAfterSeconds.HasValue)
+                    ctx.Response.Headers["Retry-After"] = RetryAfterSeconds.Value.ToString();
                 if (!string.IsNullOrEmpty(body))
                 {
                     var bytes = Encoding.UTF8.GetBytes(body);

@@ -13,6 +13,12 @@ public interface IRiotRateGate
     /// max wait — the caller should skip the call and let it be retried later, rather than block forever.
     /// </summary>
     Task<bool> AcquireAsync(string routingKey, CancellationToken ct = default);
+
+    /// <summary>
+    /// Temporarily drains and pauses one routing region after Riot returns a final 429. Other regions
+    /// remain independent and continue using their own budgets.
+    /// </summary>
+    void Pause(string routingKey, TimeSpan retryAfter);
 }
 
 /// <summary>
@@ -41,6 +47,15 @@ public sealed class RiotRateGate(
         return acquired;
     }
 
+    public void Pause(string routingKey, TimeSpan retryAfter)
+    {
+        if (!_options.Enabled)
+            return;
+
+        var key = string.IsNullOrWhiteSpace(routingKey) ? "default" : routingKey.Trim().ToUpperInvariant();
+        _buckets.GetOrAdd(key, _ => new Bucket(_options)).Pause(retryAfter);
+    }
+
     public void Dispose()
     {
         foreach (var bucket in _buckets.Values)
@@ -55,6 +70,7 @@ public sealed class RiotRateGate(
         private readonly int _tokensPerPeriod;
         private readonly int _maxWaitMs;
         private readonly object _refillLock = new();
+        private long _pausedUntilUtcTicks;
 
         public Bucket(RiotRateGateOptions o)
         {
@@ -73,6 +89,9 @@ public sealed class RiotRateGate(
             // so the released amount can never push the semaphore over _maxTokens.
             lock (_refillLock)
             {
+                if (DateTime.UtcNow.Ticks < Volatile.Read(ref _pausedUntilUtcTicks))
+                    return;
+
                 var room = _maxTokens - _tokens.CurrentCount;
                 var release = Math.Min(_tokensPerPeriod, room);
                 if (release > 0)
@@ -82,6 +101,10 @@ public sealed class RiotRateGate(
 
         public async Task<bool> AcquireAsync(CancellationToken ct)
         {
+            var pausedUntilTicks = Volatile.Read(ref _pausedUntilUtcTicks);
+            if (DateTime.UtcNow.Ticks < pausedUntilTicks)
+                return false;
+
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeoutCts.CancelAfter(_maxWaitMs);
             try
@@ -94,6 +117,23 @@ public sealed class RiotRateGate(
                 // Token did not become available within the max wait — reject so the caller skips this call
                 // instead of holding a worker slot indefinitely.
                 return false;
+            }
+        }
+
+        public void Pause(TimeSpan retryAfter)
+        {
+            var boundedDelay = retryAfter <= TimeSpan.Zero ? TimeSpan.FromSeconds(1) : retryAfter;
+            var candidateTicks = DateTime.UtcNow.Add(boundedDelay).Ticks;
+
+            lock (_refillLock)
+            {
+                if (candidateTicks > _pausedUntilUtcTicks)
+                    Volatile.Write(ref _pausedUntilUtcTicks, candidateTicks);
+
+                while (_tokens.Wait(0))
+                {
+                    // Drain burst capacity so no queued call leaks through during Retry-After.
+                }
             }
         }
 

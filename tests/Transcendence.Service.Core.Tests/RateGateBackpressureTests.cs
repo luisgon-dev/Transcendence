@@ -148,6 +148,87 @@ public sealed class RateGateBackpressureTests
     }
 
     [Fact]
+    public async Task FullHistoryBackfill_WhenMatchDetailReturns429_PreservesCursorWithoutRecordingFailure()
+    {
+        await using var context = await CreateContextAsync();
+        var summoner = new Summoner
+        {
+            Id = Guid.NewGuid(),
+            Puuid = "puuid-429",
+            GameName = "RateLimited",
+            TagLine = "NA1",
+            PlatformRegion = "NA1",
+            Region = "AMERICAS"
+        };
+        context.Summoners.Add(summoner);
+        await context.SaveChangesAsync();
+
+        using var stub = new RiotApiServiceHttpTests.RiotApiStub
+        {
+            Response = (System.Net.HttpStatusCode.TooManyRequests, null),
+            RetryAfterSeconds = 11
+        };
+        var matchIds = new Mock<IRiotMatchIdsClient>();
+        matchIds
+            .Setup(client => client.GetMatchIdsByPuuidAsync(
+                It.IsAny<Camille.Enums.RegionalRoute>(),
+                summoner.Puuid,
+                It.IsAny<int>(),
+                It.IsAny<long?>(),
+                It.IsAny<Camille.Enums.Queue?>(),
+                It.IsAny<long?>(),
+                It.IsAny<int>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(["NA1_429"]);
+        var gate = new Mock<IRiotRateGate>();
+        gate.Setup(x => x.AcquireAsync("AMERICAS", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        var locks = new Mock<IRefreshLockRepository>();
+        locks
+            .Setup(repository => repository.TryAcquireAsync(
+                It.IsAny<string>(),
+                It.IsAny<TimeSpan>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        locks
+            .Setup(repository => repository.ReleaseAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        var backgroundJobs = new Mock<IBackgroundJobClient>();
+        backgroundJobs.Setup(client => client.Create(It.IsAny<Job>(), It.IsAny<IState>())).Returns("continuation-job");
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddHybridCache();
+        await using var serviceProvider = services.BuildServiceProvider();
+        var job = new FullHistoryBackfillJob(
+            context,
+            stub.BuildContext(),
+            gate.Object,
+            matchIds.Object,
+            backgroundJobs.Object,
+            serviceProvider.GetRequiredService<HybridCache>(),
+            Options.Create(new FullHistoryBackfillJobOptions
+            {
+                Enabled = true,
+                PageSize = 100,
+                MaxPagesPerRun = 1,
+                MaxFailureRetriesPerRun = 0,
+                MinimumMatchStartEpochSeconds = 0
+            }),
+            locks.Object,
+            NullLogger<FullHistoryBackfillJob>.Instance);
+
+        await job.ProcessAsync(summoner.Id, null, CancellationToken.None);
+
+        var backfill = await context.SummonerFullHistoryBackfills.SingleAsync();
+        backfill.Status.Should().Be(SummonerFullHistoryBackfillStatuses.Running);
+        backfill.CursorEndEpochSeconds.Should().BeNull();
+        backfill.DetailFetchFailures.Should().Be(0);
+        (await context.SummonerMatchFactFetchFailures.CountAsync()).Should().Be(0);
+        gate.Verify(x => x.Pause("AMERICAS", TimeSpan.FromSeconds(11)), Times.Once);
+        backgroundJobs.Verify(client => client.Create(It.IsAny<Job>(), It.IsAny<IState>()), Times.Once);
+    }
+
+    [Fact]
     public async Task FetchMatchWithRetryAsync_WhenRateGateExhausted_DefersAsTemporaryWithoutIncrementingRetryCount()
     {
         await using var context = await CreateContextAsync();
@@ -183,6 +264,44 @@ public sealed class RateGateBackpressureTests
         saved.Status.Should().Be(FetchStatus.TemporaryFailure);
         saved.RetryCount.Should().Be(0, "rate-gate backpressure is transient and must never count as a failed attempt");
         saved.Status.Should().NotBe(FetchStatus.PermanentlyUnfetchable);
+    }
+
+    [Fact]
+    public async Task FetchMatchWithRetryAsync_WhenRiotReturns429_PausesRegionWithoutIncrementingRetryCount()
+    {
+        await using var context = await CreateContextAsync();
+        using var stub = new RiotApiServiceHttpTests.RiotApiStub
+        {
+            Response = (System.Net.HttpStatusCode.TooManyRequests, null),
+            RetryAfterSeconds = 9
+        };
+        var rateGate = new Mock<IRiotRateGate>();
+        rateGate
+            .Setup(g => g.AcquireAsync("AMERICAS", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        var matchRepository = new Mock<IMatchRepository>();
+        matchRepository
+            .Setup(r => r.GetMatchByIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DataMatch?)null);
+        var service = new MatchService(
+            stub.BuildContext(),
+            context,
+            matchRepository.Object,
+            Mock.Of<ISummonerService>(),
+            Mock.Of<ISummonerRepository>(),
+            Mock.Of<IStaticDataService>(),
+            rateGate.Object,
+            Options.Create(new MatchFetchOptions()),
+            NullLogger<MatchService>.Instance);
+
+        var result = await service.FetchMatchWithRetryAsync("NA1_1000000002", "AMERICAS");
+
+        result.Should().BeFalse();
+        var saved = await context.Matches.SingleAsync(m => m.MatchId == "NA1_1000000002");
+        saved.Status.Should().Be(FetchStatus.TemporaryFailure);
+        saved.RetryCount.Should().Be(0);
+        saved.LastErrorMessage.Should().Contain("429");
+        rateGate.Verify(g => g.Pause("AMERICAS", TimeSpan.FromSeconds(9)), Times.Once);
     }
 
     [Fact]

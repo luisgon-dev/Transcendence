@@ -62,8 +62,8 @@ public class UserAuthService(
         // here even when each individual IP stays under its own rate-limit partition.
         if (user.LockoutUntilUtc is { } lockedUntil && lockedUntil > now)
         {
-            logger.LogWarning("Login blocked: account {Email} is locked out until {LockoutUntilUtc:o}.",
-                user.Email, lockedUntil);
+            logger.LogWarning("Login blocked: account {UserAccountId} is locked out until {LockoutUntilUtc:o}.",
+                user.Id, lockedUntil);
             return null;
         }
 
@@ -74,8 +74,8 @@ public class UserAuthService(
             {
                 user.LockoutUntilUtc = now.AddMinutes(LockoutDurationMinutes);
                 logger.LogWarning(
-                    "Account {Email} locked for {Minutes}m after {Attempts} consecutive failed logins.",
-                    user.Email, LockoutDurationMinutes, user.FailedLoginAttempts);
+                    "Account {UserAccountId} locked for {Minutes}m after {Attempts} consecutive failed logins.",
+                    user.Id, LockoutDurationMinutes, user.FailedLoginAttempts);
             }
             user.UpdatedAtUtc = now;
             await userAccountRepository.SaveChangesAsync(ct);
@@ -90,7 +90,7 @@ public class UserAuthService(
         if (storedIterations < PasswordIterations)
         {
             user.PasswordHash = HashPassword(request.Password);
-            logger.LogInformation("Upgraded password hash cost factor for {Email}", user.Email);
+            logger.LogInformation("Upgraded password hash cost factor for user {UserAccountId}", user.Id);
         }
         await EnsureBootstrapAdminRoleAsync(user, ct);
 
@@ -297,6 +297,6 @@ public class UserAuthService(
 
         user.Roles.Add(role);
         await userAccountRepository.AddRoleAsync(role, ct);
-        logger.LogInformation("Granted admin bootstrap role during auth flow for {Email}", user.Email);
+        logger.LogInformation("Granted admin bootstrap role during auth flow for user {UserAccountId}", user.Id);
     }
 }

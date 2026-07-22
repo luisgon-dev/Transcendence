@@ -60,7 +60,7 @@ public class ApiKeyService(
         var bootstrap = configuration[BootstrapKeyConfigPath];
         var devOnly = ParseBool(configuration[BootstrapKeyDevOnlyPath], true);
         if (!string.IsNullOrWhiteSpace(bootstrap) &&
-            string.Equals(bootstrap.Trim(), plaintextKey.Trim(), StringComparison.Ordinal))
+            BootstrapKeysMatch(bootstrap, plaintextKey))
         {
             if (devOnly && !hostEnvironment.IsDevelopment())
             {
@@ -84,6 +84,13 @@ public class ApiKeyService(
         }
 
         return new ApiKeyValidationResult(key.Id, key.Name);
+    }
+
+    internal static bool BootstrapKeysMatch(string configuredKey, string candidateKey)
+    {
+        var configuredHash = SHA256.HashData(Encoding.UTF8.GetBytes(configuredKey.Trim()));
+        var candidateHash = SHA256.HashData(Encoding.UTF8.GetBytes(candidateKey.Trim()));
+        return CryptographicOperations.FixedTimeEquals(configuredHash, candidateHash);
     }
 
     public async Task<IReadOnlyList<ApiKeyListItem>> ListAsync(CancellationToken ct = default)

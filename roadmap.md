@@ -690,11 +690,11 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Compute a dummy PBKDF2 hash on the user-not-found path so login latency is constant regardless of account existence; consider returning a uniform response for register (always 200/accepted, notify by email) if enumeration resistance is desired.
   - **Why:** An attacker can enumerate which emails have accounts (timing on login, status code on register), aiding targeted phishing/credential-stuffing. Low impact given rate limits and no direct data exposure.
   - **Where:** `Transcendence.Service.Core/Services/Auth/Implementations/UserAuthService.cs:50-57; Transcendence.WebAPI/Controllers/AuthController.cs:20-35`
-- [ ] **Bootstrap API key compared with non-constant-time string equality** `LOW` · `trivial`
+- [x] **Bootstrap API key compared with non-constant-time string equality** `LOW` · `trivial`
   - **Fix:** Compare the bootstrap key with CryptographicOperations.FixedTimeEquals over UTF-8 bytes (or hash-then-compare like normal keys), independent of environment.
   - **Why:** If an operator sets Auth:BootstrapApiKeyEnabledInDevelopmentOnly=false and configures a bootstrap key in production, the non-constant-time compare is a (weak, network-noisy) timing oracle toward recovering the app-tier bootstrap key. Low: requires a deliberate insecure config and the bootstrap principal is 'app' role, not admin.
   - **Where:** `Transcendence.Service.Core/Services/Auth/Implementations/ApiKeyService.cs:60-73`
-- [ ] **Account email (PII) written to application logs across auth flows** `LOW` · `trivial`
+- [x] **Account email (PII) written to application logs across auth flows** `LOW` · `trivial`
   - **Fix:** Log the user Guid instead of the email, or hash/redact the local-part, for these operational messages; keep raw email only in the audit trail where an actor identity is required.
   - **Why:** User email addresses accumulate in service logs and the admin log surface, expanding the PII footprint subject to log retention/exfiltration. No credentials or tokens are logged (verified). Low.
   - **Where:** `Transcendence.Service.Core/Services/Auth/Implementations/UserAuthService.cs:64,145,244; AdminBootstrapService.cs:49`

@@ -46,7 +46,7 @@ public class AdminBootstrapService(
             }, ct);
 
             grants++;
-            logger.LogInformation("Granted admin bootstrap role to {Email}", user.Email);
+            logger.LogInformation("Granted admin bootstrap role to user {UserAccountId}", user.Id);
         }
 
         if (grants > 0)

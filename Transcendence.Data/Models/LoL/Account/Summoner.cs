@@ -5,6 +5,11 @@ namespace Transcendence.Data.Models.LoL.Account;
 public class Summoner
 {
     public Guid Id { get; set; }
+    /// <summary>
+    /// PostgreSQL xmin optimistic-concurrency token. Npgsql maps a uint row-version property to the
+    /// table's implicit xmin system column, so no user-defined storage column is required.
+    /// </summary>
+    public uint Version { get; set; }
     public string? RiotSummonerId { get; set; }
     public string? SummonerName { get; set; }
     public int ProfileIconId { get; set; }

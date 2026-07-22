@@ -137,6 +137,20 @@ Operational implication:
 - API-wide exception handling maps known summoner stats compute failures to `500` ProblemDetails with a request trace id.
 - The web BFF/UI consumes ProblemDetails `title`/`detail` fields so user-visible errors still degrade gracefully.
 
+### Write Concurrency Boundaries
+
+- `Summoner` is the genuine multi-writer aggregate and uses PostgreSQL's implicit `xmin` system
+  column as an optimistic-concurrency token. A stale tracked profile write fails fast instead of
+  silently overwriting a newer name, rank, icon, or refresh update.
+- `LastActiveAtUtc` is the sole mergeable `Summoner` field. On an `xmin` collision the context
+  reloads the row and performs one bounded retry only when that timestamp is the only changed
+  property, preserving the later value. A second collision or any profile-field conflict is surfaced
+  to the caller.
+- Other contended workflows use explicit serialization rather than row versions: summoner refreshes
+  and backfills use leased `RefreshLock` ownership, timeline replacement uses a per-match advisory
+  transaction lock, and analytics replacement is a single patch-level transaction. Idempotent
+  aggregate upserts retain their database conflict targets.
+
 ### Refresh Priority Orchestration
 
 - API-triggered summoner refreshes are implicitly high-priority.

@@ -65,6 +65,62 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<AdminAuditEvent> AdminAuditEvents { get; set; }
     public DbSet<LiveGameSnapshot> LiveGameSnapshots { get; set; }
 
+    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await base.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            if (!await TryMergeMonotonicSummonerActivityAsync(exception, cancellationToken))
+                throw;
+
+            // One bounded retry: a second collision is allowed to fail fast and be retried by the
+            // surrounding job. Only LastActiveAtUtc is mergeable; profile fields never silently win.
+            return await base.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private static async Task<bool> TryMergeMonotonicSummonerActivityAsync(
+        DbUpdateConcurrencyException exception,
+        CancellationToken cancellationToken)
+    {
+        const string activityProperty = nameof(Summoner.LastActiveAtUtc);
+        foreach (var entry in exception.Entries)
+        {
+            if (entry.Entity is not Summoner || entry.State != EntityState.Modified)
+                return false;
+
+            var modifiedProperties = entry.Properties
+                .Where(property => property.IsModified)
+                .Select(property => property.Metadata.Name)
+                .ToList();
+            if (modifiedProperties.Count != 1 || modifiedProperties[0] != activityProperty)
+                return false;
+        }
+
+        foreach (var entry in exception.Entries)
+        {
+            var databaseValues = await entry.GetDatabaseValuesAsync(cancellationToken);
+            if (databaseValues == null)
+                return false;
+
+            var proposedActivity = entry.CurrentValues.GetValue<DateTime?>(activityProperty);
+            var databaseActivity = databaseValues.GetValue<DateTime?>(activityProperty);
+            var shouldAdvance = proposedActivity.HasValue
+                                && (!databaseActivity.HasValue || proposedActivity.Value > databaseActivity.Value);
+            var mergedActivity = shouldAdvance ? proposedActivity : databaseActivity;
+
+            entry.OriginalValues.SetValues(databaseValues);
+            entry.CurrentValues.SetValues(databaseValues);
+            entry.CurrentValues[activityProperty] = mergedActivity;
+            entry.Property(activityProperty).IsModified = shouldAdvance;
+        }
+
+        return true;
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Rank>()
@@ -102,6 +158,14 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
         modelBuilder.Entity<Summoner>()
             .Property(s => s.Puuid)
             .IsRequired();
+
+        var summonerVersion = modelBuilder.Entity<Summoner>()
+            .Property(s => s.Version)
+            .IsConcurrencyToken();
+        if (Database.ProviderName == "Npgsql.EntityFrameworkCore.PostgreSQL")
+            summonerVersion.IsRowVersion();
+        else
+            summonerVersion.ValueGeneratedNever();
 
         modelBuilder.Entity<Summoner>()
             .HasIndex(s => s.Puuid)

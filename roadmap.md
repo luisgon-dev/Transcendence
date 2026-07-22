@@ -589,7 +589,7 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > The analytics read surface is, on the whole, thoughtfully engineered: composable query objects fold predicates into single WHEREs, purpose-built covering indexes (with documented prod EXPLAIN wins) back the dominant scans, the precompute-aggregate layer keeps the default read paths off raw match data, AsNoTracking is applied consistently, and match-detail uses AsSplitQuery to avoid cartesian explosion. The gaps are concentrated in (a) the summoner-profile read path, where the hot endpoint tracks and over-fetches an unbounded unused navigation and several aggregates are computed client-side over a summoner's full participant history instead of in SQL, and (b) a raw analytics fallback that materializes an entire scope's distinct-MatchId set into app memory where its sibling paths keep it as a subquery. None are data-loss or security issues; the highest-impact one runs on every profile page load.
 
-- [ ] **Pro champion-playrate fetches all pro participant rows to group in memory** `LOW` · `small`
+- [x] **Pro champion-playrate fetches all pro participant rows to group in memory** `LOW` · `small`
   - **Fix:** Aggregate in SQL: GroupBy(ChampionId) selecting Count(), Sum(Win) and a distinct-Puuid count, returning only the per-champion rows.
   - **Why:** Bounded by roster size and precompute-backed for region=ALL, but the region-specific / uncached path scans and ships every tracked-pro participant row for the patch to compute a small ranked list.
   - **Where:** `Transcendence.Service.Core/Services/Analytics/Implementations/ChampionProComputeService.cs:299-326`

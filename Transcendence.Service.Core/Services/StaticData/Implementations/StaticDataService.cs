@@ -21,8 +21,6 @@ public class StaticDataService(
     ILogger<StaticDataService> logger)
     : IStaticDataService
 {
-    private sealed class NonCacheablePatchFallbackException(string message) : Exception(message);
-
     private static readonly JsonSerializerOptions CaseInsensitiveJsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -150,13 +148,13 @@ public class StaticDataService(
         await MemoizeStaticDataIfAuthoritativeAsync(
             $"static:runes:{patchVersion}",
             patchVersion,
-            ct => FetchStoreRunesAndValidateCacheabilityAsync(patchVersion, ct),
+            ct => FetchAndStoreRunesAsync(patchVersion, ct),
             cancellationToken);
 
         await MemoizeStaticDataIfAuthoritativeAsync(
             $"static:items:v2:{patchVersion}",
             patchVersion,
-            ct => FetchStoreItemsAndValidateCacheabilityAsync(patchVersion, ct),
+            ct => FetchAndStoreItemsAsync(patchVersion, ct),
             cancellationToken);
     }
 
@@ -166,40 +164,24 @@ public class StaticDataService(
         Func<CancellationToken, Task<bool>> fetchAndStore,
         CancellationToken cancellationToken)
     {
-        try
+        var shouldCache = await cacheService.GetOrCreateAsync(
+            cacheKey,
+            fetchAndStore,
+            expiration: TimeSpan.FromDays(30),
+            localExpiration: TimeSpan.FromMinutes(5),
+            tags: [CacheTags.ForPatch(patchVersion)],
+            cancellationToken: cancellationToken);
+
+        if (!shouldCache)
         {
-            await cacheService.GetOrCreateAsync(
-                cacheKey,
-                fetchAndStore,
-                expiration: TimeSpan.FromDays(30),
-                localExpiration: TimeSpan.FromMinutes(5),
-                tags: [CacheTags.ForPatch(patchVersion)],
-                cancellationToken: cancellationToken);
-        }
-        catch (NonCacheablePatchFallbackException ex)
-        {
-            logger.LogWarning(ex,
+            // HybridCache coalesces the fetch but cannot conditionally skip its write. Remove the
+            // short-lived marker immediately so a patch-specific request retries the authoritative
+            // URL later instead of memoizing data returned by CommunityDragon's `latest` fallback.
+            await cacheService.RemoveAsync(cacheKey, cancellationToken);
+            logger.LogWarning(
                 "Community Dragon data for patch '{PatchVersion}' used the 'latest' fallback and was not memoized.",
                 patchVersion);
         }
-    }
-
-    private async Task<bool> FetchStoreRunesAndValidateCacheabilityAsync(string patchVersion, CancellationToken cancellationToken)
-    {
-        var shouldCache = await FetchAndStoreRunesAsync(patchVersion, cancellationToken);
-        if (!shouldCache)
-            throw new NonCacheablePatchFallbackException($"Rune static data for patch '{patchVersion}' used 'latest' fallback.");
-
-        return true;
-    }
-
-    private async Task<bool> FetchStoreItemsAndValidateCacheabilityAsync(string patchVersion, CancellationToken cancellationToken)
-    {
-        var shouldCache = await FetchAndStoreItemsAsync(patchVersion, cancellationToken);
-        if (!shouldCache)
-            throw new NonCacheablePatchFallbackException($"Item static data for patch '{patchVersion}' used 'latest' fallback.");
-
-        return true;
     }
 
     private async Task<string?> FetchLatestPatchVersionAsync(CancellationToken cancellationToken)

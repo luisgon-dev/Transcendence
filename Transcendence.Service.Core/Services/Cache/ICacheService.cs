@@ -10,5 +10,7 @@ public interface ICacheService
         string[]? tags = null,
         CancellationToken cancellationToken = default);
 
+    Task RemoveAsync(string key, CancellationToken cancellationToken = default);
+
     Task RemoveByTagAsync(string tag, CancellationToken cancellationToken = default);
 }

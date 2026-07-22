@@ -559,7 +559,7 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Move these into an options record (e.g. MatchFetchOptions { RetentionDays, MaxRetries, BackoffSeconds[] }) bound from appsettings, mirroring PatchPromotionOptions.
   - **Why:** Changing the Riot retention window (a Riot-API policy, not a code invariant) or tuning retry behavior requires a code change + redeploy, and the '730 == 2 years' relationship is only documented in a comment. Inconsistent with the codebase's own configuration convention.
   - **Where:** `Transcendence.Service.Core/Services/RiotApi/Implementations/MatchService.cs:373,549,560-561`
-- [ ] **NonCacheablePatchFallbackException is used purely as control flow to abort memoization** `LOW` · `small`
+- [x] **NonCacheablePatchFallbackException is used purely as control flow to abort memoization** `LOW` · `small`
   - **Fix:** Have the fetch helpers return the boolean cacheability they already compute, and pass it to a cache API that supports 'compute-but-don't-store' (or gate the SetAsync on the flag) instead of throwing.
   - **Why:** Exceptions-as-control-flow obscures the happy path, costs stack-unwinding on a routine branch, and couples the two helpers through a private exception type rather than an explicit return contract.
   - **Where:** `Transcendence.Service.Core/Services/StaticData/Implementations/StaticDataService.cs:186-202, 162-184`

@@ -39,10 +39,7 @@ public class RefreshPrecomputedAnalyticsJob(
             return;
         }
 
-        var result = await refresher.RefreshTabularCoreAsync(patch, ct);
-        var matchupRows = await refresher.RefreshMatchupsAsync(patch, ct);
-        var buildRows = await refresher.RefreshBuildsAsync(patch, ct);
-        var proRows = await refresher.RefreshProSurfacesAsync(patch, ct);
+        var result = await refresher.RefreshAllAsync(patch, ct);
 
         // Now that the precomputed atoms for this patch are committed, drop the patch-scoped
         // analytics read-cache so the served data and the "updated N ago" freshness label advance
@@ -52,6 +49,13 @@ public class RefreshPrecomputedAnalyticsJob(
 
         logger.LogInformation(
             "Precompute refresh patch {Patch} completed in {ElapsedMs}ms: {RoleTier} role-tier, {ScopeMatch} scope-match, {Ban} ban, {Matchup} matchup, {Build} build, {Pro} pro rows.",
-            patch, stopwatch.ElapsedMilliseconds, result.RoleTierRows, result.ScopeMatchCountRows, result.BanScopeRows, matchupRows, buildRows, proRows);
+            patch,
+            stopwatch.ElapsedMilliseconds,
+            result.Core.RoleTierRows,
+            result.Core.ScopeMatchCountRows,
+            result.Core.BanScopeRows,
+            result.MatchupRows,
+            result.BuildRows,
+            result.ProRows);
     }
 }

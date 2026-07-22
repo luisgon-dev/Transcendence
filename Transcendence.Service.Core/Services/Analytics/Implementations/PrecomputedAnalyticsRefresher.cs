@@ -71,6 +71,27 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
         _logger = logger;
     }
 
+    public async Task<PrecomputedAnalyticsFullRefreshResult> RefreshAllAsync(string patch, CancellationToken ct)
+    {
+        PrecomputedAnalyticsRefreshResult core = null!;
+        var matchupRows = 0;
+        var buildRows = 0;
+        var proRows = 0;
+
+        await ExecuteInTransactionIfNeededAsync(async () =>
+        {
+            // Builds read the tabular atoms produced by the first phase, so ordering is a contract.
+            // Keeping all four replacements in one transaction also means external readers retain the
+            // prior complete patch snapshot until every phase succeeds.
+            core = await RefreshTabularCoreAsync(patch, ct);
+            matchupRows = await RefreshMatchupsAsync(patch, ct);
+            buildRows = await RefreshBuildsAsync(patch, ct);
+            proRows = await RefreshProSurfacesAsync(patch, ct);
+        }, ct);
+
+        return new PrecomputedAnalyticsFullRefreshResult(core, matchupRows, buildRows, proRows);
+    }
+
     public async Task<PrecomputedAnalyticsRefreshResult> RefreshTabularCoreAsync(string patch, CancellationToken ct)
     {
         var computedAt = DateTime.UtcNow;
@@ -92,22 +113,19 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
         // Tier grades are scored from the atoms just built (no extra DB round-trip) and persisted in the same
         // transaction so a region=ALL read never sees new atoms paired with a stale/absent grade.
 
-        await using var tx = await _context.Database.BeginTransactionAsync(ct);
+        await ExecuteInTransactionIfNeededAsync(async () =>
+        {
+            await _context.ChampionRoleTierStats.Where(x => x.Patch == patch).ExecuteDeleteAsync(ct);
+            await _context.ScopeMatchCountStats.Where(x => x.Patch == patch).ExecuteDeleteAsync(ct);
+            await _context.ChampionBanScopeStats.Where(x => x.Patch == patch).ExecuteDeleteAsync(ct);
+            await _context.ChampionScopeGradeStats.Where(x => x.Patch == patch).ExecuteDeleteAsync(ct);
 
-        // Replace this patch's rows transactionally: a reader sees either the whole previous snapshot or the
-        // whole new one, never a half-written patch.
-        await _context.ChampionRoleTierStats.Where(x => x.Patch == patch).ExecuteDeleteAsync(ct);
-        await _context.ScopeMatchCountStats.Where(x => x.Patch == patch).ExecuteDeleteAsync(ct);
-        await _context.ChampionBanScopeStats.Where(x => x.Patch == patch).ExecuteDeleteAsync(ct);
-        await _context.ChampionScopeGradeStats.Where(x => x.Patch == patch).ExecuteDeleteAsync(ct);
-
-        _context.ChampionRoleTierStats.AddRange(roleTierRows);
-        _context.ScopeMatchCountStats.AddRange(scopeMatchRows);
-        _context.ChampionBanScopeStats.AddRange(banRows);
-        _context.ChampionScopeGradeStats.AddRange(gradeRows);
-        await _context.SaveChangesAsync(ct);
-
-        await tx.CommitAsync(ct);
+            _context.ChampionRoleTierStats.AddRange(roleTierRows);
+            _context.ScopeMatchCountStats.AddRange(scopeMatchRows);
+            _context.ChampionBanScopeStats.AddRange(banRows);
+            _context.ChampionScopeGradeStats.AddRange(gradeRows);
+            await _context.SaveChangesAsync(ct);
+        }, ct);
 
         _logger.LogInformation(
             "Precompute refresh (tabular core) patch {Patch}: {RoleTier} role-tier, {ScopeMatch} scope-match, {Ban} ban, {Grade} grade rows",
@@ -225,11 +243,12 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
             ComputedAtUtc = computedAt
         }).ToList();
 
-        await using var tx = await _context.Database.BeginTransactionAsync(ct);
-        await _context.ChampionMatchupStats.Where(x => x.Patch == patch).ExecuteDeleteAsync(ct);
-        _context.ChampionMatchupStats.AddRange(rows);
-        await _context.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
+        await ExecuteInTransactionIfNeededAsync(async () =>
+        {
+            await _context.ChampionMatchupStats.Where(x => x.Patch == patch).ExecuteDeleteAsync(ct);
+            _context.ChampionMatchupStats.AddRange(rows);
+            await _context.SaveChangesAsync(ct);
+        }, ct);
 
         _logger.LogInformation("Precompute refresh (matchups) patch {Patch}: {Rows} rows", patch, rows.Count);
         return rows.Count;
@@ -271,11 +290,12 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
             }
         }
 
-        await using var tx = await _context.Database.BeginTransactionAsync(ct);
-        await _context.ChampionBuildSnapshots.Where(x => x.Patch == patch).ExecuteDeleteAsync(ct);
-        _context.ChampionBuildSnapshots.AddRange(rows);
-        await _context.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
+        await ExecuteInTransactionIfNeededAsync(async () =>
+        {
+            await _context.ChampionBuildSnapshots.Where(x => x.Patch == patch).ExecuteDeleteAsync(ct);
+            _context.ChampionBuildSnapshots.AddRange(rows);
+            await _context.SaveChangesAsync(ct);
+        }, ct);
 
         _logger.LogInformation("Precompute refresh (builds) patch {Patch}: {Rows} snapshots ({Pairs} champion-roles)",
             patch, rows.Count, pairs.Count);
@@ -339,15 +359,29 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
             }
         }
 
-        await using var tx = await _context.Database.BeginTransactionAsync(ct);
-        await _context.AnalyticsResponseSnapshots.Where(x => x.Patch == patch).ExecuteDeleteAsync(ct);
-        _context.AnalyticsResponseSnapshots.AddRange(rows);
-        await _context.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
+        await ExecuteInTransactionIfNeededAsync(async () =>
+        {
+            await _context.AnalyticsResponseSnapshots.Where(x => x.Patch == patch).ExecuteDeleteAsync(ct);
+            _context.AnalyticsResponseSnapshots.AddRange(rows);
+            await _context.SaveChangesAsync(ct);
+        }, ct);
 
         _logger.LogInformation("Precompute refresh (pro surfaces) patch {Patch}: {Rows} snapshots ({Pairs} pro champion-roles)",
             patch, rows.Count, pairs.Count);
         return rows.Count;
+    }
+
+    private async Task ExecuteInTransactionIfNeededAsync(Func<Task> action, CancellationToken ct)
+    {
+        if (_context.Database.CurrentTransaction != null)
+        {
+            await action();
+            return;
+        }
+
+        await using var transaction = await _context.Database.BeginTransactionAsync(ct);
+        await action();
+        await transaction.CommitAsync(ct);
     }
 
     // ---- ChampionRoleTierStat: per (region, current-tier, champion, role) Games/Wins (additive) ----

@@ -498,6 +498,13 @@ Backend uses a layered approach (see source and README):
 
 ## Data Access
 
+Summoner analysis is split by read concern. `ISummonerStatsService` owns summoner-scoped aggregates
+(overview, champions, roles, rank/mastery/social summaries, and active-season state), while
+`ISummonerMatchHistoryService` owns paged match history plus immutable match detail/timeline rendering.
+The WebAPI controller and profile facade inject only the surfaces they consume. All-time and season
+fallback aggregates share the same optional `(startMatchDateMs, endMatchDateMs)` query path, preventing
+the two scopes from drifting while keeping the aggregation server-side.
+
 The codebase deliberately does **not** route all persistence through a repository layer. EF Core's
 `DbContext` is already a unit-of-work + repository, and testability is provided by substituting the
 provider (`SqliteCompatibleTranscendenceContext` backs the analytics/service tests against a real

@@ -17,8 +17,7 @@ namespace Transcendence.Service.Core.Services.Analysis.Implementations;
 
 public class SummonerStatsService(
     TranscendenceContext db,
-    HybridCache cache,
-    ILogger<SummonerStatsService> logger)
+    HybridCache cache)
     : ISummonerStatsService
 {
     // Cache key prefixes
@@ -30,9 +29,6 @@ public class SummonerStatsService(
     private const string ActiveSeasonProfileCacheKeyPrefix = "stats:active-season-profile:";
     private const string PlayedWithCacheKeyPrefix = "stats:played-with:";
     private const string MasteryCacheKeyPrefix = "stats:mastery:";
-    private const string RecentMatchesCacheKeyPrefix = "stats:recent:";
-    private const string MatchDetailCacheKeyPrefix = "match:detail:";
-    private const string MatchTimelineCacheKeyPrefix = "match:timeline:";
     private const string SummonerStatsCacheTagPrefix = "summoner-stats:";
 
     // Stats cache options: 5min total, 2min L1 (stats change on refresh)
@@ -49,13 +45,6 @@ public class SummonerStatsService(
     {
         Expiration = ActiveSeasonCacheBucket,
         LocalCacheExpiration = TimeSpan.FromMinutes(2)
-    };
-
-    // Match detail cache options: 1hr total, 15min L1 (match data is immutable)
-    private static readonly HybridCacheEntryOptions MatchDetailCacheOptions = new()
-    {
-        Expiration = TimeSpan.FromHours(1),
-        LocalCacheExpiration = TimeSpan.FromMinutes(15)
     };
 
     public async Task<SummonerOverviewStats> GetSummonerOverviewAsync(Guid summonerId, int recentGamesCount,
@@ -75,84 +64,13 @@ public class SummonerStatsService(
     }
 
     private async Task<SummonerOverviewStats> ComputeOverviewAsync(Guid summonerId, int recentGamesCount,
-        CancellationToken ct)
-    {
-        var baseQuery = db.MatchParticipants
-            .AsNoTracking()
-            .Where(mp => mp.SummonerId == summonerId)
-            .InRankedSoloQueue()
-            .Select(mp => new
-            {
-                mp.Win,
-                mp.Kills,
-                mp.Deaths,
-                mp.Assists,
-                mp.VisionScore,
-                mp.TotalDamageDealtToChampions,
-                Cs = mp.TotalMinionsKilled + mp.NeutralMinionsKilled,
-                DurationSeconds = mp.Match.Duration
-            });
-
-        var aggregate = await baseQuery
-            .GroupBy(_ => 1)
-            .Select(g => new
-            {
-                Total = g.Count(),
-                Wins = g.Sum(x => x.Win ? 1 : 0),
-                Losses = g.Sum(x => x.Win ? 0 : 1),
-                AvgKills = g.Average(x => (double)x.Kills),
-                AvgDeaths = g.Average(x => (double)x.Deaths),
-                AvgAssists = g.Average(x => (double)x.Assists),
-                AvgVision = g.Average(x => (double)x.VisionScore),
-                AvgDamage = g.Average(x => (double)x.TotalDamageDealtToChampions),
-                AvgCsPerMin = g.Average(x => x.DurationSeconds > 0 ? x.Cs / (x.DurationSeconds / 60d) : 0d),
-                AvgDurationMin = g.Average(x => x.DurationSeconds / 60.0)
-            })
-            .SingleOrDefaultAsync(ct);
-
-        var total = aggregate?.Total ?? 0;
-        var wins = aggregate?.Wins ?? 0;
-        var losses = aggregate?.Losses ?? 0;
-        var wr = total > 0 ? (double)wins / total * 100.0 : 0.0;
-
-        var recent = await db.MatchParticipants
-            .AsNoTracking()
-            .Where(mp => mp.SummonerId == summonerId)
-            .InRankedSoloQueue()
-            .OrderByDescending(mp => mp.Match.MatchDate)
-            .ThenByDescending(mp => mp.Match.MatchId)
-            .Select(mp => new RecentPerformancePoint(
-                mp.Match.MatchId!,
-                mp.Win,
-                mp.Kills,
-                mp.Deaths,
-                mp.Assists,
-                mp.Match.Duration > 0
-                    ? (mp.TotalMinionsKilled + mp.NeutralMinionsKilled) / (mp.Match.Duration / 60.0)
-                    : 0.0,
-                mp.VisionScore,
-                mp.TotalDamageDealtToChampions
-            ))
-            .Take(recentGamesCount)
-            .ToListAsync(ct);
-
-        return new SummonerOverviewStats(
+        CancellationToken ct) =>
+        await ComputeOverviewFromParticipantsAsync(
             summonerId,
-            total,
-            wins,
-            losses,
-            wr,
-            aggregate?.AvgKills ?? 0,
-            aggregate?.AvgDeaths ?? 0,
-            aggregate?.AvgAssists ?? 0,
-            CalcKdaRatio(aggregate?.AvgKills ?? 0, aggregate?.AvgDeaths ?? 0, aggregate?.AvgAssists ?? 0),
-            aggregate?.AvgCsPerMin ?? 0,
-            aggregate?.AvgVision ?? 0,
-            aggregate?.AvgDamage ?? 0,
-            aggregate?.AvgDurationMin ?? 0,
-            recent
-        );
-    }
+            recentGamesCount,
+            startMatchDateMs: null,
+            endMatchDateMs: null,
+            ct);
 
     public async Task<IReadOnlyList<ChampionStat>> GetChampionStatsAsync(Guid summonerId, int top, CancellationToken ct)
     {
@@ -170,61 +88,13 @@ public class SummonerStatsService(
     }
 
     private async Task<IReadOnlyList<ChampionStat>> ComputeChampionStatsAsync(Guid summonerId, int top,
-        CancellationToken ct)
-    {
-        // Aggregate server-side (GROUP BY ChampionId) so only the grouped rows leave the DB.
-        // Mirrors the ComputeOverviewAsync aggregate pattern (project → GroupBy → Select).
-        var rows = await db.MatchParticipants
-            .AsNoTracking()
-            .Where(mp => mp.SummonerId == summonerId)
-            .InRankedSoloQueue()
-            .Select(mp => new
-            {
-                mp.ChampionId,
-                mp.Win,
-                mp.Kills,
-                mp.Deaths,
-                mp.Assists,
-                mp.VisionScore,
-                mp.TotalDamageDealtToChampions,
-                Cs = mp.TotalMinionsKilled + mp.NeutralMinionsKilled,
-                MatchDuration = mp.Match.Duration
-            })
-            .GroupBy(x => x.ChampionId)
-            .Select(g => new
-            {
-                ChampionId = g.Key,
-                Games = g.Count(),
-                Wins = g.Sum(x => x.Win ? 1 : 0),
-                AvgKills = g.Average(x => (double)x.Kills),
-                AvgDeaths = g.Average(x => (double)x.Deaths),
-                AvgAssists = g.Average(x => (double)x.Assists),
-                AvgCsPerMin = g.Average(x => x.MatchDuration > 0
-                    ? x.Cs / (x.MatchDuration / 60.0)
-                    : 0.0),
-                AvgVision = g.Average(x => (double)x.VisionScore),
-                AvgDamage = g.Average(x => (double)x.TotalDamageDealtToChampions)
-            })
-            .OrderByDescending(x => x.Games)
-            .Take(top)
-            .ToListAsync(ct);
-
-        return rows
-            .Select(x => new ChampionStat(
-                x.ChampionId,
-                x.Games,
-                x.Wins,
-                x.Games - x.Wins,
-                x.Games > 0 ? (double)x.Wins / x.Games * 100.0 : 0.0,
-                x.AvgKills,
-                x.AvgDeaths,
-                x.AvgAssists,
-                CalcKdaRatio(x.AvgKills, x.AvgDeaths, x.AvgAssists),
-                x.AvgCsPerMin,
-                x.AvgVision,
-                x.AvgDamage))
-            .ToList();
-    }
+        CancellationToken ct) =>
+        await ComputeChampionStatsFromParticipantsAsync(
+            summonerId,
+            top,
+            startMatchDateMs: null,
+            endMatchDateMs: null,
+            ct);
 
     public async Task<SummonerSeasonProfileStats> GetActiveSeasonProfileStatsAsync(
         Guid summonerId,
@@ -340,16 +210,17 @@ public class SummonerStatsService(
     private async Task<SummonerOverviewStats> ComputeOverviewFromParticipantsAsync(
         Guid summonerId,
         int recentGamesCount,
-        long startMatchDateMs,
+        long? startMatchDateMs,
         long? endMatchDateMs,
         CancellationToken ct)
     {
         var baseQuery = db.MatchParticipants
             .AsNoTracking()
             .Where(mp => mp.SummonerId == summonerId)
-            .InRankedSoloQueue()
-            .Where(mp => mp.Match.MatchDate >= startMatchDateMs);
+            .InRankedSoloQueue();
 
+        if (startMatchDateMs.HasValue)
+            baseQuery = baseQuery.Where(mp => mp.Match.MatchDate >= startMatchDateMs.Value);
         if (endMatchDateMs.HasValue)
             baseQuery = baseQuery.Where(mp => mp.Match.MatchDate < endMatchDateMs.Value);
 
@@ -422,20 +293,21 @@ public class SummonerStatsService(
     private async Task<IReadOnlyList<ChampionStat>> ComputeChampionStatsFromParticipantsAsync(
         Guid summonerId,
         int top,
-        long startMatchDateMs,
+        long? startMatchDateMs,
         long? endMatchDateMs,
         CancellationToken ct)
     {
         var query = db.MatchParticipants
             .AsNoTracking()
             .Where(mp => mp.SummonerId == summonerId)
-            .InRankedSoloQueue()
-            .Where(mp => mp.Match.MatchDate >= startMatchDateMs);
+            .InRankedSoloQueue();
 
+        if (startMatchDateMs.HasValue)
+            query = query.Where(mp => mp.Match.MatchDate >= startMatchDateMs.Value);
         if (endMatchDateMs.HasValue)
             query = query.Where(mp => mp.Match.MatchDate < endMatchDateMs.Value);
 
-        var games = await query
+        var rows = await query
             .Select(mp => new
             {
                 mp.ChampionId,
@@ -448,33 +320,39 @@ public class SummonerStatsService(
                 Cs = mp.TotalMinionsKilled + mp.NeutralMinionsKilled,
                 MatchDuration = mp.Match.Duration
             })
-            .ToListAsync(ct);
-
-        return games
             .GroupBy(x => x.ChampionId)
-            .Select(g =>
+            .Select(g => new
             {
-                var count = g.Count();
-                var wins = g.Sum(x => x.Win ? 1 : 0);
-                var avgKills = g.Average(x => (double)x.Kills);
-                var avgDeaths = g.Average(x => (double)x.Deaths);
-                var avgAssists = g.Average(x => (double)x.Assists);
-                return new ChampionStat(
-                    g.Key,
-                    count,
-                    wins,
-                    count - wins,
-                    count > 0 ? (double)wins / count * 100.0 : 0.0,
-                    avgKills,
-                    avgDeaths,
-                    avgAssists,
-                    CalcKdaRatio(avgKills, avgDeaths, avgAssists),
-                    g.Average(x => x.MatchDuration > 0 ? x.Cs / (x.MatchDuration / 60.0) : 0.0),
-                    g.Average(x => (double)x.VisionScore),
-                    g.Average(x => (double)x.TotalDamageDealtToChampions));
+                ChampionId = g.Key,
+                Games = g.Count(),
+                Wins = g.Sum(x => x.Win ? 1 : 0),
+                AvgKills = g.Average(x => (double)x.Kills),
+                AvgDeaths = g.Average(x => (double)x.Deaths),
+                AvgAssists = g.Average(x => (double)x.Assists),
+                AvgCsPerMin = g.Average(x => x.MatchDuration > 0
+                    ? x.Cs / (x.MatchDuration / 60.0)
+                    : 0.0),
+                AvgVision = g.Average(x => (double)x.VisionScore),
+                AvgDamage = g.Average(x => (double)x.TotalDamageDealtToChampions)
             })
             .OrderByDescending(x => x.Games)
             .Take(top)
+            .ToListAsync(ct);
+
+        return rows
+            .Select(x => new ChampionStat(
+                x.ChampionId,
+                x.Games,
+                x.Wins,
+                x.Games - x.Wins,
+                x.Games > 0 ? (double)x.Wins / x.Games * 100.0 : 0.0,
+                x.AvgKills,
+                x.AvgDeaths,
+                x.AvgAssists,
+                CalcKdaRatio(x.AvgKills, x.AvgDeaths, x.AvgAssists),
+                x.AvgCsPerMin,
+                x.AvgVision,
+                x.AvgDamage))
             .ToList();
     }
 
@@ -788,6 +666,66 @@ public class SummonerStatsService(
                 cm.TokensEarned))
             .ToListAsync(ct);
     }
+
+    private static double CalcKdaRatio(double kills, double deaths, double assists) =>
+        (kills + assists) / Math.Max(1.0, deaths);
+
+    private static string BuildSummonerStatsTag(Guid summonerId) => $"{SummonerStatsCacheTagPrefix}{summonerId}";
+
+    private static string NormalizeTeamPosition(string? teamPosition)
+    {
+        if (string.IsNullOrWhiteSpace(teamPosition))
+            return "UNKNOWN";
+
+        return teamPosition.Trim().ToUpperInvariant();
+    }
+
+    private static async Task<T> ExecuteStatsRequestAsync<T>(
+        string failureMessage,
+        Func<CancellationToken, Task<T>> operation,
+        CancellationToken ct)
+    {
+        try
+        {
+            return await operation(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (SummonerStatsComputationException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new SummonerStatsComputationException(failureMessage, ex);
+        }
+    }
+}
+
+public class SummonerMatchHistoryService(
+    TranscendenceContext db,
+    HybridCache cache,
+    ILogger<SummonerMatchHistoryService> logger)
+    : ISummonerMatchHistoryService
+{
+    private const string RecentMatchesCacheKeyPrefix = "stats:recent:";
+    private const string MatchDetailCacheKeyPrefix = "match:detail:";
+    private const string MatchTimelineCacheKeyPrefix = "match:timeline:";
+    private const string SummonerStatsCacheTagPrefix = "summoner-stats:";
+
+    private static readonly HybridCacheEntryOptions StatsCacheOptions = new()
+    {
+        Expiration = TimeSpan.FromMinutes(5),
+        LocalCacheExpiration = TimeSpan.FromMinutes(2)
+    };
+
+    private static readonly HybridCacheEntryOptions MatchDetailCacheOptions = new()
+    {
+        Expiration = TimeSpan.FromHours(1),
+        LocalCacheExpiration = TimeSpan.FromMinutes(15)
+    };
 
     public async Task<PagedResult<RecentMatchSummary>> GetRecentMatchesAsync(
         Guid summonerId,
@@ -1327,25 +1265,12 @@ public class SummonerStatsService(
             mapped.StatShards);
     }
 
-    private static double CalcKdaRatio(double kills, double deaths, double assists)
-    {
-        return (kills + assists) / Math.Max(1.0, deaths);
-    }
-
     private static string NormalizePatchVersion(string? patchVersion)
     {
         return string.IsNullOrWhiteSpace(patchVersion) ? string.Empty : patchVersion.Trim();
     }
 
     private static string BuildSummonerStatsTag(Guid summonerId) => $"{SummonerStatsCacheTagPrefix}{summonerId}";
-
-    private static string NormalizeTeamPosition(string? teamPosition)
-    {
-        if (string.IsNullOrWhiteSpace(teamPosition))
-            return "UNKNOWN";
-
-        return teamPosition.Trim().ToUpperInvariant();
-    }
 
     private static string NormalizeQueueFamily(string? queueFamily)
     {

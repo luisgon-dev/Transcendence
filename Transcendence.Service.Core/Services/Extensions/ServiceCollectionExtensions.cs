@@ -42,6 +42,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICacheService, CacheService>();
         services.AddScoped<IChampionLoadoutAnalysisService, ChampionLoadoutAnalysisService>();
         services.AddScoped<ISummonerStatsService, SummonerStatsService>();
+        services.AddScoped<ISummonerMatchHistoryService, SummonerMatchHistoryService>();
         services.AddScoped<IApiKeyService, ApiKeyService>();
         services.AddScoped<IAdminAuditService, AdminAuditService>();
         services.AddScoped<IAdminBootstrapService, AdminBootstrapService>();

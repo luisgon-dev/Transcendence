@@ -129,7 +129,7 @@ public class SummonerStatsServiceTests
 
         await harness.Db.SaveChangesAsync();
 
-        var result = await harness.Service.GetRecentMatchesAsync(
+        var result = await harness.MatchHistory.GetRecentMatchesAsync(
             summoner.Id,
             page: 0,
             pageSize: 999,
@@ -188,7 +188,7 @@ public class SummonerStatsServiceTests
     {
         await using var harness = await SummonerStatsHarness.CreateAsync();
 
-        var result = await harness.Service.GetMatchDetailAsync("NA1_404", CancellationToken.None);
+        var result = await harness.MatchHistory.GetMatchDetailAsync("NA1_404", CancellationToken.None);
 
         result.Should().BeNull();
     }
@@ -309,7 +309,7 @@ public class SummonerStatsServiceTests
         await harness.Db.SaveChangesAsync();
         var matchId = participant.Match.MatchId!;
 
-        var detail = await harness.Service.GetMatchDetailAsync(matchId, CancellationToken.None);
+        var detail = await harness.MatchHistory.GetMatchDetailAsync(matchId, CancellationToken.None);
 
         detail.Should().NotBeNull();
         detail!.Participants.Should().ContainSingle();
@@ -383,7 +383,7 @@ public class SummonerStatsServiceTests
 
         await harness.Db.SaveChangesAsync();
 
-        var detail = await harness.Service.GetMatchDetailAsync(participant.Match.MatchId!, CancellationToken.None);
+        var detail = await harness.MatchHistory.GetMatchDetailAsync(participant.Match.MatchId!, CancellationToken.None);
 
         detail.Should().NotBeNull();
         detail!.Bans.Should().HaveCount(2);
@@ -426,7 +426,7 @@ public class SummonerStatsServiceTests
 
         await harness.Db.SaveChangesAsync();
 
-        var detail = await harness.Service.GetMatchDetailAsync(participant.Match.MatchId!, CancellationToken.None);
+        var detail = await harness.MatchHistory.GetMatchDetailAsync(participant.Match.MatchId!, CancellationToken.None);
 
         detail.Should().NotBeNull();
         var p = detail!.Participants.Single();
@@ -476,7 +476,7 @@ public class SummonerStatsServiceTests
 
         await harness.Db.SaveChangesAsync();
 
-        var result = await harness.Service.GetMatchTimelineAsync("NA1_tl1", CancellationToken.None);
+        var result = await harness.MatchHistory.GetMatchTimelineAsync("NA1_tl1", CancellationToken.None);
 
         result.Should().NotBeNull();
         result!.Duration.Should().Be(1800);
@@ -492,7 +492,7 @@ public class SummonerStatsServiceTests
     public async Task GetMatchTimelineAsync_ReturnsNullForUnknownMatch()
     {
         await using var harness = await SummonerStatsHarness.CreateAsync();
-        var result = await harness.Service.GetMatchTimelineAsync("NA1_missing", CancellationToken.None);
+        var result = await harness.MatchHistory.GetMatchTimelineAsync("NA1_missing", CancellationToken.None);
         result.Should().BeNull();
     }
 
@@ -614,16 +614,19 @@ public class SummonerStatsServiceTests
             SqliteConnection connection,
             SqliteCompatibleTranscendenceContext db,
             ServiceProvider services,
-            SummonerStatsService service)
+            SummonerStatsService service,
+            SummonerMatchHistoryService matchHistory)
         {
             _connection = connection;
             Db = db;
             _services = services;
             Service = service;
+            MatchHistory = matchHistory;
         }
 
         public SqliteCompatibleTranscendenceContext Db { get; }
         public SummonerStatsService Service { get; }
+        public SummonerMatchHistoryService MatchHistory { get; }
 
         public static async Task<SummonerStatsHarness> CreateAsync()
         {
@@ -644,10 +647,13 @@ public class SummonerStatsServiceTests
 
             var service = new SummonerStatsService(
                 db,
+                services.GetRequiredService<HybridCache>());
+            var matchHistory = new SummonerMatchHistoryService(
+                db,
                 services.GetRequiredService<HybridCache>(),
-                services.GetRequiredService<ILogger<SummonerStatsService>>());
+                services.GetRequiredService<ILogger<SummonerMatchHistoryService>>());
 
-            return new SummonerStatsHarness(connection, db, services, service);
+            return new SummonerStatsHarness(connection, db, services, service, matchHistory);
         }
 
         public Summoner CreateSummoner()

@@ -251,7 +251,8 @@ public class SummonersControllerTests
         return new SummonersController(
             new SummonerProfileService(
                 effectiveSummonerRepository,
-                statsService ?? Mock.Of<ISummonerStatsService>()),
+                statsService ?? Mock.Of<ISummonerStatsService>(),
+                Mock.Of<ISummonerMatchHistoryService>()),
             new SummonerRefreshCoordinator(
                 effectiveRefreshLockRepository,
                 effectiveBackgroundJobClient,

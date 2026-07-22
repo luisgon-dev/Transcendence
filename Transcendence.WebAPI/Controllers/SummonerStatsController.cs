@@ -10,7 +10,9 @@ namespace Transcendence.WebAPI.Controllers;
 [Route("api/lol/summoners/{summonerId:guid}")]
 [EnableRateLimiting("expensive-read")]
 [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
-public class SummonerStatsController(ISummonerStatsService statsService) : ControllerBase
+public class SummonerStatsController(
+    ISummonerStatsService statsService,
+    ISummonerMatchHistoryService matchHistoryService) : ControllerBase
 {
     /// <summary>
     ///     Gets overall statistics for a summoner.
@@ -114,7 +116,7 @@ public class SummonerStatsController(ISummonerStatsService statsService) : Contr
         [FromQuery] int pageSize = 20, [FromQuery] string? queueFamily = null,
         [FromQuery] List<int>? queueIds = null, CancellationToken ct = default)
     {
-        var result = await statsService.GetRecentMatchesAsync(
+        var result = await matchHistoryService.GetRecentMatchesAsync(
             summonerId,
             page,
             pageSize,
@@ -172,7 +174,7 @@ public class SummonerStatsController(ISummonerStatsService statsService) : Contr
         [FromRoute] string matchId,
         CancellationToken ct = default)
     {
-        var result = await statsService.GetMatchDetailAsync(matchId, ct);
+        var result = await matchHistoryService.GetMatchDetailAsync(matchId, ct);
         if (result == null)
             return NotFound();
 
@@ -191,7 +193,7 @@ public class SummonerStatsController(ISummonerStatsService statsService) : Contr
         [FromRoute] string matchId,
         CancellationToken ct = default)
     {
-        var result = await statsService.GetMatchTimelineAsync(matchId, ct);
+        var result = await matchHistoryService.GetMatchTimelineAsync(matchId, ct);
         if (result == null)
             return NotFound();
 

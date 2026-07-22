@@ -51,20 +51,22 @@ public class SummonerStatsControllerTests
     [Fact]
     public async Task GetMatchDetail_ReturnsNotFoundWhenServiceReturnsNull()
     {
-        var service = new Mock<ISummonerStatsService>();
+        var service = new Mock<ISummonerMatchHistoryService>();
         service.Setup(x => x.GetMatchDetailAsync("NA1_404", It.IsAny<CancellationToken>()))
             .ReturnsAsync((MatchDetailDto?)null);
 
-        var controller = BuildController(service.Object);
+        var controller = BuildController(Mock.Of<ISummonerStatsService>(), service.Object);
 
         var result = await controller.GetMatchDetail(Guid.NewGuid(), "NA1_404", CancellationToken.None);
 
         result.Should().BeOfType<NotFoundResult>();
     }
 
-    private static SummonerStatsController BuildController(ISummonerStatsService service)
+    private static SummonerStatsController BuildController(
+        ISummonerStatsService service,
+        ISummonerMatchHistoryService? matchHistoryService = null)
     {
-        return new SummonerStatsController(service)
+        return new SummonerStatsController(service, matchHistoryService ?? Mock.Of<ISummonerMatchHistoryService>())
         {
             ControllerContext = new ControllerContext
             {

@@ -85,8 +85,8 @@ Transcendence is a backend + web monorepo:
 ## Data Flow: Summoner Refresh
 
 1. Client requests a summoner by Riot ID:
-   - If data exists in DB: return immediately
-   - If missing: return `202 Accepted` indicating refresh is needed
+   - The read always returns `200 OK` with a typed `SummonerLookupResponse` discriminator
+   - `ready` includes the profile, `refreshing` includes a retry hint, and `missing` tells the client an explicit refresh is needed
 2. Client triggers refresh:
    - The refresh endpoint is signed-in only (`UserOnly`); the web app reaches it through `/api/trn/user/*`
    - The shared `ISummonerRefreshCoordinator` acquires the refresh locks (preventing concurrent refreshes)
@@ -99,7 +99,7 @@ Transcendence is a backend + web monorepo:
      - all-mode head sync second
      - non-ranked backfill pagination (bounded by safety caps)
    - Signed-in manual refreshes then enqueue `FullHistoryBackfillJob` on the reserved `history-backfill` queue
-4. Client polls GET endpoint until data is ready (200 OK)
+4. Client polls the GET endpoint until its lookup state changes from `refreshing` to `ready`
 
 ### Full-History Profile Backfill
 
@@ -170,6 +170,11 @@ Operational implication:
 
 - Only the worker host owns Riot credentials and calls Spectator-V5. The keyless Web API serves the
   latest `LiveGameSnapshot`; browser requests never bypass the ingestion priority policy.
+- Any stored profile can request an on-demand probe through the AppOnly BFF. The Web API takes a
+  fenced, per-Riot-ID `live-game-probe:*` lease and enqueues `ILiveGameProbeJob` on `refresh-high`;
+  the worker performs a rate-gated, cache-bypassing Spectator read, persists the complete snapshot,
+  and releases the lease. Concurrent checks coalesce and the browser polls the snapshot-only GET.
+  Favorite polling remains the proactive background path, not a prerequisite for a manual live check.
 - Each snapshot stores its complete response as PostgreSQL `jsonb` alongside indexed
   state/game/timing columns. This preserves participant spells/runes and computed scouting analysis
   across the worker-to-Web-API boundary. Snapshots written before the payload column remain readable
@@ -456,7 +461,7 @@ The web app never exposes backend tokens to browser JS:
   - `X-API-Key` (AppOnly) when needed
 - Backend never receives browser cookies (explicitly stripped in proxy)
 - Catch-all proxy routes reject invalid path segments (`.`/`..`) to avoid path normalization escapes.
-- AppOnly proxy route `/api/trn/app/*` is explicitly allowlisted for approved paths (not a generic arbitrary AppOnly relay).
+- AppOnly proxy route `/api/trn/app/*` is explicitly allowlisted for approved paths (not a generic arbitrary AppOnly relay). Live-game GET/probe paths include the backend's `lol/summoners` namespace exactly, preventing BFF/backend route drift.
 - Anonymous public proxy route `/api/trn/public/*` is explicitly allowlisted (`lib/publicProxyAllowlist.ts`): only LoL summoner reads (`lol/summoners/**` GET) are relayed; anything else (admin, user, auth, analytics writes, refresh POSTs, arbitrary paths, `PUT`/`DELETE`) is rejected `404`. It forwards no credentials, so it is a narrow read surface, not a generic anonymous relay. Signed-in profile refreshes go through `/api/trn/user/*`, where the BFF attaches the user's JWT.
 - `/account/favorites` is server-first: the authenticated server render fetches the initial favorite
   list, while a small client island owns removal only. The repository projects each favorite with

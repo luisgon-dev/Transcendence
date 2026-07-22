@@ -2,6 +2,7 @@ using Transcendence.Data.Repositories.Interfaces;
 using System.Text.Json;
 using Transcendence.Service.Core.Services.LiveGame.Interfaces;
 using Transcendence.Service.Core.Services.LiveGame.Models;
+using Transcendence.Service.Core.Services.RiotApi;
 
 namespace Transcendence.Service.Core.Services.LiveGame.Implementations;
 
@@ -15,16 +16,24 @@ public class StoredLiveGameService(
         string tagLine,
         CancellationToken ct = default)
     {
-        var summoner = await summonerRepository.FindByRiotIdAsync(platformRegion, gameName, tagLine, cancellationToken: ct);
+        if (!PlatformRouteParser.TryParse(platformRegion, out var platform))
+            throw new ArgumentException($"Unsupported platform region '{platformRegion}'.", nameof(platformRegion));
+
+        var normalizedRegion = platform.ToString();
+        var summoner = await summonerRepository.FindByRiotIdAsync(
+            normalizedRegion,
+            gameName,
+            tagLine,
+            cancellationToken: ct);
         if (string.IsNullOrWhiteSpace(summoner?.Puuid))
         {
-            return BuildOfflineResponse(platformRegion);
+            return BuildOfflineResponse(normalizedRegion);
         }
 
-        var snapshot = await snapshotRepository.GetLatestByPuuidAsync(summoner.Puuid, platformRegion, ct);
+        var snapshot = await snapshotRepository.GetLatestByPuuidAsync(summoner.Puuid, normalizedRegion, ct);
         if (snapshot == null)
         {
-            return BuildOfflineResponse(platformRegion);
+            return BuildOfflineResponse(normalizedRegion);
         }
 
         var observedAtUtc = snapshot.ObservedAtUtc;
@@ -50,7 +59,7 @@ public class StoredLiveGameService(
 
         return new LiveGameResponseDto(
             snapshot.State,
-            platformRegion,
+            normalizedRegion,
             snapshot.GameId,
             null,
             null,

@@ -53,6 +53,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRiotRsoService, RiotRsoService>();
         services.AddScoped<IUserPreferencesService, UserPreferencesService>();
         services.AddScoped<ILiveGameService, StoredLiveGameService>();
+        services.AddScoped<ILiveGameProbeCoordinator, LiveGameProbeCoordinator>();
         services.AddScoped<ILiveGameAnalysisService, LiveGameAnalysisService>();
         services.AddScoped<IMultiSearchService, MultiSearchService>();
         services.AddScoped<ILeaderboardService, LeaderboardService>();
@@ -117,6 +118,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<WarmDefaultChampionProfilesJob>();
         services.AddScoped<RefreshPrecomputedAnalyticsJob>();
         services.AddScoped<LiveGamePollingJob>();
+        services.AddScoped<ILiveGameProbeJob, LiveGameProbeJob>();
         services.AddScoped<RuneSelectionIntegrityBackfillJob>();
         services.AddScoped<MatchTimelineBackfillJob>();
         services.AddScoped<SummonerMaintenanceJob>();

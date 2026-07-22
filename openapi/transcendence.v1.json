@@ -3119,6 +3119,90 @@
         ]
       }
     },
+    "/api/lol/summoners/{region}/{gameName}/{tagLine}/live-game/probe": {
+      "post": {
+        "tags": [
+          "LiveGame"
+        ],
+        "parameters": [
+          {
+            "name": "region",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "gameName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tagLine",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveGameProbeAcceptedResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveGameProbeAcceptedResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveGameProbeAcceptedResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          { }
+        ]
+      }
+    },
     "/api/lol/analytics/pro/champions": {
       "get": {
         "tags": [
@@ -3738,17 +3822,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/SummonerProfileResponse"
+                  "$ref": "#/components/schemas/SummonerLookupResponse"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SummonerProfileResponse"
+                  "$ref": "#/components/schemas/SummonerLookupResponse"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SummonerProfileResponse"
+                  "$ref": "#/components/schemas/SummonerLookupResponse"
                 }
               }
             }
@@ -3759,26 +3843,6 @@
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "202": {
-            "description": "Accepted",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/SummonerAcceptedResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SummonerAcceptedResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SummonerAcceptedResponse"
                 }
               }
             }
@@ -7802,6 +7866,27 @@
         },
         "additionalProperties": false
       },
+      "LiveGameProbeAcceptedResponse": {
+        "required": [
+          "retryAfterSeconds",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "poll": {
+            "type": "string",
+            "nullable": true
+          },
+          "retryAfterSeconds": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
       "LiveGameResponseDto": {
         "required": [
           "dataAgeSeconds",
@@ -9622,6 +9707,44 @@
           "retryAfterSeconds": {
             "type": "integer",
             "description": "Retry hint in seconds for contention responses; null when refresh was just queued.",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SummonerLookupResponse": {
+        "required": [
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "Lookup state: ready, refreshing, or missing."
+          },
+          "profile": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SummonerProfileResponse"
+              }
+            ],
+            "description": "Summoner profile when status is ready; otherwise null.",
+            "nullable": true
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable state detail when the profile is not ready.",
+            "nullable": true
+          },
+          "poll": {
+            "type": "string",
+            "description": "Absolute URL clients can poll for the current lookup state.",
+            "nullable": true
+          },
+          "retryAfterSeconds": {
+            "type": "integer",
+            "description": "Suggested delay before polling again when status is refreshing.",
             "format": "int32",
             "nullable": true
           }

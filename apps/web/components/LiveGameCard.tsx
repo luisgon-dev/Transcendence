@@ -54,6 +54,7 @@ type LiveGameStaticData = {
 
 // The BFF error envelope carries message/requestId, which the success DTO lacks.
 type LiveGameErrorFields = { message?: string | null; requestId?: string | null };
+type LiveGameProbeAccepted = components["schemas"]["LiveGameProbeAcceptedResponse"] & LiveGameErrorFields;
 
 const TEAMS: ReadonlyArray<{ id: number; label: string }> = [
   { id: 100, label: "Blue Side" },
@@ -331,21 +332,42 @@ export function LiveGameCard({
     const controller = new AbortController();
     requestRef.current = controller;
     try {
-      const res = await fetch(
-        `/api/trn/app/summoners/${encodeURIComponent(region)}/${encodeURIComponent(
+      const liveGamePath =
+        `/api/trn/app/lol/summoners/${encodeURIComponent(region)}/${encodeURIComponent(
           gameName
-        )}/${encodeURIComponent(tagLine)}/live-game`,
-        { cache: "no-store", signal: controller.signal }
-      );
-
-      const json = (await res.json().catch(() => null)) as
-        | (LiveGameResponse & LiveGameErrorFields)
-        | null;
-      if (!res.ok) {
-        const msg = json?.message ?? `Live game request failed (${res.status}).`;
-        const rid = json?.requestId ? ` Request ID: ${json.requestId}` : "";
+        )}/${encodeURIComponent(tagLine)}/live-game`;
+      const probeStartedAt = Date.now();
+      const probeRes = await fetch(`${liveGamePath}/probe`, {
+        method: "POST",
+        cache: "no-store",
+        signal: controller.signal
+      });
+      const probeJson = (await probeRes.json().catch(() => null)) as LiveGameProbeAccepted | null;
+      if (!probeRes.ok) {
+        const msg = probeJson?.message ?? `Live game probe failed (${probeRes.status}).`;
+        const rid = probeJson?.requestId ? ` Request ID: ${probeJson.requestId}` : "";
         setError(`${msg}${rid}`);
         return;
+      }
+
+      const retryDelayMs = Math.min(5_000, Math.max(0, (probeJson?.retryAfterSeconds ?? 2) * 1_000));
+      let json: (LiveGameResponse & LiveGameErrorFields) | null = null;
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        if (retryDelayMs > 0)
+          await new Promise((resolve) => window.setTimeout(resolve, retryDelayMs));
+        if (controller.signal.aborted) return;
+
+        const res = await fetch(liveGamePath, { cache: "no-store", signal: controller.signal });
+        json = (await res.json().catch(() => null)) as (LiveGameResponse & LiveGameErrorFields) | null;
+        if (!res.ok) {
+          const msg = json?.message ?? `Live game request failed (${res.status}).`;
+          const rid = json?.requestId ? ` Request ID: ${json.requestId}` : "";
+          setError(`${msg}${rid}`);
+          return;
+        }
+
+        const observedAt = json?.lastUpdatedUtc ? Date.parse(json.lastUpdatedUtc) : Number.NaN;
+        if (Number.isFinite(observedAt) && observedAt >= probeStartedAt - 1_000) break;
       }
 
       setData(json);
@@ -376,7 +398,7 @@ export function LiveGameCard({
   }, [check]);
 
   const participants = (data?.participants ?? []) as EnrichedParticipant[];
-  const inGame = data?.state === "IN_PROGRESS" || participants.length > 0;
+  const inGame = data?.state === "in_game" || data?.state === "IN_PROGRESS" || participants.length > 0;
 
   // Once a game is detected, keep the scout view fresh at a deliberately light cadence. A timeout
   // (rather than an interval) avoids overlapping a slow request.

@@ -9,10 +9,22 @@ export function isAllowedAppProxyPath(method: string, path: string[]): boolean {
     return true;
   }
 
+  if (
+    method === "POST" &&
+    path.length === 7 &&
+    path[0] === "lol" &&
+    path[1] === "summoners" &&
+    path[5] === "live-game" &&
+    path[6] === "probe"
+  ) {
+    return true;
+  }
+
   return (
     method === "GET" &&
-    path.length === 5 &&
-    path[0] === "summoners" &&
-    path[4] === "live-game"
+    path.length === 6 &&
+    path[0] === "lol" &&
+    path[1] === "summoners" &&
+    path[5] === "live-game"
   );
 }

@@ -2652,6 +2652,79 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/lol/summoners/{region}/{gameName}/{tagLine}/live-game/probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    region: string;
+                    gameName: string;
+                    tagLine: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Accepted */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["LiveGameProbeAcceptedResponse"];
+                        "application/json": components["schemas"]["LiveGameProbeAcceptedResponse"];
+                        "text/json": components["schemas"]["LiveGameProbeAcceptedResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/lol/analytics/pro/champions": {
         parameters: {
             query?: never;
@@ -3165,20 +3238,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["SummonerProfileResponse"];
-                        "application/json": components["schemas"]["SummonerProfileResponse"];
-                        "text/json": components["schemas"]["SummonerProfileResponse"];
-                    };
-                };
-                /** @description Accepted */
-                202: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["SummonerAcceptedResponse"];
-                        "application/json": components["schemas"]["SummonerAcceptedResponse"];
-                        "text/json": components["schemas"]["SummonerAcceptedResponse"];
+                        "text/plain": components["schemas"]["SummonerLookupResponse"];
+                        "application/json": components["schemas"]["SummonerLookupResponse"];
+                        "text/json": components["schemas"]["SummonerLookupResponse"];
                     };
                 };
                 /** @description Bad Request */
@@ -5065,6 +5127,12 @@ export interface components {
             /** Format: int32 */
             perkSubStyleId?: number | null;
         };
+        LiveGameProbeAcceptedResponse: {
+            status: string;
+            poll?: string | null;
+            /** Format: int32 */
+            retryAfterSeconds: number;
+        };
         LiveGameResponseDto: {
             state: string;
             platformRegion: string;
@@ -5598,6 +5666,21 @@ export interface components {
             /**
              * Format: int32
              * @description Retry hint in seconds for contention responses; null when refresh was just queued.
+             */
+            retryAfterSeconds?: number | null;
+        };
+        SummonerLookupResponse: {
+            /** @description Lookup state: ready, refreshing, or missing. */
+            status: string;
+            /** @description Summoner profile when status is ready; otherwise null. */
+            profile?: components["schemas"]["SummonerProfileResponse"] | null;
+            /** @description Human-readable state detail when the profile is not ready. */
+            message?: string | null;
+            /** @description Absolute URL clients can poll for the current lookup state. */
+            poll?: string | null;
+            /**
+             * Format: int32
+             * @description Suggested delay before polling again when status is refreshing.
              */
             retryAfterSeconds?: number | null;
         };

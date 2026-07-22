@@ -15,6 +15,7 @@ import {
   pickApiError,
   queueValueForMatch,
   type AcceptedResponse,
+  type ApiErrorResponse,
   type ChampionStatic,
   type ItemStatic,
   type MatchDetail,
@@ -26,6 +27,7 @@ import {
   type RankInfo,
   type RuneStatic,
   type SpellStatic,
+  type SummonerLookupResponse,
   type SummonerProfileResponse
 } from "@/components/lol-profile/shared";
 import Link from "next/link";
@@ -47,7 +49,7 @@ import {
 
 export type { SummonerProfileResponse } from "@/components/lol-profile/shared";
 
-// Stop polling the 202→200 refresh loop after this many attempts (~2-3 min with the
+// Stop polling the refreshing→ready lookup loop after this many attempts (~2-3 min with the
 // 1-10s backoff) so a stuck worker degrades to a retry prompt instead of an endless spinner.
 const MAX_POLL_ATTEMPTS = 24;
 
@@ -55,8 +57,8 @@ export function SummonerProfileClient({
   region,
   gameName,
   tagLine,
-  initialStatus,
-  initialBody,
+  initialLookup,
+  initialError,
   initialPage = 1,
   initialQueue = "ALL",
   initialExpandMatchId = null,
@@ -72,8 +74,8 @@ export function SummonerProfileClient({
   region: string;
   gameName: string;
   tagLine: string;
-  initialStatus: number;
-  initialBody: unknown;
+  initialLookup: SummonerLookupResponse | null;
+  initialError: ApiErrorResponse | null;
   initialPage?: number;
   initialQueue?: string;
   initialExpandMatchId?: string | null;
@@ -89,18 +91,21 @@ export function SummonerProfileClient({
   const pathname = usePathname();
   const prefersReducedMotion = useReducedMotion();
   const title = `${gameName}#${tagLine}`;
+  const initialProfile = initialLookup?.status === "ready" ? initialLookup.profile ?? null : null;
+  const initialAccepted =
+    initialLookup && initialLookup.status !== "ready"
+      ? {
+          message: initialLookup.message ?? undefined,
+          poll: initialLookup.poll ?? undefined,
+          retryAfterSeconds: initialLookup.retryAfterSeconds ?? undefined
+        }
+      : null;
 
-  const [profile, setProfile] = useState<SummonerProfileResponse | null>(
-    initialStatus === 200 ? (initialBody as SummonerProfileResponse) : null
-  );
-  const [accepted, setAccepted] = useState<AcceptedResponse | null>(
-    initialStatus === 202 ? (initialBody as AcceptedResponse) : null
-  );
-  const [error, setError] = useState(
-    initialStatus !== 200 && initialStatus !== 202 ? pickApiError(initialStatus, initialBody) : null
-  );
+  const [profile, setProfile] = useState<SummonerProfileResponse | null>(initialProfile);
+  const [accepted, setAccepted] = useState<AcceptedResponse | null>(initialAccepted);
+  const [error, setError] = useState<ApiErrorResponse | null>(initialError);
   const [busy, setBusy] = useState(false);
-  const [polling, setPolling] = useState(initialStatus === 202);
+  const [polling, setPolling] = useState(initialLookup?.status === "refreshing");
   const [pollDelayMs, setPollDelayMs] = useState(2000);
   const [pollAttempts, setPollAttempts] = useState(0);
   const [championStatic, setChampionStatic] = useState<ChampionStatic | null>(initialChampionStatic);
@@ -120,13 +125,13 @@ export function SummonerProfileClient({
   const [detailBusy, setDetailBusy] = useState<Record<string, boolean>>({});
   const [rankHistory, setRankHistory] = useState<RankHistoryEntry[] | null>(initialRankHistory);
   const serverHistoryKey = useRef(
-    initialHistory && initialStatus === 200
-      ? `${(initialBody as SummonerProfileResponse).summonerId}:${initialHistory.page}`
+    initialHistory && initialProfile
+      ? `${initialProfile.summonerId}:${initialHistory.page}`
       : null
   );
   const serverRankHistorySummonerId = useRef(
-    initialRankHistory && initialStatus === 200
-      ? (initialBody as SummonerProfileResponse).summonerId
+    initialRankHistory && initialProfile
+      ? initialProfile.summonerId
       : null
   );
 
@@ -280,21 +285,33 @@ export function SummonerProfileClient({
     });
     const json = (await res.json().catch(() => null)) as unknown;
 
-    if (res.status === 200) {
-      setProfile(json as SummonerProfileResponse);
+    if (!res.ok) {
+      setAccepted(null);
+      setPolling(false);
+      setError(pickApiError(res.status, json));
+      return;
+    }
+
+    const lookup = json as SummonerLookupResponse | null;
+    if (lookup?.status === "ready" && lookup.profile) {
+      setProfile(lookup.profile);
       setAccepted(null);
       setPolling(false);
       return;
     }
 
-    if (res.status === 202) {
-      setAccepted((json as AcceptedResponse) ?? { message: "Refresh in process." });
+    if (lookup?.status === "refreshing" || lookup?.status === "missing") {
+      setAccepted({
+        message: lookup.message ?? undefined,
+        poll: lookup.poll ?? undefined,
+        retryAfterSeconds: lookup.retryAfterSeconds ?? undefined
+      });
       return;
     }
 
     setAccepted(null);
     setPolling(false);
-    setError(pickApiError(res.status, json));
+    setError({ message: "The player lookup returned an invalid response.", code: "INVALID_RESPONSE" });
   }, [gameName, region, tagLine]);
 
   useEffect(() => {

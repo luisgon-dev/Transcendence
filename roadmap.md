@@ -661,7 +661,7 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Annotate error responses with the `application/problem+json` content type (via a ProducesResponseType/operation filter or [Produces]) so the declared and actual media types align.
   - **Why:** A strict client that content-negotiates or matches on media type will mis-handle error bodies; the contract misrepresents the RFC 7807 media type the server actually returns.
   - **Where:** `Transcendence.WebAPI/Errors/ProblemDetailsErrorBodyFilter.cs:36-40; openapi/transcendence.v1.json`
-- [ ] **GET summoner-by-riot-id is dual-typed (200 profile vs 202 accepted), forcing status-based branching and bypassing the typed client** `LOW` · `medium`
+- [x] **GET summoner-by-riot-id is dual-typed (200 profile vs 202 accepted), forcing status-based branching and bypassing the typed client** `LOW` · `medium`
   - **Fix:** Consider modeling absence explicitly (e.g. 404 for not-stored, 200 with a `status`/`stale` discriminator field, or a dedicated `?refresh` sub-resource) so the success path is a single typed 200 shape.
   - **Why:** A read endpoint that returns 202 with an alternate body is an unusual contract that most typed HTTP clients model awkwardly; here it pushed the frontend to hand-roll status handling instead of the generated client, eroding the client's value.
   - **Where:** `Transcendence.WebAPI/Controllers/SummonersController.cs:89-96,271-279; apps/web/app/lol/summoners/[region]/[riotId]/page.tsx:113,153`

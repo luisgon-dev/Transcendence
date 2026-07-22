@@ -9,6 +9,7 @@ public static class RefreshLockKeys
     public const string StarvationGuardrailCatchUpPrefix = "refresh-priority:guardrail:catchup:";
     public const string StarvationGuardrailCooldownPrefix = "refresh-priority:guardrail:cooldown:";
     public const string ProducerPacingPrefix = "producer:pacing:";
+    public const string LiveGameProbePrefix = "live-game-probe:";
 
     public static string BuildCanonicalIdentity(PlatformRoute platform, string gameName, string tagLine)
     {
@@ -29,6 +30,11 @@ public static class RefreshLockKeys
     public static string BuildApiPriorityKey(PlatformRoute platform, string gameName, string tagLine)
     {
         return $"{ApiPriorityRefreshPrefix}{BuildCanonicalIdentity(platform, gameName, tagLine)}";
+    }
+
+    public static string BuildLiveGameProbeKey(PlatformRoute platform, string gameName, string tagLine)
+    {
+        return $"{LiveGameProbePrefix}{BuildCanonicalIdentity(platform, gameName, tagLine)}";
     }
 
     public static string BuildStarvationGuardrailCatchUpKey(string producerKey)

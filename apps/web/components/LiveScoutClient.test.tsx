@@ -13,7 +13,13 @@ describe("LiveScoutClient", () => {
           headers: { "content-type": "application/json" }
         });
       }
-      return new Response(JSON.stringify({ state: "offline", participants: [], dataAgeSeconds: 8 }), {
+      if (url.endsWith("/probe")) {
+        return new Response(JSON.stringify({ status: "queued", retryAfterSeconds: 0 }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+      return new Response(JSON.stringify({ state: "offline", participants: [], dataAgeSeconds: 8, lastUpdatedUtc: new Date().toISOString() }), {
         status: 200,
         headers: { "content-type": "application/json" }
       });
@@ -30,7 +36,7 @@ describe("LiveScoutClient", () => {
 
     expect(await screen.findByText("Not currently in a game.")).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/trn/app/summoners/na/Kronic/NA1/live-game",
+      "/api/trn/app/lol/summoners/na/Kronic/NA1/live-game",
       expect.objectContaining({ cache: "no-store" })
     );
   });
@@ -44,7 +50,13 @@ describe("LiveScoutClient", () => {
           headers: { "content-type": "application/json" }
         });
       }
-      return new Response(JSON.stringify({ state: "offline", participants: [], dataAgeSeconds: 8 }), {
+      if (url.endsWith("/probe")) {
+        return new Response(JSON.stringify({ status: "queued", retryAfterSeconds: 0 }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+      return new Response(JSON.stringify({ state: "offline", participants: [], dataAgeSeconds: 8, lastUpdatedUtc: new Date().toISOString() }), {
         status: 200,
         headers: { "content-type": "application/json" }
       });
@@ -56,7 +68,7 @@ describe("LiveScoutClient", () => {
     expect(await screen.findByText("Not currently in a game.")).toBeTruthy();
     expect((screen.getByLabelText("Riot ID") as HTMLInputElement).value).toBe("Hide on bush#KR1");
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/trn/app/summoners/kr/Hide%20on%20bush/KR1/live-game",
+      "/api/trn/app/lol/summoners/kr/Hide%20on%20bush/KR1/live-game",
       expect.objectContaining({ cache: "no-store" })
     );
   });

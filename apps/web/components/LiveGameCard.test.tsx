@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LiveGameCard } from "./LiveGameCard";
@@ -15,24 +15,31 @@ describe("LiveGameCard", () => {
 
   it("checks automatically, shows a loading skeleton, and stamps freshness", async () => {
     let resolveRequest: ((response: Response) => void) | undefined;
-    const fetchMock = vi.fn(
-      () =>
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ status: "queued", retryAfterSeconds: 0 }))
+      .mockImplementationOnce(
+        () =>
         new Promise<Response>((resolve) => {
           resolveRequest = resolve;
         })
-    );
+      );
     vi.stubGlobal("fetch", fetchMock);
 
     render(<LiveGameCard region="na" gameName="Kronic" tagLine="NA1" />);
 
     expect(screen.getByLabelText("Checking live game")).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/trn/app/summoners/na/Kronic/NA1/live-game",
-      expect.objectContaining({ cache: "no-store" })
+      "/api/trn/app/lol/summoners/na/Kronic/NA1/live-game/probe",
+      expect.objectContaining({ cache: "no-store", method: "POST" })
     );
 
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     await act(async () => {
-      resolveRequest?.(jsonResponse({ state: "NOT_IN_PROGRESS", participants: [] }));
+      resolveRequest?.(jsonResponse({
+        state: "NOT_IN_PROGRESS",
+        participants: [],
+        lastUpdatedUtc: new Date().toISOString()
+      }));
     });
 
     expect(await screen.findByText("Not currently in a game.")).toBeTruthy();
@@ -42,8 +49,10 @@ describe("LiveGameCard", () => {
 
   it("refreshes detected games on the light one-minute cadence", async () => {
     vi.useFakeTimers();
-    const fetchMock = vi.fn(async () =>
-      jsonResponse({ state: "IN_PROGRESS", participants: [], gameLengthSeconds: 120 })
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith("/probe")
+        ? jsonResponse({ status: "queued", retryAfterSeconds: 0 })
+        : jsonResponse({ state: "IN_PROGRESS", participants: [], gameLengthSeconds: 120, lastUpdatedUtc: new Date().toISOString() })
     );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -59,7 +68,7 @@ describe("LiveGameCard", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60_000);
     });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it("shows loadout, streak, KDA, and recent champion pool on the detailed scout", async () => {
@@ -79,8 +88,12 @@ describe("LiveGameCard", () => {
           runeById: { "8005": { name: "Press the Attack", icon: "perk-images/Styles/Precision/PressTheAttack/PressTheAttack.png" } }
         });
       }
+      if (url.endsWith("/probe")) {
+        return jsonResponse({ status: "queued", retryAfterSeconds: 0 });
+      }
       return jsonResponse({
         state: "in_game",
+        lastUpdatedUtc: new Date().toISOString(),
         dataAgeSeconds: 14,
         participants: [
           {

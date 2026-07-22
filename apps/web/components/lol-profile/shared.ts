@@ -1,6 +1,7 @@
 import { formatQueueLabel } from "@/lib/queues";
 import { rankTierColorClass } from "@/lib/ranks";
 import type { RuneTree } from "@/lib/staticData";
+import type { components } from "@transcendence/api-client";
 
 export type DataAgeMetadata = {
   fetchedAt?: string;
@@ -106,6 +107,13 @@ export type AcceptedResponse = {
   message?: string;
   retryAfterSeconds?: number;
   poll?: string;
+};
+
+type ApiSummonerLookupResponse = components["schemas"]["SummonerLookupResponse"];
+
+export type SummonerLookupResponse = Omit<ApiSummonerLookupResponse, "status" | "profile"> & {
+  status: "ready" | "refreshing" | "missing";
+  profile?: SummonerProfileResponse | null;
 };
 
 export type ApiErrorResponse = {

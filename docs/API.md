@@ -67,6 +67,10 @@ This is a navigational summary; the OpenAPI spec is the source of truth.
 - `GET /api/lol/summoners/{summonerId}/matches/{matchId}/timeline` (public, `expensive-read` rate limit; per-minute team gold/XP and difference curves, or `404` before timeline ingestion)
 
 Default stats scope:
+- The Riot-ID lookup always returns `200` with `SummonerLookupResponse`, whose `status` is `ready`,
+  `refreshing`, or `missing`. `profile` is populated only for `ready`; `refreshing` includes the poll
+  URL and retry hint. This keeps the read response single-typed. The separate signed-in refresh POST
+  retains `202 Accepted` because it queues work.
 - `stats/overview`, `stats/champions`, and `stats/roles` are computed from ranked solo/duo sample data.
 - `GET /api/lol/summoners/{region}/{name}/{tag}` uses the active season for profile overview and champion stats. When a signed-in manual refresh has produced full-history facts, those profile stats use the durable active-season aggregate; otherwise they fall back to retained match detail currently present in the database.
 - `matches/recent` defaults to full stored history and can be filtered by queue metadata.
@@ -318,8 +322,13 @@ Response: `{ patch, region, scope, champions[], sample }` where each champion en
 ### Live Game (`AppOnly`)
 
 - `GET /api/lol/summoners/{region}/{gameName}/{tagLine}/live-game`
+- `POST /api/lol/summoners/{region}/{gameName}/{tagLine}/live-game/probe`
 - Returns the latest worker-observed snapshot. `lastUpdatedUtc` and `dataAgeSeconds` expose
   freshness; the Web API does not call Riot directly.
+- The probe endpoint queues a fresh Spectator-V5 check on the credentialed worker and returns
+  `202` with `status` (`queued` or `in_progress`), `poll`, and `retryAfterSeconds`. A per-Riot-ID
+  fenced lease coalesces repeated browser checks; the frontend polls the GET until it observes the
+  newly persisted snapshot. Both routes are exposed only through the narrow AppOnly BFF allowlist.
 - Active-game participants include champion, summoner spells, selected perk IDs/styles, and a
   stored-data analysis projection with Solo/Duo rank, recent-20 win rate/KDA, signed current streak
   (positive wins, negative losses), and the three most-played champions in that recent window.

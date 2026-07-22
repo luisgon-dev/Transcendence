@@ -46,7 +46,7 @@ public sealed class StoredLiveGameServiceTests
         var summonerRepository = new Mock<ISummonerRepository>();
         summonerRepository
             .Setup(repository => repository.FindByRiotIdAsync(
-                "na",
+                "NA1",
                 "Player",
                 "NA1",
                 null,
@@ -60,7 +60,7 @@ public sealed class StoredLiveGameServiceTests
             });
         var snapshotRepository = new Mock<ILiveGameSnapshotRepository>();
         snapshotRepository
-            .Setup(repository => repository.GetLatestByPuuidAsync("puuid", "na", It.IsAny<CancellationToken>()))
+            .Setup(repository => repository.GetLatestByPuuidAsync("puuid", "NA1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new LiveGameSnapshot
             {
                 Id = Guid.NewGuid(),

@@ -597,7 +597,7 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Wrap the active-season resolution in a short HybridCache entry (minutes) keyed on the current time bucket, mirroring ActivePatchCacheOptions.
   - **Why:** Even when a profile's stats are fully cache-warm, every load still round-trips to RankedSeasons. The table is tiny and indexed (StartUtc/EndUtc index), so cost per call is small, but it defeats part of the caching intent on a hot path and is inconsistent with the patch-lookup treatment.
   - **Where:** `Transcendence.Service.Core/Services/Analysis/Implementations/SummonerStatsService.cs:222; Transcendence.Service.Core/Services/Analysis/RankedSeasonResolver.cs:16-26`
-- [ ] **Rank-history snapshot check queries per iteration through a navigation instead of the indexed shadow FK** `LOW` · `small`
+- [x] **Rank-history snapshot check queries per iteration through a navigation instead of the indexed shadow FK** `LOW` · `small`
   - **Fix:** Query HistoricalRanks by the shadow FK (EF.Property<Guid?>(hr, "SummonerId") == summoner.Id) and, if worth it, batch the existence checks for all incoming queue types into one query before the loop.
   - **Why:** A per-row awaited query in a loop on the rank write path. Bounded (a summoner has ~2-3 queue types) so real impact is small, but each iteration pays an avoidable join instead of an indexed shadow-FK seek.
   - **Where:** `Transcendence.Data/Repositories/Implementations/RankRepository.cs:36-46`

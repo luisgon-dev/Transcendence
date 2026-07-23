@@ -44,8 +44,15 @@ builder.Services.AddHangfire(config =>
         {
             Attempts = hangfireRetryAttempts
         })
-        .UsePostgreSqlStorage(options =>
-            options.UseNpgsqlConnection(builder.Configuration.GetConnectionString("MainDatabase"))));
+        .UsePostgreSqlStorage(
+            options => options.UseNpgsqlConnection(
+                builder.Configuration.GetConnectionString("MainDatabase")),
+            new PostgreSqlStorageOptions
+            {
+                // Long analytics jobs can exceed the provider's 30-minute invisibility window.
+                // Renew fetched-at while work is alive so another worker cannot steal and cancel it.
+                UseSlidingInvisibilityTimeout = true
+            }));
 builder.Services.AddHangfireServer(options =>
 {
     options.Queues = ["refresh-high", "default", "refresh-low"];

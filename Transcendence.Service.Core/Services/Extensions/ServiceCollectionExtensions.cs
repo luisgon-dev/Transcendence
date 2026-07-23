@@ -71,6 +71,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IChampionAnalyticsService, ChampionAnalyticsService>();
         services.AddScoped<IAnalyticsPatchQueryService, AnalyticsPatchQueryService>();
         services.AddScoped<IBuildResourceAnalyticsService, BuildResourceAnalyticsService>();
+        services.AddScoped<IBuildResourceSnapshotRefresher, BuildResourceSnapshotRefresher>();
         services.AddScoped<IChampionSynergyService, ChampionSynergyService>();
         services.AddScoped<IPrecomputedAnalyticsRefresher, PrecomputedAnalyticsRefresher>();
 
@@ -117,6 +118,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<RefreshChampionAnalyticsJob>();
         services.AddScoped<WarmDefaultChampionProfilesJob>();
         services.AddScoped<RefreshPrecomputedAnalyticsJob>();
+        services.AddScoped<RefreshBuildResourceAnalyticsJob>();
         services.AddScoped<LiveGamePollingJob>();
         services.AddScoped<ILiveGameProbeJob, LiveGameProbeJob>();
         services.AddScoped<RuneSelectionIntegrityBackfillJob>();

@@ -1,10 +1,14 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Account;
+using Transcendence.Data.Models.LoL.Analytics;
 using Transcendence.Data.Models.LoL.Match;
+using Transcendence.Data.Models.LoL.Static;
 using Transcendence.Service.Core.Services.Analytics.Implementations;
 using Transcendence.Service.Core.Services.Analytics.Models;
 
@@ -111,6 +115,84 @@ public sealed class AnalyticsEquivalenceRealPostgresTests(PostgresIntegrationFix
         stats.Should().BeEquivalentTo(raw, options => options.WithStrictOrdering()
             .Excluding(row => row.Movement).Excluding(row => row.PreviousTier));
         stats.Should().OnlyContain(row => row.Role == "ALL");
+    }
+
+    [Fact]
+    public async Task BuildAtlas_GenerationReadPath_PreservesExactCountsAcrossIncrementalPromotion()
+    {
+        var patch = UniquePatch();
+        await using var db = NewDb();
+        db.Patches.Add(new Patch
+        {
+            Version = patch,
+            ReleaseDate = DateTime.UtcNow,
+            DetectedAt = DateTime.UtcNow,
+            IsActive = false
+        });
+        db.ItemVersions.Add(new ItemVersion
+        {
+            ItemId = 3078,
+            PatchVersion = patch,
+            Name = "Trinity Force",
+            BuildsFrom = [3057],
+            BuildsInto = [],
+            Tags = ["Damage"],
+            InStore = true,
+            PriceTotal = 3333
+        });
+        db.RuneVersions.Add(new RuneVersion
+        {
+            RuneId = 8005,
+            PatchVersion = patch,
+            Name = "Press the Attack",
+            RunePathId = 8000,
+            RunePathName = "Precision",
+            Slot = 0
+        });
+        AddBuildResourceGame(db, patch, "build-one", win: true);
+        await db.SaveChangesAsync();
+
+        var refresher = new BuildResourceSnapshotRefresher(
+            db,
+            Options.Create(new BuildResourceSnapshotOptions
+            {
+                MatchBatchSize = 50,
+                CommandTimeoutSeconds = 120
+            }),
+            NullLogger<BuildResourceSnapshotRefresher>.Instance);
+        var first = await refresher.RefreshAsync(patch, forceFullRebuild: true, CancellationToken.None);
+
+        AddBuildResourceGame(db, patch, "build-two", win: false);
+        await db.SaveChangesAsync();
+        var second = await refresher.RefreshAsync(patch, forceFullRebuild: false, CancellationToken.None);
+
+        second.SnapshotId.Should().NotBe(first.SnapshotId);
+        second.ProcessedMatchCount.Should().Be(1);
+        var active = await db.BuildResourceSnapshots.AsNoTracking()
+            .SingleAsync(snapshot => snapshot.Patch == patch && snapshot.IsActive);
+        active.Status.Should().Be(BuildResourceSnapshotStatus.Ready);
+        active.ProcessedMatchCount.Should().Be(2);
+
+        var serviceCollection = new ServiceCollection();
+        serviceCollection.AddLogging();
+        serviceCollection.AddHybridCache();
+        var services = serviceCollection.BuildServiceProvider();
+        await using (services)
+        {
+            var service = new BuildResourceAnalyticsService(
+                db,
+                services.GetRequiredService<HybridCache>(),
+                new AnalyticsPatchQueryService(db));
+            var items = await service.GetItemsAsync("NA1", patch);
+            var runes = await service.GetRunesAsync("NA1", patch);
+
+            items.TotalParticipantGames.Should().Be(2);
+            var item = items.Entries.Should().ContainSingle().Subject;
+            item.Games.Should().Be(2);
+            item.Wins.Should().Be(1);
+            item.PickRate.Should().Be(1);
+            runes.Entries.Should().ContainSingle().Which.Games.Should().Be(2);
+        }
     }
 
     // ---- harness (ported from ChampionAnalyticsStatsEquivalenceTests, real Npgsql context) ----
@@ -240,4 +322,70 @@ public sealed class AnalyticsEquivalenceRealPostgresTests(PostgresIntegrationFix
 
     private static void SeedBan(TranscendenceContext db, Match match, int championId) =>
         db.MatchBans.Add(new MatchBan { MatchId = match.Id, Match = match, TeamId = 200, PickTurn = 1, ChampionId = championId });
+
+    private static void AddBuildResourceGame(
+        TranscendenceContext db,
+        string patch,
+        string matchId,
+        bool win)
+    {
+        var summoner = new Summoner
+        {
+            Id = Guid.NewGuid(),
+            PlatformRegion = "NA1",
+            Region = "americas",
+            GameName = Guid.NewGuid().ToString("N")[..8],
+            TagLine = "NA1",
+            Puuid = Guid.NewGuid().ToString("N"),
+            SummonerName = "s",
+            RiotSummonerId = Guid.NewGuid().ToString("N")
+        };
+        var match = new Match
+        {
+            Id = Guid.NewGuid(),
+            MatchId = matchId,
+            MatchDate = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            Duration = 1800,
+            Patch = patch,
+            QueueId = 420,
+            QueueFamily = "RANKED_SOLO_DUO",
+            QueueType = "420",
+            Status = FetchStatus.Success,
+            PlatformRegion = "NA1",
+            FetchedAt = DateTime.UtcNow
+        };
+        var participant = new MatchParticipant
+        {
+            Id = Guid.NewGuid(),
+            MatchId = match.Id,
+            Match = match,
+            SummonerId = summoner.Id,
+            Summoner = summoner,
+            Puuid = summoner.Puuid,
+            ParticipantId = 1,
+            TeamId = 100,
+            ChampionId = 266,
+            TeamPosition = "TOP",
+            Win = win
+        };
+        participant.Items.Add(new MatchParticipantItem
+        {
+            MatchParticipantId = participant.Id,
+            SlotIndex = 0,
+            ItemId = 3078,
+            PatchVersion = patch
+        });
+        participant.Runes.Add(new MatchParticipantRune
+        {
+            MatchParticipantId = participant.Id,
+            RuneId = 8005,
+            PatchVersion = patch,
+            SelectionTree = RuneSelectionTree.Primary,
+            SelectionIndex = 0,
+            StyleId = 8000
+        });
+        db.Summoners.Add(summoner);
+        db.Matches.Add(match);
+        db.MatchParticipants.Add(participant);
+    }
 }

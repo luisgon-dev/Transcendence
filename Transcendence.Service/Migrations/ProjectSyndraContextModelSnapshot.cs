@@ -1170,6 +1170,96 @@ namespace Transcendence.Service.Migrations
                     b.ToTable("AnalyticsResponseSnapshots");
                 });
 
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Analytics.BuildResourcePopulationStat", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ChampionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Games")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PlatformRegion")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("SnapshotId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SnapshotId", "PlatformRegion", "ChampionId", "Role")
+                        .IsUnique();
+
+                    b.ToTable("BuildResourcePopulationStats");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Analytics.BuildResourceProcessedMatch", b =>
+                {
+                    b.Property<Guid>("SnapshotId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("SnapshotId", "MatchId");
+
+                    b.HasIndex("MatchId");
+
+                    b.ToTable("BuildResourceProcessedMatches");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Analytics.BuildResourceSnapshot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsFullRebuild")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Patch")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("ProcessedMatchCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Patch", "IsActive");
+
+                    b.HasIndex("Patch", "Status", "CompletedAtUtc");
+
+                    b.ToTable("BuildResourceSnapshots");
+                });
+
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Analytics.BuildResourceStat", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1179,16 +1269,8 @@ namespace Transcendence.Service.Migrations
                     b.Property<int>("ChampionId")
                         .HasColumnType("integer");
 
-                    b.Property<DateTime>("ComputedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<int>("Games")
                         .HasColumnType("integer");
-
-                    b.Property<string>("Patch")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
 
                     b.Property<string>("PlatformRegion")
                         .IsRequired()
@@ -1208,14 +1290,17 @@ namespace Transcendence.Service.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<Guid>("SnapshotId")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("Wins")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Patch", "ResourceType", "ResourceId");
+                    b.HasIndex("SnapshotId", "ResourceType", "ResourceId");
 
-                    b.HasIndex("Patch", "PlatformRegion", "ResourceType", "ResourceId", "ChampionId", "Role")
+                    b.HasIndex("SnapshotId", "PlatformRegion", "ResourceType", "ResourceId", "ChampionId", "Role")
                         .IsUnique();
 
                     b.ToTable("BuildResourceStats");
@@ -2370,6 +2455,39 @@ namespace Transcendence.Service.Migrations
                     b.Navigation("Summoner");
                 });
 
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Analytics.BuildResourcePopulationStat", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.LoL.Analytics.BuildResourceSnapshot", "Snapshot")
+                        .WithMany("PopulationStats")
+                        .HasForeignKey("SnapshotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Snapshot");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Analytics.BuildResourceProcessedMatch", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.LoL.Analytics.BuildResourceSnapshot", "Snapshot")
+                        .WithMany("ProcessedMatches")
+                        .HasForeignKey("SnapshotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Snapshot");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Analytics.BuildResourceStat", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.LoL.Analytics.BuildResourceSnapshot", "Snapshot")
+                        .WithMany("ResourceStats")
+                        .HasForeignKey("SnapshotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Snapshot");
+                });
+
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.MatchBan", b =>
                 {
                     b.HasOne("Transcendence.Data.Models.LoL.Match.Match", "Match")
@@ -2542,6 +2660,15 @@ namespace Transcendence.Service.Migrations
                     b.Navigation("SeasonCoverages");
 
                     b.Navigation("SeasonOverviewStats");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Analytics.BuildResourceSnapshot", b =>
+                {
+                    b.Navigation("PopulationStats");
+
+                    b.Navigation("ProcessedMatches");
+
+                    b.Navigation("ResourceStats");
                 });
 
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.Match", b =>

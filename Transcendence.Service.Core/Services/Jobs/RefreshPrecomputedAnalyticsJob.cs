@@ -48,14 +48,13 @@ public class RefreshPrecomputedAnalyticsJob(
         await analyticsService.InvalidateAnalyticsCacheForPatchAsync(patch, ct);
 
         logger.LogInformation(
-            "Precompute refresh patch {Patch} completed in {ElapsedMs}ms: {RoleTier} role-tier, {ScopeMatch} scope-match, {Ban} ban, {Matchup} matchup, {BuildResource} build-resource, {Build} build, {Pro} pro rows.",
+            "Precompute refresh patch {Patch} completed in {ElapsedMs}ms: {RoleTier} role-tier, {ScopeMatch} scope-match, {Ban} ban, {Matchup} matchup, {Build} build, {Pro} pro rows.",
             patch,
             stopwatch.ElapsedMilliseconds,
             result.Core.RoleTierRows,
             result.Core.ScopeMatchCountRows,
             result.Core.BanScopeRows,
             result.MatchupRows,
-            result.BuildResourceRows,
             result.BuildRows,
             result.ProRows);
     }

@@ -1,8 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
 using Transcendence.Data;
-using Transcendence.Data.Models.LoL.Match;
-using Transcendence.Service.Core.Queries;
+using Transcendence.Data.Models.LoL.Analytics;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Cache;
@@ -11,8 +10,9 @@ using Transcendence.Service.Core.Services.RiotApi;
 namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 
 /// <summary>
-/// Cached, corpus-backed item and rune exploration. The aggregation starts from one row per
-/// participant/resource so duplicate inventory slots never inflate pick rate.
+/// Cached item and rune exploration backed only by a completed Build Atlas generation. The request
+/// path never scans raw match resources. When the requested/default patch is still warming, default
+/// reads use the newest completed patch and explicit patch reads return an empty result immediately.
 /// </summary>
 public sealed class BuildResourceAnalyticsService(
     TranscendenceContext context,
@@ -62,17 +62,17 @@ public sealed class BuildResourceAnalyticsService(
         string? requestedPatch,
         CancellationToken ct)
     {
-        var patch = await ResolvePatchAsync(requestedPatch, ct);
         var normalizedRegion = AnalyticsRegionCatalog.NormalizeOrDefault(region);
-        if (string.IsNullOrEmpty(patch))
-            return EmptyIndex(resourceType, normalizedRegion);
+        var selection = await ResolveSnapshotAsync(requestedPatch, ct);
+        if (selection is null)
+            return EmptyIndex(resourceType, requestedPatch?.Trim() ?? string.Empty, normalizedRegion);
 
-        var key = $"analytics:build-resources:v1:{resourceType}:{patch}:{normalizedRegion}";
+        var key = $"analytics:build-resources:v2:{resourceType}:{selection.SnapshotId}:{normalizedRegion}";
         return await cache.GetOrCreateAsync(
             key,
-            cancel => ComputeIndexAsync(resourceType, normalizedRegion, patch, cancel),
+            cancel => ComputeIndexAsync(resourceType, normalizedRegion, selection, cancel),
             CacheOptions,
-            tags: ["analytics", CacheTags.ForPatch(patch)],
+            tags: ["analytics", CacheTags.ForPatch(selection.Patch)],
             cancellationToken: ct);
     }
 
@@ -86,71 +86,41 @@ public sealed class BuildResourceAnalyticsService(
         if (resourceId <= 0)
             return null;
 
-        var patch = await ResolvePatchAsync(requestedPatch, ct);
         var normalizedRegion = AnalyticsRegionCatalog.NormalizeOrDefault(region);
-        if (string.IsNullOrEmpty(patch))
+        var selection = await ResolveSnapshotAsync(requestedPatch, ct);
+        if (selection is null)
             return null;
 
-        var key = $"analytics:build-resource:v1:{resourceType}:{resourceId}:{patch}:{normalizedRegion}";
+        var key =
+            $"analytics:build-resource:v2:{resourceType}:{resourceId}:{selection.SnapshotId}:{normalizedRegion}";
         return await cache.GetOrCreateAsync(
             key,
-            cancel => ComputeDetailAsync(resourceType, resourceId, normalizedRegion, patch, cancel),
+            cancel => ComputeDetailAsync(resourceType, resourceId, normalizedRegion, selection, cancel),
             CacheOptions,
-            tags: ["analytics", CacheTags.ForPatch(patch)],
+            tags: ["analytics", CacheTags.ForPatch(selection.Patch)],
             cancellationToken: ct);
     }
 
     private async ValueTask<BuildResourceAnalyticsIndexResponse> ComputeIndexAsync(
         string resourceType,
         string region,
-        string patch,
+        SnapshotSelection selection,
         CancellationToken ct)
     {
-        var metadata = await LoadMetadataAsync(resourceType, patch, ct);
+        var metadata = await LoadMetadataAsync(resourceType, selection.Patch, ct);
         if (metadata.Count == 0)
-            return new BuildResourceAnalyticsIndexResponse(resourceType, patch, region, 0, []);
+            return new BuildResourceAnalyticsIndexResponse(resourceType, selection.Patch, region, 0, []);
 
-        var precomputed = await LoadPrecomputedAsync(resourceType, region, patch, metadata.Keys.ToArray(), ct);
-        if (precomputed != null)
-        {
-            var precomputedEntries = precomputed.Aggregates
-                .GroupBy(row => row.ResourceId)
-                .Select(group => BuildEntry(
-                    group.Key,
-                    metadata[group.Key],
-                    group.ToList(),
-                    precomputed.ChampionTotals,
-                    precomputed.TotalParticipantGames,
-                    IndexChampionLimit))
-                .OrderByDescending(entry => entry.Games)
-                .ThenBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            return new BuildResourceAnalyticsIndexResponse(
-                resourceType, patch, region, precomputed.TotalParticipantGames, precomputedEntries);
-        }
-
-        var participants = BuildParticipantQuery(region, patch);
-        var totalParticipantGames = await participants.CountAsync(ct);
-        if (totalParticipantGames == 0)
-            return new BuildResourceAnalyticsIndexResponse(resourceType, patch, region, 0, []);
-
-        var championTotals = await LoadChampionTotalsAsync(participants, ct);
-        var aggregates = await LoadResourceAggregatesAsync(
-            participants,
-            resourceType,
-            patch,
-            metadata.Keys.ToArray(),
-            resourceId: null,
-            ct);
-
-        var entries = aggregates
+        var snapshot = await LoadSnapshotDataAsync(
+            selection.SnapshotId, resourceType, region, metadata.Keys.ToArray(), ct);
+        var entries = snapshot.Aggregates
             .GroupBy(row => row.ResourceId)
             .Select(group => BuildEntry(
                 group.Key,
                 metadata[group.Key],
                 group.ToList(),
-                championTotals,
-                totalParticipantGames,
+                snapshot.ChampionTotals,
+                snapshot.TotalParticipantGames,
                 IndexChampionLimit))
             .OrderByDescending(entry => entry.Games)
             .ThenBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
@@ -158,9 +128,9 @@ public sealed class BuildResourceAnalyticsService(
 
         return new BuildResourceAnalyticsIndexResponse(
             resourceType,
-            patch,
+            selection.Patch,
             region,
-            totalParticipantGames,
+            snapshot.TotalParticipantGames,
             entries);
     }
 
@@ -168,126 +138,54 @@ public sealed class BuildResourceAnalyticsService(
         string resourceType,
         int resourceId,
         string region,
-        string patch,
+        SnapshotSelection selection,
         CancellationToken ct)
     {
-        var metadata = await LoadMetadataAsync(resourceType, patch, ct, resourceId);
+        var metadata = await LoadMetadataAsync(resourceType, selection.Patch, ct, resourceId);
         if (!metadata.TryGetValue(resourceId, out var resourceMetadata))
             return null;
 
-        var precomputed = await LoadPrecomputedAsync(resourceType, region, patch, [resourceId], ct);
-        if (precomputed != null)
-        {
-            if (precomputed.Aggregates.Count == 0)
-                return null;
-            var precomputedEntry = BuildEntry(
-                resourceId,
-                resourceMetadata,
-                precomputed.Aggregates,
-                precomputed.ChampionTotals,
-                precomputed.TotalParticipantGames,
-                DetailChampionLimit);
-            return new BuildResourceAnalyticsDetailResponse(
-                resourceType,
-                patch,
-                region,
-                precomputed.TotalParticipantGames,
-                precomputedEntry,
-                BuildChampionStats(
-                    precomputed.Aggregates,
-                    precomputed.ChampionTotals,
-                    precomputedEntry.Games,
-                    DetailChampionLimit));
-        }
-
-        var participants = BuildParticipantQuery(region, patch);
-        var totalParticipantGames = await participants.CountAsync(ct);
-        if (totalParticipantGames == 0)
-            return null;
-
-        var championTotals = await LoadChampionTotalsAsync(participants, ct);
-        var aggregates = await LoadResourceAggregatesAsync(
-            participants,
-            resourceType,
-            patch,
-            [resourceId],
-            resourceId,
-            ct);
-        if (aggregates.Count == 0)
+        var snapshot = await LoadSnapshotDataAsync(
+            selection.SnapshotId, resourceType, region, [resourceId], ct);
+        if (snapshot.Aggregates.Count == 0)
             return null;
 
         var entry = BuildEntry(
             resourceId,
             resourceMetadata,
-            aggregates,
-            championTotals,
-            totalParticipantGames,
+            snapshot.Aggregates,
+            snapshot.ChampionTotals,
+            snapshot.TotalParticipantGames,
             DetailChampionLimit);
         var championStats = BuildChampionStats(
-            aggregates,
-            championTotals,
+            snapshot.Aggregates,
+            snapshot.ChampionTotals,
             entry.Games,
             DetailChampionLimit);
 
         return new BuildResourceAnalyticsDetailResponse(
             resourceType,
-            patch,
+            selection.Patch,
             region,
-            totalParticipantGames,
+            snapshot.TotalParticipantGames,
             entry,
             championStats);
     }
 
-    private IQueryable<MatchParticipant> BuildParticipantQuery(string region, string patch) =>
-        context.MatchParticipants
-            // Every match constraint required by this analytics surface is applied explicitly below.
-            // Ignoring the dependent global filters prevents EF from injecting an additional
-            // Matches join before applying the same successful-match predicate.
-            .IgnoreQueryFilters()
-            .AsNoTracking()
-            .OnPatch(patch)
-            .FromSuccessfulMatches()
-            .InAnalyticsQueue(QueueCatalog.QueueFamilyRankedSoloDuo)
-            .InPlatformRegion(AnalyticsRegionCatalog.NormalizeToFilter(region))
-            .WithAssignedRole();
-
-    private static async Task<Dictionary<ChampionRoleKey, int>> LoadChampionTotalsAsync(
-        IQueryable<MatchParticipant> participants,
-        CancellationToken ct)
-    {
-        var rows = await participants
-            .GroupBy(participant => new { participant.ChampionId, Role = participant.TeamPosition! })
-            .Select(group => new ChampionTotalRow
-            {
-                ChampionId = group.Key.ChampionId,
-                Role = group.Key.Role,
-                Games = group.Count()
-            })
-            .ToListAsync(ct);
-
-        return rows.ToDictionary(row => new ChampionRoleKey(row.ChampionId, row.Role), row => row.Games);
-    }
-
-    private async Task<PrecomputedResourceData?> LoadPrecomputedAsync(
+    private async Task<SnapshotData> LoadSnapshotDataAsync(
+        Guid snapshotId,
         string resourceType,
         string region,
-        string patch,
         int[] allowedIds,
         CancellationToken ct)
     {
-        var hasSnapshot = await context.BuildResourceStats.AsNoTracking()
-            .AnyAsync(row => row.Patch == patch && row.ResourceType == resourceType, ct);
-        if (!hasSnapshot)
-            return null;
-
         var regionFilter = AnalyticsRegionCatalog.NormalizeToFilter(region);
         var stats = context.BuildResourceStats.AsNoTracking()
-            .Where(row => row.Patch == patch &&
+            .Where(row => row.SnapshotId == snapshotId &&
                           row.ResourceType == resourceType &&
                           allowedIds.Contains(row.ResourceId));
-        var population = context.ChampionRoleTierStats.AsNoTracking()
-            .Where(row => row.Patch == patch &&
-                          row.QueueFamily == QueueCatalog.QueueFamilyRankedSoloDuo);
+        var population = context.BuildResourcePopulationStats.AsNoTracking()
+            .Where(row => row.SnapshotId == snapshotId);
         if (regionFilter != null)
         {
             stats = stats.Where(row => row.PlatformRegion == regionFilter);
@@ -317,79 +215,7 @@ public sealed class BuildResourceAnalyticsService(
         var championTotals = championRows.ToDictionary(
             row => new ChampionRoleKey(row.ChampionId, row.Role),
             row => row.Games);
-        return new PrecomputedResourceData(aggregates, championTotals, championRows.Sum(row => row.Games));
-    }
-
-    private async Task<List<ResourceAggregateRow>> LoadResourceAggregatesAsync(
-        IQueryable<MatchParticipant> participants,
-        string resourceType,
-        string patch,
-        int[] allowedIds,
-        int? resourceId,
-        CancellationToken ct)
-    {
-        IQueryable<ResourceUseRow> uses;
-        if (resourceType == ItemType)
-        {
-            uses = context.MatchParticipantItems
-                // The participant query already excludes every ineligible match. Applying the
-                // dependent global filter here makes EF scan a second participant/match tree across
-                // the historical resource table before joining it back to the current patch.
-                .IgnoreQueryFilters()
-                .Where(item =>
-                        item.PatchVersion == patch &&
-                        item.ItemId != 0 &&
-                        allowedIds.Contains(item.ItemId) &&
-                        (resourceId == null || item.ItemId == resourceId))
-                .Join(
-                    participants,
-                    item => item.MatchParticipantId,
-                    participant => participant.Id,
-                    (item, participant) => new ResourceUseRow
-                    {
-                        ResourceId = item.ItemId,
-                        ParticipantId = participant.Id,
-                        ChampionId = participant.ChampionId,
-                        Role = participant.TeamPosition!,
-                        Win = participant.Win
-                    })
-                .Distinct();
-        }
-        else
-        {
-            uses = context.MatchParticipantRunes
-                .IgnoreQueryFilters()
-                .Where(rune =>
-                        rune.PatchVersion == patch &&
-                        rune.SelectionTree != RuneSelectionTree.StatShards &&
-                        allowedIds.Contains(rune.RuneId) &&
-                        (resourceId == null || rune.RuneId == resourceId))
-                .Join(
-                    participants,
-                    rune => rune.MatchParticipantId,
-                    participant => participant.Id,
-                    (rune, participant) => new ResourceUseRow
-                    {
-                        ResourceId = rune.RuneId,
-                        ParticipantId = participant.Id,
-                        ChampionId = participant.ChampionId,
-                        Role = participant.TeamPosition!,
-                        Win = participant.Win
-                    })
-                .Distinct();
-        }
-
-        return await uses
-            .GroupBy(row => new { row.ResourceId, row.ChampionId, row.Role })
-            .Select(group => new ResourceAggregateRow
-            {
-                ResourceId = group.Key.ResourceId,
-                ChampionId = group.Key.ChampionId,
-                Role = group.Key.Role,
-                Games = group.Count(),
-                Wins = group.Count(row => row.Win)
-            })
-            .ToListAsync(ct);
+        return new SnapshotData(aggregates, championTotals, championRows.Sum(row => row.Games));
     }
 
     private async Task<Dictionary<int, ResourceMetadata>> LoadMetadataAsync(
@@ -443,11 +269,37 @@ public sealed class BuildResourceAnalyticsService(
                 ct);
     }
 
-    private async Task<string> ResolvePatchAsync(string? requestedPatch, CancellationToken ct)
+    private async Task<SnapshotSelection?> ResolveSnapshotAsync(string? requestedPatch, CancellationToken ct)
     {
-        if (!string.IsNullOrWhiteSpace(requestedPatch))
-            return requestedPatch.Trim();
+        var explicitPatch = !string.IsNullOrWhiteSpace(requestedPatch);
+        var desiredPatch = explicitPatch ? requestedPatch!.Trim() : await ResolveDefaultPatchAsync(ct);
+        if (!string.IsNullOrWhiteSpace(desiredPatch))
+        {
+            var exact = await context.BuildResourceSnapshots.AsNoTracking()
+                .Where(snapshot =>
+                    snapshot.Patch == desiredPatch &&
+                    snapshot.IsActive &&
+                    snapshot.Status == BuildResourceSnapshotStatus.Ready)
+                .OrderByDescending(snapshot => snapshot.CompletedAtUtc)
+                .Select(snapshot => new SnapshotSelection(snapshot.Id, snapshot.Patch))
+                .FirstOrDefaultAsync(ct);
+            if (exact is not null || explicitPatch)
+                return exact;
+        }
 
+        // During initial bootstrap or patch rollover, default reads stay on the newest completed
+        // generation rather than invoking the raw corpus query or exposing a partial build.
+        return await context.BuildResourceSnapshots.AsNoTracking()
+            .Where(snapshot =>
+                snapshot.IsActive &&
+                snapshot.Status == BuildResourceSnapshotStatus.Ready)
+            .OrderByDescending(snapshot => snapshot.CompletedAtUtc)
+            .Select(snapshot => new SnapshotSelection(snapshot.Id, snapshot.Patch))
+            .FirstOrDefaultAsync(ct);
+    }
+
+    private async Task<string> ResolveDefaultPatchAsync(CancellationToken ct)
+    {
         var options = await patchQueryService.GetPatchOptionsAsync(QueueCatalog.QueueFamilyRankedSoloDuo, ct);
         return options.FirstOrDefault(option => option.IsActive && option.RankedSoloDuoMatchCount > 0)?.Patch
             ?? options.FirstOrDefault(option => option.RankedSoloDuoMatchCount > 0)?.Patch
@@ -498,20 +350,14 @@ public sealed class BuildResourceAnalyticsService(
             })
             .ToList();
 
-    private static BuildResourceAnalyticsIndexResponse EmptyIndex(string resourceType, string region) =>
-        new(resourceType, string.Empty, region, 0, []);
+    private static BuildResourceAnalyticsIndexResponse EmptyIndex(
+        string resourceType,
+        string patch,
+        string region) =>
+        new(resourceType, patch, region, 0, []);
 
     private sealed record ResourceMetadata(string Name, string? Description);
     private readonly record struct ChampionRoleKey(int ChampionId, string Role);
-
-    private sealed class ResourceUseRow
-    {
-        public int ResourceId { get; init; }
-        public Guid ParticipantId { get; init; }
-        public int ChampionId { get; init; }
-        public string Role { get; init; } = string.Empty;
-        public bool Win { get; init; }
-    }
 
     private sealed class ResourceAggregateRow
     {
@@ -529,8 +375,10 @@ public sealed class BuildResourceAnalyticsService(
         public int Games { get; init; }
     }
 
-    private sealed record PrecomputedResourceData(
+    private sealed record SnapshotData(
         List<ResourceAggregateRow> Aggregates,
         Dictionary<ChampionRoleKey, int> ChampionTotals,
         int TotalParticipantGames);
+
+    private sealed record SnapshotSelection(Guid SnapshotId, string Patch);
 }

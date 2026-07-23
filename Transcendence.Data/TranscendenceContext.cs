@@ -42,7 +42,10 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<ChampionScopeGradeStat> ChampionScopeGradeStats { get; set; }
     public DbSet<ChampionMatchupStat> ChampionMatchupStats { get; set; }
     public DbSet<ChampionBuildSnapshot> ChampionBuildSnapshots { get; set; }
+    public DbSet<BuildResourceSnapshot> BuildResourceSnapshots { get; set; }
     public DbSet<BuildResourceStat> BuildResourceStats { get; set; }
+    public DbSet<BuildResourcePopulationStat> BuildResourcePopulationStats { get; set; }
+    public DbSet<BuildResourceProcessedMatch> BuildResourceProcessedMatches { get; set; }
     public DbSet<AnalyticsResponseSnapshot> AnalyticsResponseSnapshots { get; set; }
 
     // Versioned static data
@@ -780,17 +783,51 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             entity.HasIndex(x => new { x.Patch, x.ChampionId, x.Role, x.RankScope }).IsUnique();
         });
 
-        modelBuilder.Entity<BuildResourceStat>(entity =>
+        modelBuilder.Entity<BuildResourceSnapshot>(entity =>
         {
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Patch).HasMaxLength(32);
+            entity.Property(x => x.FailureReason).HasMaxLength(512);
+            entity.HasIndex(x => new { x.Patch, x.IsActive });
+            entity.HasIndex(x => new { x.Patch, x.Status, x.CompletedAtUtc });
+        });
+
+        modelBuilder.Entity<BuildResourceStat>(entity =>
+        {
+            entity.HasKey(x => x.Id);
             entity.Property(x => x.PlatformRegion).HasMaxLength(16);
             entity.Property(x => x.ResourceType).HasMaxLength(16);
             entity.Property(x => x.Role).HasMaxLength(32);
             entity.HasIndex(x => new
-                { x.Patch, x.PlatformRegion, x.ResourceType, x.ResourceId, x.ChampionId, x.Role })
+                { x.SnapshotId, x.PlatformRegion, x.ResourceType, x.ResourceId, x.ChampionId, x.Role })
                 .IsUnique();
-            entity.HasIndex(x => new { x.Patch, x.ResourceType, x.ResourceId });
+            entity.HasIndex(x => new { x.SnapshotId, x.ResourceType, x.ResourceId });
+            entity.HasOne(x => x.Snapshot)
+                .WithMany(x => x.ResourceStats)
+                .HasForeignKey(x => x.SnapshotId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<BuildResourcePopulationStat>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.PlatformRegion).HasMaxLength(16);
+            entity.Property(x => x.Role).HasMaxLength(32);
+            entity.HasIndex(x => new { x.SnapshotId, x.PlatformRegion, x.ChampionId, x.Role }).IsUnique();
+            entity.HasOne(x => x.Snapshot)
+                .WithMany(x => x.PopulationStats)
+                .HasForeignKey(x => x.SnapshotId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<BuildResourceProcessedMatch>(entity =>
+        {
+            entity.HasKey(x => new { x.SnapshotId, x.MatchId });
+            entity.HasIndex(x => x.MatchId);
+            entity.HasOne(x => x.Snapshot)
+                .WithMany(x => x.ProcessedMatches)
+                .HasForeignKey(x => x.SnapshotId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<AnalyticsResponseSnapshot>(entity =>

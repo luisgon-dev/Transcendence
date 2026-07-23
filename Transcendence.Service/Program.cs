@@ -156,6 +156,8 @@ builder.Services.Configure<SummonerBootstrapOptions>(builder.Configuration.GetSe
 builder.Services.Configure<MultiRegionIngestionOptions>(builder.Configuration.GetSection("Jobs:MultiRegionIngestion"));
 builder.Services.Configure<ChampionAnalyticsComputeOptions>(builder.Configuration.GetSection("Analytics:Compute"));
 builder.Services.Configure<TieringOptions>(builder.Configuration.GetSection("Analytics:Tiering"));
+builder.Services.Configure<BuildResourceSnapshotOptions>(
+    builder.Configuration.GetSection("Analytics:BuildAtlas"));
 builder.Services.AddSingleton<IWorkerRecurringJobPolicy, WorkerRecurringJobPolicy>();
 builder.Services.AddSingleton<WorkerStartupIntegrityState>();
 builder.Services.AddSingleton<IWorkerStartupIntegrityService, WorkerStartupIntegrityService>();

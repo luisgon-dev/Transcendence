@@ -5,6 +5,7 @@ using Hangfire.States;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
+using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Workers;
 using Transcendence.Service.Workers.Startup;
@@ -14,7 +15,7 @@ namespace Transcendence.Service.Core.Tests;
 public class ProductionWorkerTests
 {
     [Fact]
-    public async Task StartAsync_WhenPatchRolloverIsNotDetected_DoesNotQueueStartupBootstrapOrRepairJobs()
+    public async Task StartAsync_WhenPatchRolloverIsNotDetected_QueuesBuildAtlasBootstrap()
     {
         var harness = new Harness();
         harness.StartupPatchRolloverService
@@ -30,11 +31,17 @@ public class ProductionWorkerTests
         await harness.Worker.StartAsync(CancellationToken.None);
         await harness.Worker.StopAsync(CancellationToken.None);
 
-        harness.BackgroundJobs.Verify(x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()), Times.Never);
+        harness.BackgroundJobs.Verify(
+            x => x.Create(
+                It.Is<Job>(job =>
+                    job.Type == typeof(RefreshBuildResourceAnalyticsJob) &&
+                    job.Method.Name == nameof(RefreshBuildResourceAnalyticsJob.ExecuteAsync)),
+                It.IsAny<IState>()),
+            Times.Once);
     }
 
     [Fact]
-    public async Task StartAsync_WhenPatchRolloverIsDetected_QueuesOnlyPatchBootstrap()
+    public async Task StartAsync_WhenPatchRolloverIsDetected_QueuesBuildAtlasAndPatchBootstraps()
     {
         var harness = new Harness();
         harness.StartupPatchRolloverService
@@ -56,9 +63,13 @@ public class ProductionWorkerTests
         await harness.Worker.StartAsync(CancellationToken.None);
         await harness.Worker.StopAsync(CancellationToken.None);
 
-        createdJobs.Should().ContainSingle();
-        createdJobs[0].Type.Name.Should().Be("ChampionAnalyticsIngestionJob");
-        createdJobs[0].Method.Name.Should().Be("ExecuteAsync");
+        createdJobs.Should().HaveCount(2);
+        createdJobs.Should().Contain(job =>
+            job.Type == typeof(RefreshBuildResourceAnalyticsJob) &&
+            job.Method.Name == nameof(RefreshBuildResourceAnalyticsJob.ExecuteAsync));
+        createdJobs.Should().Contain(job =>
+            job.Type == typeof(ChampionAnalyticsIngestionJob) &&
+            job.Method.Name == nameof(ChampionAnalyticsIngestionJob.ExecuteAsync));
     }
 
     private sealed class Harness
@@ -68,6 +79,7 @@ public class ProductionWorkerTests
             Policy.SetupGet(x => x.KnownJobIds).Returns([
                 WorkerRecurringJobPolicy.DetectPatchJobId,
                 WorkerRecurringJobPolicy.RetryFailedMatchesJobId,
+                WorkerRecurringJobPolicy.RefreshBuildResourceAnalyticsJobId,
                 WorkerRecurringJobPolicy.ChampionAnalyticsIngestionJobId,
                 WorkerRecurringJobPolicy.RefreshLockLifecycleCleanupJobId
             ]);
@@ -76,6 +88,7 @@ public class ProductionWorkerTests
                 .Returns([
                     Descriptor(WorkerRecurringJobPolicy.DetectPatchJobId),
                     Descriptor(WorkerRecurringJobPolicy.RetryFailedMatchesJobId),
+                    Descriptor(WorkerRecurringJobPolicy.RefreshBuildResourceAnalyticsJobId),
                     Descriptor(WorkerRecurringJobPolicy.ChampionAnalyticsIngestionJobId),
                     Descriptor(WorkerRecurringJobPolicy.RefreshLockLifecycleCleanupJobId)
                 ]);

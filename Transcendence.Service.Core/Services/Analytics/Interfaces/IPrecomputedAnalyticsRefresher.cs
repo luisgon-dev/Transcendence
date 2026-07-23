@@ -38,12 +38,6 @@ public interface IPrecomputedAnalyticsRefresher
     Task<int> RefreshBuildsAsync(string patch, CancellationToken ct);
 
     /// <summary>
-    /// Rebuilds additive item/rune usage atoms for Build Atlas. The heavy participant-resource scan
-    /// runs on the worker so API reads remain indexed rollups.
-    /// </summary>
-    Task<int> RefreshBuildResourcesAsync(string patch, CancellationToken ct);
-
-    /// <summary>
     /// Recomputes + persists the durable pro-surface responses (<c>AnalyticsResponseSnapshot</c>) for
     /// <paramref name="patch"/>: pro-playrate per roster scope, and pro-builds for each pro-played
     /// (champion, role) x roster scope, all-region. Returns the snapshot count written.
@@ -61,6 +55,5 @@ public sealed record PrecomputedAnalyticsRefreshResult(
 public sealed record PrecomputedAnalyticsFullRefreshResult(
     PrecomputedAnalyticsRefreshResult Core,
     int MatchupRows,
-    int BuildResourceRows,
     int BuildRows,
     int ProRows);

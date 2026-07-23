@@ -321,7 +321,8 @@ chain, and the auth/authz middleware — things SQLite and the EF InMemory provi
   (X-API-Key) / UserOnly (JWT) / AdminOnly (JWT+admin) × no / wrong / correct credentials, with
   credentials minted through the app's own `IApiKeyService` / `IJwtService`;
 - analytics raw-vs-precompute equivalence on real Postgres (the SQLite equivalence gate, re-run on
-  Npgsql for real GROUP BY / NULL collation / tie-break ordering);
+  Npgsql for real GROUP BY / NULL collation / tie-break ordering), plus Build Atlas full/incremental
+  generation promotion and completed-snapshot reads;
 - `List<int>` / `List<string>` ↔ Postgres `integer[]` / `text[]` array round-trips.
 
 It runs in CI via the solution-wide `dotnet test Transcendence.sln` step (GitHub `ubuntu-latest` has Docker
@@ -378,11 +379,33 @@ ordinary Hangfire scope and transaction to observe cancellation and unwind.
 
 ### Production Startup Bootstrap
 
-When `Transcendence.Service` runs in non-development environments, the `ProductionWorker` only queues startup bootstrap jobs when startup patch detection confirms patch skew:
+When `Transcendence.Service` runs in non-development environments, the `ProductionWorker` queues bounded startup bootstrap work:
 
 - `Jobs:Schedule:RunPatchDetectionOnStartup=true` runs patch detection immediately on startup.
 - `Jobs:Schedule:PurgeBacklogOnPatchRolloverOnStartup=false` keeps current-patch catch-up work intact across restarts.
 - After startup patch detection confirms a rollover, the worker refreshes static data and queues a bounded analytics ingestion bootstrap without performing a blanket Hangfire purge.
+- When `refresh-build-resource-analytics` is enabled, every production startup also enqueues an
+  `onlyIfMissing` Build Atlas bootstrap. It exits immediately when the active patch already has a
+  Ready generation and repairs a missing snapshot even when the deploy did not coincide with patch
+  rollover.
+
+### Build Atlas Refresh
+
+Build Atlas (`/lol/items/*` and `/lol/runes/*`) is served only from completed snapshot generations;
+the HTTP request path never falls back to scanning raw match resources. Its recurring job is
+`refresh-build-resource-analytics`, controlled by:
+
+- `Jobs:Schedule:RefreshBuildResourceAnalyticsCron` (default `40 * * * *`)
+- `Jobs:Schedule:EnableRefreshBuildResourceAnalytics` (default `true`)
+- `Analytics:BuildAtlas:MatchBatchSize` (default `500`)
+- `Analytics:BuildAtlas:CommandTimeoutSeconds` (default `120`, clamped to 30–600)
+
+The job runs independently on `analytics-warm`. A first/forced run rebuilds the retained active-patch
+ranked-Solo/Duo corpus in bounded match batches. Incremental runs clone the active resource and exact
+population atoms, add only matches not recorded by a completed generation, then atomically promote
+the result. The active generation is unchanged when there are no new eligible matches. Static-data
+detection also enqueues an `onlyIfMissing` bootstrap so new patches begin warming without waiting for
+the hourly schedule.
 
 ### Champion Analytics Ingestion
 

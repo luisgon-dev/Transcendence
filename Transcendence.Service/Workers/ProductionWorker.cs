@@ -72,15 +72,25 @@ public class ProductionWorker(
         IReadOnlyDictionary<string, WorkerRecurringJobDescriptor> descriptorsById,
         StartupPatchRolloverResult patchRolloverResult)
     {
-        if (!patchRolloverResult.PatchRolloverDetected ||
-            !patchRolloverResult.PatchDetectionCompleted ||
-            !IsRecurringJobEnabled(descriptorsById, WorkerRecurringJobPolicy.ChampionAnalyticsIngestionJobId))
-            return;
+        if (IsRecurringJobEnabled(
+                descriptorsById,
+                WorkerRecurringJobPolicy.RefreshBuildResourceAnalyticsJobId))
+        {
+            TryEnqueueStartupJob(
+                "startup-build-atlas-bootstrap",
+                () => backgroundJobClient.Enqueue<RefreshBuildResourceAnalyticsJob>(
+                    job => job.ExecuteAsync(true, false, CancellationToken.None)));
+        }
 
-        TryEnqueueStartupJob(
-            "startup-champion-analytics-bootstrap",
-            () => backgroundJobClient.Enqueue<ChampionAnalyticsIngestionJob>(
-                job => job.ExecuteAsync(CancellationToken.None)));
+        if (patchRolloverResult.PatchRolloverDetected &&
+            patchRolloverResult.PatchDetectionCompleted &&
+            IsRecurringJobEnabled(descriptorsById, WorkerRecurringJobPolicy.ChampionAnalyticsIngestionJobId))
+        {
+            TryEnqueueStartupJob(
+                "startup-champion-analytics-bootstrap",
+                () => backgroundJobClient.Enqueue<ChampionAnalyticsIngestionJob>(
+                    job => job.ExecuteAsync(CancellationToken.None)));
+        }
     }
 
     private void CleanupHangfireJobs()

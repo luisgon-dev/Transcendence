@@ -13,6 +13,8 @@ public class WorkerJobScheduleOptions
     public string WarmDefaultChampionProfilesCron { get; set; } = "0 * * * *";
     // Offset 30 min from the warm job (:00) so the two heavy analytics passes don't collide on the HDD-backed DB.
     public string RefreshPrecomputedAnalyticsCron { get; set; } = "30 * * * *";
+    // Independent from the champion precompute job, which may run long or fail on matchup aggregation.
+    public string RefreshBuildResourceAnalyticsCron { get; set; } = "40 * * * *";
     public string ChampionAnalyticsIngestionCron { get; set; } = "*/2 * * * *";
     public string SummonerMaintenanceCron { get; set; } = "*/5 * * * *";
     public string MatchTimelineBackfillCron { get; set; } = "*/10 * * * *";
@@ -24,6 +26,7 @@ public class WorkerJobScheduleOptions
     public bool EnableAdaptiveAnalyticsRefresh { get; set; } = true;
     public bool EnableWarmDefaultChampionProfiles { get; set; } = true;
     public bool EnableRefreshPrecomputedAnalytics { get; set; } = true;
+    public bool EnableRefreshBuildResourceAnalytics { get; set; } = true;
     public bool EnableChampionAnalyticsIngestion { get; set; } = true;
     public bool EnableSummonerMaintenance { get; set; } = true;
     public bool EnableMatchTimelineBackfill { get; set; } = true;

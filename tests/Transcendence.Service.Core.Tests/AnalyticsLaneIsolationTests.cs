@@ -17,6 +17,7 @@ public class AnalyticsLaneIsolationTests
 {
     [Theory]
     [InlineData(typeof(RefreshPrecomputedAnalyticsJob))]
+    [InlineData(typeof(RefreshBuildResourceAnalyticsJob))]
     [InlineData(typeof(WarmDefaultChampionProfilesJob))]
     public void AnalyticsJob_RunsOnDedicatedAnalyticsWarmLane(Type jobType)
     {

@@ -45,6 +45,10 @@
       "BootstrapWindowHours": 24,
       "ProvisionalWindowHours": 96,
       "MaturingWindowHours": 240
+    },
+    "BuildAtlas": {
+      "MatchBatchSize": 500,
+      "CommandTimeoutSeconds": 120
     }
   }
 }

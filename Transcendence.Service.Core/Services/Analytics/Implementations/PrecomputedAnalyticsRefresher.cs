@@ -16,8 +16,8 @@ namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 /// <summary>
 /// Rebuilds the tabular-core precomputed analytics aggregates from raw match data. See
 /// <see cref="IPrecomputedAnalyticsRefresher"/>. Every aggregation mirrors the filters of the live
-/// compute (the <c>Champion{WinRate,Build,Pro,Matchup}ComputeService</c> services) so the read path can roll these atoms up to the exact
-/// same numbers:
+/// compute (the <c>Champion{WinRate,Build,Pro,Matchup}ComputeService</c> services and Build Atlas)
+/// so the read path can roll these atoms up to the exact same numbers:
 /// <list type="bullet">
 /// <item><c>ChampionRoleTierStat</c>: a LEFT JOIN to the current solo rank gives each participant a tier
 /// ("UNRANKED" when absent); grouped by (region, tier, champion, role) → additive Games/Wins.</item>
@@ -26,6 +26,8 @@ namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 /// PlatformRegion="ALL" row is materialized (global, no region filter) for the region=ALL read, alongside
 /// per-platform rows; the read point-looks-up, never sums. Scope membership uses the same EXISTS form as
 /// the live <c>ApplyRankTierScopeToParticipants</c>.</item>
+/// <item><c>BuildResourceStat</c>: deduplicated item/rune usage grouped by region, resource, champion,
+/// and role, so Build Atlas requests never scan raw inventory/rune rows.</item>
 /// </list>
 /// Region "ALL" is a reserved synthetic token; <see cref="AllRegion"/>. A null Match.PlatformRegion is
 /// coalesced to "" (a bucket only the region=ALL roll-up ever includes).
@@ -75,21 +77,137 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
     {
         PrecomputedAnalyticsRefreshResult core = null!;
         var matchupRows = 0;
+        var buildResourceRows = 0;
         var buildRows = 0;
         var proRows = 0;
 
         await ExecuteInTransactionIfNeededAsync(async () =>
         {
             // Builds read the tabular atoms produced by the first phase, so ordering is a contract.
-            // Keeping all four replacements in one transaction also means external readers retain the
+            // Keeping all five replacements in one transaction also means external readers retain the
             // prior complete patch snapshot until every phase succeeds.
             core = await RefreshTabularCoreAsync(patch, ct);
             matchupRows = await RefreshMatchupsAsync(patch, ct);
+            buildResourceRows = await RefreshBuildResourcesAsync(patch, ct);
             buildRows = await RefreshBuildsAsync(patch, ct);
             proRows = await RefreshProSurfacesAsync(patch, ct);
         }, ct);
 
-        return new PrecomputedAnalyticsFullRefreshResult(core, matchupRows, buildRows, proRows);
+        return new PrecomputedAnalyticsFullRefreshResult(core, matchupRows, buildResourceRows, buildRows, proRows);
+    }
+
+    public async Task<int> RefreshBuildResourcesAsync(string patch, CancellationToken ct)
+    {
+        var computedAt = DateTime.UtcNow;
+        var previousTimeout = _context.Database.GetCommandTimeout();
+        _context.Database.SetCommandTimeout(TimeSpan.FromMinutes(10));
+        try
+        {
+            var participants = BaseParticipants(patch).IgnoreQueryFilters();
+            var itemIds = (await _context.ItemVersions.AsNoTracking()
+                    .Where(item => item.PatchVersion == patch)
+                    .Select(item => new
+                    {
+                        item.ItemId, item.BuildsFrom, item.BuildsInto, item.Tags, item.InStore, item.PriceTotal
+                    })
+                    .ToListAsync(ct))
+                .Where(item =>
+                {
+                    var metadata = new BuildItemMetadata(
+                        item.BuildsFrom, item.BuildsInto, item.Tags, item.InStore, item.PriceTotal);
+                    return BuildItemClassifier.IsCompletedBuildItem(metadata) || BuildItemClassifier.IsBoots(metadata);
+                })
+                .Select(item => item.ItemId)
+                .ToArray();
+            var runeIds = await _context.RuneVersions.AsNoTracking()
+                .Where(rune => rune.PatchVersion == patch)
+                .Select(rune => rune.RuneId)
+                .ToArrayAsync(ct);
+
+            var itemUses = _context.MatchParticipantItems.IgnoreQueryFilters()
+                .Where(item => item.PatchVersion == patch && item.ItemId != 0 && itemIds.Contains(item.ItemId))
+                .Join(participants, item => item.MatchParticipantId, participant => participant.Id,
+                    (item, participant) => new ResourceRefreshUse
+                    {
+                        ResourceId = item.ItemId,
+                        ParticipantId = participant.Id,
+                        Region = participant.Match.PlatformRegion ?? "",
+                        ChampionId = participant.ChampionId,
+                        Role = participant.TeamPosition!,
+                        Win = participant.Win
+                    })
+                .Distinct();
+            var runeUses = _context.MatchParticipantRunes.IgnoreQueryFilters()
+                .Where(rune => rune.PatchVersion == patch &&
+                               rune.SelectionTree != RuneSelectionTree.StatShards &&
+                               runeIds.Contains(rune.RuneId))
+                .Join(participants, rune => rune.MatchParticipantId, participant => participant.Id,
+                    (rune, participant) => new ResourceRefreshUse
+                    {
+                        ResourceId = rune.RuneId,
+                        ParticipantId = participant.Id,
+                        Region = participant.Match.PlatformRegion ?? "",
+                        ChampionId = participant.ChampionId,
+                        Role = participant.TeamPosition!,
+                        Win = participant.Win
+                    })
+                .Distinct();
+
+            var itemRows = await AggregateResourceUsesAsync(itemUses, "item", patch, computedAt, ct);
+            var runeRows = await AggregateResourceUsesAsync(runeUses, "rune", patch, computedAt, ct);
+            var rows = itemRows.Concat(runeRows).ToList();
+
+            await ExecuteInTransactionIfNeededAsync(async () =>
+            {
+                await _context.BuildResourceStats.Where(row => row.Patch == patch).ExecuteDeleteAsync(ct);
+                _context.BuildResourceStats.AddRange(rows);
+                await _context.SaveChangesAsync(ct);
+            }, ct);
+
+            _logger.LogInformation(
+                "Precompute refresh (build resources) patch {Patch}: {Rows} item/rune atoms",
+                patch, rows.Count);
+            return rows.Count;
+        }
+        finally
+        {
+            _context.Database.SetCommandTimeout(previousTimeout);
+        }
+    }
+
+    private static async Task<List<BuildResourceStat>> AggregateResourceUsesAsync(
+        IQueryable<ResourceRefreshUse> uses,
+        string resourceType,
+        string patch,
+        DateTime computedAt,
+        CancellationToken ct)
+    {
+        var aggregates = await uses
+            .GroupBy(use => new { use.Region, use.ResourceId, use.ChampionId, use.Role })
+            .Select(group => new ResourceRefreshAggregate
+            {
+                Region = group.Key.Region,
+                ResourceId = group.Key.ResourceId,
+                ChampionId = group.Key.ChampionId,
+                Role = group.Key.Role,
+                Games = group.Count(),
+                Wins = group.Count(use => use.Win)
+            })
+            .ToListAsync(ct);
+
+        return aggregates.Select(row => new BuildResourceStat
+        {
+            Id = Guid.NewGuid(),
+            Patch = patch,
+            PlatformRegion = row.Region,
+            ResourceType = resourceType,
+            ResourceId = row.ResourceId,
+            ChampionId = row.ChampionId,
+            Role = row.Role,
+            Games = row.Games,
+            Wins = row.Wins,
+            ComputedAtUtc = computedAt
+        }).ToList();
     }
 
     public async Task<PrecomputedAnalyticsRefreshResult> RefreshTabularCoreAsync(string patch, CancellationToken ct)
@@ -704,5 +822,25 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
         return query.Where(mp => ranks.Any(r =>
             r.SummonerId == mp.SummonerId &&
             r.Tier == scope));
+    }
+
+    private sealed class ResourceRefreshUse
+    {
+        public int ResourceId { get; init; }
+        public Guid ParticipantId { get; init; }
+        public string Region { get; init; } = "";
+        public int ChampionId { get; init; }
+        public string Role { get; init; } = "";
+        public bool Win { get; init; }
+    }
+
+    private sealed class ResourceRefreshAggregate
+    {
+        public string Region { get; init; } = "";
+        public int ResourceId { get; init; }
+        public int ChampionId { get; init; }
+        public string Role { get; init; } = "";
+        public int Games { get; init; }
+        public int Wins { get; init; }
     }
 }

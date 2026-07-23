@@ -5,6 +5,7 @@ using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Account;
+using Transcendence.Data.Models.LoL.Analytics;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Models.LoL.Static;
 using Transcendence.Service.Core.Services.Analytics.Implementations;
@@ -15,6 +16,55 @@ namespace Transcendence.Service.Core.Tests;
 
 public sealed class BuildResourceAnalyticsServiceTests
 {
+    [Fact]
+    public async Task ItemAnalytics_UsesPrecomputedAtomsWithoutScanningRawMatches()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<TranscendenceContext>().UseSqlite(connection).Options;
+        await using var db = new SqliteCompatibleTranscendenceContext(options);
+        await db.Database.EnsureCreatedAsync();
+        const string patch = "16.14";
+        db.Patches.Add(new Patch
+        {
+            Version = patch,
+            ReleaseDate = DateTime.UtcNow,
+            IsActive = true
+        });
+        db.ItemVersions.Add(new ItemVersion
+        {
+            ItemId = 3078, PatchVersion = patch, Name = "Trinity Force", BuildsFrom = [3057],
+            BuildsInto = [], Tags = ["Damage"], InStore = true, PriceTotal = 3333
+        });
+        db.BuildResourceStats.Add(new BuildResourceStat
+        {
+            Id = Guid.NewGuid(), Patch = patch, PlatformRegion = "NA1", ResourceType = "item",
+            ResourceId = 3078, ChampionId = 266, Role = "TOP", Games = 10, Wins = 6
+        });
+        db.ChampionRoleTierStats.Add(new ChampionRoleTierStat
+        {
+            Id = Guid.NewGuid(), Patch = patch, QueueFamily = "RANKED_SOLO_DUO",
+            PlatformRegion = "NA1", RankTier = "EMERALD", ChampionId = 266, Role = "TOP",
+            Games = 20, Wins = 11
+        });
+        await db.SaveChangesAsync();
+
+        var serviceCollection = new ServiceCollection();
+        serviceCollection.AddLogging();
+        serviceCollection.AddHybridCache();
+        var services = serviceCollection.BuildServiceProvider();
+        var service = new BuildResourceAnalyticsService(
+            db, services.GetRequiredService<HybridCache>(), new AnalyticsPatchQueryService(db));
+
+        var response = await service.GetItemsAsync("NA1", patch);
+
+        response.TotalParticipantGames.Should().Be(20);
+        var item = response.Entries.Should().ContainSingle().Subject;
+        item.Games.Should().Be(10);
+        item.WinRate.Should().BeApproximately(0.6, 0.0001);
+        item.PickRate.Should().BeApproximately(0.5, 0.0001);
+    }
+
     [Fact]
     public async Task ItemAndRuneAnalytics_UseParticipantLevelPickRatesAndChampionDenominators()
     {
@@ -136,6 +186,15 @@ public sealed class BuildResourceAnalyticsServiceTests
             {
                 MatchParticipantId = participant.Id,
                 SlotIndex = 0,
+                ItemId = 3078,
+                PatchVersion = "16.14"
+            });
+            // A participant can carry the same item in more than one final inventory slot. Build
+            // Atlas counts participant/resource usage, so duplicate slots must not inflate games.
+            participant.Items.Add(new MatchParticipantItem
+            {
+                MatchParticipantId = participant.Id,
+                SlotIndex = 1,
                 ItemId = 3078,
                 PatchVersion = "16.14"
             });

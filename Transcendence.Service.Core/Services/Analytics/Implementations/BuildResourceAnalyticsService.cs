@@ -110,6 +110,25 @@ public sealed class BuildResourceAnalyticsService(
         if (metadata.Count == 0)
             return new BuildResourceAnalyticsIndexResponse(resourceType, patch, region, 0, []);
 
+        var precomputed = await LoadPrecomputedAsync(resourceType, region, patch, metadata.Keys.ToArray(), ct);
+        if (precomputed != null)
+        {
+            var precomputedEntries = precomputed.Aggregates
+                .GroupBy(row => row.ResourceId)
+                .Select(group => BuildEntry(
+                    group.Key,
+                    metadata[group.Key],
+                    group.ToList(),
+                    precomputed.ChampionTotals,
+                    precomputed.TotalParticipantGames,
+                    IndexChampionLimit))
+                .OrderByDescending(entry => entry.Games)
+                .ThenBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            return new BuildResourceAnalyticsIndexResponse(
+                resourceType, patch, region, precomputed.TotalParticipantGames, precomputedEntries);
+        }
+
         var participants = BuildParticipantQuery(region, patch);
         var totalParticipantGames = await participants.CountAsync(ct);
         if (totalParticipantGames == 0)
@@ -119,6 +138,7 @@ public sealed class BuildResourceAnalyticsService(
         var aggregates = await LoadResourceAggregatesAsync(
             participants,
             resourceType,
+            patch,
             metadata.Keys.ToArray(),
             resourceId: null,
             ct);
@@ -155,6 +175,31 @@ public sealed class BuildResourceAnalyticsService(
         if (!metadata.TryGetValue(resourceId, out var resourceMetadata))
             return null;
 
+        var precomputed = await LoadPrecomputedAsync(resourceType, region, patch, [resourceId], ct);
+        if (precomputed != null)
+        {
+            if (precomputed.Aggregates.Count == 0)
+                return null;
+            var precomputedEntry = BuildEntry(
+                resourceId,
+                resourceMetadata,
+                precomputed.Aggregates,
+                precomputed.ChampionTotals,
+                precomputed.TotalParticipantGames,
+                DetailChampionLimit);
+            return new BuildResourceAnalyticsDetailResponse(
+                resourceType,
+                patch,
+                region,
+                precomputed.TotalParticipantGames,
+                precomputedEntry,
+                BuildChampionStats(
+                    precomputed.Aggregates,
+                    precomputed.ChampionTotals,
+                    precomputedEntry.Games,
+                    DetailChampionLimit));
+        }
+
         var participants = BuildParticipantQuery(region, patch);
         var totalParticipantGames = await participants.CountAsync(ct);
         if (totalParticipantGames == 0)
@@ -164,6 +209,7 @@ public sealed class BuildResourceAnalyticsService(
         var aggregates = await LoadResourceAggregatesAsync(
             participants,
             resourceType,
+            patch,
             [resourceId],
             resourceId,
             ct);
@@ -194,6 +240,10 @@ public sealed class BuildResourceAnalyticsService(
 
     private IQueryable<MatchParticipant> BuildParticipantQuery(string region, string patch) =>
         context.MatchParticipants
+            // Every match constraint required by this analytics surface is applied explicitly below.
+            // Ignoring the dependent global filters prevents EF from injecting an additional
+            // Matches join before applying the same successful-match predicate.
+            .IgnoreQueryFilters()
             .AsNoTracking()
             .OnPatch(patch)
             .FromSuccessfulMatches()
@@ -218,9 +268,62 @@ public sealed class BuildResourceAnalyticsService(
         return rows.ToDictionary(row => new ChampionRoleKey(row.ChampionId, row.Role), row => row.Games);
     }
 
-    private static async Task<List<ResourceAggregateRow>> LoadResourceAggregatesAsync(
+    private async Task<PrecomputedResourceData?> LoadPrecomputedAsync(
+        string resourceType,
+        string region,
+        string patch,
+        int[] allowedIds,
+        CancellationToken ct)
+    {
+        var hasSnapshot = await context.BuildResourceStats.AsNoTracking()
+            .AnyAsync(row => row.Patch == patch && row.ResourceType == resourceType, ct);
+        if (!hasSnapshot)
+            return null;
+
+        var regionFilter = AnalyticsRegionCatalog.NormalizeToFilter(region);
+        var stats = context.BuildResourceStats.AsNoTracking()
+            .Where(row => row.Patch == patch &&
+                          row.ResourceType == resourceType &&
+                          allowedIds.Contains(row.ResourceId));
+        var population = context.ChampionRoleTierStats.AsNoTracking()
+            .Where(row => row.Patch == patch &&
+                          row.QueueFamily == QueueCatalog.QueueFamilyRankedSoloDuo);
+        if (regionFilter != null)
+        {
+            stats = stats.Where(row => row.PlatformRegion == regionFilter);
+            population = population.Where(row => row.PlatformRegion == regionFilter);
+        }
+
+        var aggregates = await stats
+            .GroupBy(row => new { row.ResourceId, row.ChampionId, row.Role })
+            .Select(group => new ResourceAggregateRow
+            {
+                ResourceId = group.Key.ResourceId,
+                ChampionId = group.Key.ChampionId,
+                Role = group.Key.Role,
+                Games = group.Sum(row => row.Games),
+                Wins = group.Sum(row => row.Wins)
+            })
+            .ToListAsync(ct);
+        var championRows = await population
+            .GroupBy(row => new { row.ChampionId, row.Role })
+            .Select(group => new ChampionTotalRow
+            {
+                ChampionId = group.Key.ChampionId,
+                Role = group.Key.Role,
+                Games = group.Sum(row => row.Games)
+            })
+            .ToListAsync(ct);
+        var championTotals = championRows.ToDictionary(
+            row => new ChampionRoleKey(row.ChampionId, row.Role),
+            row => row.Games);
+        return new PrecomputedResourceData(aggregates, championTotals, championRows.Sum(row => row.Games));
+    }
+
+    private async Task<List<ResourceAggregateRow>> LoadResourceAggregatesAsync(
         IQueryable<MatchParticipant> participants,
         string resourceType,
+        string patch,
         int[] allowedIds,
         int? resourceId,
         CancellationToken ct)
@@ -228,13 +331,21 @@ public sealed class BuildResourceAnalyticsService(
         IQueryable<ResourceUseRow> uses;
         if (resourceType == ItemType)
         {
-            uses = participants
-                .SelectMany(
-                    participant => participant.Items.Where(item =>
+            uses = context.MatchParticipantItems
+                // The participant query already excludes every ineligible match. Applying the
+                // dependent global filter here makes EF scan a second participant/match tree across
+                // the historical resource table before joining it back to the current patch.
+                .IgnoreQueryFilters()
+                .Where(item =>
+                        item.PatchVersion == patch &&
                         item.ItemId != 0 &&
                         allowedIds.Contains(item.ItemId) &&
-                        (resourceId == null || item.ItemId == resourceId)),
-                    (participant, item) => new ResourceUseRow
+                        (resourceId == null || item.ItemId == resourceId))
+                .Join(
+                    participants,
+                    item => item.MatchParticipantId,
+                    participant => participant.Id,
+                    (item, participant) => new ResourceUseRow
                     {
                         ResourceId = item.ItemId,
                         ParticipantId = participant.Id,
@@ -246,13 +357,18 @@ public sealed class BuildResourceAnalyticsService(
         }
         else
         {
-            uses = participants
-                .SelectMany(
-                    participant => participant.Runes.Where(rune =>
+            uses = context.MatchParticipantRunes
+                .IgnoreQueryFilters()
+                .Where(rune =>
+                        rune.PatchVersion == patch &&
                         rune.SelectionTree != RuneSelectionTree.StatShards &&
                         allowedIds.Contains(rune.RuneId) &&
-                        (resourceId == null || rune.RuneId == resourceId)),
-                    (participant, rune) => new ResourceUseRow
+                        (resourceId == null || rune.RuneId == resourceId))
+                .Join(
+                    participants,
+                    rune => rune.MatchParticipantId,
+                    participant => participant.Id,
+                    (rune, participant) => new ResourceUseRow
                     {
                         ResourceId = rune.RuneId,
                         ParticipantId = participant.Id,
@@ -412,4 +528,9 @@ public sealed class BuildResourceAnalyticsService(
         public string Role { get; init; } = string.Empty;
         public int Games { get; init; }
     }
+
+    private sealed record PrecomputedResourceData(
+        List<ResourceAggregateRow> Aggregates,
+        Dictionary<ChampionRoleKey, int> ChampionTotals,
+        int TotalParticipantGames);
 }

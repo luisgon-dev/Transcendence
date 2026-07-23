@@ -74,7 +74,7 @@ const TIER_LINKS = [
   { label: "Item Analytics · Pick rates and champion fit", href: "/lol/items" },
   { label: "Rune Analytics · Pick rates and champion fit", href: "/lol/runes" },
   { label: "Leaderboards · Regional and champion", href: "/lol/leaderboards" },
-  { label: "Pro Builds", href: "/lol/pro-builds" },
+  { label: "Pro Solo Queue Builds", href: "/lol/pro-builds" },
   { label: "Multi-Search · Champ Select Scout", href: "/lol/multi-search" }
 ] as const;
 
@@ -112,54 +112,66 @@ const resultsSectionVariants = {
   }
 };
 
-function getPanelTopOffset() {
-  if (typeof window === "undefined") return 96;
-  return Math.max(72, Math.round(window.innerHeight * 0.09));
-}
-
-function getPanelWidth() {
-  if (typeof window === "undefined") return 880;
-  return Math.max(320, Math.min(880, window.innerWidth - 24));
-}
-
-function getPanelEnterState(
+function capturePanelOpening(
   origin: GlobalSearchOpenOrigin | null,
   prefersReducedMotion: boolean
 ) {
-  if (prefersReducedMotion || typeof window === "undefined") {
+  const viewportWidth = window.innerWidth;
+  const panelWidth = Math.max(320, Math.min(880, viewportWidth - 24));
+  const topOffset = Math.max(72, Math.round(window.innerHeight * 0.09));
+
+  if (prefersReducedMotion) {
     return {
-      opacity: 0,
-      x: 0,
-      y: -10,
-      scaleX: 1,
-      scaleY: 1,
-      borderRadius: 24
+      topOffset,
+      enterState: {
+        opacity: 0,
+        x: 0,
+        y: -10,
+        scaleX: 1,
+        scaleY: 1,
+        borderRadius: 24
+      }
     };
   }
 
   if (!origin) {
     return {
-      opacity: 0,
-      x: 0,
-      y: -18,
-      scaleX: 0.985,
-      scaleY: 0.97,
-      borderRadius: 24
+      topOffset,
+      enterState: {
+        opacity: 0,
+        x: 0,
+        y: -18,
+        scaleX: 0.985,
+        scaleY: 0.97,
+        borderRadius: 24
+      }
     };
   }
 
-  const panelWidth = getPanelWidth();
-  const panelTop = getPanelTopOffset();
-
   return {
-    opacity: 0.76,
-    x: origin.centerX - window.innerWidth / 2,
-    y: origin.centerY - panelTop,
-    scaleX: Math.min(1, Math.max(0.18, origin.width / panelWidth)),
-    scaleY: Math.min(1, Math.max(0.15, origin.height / 280)),
-    borderRadius: Math.max(18, Math.round(origin.height / 2))
+    topOffset,
+    enterState: {
+      opacity: 0.76,
+      x: origin.centerX - viewportWidth / 2,
+      y: origin.centerY - topOffset,
+      scaleX: Math.min(1, Math.max(0.18, origin.width / panelWidth)),
+      scaleY: Math.min(1, Math.max(0.15, origin.height / 280)),
+      borderRadius: Math.max(18, Math.round(origin.height / 2))
+    }
   };
 }
+
+const DEFAULT_PANEL_OPENING = {
+  topOffset: 96,
+  enterState: {
+    opacity: 0,
+    x: 0,
+    y: -18,
+    scaleX: 0.985,
+    scaleY: 0.97,
+    borderRadius: 24
+  }
+};
 
 function isEditableTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;
@@ -246,7 +258,7 @@ export function GlobalCommandPalette() {
   const lastFocusedRef = useRef<HTMLElement | null>(null);
   const suggestionCacheRef = useRef<Map<string, SummonerSearchItem[]>>(new Map());
   const [open, setOpen] = useState(false);
-  const [openOrigin, setOpenOrigin] = useState<GlobalSearchOpenOrigin | null>(null);
+  const [panelOpening, setPanelOpening] = useState(DEFAULT_PANEL_OPENING);
   const [query, setQuery] = useState("");
   const [region, setRegion] = useState("na");
   const [champions, setChampions] = useState<ChampionSearchItem[]>([]);
@@ -265,7 +277,7 @@ export function GlobalCommandPalette() {
         if (isEditableTarget(e.target)) return;
         e.preventDefault();
         lastFocusedRef.current = document.activeElement as HTMLElement | null;
-        setOpenOrigin(null);
+        setPanelOpening(capturePanelOpening(null, prefersReducedMotion));
         setOpen(true);
       }
       // Escape (and outside-click / focus-out) close is owned by the Radix Dialog below, which also
@@ -274,7 +286,9 @@ export function GlobalCommandPalette() {
 
     function onOpenEvent(event: Event) {
       lastFocusedRef.current = document.activeElement as HTMLElement | null;
-      setOpenOrigin(getGlobalSearchOpenDetail(event).origin);
+      setPanelOpening(
+        capturePanelOpening(getGlobalSearchOpenDetail(event).origin, prefersReducedMotion)
+      );
       setOpen(true);
     }
 
@@ -284,7 +298,7 @@ export function GlobalCommandPalette() {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener(GLOBAL_SEARCH_OPEN_EVENT, onOpenEvent);
     };
-  }, [open]);
+  }, [prefersReducedMotion]);
 
   useEffect(() => {
     if (!open) return;
@@ -454,7 +468,6 @@ export function GlobalCommandPalette() {
     tierResults.length === 0 &&
     summonerResults.length === 0 &&
     !parsedRiotId;
-  const panelEnterState = getPanelEnterState(openOrigin, prefersReducedMotion);
   const sectionVariants = prefersReducedMotion
     ? {
         hidden: { opacity: 0 },
@@ -464,15 +477,13 @@ export function GlobalCommandPalette() {
         }
       }
     : resultsSectionVariants;
-  const panelTopOffset = getPanelTopOffset();
-
   return (
     // Radix Dialog supplies the modal a11y the hand-rolled overlay lacked: role="dialog" + aria-modal,
     // a focus trap, focus return to the launcher on close, Escape-to-close, and page scroll lock — while
     // forceMount keeps the nodes present so framer-motion still owns the enter/exit animation.
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Portal forceMount>
-        <AnimatePresence initial={false} onExitComplete={() => setOpenOrigin(null)}>
+        <AnimatePresence initial={false}>
           {open ? (
             <div className="command-palette-overlay fixed inset-0 z-50">
               <Dialog.Overlay asChild forceMount>
@@ -487,7 +498,7 @@ export function GlobalCommandPalette() {
 
               <div
             className="command-palette-shell absolute inset-x-0 top-0 flex justify-center px-3"
-            style={{ paddingTop: `${panelTopOffset}px` }}
+            style={{ paddingTop: `${panelOpening.topOffset}px` }}
           >
             <Dialog.Content
               asChild
@@ -506,7 +517,7 @@ export function GlobalCommandPalette() {
             >
             <motion.div
               className="command-palette-panel pointer-events-auto w-[min(880px,calc(100vw-24px))] overflow-hidden border border-border/70 bg-surface shadow-overlay"
-              initial={panelEnterState}
+              initial={panelOpening.enterState}
               animate={{
                 opacity: 1,
                 x: 0,
@@ -617,7 +628,7 @@ export function GlobalCommandPalette() {
                           Nothing lines up with that search.
                         </p>
                         <p className="mt-2 max-w-[48ch] text-sm leading-6 text-fg/62">
-                          Try a champion name, a route like tier list or pro builds, or a full Riot ID like
+                          Try a champion name, a route like tier list or pro solo queue, or a full Riot ID like
                           <span className="font-medium text-fg/82"> Kronic#NA1</span>.
                         </p>
                       </Command.Empty>

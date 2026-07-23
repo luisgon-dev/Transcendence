@@ -79,7 +79,7 @@ public class SummonersControllerTests
     }
 
     [Fact]
-    public async Task GetByRiotId_ReturnsAcceptedWhenSummonerMissing()
+    public async Task GetByRiotId_ReturnsTypedMissingStateWhenSummonerMissing()
     {
         var summonerRepository = new Mock<ISummonerRepository>();
         var refreshLockRepository = new Mock<IRefreshLockRepository>();
@@ -106,8 +106,10 @@ public class SummonersControllerTests
 
         var result = await controller.GetByRiotId("na1", "name", "tag", CancellationToken.None);
 
-        var accepted = result.Should().BeOfType<AcceptedResult>().Subject;
-        var payload = accepted.Value.Should().BeOfType<SummonerAcceptedResponse>().Subject;
+        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+        var payload = ok.Value.Should().BeOfType<SummonerLookupResponse>().Subject;
+        payload.Status.Should().Be(SummonerLookupStatuses.Missing);
+        payload.Profile.Should().BeNull();
         payload.Message.Should().Contain("Summoner not found");
     }
 
@@ -251,7 +253,8 @@ public class SummonersControllerTests
         return new SummonersController(
             new SummonerProfileService(
                 effectiveSummonerRepository,
-                statsService ?? Mock.Of<ISummonerStatsService>()),
+                statsService ?? Mock.Of<ISummonerStatsService>(),
+                Mock.Of<ISummonerMatchHistoryService>()),
             new SummonerRefreshCoordinator(
                 effectiveRefreshLockRepository,
                 effectiveBackgroundJobClient,

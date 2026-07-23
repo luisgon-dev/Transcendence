@@ -5,7 +5,11 @@ public record FavoriteSummonerDto(
     string SummonerPuuid,
     string PlatformRegion,
     string? DisplayName,
-    DateTime CreatedAtUtc
+    DateTime CreatedAtUtc,
+    bool IsLive,
+    string? LiveState,
+    string? LiveGameId,
+    DateTime? LiveObservedAtUtc
 );
 
 public record AddFavoriteRequest(

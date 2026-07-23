@@ -29,7 +29,11 @@ public sealed class FullHistoryBackfillJob(
     private const string RankedSoloQueueScope = QueueCatalog.QueueFamilyRankedSoloDuo;
     private const int AggregationVersion = 1;
 
-    private sealed record FactBuildResult(SummonerMatchFact? Fact, long? MatchEpochSeconds, string? FailureMessage);
+    private sealed record FactBuildResult(
+        SummonerMatchFact? Fact,
+        long? MatchEpochSeconds,
+        string? FailureMessage,
+        bool DeferredByRateLimit = false);
 
     [Queue(HangfireQueues.HistoryBackfill)]
     public async Task ProcessAsync(
@@ -129,7 +133,7 @@ public sealed class FullHistoryBackfillJob(
         {
             ct.ThrowIfCancellationRequested();
 
-            var pageIds = (await riotMatchIdsClient.GetMatchIdsByPuuidAsync(
+            var matchIdPage = await riotMatchIdsClient.GetMatchIdsByPuuidAsync(
                     regionalRoute,
                     summoner.Puuid!,
                     pageSize,
@@ -138,7 +142,23 @@ public sealed class FullHistoryBackfillJob(
                     startTimeEpochSeconds: lowerBoundEpochSeconds,
                     start: 0,
                     type: null,
-                    ct))
+                    ct);
+            if (matchIdPage == null)
+            {
+                // This is rate-gate backpressure, not end-of-history. Keep the row Running and enqueue
+                // the normal continuation so a momentary budget miss can never mark the backfill done.
+                backfill.Status = SummonerFullHistoryBackfillStatuses.Running;
+                backfill.UpdatedAtUtc = now;
+                await db.SaveChangesAsync(ct);
+                shouldContinue = true;
+                logger.LogInformation(
+                    "[FullHistory] Match-id page deferred for summoner {SummonerId}; preserving cursor {Cursor} and retrying later.",
+                    summonerId,
+                    backfill.CursorEndEpochSeconds);
+                break;
+            }
+
+            var pageIds = matchIdPage
                 .Where(id => !string.IsNullOrWhiteSpace(id))
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
@@ -174,6 +194,7 @@ public sealed class FullHistoryBackfillJob(
 
             backfill.SkippedExistingFacts += pageIds.Count - pendingIds.Count;
 
+            var detailFetchDeferred = false;
             foreach (var matchId in pendingIds)
             {
                 ct.ThrowIfCancellationRequested();
@@ -187,6 +208,12 @@ public sealed class FullHistoryBackfillJob(
                         configuredSeasons,
                         now,
                         ct);
+
+                    if (result.DeferredByRateLimit)
+                    {
+                        detailFetchDeferred = true;
+                        break;
+                    }
 
                     if (result.MatchEpochSeconds.HasValue && result.MatchEpochSeconds.Value < oldestSeenEpochSeconds)
                         oldestSeenEpochSeconds = result.MatchEpochSeconds.Value;
@@ -236,6 +263,21 @@ public sealed class FullHistoryBackfillJob(
                         matchId,
                         summonerId);
                 }
+            }
+
+            if (detailFetchDeferred)
+            {
+                // Preserve the page cursor so none of the unprocessed IDs are skipped. The next run
+                // re-reads this page after the regional pause/gate pressure clears.
+                backfill.Status = SummonerFullHistoryBackfillStatuses.Running;
+                backfill.UpdatedAtUtc = now;
+                await db.SaveChangesAsync(ct);
+                shouldContinue = true;
+                logger.LogInformation(
+                    "[FullHistory] Match-detail fetch deferred for summoner {SummonerId}; preserving cursor {Cursor} and retrying later.",
+                    summonerId,
+                    backfill.CursorEndEpochSeconds);
+                break;
             }
 
             if (oldestSeenEpochSeconds != long.MaxValue)
@@ -332,9 +374,24 @@ public sealed class FullHistoryBackfillJob(
         CancellationToken ct)
     {
         if (!await rateGate.AcquireAsync(regionalRoute.ToString(), ct))
-            return new FactBuildResult(null, null, "Riot rate gate unavailable for match detail fetch.");
+            return new FactBuildResult(null, null, null, DeferredByRateLimit: true);
 
-        var matchDto = await riotApiContext.Api.MatchV5().GetMatchAsync(regionalRoute, matchId, ct);
+        Camille.RiotGames.MatchV5.Match? matchDto;
+        try
+        {
+            matchDto = await riotApiContext.Api.MatchV5().GetMatchAsync(regionalRoute, matchId, ct);
+        }
+        catch (Exception ex) when (RiotRateLimitHandling.TryGetRetryAfter(ex, out var retryAfter))
+        {
+            rateGate.Pause(regionalRoute.ToString(), retryAfter);
+            logger.LogWarning(
+                "[FullHistory] Riot returned 429 for match {MatchId} ({Region}); pausing that region for {RetryAfterSeconds:F0}s without recording a fetch failure.",
+                matchId,
+                regionalRoute,
+                retryAfter.TotalSeconds);
+            return new FactBuildResult(null, null, null, DeferredByRateLimit: true);
+        }
+
         if (matchDto == null)
             return new FactBuildResult(null, null, "Riot API returned null match detail.");
 
@@ -445,6 +502,9 @@ public sealed class FullHistoryBackfillJob(
                 configuredSeasons,
                 now,
                 ct);
+
+            if (result.DeferredByRateLimit)
+                break;
 
             failure.AttemptCount++;
             failure.LastAttemptAtUtc = now;

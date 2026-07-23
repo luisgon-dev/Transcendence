@@ -1,169 +1,77 @@
-"use client";
+import type { components } from "@transcendence/api-client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
-
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { Skeleton } from "@/components/ui/Skeleton";
-import { Toolbar } from "@/components/ui/Toolbar";
+import { FavoriteListClient } from "@/components/FavoriteListClient";
 import { RiotAccountPanel } from "@/components/RiotAccountPanel";
-import { encodeRiotIdPath, parseRiotIdInput } from "@/lib/riotid";
+import { Toolbar } from "@/components/ui/Toolbar";
+import { getAccessTokenOrRefresh } from "@/lib/sessionToken";
+import { getTrnClient } from "@/lib/trnClient";
 
-type FavoriteSummonerDto = {
-  id: string;
-  summonerPuuid: string;
-  platformRegion: string;
-  displayName?: string | null;
-  createdAtUtc: string;
+type FavoriteSummonerDto = components["schemas"]["FavoriteSummonerDto"];
+
+type FavoritesLoadResult = {
+  authenticated: boolean;
+  items: FavoriteSummonerDto[];
+  error: string | null;
 };
 
-export default function FavoritesPage() {
-  const [items, setItems] = useState<FavoriteSummonerDto[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function load() {
-    setError(null);
-    try {
-      const res = await fetch("/api/trn/user/users/me/favorites", {
-        cache: "no-store"
-      });
-
-      if (res.status === 401) {
-        setItems([]);
-        setError("Sign in to view saved players.");
-        return;
-      }
-
-      if (!res.ok) {
-        const json = (await res.json().catch(() => null)) as
-          | { message?: string; requestId?: string }
-          | null;
-        const msg = json?.message ?? `Failed to load favorites (${res.status}).`;
-        const rid = json?.requestId ? ` (Request ID: ${json.requestId})` : "";
-        setItems([]);
-        setError(`${msg}${rid}`);
-        return;
-      }
-
-      const json = (await res.json()) as FavoriteSummonerDto[];
-      setItems(json);
-    } catch (e) {
-      setItems([]);
-      setError(e instanceof Error ? e.message : "Failed to load favorites.");
-    }
+async function loadFavorites(): Promise<FavoritesLoadResult> {
+  const token = await getAccessTokenOrRefresh();
+  if (!token.ok) {
+    return {
+      authenticated: false,
+      items: [],
+      error:
+        token.reason === "unavailable"
+          ? "Account services are temporarily unavailable. Try again shortly."
+          : "Sign in to view saved players."
+    };
   }
 
-  useEffect(() => {
-    void load();
-  }, []);
+  try {
+    const { data, error, response } = await getTrnClient().GET("/api/users/me/favorites", {
+      headers: { authorization: `Bearer ${token.accessToken}` },
+      cache: "no-store"
+    });
 
-  async function removeFavorite(id: string) {
-    try {
-      const res = await fetch(`/api/trn/user/users/me/favorites/${id}`, {
-        method: "DELETE"
-      });
-      if (!res.ok) {
-        const json = (await res.json().catch(() => null)) as
-          | { message?: string; requestId?: string }
-          | null;
-        const msg =
-          json?.message ?? `Failed to remove favorite (${res.status}).`;
-        const rid = json?.requestId ? ` (Request ID: ${json.requestId})` : "";
-        setError(`${msg}${rid}`);
-        return;
-      }
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to remove favorite.");
+    if (!data) {
+      return {
+        authenticated: response.status !== 401,
+        items: [],
+        error:
+          (error as { detail?: string; title?: string } | undefined)?.detail ??
+          (error as { detail?: string; title?: string } | undefined)?.title ??
+          "We couldn't load favorites right now."
+      };
     }
+
+    return { authenticated: true, items: data as FavoriteSummonerDto[], error: null };
+  } catch {
+    return {
+      authenticated: true,
+      items: [],
+      error: "We couldn't reach favorites right now. Try again shortly."
+    };
   }
+}
+
+export default async function FavoritesPage() {
+  const result = await loadFavorites();
 
   return (
     <div className="grid gap-4">
       <Toolbar
         eyebrow="Account"
         title="Favorites"
-        meta={<span>Your saved players from League profiles</span>}
+        meta={<span>Saved players, with fresh live-game signals</span>}
       />
 
-      <RiotAccountPanel />
+      {result.authenticated ? <RiotAccountPanel /> : null}
 
-      {error ? (
-        <Card className="p-5">
-          <p className="type-ui text-danger">{error}</p>
-          <div className="mt-3 flex items-center gap-3">
-            <Link
-              className="type-ui font-semibold text-primary hover:underline"
-              href="/account/login"
-            >
-              Sign in
-            </Link>
-          </div>
-        </Card>
-      ) : null}
-
-      {!items ? (
-        <div className="grid gap-3">
-          <Card className="p-5">
-            <Skeleton className="h-5 w-40" />
-            <Skeleton className="mt-3 h-12 w-full" />
-          </Card>
-        </div>
-      ) : items.length === 0 ? (
-        <EmptyState
-          title="No saved players yet"
-          description="Open any League player profile and use Add Favorite to pin it here for quick access."
-          action={
-            <Link
-              href="/lol/tierlist"
-              className="type-ui font-semibold text-primary hover:underline"
-            >
-              Browse the tier list to find players
-            </Link>
-          }
-        />
-      ) : (
-        <div className="grid gap-2">
-          {items.map((f) => (
-            <Card key={f.id} className="p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  {f.displayName && parseRiotIdInput(f.displayName) ? (
-                    <Link
-                      className="type-ui font-semibold text-fg hover:underline"
-                      href={`/lol/summoners/${encodeURIComponent(
-                        f.platformRegion
-                      )}/${encodeRiotIdPath(parseRiotIdInput(f.displayName)!)}`}
-                    >
-                      {f.displayName}
-                    </Link>
-                  ) : (
-                    <p className="type-ui font-semibold text-fg">
-                      {f.displayName ?? f.summonerPuuid}
-                    </p>
-                  )}
-                  <p className="type-ui type-tabular text-muted">
-                    {f.platformRegion} · Added{" "}
-                    {new Date(f.createdAtUtc).toLocaleString()}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => removeFavorite(f.id)}
-                  >
-                    Remove
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
+      <FavoriteListClient
+        initialItems={result.items}
+        initialError={result.error}
+        authenticated={result.authenticated}
+      />
     </div>
   );
 }

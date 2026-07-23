@@ -2,6 +2,11 @@
 const nextConfig = {
   output: "standalone",
   images: {
+    // Most remote images are small Data Dragon assets with versioned URLs. Keep transformed
+    // WebP results warm for a week; this cuts repeated optimizer work while bounding staleness
+    // for the small number of unversioned splash/community assets that share the cache.
+    minimumCacheTTL: 60 * 60 * 24 * 7,
+    formats: ["image/webp"],
     qualities: [55, 75],
     remotePatterns: [
       {

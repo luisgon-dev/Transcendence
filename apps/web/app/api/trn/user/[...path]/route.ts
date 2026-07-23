@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { clearAuthCookies } from "@/lib/authCookies";
+import { isSafeMethod, isSameOriginRequest } from "@/lib/bffOrigin";
 import {
   getAccessTokenOrRefresh,
   refreshAccessToken
@@ -11,6 +12,10 @@ import { proxyToBackend } from "@/lib/trnProxy";
 type Ctx = { params: Promise<{ path: string[] }> };
 
 async function handler(req: NextRequest, ctx: Ctx) {
+  if (!isSafeMethod(req.method) && !isSameOriginRequest(req)) {
+    return NextResponse.json({ message: "Invalid origin." }, { status: 403 });
+  }
+
   const token = await getAccessTokenOrRefresh();
 
   if (!token.ok) {

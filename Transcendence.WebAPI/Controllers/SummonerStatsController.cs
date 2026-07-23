@@ -10,7 +10,9 @@ namespace Transcendence.WebAPI.Controllers;
 [Route("api/lol/summoners/{summonerId:guid}")]
 [EnableRateLimiting("expensive-read")]
 [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
-public class SummonerStatsController(ISummonerStatsService statsService) : ControllerBase
+public class SummonerStatsController(
+    ISummonerStatsService statsService,
+    ISummonerMatchHistoryService matchHistoryService) : ControllerBase
 {
     /// <summary>
     ///     Gets overall statistics for a summoner.
@@ -112,14 +114,17 @@ public class SummonerStatsController(ISummonerStatsService statsService) : Contr
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetRecentMatches([FromRoute] Guid summonerId, [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20, [FromQuery] string? queueFamily = null,
-        [FromQuery] List<int>? queueIds = null, CancellationToken ct = default)
+        [FromQuery] List<int>? queueIds = null, [FromQuery] int? championId = null,
+        CancellationToken ct = default)
     {
-        var result = await statsService.GetRecentMatchesAsync(
+        var result = await matchHistoryService.GetRecentMatchesAsync(
             summonerId,
             page,
             pageSize,
             queueFamily,
             queueIds,
+            championId,
+            includeFacets: true,
             ct);
         var dto = new PagedResultDto<RecentMatchSummaryDto>(
             result.Items.Select(m => new RecentMatchSummaryDto(
@@ -151,7 +156,17 @@ public class SummonerStatsController(ISummonerStatsService statsService) : Contr
             result.Page,
             result.PageSize,
             result.TotalCount,
-            result.TotalPages
+            result.TotalPages,
+            result.Facets == null
+                ? null
+                : new MatchHistoryFacetsDto(
+                    result.Facets.Queues
+                        .Select(value => new MatchHistoryQueueFacetDto(
+                            value.QueueId,
+                            value.QueueType,
+                            value.QueueFamily))
+                        .ToList(),
+                    result.Facets.ChampionIds)
         );
         return Ok(dto);
     }
@@ -172,7 +187,7 @@ public class SummonerStatsController(ISummonerStatsService statsService) : Contr
         [FromRoute] string matchId,
         CancellationToken ct = default)
     {
-        var result = await statsService.GetMatchDetailAsync(matchId, ct);
+        var result = await matchHistoryService.GetMatchDetailAsync(matchId, ct);
         if (result == null)
             return NotFound();
 
@@ -191,7 +206,7 @@ public class SummonerStatsController(ISummonerStatsService statsService) : Contr
         [FromRoute] string matchId,
         CancellationToken ct = default)
     {
-        var result = await statsService.GetMatchTimelineAsync(matchId, ct);
+        var result = await matchHistoryService.GetMatchTimelineAsync(matchId, ct);
         if (result == null)
             return NotFound();
 

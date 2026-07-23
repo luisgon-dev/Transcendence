@@ -25,7 +25,7 @@ const SECONDARY_LINKS = [
   { label: "Runes", href: "/lol/runes" },
   { label: "Leaderboards", href: "/lol/leaderboards" },
   { label: "Multi-Search", href: "/lol/multi-search" },
-  { label: "Pro Builds", href: "/lol/pro-builds" }
+  { label: "Pro Solo Queue", href: "/lol/pro-builds" }
 ] as const;
 
 export default async function HomePage({
@@ -245,7 +245,7 @@ export default async function HomePage({
                 href={hrefWithRegion("/lol/pro-builds")}
                 className="type-ui inline-flex items-center justify-between gap-3 border-t border-border/20 pt-3 text-fg/84 transition hover:text-fg"
               >
-                <span>Pro Builds</span>
+                <span>Pro Solo Queue</span>
                 <span className="text-fg/40" aria-hidden="true">/</span>
               </Link>
               <Link

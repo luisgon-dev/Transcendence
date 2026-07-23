@@ -9,6 +9,7 @@ using Transcendence.Service.Core.Services.Cache;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.StaticData.DTOs;
 using Transcendence.Service.Core.Services.StaticData.Interfaces;
+using Transcendence.Service.Core.Services.StaticData.Models;
 
 namespace Transcendence.Service.Core.Services.StaticData.Implementations;
 
@@ -20,8 +21,6 @@ public class StaticDataService(
     ILogger<StaticDataService> logger)
     : IStaticDataService
 {
-    private sealed class NonCacheablePatchFallbackException(string message) : Exception(message);
-
     private static readonly JsonSerializerOptions CaseInsensitiveJsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -125,6 +124,8 @@ public class StaticDataService(
         row.IsActive = true;
         await context.SaveChangesAsync(cancellationToken);
 
+        await cacheService.RemoveAsync(AnalyticsCacheKeys.ActivePatch, cancellationToken);
+
         if (previous != null)
             await cacheService.RemoveByTagAsync(CacheTags.ForPatch(previous.Version), cancellationToken);
     }
@@ -149,13 +150,13 @@ public class StaticDataService(
         await MemoizeStaticDataIfAuthoritativeAsync(
             $"static:runes:{patchVersion}",
             patchVersion,
-            ct => FetchStoreRunesAndValidateCacheabilityAsync(patchVersion, ct),
+            ct => FetchAndStoreRunesAsync(patchVersion, ct),
             cancellationToken);
 
         await MemoizeStaticDataIfAuthoritativeAsync(
             $"static:items:v2:{patchVersion}",
             patchVersion,
-            ct => FetchStoreItemsAndValidateCacheabilityAsync(patchVersion, ct),
+            ct => FetchAndStoreItemsAsync(patchVersion, ct),
             cancellationToken);
     }
 
@@ -165,40 +166,24 @@ public class StaticDataService(
         Func<CancellationToken, Task<bool>> fetchAndStore,
         CancellationToken cancellationToken)
     {
-        try
+        var shouldCache = await cacheService.GetOrCreateAsync(
+            cacheKey,
+            fetchAndStore,
+            expiration: TimeSpan.FromDays(30),
+            localExpiration: TimeSpan.FromMinutes(5),
+            tags: [CacheTags.ForPatch(patchVersion)],
+            cancellationToken: cancellationToken);
+
+        if (!shouldCache)
         {
-            await cacheService.GetOrCreateAsync(
-                cacheKey,
-                fetchAndStore,
-                expiration: TimeSpan.FromDays(30),
-                localExpiration: TimeSpan.FromMinutes(5),
-                tags: [CacheTags.ForPatch(patchVersion)],
-                cancellationToken: cancellationToken);
-        }
-        catch (NonCacheablePatchFallbackException ex)
-        {
-            logger.LogWarning(ex,
+            // HybridCache coalesces the fetch but cannot conditionally skip its write. Remove the
+            // short-lived marker immediately so a patch-specific request retries the authoritative
+            // URL later instead of memoizing data returned by CommunityDragon's `latest` fallback.
+            await cacheService.RemoveAsync(cacheKey, cancellationToken);
+            logger.LogWarning(
                 "Community Dragon data for patch '{PatchVersion}' used the 'latest' fallback and was not memoized.",
                 patchVersion);
         }
-    }
-
-    private async Task<bool> FetchStoreRunesAndValidateCacheabilityAsync(string patchVersion, CancellationToken cancellationToken)
-    {
-        var shouldCache = await FetchAndStoreRunesAsync(patchVersion, cancellationToken);
-        if (!shouldCache)
-            throw new NonCacheablePatchFallbackException($"Rune static data for patch '{patchVersion}' used 'latest' fallback.");
-
-        return true;
-    }
-
-    private async Task<bool> FetchStoreItemsAndValidateCacheabilityAsync(string patchVersion, CancellationToken cancellationToken)
-    {
-        var shouldCache = await FetchAndStoreItemsAsync(patchVersion, cancellationToken);
-        if (!shouldCache)
-            throw new NonCacheablePatchFallbackException($"Item static data for patch '{patchVersion}' used 'latest' fallback.");
-
-        return true;
     }
 
     private async Task<string?> FetchLatestPatchVersionAsync(CancellationToken cancellationToken)
@@ -398,7 +383,7 @@ public class StaticDataService(
             foreach (var slot in style.Slots)
             {
                 var isStatSlot = string.Equals(slot.Type, "kStatMod", StringComparison.OrdinalIgnoreCase);
-                var resolvedPathId = isStatSlot ? 5000 : style.Id;
+                var resolvedPathId = isStatSlot ? RunePathIds.StatMods : style.Id;
                 var resolvedPathName = isStatSlot ? "Stat Mods" : style.Name;
                 var resolvedSlot = isStatSlot ? statSlot : nonStatSlot;
 

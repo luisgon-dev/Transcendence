@@ -5,6 +5,7 @@ import "@/app/globals.css";
 import { GlobalCommandPaletteLoader } from "@/components/GlobalCommandPaletteLoader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import { getMetadataBase, SITE_NAME, socialImageUrl } from "@/lib/seo";
 
 const displayFont = Bricolage_Grotesque({
@@ -99,12 +100,14 @@ export default function RootLayout({
     >
       <body className="antialiased">
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-        <SiteHeader />
-        <main className="site-main mx-auto flex w-full max-w-[1440px] flex-1 flex-col px-4 py-8 md:px-6 md:py-10 lg:px-8">
-          {children}
-        </main>
-        <SiteFooter />
-        <GlobalCommandPaletteLoader />
+        <TooltipProvider>
+          <SiteHeader />
+          <main className="site-main mx-auto flex w-full max-w-[1440px] flex-1 flex-col px-4 py-8 md:px-6 md:py-10 lg:px-8">
+            {children}
+          </main>
+          <SiteFooter />
+          <GlobalCommandPaletteLoader />
+        </TooltipProvider>
       </body>
     </html>
   );

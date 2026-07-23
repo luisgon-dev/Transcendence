@@ -2,44 +2,15 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { hasAdminRole } from "@/lib/authz";
-import { getPublicOrigin } from "@/lib/env";
+import { isSafeMethod, isSameOriginRequest } from "@/lib/bffOrigin";
 import { getSessionMe } from "@/lib/session";
 import { getAccessTokenOrRefresh } from "@/lib/sessionToken";
 import { proxyToBackend } from "@/lib/trnProxy";
 
-function isSafeMethod(method: string) {
-  return method === "GET" || method === "HEAD" || method === "OPTIONS";
-}
-
-function isSameOrigin(req: NextRequest) {
-  const origin = req.headers.get("origin");
-  if (!origin) return true;
-  let originUrl: URL;
-  try {
-    originUrl = new URL(origin);
-  } catch {
-    return false;
-  }
-
-  // Prefer the server-configured canonical origin: it cannot be influenced by a client-supplied
-  // X-Forwarded-Host, so the check can't be spoofed. Recommended in production.
-  const configured = getPublicOrigin();
-  if (configured) return originUrl.origin === configured;
-
-  // Fallback (dev / unconfigured) — kept for compatibility; set TRN_PUBLIC_ORIGIN to harden. Note
-  // SameSite=Lax cookies are the primary CSRF control here, this is defense-in-depth.
-  const forwardedHost = req.headers.get("x-forwarded-host");
-  const forwardedProto = req.headers.get("x-forwarded-proto");
-  const host = forwardedHost ?? req.headers.get("host");
-  const proto = forwardedProto ?? req.nextUrl.protocol.replace(":", "");
-  if (!host) return false;
-  return originUrl.host === host && originUrl.protocol === `${proto}:`;
-}
-
 type Ctx = { params: Promise<{ path: string[] }> };
 
 async function handler(req: NextRequest, ctx: Ctx) {
-  if (!isSafeMethod(req.method) && !isSameOrigin(req)) {
+  if (!isSafeMethod(req.method) && !isSameOriginRequest(req)) {
     return NextResponse.json({ message: "Invalid origin." }, { status: 403 });
   }
 

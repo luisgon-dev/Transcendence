@@ -565,10 +565,9 @@ body::before {
      the toolbar (z-30). */
   .tierlist-sticky-head {
     position: sticky; top: var(--tl-thead-top, 18.5rem); z-index: 20;
-    /* Near-opaque so scrolling rows don't read through the column labels, with a whisper of the
-       sanctioned sticky-head frost. */
+    /* Near-opaque so scrolling rows don't read through the column labels. Sticky table chrome is
+       deliberately solid; blur is reserved for the genuinely floating site/palette layers. */
     background: color-mix(in oklch, var(--t-surface), transparent 2%);
-    backdrop-filter: blur(8px);
   }
   .tierlist-row { transition: background-color 140ms var(--ease-out-quart); }
   .tierlist-row:hover { background: color-mix(in oklch, var(--t-fg), transparent 95%); }

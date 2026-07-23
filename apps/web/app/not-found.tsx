@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/Card";
 const suggestions = [
   { href: "/lol/tierlist", label: "LoL Tier List" },
   { href: "/lol/champions", label: "Champions" },
-  { href: "/lol/pro-builds", label: "Pro Builds" }
+  { href: "/lol/pro-builds", label: "Pro Solo Queue" }
 ];
 
 export default function NotFound() {
@@ -67,4 +67,3 @@ export default function NotFound() {
     </div>
   );
 }
-

@@ -56,16 +56,20 @@ export function MatchupsTable({
             onClick={() => setSortKey("winRate")}
             className="control-tab type-ui px-3 py-2"
             data-active={sortKey === "winRate"}
+            aria-pressed={sortKey === "winRate"}
+            aria-label="Sort by win rate, toughest first"
           >
-            Sort by Win Rate
+            Toughest first <span aria-hidden="true">↑</span>
           </button>
           <button
             type="button"
             onClick={() => setSortKey("games")}
             className="control-tab type-ui px-3 py-2"
             data-active={sortKey === "games"}
+            aria-pressed={sortKey === "games"}
+            aria-label="Sort by games, most played first"
           >
-            Sort by Games
+            Most played <span aria-hidden="true">↓</span>
           </button>
         </div>
       </div>
@@ -74,8 +78,18 @@ export function MatchupsTable({
           <thead className="type-overline text-muted">
             <tr className="border-b border-border/30">
               <th className="py-2 pr-4">Opponent</th>
-              <th className="py-2 pr-4 text-right">Win Rate</th>
-              <th className="py-2 pr-4 text-right">Games</th>
+              <th
+                className="py-2 pr-4 text-right"
+                aria-sort={sortKey === "winRate" ? "ascending" : undefined}
+              >
+                Win Rate
+              </th>
+              <th
+                className="py-2 pr-4 text-right"
+                aria-sort={sortKey === "games" ? "descending" : undefined}
+              >
+                Games
+              </th>
               <th className="py-2 pr-4 text-right">Verdict</th>
             </tr>
           </thead>

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import type { UITierListEntry } from "@/lib/tierlist";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 
 import { TierListTable } from "./TierListTable";
 
@@ -61,14 +62,16 @@ describe("TierListTable", () => {
   it("filters by champion and renders a useful empty state", async () => {
     const user = userEvent.setup();
     render(
-      <TierListTable
-        entries={entries}
-        champions={champions}
-        version="16.14.1"
-        rankTierValue="EMERALD_PLUS"
-        activeRegion="ALL"
-        minGames={500}
-      />
+      <TooltipProvider>
+        <TierListTable
+          entries={entries}
+          champions={champions}
+          version="16.14.1"
+          rankTierValue="EMERALD_PLUS"
+          activeRegion="ALL"
+          minGames={500}
+        />
+      </TooltipProvider>
     );
 
     expect(screen.getByText("Ahri")).toBeTruthy();
@@ -86,14 +89,16 @@ describe("TierListTable", () => {
   it("reveals low-sample rows and exposes the active sort direction", async () => {
     const user = userEvent.setup();
     render(
-      <TierListTable
-        entries={entries}
-        champions={champions}
-        version="16.14.1"
-        rankTierValue="EMERALD_PLUS"
-        activeRegion="ALL"
-        minGames={500}
-      />
+      <TooltipProvider>
+        <TierListTable
+          entries={entries}
+          champions={champions}
+          version="16.14.1"
+          rankTierValue="EMERALD_PLUS"
+          activeRegion="ALL"
+          minGames={500}
+        />
+      </TooltipProvider>
     );
 
     await user.click(screen.getByRole("button", { name: "Show low-sample (1)" }));

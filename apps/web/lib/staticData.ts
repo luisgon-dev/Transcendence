@@ -2,7 +2,7 @@ import { cache } from "react";
 
 export type ChampionMap = {
   version: string;
-  champions: Record<string, { id: string; name: string; title?: string }>;
+  champions: Record<string, { id: string; name: string; title?: string; difficulty?: number }>;
 };
 
 type DDragonVersions = string[];
@@ -12,6 +12,9 @@ type DDragonChampion = {
   name: string;
   title?: string;
   key: string;
+  info?: {
+    difficulty?: number;
+  };
 };
 
 type DDragonChampionList = {
@@ -170,7 +173,12 @@ export const fetchChampionMap = cache(async (): Promise<ChampionMap> => {
   const champions: ChampionMap["champions"] = {};
 
   for (const champ of Object.values(champList.data)) {
-    champions[champ.key] = { id: champ.id, name: champ.name, title: champ.title };
+    champions[champ.key] = {
+      id: champ.id,
+      name: champ.name,
+      title: champ.title,
+      difficulty: champ.info?.difficulty
+    };
   }
 
   return { version, champions };
@@ -317,4 +325,3 @@ function communityDragonAssetUrl(iconPath: string) {
   const withoutAssetPrefix = trimmed.replace(/^\/lol-game-data\/assets/i, "");
   return `${CDRAGON_GAME_DATA_BASE}${withoutAssetPrefix.toLowerCase()}`;
 }
-

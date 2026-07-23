@@ -200,8 +200,10 @@ public class SummonerMaintenanceJobTests
             x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()),
             Times.Once);
         queuedJobs.Should().ContainSingle();
-        queuedJobs[0].Args[3].Should().BeOfType<string>()
-            .Which.Should().EndWith("|forced-catch-up");
+        var ownedHandle = queuedJobs[0].Args[3].Should().BeOfType<string>().Subject;
+        var (executionLockKey, ownerToken) = RefreshLockKeys.ParseOwnedHandle(ownedHandle);
+        executionLockKey.Should().EndWith("|forced-catch-up");
+        ownerToken.Should().NotBeNull();
     }
 
     [Fact]
@@ -270,6 +272,49 @@ public class SummonerMaintenanceJobTests
         queuedJobs[0].Args[2].Should().Be(Camille.Enums.PlatformRoute.EUW1);
     }
 
+    [Fact]
+    public async Task ExecuteForRegionAsync_WhenEnqueueFails_ReleasesOwnedLockWithIndependentToken()
+    {
+        var adaptivePolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
+            AdaptiveThroughputBudgetMode.Balanced,
+            MaxCandidates: 1,
+            QueueTarget: 1,
+            IncludeAllModes: false,
+            CoverageRatio: 0.3d,
+            BacklogAgeMinutes: 90d,
+            RecentVelocityPerHour: 3d,
+            CandidatePressureRatio: 1d));
+
+        await using var harness = await Harness.CreateAsync(adaptivePolicy);
+        harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        harness.SeedSummoner("QueueFailure", "NA1", DateTime.UtcNow.AddHours(-6));
+        await harness.Db.SaveChangesAsync();
+
+        var ownerToken = Guid.NewGuid();
+        var callerCts = new CancellationTokenSource();
+        CancellationToken releaseToken = default;
+        harness.RefreshLockRepository
+            .Setup(x => x.TryAcquireOwnedAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ownerToken);
+        harness.RefreshLockRepository
+            .Setup(x => x.ReleaseOwnedAsync(It.IsAny<string>(), ownerToken, It.IsAny<CancellationToken>()))
+            .Callback<string, Guid, CancellationToken>((_, _, token) => releaseToken = token)
+            .Returns(Task.CompletedTask);
+        harness.BackgroundJobClient
+            .Setup(x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()))
+            .Callback(() => callerCts.Cancel())
+            .Throws(new InvalidOperationException("enqueue failed"));
+
+        var act = async () => await harness.Job.ExecuteForRegionAsync("NA1", callerCts.Token);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("enqueue failed");
+        releaseToken.CanBeCanceled.Should().BeTrue();
+        releaseToken.IsCancellationRequested.Should().BeFalse();
+        harness.RefreshLockRepository.Verify(
+            x => x.ReleaseOwnedAsync(It.IsAny<string>(), ownerToken, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
@@ -312,7 +357,11 @@ public class SummonerMaintenanceJobTests
                 .ReturnsAsync(false);
             refreshLocks.Setup(x => x.TryAcquireAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(true);
+            refreshLocks.Setup(x => x.TryAcquireOwnedAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => Guid.NewGuid());
             refreshLocks.Setup(x => x.ReleaseAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
+            refreshLocks.Setup(x => x.ReleaseOwnedAsync(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
             var backgroundJobs = new Mock<IBackgroundJobClient>();

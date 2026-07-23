@@ -10,14 +10,14 @@ using Transcendence.Service.Core.Services.Analysis.Interfaces;
 using Transcendence.Service.Core.Services.Analysis.Models;
 using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.DTOs;
+using Transcendence.Service.Core.Services.StaticData.Models;
 using RuneSelectionTree = Transcendence.Data.Models.LoL.Match.RuneSelectionTree;
 
 namespace Transcendence.Service.Core.Services.Analysis.Implementations;
 
 public class SummonerStatsService(
     TranscendenceContext db,
-    HybridCache cache,
-    ILogger<SummonerStatsService> logger)
+    HybridCache cache)
     : ISummonerStatsService
 {
     // Cache key prefixes
@@ -25,12 +25,10 @@ public class SummonerStatsService(
     private const string ChampionsCacheKeyPrefix = "stats:champions:";
     private const string RolesCacheKeyPrefix = "stats:roles:";
     private const string RankHistoryCacheKeyPrefix = "stats:rank-history:";
+    private const string ActiveSeasonCacheKeyPrefix = "stats:active-season:";
     private const string ActiveSeasonProfileCacheKeyPrefix = "stats:active-season-profile:";
     private const string PlayedWithCacheKeyPrefix = "stats:played-with:";
     private const string MasteryCacheKeyPrefix = "stats:mastery:";
-    private const string RecentMatchesCacheKeyPrefix = "stats:recent:";
-    private const string MatchDetailCacheKeyPrefix = "match:detail:";
-    private const string MatchTimelineCacheKeyPrefix = "match:timeline:";
     private const string SummonerStatsCacheTagPrefix = "summoner-stats:";
 
     // Stats cache options: 5min total, 2min L1 (stats change on refresh)
@@ -40,11 +38,13 @@ public class SummonerStatsService(
         LocalCacheExpiration = TimeSpan.FromMinutes(2)
     };
 
-    // Match detail cache options: 1hr total, 15min L1 (match data is immutable)
-    private static readonly HybridCacheEntryOptions MatchDetailCacheOptions = new()
+    // Season configuration changes rarely. A time-bucketed key removes the otherwise unconditional
+    // RankedSeasons query while naturally rolling over at season boundaries or after config edits.
+    private static readonly TimeSpan ActiveSeasonCacheBucket = TimeSpan.FromMinutes(5);
+    private static readonly HybridCacheEntryOptions ActiveSeasonCacheOptions = new()
     {
-        Expiration = TimeSpan.FromHours(1),
-        LocalCacheExpiration = TimeSpan.FromMinutes(15)
+        Expiration = ActiveSeasonCacheBucket,
+        LocalCacheExpiration = TimeSpan.FromMinutes(2)
     };
 
     public async Task<SummonerOverviewStats> GetSummonerOverviewAsync(Guid summonerId, int recentGamesCount,
@@ -64,84 +64,13 @@ public class SummonerStatsService(
     }
 
     private async Task<SummonerOverviewStats> ComputeOverviewAsync(Guid summonerId, int recentGamesCount,
-        CancellationToken ct)
-    {
-        var baseQuery = db.MatchParticipants
-            .AsNoTracking()
-            .Where(mp => mp.SummonerId == summonerId)
-            .InRankedSoloQueue()
-            .Select(mp => new
-            {
-                mp.Win,
-                mp.Kills,
-                mp.Deaths,
-                mp.Assists,
-                mp.VisionScore,
-                mp.TotalDamageDealtToChampions,
-                Cs = mp.TotalMinionsKilled + mp.NeutralMinionsKilled,
-                DurationSeconds = mp.Match.Duration
-            });
-
-        var aggregate = await baseQuery
-            .GroupBy(_ => 1)
-            .Select(g => new
-            {
-                Total = g.Count(),
-                Wins = g.Sum(x => x.Win ? 1 : 0),
-                Losses = g.Sum(x => x.Win ? 0 : 1),
-                AvgKills = g.Average(x => (double)x.Kills),
-                AvgDeaths = g.Average(x => (double)x.Deaths),
-                AvgAssists = g.Average(x => (double)x.Assists),
-                AvgVision = g.Average(x => (double)x.VisionScore),
-                AvgDamage = g.Average(x => (double)x.TotalDamageDealtToChampions),
-                AvgCsPerMin = g.Average(x => x.DurationSeconds > 0 ? x.Cs / (x.DurationSeconds / 60d) : 0d),
-                AvgDurationMin = g.Average(x => x.DurationSeconds / 60.0)
-            })
-            .SingleOrDefaultAsync(ct);
-
-        var total = aggregate?.Total ?? 0;
-        var wins = aggregate?.Wins ?? 0;
-        var losses = aggregate?.Losses ?? 0;
-        var wr = total > 0 ? (double)wins / total * 100.0 : 0.0;
-
-        var recent = await db.MatchParticipants
-            .AsNoTracking()
-            .Where(mp => mp.SummonerId == summonerId)
-            .InRankedSoloQueue()
-            .OrderByDescending(mp => mp.Match.MatchDate)
-            .ThenByDescending(mp => mp.Match.MatchId)
-            .Select(mp => new RecentPerformancePoint(
-                mp.Match.MatchId!,
-                mp.Win,
-                mp.Kills,
-                mp.Deaths,
-                mp.Assists,
-                mp.Match.Duration > 0
-                    ? (mp.TotalMinionsKilled + mp.NeutralMinionsKilled) / (mp.Match.Duration / 60.0)
-                    : 0.0,
-                mp.VisionScore,
-                mp.TotalDamageDealtToChampions
-            ))
-            .Take(recentGamesCount)
-            .ToListAsync(ct);
-
-        return new SummonerOverviewStats(
+        CancellationToken ct) =>
+        await ComputeOverviewFromParticipantsAsync(
             summonerId,
-            total,
-            wins,
-            losses,
-            wr,
-            aggregate?.AvgKills ?? 0,
-            aggregate?.AvgDeaths ?? 0,
-            aggregate?.AvgAssists ?? 0,
-            CalcKdaRatio(aggregate?.AvgKills ?? 0, aggregate?.AvgDeaths ?? 0, aggregate?.AvgAssists ?? 0),
-            aggregate?.AvgCsPerMin ?? 0,
-            aggregate?.AvgVision ?? 0,
-            aggregate?.AvgDamage ?? 0,
-            aggregate?.AvgDurationMin ?? 0,
-            recent
-        );
-    }
+            recentGamesCount,
+            startMatchDateMs: null,
+            endMatchDateMs: null,
+            ct);
 
     public async Task<IReadOnlyList<ChampionStat>> GetChampionStatsAsync(Guid summonerId, int top, CancellationToken ct)
     {
@@ -159,61 +88,13 @@ public class SummonerStatsService(
     }
 
     private async Task<IReadOnlyList<ChampionStat>> ComputeChampionStatsAsync(Guid summonerId, int top,
-        CancellationToken ct)
-    {
-        // Aggregate server-side (GROUP BY ChampionId) so only the grouped rows leave the DB.
-        // Mirrors the ComputeOverviewAsync aggregate pattern (project → GroupBy → Select).
-        var rows = await db.MatchParticipants
-            .AsNoTracking()
-            .Where(mp => mp.SummonerId == summonerId)
-            .InRankedSoloQueue()
-            .Select(mp => new
-            {
-                mp.ChampionId,
-                mp.Win,
-                mp.Kills,
-                mp.Deaths,
-                mp.Assists,
-                mp.VisionScore,
-                mp.TotalDamageDealtToChampions,
-                Cs = mp.TotalMinionsKilled + mp.NeutralMinionsKilled,
-                MatchDuration = mp.Match.Duration
-            })
-            .GroupBy(x => x.ChampionId)
-            .Select(g => new
-            {
-                ChampionId = g.Key,
-                Games = g.Count(),
-                Wins = g.Sum(x => x.Win ? 1 : 0),
-                AvgKills = g.Average(x => (double)x.Kills),
-                AvgDeaths = g.Average(x => (double)x.Deaths),
-                AvgAssists = g.Average(x => (double)x.Assists),
-                AvgCsPerMin = g.Average(x => x.MatchDuration > 0
-                    ? x.Cs / (x.MatchDuration / 60.0)
-                    : 0.0),
-                AvgVision = g.Average(x => (double)x.VisionScore),
-                AvgDamage = g.Average(x => (double)x.TotalDamageDealtToChampions)
-            })
-            .OrderByDescending(x => x.Games)
-            .Take(top)
-            .ToListAsync(ct);
-
-        return rows
-            .Select(x => new ChampionStat(
-                x.ChampionId,
-                x.Games,
-                x.Wins,
-                x.Games - x.Wins,
-                x.Games > 0 ? (double)x.Wins / x.Games * 100.0 : 0.0,
-                x.AvgKills,
-                x.AvgDeaths,
-                x.AvgAssists,
-                CalcKdaRatio(x.AvgKills, x.AvgDeaths, x.AvgAssists),
-                x.AvgCsPerMin,
-                x.AvgVision,
-                x.AvgDamage))
-            .ToList();
-    }
+        CancellationToken ct) =>
+        await ComputeChampionStatsFromParticipantsAsync(
+            summonerId,
+            top,
+            startMatchDateMs: null,
+            endMatchDateMs: null,
+            ct);
 
     public async Task<SummonerSeasonProfileStats> GetActiveSeasonProfileStatsAsync(
         Guid summonerId,
@@ -224,7 +105,7 @@ public class SummonerStatsService(
         if (topChampions <= 0) topChampions = 5;
         if (recentGamesCount <= 0) recentGamesCount = 20;
 
-        var season = await RankedSeasonResolver.GetActiveSeasonAsync(db, DateTime.UtcNow, ct);
+        var season = await ResolveActiveSeasonAsync(DateTime.UtcNow, ct);
         var cacheKey = $"{ActiveSeasonProfileCacheKeyPrefix}{summonerId}:{season.SeasonKey}:{topChampions}:{recentGamesCount}";
         return await ExecuteStatsRequestAsync(
             "Failed to compute active-season profile stats.",
@@ -240,6 +121,16 @@ public class SummonerStatsService(
                 tags: new[] { BuildSummonerStatsTag(summonerId) },
                 cancellationToken: token),
             ct);
+    }
+
+    internal async Task<RankedSeasonWindow> ResolveActiveSeasonAsync(DateTime nowUtc, CancellationToken ct)
+    {
+        var bucket = nowUtc.Ticks / ActiveSeasonCacheBucket.Ticks;
+        return await cache.GetOrCreateAsync(
+            $"{ActiveSeasonCacheKeyPrefix}{bucket}",
+            async cancel => await RankedSeasonResolver.GetActiveSeasonAsync(db, nowUtc, cancel),
+            ActiveSeasonCacheOptions,
+            cancellationToken: ct);
     }
 
     private async Task<SummonerSeasonProfileStats> ComputeActiveSeasonProfileStatsAsync(
@@ -319,16 +210,17 @@ public class SummonerStatsService(
     private async Task<SummonerOverviewStats> ComputeOverviewFromParticipantsAsync(
         Guid summonerId,
         int recentGamesCount,
-        long startMatchDateMs,
+        long? startMatchDateMs,
         long? endMatchDateMs,
         CancellationToken ct)
     {
         var baseQuery = db.MatchParticipants
             .AsNoTracking()
             .Where(mp => mp.SummonerId == summonerId)
-            .InRankedSoloQueue()
-            .Where(mp => mp.Match.MatchDate >= startMatchDateMs);
+            .InRankedSoloQueue();
 
+        if (startMatchDateMs.HasValue)
+            baseQuery = baseQuery.Where(mp => mp.Match.MatchDate >= startMatchDateMs.Value);
         if (endMatchDateMs.HasValue)
             baseQuery = baseQuery.Where(mp => mp.Match.MatchDate < endMatchDateMs.Value);
 
@@ -401,20 +293,21 @@ public class SummonerStatsService(
     private async Task<IReadOnlyList<ChampionStat>> ComputeChampionStatsFromParticipantsAsync(
         Guid summonerId,
         int top,
-        long startMatchDateMs,
+        long? startMatchDateMs,
         long? endMatchDateMs,
         CancellationToken ct)
     {
         var query = db.MatchParticipants
             .AsNoTracking()
             .Where(mp => mp.SummonerId == summonerId)
-            .InRankedSoloQueue()
-            .Where(mp => mp.Match.MatchDate >= startMatchDateMs);
+            .InRankedSoloQueue();
 
+        if (startMatchDateMs.HasValue)
+            query = query.Where(mp => mp.Match.MatchDate >= startMatchDateMs.Value);
         if (endMatchDateMs.HasValue)
             query = query.Where(mp => mp.Match.MatchDate < endMatchDateMs.Value);
 
-        var games = await query
+        var rows = await query
             .Select(mp => new
             {
                 mp.ChampionId,
@@ -427,33 +320,39 @@ public class SummonerStatsService(
                 Cs = mp.TotalMinionsKilled + mp.NeutralMinionsKilled,
                 MatchDuration = mp.Match.Duration
             })
-            .ToListAsync(ct);
-
-        return games
             .GroupBy(x => x.ChampionId)
-            .Select(g =>
+            .Select(g => new
             {
-                var count = g.Count();
-                var wins = g.Sum(x => x.Win ? 1 : 0);
-                var avgKills = g.Average(x => (double)x.Kills);
-                var avgDeaths = g.Average(x => (double)x.Deaths);
-                var avgAssists = g.Average(x => (double)x.Assists);
-                return new ChampionStat(
-                    g.Key,
-                    count,
-                    wins,
-                    count - wins,
-                    count > 0 ? (double)wins / count * 100.0 : 0.0,
-                    avgKills,
-                    avgDeaths,
-                    avgAssists,
-                    CalcKdaRatio(avgKills, avgDeaths, avgAssists),
-                    g.Average(x => x.MatchDuration > 0 ? x.Cs / (x.MatchDuration / 60.0) : 0.0),
-                    g.Average(x => (double)x.VisionScore),
-                    g.Average(x => (double)x.TotalDamageDealtToChampions));
+                ChampionId = g.Key,
+                Games = g.Count(),
+                Wins = g.Sum(x => x.Win ? 1 : 0),
+                AvgKills = g.Average(x => (double)x.Kills),
+                AvgDeaths = g.Average(x => (double)x.Deaths),
+                AvgAssists = g.Average(x => (double)x.Assists),
+                AvgCsPerMin = g.Average(x => x.MatchDuration > 0
+                    ? x.Cs / (x.MatchDuration / 60.0)
+                    : 0.0),
+                AvgVision = g.Average(x => (double)x.VisionScore),
+                AvgDamage = g.Average(x => (double)x.TotalDamageDealtToChampions)
             })
             .OrderByDescending(x => x.Games)
             .Take(top)
+            .ToListAsync(ct);
+
+        return rows
+            .Select(x => new ChampionStat(
+                x.ChampionId,
+                x.Games,
+                x.Wins,
+                x.Games - x.Wins,
+                x.Games > 0 ? (double)x.Wins / x.Games * 100.0 : 0.0,
+                x.AvgKills,
+                x.AvgDeaths,
+                x.AvgAssists,
+                CalcKdaRatio(x.AvgKills, x.AvgDeaths, x.AvgAssists),
+                x.AvgCsPerMin,
+                x.AvgVision,
+                x.AvgDamage))
             .ToList();
     }
 
@@ -768,12 +667,74 @@ public class SummonerStatsService(
             .ToListAsync(ct);
     }
 
+    private static double CalcKdaRatio(double kills, double deaths, double assists) =>
+        (kills + assists) / Math.Max(1.0, deaths);
+
+    private static string BuildSummonerStatsTag(Guid summonerId) => $"{SummonerStatsCacheTagPrefix}{summonerId}";
+
+    private static string NormalizeTeamPosition(string? teamPosition)
+    {
+        if (string.IsNullOrWhiteSpace(teamPosition))
+            return "UNKNOWN";
+
+        return teamPosition.Trim().ToUpperInvariant();
+    }
+
+    private static async Task<T> ExecuteStatsRequestAsync<T>(
+        string failureMessage,
+        Func<CancellationToken, Task<T>> operation,
+        CancellationToken ct)
+    {
+        try
+        {
+            return await operation(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (SummonerStatsComputationException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new SummonerStatsComputationException(failureMessage, ex);
+        }
+    }
+}
+
+public class SummonerMatchHistoryService(
+    TranscendenceContext db,
+    HybridCache cache,
+    ILogger<SummonerMatchHistoryService> logger)
+    : ISummonerMatchHistoryService
+{
+    private const string RecentMatchesCacheKeyPrefix = "stats:recent:";
+    private const string MatchDetailCacheKeyPrefix = "match:detail:";
+    private const string MatchTimelineCacheKeyPrefix = "match:timeline:";
+    private const string SummonerStatsCacheTagPrefix = "summoner-stats:";
+
+    private static readonly HybridCacheEntryOptions StatsCacheOptions = new()
+    {
+        Expiration = TimeSpan.FromMinutes(5),
+        LocalCacheExpiration = TimeSpan.FromMinutes(2)
+    };
+
+    private static readonly HybridCacheEntryOptions MatchDetailCacheOptions = new()
+    {
+        Expiration = TimeSpan.FromHours(1),
+        LocalCacheExpiration = TimeSpan.FromMinutes(15)
+    };
+
     public async Task<PagedResult<RecentMatchSummary>> GetRecentMatchesAsync(
         Guid summonerId,
         int page,
         int pageSize,
         string? queueFamily,
         IReadOnlyCollection<int>? queueIds,
+        int? championId,
+        bool includeFacets,
         CancellationToken ct)
     {
         if (page <= 0) page = 1;
@@ -784,7 +745,7 @@ public class SummonerStatsService(
             ? string.Join(",", normalizedQueueIds)
             : "-";
         var cacheKey =
-            $"{RecentMatchesCacheKeyPrefix}{summonerId}:{page}:{pageSize}:{normalizedFamily}:{queueIdsCacheKey}";
+            $"{RecentMatchesCacheKeyPrefix}{summonerId}:{page}:{pageSize}:{normalizedFamily}:{queueIdsCacheKey}:{championId?.ToString() ?? "-"}:{includeFacets}";
         return await ExecuteStatsRequestAsync(
             "Failed to compute recent matches.",
             async token => await cache.GetOrCreateAsync(
@@ -795,6 +756,8 @@ public class SummonerStatsService(
                     pageSize,
                     normalizedFamily,
                     normalizedQueueIds,
+                    championId is > 0 ? championId : null,
+                    includeFacets,
                     cancel),
                 StatsCacheOptions,
                 tags: new[] { BuildSummonerStatsTag(summonerId) },
@@ -808,14 +771,21 @@ public class SummonerStatsService(
         int pageSize,
         string queueFamily,
         IReadOnlyList<int> queueIds,
+        int? championId,
+        bool includeFacets,
         CancellationToken ct)
     {
+        var baseQuery = db.MatchParticipants
+            .AsNoTracking()
+            .Where(mp => mp.SummonerId == summonerId);
+        var facets = includeFacets
+            ? await LoadMatchHistoryFacetsAsync(baseQuery, ct)
+            : null;
         var query = ApplyRecentMatchFilters(
-                db.MatchParticipants
-                    .AsNoTracking()
-                    .Where(mp => mp.SummonerId == summonerId),
+                baseQuery,
                 queueFamily,
-                queueIds)
+                queueIds,
+                championId)
             .AsNoTracking()
             .OrderByDescending(mp => mp.Match.MatchDate)
             .ThenByDescending(mp => mp.Match.MatchId);
@@ -861,7 +831,7 @@ public class SummonerStatsService(
         }
 
         if (participantData.Count == 0)
-            return new PagedResult<RecentMatchSummary>([], page, pageSize, total);
+            return new PagedResult<RecentMatchSummary>([], page, pageSize, total, facets);
 
         // Get items and runes for these participants
         var participantIds = participantData.Select(p => p.ParticipantId).Distinct().ToList();
@@ -899,7 +869,6 @@ public class SummonerStatsService(
                 g => g
                     .Select(r => new StoredRuneSelection(
                         r.RuneId,
-                        r.PatchVersion,
                         r.SelectionTree,
                         r.SelectionIndex,
                         r.StyleId))
@@ -930,7 +899,7 @@ public class SummonerStatsService(
                 g =>
                 {
                     var first = g.First();
-                    return new RuneMetadata(first.RunePathId, first.Slot);
+                    return new RuneSelectionMetadata(first.RunePathId, first.Slot);
                 });
 
         var runeMetadataByRuneId = runeMetadataRows
@@ -940,7 +909,7 @@ public class SummonerStatsService(
                 g =>
                 {
                     var first = g.First();
-                    return new RuneMetadata(first.RunePathId, first.Slot);
+                    return new RuneSelectionMetadata(first.RunePathId, first.Slot);
                 });
 
         // Map to final DTOs
@@ -987,7 +956,35 @@ public class SummonerStatsService(
             );
         }).ToList();
 
-        return new PagedResult<RecentMatchSummary>(items, page, pageSize, total);
+        return new PagedResult<RecentMatchSummary>(items, page, pageSize, total, facets);
+    }
+
+    private static async Task<MatchHistoryFacets> LoadMatchHistoryFacetsAsync(
+        IQueryable<Data.Models.LoL.Match.MatchParticipant> query,
+        CancellationToken ct)
+    {
+        var queues = await query
+            .Select(mp => new { mp.Match.QueueId, mp.Match.QueueType, mp.Match.QueueFamily })
+            .Distinct()
+            .OrderBy(value => value.QueueId)
+            .ThenBy(value => value.QueueType)
+            .ToListAsync(ct);
+        var championIds = await query
+            .Select(mp => mp.ChampionId)
+            .Distinct()
+            .OrderBy(value => value)
+            .ToListAsync(ct);
+
+        return new MatchHistoryFacets(
+            queues.Select(value => new MatchHistoryQueueFacet(
+                value.QueueId,
+                !string.IsNullOrWhiteSpace(value.QueueType)
+                    ? value.QueueType
+                    : QueueCatalog.ResolveQueueLabel(value.QueueId),
+                !string.IsNullOrWhiteSpace(value.QueueFamily)
+                    ? value.QueueFamily
+                    : QueueCatalog.ResolveQueueFamily(value.QueueId))).ToList(),
+            championIds);
     }
 
     private async Task<List<RecentMatchProjection>> LoadRecentMatchPageConservativelyAsync(
@@ -1206,7 +1203,7 @@ public class SummonerStatsService(
                 g =>
                 {
                     var first = g.First();
-                    return new RuneMetadata(first.RunePathId, first.Slot);
+                    return new RuneSelectionMetadata(first.RunePathId, first.Slot);
                 });
 
         var participants = match.Participants.Select(p => MapParticipant(p, runeMetadata)).ToList();
@@ -1249,7 +1246,7 @@ public class SummonerStatsService(
 
     private static ParticipantDetailDto MapParticipant(
         Data.Models.LoL.Match.MatchParticipant p,
-        Dictionary<int, RuneMetadata> runeMetadata)
+        Dictionary<int, RuneSelectionMetadata> runeMetadata)
     {
         var items = p.Items
             .OrderBy(i => i.SlotIndex)
@@ -1260,7 +1257,6 @@ public class SummonerStatsService(
         var runes = BuildRunesDto(
             p.Runes.Select(r => new StoredRuneSelection(
                 r.RuneId,
-                r.PatchVersion,
                 r.SelectionTree,
                 r.SelectionIndex,
                 r.StyleId)).ToList(),
@@ -1295,113 +1291,17 @@ public class SummonerStatsService(
 
     private static ParticipantRunesDto BuildRunesDto(
         List<StoredRuneSelection> selections,
-        Dictionary<int, RuneMetadata> runeMetadata)
+        Dictionary<int, RuneSelectionMetadata> runeMetadata)
     {
-        if (selections.Count == 0)
-            return new ParticipantRunesDto(0, 0, [], [], []);
-
-        if (HasStructuredSelections(selections))
-        {
-            var primarySelections = selections
-                .Where(s => s.SelectionTree == RuneSelectionTree.Primary)
-                .OrderBy(s => s.SelectionIndex)
-                .Select(s => s.RuneId)
-                .ToList();
-            var subSelections = selections
-                .Where(s => s.SelectionTree == RuneSelectionTree.Secondary)
-                .OrderBy(s => s.SelectionIndex)
-                .Select(s => s.RuneId)
-                .ToList();
-            var statShards = selections
-                .Where(s => s.SelectionTree == RuneSelectionTree.StatShards)
-                .OrderBy(s => s.SelectionIndex)
-                .Select(s => s.RuneId)
-                .ToList();
-
-            var primaryStyleId = selections
-                .Where(s => s.SelectionTree == RuneSelectionTree.Primary && s.StyleId > 0)
-                .Select(s => s.StyleId)
-                .FirstOrDefault();
-            var subStyleId = selections
-                .Where(s => s.SelectionTree == RuneSelectionTree.Secondary && s.StyleId > 0)
-                .Select(s => s.StyleId)
-                .FirstOrDefault();
-
-            if (primaryStyleId == 0 && primarySelections.Count > 0 &&
-                runeMetadata.TryGetValue(primarySelections[0], out var primaryMeta))
-                primaryStyleId = primaryMeta.PathId;
-
-            if (subStyleId == 0 && subSelections.Count > 0 &&
-                runeMetadata.TryGetValue(subSelections[0], out var subMeta))
-                subStyleId = subMeta.PathId;
-
-            return new ParticipantRunesDto(
-                primaryStyleId,
-                subStyleId,
-                primarySelections,
-                subSelections,
-                statShards
-            );
-        }
-
-        // Legacy fallback: infer trees by path/slot metadata.
-        var runesByPath = selections
-            .Select(s => runeMetadata.TryGetValue(s.RuneId, out var meta)
-                ? (RuneId: s.RuneId, PathId: meta.PathId, Slot: meta.Slot)
-                : (RuneId: s.RuneId, PathId: 0, Slot: s.SelectionIndex))
-            .GroupBy(x => x.PathId)
-            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Slot).ToList());
-
-        var statPath = runesByPath
-            .Where(kvp => kvp.Key >= 5000)
-            .SelectMany(kvp => kvp.Value)
-            .OrderBy(x => x.Slot)
-            .Select(x => x.RuneId)
-            .Take(3)
-            .ToList();
-
-        var nonStatPaths = runesByPath
-            .Where(kvp => kvp.Key > 0 && kvp.Key < 5000)
-            .Select(kvp => new { PathId = kvp.Key, Runes = kvp.Value })
-            .OrderByDescending(x => x.Runes.Count)
-            .ThenBy(x => x.PathId)
-            .ToList();
-
-        var primaryPath = nonStatPaths.FirstOrDefault();
-        var secondaryPath = nonStatPaths.Skip(1).FirstOrDefault();
-
+        var mapped = RuneSelectionMapper.Map(
+            selections,
+            runeId => runeMetadata.TryGetValue(runeId, out var metadata) ? metadata : null);
         return new ParticipantRunesDto(
-            primaryPath?.PathId ?? 0,
-            secondaryPath?.PathId ?? 0,
-            primaryPath?.Runes.Select(r => r.RuneId).ToList() ?? [],
-            secondaryPath?.Runes.Select(r => r.RuneId).ToList() ?? [],
-            statPath
-        );
-    }
-
-    private static bool HasStructuredSelections(List<StoredRuneSelection> selections)
-    {
-        if (selections.Count == 0)
-            return false;
-
-        var hasNonDefaultHierarchy = selections.Any(s =>
-            s.SelectionTree != RuneSelectionTree.Primary ||
-            s.StyleId != 0);
-
-        if (!hasNonDefaultHierarchy)
-            return false;
-
-        var uniqueSlots = selections
-            .Select(s => (s.SelectionTree, s.SelectionIndex))
-            .Distinct()
-            .Count();
-
-        return uniqueSlots == selections.Count;
-    }
-
-    private static double CalcKdaRatio(double kills, double deaths, double assists)
-    {
-        return (kills + assists) / Math.Max(1.0, deaths);
+            mapped.PrimaryStyleId,
+            mapped.SubStyleId,
+            mapped.PrimaryRunes,
+            mapped.SubRunes,
+            mapped.StatShards);
     }
 
     private static string NormalizePatchVersion(string? patchVersion)
@@ -1410,14 +1310,6 @@ public class SummonerStatsService(
     }
 
     private static string BuildSummonerStatsTag(Guid summonerId) => $"{SummonerStatsCacheTagPrefix}{summonerId}";
-
-    private static string NormalizeTeamPosition(string? teamPosition)
-    {
-        if (string.IsNullOrWhiteSpace(teamPosition))
-            return "UNKNOWN";
-
-        return teamPosition.Trim().ToUpperInvariant();
-    }
 
     private static string NormalizeQueueFamily(string? queueFamily)
     {
@@ -1445,7 +1337,8 @@ public class SummonerStatsService(
     private static IQueryable<Data.Models.LoL.Match.MatchParticipant> ApplyRecentMatchFilters(
         IQueryable<Data.Models.LoL.Match.MatchParticipant> query,
         string queueFamily,
-        IReadOnlyList<int> queueIds)
+        IReadOnlyList<int> queueIds,
+        int? championId)
     {
         if (queueIds.Count > 0)
         {
@@ -1459,6 +1352,9 @@ public class SummonerStatsService(
         if (!string.Equals(queueFamily, QueueCatalog.QueueFamilyAll, StringComparison.Ordinal))
             query = query.Where(mp => mp.Match.QueueFamily == queueFamily);
 
+        if (championId is > 0)
+            query = query.Where(mp => mp.ChampionId == championId.Value);
+
         return query;
     }
 
@@ -1469,8 +1365,8 @@ public class SummonerStatsService(
     private static MatchRuneSummary BuildRuneSummary(
         List<StoredRuneSelection> selections,
         string? patchVersion,
-        Dictionary<RunePatchKey, RuneMetadata> runeMetadata,
-        IReadOnlyDictionary<int, RuneMetadata> runeMetadataByRuneId)
+        Dictionary<RunePatchKey, RuneSelectionMetadata> runeMetadata,
+        IReadOnlyDictionary<int, RuneSelectionMetadata> runeMetadataByRuneId)
     {
         var detail = BuildRuneDetail(selections, patchVersion, runeMetadata, runeMetadataByRuneId);
         return new MatchRuneSummary(
@@ -1482,108 +1378,34 @@ public class SummonerStatsService(
     private static MatchRuneDetail BuildRuneDetail(
         List<StoredRuneSelection> selections,
         string? patchVersion,
-        Dictionary<RunePatchKey, RuneMetadata> runeMetadataByPatch,
-        IReadOnlyDictionary<int, RuneMetadata> runeMetadataByRuneId)
+        Dictionary<RunePatchKey, RuneSelectionMetadata> runeMetadataByPatch,
+        IReadOnlyDictionary<int, RuneSelectionMetadata> runeMetadataByRuneId)
     {
-        if (selections.Count == 0)
-            return new MatchRuneDetail(0, 0, [], [], []);
-
         var normalizedPatch = NormalizePatchVersion(patchVersion);
-
-        if (HasStructuredSelections(selections))
-        {
-            var primarySelections = selections
-                .Where(s => s.SelectionTree == RuneSelectionTree.Primary)
-                .OrderBy(s => s.SelectionIndex)
-                .Select(s => s.RuneId)
-                .ToList();
-            var subSelections = selections
-                .Where(s => s.SelectionTree == RuneSelectionTree.Secondary)
-                .OrderBy(s => s.SelectionIndex)
-                .Select(s => s.RuneId)
-                .ToList();
-            var statShards = selections
-                .Where(s => s.SelectionTree == RuneSelectionTree.StatShards)
-                .OrderBy(s => s.SelectionIndex)
-                .Select(s => s.RuneId)
-                .ToList();
-
-            var primaryStyleId = selections
-                .Where(s => s.SelectionTree == RuneSelectionTree.Primary && s.StyleId > 0)
-                .Select(s => s.StyleId)
-                .FirstOrDefault();
-            var subStyleId = selections
-                .Where(s => s.SelectionTree == RuneSelectionTree.Secondary && s.StyleId > 0)
-                .Select(s => s.StyleId)
-                .FirstOrDefault();
-
-            if (primaryStyleId == 0 && primarySelections.Count > 0 &&
-                TryGetRuneMetadata(primarySelections[0], normalizedPatch, runeMetadataByPatch, runeMetadataByRuneId,
-                    out var primaryMeta) &&
-                primaryMeta.PathId is > 0 and < 5000)
-            {
-                primaryStyleId = primaryMeta.PathId;
-            }
-
-            if (subStyleId == 0 && subSelections.Count > 0 &&
-                TryGetRuneMetadata(subSelections[0], normalizedPatch, runeMetadataByPatch, runeMetadataByRuneId,
-                    out var subMeta) &&
-                subMeta.PathId is > 0 and < 5000)
-            {
-                subStyleId = subMeta.PathId;
-            }
-
-            return new MatchRuneDetail(primaryStyleId, subStyleId, primarySelections, subSelections, statShards);
-        }
-
-        // Legacy fallback: infer trees/styles by path metadata.
-        var resolvedRunes = selections
-            .Select(s =>
-            {
-                return TryGetRuneMetadata(s.RuneId, normalizedPatch, runeMetadataByPatch, runeMetadataByRuneId,
-                    out var meta)
-                    ? (RuneId: s.RuneId, PathId: meta.PathId, Slot: meta.Slot)
-                    : (RuneId: s.RuneId, PathId: 0, Slot: s.SelectionIndex);
-            })
-            .ToList();
-
-        var statShardsFallback = resolvedRunes
-            .Where(r => r.PathId >= 5000)
-            .OrderBy(r => r.Slot)
-            .Select(r => r.RuneId)
-            .Take(3)
-            .ToList();
-
-        var nonStatPaths = resolvedRunes
-            .Where(r => r.PathId > 0 && r.PathId < 5000)
-            .GroupBy(r => r.PathId)
-            .Select(g => new
-            {
-                PathId = g.Key,
-                Runes = g.OrderBy(x => x.Slot).ToList()
-            })
-            .OrderByDescending(x => x.Runes.Count)
-            .ThenBy(x => x.PathId)
-            .ToList();
-
-        var primaryPath = nonStatPaths.FirstOrDefault();
-        var secondaryPath = nonStatPaths.Skip(1).FirstOrDefault();
-
+        var mapped = RuneSelectionMapper.Map(
+            selections,
+            runeId => TryGetRuneMetadata(
+                runeId,
+                normalizedPatch,
+                runeMetadataByPatch,
+                runeMetadataByRuneId,
+                out var metadata)
+                    ? metadata
+                    : null);
         return new MatchRuneDetail(
-            primaryPath?.PathId ?? 0,
-            secondaryPath?.PathId ?? 0,
-            primaryPath?.Runes.Select(r => r.RuneId).ToList() ?? [],
-            secondaryPath?.Runes.Select(r => r.RuneId).ToList() ?? [],
-            statShardsFallback
-        );
+            mapped.PrimaryStyleId,
+            mapped.SubStyleId,
+            mapped.PrimaryRunes,
+            mapped.SubRunes,
+            mapped.StatShards);
     }
 
     private static bool TryGetRuneMetadata(
         int runeId,
         string normalizedPatch,
-        IReadOnlyDictionary<RunePatchKey, RuneMetadata> runeMetadataByPatch,
-        IReadOnlyDictionary<int, RuneMetadata> runeMetadataByRuneId,
-        out RuneMetadata metadata)
+        IReadOnlyDictionary<RunePatchKey, RuneSelectionMetadata> runeMetadataByPatch,
+        IReadOnlyDictionary<int, RuneSelectionMetadata> runeMetadataByRuneId,
+        out RuneSelectionMetadata metadata)
     {
         if (runeMetadataByPatch.TryGetValue(new RunePatchKey(runeId, normalizedPatch), out metadata))
             return true;
@@ -1596,14 +1418,6 @@ public class SummonerStatsService(
     /// </summary>
     private readonly record struct RunePatchKey(int RuneId, string PatchVersion);
 
-    private readonly record struct StoredRuneSelection(
-        int RuneId,
-        string? PatchVersion,
-        RuneSelectionTree SelectionTree,
-        int SelectionIndex,
-        int StyleId);
-
-    private readonly record struct RuneMetadata(int PathId, int Slot);
     private sealed record RecentMatchMatchProjection(
         Guid Id,
         string? MatchId,

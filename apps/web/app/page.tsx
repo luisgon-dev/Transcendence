@@ -10,6 +10,7 @@ import { LaneIcon } from "@/components/ui/LaneIcon";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { cn } from "@/lib/cn";
 import { getBackendBaseUrl } from "@/lib/env";
+import { selectStarterPicks } from "@/lib/homeGuidance";
 import { fetchLolAnalyticsStatus } from "@/lib/lolAnalyticsStatus";
 import { platformRegionToSlug } from "@/lib/lolRegions";
 import { DEFAULT_TIERLIST_RANK_TIER } from "@/lib/ranks";
@@ -66,8 +67,8 @@ const EXPLORE = [
   },
   {
     href: "/lol/pro-builds",
-    name: "Pro builds",
-    description: "What pros actually buy, rush, and max this patch."
+    name: "Pro solo queue",
+    description: "What tracked pros buy, rush, and max in ranked solo queue this patch."
   },
   {
     href: "/lol/items",
@@ -85,7 +86,7 @@ type HomeLiveData = {
   version: string;
   champions: Awaited<ReturnType<typeof fetchChampionMap>>["champions"];
   patch: string | null;
-  lolTop: ReturnType<typeof normalizeTierListEntries>;
+  tierEntries: ReturnType<typeof normalizeTierListEntries>;
 };
 
 // The "Top picks" strip is best-effort. fetchChampionMap throws on a Data Dragon
@@ -108,12 +109,10 @@ async function loadHomeLiveData(): Promise<HomeLiveData> {
       version,
       champions,
       patch: analyticsStatus?.patch ?? tierListRes.body?.patch ?? null,
-      lolTop: tierListRes.ok
-        ? normalizeTierListEntries(tierListRes.body?.entries ?? []).slice(0, 5)
-        : []
+      tierEntries: tierListRes.ok ? normalizeTierListEntries(tierListRes.body?.entries ?? []) : []
     };
   } catch {
-    return { version: "", champions: {}, patch: null, lolTop: [] };
+    return { version: "", champions: {}, patch: null, tierEntries: [] };
   }
 }
 
@@ -131,10 +130,12 @@ async function loadVerifiedMain(): Promise<RiotAccountLink | null> {
 }
 
 export default async function LandingPage() {
-  const [{ version, champions, patch, lolTop }, verifiedMain] = await Promise.all([
+  const [{ version, champions, patch, tierEntries }, verifiedMain] = await Promise.all([
     loadHomeLiveData(),
     loadVerifiedMain()
   ]);
+  const lolTop = tierEntries.slice(0, 5);
+  const starterPicks = selectStarterPicks(tierEntries, champions);
   const hasPicks = lolTop.length > 0;
 
   return (
@@ -143,7 +144,7 @@ export default async function LandingPage() {
         {verifiedMain ? (
           <p className="type-kicker mb-3 text-primary">Welcome back, {verifiedMain.gameName}</p>
         ) : null}
-        <h1 className="type-display max-w-3xl">Look up any League player, champion, or matchup.</h1>
+        <h1 className="type-display max-w-3xl">Look up any League player or champion.</h1>
         <p className="type-lead mt-5 max-w-2xl">
           Current-patch tier lists, builds, and live profiles, refreshed continuously from ranked
           games.
@@ -181,6 +182,60 @@ export default async function LandingPage() {
           </p>
         </div>
       </section>
+
+      {starterPicks.length > 0 ? (
+        <section aria-labelledby="starter-picks-heading" className="page-panel p-5 sm:p-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="type-kicker text-muted">New to ranked</p>
+              <h2 id="starter-picks-heading" className="type-section mt-1 text-fg">
+                Approachable picks for every role
+              </h2>
+            </div>
+            <p className="type-note max-w-xl text-muted sm:text-right">
+              Suggestions favor lower-complexity champions with a stable sample, then rank them by
+              strength against their role peers.
+            </p>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            {starterPicks.map((pick) => (
+              <Link
+                key={pick.role}
+                href={`/lol/champions/${pick.championId}?role=${pick.role}`}
+                className={cn(
+                  "group flex items-center gap-3 rounded-lg border border-border/55 bg-surface-2/35 p-3 transition-colors hover:border-border hover:bg-surface-2/70",
+                  FOCUS_RING
+                )}
+              >
+                <Image
+                  src={championIconUrl(version, pick.champion.id)}
+                  alt=""
+                  width={38}
+                  height={38}
+                  sizes="38px"
+                  className="rounded-md"
+                />
+                <span className="min-w-0">
+                  <span className="type-note flex items-center gap-1.5 text-muted">
+                    <LaneIcon role={pick.role} className="h-3.5 w-3.5" />
+                    {roleDisplayLabel(pick.role)}
+                  </span>
+                  <span className="type-ui mt-0.5 block truncate font-semibold text-fg group-hover:text-primary">
+                    {pick.champion.name}
+                  </span>
+                </span>
+              </Link>
+            ))}
+          </div>
+
+          <p className="type-note mt-4 border-t border-border/45 pt-4 text-muted">
+            How tiers work: win rates are adjusted toward each role&apos;s baseline when samples are
+            small, then graded by the remaining performance gap. Pick and ban pressure are shown
+            separately.
+          </p>
+        </section>
+      ) : null}
 
       <section
         className={cn("grid gap-5", hasPicks && "lg:grid-cols-[1.5fr_1fr] lg:items-start")}

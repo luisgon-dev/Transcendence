@@ -29,6 +29,7 @@ public class SummonerMaintenanceJob(
     IOptions<MultiRegionIngestionOptions> multiRegionOptions,
     ILogger<SummonerMaintenanceJob> logger)
 {
+    private static readonly TimeSpan QueueFailureLockReleaseTimeout = TimeSpan.FromSeconds(5);
     private const string ProducerKeyBase = nameof(SummonerMaintenanceJob);
     private const string TelemetrySource = "summoner-maintenance-job";
 
@@ -366,8 +367,8 @@ public class SummonerMaintenanceJob(
             }
 
             var lockKey = RefreshLockKeys.BuildSummonerRefreshKey(platform, candidate.GameName, candidate.TagLine);
-            var acquired = await refreshLockRepository.TryAcquireAsync(lockKey, lockTtl, ct);
-            if (!acquired)
+            var lockToken = await refreshLockRepository.TryAcquireOwnedAsync(lockKey, lockTtl, ct);
+            if (lockToken is null)
                 continue;
 
             try
@@ -377,7 +378,9 @@ public class SummonerMaintenanceJob(
                         candidate.GameName,
                         candidate.TagLine,
                         platform,
-                        SummonerRefreshJob.BuildAnalyticsExecutionLockKey(lockKey, forcedCatchUpActive),
+                        RefreshLockKeys.BuildOwnedHandle(
+                            SummonerRefreshJob.BuildAnalyticsExecutionLockKey(lockKey, forcedCatchUpActive),
+                            lockToken.Value),
                         patchStartEpoch,
                         activePatch.Version,
                         includeAllModes,
@@ -386,7 +389,7 @@ public class SummonerMaintenanceJob(
             }
             catch (Exception)
             {
-                await refreshLockRepository.ReleaseAsync(lockKey, ct);
+                await ReleaseLockAfterQueueFailureAsync(lockKey, lockToken.Value);
                 throw;
             }
         }
@@ -424,6 +427,28 @@ public class SummonerMaintenanceJob(
             budget.CandidatePressureRatio,
             guardrailDecision.MaxEligibleDeferAgeMinutes,
             guardrailDecision.DeferAgeThresholdMinutes);
+    }
+
+    private async Task ReleaseLockAfterQueueFailureAsync(string lockKey, Guid ownerToken)
+    {
+        using var releaseTimeoutCts = new CancellationTokenSource(QueueFailureLockReleaseTimeout);
+        try
+        {
+            await refreshLockRepository.ReleaseOwnedAsync(lockKey, ownerToken, releaseTimeoutCts.Token);
+        }
+        catch (OperationCanceledException) when (releaseTimeoutCts.IsCancellationRequested)
+        {
+            logger.LogWarning(
+                "Summoner maintenance timed out releasing refresh lock {LockKey} after queue failure (timeout {TimeoutSeconds}s).",
+                lockKey,
+                QueueFailureLockReleaseTimeout.TotalSeconds);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Summoner maintenance failed to release refresh lock {LockKey} after queue failure.",
+                lockKey);
+        }
     }
 
     private double ResolveRegionWeight(string? region)

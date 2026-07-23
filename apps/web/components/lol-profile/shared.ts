@@ -1,6 +1,7 @@
 import { formatQueueLabel } from "@/lib/queues";
 import { rankTierColorClass } from "@/lib/ranks";
 import type { RuneTree } from "@/lib/staticData";
+import type { components } from "@transcendence/api-client";
 
 export type DataAgeMetadata = {
   fetchedAt?: string;
@@ -108,6 +109,13 @@ export type AcceptedResponse = {
   poll?: string;
 };
 
+type ApiSummonerLookupResponse = components["schemas"]["SummonerLookupResponse"];
+
+export type SummonerLookupResponse = Omit<ApiSummonerLookupResponse, "status" | "profile"> & {
+  status: "ready" | "refreshing" | "missing";
+  profile?: SummonerProfileResponse | null;
+};
+
 export type ApiErrorResponse = {
   message?: string;
   code?: string;
@@ -174,6 +182,10 @@ export type PagedResultDto<T> = {
   pageSize: number;
   totalCount: number;
   totalPages: number;
+  facets?: {
+    queues: Array<{ queueId: number; queueType: string; queueFamily: string }>;
+    championIds: number[];
+  } | null;
 };
 
 export type MatchDetail = {
@@ -293,17 +305,12 @@ export function rankColorClass(tier?: string): string {
   return rankTierColorClass(tier) === "text-muted" ? "text-fg/80" : rankTierColorClass(tier);
 }
 
-export function queueValueForMatch(match: Pick<MatchSummary, "queueId" | "queueType">): string {
-  if (match.queueId > 0) return `id:${match.queueId}`;
-  return `type:${match.queueType || "UNKNOWN"}`;
-}
-
 export function normalizeInitialQueue(value?: string) {
   if (!value || value.toUpperCase() === "ALL") return "ALL";
-  if (value.startsWith("id:") || value.startsWith("type:")) return value;
+  if (value.startsWith("id:") || value.startsWith("type:") || value.startsWith("family:")) return value;
 
   if (/^\d+$/.test(value)) return `id:${value}`;
-  if (value.includes("_")) return `type:${value}`;
+  if (value.includes("_")) return `family:${value}`;
 
   const normalizedLabel = formatQueueLabel(value);
   return `label:${normalizedLabel}`;

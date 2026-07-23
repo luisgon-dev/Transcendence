@@ -68,13 +68,15 @@ public static class MatchParticipantQueries
         participants.Where(mp => mp.Match.Status == FetchStatus.Success);
 
     /// <summary>
-    /// Restricts to a platform region (e.g. "NA1"). A null/blank region is a no-op — callers pass the
-    /// already-normalized region filter, so this absorbs the per-site "if region is set" guard.
+    /// Restricts to the match's platform region (e.g. "NA1"). Region belongs to the match, not the
+    /// participant's mutable account record: using the latter can split one historical match across
+    /// regions after an account transfer and inflate distinct-match denominators.
+    /// A null/blank region is a no-op — callers pass the already-normalized region filter.
     /// </summary>
     public static IQueryable<MatchParticipant> InPlatformRegion(this IQueryable<MatchParticipant> participants, string? platformRegion) =>
         string.IsNullOrWhiteSpace(platformRegion)
             ? participants
-            : participants.Where(mp => mp.Summoner.PlatformRegion == platformRegion);
+            : participants.Where(mp => mp.Match.PlatformRegion == platformRegion);
 
     /// <summary>Participants with an assigned lane/role (non-empty <c>TeamPosition</c>).</summary>
     public static IQueryable<MatchParticipant> WithAssignedRole(this IQueryable<MatchParticipant> participants) =>

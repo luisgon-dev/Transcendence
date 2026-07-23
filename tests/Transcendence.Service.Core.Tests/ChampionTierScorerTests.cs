@@ -73,7 +73,7 @@ public class ChampionTierScorerTests
     }
 
     [Fact]
-    public void ScoreRole_ClearsTopCutoffButBelowGamesFloor_IsCappedToBAndFlaggedLowSample()
+    public void ScoreRole_ClearsTopCutoffButBelowGamesFloor_IsClampedToBAndFlaggedLowSample()
     {
         // Custom options make a 100-game champ's shrunk delta clear SMin, isolating the games-floor cap.
         var options = new TieringOptions
@@ -99,6 +99,34 @@ public class ChampionTierScorerTests
         champ1.StrengthScore.Should().BeGreaterThan(options.Cutoffs.SMin);
         champ1.IsLowSample.Should().BeTrue();        // 100 < fixed 500-game test floor
         champ1.Tier.Should().Be(TierGrade.B);        // would be S, but a thin sample is capped at B
+    }
+
+    [Fact]
+    public void ScoreRole_ClearsBottomCutoffButBelowGamesFloor_IsClampedToBAndFlaggedLowSample()
+    {
+        // Mirror the top-cutoff case to prove the games-floor protection is symmetric.
+        var options = new TieringOptions
+        {
+            PriorStrengthMin = 1,
+            PriorStrengthMax = 10,
+            PriorFitMinGamesFloor = 10,
+            PriorFitMinGamesCeiling = 10,
+            GradeMinGamesFloor = 500,
+            GradeMinGamesCeiling = 500
+        };
+
+        var population = new[]
+        {
+            Champ(1, "TOP", games: 100, wins: 70),
+            Champ(2, "TOP", games: 100, wins: 30),   // 30% vs a 50% baseline
+        };
+
+        var scored = ChampionTierScorer.ScoreRole(population, totalRoleGames: 200, LargeScopeMatches, options);
+
+        var champ2 = scored.Single(c => c.ChampionId == 2);
+        champ2.StrengthScore.Should().BeLessThan(options.Cutoffs.CMin);
+        champ2.IsLowSample.Should().BeTrue();
+        champ2.Tier.Should().Be(TierGrade.B);         // would be D, but thin evidence is clamped to neutral
     }
 
     [Fact]

@@ -4,9 +4,11 @@ import { Suspense } from "react";
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { SummonerProfileClient } from "@/components/SummonerProfileClient";
 import type {
+  ApiErrorResponse,
   MatchSummary,
   PagedResultDto,
-  RankHistoryEntry
+  RankHistoryEntry,
+  SummonerLookupResponse
 } from "@/components/lol-profile/shared";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
@@ -27,6 +29,12 @@ import Loading from "./loading";
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
+}
+
+function isSummonerLookupResponse(value: unknown): value is SummonerLookupResponse {
+  if (!isRecord(value)) return false;
+  if (value.status === "ready") return isRecord(value.profile);
+  return value.status === "refreshing" || value.status === "missing";
 }
 
 export async function generateMetadata({
@@ -210,21 +218,22 @@ async function SummonerProfileData({
     fetchSummonerSpellMap(),
     fetchRunesReforged()
   ]);
-  const result = await fetchBackendJson<unknown>(url, { cache: "no-store" });
+  const result = await fetchBackendJson<SummonerLookupResponse>(url, { cache: "no-store" });
 
-  let initialStatus = result.status;
-  let initialBody: unknown = result.body;
+  let initialLookup: SummonerLookupResponse | null = null;
+  let initialError: ApiErrorResponse | null = null;
 
-  if (!result.ok && initialStatus !== 202) {
+  if (!result.ok) {
+    const errorBody: unknown = result.body;
     // Backend errors are ProblemDetails (RFC 7807): `detail` is the specific message, `title` the
     // generic one. Some admin-style bodies use `message`. Prefer the most specific available.
-    const messageFromBackend = isRecord(result.body)
-      ? (typeof result.body.detail === "string"
-          ? result.body.detail
-          : typeof result.body.message === "string"
-            ? result.body.message
-            : typeof result.body.title === "string"
-              ? result.body.title
+    const messageFromBackend = isRecord(errorBody)
+      ? (typeof errorBody.detail === "string"
+          ? errorBody.detail
+          : typeof errorBody.message === "string"
+            ? errorBody.message
+            : typeof errorBody.title === "string"
+              ? errorBody.title
               : null)
       : null;
 
@@ -242,7 +251,7 @@ async function SummonerProfileData({
       errorKind: result.errorKind
     });
 
-    initialBody = {
+    initialError = {
       message,
       requestId: result.requestId,
       ...(verbosity === "verbose"
@@ -255,15 +264,22 @@ async function SummonerProfileData({
           }
         : null)
     };
-  } else if (initialStatus === 202 && isRecord(initialBody)) {
-    initialBody = { ...initialBody, requestId: result.requestId };
+  } else if (isSummonerLookupResponse(result.body)) {
+    initialLookup = result.body;
+  } else {
+    initialError = {
+      message: "The player lookup returned an invalid response.",
+      code: "INVALID_RESPONSE",
+      requestId: result.requestId
+    };
   }
 
   let initialHistory: PagedResultDto<MatchSummary> | null = null;
   let initialRankHistory: RankHistoryEntry[] | null = null;
 
-  if (initialStatus === 200 && isRecord(initialBody) && typeof initialBody.summonerId === "string") {
-    const summonerId = encodeURIComponent(initialBody.summonerId);
+  const initialProfile = initialLookup?.status === "ready" ? initialLookup.profile : null;
+  if (initialProfile?.summonerId) {
+    const summonerId = encodeURIComponent(initialProfile.summonerId);
     const baseUrl = `${getBackendBaseUrl()}/api/lol/summoners/${summonerId}`;
     const [historyResult, rankHistoryResult] = await Promise.all([
       fetchBackendJson<PagedResultDto<MatchSummary>>(
@@ -288,8 +304,8 @@ async function SummonerProfileData({
       region={region}
       gameName={riotId.gameName}
       tagLine={riotId.tagLine}
-      initialStatus={initialStatus}
-      initialBody={initialBody}
+      initialLookup={initialLookup}
+      initialError={initialError}
       initialPage={initialPage}
       initialQueue={initialQueue}
       initialSort={initialSort}

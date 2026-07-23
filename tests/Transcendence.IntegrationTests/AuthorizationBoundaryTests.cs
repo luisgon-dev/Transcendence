@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Transcendence.Data.Models.Auth;
@@ -22,7 +23,7 @@ namespace Transcendence.IntegrationTests;
 public sealed class AuthorizationBoundaryTests(PostgresIntegrationFixture fixture)
 {
     private const string PublicEndpoint = "/api/lol/analytics/regions";
-    private const string AppOnlyEndpoint = "/api/lol/analytics/cache/invalidate";           // POST
+    private const string AppOnlyEndpoint = "/api/lol/summoners/multi-search";               // POST
     private const string UserOnlyEndpoint = "/api/users/me/favorites";                       // GET
     private const string AdminOnlyEndpoint = "/api/admin/pro-summoners";                     // GET
 
@@ -40,7 +41,7 @@ public sealed class AuthorizationBoundaryTests(PostgresIntegrationFixture fixtur
     [Fact]
     public async Task AppOnly_WithoutApiKey_Is401()
     {
-        var response = await fixture.Factory.CreateClient().PostAsync(AppOnlyEndpoint, content: null);
+        var response = await PostAppOnlyRequestAsync(fixture.Factory.CreateClient());
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
@@ -49,7 +50,7 @@ public sealed class AuthorizationBoundaryTests(PostgresIntegrationFixture fixtur
     {
         var client = fixture.Factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-API-Key", "trn_not_a_real_key");
-        var response = await client.PostAsync(AppOnlyEndpoint, content: null);
+        var response = await PostAppOnlyRequestAsync(client);
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
@@ -58,8 +59,8 @@ public sealed class AuthorizationBoundaryTests(PostgresIntegrationFixture fixtur
     {
         var client = fixture.Factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-API-Key", await CreateApiKeyAsync());
-        var response = await client.PostAsync(AppOnlyEndpoint, content: null);
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var response = await PostAppOnlyRequestAsync(client);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     // ---- UserOnly (JWT) ----
@@ -108,6 +109,9 @@ public sealed class AuthorizationBoundaryTests(PostgresIntegrationFixture fixtur
     }
 
     // ---- credential minting through the app's own services ----
+
+    private static Task<HttpResponseMessage> PostAppOnlyRequestAsync(HttpClient client) =>
+        client.PostAsJsonAsync(AppOnlyEndpoint, new { region = "NA1", summoners = Array.Empty<object>() });
 
     private async Task<string> CreateApiKeyAsync()
     {

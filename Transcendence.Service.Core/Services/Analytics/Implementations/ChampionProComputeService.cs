@@ -5,6 +5,7 @@ using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Service.Core.Queries;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
+using Transcendence.Service.Core.Services.StaticData.Models;
 
 namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 
@@ -115,7 +116,7 @@ public sealed class ChampionProComputeService : IChampionProComputeService
                 mp.Summoner.GameName,
                 mp.Summoner.TagLine,
                 Items = mp.Items.Select(i => i.ItemId).ToList(),
-                Runes = mp.Runes.Select(r => new ChampionBuildPathBuilder.StoredRuneSelection(
+                Runes = mp.Runes.Select(r => new StoredRuneSelection(
                     r.RuneId,
                     r.SelectionTree,
                     r.SelectionIndex,
@@ -139,7 +140,7 @@ public sealed class ChampionProComputeService : IChampionProComputeService
             .AsNoTracking()
             .Where(rv => allRuneIds.Contains(rv.RuneId) && rv.PatchVersion == patch)
             .Select(rv => new { rv.RuneId, rv.RunePathId, rv.Slot })
-            .ToDictionaryAsync(rv => rv.RuneId, rv => new ChampionBuildPathBuilder.RuneMetadata(rv.RunePathId, rv.Slot), ct);
+            .ToDictionaryAsync(rv => rv.RuneId, rv => new RuneSelectionMetadata(rv.RunePathId, rv.Slot), ct);
 
         // Ordered build path + skill orders for the projected pro matches (timeline-derived).
         var proMatchGuids = rows.Select(r => r.MatchGuid).Distinct().ToList();
@@ -303,25 +304,26 @@ public sealed class ChampionProComputeService : IChampionProComputeService
             .FromSuccessfulMatches()
             .InRankedSoloQueue()
             .Where(mp => mp.Puuid != null && trackedPuuids.Contains(mp.Puuid))
-            .Select(mp => new { mp.ChampionId, mp.Win, mp.Puuid })
+            .GroupBy(mp => mp.ChampionId)
+            .Select(g => new
+            {
+                ChampionId = g.Key,
+                Games = g.Count(),
+                Wins = g.Sum(mp => mp.Win ? 1 : 0),
+                UniquePlayers = g.Select(mp => mp.Puuid).Distinct().Count()
+            })
             .ToListAsync(ct);
 
         if (rows.Count == 0)
             return new ProChampionPlayrateResponse(patch, normalizedRegion, normalizedScope, []);
 
         var champions = rows
-            .GroupBy(r => r.ChampionId)
-            .Select(g =>
-            {
-                var games = g.Count();
-                var wins = g.Count(x => x.Win);
-                return new ProChampionPlayrateDto(
-                    g.Key,
-                    games,
-                    wins,
-                    games > 0 ? (double)wins / games : 0.0,
-                    g.Select(x => x.Puuid).Distinct().Count());
-            })
+            .Select(row => new ProChampionPlayrateDto(
+                row.ChampionId,
+                row.Games,
+                row.Wins,
+                row.Games > 0 ? (double)row.Wins / row.Games : 0.0,
+                row.UniquePlayers))
             .OrderByDescending(c => c.Games)
             .ThenByDescending(c => c.WinRate)
             .ToList();

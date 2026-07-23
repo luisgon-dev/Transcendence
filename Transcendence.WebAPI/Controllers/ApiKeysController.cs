@@ -38,7 +38,9 @@ public class ApiKeysController(IApiKeyService apiKeyService, IAdminAuditService 
             created.Prefix,
             created.ExpiresAt
         }, ct);
-        return CreatedAtAction(nameof(List), new { id = created.Id }, created);
+        // The API intentionally exposes API-key metadata only as a collection. Do not emit a
+        // misleading Location header that looks like an item resource when no item route exists.
+        return StatusCode(StatusCodes.Status201Created, created);
     }
 
     [HttpPost("{id:guid}/revoke")]

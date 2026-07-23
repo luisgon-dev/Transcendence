@@ -30,4 +30,9 @@ public class CacheService(HybridCache cache) : ICacheService
     {
         await cache.RemoveByTagAsync(tag, cancellationToken);
     }
+
+    public async Task RemoveAsync(string key, CancellationToken cancellationToken = default)
+    {
+        await cache.RemoveAsync(key, cancellationToken);
+    }
 }

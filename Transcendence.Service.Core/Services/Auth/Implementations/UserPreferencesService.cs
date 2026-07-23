@@ -10,16 +10,23 @@ public class UserPreferencesService(
     IUserPreferencesRepository userPreferencesRepository,
     ISummonerRepository summonerRepository) : IUserPreferencesService
 {
+    private static readonly TimeSpan LiveSignalFreshness = TimeSpan.FromMinutes(10);
+
     public async Task<IReadOnlyList<FavoriteSummonerDto>> GetFavoritesAsync(Guid userId, CancellationToken ct = default)
     {
         var favorites = await userPreferencesRepository.GetFavoritesAsync(userId, ct);
-        return favorites.Select(x => new FavoriteSummonerDto(
+        var freshAfterUtc = DateTime.UtcNow - LiveSignalFreshness;
+
+        return favorites.Select(x => MapFavorite(
             x.Id,
             x.SummonerPuuid,
             x.PlatformRegion,
             x.DisplayName,
-            x.CreatedAtUtc
-        )).ToList();
+            x.CreatedAtUtc,
+            x.LiveState,
+            x.LiveGameId,
+            x.LiveObservedAtUtc,
+            freshAfterUtc)).ToList();
     }
 
     public async Task<FavoriteSummonerDto> AddFavoriteAsync(Guid userId, AddFavoriteRequest request, CancellationToken ct = default)
@@ -47,7 +54,11 @@ public class UserPreferencesService(
                 duplicate.SummonerPuuid,
                 duplicate.PlatformRegion,
                 duplicate.DisplayName,
-                duplicate.CreatedAtUtc
+                duplicate.CreatedAtUtc,
+                false,
+                null,
+                null,
+                null
             );
         }
 
@@ -69,7 +80,11 @@ public class UserPreferencesService(
             favorite.SummonerPuuid,
             favorite.PlatformRegion,
             favorite.DisplayName,
-            favorite.CreatedAtUtc
+            favorite.CreatedAtUtc,
+            false,
+            null,
+            null,
+            null
         );
     }
 
@@ -125,6 +140,32 @@ public class UserPreferencesService(
             entity.LivePollingEnabled,
             entity.UpdatedAtUtc
         );
+    }
+
+    private static FavoriteSummonerDto MapFavorite(
+        Guid id,
+        string summonerPuuid,
+        string platformRegion,
+        string? displayName,
+        DateTime createdAtUtc,
+        string? liveState,
+        string? liveGameId,
+        DateTime? liveObservedAtUtc,
+        DateTime freshAfterUtc)
+    {
+        var isLive = string.Equals(liveState, "in_game", StringComparison.OrdinalIgnoreCase)
+                     && liveObservedAtUtc >= freshAfterUtc;
+
+        return new FavoriteSummonerDto(
+            id,
+            summonerPuuid,
+            platformRegion,
+            displayName,
+            createdAtUtc,
+            isLive,
+            liveState,
+            liveGameId,
+            liveObservedAtUtc);
     }
 
 }

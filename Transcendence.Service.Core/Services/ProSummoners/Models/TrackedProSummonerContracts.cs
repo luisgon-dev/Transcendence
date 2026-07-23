@@ -1,11 +1,13 @@
+using System.ComponentModel.DataAnnotations;
+
 // These contracts intentionally retain the controller namespace so their public OpenAPI schema
 // names and all existing consumers remain unchanged after moving them into Service.Core.
 namespace Transcendence.WebAPI.Controllers;
 
 public record UpsertTrackedProSummonerRequest(
-    string GameName,
-    string TagLine,
-    string PlatformRegion,
+    [property: Required] string GameName,
+    [property: Required] string TagLine,
+    [property: Required] string PlatformRegion,
     string? Puuid = null,
     string? ProName = null,
     string? TeamName = null,

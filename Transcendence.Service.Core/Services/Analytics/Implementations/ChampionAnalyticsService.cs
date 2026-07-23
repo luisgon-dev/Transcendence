@@ -29,7 +29,6 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
     private const string ProRosterCacheKeyPrefix = "analytics:proroster:";
     private const string MatchupsCacheKeyPrefix = "analytics:matchups:";
     private const string AnalyticsCacheTag = "analytics";
-    private const string ActivePatchCacheKey = "analytics:active-patch:v1";
 
     // Active-patch metadata changes ~biweekly; a short cache removes the per-request Patches lookup
     // that every analytics endpoint runs (cutting DB round-trips so reads degrade less under load).
@@ -172,7 +171,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         };
 
         // Build cache key based on normalized filter parameters
-        var cacheKey = BuildCacheKey(championId, normalizedFilter, currentPatch);
+        var cacheKey = BuildWinRateKey(championId, normalizedFilter, currentPatch);
 
         // Serve from the precomputed aggregate tables (fast indexed scope roll-up; falls back to the raw
         // compute for any patch without aggregates yet). HybridCache stays the hot tier in front.
@@ -658,14 +657,14 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             Region: globalRegionFilter,
             Role: null,
             Patch: currentPatch);
-        var winKey = BuildCacheKey(championId, winFilter, currentPatch);
+        var winKey = BuildWinRateKey(championId, winFilter, currentPatch);
         var winTags = new[] { AnalyticsCacheTag, $"champion:{championId}", CacheTags.ForPatch(currentPatch) };
         var winRates = await _winRateService.ComputeWinRatesFromStatsAsync(championId, winFilter, currentPatch, ct);
         await _cache.SetAsync(winKey, winRates, AnalyticsCacheOptions, winTags, ct);
 
         // Resolve the most-played lane EXACTLY like ChampionAnalyticsController.GetProfile so the
         // builds/matchups keys we warm match what the page will request.
-        var effectiveRole = PickMostPlayedLane(winRates);
+        var effectiveRole = ChampionRoleResolver.PickMostPlayed(winRates);
         if (effectiveRole == null && normalizedTier != "all")
         {
             // Mirror GetProfile's all-rank fallback: when the scoped tier has no rows, resolve the
@@ -675,10 +674,10 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
                 Region: globalRegionFilter,
                 Role: null,
                 Patch: currentPatch);
-            var fallbackKey = BuildCacheKey(championId, fallbackFilter, currentPatch);
+            var fallbackKey = BuildWinRateKey(championId, fallbackFilter, currentPatch);
             var fallbackWinRates = await _winRateService.ComputeWinRatesFromStatsAsync(championId, fallbackFilter, currentPatch, ct);
             await _cache.SetAsync(fallbackKey, fallbackWinRates, AnalyticsCacheOptions, winTags, ct);
-            effectiveRole = PickMostPlayedLane(fallbackWinRates);
+            effectiveRole = ChampionRoleResolver.PickMostPlayed(fallbackWinRates);
         }
 
         effectiveRole ??= "MIDDLE"; // mirror GetProfile's final fallback so the key always matches
@@ -740,7 +739,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         }
 
         var activePatch = await _cache.GetOrCreateAsync(
-            ActivePatchCacheKey,
+            AnalyticsCacheKeys.ActivePatch,
             async cancel =>
             {
                 var row = await _context.Patches
@@ -776,7 +775,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 
     // Shared cache-key builders — the reader path (GetBuildsAsync/GetProBuildsAsync/GetMatchupsAsync)
     // and the warm writer (RefreshDefaultProfileCacheAsync) MUST produce byte-identical keys or the
-    // warmed entry never gets hit. Keep these as the single source of truth (mirrors BuildCacheKey).
+    // warmed entry never gets hit. Keep these as the single source of truth.
     private static string BuildBuildsKey(
         int championId, string role, string tier, string region, string queueFamily, string patch)
         => $"{BuildsCacheKeyPrefix}{championId}:{role}:{tier}:{region}:{queueFamily}:{patch}";
@@ -788,7 +787,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
     private static string BuildProBuildsKey(int championId, string region, string role, string scope, string patch)
         => $"{ProBuildsCacheKeyPrefix}{championId}:{region}:{role}:{scope}:{patch}";
 
-    private static string BuildCacheKey(int championId, ChampionAnalyticsFilter filter, string patch)
+    private static string BuildWinRateKey(int championId, ChampionAnalyticsFilter filter, string patch)
     {
         var keyParts = new List<string>
         {
@@ -799,8 +798,9 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         if (!string.IsNullOrEmpty(filter.RankTier))
             keyParts.Add($"tier:{filter.RankTier}");
 
-        if (!string.IsNullOrEmpty(filter.Region))
-            keyParts.Add($"region:{filter.Region}");
+        // Compute queries use null for the global filter, while cache identity always uses the
+        // canonical region code. This keeps every analytics key on one representation ("ALL").
+        keyParts.Add($"region:{AnalyticsRegionCatalog.NormalizeOrDefault(filter.Region)}");
 
         if (!string.IsNullOrEmpty(filter.Role))
             keyParts.Add($"role:{filter.Role}");
@@ -820,32 +820,6 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         return allowed.Contains(normalized)
             ? normalized
             : AnalyticsRegionCatalog.GlobalRegionCode;
-    }
-
-    private static readonly HashSet<string> LaneRoles = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"
-    };
-
-    // Must produce the SAME result as ChampionAnalyticsController.PickMostPlayedRole (operating on
-    // the by-role win-rate rows) so the lane this warms matches the lane the profile page requests.
-    private static string? PickMostPlayedLane(IEnumerable<ChampionWinRateDto> winRates) =>
-        winRates
-            .Select(row => new { Role = NormalizeLane(row.Role), row.Games })
-            .Where(row => row.Role != null)
-            .GroupBy(row => row.Role!)
-            .Select(group => new { Role = group.Key, Games = group.Sum(row => Math.Max(0, row.Games)) })
-            .OrderByDescending(row => row.Games)
-            .Select(row => row.Role)
-            .FirstOrDefault();
-
-    private static string? NormalizeLane(string? role)
-    {
-        if (string.IsNullOrWhiteSpace(role))
-            return null;
-
-        var upper = role.Trim().ToUpperInvariant();
-        return LaneRoles.Contains(upper) ? upper : null;
     }
 
     private static string NormalizeRankTier(string? rankTier)

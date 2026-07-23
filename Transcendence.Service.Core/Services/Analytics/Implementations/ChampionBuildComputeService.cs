@@ -5,6 +5,7 @@ using Transcendence.Data;
 using Transcendence.Service.Core.Queries;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
+using Transcendence.Service.Core.Services.StaticData.Models;
 using Transcendence.Service.Core.Services.RiotApi;
 
 namespace Transcendence.Service.Core.Services.Analytics.Implementations;
@@ -95,7 +96,7 @@ public sealed class ChampionBuildComputeService : IChampionBuildComputeService
                 mp.SummonerSpell1Id,
                 mp.SummonerSpell2Id,
                 Items = mp.Items.Select(i => i.ItemId).ToList(),
-                Runes = mp.Runes.Select(r => new ChampionBuildPathBuilder.StoredRuneSelection(
+                Runes = mp.Runes.Select(r => new StoredRuneSelection(
                     r.RuneId,
                     r.SelectionTree,
                     r.SelectionIndex,
@@ -192,7 +193,7 @@ public sealed class ChampionBuildComputeService : IChampionBuildComputeService
             .AsNoTracking()
             .Where(rv => allRuneIds.Contains(rv.RuneId) && rv.PatchVersion == patch)
             .Select(rv => new { rv.RuneId, rv.RunePathId, rv.Slot })
-            .ToDictionaryAsync(rv => rv.RuneId, rv => new ChampionBuildPathBuilder.RuneMetadata(rv.RunePathId, rv.Slot), ct);
+            .ToDictionaryAsync(rv => rv.RuneId, rv => new RuneSelectionMetadata(rv.RunePathId, rv.Slot), ct);
 
         // Step 4: Group by build (items + runes as key)
         var effectiveBuildSampleSize = AnalyticsScopeMath.ResolveEffectiveSampleSize(MinBuildSampleSize, totalGames, floor: 2);

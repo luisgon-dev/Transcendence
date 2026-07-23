@@ -3,6 +3,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Moq;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Models.LoL.Analytics;
@@ -76,6 +77,27 @@ public class PrecomputedAnalyticsRefresherTests
     }
 
     [Fact]
+    public async Task RefreshTabularCore_RegionUsesHistoricalMatchInsteadOfTransferredSummoner()
+    {
+        await using var ctx = await SeededAsync();
+        var transferredParticipant = await ctx.Db.MatchParticipants
+            .Include(x => x.Match)
+            .Include(x => x.Summoner)
+            .FirstAsync(x => x.Match.PlatformRegion == "NA1");
+        transferredParticipant.Summoner.PlatformRegion = "EUW1";
+        await ctx.Db.SaveChangesAsync();
+
+        await Refresh(ctx.Db);
+
+        var rows = await ctx.Db.ScopeMatchCountStats.AsNoTracking()
+            .Where(x => x.RankScope == "ALL")
+            .ToListAsync();
+        Total(rows, "NA1", "ALL").Should().Be(6);
+        Total(rows, "EUW1", "ALL").Should().Be(2);
+        Total(rows, "ALL", "ALL").Should().Be(8);
+    }
+
+    [Fact]
     public async Task RefreshTabularCore_BanCounts_DistinctPerScopeWithGlobalAllRow()
     {
         await using var ctx = await SeededAsync();
@@ -141,6 +163,43 @@ public class PrecomputedAnalyticsRefresherTests
         secondBans.Should().Be(firstBans);
         firstGrades.Should().BeGreaterThan(0);
         secondGrades.Should().Be(firstGrades); // the grade table is replaced per patch, not duplicated
+    }
+
+    [Fact]
+    public async Task RefreshAll_WhenFinalPhaseFails_RollsBackEveryEarlierSurface()
+    {
+        await using var ctx = await SeededAsync();
+        await Refresh(ctx.Db);
+        Total(await ctx.Db.ScopeMatchCountStats.AsNoTracking().ToListAsync(), "NA1", "ALL").Should().Be(6);
+
+        SeedOne(ctx.Db, "NA1_9", "NA1", champ: 100, role: "TOP", win: true, tier: "EMERALD");
+        await ctx.Db.SaveChangesAsync();
+
+        var build = new ChampionBuildComputeService(
+            ctx.Db,
+            Options.Create(new ChampionAnalyticsComputeOptions { MinimumGamesRequired = 1 }),
+            NullLogger<ChampionBuildComputeService>.Instance);
+        var pro = new Mock<IChampionProComputeService>();
+        pro.Setup(x => x.ComputeProChampionPlayrateAsync(
+                null,
+                It.IsAny<string>(),
+                Patch,
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("simulated final-phase failure"));
+        var refresher = new PrecomputedAnalyticsRefresher(
+            ctx.Db,
+            build,
+            pro.Object,
+            Options.Create(new TieringOptions()),
+            NullLogger<PrecomputedAnalyticsRefresher>.Instance);
+
+        var act = () => refresher.RefreshAllAsync(Patch, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        ctx.Db.ChangeTracker.Clear();
+        var persisted = await ctx.Db.ScopeMatchCountStats.AsNoTracking().ToListAsync();
+        Total(persisted, "NA1", "ALL").Should().Be(6,
+            "the previous complete snapshot remains visible when a later phase fails");
     }
 
     [Fact]

@@ -78,7 +78,9 @@ services:
       PORT: 3000
       TRN_BACKEND_BASE_URL: http://webapi:8080
       TRN_BACKEND_API_KEY: ${WEB_TRN_BACKEND_API_KEY}
-      TRN_ERROR_VERBOSITY: verbose
+      # Safe is the production default. Set TRN_ERROR_VERBOSITY=verbose only for a short-lived
+      # local debugging session; verbose mode can expose upstream/internal failure detail.
+      TRN_ERROR_VERBOSITY: ${TRN_ERROR_VERBOSITY:-safe}
     ports:
       - "${WEB_PORT:-3000}:3000"
     depends_on:

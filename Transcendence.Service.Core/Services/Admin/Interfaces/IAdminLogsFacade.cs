@@ -1,4 +1,4 @@
-using Transcendence.WebAPI.Controllers;
+using Transcendence.Service.Core.Services.Admin.Models;
 
 namespace Transcendence.Service.Core.Services.Admin.Interfaces;
 

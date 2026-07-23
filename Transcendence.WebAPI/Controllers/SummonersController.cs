@@ -69,7 +69,8 @@ public class SummonersController(
 
     /// <summary>
     ///     Get summoner information by Riot ID (gameName and tagLine) and platform region (e.g., NA1, EUW1).
-    ///     This endpoint reads from the database only. If the summoner is not found, a background refresh will be required.
+    ///     This endpoint reads from the database only and always returns a typed lookup state. A missing state requires an
+    ///     explicit signed-in refresh request; a refreshing state can be polled until it becomes ready.
     /// </summary>
     /// <param name="region">
     ///     Platform route like NA1, EUW1, EUN1, KR, BR1, LA1, LA2, OC1, JP1, TR1, RU. Common short forms (na,
@@ -79,9 +80,8 @@ public class SummonersController(
     /// <param name="tag">Riot tag (without #)</param>
     [HttpGet("{region}/{name}/{tag}")]
     [EnableRateLimiting("expensive-read")]
-    [ProducesResponseType(typeof(SummonerProfileResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(SummonerLookupResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(SummonerAcceptedResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetByRiotId([FromRoute] string region, [FromRoute] string name,
         [FromRoute] string tag, CancellationToken ct)
@@ -91,7 +91,7 @@ public class SummonersController(
 
         var profile = await summonerProfileService.GetProfileByRiotIdAsync(platform.ToString(), name, tag, ct);
         if (profile is not null)
-            return Ok(profile);
+            return Ok(new SummonerLookupResponse(SummonerLookupStatuses.Ready, Profile: profile));
 
         var pollUrl = Url.ActionLink(nameof(GetByRiotId), null, new
         {
@@ -107,15 +107,17 @@ public class SummonersController(
             ct);
         if (progress is not null)
         {
-            return Accepted(new SummonerAcceptedResponse(
-                "Refresh in process",
-                pollUrl,
-                progress.RetryAfterSeconds));
+            return Ok(new SummonerLookupResponse(
+                SummonerLookupStatuses.Refreshing,
+                Message: "Refresh in process",
+                Poll: pollUrl,
+                RetryAfterSeconds: progress.RetryAfterSeconds));
         }
 
-        return Accepted(new SummonerAcceptedResponse(
-            "Summoner not found in store. Use the refresh endpoint to queue a background refresh.",
-            pollUrl));
+        return Ok(new SummonerLookupResponse(
+            SummonerLookupStatuses.Missing,
+            Message: "Summoner not found in store. Use the refresh endpoint to queue a background refresh.",
+            Poll: pollUrl));
     }
 
     /// <summary>

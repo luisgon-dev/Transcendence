@@ -72,15 +72,21 @@ internal static class ChampionTierScorer
         IReadOnlyList<RoleGames> aggregated,
         IReadOnlyDictionary<int, int> banByChampion,
         int totalScopeMatches,
-        TieringOptions options)
+        TieringOptions options,
+        IReadOnlyDictionary<int, int>? scopeGamesByChampion = null)
     {
         if (aggregated.Count == 0)
             return new ScopeScore([], []);
 
         // Champion presence numerator for the contested index: total games across all roles in the scope.
-        var champTotalGames = new Dictionary<int, int>();
-        foreach (var a in aggregated)
-            champTotalGames[a.ChampionId] = champTotalGames.GetValueOrDefault(a.ChampionId) + a.Games;
+        var champTotalGames = scopeGamesByChampion == null
+            ? new Dictionary<int, int>()
+            : new Dictionary<int, int>(scopeGamesByChampion);
+        if (scopeGamesByChampion == null)
+        {
+            foreach (var a in aggregated)
+                champTotalGames[a.ChampionId] = champTotalGames.GetValueOrDefault(a.ChampionId) + a.Games;
+        }
 
         var perRole = new List<ScoredChampion>(aggregated.Count);
         foreach (var roleGroup in aggregated.GroupBy(x => x.Role))
@@ -206,8 +212,9 @@ internal static class ChampionTierScorer
             strength >= cutoffs.CMin ? TierGrade.C :
             TierGrade.D;
 
-        // A thin sample cannot earn a top tier even if its shrunk delta clears the bar.
-        if (isLowSample && (tier == TierGrade.S || tier == TierGrade.A))
+        // A thin sample cannot justify either a top or bottom tier, even if its shrunk delta clears a bar.
+        // Clamp both directions to B so sampling noise is not treated as evidence of strength or weakness.
+        if (isLowSample)
             tier = TierGrade.B;
 
         return tier;

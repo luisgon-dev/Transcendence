@@ -7,7 +7,8 @@ namespace Transcendence.Service.Core.Services.Summoners.Implementations;
 
 public sealed class SummonerProfileService(
     ISummonerRepository summonerRepository,
-    ISummonerStatsService statsService) : ISummonerProfileService
+    ISummonerStatsService statsService,
+    ISummonerMatchHistoryService matchHistoryService) : ISummonerProfileService
 {
     public async Task<IReadOnlyList<SummonerSearchCandidateDto>> SearchByPrefixAsync(
         string platformRegion,
@@ -56,7 +57,8 @@ public sealed class SummonerProfileService(
 
         // These calls share a scoped DbContext and must remain sequential.
         var activeSeasonStats = await statsService.GetActiveSeasonProfileStatsAsync(summoner.Id, 5, 20, ct);
-        var recent = await statsService.GetRecentMatchesAsync(summoner.Id, 1, 10, null, null, ct);
+        var recent = await matchHistoryService.GetRecentMatchesAsync(
+            summoner.Id, 1, 10, null, null, null, includeFacets: false, ct);
         var playedWith = await statsService.GetPlayedWithAsync(summoner.Id, 100, 6, ct);
         var mastery = await statsService.GetTopMasteryAsync(summoner.Id, 6, ct);
         var overview = activeSeasonStats.Overview;

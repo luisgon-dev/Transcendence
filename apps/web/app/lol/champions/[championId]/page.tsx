@@ -25,7 +25,7 @@ import { analyticsQueueOption, normalizeAnalyticsQueue } from "@/lib/analyticsQu
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { pickMostSevereAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
-import { formatGames } from "@/lib/format";
+import { formatGames, matchupVerdict } from "@/lib/format";
 import { fetchLolAnalyticsPatches } from "@/lib/lolAnalyticsPatches";
 import { normalizeAnalyticsPatch } from "@/lib/lolPatchFilters";
 import { resolveDefaultedRankTier, rankTierDisplayLabel, rankTierLadderOrdinal } from "@/lib/ranks";
@@ -110,13 +110,6 @@ export async function generateMetadata({
     },
     twitter: { card: "summary_large_image", title, description, images: [image] }
   };
-}
-
-function matchupVerdict(winRate: number | null | undefined): string {
-  const pct = (winRate ?? 0) * 100;
-  if (pct >= 52) return "Favored";
-  if (pct < 48) return "Unfavored";
-  return "Even";
 }
 
 function normalizeRole(role: string | null | undefined) {
@@ -395,9 +388,9 @@ async function ChampionHeroMeta({
         ) : null}
         <Link
           href={`/lol/pro-builds/${championId}${linkQuery ? `?${linkQuery}` : ""}`}
-          className="rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 font-medium text-primary transition-colors hover:bg-primary/20"
+          className="rounded-lg border border-border/60 bg-surface-2/50 px-2.5 py-1 font-medium text-fg/80 transition-colors hover:bg-surface-2/80"
         >
-          Pro Builds
+          Pro Solo Queue
         </Link>
       </div>
 
@@ -545,8 +538,6 @@ async function ChampionSections({
 
   return (
     <>
-      <ChampionTrendChart championName={champName} trend={trend} />
-
       {queueOption.hasRoles ? (
         <ChampionSynergyPanel
           championName={champName}
@@ -645,7 +636,7 @@ async function ChampionSections({
 
               {buildRows.map((b, idx) => (
                 <details
-                  key={idx}
+                  key={`${b.primaryStyleId ?? 0}-${b.subStyleId ?? 0}-${(b.coreItems ?? []).join("-")}-${(b.items ?? []).join("-")}`}
                   open={idx === 0}
                   className="group rounded-lg border border-border/60 bg-surface-2/40"
                 >
@@ -727,6 +718,9 @@ async function ChampionSections({
           )}
         </Card> : null}
       </div>
+
+      {/* Patch history is useful context, but secondary to the current-patch decisions above. */}
+      <ChampionTrendChart championName={champName} trend={trend} />
     </>
   );
 }
@@ -749,14 +743,7 @@ function ChampionHeroMetaSkeleton() {
 function ChampionSectionsSkeleton() {
   return (
     <>
-      <Card className="p-5">
-        <Skeleton className="h-6 w-28" />
-        <div className="mt-4 grid gap-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-10 w-full rounded-md" />
-          ))}
-        </div>
-      </Card>
+      <Skeleton className="h-12 w-full rounded-card" />
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="p-5">
@@ -775,6 +762,11 @@ function ChampionSectionsSkeleton() {
           </div>
         </Card>
       </div>
+
+      <Card className="p-5">
+        <Skeleton className="h-6 w-28" />
+        <Skeleton className="mt-4 h-32 w-full rounded-lg" />
+      </Card>
     </>
   );
 }

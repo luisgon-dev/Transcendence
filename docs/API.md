@@ -39,6 +39,12 @@ All error responses use RFC 7807 **ProblemDetails** (`application/problem+json`)
 - Empty-body `4xx/5xx` (e.g. `NotFound()`), model-validation failures, and unhandled exceptions are ProblemDetails automatically.
 - Body-carrying errors are normalized: a bare string body (`BadRequest("…")`) is rewrapped as ProblemDetails `detail`, and admin operations return `Problem(title, detail, status)` rather than the legacy `{ message, detail }` object.
 - Model-validation failures (e.g. `POST /api/lol/summoners/multi-search`) return **`ValidationProblemDetails`** — ProblemDetails plus a per-field `errors` map. The schema is published in the OpenAPI contract.
+- The OpenAPI document declares only `application/problem+json` for these error schemas, matching the runtime response rather than the ordinary JSON/text formatter list.
+
+The service's routes are intentionally unversioned because the API is an internal contract consumed
+by the lock-step web app and generated client. The OpenAPI document's `v1` label versions the
+published schema snapshot; introduce negotiated URL or header versioning before supporting an
+independently deployed external client.
 
 Side-effecting operations that acknowledge success with a message return a typed **`OperationResult`** (`{ message, id? }`) instead of an anonymous body, so the shape is documented in the contract and typed in the generated client. Pure side-effect operations may return `204 No Content`.
 
@@ -58,8 +64,13 @@ This is a navigational summary; the OpenAPI spec is the source of truth.
 - `GET /api/lol/summoners/{summonerId}/stats/rank-history`
 - `GET /api/lol/summoners/{summonerId}/matches/recent`
 - `GET /api/lol/summoners/{summonerId}/matches/{matchId}`
+- `GET /api/lol/summoners/{summonerId}/matches/{matchId}/timeline` (public, `expensive-read` rate limit; per-minute team gold/XP and difference curves, or `404` before timeline ingestion)
 
 Default stats scope:
+- The Riot-ID lookup always returns `200` with `SummonerLookupResponse`, whose `status` is `ready`,
+  `refreshing`, or `missing`. `profile` is populated only for `ready`; `refreshing` includes the poll
+  URL and retry hint. This keeps the read response single-typed. The separate signed-in refresh POST
+  retains `202 Accepted` because it queues work.
 - `stats/overview`, `stats/champions`, and `stats/roles` are computed from ranked solo/duo sample data.
 - `GET /api/lol/summoners/{region}/{name}/{tag}` uses the active season for profile overview and champion stats. When a signed-in manual refresh has produced full-history facts, those profile stats use the durable active-season aggregate; otherwise they fall back to retained match detail currently present in the database.
 - `matches/recent` defaults to full stored history and can be filtered by queue metadata.
@@ -74,6 +85,9 @@ Profile responses include additional season/history metadata:
 - `page` / `pageSize`
 - `queueFamily` (optional; e.g. `ALL`, `RANKED_SOLO_DUO`, `RANKED_FLEX`, `NORMAL_SR`, `ARAM`, `CLASH`, `ARENA`, `ROTATING`, `BOT`, `CUSTOM`, `OTHER`)
 - `queueIds` (optional repeated query param for explicit queue IDs)
+- `championId` (optional; filters before pagination)
+- Responses include stable `facets.queues` and `facets.championIds` collected across the summoner's
+  full stored history, independent of the current page and active filters.
 
 `GET /api/lol/summoners/search` supports:
 - `region` (required; platform route or alias such as `NA1` or `na`)
@@ -154,8 +168,9 @@ Example (`SummonerAcceptedResponse`):
 - `GET /api/lol/analytics/items/{itemId}`
 - `GET /api/lol/analytics/runes`
 - `GET /api/lol/analytics/runes/{runeId}`
-- `POST /api/lol/analytics/cache/invalidate` (`AppOnly`)
-- `POST /api/lol/analytics/champions/cache/invalidate` (`AppOnly`)
+
+Analytics cache invalidation is intentionally exposed only through the audited
+`POST /api/admin/cache/invalidate` operation.
 
 ### LoL Leaderboards
 
@@ -197,7 +212,7 @@ Early-patch semantics:
 
 Tier methodology (`GET /api/lol/analytics/tierlist`):
 - Tiers are **per-role-first**: a champion is graded only against same-role peers. The unified ("All Roles", `role` omitted) list shows each champion at its **primary (most-played) role**; `role` on each entry is that graded role.
-- The grade is driven by **strength = win-rate delta vs the role baseline**, with empirical-Bayes shrinkage toward that baseline (low-sample champions shrink to ~0 delta). Tiers are **absolute cutoffs** on that delta (config-driven), so `S` means a real, sample-resolvable edge and `S` may be **empty on a balanced patch**. The prior-fit and S/A eligibility gates scale with the selected role volume between calibrated safety bounds; `isLowSample=true` champions are capped at `B`.
+- The grade is driven by **strength = win-rate delta vs the role baseline**, with empirical-Bayes shrinkage toward that baseline (low-sample champions shrink to ~0 delta). Tiers are **absolute cutoffs** on that delta (config-driven), so `S` means a real, sample-resolvable edge and `S` may be **empty on a balanced patch**. The prior-fit and tier eligibility gates scale with the selected role volume between calibrated safety bounds; `isLowSample=true` champions are clamped to `B` so thin evidence cannot produce an extreme grade in either direction.
 - Pick rate and ban rate are **not** in the strength score — they feed a separate popularity axis (`contestedScore`).
 - `TierListResponse.confidence` reports whether the selected scope has a meaningful tier spread: `RESOLVED` (multiple tiers and at least one champion over the adaptive floor), `FLAT` (adequate samples but one tier), or `INSUFFICIENT` (no champion clears the floor / no data).
 - `TierListEntry` fields include `strengthScore` (signed delta vs role baseline), `contestedScore` (popularity/meta-presence index), `roleBaseline` (the role's baseline win rate), and `isLowSample`. `compositeScore` is retained as a back-compat alias of `strengthScore` and is slated for removal.
@@ -209,7 +224,8 @@ Tier methodology (`GET /api/lol/analytics/tierlist`):
 
 `region` query semantics across tier list, win rates, builds, and matchups:
 - `ALL` (or omitted): global aggregate across enabled ingestion regions
-- Concrete platform region token: for example `NA1|EUW1|EUN1|KR`
+- Concrete platform region token: for example `NA1|EUW1|EUN1|KR`. Historical analytics are keyed by
+  the match's recorded platform region, not a participant account's current region after a transfer.
 - Supported public region tokens are discoverable via `GET /api/lol/analytics/regions`
 - Tier list, builds, and matchup responses now echo the resolved `region` field so the UI can badge active scope without guessing
 
@@ -297,7 +313,7 @@ Response includes:
 - `topPlayers[]`
 - `commonBuilds[]` — non-empty item sets in purchase order, ranked by games and then win rate (empty inventories remain available only on their raw `recentProMatches[]` rows)
 
-`GET /api/lol/analytics/pro/champions` (public) returns champions ranked by pick/play frequency among tracked pro / high-elo players (the "Pro Builds" home ranking). Optional filters:
+`GET /api/lol/analytics/pro/champions` (public) returns champions ranked by pick/play frequency among tracked pro / high-elo players (the "Pro Solo Queue Builds" home ranking). These are ranked solo-queue observations, not tournament drafts, esports schedules, or official match results. Optional filters:
 - `region` (`ALL` or supported platform-region token such as `NA1|EUW1|EUN1|KR`)
 - `scope`: `pro` (official pros, `IsPro`), `highelo` (auto-discovered Challenger/GM/Master one-tricks, `IsHighEloOtp`), or `all` (either). Defaults to `all`.
 - `patch`
@@ -309,8 +325,13 @@ Response: `{ patch, region, scope, champions[], sample }` where each champion en
 ### Live Game (`AppOnly`)
 
 - `GET /api/lol/summoners/{region}/{gameName}/{tagLine}/live-game`
+- `POST /api/lol/summoners/{region}/{gameName}/{tagLine}/live-game/probe`
 - Returns the latest worker-observed snapshot. `lastUpdatedUtc` and `dataAgeSeconds` expose
   freshness; the Web API does not call Riot directly.
+- The probe endpoint queues a fresh Spectator-V5 check on the credentialed worker and returns
+  `202` with `status` (`queued` or `in_progress`), `poll`, and `retryAfterSeconds`. A per-Riot-ID
+  fenced lease coalesces repeated browser checks; the frontend polls the GET until it observes the
+  newly persisted snapshot. Both routes are exposed only through the narrow AppOnly BFF allowlist.
 - Active-game participants include champion, summoner spells, selected perk IDs/styles, and a
   stored-data analysis projection with Solo/Duo rank, recent-20 win rate/KDA, signed current streak
   (positive wins, negative losses), and the three most-played champions in that recent window.
@@ -347,6 +368,8 @@ Riot account linking (`UserOnly`):
 Auth behavior notes:
 - Registration duplicate-email responses are intentionally generic (`Registration failed.`).
 - Password minimum length is 12 characters.
+- Login performs a current-cost dummy PBKDF2 verification when the email is unknown, so the invalid-credential response does not reveal account existence through a cheap early return.
+- Registration still returns `409 Conflict` for an existing address. This is an intentional product tradeoff until an email-verification flow can provide a genuinely uniform accepted response without returning a session for an existing account.
 - Password-reset tokens are random, stored only as SHA-256 hashes, expire after the configured lifetime (30 minutes by default), and are single-use. Completing a reset revokes every active refresh token for the account.
 
 ### Admin Operations (`AdminOnly`)
@@ -440,7 +463,10 @@ Auth behavior notes:
 
 ### User Preferences (`UserOnly`)
 
-- Favorites and preferences under `/api/users/me/*`
+- Favorites and preferences under `/api/users/me/*`. `GET /api/users/me/favorites` includes the
+  latest stored live-game observation (`liveState`, `liveGameId`, `liveObservedAtUtc`) and an
+  `isLive` convenience flag. `isLive` is true only for an `in_game` observation no more than ten
+  minutes old, so a stale worker snapshot cannot present a player as currently live.
 
 ## OpenAPI Generation Workflow
 

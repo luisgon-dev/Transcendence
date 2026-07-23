@@ -17,8 +17,11 @@ This repo contains a .NET backend (API + background worker) and a Next.js web fr
 
 ```bash
 cp .env.example .env
-docker compose up --build
+pnpm dev:stack:up
 ```
+
+`dev:stack:up` runs `docker compose up --build -d`, so the full stack starts in the background. Use
+`pnpm dev:stack:down` to stop it.
 
 Compose reads local backend credentials from the repo-root [`.env.example`](../.env.example). Copy it to an untracked `.env` before first run. The current Riot key variable is:
 
@@ -54,7 +57,7 @@ Optional (admin bootstrap):
 Optional:
 - `TRN_BACKEND_TIMEOUT_MS=10000` (server-side backend timeout, milliseconds)
 - `TRN_ERROR_VERBOSITY=safe|verbose` (controls user-visible error detail from Next route handlers)
-- `TRN_PUBLIC_ORIGIN=https://transcend.kronic.one` (optional locally, required in production; canonical public origin for metadata, social cards, sitemap/robots URLs, and the admin BFF same-origin/CSRF check. Setting it prevents canonical URLs or the CSRF comparison from being influenced by client-supplied host headers; local development falls back to `http://localhost:3000`)
+- `TRN_PUBLIC_ORIGIN=https://transcend.kronic.one` (optional locally, required in production; canonical public origin for metadata, social cards, sitemap/robots URLs, and credentialed BFF same-origin/CSRF checks. Setting it prevents canonical URLs or the CSRF comparison from being influenced by client-supplied host headers; local development falls back to `http://localhost:3000`)
 
 5. Run the web app:
 
@@ -159,11 +162,15 @@ Riot API key model:
 Prometheus + Grafana are their own stack — the single source of truth for both local dev and prod — at [`config/monitoring/`](../config/monitoring/README.md) (separate from the app `compose.yml`). Bring the app stack up first (it creates the shared `transcendence_transcendence-net` network), then:
 
 ```bash
-# Grafana → http://localhost:3300 (admin/admin), Prometheus → http://localhost:9090
+# Copy config/monitoring/secrets/grafana_admin_password.example to
+# config/monitoring/secrets/grafana_admin_password and replace the placeholder.
+# Grafana → http://localhost:3300 (admin + file-backed password), Prometheus → http://localhost:9090
 docker compose -f config/monitoring/compose.yml up -d
 ```
 
-Grafana is file-provisioned from `config/monitoring/grafana/provisioning` (datasource, dashboards, and `alerting/rules.yml` + `alerting/contactpoints.yml`). The provisioned rules (WebAPI/worker down, API 5xx ratio, API p95 latency) evaluate against Prometheus and notify a Discord/Slack-compatible webhook:
+Grafana is file-provisioned from `config/monitoring/grafana/provisioning`, including five dashboards
+(fleet overview, read API, worker runtime, Riot API, and ingestion rate gate), its datasource, and
+`alerting/rules.yml` + `alerting/contactpoints.yml`. The provisioned rules (WebAPI/worker down, API 5xx ratio, API p95 latency) evaluate against Prometheus and notify a Discord/Slack-compatible webhook:
 
 - **`DISCORD_ALERT_WEBHOOK_URL`** (in `config/monitoring/.env`, see `.env.example`) — the `discord` contact point's URL is interpolated from it (`$VAR` provisioning interpolation). Grafana 13 **refuses to start** on an empty contact-point URL, so when unset the base compose falls back to a no-op placeholder URL: Grafana boots and the rules are visible in Grafana → Alerting, but alerts don't deliver anywhere real. In prod, set it to the same incoming webhook the worker's ingestion alerter uses (`Alerts__Webhook__Url`). Locally the `up == 0` rules go `pending`/`Alerting` because no webapi/worker target is scraped — expected.
 
@@ -358,9 +365,14 @@ Production defaults in `Transcendence.Service/appsettings.json` are coverage-fir
 Which recurring jobs are active is determined by:
 
 - the per-job `Enable*` flags under `Jobs:Schedule` (for example `EnableChampionAnalyticsIngestion`, `EnableMatchTimelineBackfill`), and
-- the resolved **scheduling profile** (`Jobs:Schedule:Profile`, falling back to `DefaultProfile`, default `stable`), whose `Jobs:SchedulingProfiles:Profiles:<name>:JobOverrides` can flip a job's `Enabled`/`Cron`/`MandatoryBaseline`. Profile overrides win over the descriptor defaults, and `poll-live-games` is disabled by default.
+- the resolved **scheduling profile** (`Jobs:Schedule:Profile`, falling back to `DefaultProfile`, default `stable`), whose `Jobs:SchedulingProfiles:Profiles:<name>:JobOverrides` can flip a job's `Enabled`/`Cron`/`MandatoryBaseline`. Profile overrides win over the descriptor defaults. `poll-live-games` is enabled in `stable`, bounded by `Jobs:LiveGamePolling`, and defaults to opted-in favorite summoners only.
 
-The base `appsettings.json` ships `Jobs:Schedule:Profile = "stable"` (there is no `appsettings.Development.json`), so a local worker resolves the **same `stable` profile as production** unless you override `Jobs:Schedule:Profile` (or individual `Enable*` / `JobOverrides` values) via user-secrets or environment variables. Under `stable` the enabled jobs are the LoL analytics-coverage set (adaptive analytics refresh, champion-analytics ingestion, summoner maintenance — each a single self-pacing job that tightens cadence during the new-patch ramp window — plus match-timeline backfill and high-elo profile refresh), plus the baseline jobs (`detect-patch`, `retry-failed-matches`, `refresh-lock-lifecycle-cleanup`); `poll-live-games`, `rune-selection-integrity-backfill`, and the daily `refresh-champion-analytics` are disabled.
+The base `appsettings.json` ships `Jobs:Schedule:Profile = "stable"` (there is no `appsettings.Development.json`), so a local worker resolves the **same `stable` profile as production** unless you override `Jobs:Schedule:Profile` (or individual `Enable*` / `JobOverrides` values) via user-secrets or environment variables. Under `stable` the enabled jobs are the LoL analytics-coverage set (adaptive analytics refresh, champion-analytics ingestion, summoner maintenance, each a single self-pacing job that tightens cadence during the new-patch ramp window, plus match-timeline backfill, live-game polling for opted-in favorites, and high-elo profile refresh), plus the baseline jobs (`detect-patch`, `retry-failed-matches`, `refresh-lock-lifecycle-cleanup`); `rune-selection-integrity-backfill` and the daily `refresh-champion-analytics` are disabled.
+
+The worker watchdog requests graceful generic-host shutdown on a stale producer heartbeat, waiting
+`Worker:Watchdog:GracefulShutdownTimeout` (default `00:00:15`) before its hard-exit/container-restart
+fallback. Override it with `Worker__Watchdog__GracefulShutdownTimeout`; keep it long enough for an
+ordinary Hangfire scope and transaction to observe cancellation and unwind.
 
 `DevelopmentWorker`'s only environment-specific startup actions are: removing legacy/invalid recurring jobs (old `cache-warmup*` ids), an optional full Hangfire purge when `Jobs:Schedule:CleanupOnStartup=true` (default `false`), and a startup integrity check that fail-fasts on mandatory-baseline job failures. It does **not** run the production startup bootstrap described below.
 
@@ -610,7 +622,7 @@ Tuning knobs for the per-role-first, empirical-Bayes champion tier scorer (`Cham
 - `Analytics:Tiering:PriorStrengthMin` / `PriorStrengthMax` (default `50` / `2000`) — clamp on the empirical-Bayes prior strength `k`
 - `Analytics:Tiering:PriorFitMinGamesFloor` / `PriorFitMinGamesCeiling` (default `20` / `200`) — bounds for the adaptive Beta-prior fit gate
 - `Analytics:Tiering:PriorFitRoleVolumeShare` (default `0.0012`) — share of total role games used to scale that gate between its bounds
-- `Analytics:Tiering:GradeMinGamesFloor` / `GradeMinGamesCeiling` (default `50` / `500`) — bounds for the adaptive S/A eligibility gate; below the resolved gate a champion is flagged low-sample and capped at `B`
+- `Analytics:Tiering:GradeMinGamesFloor` / `GradeMinGamesCeiling` (default `50` / `500`) — bounds for the adaptive tier eligibility gate; below the resolved gate a champion is flagged low-sample and clamped to `B`
 - `Analytics:Tiering:GradeRoleVolumeShare` (default `0.003`) — share of total role games used to scale the grade gate between its bounds
 - `Analytics:Tiering:ContestPickWeight` / `ContestBanWeight` (default `1` / `1`) — weights in the `contestedScore` popularity index
 

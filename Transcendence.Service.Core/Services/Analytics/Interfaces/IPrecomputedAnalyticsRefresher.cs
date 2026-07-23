@@ -9,6 +9,13 @@ namespace Transcendence.Service.Core.Services.Analytics.Interfaces;
 public interface IPrecomputedAnalyticsRefresher
 {
     /// <summary>
+    /// Rebuilds every durable analytics surface in the required core → matchup → build → pro order and
+    /// commits them as one patch-level transaction. A failed phase leaves the previously completed
+    /// snapshot visible across every surface.
+    /// </summary>
+    Task<PrecomputedAnalyticsFullRefreshResult> RefreshAllAsync(string patch, CancellationToken ct);
+
+    /// <summary>
     /// Rebuilds the tabular-core aggregates (win-rate/pick-rate/role-rank source + ban-rate
     /// numerator/denominator) for <paramref name="patch"/>, replacing that patch's rows transactionally so
     /// reads never observe a partially-written patch.
@@ -44,3 +51,9 @@ public sealed record PrecomputedAnalyticsRefreshResult(
     int ScopeMatchCountRows,
     int BanScopeRows,
     int GradeRows);
+
+public sealed record PrecomputedAnalyticsFullRefreshResult(
+    PrecomputedAnalyticsRefreshResult Core,
+    int MatchupRows,
+    int BuildRows,
+    int ProRows);

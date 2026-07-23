@@ -51,7 +51,7 @@ export function DataBar({
   return (
     <span className={cn("inline-flex items-center gap-2", className)}>
       <span
-        className="relative hidden h-[7px] w-[clamp(56px,9vw,104px)] overflow-hidden rounded-full bg-surface-2 sm:block"
+        className="relative block h-[7px] w-12 overflow-hidden rounded-full bg-surface-2 sm:w-[clamp(56px,9vw,104px)]"
         aria-hidden="true"
       >
         {/* center reference tick */}

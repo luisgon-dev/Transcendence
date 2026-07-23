@@ -6,7 +6,7 @@
 
 **A command deck for League of Legends analytics.**
 
-Tier lists, champion builds, pro picks, and live summoner profiles — fast, trustworthy, and unapologetically data-forward.
+Tier lists, champion builds, tracked pro solo-queue picks, and live summoner profiles. Fast, trustworthy, and unapologetically data-forward.
 
 <!-- hero screenshot goes here — e.g. the LoL tier list or a summoner profile from apps/web -->
 
@@ -39,7 +39,7 @@ The live site redeploys automatically once changes land on `main`.
 
 - Tier list rankings
 - Champion analytics — win rates, builds, and matchups by role, with tier / rank / patch filters
-- Pro play insights — top picks and pro rosters by region
+- Tracked pro solo-queue insights: top picks, builds, and player rosters by region (not tournament schedules/results)
 - Summoner profiles — ranked stats, mastery, and match history with detailed post-game analytics
 - Live game detection
 - Search with prefix autosuggest, plus multi-search (up to 5 players) for champ-select — surfacing average rank, role coverage, and autofill risk
@@ -50,9 +50,9 @@ The live site redeploys automatically once changes land on `main`.
 **🛠 Platform**
 
 - Email auth — register, login, token refresh, password reset
-- User preferences + saved favorite summoners
+- User preferences + saved favorite summoners with fresh "live now" surfacing
 - Admin dashboard — Hangfire queue visibility, recurring-job controls, audit logs, cache invalidation, service logs, and analysis metrics
-- 80+ endpoints behind a committed OpenAPI contract
+- 60+ endpoints behind a committed OpenAPI contract
 - Per-surface rate limiting and health probes
 
 </td>
@@ -158,14 +158,28 @@ pnpm web:test     # Vitest
 </details>
 
 <details>
-<summary><strong>Optional: developer tooling (pgAdmin, container logs)</strong></summary>
+<summary><strong>Optional: developer tooling and observability</strong></summary>
 
-Two extra services ship in `compose.yml` behind profiles:
+Two utility services ship in the app `compose.yml` behind profiles:
 
 ```bash
 docker compose --profile local-tools up   # pgAdmin → http://localhost:5050
 docker compose --profile ops-tools up      # Dozzle (container log viewer) → http://localhost:9999
 ```
+
+Prometheus and Grafana run from the dedicated monitoring stack after the app network exists:
+
+```bash
+# First copy config/monitoring/secrets/grafana_admin_password.example to
+# config/monitoring/secrets/grafana_admin_password and replace the placeholder.
+docker compose -f config/monitoring/compose.yml up -d
+# Prometheus → http://localhost:9090
+# Grafana → http://localhost:3300 (admin + file-backed password)
+```
+
+Grafana provisions five dashboards (fleet overview, read API, worker runtime, Riot API, and ingestion
+rate gate) plus alert rules. See [`config/monitoring/README.md`](config/monitoring/README.md) for local
+configuration and the production secret/deploy workflow.
 
 </details>
 

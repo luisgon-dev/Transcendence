@@ -1,11 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-// NOTE: These admin DTO contracts intentionally live in the Transcendence.WebAPI.Controllers
-// namespace so that the public OpenAPI schema names and the controller's call sites remain
-// byte-for-byte unchanged after the controller was decomposed behind facades (P10.1).
-// They are physically hosted in Transcendence.Service.Core so the admin facades (which live in
-// Service.Core) can return them while the WebAPI controller still maps them to IActionResult.
-namespace Transcendence.WebAPI.Controllers;
+namespace Transcendence.Service.Core.Services.Admin.Models;
 
 public record AdminOverviewResponse(
     DateTime GeneratedAtUtc,

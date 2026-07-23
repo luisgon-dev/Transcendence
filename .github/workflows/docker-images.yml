@@ -132,8 +132,8 @@ jobs:
         uses: docker/metadata-action@96383f45573cb7f253c731d3b3ab81c87ef81934 # v5.0.0
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}-${{ matrix.image_suffix }}
-          # `:main` stays the moving tag wud follows; `:sha-<short>` is an
-          # immutable per-commit handle used for break-glass rollback (see
+          # `:main` stays the moving tag the digest poller follows; `:sha-<short>`
+          # is an immutable per-commit handle used for break-glass rollback (see
           # docs/ARCHITECTURE.md "Deployment & rollback").
           tags: |
             type=ref,event=branch
@@ -154,14 +154,10 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           file: ${{ matrix.dockerfile }}
-          # Publish a plain single-arch manifest, NOT an OCI image index. Buildx defaults
-          # provenance/SBOM attestations ON, which wraps even a single-platform image in an
-          # index with an `unknown/unknown` attestation sub-manifest. That breaks wud's
-          # local-vs-remote digest comparison on the moving `:main` tag (it resolves the new
-          # remote digest correctly but reports updateAvailable=false), so pushes silently
-          # fail to auto-deploy and require a manual `compose up`. See docs + task P1.3b.
-          provenance: false
-          sbom: false
+          # The systemd poller resolves the top-level OCI digest explicitly and supports
+          # attestation sub-manifests, so publish both build provenance and an SBOM.
+          provenance: mode=max
+          sbom: true
 
       - name: Sign the published Docker image
         if: steps.plan.outputs.run == 'true' && github.event_name != 'pull_request'

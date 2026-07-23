@@ -2,9 +2,11 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { ParticipantRuneCard } from "@/components/lol-profile/ParticipantRuneCard";
+import { useStaticData } from "@/components/lol-profile/StaticDataContext";
 import { TableScroll, Table, Th, Td } from "@/components/ui/Table";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/cn";
+import { formatCompactNumber } from "@/lib/format";
 import { encodeRiotIdPath } from "@/lib/riotid";
 import { roleDisplayLabel } from "@/lib/roles";
 import {
@@ -20,28 +22,15 @@ import {
   normalizeRoleKey,
   participantDisplayName,
   primaryKeystoneId,
-  type ChampionStatic,
-  type ItemStatic,
-  type MatchParticipant,
-  type RuneStatic,
-  type SpellStatic
+  type MatchParticipant
 } from "@/components/lol-profile/shared";
 
 const ROLE_ORDER: Record<string, number> = { TOP: 0, JUNGLE: 1, MIDDLE: 2, BOTTOM: 3, UTILITY: 4 };
 
 export type ScoreboardDensity = "compact" | "full";
 
-function formatGold(gold: number): string {
-  return gold >= 1000 ? `${(gold / 1000).toFixed(1)}k` : String(gold);
-}
-
-function RuneTrigger({
-  participant,
-  runeStatic
-}: {
-  participant: MatchParticipant;
-  runeStatic: RuneStatic | null;
-}) {
+function RuneTrigger({ participant }: { participant: MatchParticipant }) {
+  const { runeStatic } = useStaticData();
   const keystoneId = primaryKeystoneId(participant.runes, runeStatic);
   const keystone = runeStatic?.runeById[String(keystoneId)];
   const subStyle = runeStatic?.styleById[String(participant.runes?.subStyleId ?? 0)];
@@ -81,7 +70,7 @@ function RuneTrigger({
       className="max-w-none p-2"
       content={
         <div className="w-[244px]">
-          <ParticipantRuneCard participant={participant} runeStatic={runeStatic} />
+          <ParticipantRuneCard participant={participant} />
         </div>
       }
     >
@@ -103,11 +92,7 @@ function ScoreboardRow({
   density,
   region,
   gameName,
-  tagLine,
-  championStatic,
-  itemStatic,
-  spellStatic,
-  runeStatic
+  tagLine
 }: {
   participant: MatchParticipant;
   durationSeconds: number;
@@ -116,11 +101,8 @@ function ScoreboardRow({
   region: string;
   gameName: string;
   tagLine: string;
-  championStatic: ChampionStatic | null;
-  itemStatic: ItemStatic | null;
-  spellStatic: SpellStatic | null;
-  runeStatic: RuneStatic | null;
 }) {
+  const { championStatic, itemStatic, spellStatic } = useStaticData();
   const isCurrent = isCurrentProfilePlayer(participant, gameName, tagLine);
   const champion = championStatic?.champions[String(participant.championId)];
   const cs = participant.totalMinionsKilled + participant.neutralMinionsKilled;
@@ -179,7 +161,7 @@ function ScoreboardRow({
             </span>
           ) : null}
 
-          <RuneTrigger participant={participant} runeStatic={runeStatic} />
+          <RuneTrigger participant={participant} />
 
           <div className="min-w-0">
             {canLink ? (
@@ -248,7 +230,7 @@ function ScoreboardRow({
           </Td>
 
           <Td align="right" className="hidden whitespace-nowrap text-sm tabular-nums text-fg/82 sm:table-cell">
-            {formatGold(participant.goldEarned)}
+            {formatCompactNumber(participant.goldEarned)}
           </Td>
         </>
       ) : null}
@@ -291,11 +273,7 @@ export function ScoreboardTeamTable({
   region,
   gameName,
   tagLine,
-  density = "compact",
-  championStatic,
-  itemStatic,
-  spellStatic,
-  runeStatic
+  density = "compact"
 }: {
   participants: MatchParticipant[];
   teamId: 100 | 200;
@@ -306,11 +284,8 @@ export function ScoreboardTeamTable({
   gameName: string;
   tagLine: string;
   density?: ScoreboardDensity;
-  championStatic: ChampionStatic | null;
-  itemStatic: ItemStatic | null;
-  spellStatic: SpellStatic | null;
-  runeStatic: RuneStatic | null;
 }) {
+  const { championStatic } = useStaticData();
   const ordered = participants
     .slice()
     .sort((a, b) => (ROLE_ORDER[normalizeRoleKey(a.teamPosition)] ?? 9) - (ROLE_ORDER[normalizeRoleKey(b.teamPosition)] ?? 9));
@@ -353,7 +328,7 @@ export function ScoreboardTeamTable({
           ) : null}
           <div className="type-caption flex items-center gap-3 text-muted tabular-nums">
             <span>{totalKills} kills</span>
-            <span>{formatGold(totalGold)} gold</span>
+            <span>{formatCompactNumber(totalGold)} gold</span>
           </div>
         </div>
       </div>
@@ -386,10 +361,6 @@ export function ScoreboardTeamTable({
                 region={region}
                 gameName={gameName}
                 tagLine={tagLine}
-                championStatic={championStatic}
-                itemStatic={itemStatic}
-                spellStatic={spellStatic}
-                runeStatic={runeStatic}
               />
             ))}
           </tbody>

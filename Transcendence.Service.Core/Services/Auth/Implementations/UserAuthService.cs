@@ -15,6 +15,11 @@ public class UserAuthService(
 {
     private const int RefreshTokenDays = 7;
     private const int PasswordIterations = 310_000;
+    // A syntactically valid current-cost hash. The actual hash bytes are deliberately arbitrary:
+    // unknown-account logins verify against it only to consume the same PBKDF2 work as a bad
+    // password for an existing account, without keeping a usable dummy credential in the binary.
+    private const string DummyPasswordHash =
+        "pbkdf2$310000$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
     internal const int MinimumPasswordLength = 12;
     // Per-account brute-force lockout, independent of the per-IP rate limiter.
     private const int MaxFailedLoginAttempts = 10;
@@ -56,14 +61,18 @@ public class UserAuthService(
         var now = DateTime.UtcNow;
         var emailNormalized = NormalizeEmail(request.Email);
         var user = await userAccountRepository.GetByEmailNormalizedAsync(emailNormalized, ct);
-        if (user == null) return null;
+        if (user == null)
+        {
+            _ = VerifyPassword(request.Password, DummyPasswordHash, out _);
+            return null;
+        }
 
         // Per-account lockout: a distributed/rotating-IP brute force against ONE account is throttled
         // here even when each individual IP stays under its own rate-limit partition.
         if (user.LockoutUntilUtc is { } lockedUntil && lockedUntil > now)
         {
-            logger.LogWarning("Login blocked: account {Email} is locked out until {LockoutUntilUtc:o}.",
-                user.Email, lockedUntil);
+            logger.LogWarning("Login blocked: account {UserAccountId} is locked out until {LockoutUntilUtc:o}.",
+                user.Id, lockedUntil);
             return null;
         }
 
@@ -74,8 +83,8 @@ public class UserAuthService(
             {
                 user.LockoutUntilUtc = now.AddMinutes(LockoutDurationMinutes);
                 logger.LogWarning(
-                    "Account {Email} locked for {Minutes}m after {Attempts} consecutive failed logins.",
-                    user.Email, LockoutDurationMinutes, user.FailedLoginAttempts);
+                    "Account {UserAccountId} locked for {Minutes}m after {Attempts} consecutive failed logins.",
+                    user.Id, LockoutDurationMinutes, user.FailedLoginAttempts);
             }
             user.UpdatedAtUtc = now;
             await userAccountRepository.SaveChangesAsync(ct);
@@ -90,7 +99,7 @@ public class UserAuthService(
         if (storedIterations < PasswordIterations)
         {
             user.PasswordHash = HashPassword(request.Password);
-            logger.LogInformation("Upgraded password hash cost factor for {Email}", user.Email);
+            logger.LogInformation("Upgraded password hash cost factor for user {UserAccountId}", user.Id);
         }
         await EnsureBootstrapAdminRoleAsync(user, ct);
 
@@ -297,6 +306,6 @@ public class UserAuthService(
 
         user.Roles.Add(role);
         await userAccountRepository.AddRoleAsync(role, ct);
-        logger.LogInformation("Granted admin bootstrap role during auth flow for {Email}", user.Email);
+        logger.LogInformation("Granted admin bootstrap role during auth flow for user {UserAccountId}", user.Id);
     }
 }

@@ -9,4 +9,10 @@ public interface ILiveGamePollingService
         string gameName,
         string tagLine,
         CancellationToken ct = default);
+
+    Task<LiveGameResponseDto> ProbeCurrentGameAsync(
+        string platformRegion,
+        string gameName,
+        string tagLine,
+        CancellationToken ct = default);
 }

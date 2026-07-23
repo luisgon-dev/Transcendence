@@ -474,15 +474,15 @@ _Discoverability, multi-mode analytics, and the champ-select hook_
   - **Fix:** Add champion synergy (co-occurrence win rate for bot-lane and jungle+lane pairs) and a 'best partners' section on champion pages, reusing the existing matchup compute pipeline.
   - **Why:** Mobalytics/u.gg offer synergy and duo/lane-partner data and team-comp tools that competitive duos rely on. Counters alone answer 'is this matchup winnable' but not 'who should I duo/pair with', a common recurring question.
   - **Where:** `Transcendence.WebAPI/Controllers/ChampionAnalyticsController.cs:223 (matchups only); grep 'synerg|duo' across source → 0 hits`
-- [ ] **No esports / pro-match coverage — 'Pro Builds' is solo-queue builds, not matches** `LOW` · `large` · ✅ verified
+- [x] **No esports / pro-match coverage — 'Pro Builds' is solo-queue builds, not matches** `LOW` · `large` · ✅ verified
   - **Fix:** If pursuing breadth, integrate an esports schedule/results feed (e.g. LoL Esports data) into a /lol/esports hub; otherwise clarify positioning so 'Pro' isn't confused with esports coverage.
   - **Why:** u.gg, Mobalytics and Blitz run esports hubs (schedules, results, pro team comps) that pull fans in daily during splits. This is a differentiator rather than table stakes, but its absence caps engagement outside of ranked players.
   - **Where:** `apps/web/app/lol/pro-builds + ProAnalyticsController.cs:25,42 (champions/players); grep 'esport|lck|lec|worlds|schedule' across source → 0 hits`
-- [ ] **No retention/growth hooks: no notifications/alerts, no sharing/embeds, no companion/overlay** `LOW` · `medium` · ✅ verified
+- [x] **No retention/growth hooks: no notifications/alerts, no sharing/embeds, no companion/overlay** `LOW` · `medium` · ✅ verified
   - **Fix:** Start cheap: 'favorite is live now' surfacing on the favorites page and shareable OG cards for profiles/champions; consider a lightweight browser or in-client companion later.
   - **Why:** Daily drivers rely on pull mechanics: Blitz/Porofessor use a desktop client, op.gg pushes 'your favorite is in game', and everyone leans on shareable cards. Transcendence is purely pull-to-refresh in a browser tab, so it has no mechanism to bring users back between intentional visits.
   - **Where:** `absent — grep 'notification|webhook|alert|embed' across source → 0 product hits; no in-client/overlay app in repo; only manual favorites (UserPreferencesController)`
-- [ ] **Casual-user onboarding is thin — landing is search + tier list, no guidance layer** `LOW` · `small` · ✅ verified
+- [x] **Casual-user onboarding is thin — landing is search + tier list, no guidance layer** `LOW` · `small` · ✅ verified
   - **Fix:** Add a lightweight guidance strip for query-less visitors (e.g. 'easy champions to climb with' by role, a one-line 'how tiers are computed' explainer) without compromising the data-first center of gravity.
   - **Why:** PRODUCT.md deliberately centers competitive climbers, which is defensible — but the owner's stated goal is a *general-purpose* daily driver, and a first-time casual visitor with no summoner name in mind gets a tier list and little else. Competitors offer 'champions to climb with', role-based starter guidance, and explainer copy.
   - **Where:** `apps/web/app/page.tsx (search launcher + tier list 'top picks' strip); SiteHeaderClient.tsx:16-18 nav = Tier List/Champions/Pro Builds`
@@ -514,11 +514,11 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Extract the acquire→enqueue→compensate flow into a single Service.Core orchestrator (e.g. ISummonerRefreshOrchestrator.QueueRefreshAsync) returning a small result the controllers map to IActionResult; both controllers call it.
   - **Why:** The lock TTL, priority-key semantics, compensation-on-enqueue-failure, and contention-response shape must be kept in sync by hand across two files; a fix or change to the lock protocol in one controller will silently diverge from the other, risking inconsistent refresh behavior (e.g. leaked locks) for one caller path.
   - **Where:** `Transcendence.WebAPI/Controllers/SummonersController.cs:304-389; Transcendence.WebAPI/Controllers/ProSummonersController.cs:222-299`
-- [ ] **Admin DTOs physically in Service.Core are declared under `namespace Transcendence.WebAPI.Controllers`, and facades `using Transcendence.WebAPI.Controllers`** `MED` · `medium`
+- [x] **Admin DTOs physically in Service.Core are declared under `namespace Transcendence.WebAPI.Controllers`, and facades `using Transcendence.WebAPI.Controllers`** `MED` · `medium`
   - **Fix:** Move the DTOs to a Service.Core-owned namespace (e.g. Transcendence.Service.Core.Services.Admin.Models) and, if the generated OpenAPI schema id must stay stable, pin it via Swashbuckle's SchemaId/CustomSchemaIds rather than by mislabeling the namespace.
   - **Why:** Namespace no longer reflects assembly/layer ownership. A reader (or static-analysis/dependency-direction tooling) sees Service.Core types and usings in a WebAPI namespace and cannot tell that the real dependency direction is intact. It also couples the Service.Core contract names to a WebAPI-shaped naming decision (OpenAPI schema stability), making a future namespace correction a breaking OpenAPI/client-regen change.
   - **Where:** `Transcendence.Service.Core/Services/Admin/Models/AdminOperationsContracts.cs:3-8; Transcendence.Service.Core/Services/Admin/Implementations/AdminJobsFacade.cs:9; Transcendence.Service.Core/Services/Admin/Implementations/AdminOverviewFacade.cs:13`
-- [ ] **SummonerStatsService is a 1642-LOC god service; its interface bundles unrelated concerns (ISP violation)** `MED` · `large`
+- [x] **SummonerStatsService is a 1642-LOC god service; its interface bundles unrelated concerns (ISP violation)** `MED` · `large`
   - **Fix:** Split along the seams: keep summoner-scoped aggregates in ISummonerStatsService and extract match rendering (GetMatchDetailAsync/GetMatchTimelineAsync) into an IMatchDetailService, mirroring the prior god-file decomposition.
   - **Why:** Any consumer that only needs one match detail takes a dependency on the entire summoner-stats surface; the class is a change-magnet and hard to test in isolation. The parallel P10.1 effort already split other god-files (e.g. the 4-service decomposition noted in project memory), but this one was left intact, so the codebase is now inconsistent about where the 'god service' line is.
   - **Where:** `Transcendence.Service.Core/Services/Analysis/Interfaces/ISummonerStatsService.cs:6-53; Transcendence.Service.Core/Services/Analysis/Implementations/SummonerStatsService.cs (1642 LOC)`
@@ -526,7 +526,7 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Inject IRefreshLockLifecycleTelemetry via the constructor (it is always registered) or fold telemetry into the proposed refresh orchestrator; drop the service-locator and the empty catch.
   - **Why:** Hides a real dependency from the constructor (harder to see/test), and the blanket catch would silently mask a genuine misconfiguration where the telemetry service is missing. Combined with the duplicated refresh logic, it signals the orchestration was pasted rather than shared.
   - **Where:** `Transcendence.WebAPI/Controllers/SummonersController.cs:550-560,568-578; duplicated in Transcendence.WebAPI/Controllers/ProSummonersController.cs`
-- [ ] **Inconsistent Interfaces/Implementations/Models folder convention across Service.Core service areas** `LOW` · `medium`
+- [x] **Inconsistent Interfaces/Implementations/Models folder convention across Service.Core service areas** `LOW` · `medium`
   - **Fix:** Either document these as intentional exceptions (small/cross-cutting areas stay flat) or normalize the larger areas (Diagnostics, Jobs) to the Interfaces/Implementations/Models layout used elsewhere.
   - **Why:** Discoverability cost: contributors cannot rely on a single rule for where an interface vs implementation lives, and the repo-map's stated convention does not hold uniformly. Low risk, purely maintainability.
   - **Where:** `Transcendence.Service.Core/Services/{Cache,Diagnostics,Database,Jobs} vs {Admin,Analysis,Auth,LiveGame,StaticData,RiotApi}`
@@ -535,35 +535,35 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > The largest services split cleanly into two camps. ChampionAnalyticsService is a genuinely well-decomposed facade that delegates all heavy compute to focused sub-services, and read paths are disciplined (AsNoTracking, DTO projection, tag-based cache invalidation, consistent OperationCanceledException rethrow, no empty catch blocks). The other three, however, carry serious duplication debt: MatchService triplicates ~120-line ingestion bodies (author-acknowledged), and rune-selection parsing is re-implemented three times across two files — and the copies have already drifted, which is a latent correctness bug, not just style. SummonerStatsService is a 1642-LOC god class mixing 10 query responsibilities with ~300 lines of rune mapping. Magic numbers (the 5000 stat-mod threshold, retention/retry constants) are scattered as bare literals rather than named/config-bound.
 
-- [ ] **MatchService triplicates the entire match-ingestion body across three methods** `MED` · `medium` · ✅ verified
+- [x] **MatchService triplicates the entire match-ingestion body across three methods** `MED` · `medium` · ✅ verified
   - **Fix:** Extract a single `MapParticipant(Participant p, Match match, Summoner summoner)` factory and a shared `BuildParticipants(info, resolver, match)` helper parameterized by a summoner-resolution delegate. The three public methods then differ only in how they resolve summoners (full API resolve vs stub vs retry) and in their persistence/error wrapping.
   - **Why:** Any field added to MatchParticipant, or any bug fixed in one ingestion path, must be manually mirrored in two others or the paths silently diverge. This is exactly the class of drift that produces 'lightweight import has stale/missing data' bugs. It also inflates the file and obscures the small real differences (stub-creation vs Riot resolution) between the three flows.
   - **Where:** `Transcendence.Service.Core/Services/RiotApi/Implementations/MatchService.cs:126-160, 313-346, 475-509`
-- [ ] **Rune-selection parsing is re-implemented three times and the copies have already diverged** `MED` · `medium` · ✅ verified
+- [x] **Rune-selection parsing is re-implemented three times and the copies have already diverged** `MED` · `medium` · ✅ verified
   - **Fix:** Promote a single `RuneSelectionMapper` (taking StoredRuneSelection[] + a metadata lookup) that returns the structured primary/sub/statShard tuple, and have all three call sites consume it. Delete the duplicate HasStructuredSelections.
   - **Why:** BuildRunesDto can assign a stat-mod path id (5000) or 0 as a primary rune style where the other two implementations reject it -- the same participant's runes can be rendered differently on match-detail vs match-history vs build pages. This is a live correctness inconsistency, and the duplication guarantees future fixes land in only one copy.
   - **Where:** `Transcendence.Service.Core/Services/Analysis/Implementations/SummonerStatsService.cs:1268-1352 & 1454-1551; Transcendence.Service.Core/Services/Analytics/Implementations/ChampionBuildPathBuilder.cs:381-468`
-- [ ] **SummonerStatsService is a 1642-LOC god class spanning 10 unrelated query responsibilities plus rune mapping** `MED` · `large`
+- [x] **SummonerStatsService is a 1642-LOC god class spanning 10 unrelated query responsibilities plus rune mapping** `MED` · `large`
   - **Fix:** Split along seams: a SummonerStatsService (overview/champions/roles/season), a SummonerMatchHistoryService (recent matches + match detail/timeline), and a shared RuneSelectionMapper. Each becomes independently testable.
   - **Why:** SRP is broken: a change to match-timeline aggregation and a change to rune parsing touch the same 1600-line file, raising merge-conflict and regression surface. The rune-mapping block is the very code duplicated in ChampionBuildPathBuilder, so its being buried here also hides the reuse opportunity.
   - **Where:** `Transcendence.Service.Core/Services/Analysis/Implementations/SummonerStatsService.cs:17-1642`
-- [ ] **The '5000' stat-mod rune-path threshold is a bare literal repeated in 13+ sites across 4 files** `MED` · `small`
+- [x] **The '5000' stat-mod rune-path threshold is a bare literal repeated in 13+ sites across 4 files** `MED` · `small`
   - **Fix:** Define `public const int StatModPathId = 5000;` (and helpers `IsStatModPath` / `IsRealRunePath`) in one shared static, e.g. alongside the rune metadata types, and reference it everywhere including the StaticDataService assignment.
   - **Why:** The meaning ('5000 == synthetic stat-mod path id') lives nowhere as a name, so a reader must reverse-engineer it, and if Riot's data scheme ever shifts, the value must be found and changed correctly in a dozen places across four files. Classic primitive-obsession / magic-number smell.
   - **Where:** `Transcendence.Service.Core/Services/StaticData/Implementations/StaticDataService.cs:401; SummonerStatsService.cs:1328,1336,1495,1503,1523,1530; ChampionBuildPathBuilder.cs:410,417,440,447; RuneSelectionIntegrityBackfillJob.cs:160,168,178`
-- [ ] **SummonerStatsService has two near-identical overview/champion compute methods differing only by a date filter** `MED` · `medium`
+- [x] **SummonerStatsService has two near-identical overview/champion compute methods differing only by a date filter** `MED` · `medium`
   - **Fix:** Parameterize a single private method with optional `(long? startMs, long? endMs)` bounds (null = all-time) feeding a shared aggregate projection, and delete the season-specific copies.
   - **Why:** ~130 lines of duplicated aggregation logic. The two champion-stat copies have already drifted in style -- the first uses a `0, // fill KDA after` placeholder then a second `x with` pass (193, 205-210) while the second computes KDA inline (445) -- showing the copies are maintained independently.
   - **Where:** `Transcendence.Service.Core/Services/Analysis/Implementations/SummonerStatsService.cs:66-144 vs 314-394; and 161-211 vs 396-453`
-- [ ] **Operational tunables in MatchService are hardcoded literals while sibling policies are options-bound** `MED` · `small`
+- [x] **Operational tunables in MatchService are hardcoded literals while sibling policies are options-bound** `MED` · `small`
   - **Fix:** Move these into an options record (e.g. MatchFetchOptions { RetentionDays, MaxRetries, BackoffSeconds[] }) bound from appsettings, mirroring PatchPromotionOptions.
   - **Why:** Changing the Riot retention window (a Riot-API policy, not a code invariant) or tuning retry behavior requires a code change + redeploy, and the '730 == 2 years' relationship is only documented in a comment. Inconsistent with the codebase's own configuration convention.
   - **Where:** `Transcendence.Service.Core/Services/RiotApi/Implementations/MatchService.cs:373,549,560-561`
-- [ ] **NonCacheablePatchFallbackException is used purely as control flow to abort memoization** `LOW` · `small`
+- [x] **NonCacheablePatchFallbackException is used purely as control flow to abort memoization** `LOW` · `small`
   - **Fix:** Have the fetch helpers return the boolean cacheability they already compute, and pass it to a cache API that supports 'compute-but-don't-store' (or gate the SetAsync on the flag) instead of throwing.
   - **Why:** Exceptions-as-control-flow obscures the happy path, costs stack-unwinding on a routine branch, and couples the two helpers through a private exception type rather than an explicit return contract.
   - **Where:** `Transcendence.Service.Core/Services/StaticData/Implementations/StaticDataService.cs:186-202, 162-184`
-- [ ] **Cache-key strings are hand-built in multiple places and must match a controller method by convention only** `LOW` · `medium`
+- [x] **Cache-key strings are hand-built in multiple places and must match a controller method by convention only** `LOW` · `medium`
   - **Fix:** Centralize each cache-key shape in a single builder (extend the existing BuildCacheKey pattern to builds/matchups/probuilds) and share the most-played-lane resolver so warmer and reader provably agree.
   - **Why:** If a key format or the lane-selection heuristic changes in one location, the cache-warming path silently writes keys the read path never queries (cold cache, wasted compute) with no compile-time or test failure. Fragile coupling.
   - **Where:** `Transcendence.Service.Core/Services/Analytics/Implementations/ChampionAnalyticsService.cs:258,303,408,495,501,512,618-628`
@@ -572,15 +572,15 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > The EF model is generally well-engineered: composite unique indexes double as UPSERT conflict targets and read lookups, global query filters for unfetchable matches are applied consistently across every match-dependent entity, and the covering-index strategy (bare shape in the model, INCLUDE payload in idempotent CONCURRENTLY raw-SQL migrations) is unusually disciplined and thoroughly documented. CI backs this with both a hot-table DDL lint and a has-pending-model-changes drift guard. The real weaknesses are relational-integrity smells rather than outright bugs: a redundant Match↔Summoner join table that is written on every ingest but never read, hard FKs from immutable match facts to mutable versioned static-data tables, nullable columns carrying UNIQUE indexes that Postgres does not enforce across NULLs, and a test harness (EF InMemory for WebAPI, SQLite-EnsureCreated for Core) that never exercises the real Postgres DDL/migrations and only partially enforces constraints. There are no decimal-precision issues because the model has no decimal columns (rates use double, counts use int).
 
-- [ ] **No optimistic-concurrency tokens (rowversion / xmin) on any entity** `LOW` · `medium`
+- [x] **No optimistic-concurrency tokens (rowversion / xmin) on any entity** `LOW` · `medium`
   - **Fix:** For rows with genuine multi-writer contention (Summoner), add an xmin concurrency token (Npgsql .UseXminAsConcurrencyToken()) so conflicting updates fail fast instead of silently overwriting; document that the RefreshLock table is the intended serialization mechanism otherwise.
   - **Why:** Last-writer-wins on concurrently-updated rows (e.g. Summoner profile/UpdatedAt/LastActiveAtUtc) with no lost-update detection. Risk is largely mitigated because the precomputed-analytics writes are idempotent ON CONFLICT upserts and Summoner refresh is serialized via the RefreshLock table, so this is a design gap rather than an active corruption source.
   - **Where:** `Transcendence.Data/Models/** (grep for RowVersion/IsConcurrencyToken/Timestamp/byte[] returns nothing); Transcendence.Data/TranscendenceContext.cs (no concurrency config)`
-- [ ] **Analytics stat key columns are unbounded `text`, inconsistent with the bounded summoner-stat tables** `LOW` · `small`
+- [x] **Analytics stat key columns are unbounded `text`, inconsistent with the bounded summoner-stat tables** `LOW` · `small`
   - **Fix:** Add HasMaxLength to the analytics key columns to match the summoner-stat conventions (e.g. Patch 32, PlatformRegion 16, RankScope/Role/Feature 64).
   - **Why:** Functionally harmless on Postgres (text == varchar performance), but these are short enum-like codes participating in composite unique indexes; leaving them unbounded is inconsistent, weakens self-documentation, and removes a cheap guard against accidental oversized values.
   - **Where:** `Transcendence.Data/TranscendenceContext.cs:610-669 (ChampionRoleTierStat/ChampionScopeGradeStat/ChampionBanScopeStat/ChampionMatchupStat/ChampionBuildSnapshot/AnalyticsResponseSnapshot); contrast SummonerMatchFact config at :531-554`
-- [ ] **`Summoner.PlatformRegion` / `Region` declared `required string?` (required modifier on a nullable type)** `INFO` · `trivial`
+- [x] **`Summoner.PlatformRegion` / `Region` declared `required string?` (required modifier on a nullable type)** `INFO` · `trivial`
   - **Fix:** Drop the nullable `?` (make it `required string`) so the type matches the intent and the DB column is NOT NULL.
   - **Why:** Contradictory intent: the field is meant to be mandatory yet the type allows null, and PlatformRegion drives the region-scoped indexes (IX_Summoners_Region_UpdatedAt, search-prefix) and candidate selection — a null-region row silently falls outside all per-region queries. Low practical risk since ingestion always sets a region.
   - **Where:** `Transcendence.Data/Models/LoL/Account/Summoner.cs:19-20`
@@ -589,15 +589,15 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > The analytics read surface is, on the whole, thoughtfully engineered: composable query objects fold predicates into single WHEREs, purpose-built covering indexes (with documented prod EXPLAIN wins) back the dominant scans, the precompute-aggregate layer keeps the default read paths off raw match data, AsNoTracking is applied consistently, and match-detail uses AsSplitQuery to avoid cartesian explosion. The gaps are concentrated in (a) the summoner-profile read path, where the hot endpoint tracks and over-fetches an unbounded unused navigation and several aggregates are computed client-side over a summoner's full participant history instead of in SQL, and (b) a raw analytics fallback that materializes an entire scope's distinct-MatchId set into app memory where its sibling paths keep it as a subquery. None are data-loss or security issues; the highest-impact one runs on every profile page load.
 
-- [ ] **Pro champion-playrate fetches all pro participant rows to group in memory** `LOW` · `small`
+- [x] **Pro champion-playrate fetches all pro participant rows to group in memory** `LOW` · `small`
   - **Fix:** Aggregate in SQL: GroupBy(ChampionId) selecting Count(), Sum(Win) and a distinct-Puuid count, returning only the per-champion rows.
   - **Why:** Bounded by roster size and precompute-backed for region=ALL, but the region-specific / uncached path scans and ships every tracked-pro participant row for the patch to compute a small ranked list.
   - **Where:** `Transcendence.Service.Core/Services/Analytics/Implementations/ChampionProComputeService.cs:299-326`
-- [ ] **Active-season resolution runs an uncached DB query on every profile-stats request** `LOW` · `trivial`
+- [x] **Active-season resolution runs an uncached DB query on every profile-stats request** `LOW` · `trivial`
   - **Fix:** Wrap the active-season resolution in a short HybridCache entry (minutes) keyed on the current time bucket, mirroring ActivePatchCacheOptions.
   - **Why:** Even when a profile's stats are fully cache-warm, every load still round-trips to RankedSeasons. The table is tiny and indexed (StartUtc/EndUtc index), so cost per call is small, but it defeats part of the caching intent on a hot path and is inconsistent with the patch-lookup treatment.
   - **Where:** `Transcendence.Service.Core/Services/Analysis/Implementations/SummonerStatsService.cs:222; Transcendence.Service.Core/Services/Analysis/RankedSeasonResolver.cs:16-26`
-- [ ] **Rank-history snapshot check queries per iteration through a navigation instead of the indexed shadow FK** `LOW` · `small`
+- [x] **Rank-history snapshot check queries per iteration through a navigation instead of the indexed shadow FK** `LOW` · `small`
   - **Fix:** Query HistoricalRanks by the shadow FK (EF.Property<Guid?>(hr, "SummonerId") == summoner.Id) and, if worth it, batch the existence checks for all incoming queue types into one query before the loop.
   - **Why:** A per-row awaited query in a loop on the rank write path. Bounded (a summoner has ~2-3 queue types) so real impact is small, but each iteration pays an avoidable join instead of an indexed shadow-FK seek.
   - **Where:** `Transcendence.Data/Repositories/Implementations/RankRepository.cs:36-46`
@@ -606,11 +606,11 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > The ingestion layer is unusually mature for a personal project: a per-region token-bucket rate gate, dedicated Hangfire queue lanes with bounded worker pools, adaptive throughput + starvation-guardrail + discovery-backpressure controls, cursor-based backfills, and idempotent match/timeline persistence with per-row duplicate fallbacks. Cancellation is propagated correctly in most jobs and the rate-gate refill is race-safe. The material risks are concentrated in the failure/retry semantics: transient rate-gate backpressure is conflated with genuine fetch failure (permanently discarding matches), refresh locks are released by key rather than by owner (defeating dedup under queue backlog), and several paths have overlapping enqueue sources with no cross-source concurrency guard. None are guaranteed prod outages, but a few are silent-data-loss / wasted-budget hazards that surface exactly during a new-patch ingestion surge when the rate budget is tightest.
 
-- [ ] **Rate-gate exhaustion when listing match IDs is indistinguishable from end-of-history, silently truncating the window** `LOW` · `small`
+- [x] **Rate-gate exhaustion when listing match IDs is indistinguishable from end-of-history, silently truncating the window** `LOW` · `small`
   - **Fix:** Distinguish 'gate exhausted' from 'empty result' — e.g. return a nullable/sentinel from GetMatchIdsByPuuidAsync so callers can break-and-reschedule (retry later) on exhaustion rather than treating it as end-of-history and completing the backfill.
   - **Why:** When the region's token bucket is momentarily empty during a match-id list call, the summoner's window sync (or, worse, a full-history backfill) terminates early as if it had reached the end of history. For the head/window sync this self-heals on the next scheduled refresh, but for FullHistoryBackfillJob it can prematurely mark the backfill Completed and stop paging older matches. The conflation is most likely precisely during a ramp when budget is tightest.
   - **Where:** `Transcendence.Service.Core/Services/Jobs/RiotMatchIdsClient.cs:21-24; SummonerRefreshJob.cs:366-381, 553-568; FullHistoryBackfillJob.cs:100-118`
-- [ ] **No reactive 429 / Retry-After handling in application code; pipeline relies entirely on proactive pacing** `LOW` · `medium`
+- [x] **No reactive 429 / Retry-After handling in application code; pipeline relies entirely on proactive pacing** `LOW` · `medium`
   - **Fix:** Add a 429-aware catch around Riot calls that reads Retry-After (or Camille's rate-limit exception), briefly drains/pauses the affected region's bucket, and reschedules without counting the attempt as a real failure. At minimum, confirm and document how Camille surfaces 429 so the proactive-only assumption is validated.
   - **Why:** If the bucket is mis-tuned relative to the live key tier, or the key is shared / the limit changes, an actual 429 is surfaced as a generic exception and treated as a normal fetch failure (incrementing RetryCount, contributing to the PermanentlyUnfetchable flip), rather than a backoff signal. The system has no closed-loop reaction to real rate-limit responses.
   - **Where:** `Transcendence.Service.Core/Services/RiotApi/Implementations/MatchService.cs:43-44, 196-197, 400; MatchTimelineIngestionJob.cs:115-116; FullHistoryBackfillJob.cs:276`
@@ -619,19 +619,19 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > The precompute layer is unusually well-built for correctness: a single pure `ChampionTierScorer` is shared by the raw compute, the stats read, and the refresher, and a comprehensive equivalence/fixture test suite (win-rates, unified + role-filtered tier lists, matchups, build/pro snapshot round-trips, and a hand-computed refresher fixture) gates raw-vs-stats divergence. Per-patch replace is transactional (no half-written-patch visibility on Postgres READ COMMITTED) and grades are persisted inside the atom transaction so a tier-list read never pairs new atoms with a stale grade. The real risks are not in the aggregation math but in (1) the decoupling between atom-refresh and read-cache invalidation, which lets the "updated N ago" freshness label overstate what is actually served, and (2) uncalibrated, aggressive tiering priors/floors that collapse thin scopes to a uniform B grade. Remaining items are low-severity, mostly acknowledged edge cases.
 
-- [ ] **Per-region distinct-match denominators double-count matches whose participants span platform regions** `LOW` · `small`
+- [x] **Per-region distinct-match denominators double-count matches whose participants span platform regions** `LOW` · `small`
   - **Fix:** Either key region off the match's PlatformRegion (single value) rather than the participant's summoner region, or document this as an accepted approximation; no urgent action given the rarity and raw/stats consistency.
   - **Why:** For the rare cross-platform match (account transfers), per-region ban-rate and match-count denominators are inflated, slightly skewing region-specific ban/pick rates. Region=ALL rows are unaffected (computed by a distinct global re-scan). Impact is small because a ranked match is normally single-platform.
   - **Where:** `/Users/kronic/Projects/Personal/Transcendence/transcendence_backend/Transcendence.Service.Core/Services/Analytics/Implementations/PrecomputedAnalyticsRefresher.cs:399`
-- [ ] **Role-filtered raw tier list computes contested/presence from role-only games, diverging from the region=ALL persisted grade** `LOW` · `small`
+- [x] **Role-filtered raw tier list computes contested/presence from role-only games, diverging from the region=ALL persisted grade** `LOW` · `small`
   - **Fix:** For role-filtered requests, compute the presence numerator from the champion's full cross-role scope games (or pass cross-role totals into the scorer) so the contested index is stable across role and region filters; alternatively document that the contested index is role-scoped in the role-filtered view.
   - **Why:** The same champion's ContestedScore (and role-scoped ban denominator) differs between a specific-region role-filtered view (raw path, role-only presence) and the region=ALL view (persisted grade, cross-role presence). Only the secondary "most contested" index and displayed ban rate are affected; tier/strength/win/pick are correct.
   - **Where:** `/Users/kronic/Projects/Personal/Transcendence/transcendence_backend/Transcendence.Service.Core/Services/Analytics/Implementations/ChampionWinRateComputeService.cs:268`
-- [ ] **Non-core surfaces refresh in separate transactions, allowing transient cross-surface staleness and an implicit ordering dependency** `LOW` · `medium`
+- [x] **Non-core surfaces refresh in separate transactions, allowing transient cross-surface staleness and an implicit ordering dependency** `LOW` · `medium`
   - **Fix:** Document (or assert) the required phase ordering, and consider a single job-level transaction or a completion marker so partial refreshes are detectable; keep RefreshBuilds after RefreshTabularCore explicitly.
   - **Why:** A crash/cancellation between phases leaves fresh role-tier atoms + grades alongside stale build/matchup/pro snapshots for the same patch until the next successful run. Because these are independent surfaces the user-visible effect is minor and self-heals hourly, but the ordering coupling is implicit and could break under a future refactor that reorders or parallelizes the phases.
   - **Where:** `/Users/kronic/Projects/Personal/Transcendence/transcendence_backend/Transcendence.Service.Core/Services/Analytics/Implementations/PrecomputedAnalyticsRefresher.cs:215`
-- [ ] **Low-sample protection is one-sided: it caps S/A to B but still allows C/D for thin samples** `INFO` · `trivial`
+- [x] **Low-sample protection is one-sided: it caps S/A to B but still allows C/D for thin samples** `INFO` · `trivial`
   - **Fix:** If the intent is to avoid over-punishing thin samples, symmetrically clamp low-sample champions toward B (both directions), or accept the asymmetry explicitly in the doc.
   - **Why:** A champion just under the 500-game floor with an unlucky loss streak can be graded D while an equally-thin sample can never be graded S — an asymmetry. In practice empirical-Bayes shrinkage pulls thin samples toward the baseline, so reaching C/D requires a fitted-small prior plus a persistent negative delta, making the real-world impact small; but the protection is inconsistent.
   - **Where:** `/Users/kronic/Projects/Personal/Transcendence/transcendence_backend/Transcendence.Service.Core/Services/Analytics/ChampionTierScorer.cs:190`
@@ -640,15 +640,15 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > The caching layer is fundamentally sound: it uses HybridCache (10.2.0, .NET 10) with a shared Redis L2 across the WebAPI and Worker hosts, consistent logical tag-based invalidation (which the .NET docs confirm works cross-node for multi-server setups), correct write-then-invalidate ordering, versioned key prefixes bumped on payload-shape changes, and no negative caching of thrown errors. The most material issues are staleness/negative-caching bugs rather than collisions or security problems: match timelines cache an empty result with no invalidation path, empty/thin analytics get a 24h TTL bounded only by a 2h–24h refresh cadence, and the analytics warm-writer reconstructs cache keys by hand (drift risk against the readers). No critical (data-loss/security) issues were found in this dimension. All findings are correctness/maintainability-grade.
 
-- [ ] **Patch rollover does not invalidate the cached active-patch pointer** `LOW` · `trivial`
+- [x] **Patch rollover does not invalidate the cached active-patch pointer** `LOW` · `trivial`
   - **Fix:** Have PromotePatchAsync also invalidate the active-patch key (or the 'analytics' tag) so the new active patch is picked up immediately rather than after the TTL.
   - **Why:** For up to ~5 minutes after a new patch is promoted, every analytics endpoint continues to resolve the OLD patch version from the cached pointer, briefly serving old-patch analytics. Self-heals on the 5-min TTL and is partly benign (a just-promoted patch has little data), so impact is small.
   - **Where:** `Transcendence.Service.Core/Services/Analytics/Implementations/ChampionAnalyticsService.cs:546-559`
-- [ ] **Two different region-normalization schemes feed analytics cache keys** `LOW` · `small`
+- [x] **Two different region-normalization schemes feed analytics cache keys** `LOW` · `small`
   - **Fix:** Standardize on one region representation for all analytics cache keys (either always the code or always the filter form) and document why the win-rate filter differs if it must.
   - **Why:** No collision or drift today because read and warm each use the same scheme consistently per key-type, but the split invites future bugs: a change to one normalizer, or a copy-paste of one key format into another, can silently produce keys that never match. Purely a clarity/robustness smell.
   - **Where:** `Transcendence.Service.Core/Services/Analytics/Implementations/ChampionAnalyticsService.cs:112,168,258,303,408`
-- [ ] **No cross-process stampede coordination — post-invalidation both hosts can recompute the same key** `INFO` · `medium`
+- [x] **No cross-process stampede coordination — post-invalidation both hosts can recompute the same key** `INFO` · `medium`
   - **Fix:** No action needed while compute stays cheap; if a payload's factory ever becomes expensive again, consider a short distributed lock or letting the warm job own (re)population without an overlapping read-through window.
   - **Why:** At most one duplicate compute per key per invalidation across the two hosts. Because reads now serve from precomputed aggregate tables (30–225ms per the analytics-layer memory) rather than the old 7s compute, the duplicate cost is small. Noted for completeness since the dimension calls out thundering-herd protection.
   - **Where:** `Transcendence.WebAPI/Program.cs:195-205`
@@ -657,27 +657,27 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > The API is resource-oriented, uses purpose-built DTOs/records with no raw EF-entity leakage, and — importantly — is gated by a real CI drift check (`pnpm api:check`) so the committed OpenAPI spec cannot silently diverge from the code. The load-bearing weakness is fidelity, not structure: Swashbuckle is not configured for C# nullable-reference-type / required-property support, so the generated TypeScript client (whose `components` types the frontend imports everywhere) systematically misrepresents nullability in both directions and marks nothing required. Secondary issues are a genuinely inconsistent error model (RFC7807 ProblemDetails everywhere except admin endpoints, which return an undocumented `{message,detail}` shape), many untyped success bodies, a missing validation-error schema, and a shipped placeholder field in the profile contract.
 
-- [ ] **ProblemDetails content-type in the spec (`application/json`/`text/plain`) does not match runtime `application/problem+json`** `LOW` · `small`
+- [x] **ProblemDetails content-type in the spec (`application/json`/`text/plain`) does not match runtime `application/problem+json`** `LOW` · `small`
   - **Fix:** Annotate error responses with the `application/problem+json` content type (via a ProducesResponseType/operation filter or [Produces]) so the declared and actual media types align.
   - **Why:** A strict client that content-negotiates or matches on media type will mis-handle error bodies; the contract misrepresents the RFC 7807 media type the server actually returns.
   - **Where:** `Transcendence.WebAPI/Errors/ProblemDetailsErrorBodyFilter.cs:36-40; openapi/transcendence.v1.json`
-- [ ] **GET summoner-by-riot-id is dual-typed (200 profile vs 202 accepted), forcing status-based branching and bypassing the typed client** `LOW` · `medium`
+- [x] **GET summoner-by-riot-id is dual-typed (200 profile vs 202 accepted), forcing status-based branching and bypassing the typed client** `LOW` · `medium`
   - **Fix:** Consider modeling absence explicitly (e.g. 404 for not-stored, 200 with a `status`/`stale` discriminator field, or a dedicated `?refresh` sub-resource) so the success path is a single typed 200 shape.
   - **Why:** A read endpoint that returns 202 with an alternate body is an unusual contract that most typed HTTP clients model awkwardly; here it pushed the frontend to hand-roll status handling instead of the generated client, eroding the client's value.
   - **Where:** `Transcendence.WebAPI/Controllers/SummonersController.cs:89-96,271-279; apps/web/app/lol/summoners/[region]/[riotId]/page.tsx:113,153`
-- [ ] **Three redundant analytics cache-invalidate endpoints** `LOW` · `trivial`
+- [x] **Three redundant analytics cache-invalidate endpoints** `LOW` · `trivial`
   - **Fix:** Consolidate to a single canonical endpoint (admin-scoped) and remove the duplicates, or clearly differentiate scope (all vs champion-only) if that distinction is real.
   - **Why:** Three public routes for one operation (with two different auth policies: AppOnly vs AdminOnly) bloat the contract and blur the intended entry point / authorization story for cache invalidation.
   - **Where:** `Transcendence.WebAPI/Controllers/AdminOperationsController.cs:305; AnalyticsController.cs:130; ChampionAnalyticsController.cs:250`
-- [ ] **201 Created Location for API-key creation points at the collection with a spurious `?id=` query** `LOW` · `trivial`
+- [x] **201 Created Location for API-key creation points at the collection with a spurious `?id=` query** `LOW` · `trivial`
   - **Fix:** Add a GET /api/auth/keys/{id} and reference it, or return 200/Created without a misleading Location.
   - **Why:** The 201 Location header violates REST expectations (does not address the new resource); clients that follow Location land on the full list with an ignored query param.
   - **Where:** `Transcendence.WebAPI/Controllers/ApiKeysController.cs:40`
-- [ ] **PUT pro-summoner lacks the required-field validation the POST enforces** `LOW` · `small`
+- [x] **PUT pro-summoner lacks the required-field validation the POST enforces** `LOW` · `small`
   - **Fix:** Apply the same required-field validation in Update (or add DataAnnotations to UpsertTrackedProSummonerRequest and rely on [ApiController] model validation for both).
   - **Why:** Inconsistent write contract for the same resource; a full-replacement PUT can degrade a record to a state the API refuses to create, and the difference is invisible in the contract.
   - **Where:** `Transcendence.WebAPI/Controllers/ProSummonersController.cs:159-171 vs 67-69`
-- [ ] **No API version segment in routes despite an OpenAPI 'v1' document** `INFO` · `medium`
+- [x] **No API version segment in routes despite an OpenAPI 'v1' document** `INFO` · `medium`
   - **Fix:** If external consumers are ever expected, adopt URL or header versioning (e.g. Asp.Versioning) before the surface stabilizes; otherwise document that the contract is intentionally internal/unversioned.
   - **Why:** Any breaking change to a route or payload is a hard break with no negotiated coexistence path. Impact is bounded because the API is internal and consumed by a single lock-step-generated client, but there is no runway for external/mobile consumers or staged rollouts.
   - **Where:** `openapi/transcendence.v1.json (info.version "v1"); all controller [Route] attributes (e.g. SummonersController.cs:22 "api/lol/summoners")`
@@ -686,15 +686,15 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > The auth boundary is, on the whole, carefully built: PBKDF2 password hashing with fixed-time compare and rehash-on-login, refresh-token reuse detection with family revocation, fully-validated JWTs, HttpOnly/SameSite/Secure cookies, a strict public-proxy allowlist with path-traversal rejection, uniform [Authorize(AdminOnly)] + audit logging on admin endpoints, no IDOR on user-scoped resources, and no real secrets committed. The most material problem is the rate-limiting boundary: the backend partitions auth (and read) limits on client IP restored from X-Forwarded-For, but the BFF's auth path (login/register/refresh via the generated client) never forwards the client IP, collapsing all auth traffic into one global partition — a trivial global login/refresh DoS and a defeated per-attacker control. Secondary issues are the BFF forwarding client-controlled X-Forwarded-For verbatim (rate-limit / internal-classification bypass) and a spoofable admin same-origin check. None are data-loss/RCE class; several are availability or defense-in-depth weaknesses.
 
-- [ ] **User/account enumeration via login timing and register status code** `LOW` · `small`
+- [x] **User/account enumeration via login timing and register status code** `LOW` · `small`
   - **Fix:** Compute a dummy PBKDF2 hash on the user-not-found path so login latency is constant regardless of account existence; consider returning a uniform response for register (always 200/accepted, notify by email) if enumeration resistance is desired.
   - **Why:** An attacker can enumerate which emails have accounts (timing on login, status code on register), aiding targeted phishing/credential-stuffing. Low impact given rate limits and no direct data exposure.
   - **Where:** `Transcendence.Service.Core/Services/Auth/Implementations/UserAuthService.cs:50-57; Transcendence.WebAPI/Controllers/AuthController.cs:20-35`
-- [ ] **Bootstrap API key compared with non-constant-time string equality** `LOW` · `trivial`
+- [x] **Bootstrap API key compared with non-constant-time string equality** `LOW` · `trivial`
   - **Fix:** Compare the bootstrap key with CryptographicOperations.FixedTimeEquals over UTF-8 bytes (or hash-then-compare like normal keys), independent of environment.
   - **Why:** If an operator sets Auth:BootstrapApiKeyEnabledInDevelopmentOnly=false and configures a bootstrap key in production, the non-constant-time compare is a (weak, network-noisy) timing oracle toward recovering the app-tier bootstrap key. Low: requires a deliberate insecure config and the bootstrap principal is 'app' role, not admin.
   - **Where:** `Transcendence.Service.Core/Services/Auth/Implementations/ApiKeyService.cs:60-73`
-- [ ] **Account email (PII) written to application logs across auth flows** `LOW` · `trivial`
+- [x] **Account email (PII) written to application logs across auth flows** `LOW` · `trivial`
   - **Fix:** Log the user Guid instead of the email, or hash/redact the local-part, for these operational messages; keep raw email only in the audit trail where an actor identity is required.
   - **Why:** User email addresses accumulate in service logs and the admin log surface, expanding the PII footprint subject to log retention/exfiltration. No credentials or tokens are logged (verified). Low.
   - **Where:** `Transcendence.Service.Core/Services/Auth/Implementations/UserAuthService.cs:64,145,244; AdminBootstrapService.cs:49`
@@ -703,19 +703,19 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > The refresh-lock machinery and background-job concurrency are, on the whole, unusually well-engineered for this class of codebase: the DB lock is a genuinely atomic upsert (no acquire TOCTOU), lock ownership is handed off cleanly from producer to consumer with release-on-failure, all concurrent work isolates its EF DbContext behind per-task DI scopes, there is zero blocking-on-async and no async void, and the singleton state (rate-gate buckets, heartbeat, telemetry) uses correct primitives. The real risk is concentrated in the newest code: FullHistoryBackfillJob (PR #117) has no concurrency guard and no duplicate/transaction handling, so overlapping runs for one summoner crash on unique-index collisions and burn scarce Riot budget, and its non-transactional delete-then-insert recompute can leave season stats missing on a crash. The remaining findings are low-impact races/inconsistencies that largely self-heal.
 
-- [ ] **WorkerWatchdog hard-kills the process with Environment.Exit, which can interrupt the non-transactional writes above** `LOW` · `small`
+- [x] **WorkerWatchdog hard-kills the process with Environment.Exit, which can interrupt the non-transactional writes above** `LOW` · `small`
   - **Fix:** Keep the watchdog, but make the operations it can interrupt crash-safe (fix #2 with a transaction). Optionally have the watchdog request a bounded graceful stop before Environment.Exit, and dispose the CTS in a StopAsync/IDisposable.
   - **Why:** The watchdog is the concrete crash vector that turns finding #2 from a transient window into a lasting data gap. Low on its own; the coupling with the non-transactional recompute is the actual risk.
   - **Where:** `Transcendence.Service.Core/Services/Diagnostics/WorkerWatchdog.cs:91,42,102-106`
-- [ ] **SummonerMaintenanceJob releases the lock on enqueue failure using the possibly-cancelled request token** `LOW` · `trivial`
+- [x] **SummonerMaintenanceJob releases the lock on enqueue failure using the possibly-cancelled request token** `LOW` · `trivial`
   - **Fix:** Route this release through the same dedicated-timeout-CTS helper used by ChampionAnalyticsIngestionJob/SummonerRefreshJob so lock release never depends on the caller's cancellation token.
   - **Why:** On a cancellation-triggered enqueue failure the summoner-refresh lock is held until its TTL expires (delaying re-processing of that one summoner). Self-heals via TTL; narrow path (Hangfire enqueue rarely throws).
   - **Where:** `Transcendence.Service.Core/Services/Jobs/SummonerMaintenanceJob.cs:387-391`
-- [ ] **AdaptiveThroughputBudgetPolicy singleton has a check-then-act race on its shared _modeStates dictionary** `LOW` · `trivial`
+- [x] **AdaptiveThroughputBudgetPolicy singleton has a check-then-act race on its shared _modeStates dictionary** `LOW` · `trivial`
   - **Fix:** If you want to remove the latent hazard, replace the GetOrAdd + indexer write with a single _modeStates.AddOrUpdate whose update delegate computes the resolved mode, making the transition atomic.
   - **Why:** If it ever occurred, at most one throttling cycle would pick a slightly-wrong hysteresis mode, self-correcting the next tick. Recorded because it is a genuine shared-state check-then-act; impact is cosmetic pacing jitter.
   - **Where:** `Transcendence.Service.Core/Services/Jobs/Priority/AdaptiveThroughputBudgetPolicy.cs:10,92,122-123`
-- [ ] **RefreshLockLifecycleTelemetry writes gauge-dimension fields without a memory barrier while the metrics thread reads them** `INFO` · `trivial`
+- [x] **RefreshLockLifecycleTelemetry writes gauge-dimension fields without a memory barrier while the metrics thread reads them** `INFO` · `trivial`
   - **Fix:** Mark the two string fields volatile (or fold class+region+counts into a single immutable record swapped via Volatile.Write/Interlocked.Exchange) so the gauge always reads a consistent snapshot.
   - **Why:** Cosmetic: a metrics data point can carry stale dimension labels for a moment. No functional effect.
   - **Where:** `Transcendence.Service.Core/Services/Diagnostics/RefreshLockLifecycleTelemetry.cs:47-48,195-196,216-228`
@@ -724,11 +724,11 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > The backend suite is sizeable (207 xUnit facts/theories across ~44 files, plus 20 frontend vitest files) and contains several genuinely high-value tests: a rigorous raw-vs-precompute equivalence gate for analytics, incident-driven regression guards, and strong refresh-token-rotation coverage. However, the correctness of the two most safety-critical areas is essentially unverified: (1) all authentication crypto — hand-rolled PBKDF2 password hashing/verification, JWT signing, and the API-key auth handler — is entirely untested and merely mocked away; and (2) the entire data layer is validated only against SQLite (via EnsureCreated) and the EF InMemory provider, never a real PostgreSQL, so Postgres/Npgsql translation, migrations, and the authorization boundary are all unexercised. Assertion quality in the seeded service tests is good; a minority of controller tests are near-tautological forwarding checks.
 
-- [ ] **Several controller tests are near-tautological forwarding checks (over-mocking)** `LOW` · `trivial`
+- [x] **Several controller tests are near-tautological forwarding checks (over-mocking)** `LOW` · `trivial`
   - **Fix:** Fold the pure pass-through cases into the behavior-rich tests, or replace them with tests that assert a real decision (parameter normalization, defaulting, error mapping). Not harmful, but low ROI.
   - **Why:** Low value-per-test: they pad the count and give a false sense of coverage without testing meaningful branching. (By contrast, the same file's most-played-role resolution and RejectsUnknownRole tests, lines 12-124, are genuinely valuable.)
   - **Where:** `tests/Transcendence.WebAPI.Tests/ChampionAnalyticsControllerTests.cs:126-182`
-- [ ] **Analytics equivalence gate excludes ban-rate/contested/movement fields, leaving persisted-path denominators outside the correctness comparison** `INFO` · `small`
+- [x] **Analytics equivalence gate excludes ban-rate/contested/movement fields, leaving persisted-path denominators outside the correctness comparison** `INFO` · `small`
   - **Fix:** Add targeted assertions on expected absolute ban-rate/contested/movement values for the seeded dataset (independent of the raw-vs-stats comparison) so those persisted fields have direct coverage.
   - **Why:** A defect specific to the persisted role-independent ban-rate denominator or the movement/previous-tier computation would not be caught by the equivalence tests — those fields are trusted rather than verified here.
   - **Where:** `tests/Transcendence.Service.Core.Tests/ChampionAnalyticsStatsEquivalenceTests.cs:65-93`
@@ -737,15 +737,15 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > The App Router architecture is largely sound and, in places, genuinely sophisticated: a clean BFF trust-boundary design (no-credentials public allowlist proxy, per-namespace credential injection, cookie stripping in both directions), no secrets in the client bundle, a well-reasoned Next 16 `proxy.ts` middleware that refreshes-and-persists tokens before render, and correct Suspense streaming on the champion detail page. The main architectural weaknesses are concentrated in the summoner-profile surface, which abandons the server-streaming pattern used elsewhere and pushes nearly all data fetching (match history, rank history, and four full static-data maps) to the client as a post-hydration waterfall. Secondary issues are missing per-request deduplication of `getSessionMe` (blocking, un-suspended, called twice on admin routes) and a couple of pages/fetch paths that fetch on the client where the server already has the data.
 
-- [ ] **Favorites page is fully client-rendered when the initial list could be server-fetched** `LOW` · `medium`
+- [x] **Favorites page is fully client-rendered when the initial list could be server-fetched** `LOW` · `medium`
   - **Fix:** Render the page as a server component that fetches the initial favorites list (via the session-aware backend call), and keep a small client island only for the interactive remove/add actions.
   - **Why:** Extra client round-trip and a loading flash on an authenticated route whose first paint could be data-complete; minor but inconsistent with the server-first pattern the analytics pages follow.
   - **Where:** `apps/web/app/account/favorites/page.tsx:20-58`
-- [ ] **Unique per-call x-trn-request-id header defeats Next fetch memoization; some hot fetches lack the compensating cache() wrapper** `LOW` · `small`
+- [x] **Unique per-call x-trn-request-id header defeats Next fetch memoization; some hot fetches lack the compensating cache() wrapper** `LOW` · `small`
   - **Fix:** Either move the request-id header out of the memoization key path (e.g. attach it in the middleware/proxy layer rather than per fetchBackendJson call) or systematically wrap shared read fetchers (status included) in React `cache()`.
   - **Why:** Duplicated backend work where the cache() wrapper is missing (the data cache may absorb the second network hit, but that is not guaranteed and the pattern is fragile — every new call site must remember to add cache()).
   - **Where:** `apps/web/lib/backendCall.ts:44`
-- [ ] **user BFF proxy lacks the same-origin guard the admin proxy enforces** `INFO` · `trivial`
+- [x] **user BFF proxy lacks the same-origin guard the admin proxy enforces** `INFO` · `trivial`
   - **Fix:** For consistency and belt-and-suspenders CSRF protection, apply the same `isSameOrigin` check to non-safe methods in the user proxy handler.
   - **Why:** Defense-in-depth parity gap rather than an open vulnerability; SameSite=Lax mitigates classic CSRF for the mutating user endpoints today.
   - **Where:** `apps/web/app/api/trn/user/[...path]/route.ts:13-41`
@@ -754,27 +754,27 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > The frontend is, on balance, well-crafted: pure logic is factored into `lib/` with careful scale-normalization, accessibility is genuinely handled (aria-sort, aria-expanded, focus rings, reduced-motion gating), and fetch effects cancel correctly. The quality debt is concentrated in the summoner-profile subtree: `SummonerProfileClient` is a 510-line orchestration god-component (23 `useState`, 7 `useEffect`) that then prop-drills ~29 props into `MatchHistorySection`, and a static-data bundle is threaded five components deep. Secondary issues: unsafe casts of untrusted/undertyped payloads that mask OpenAPI-client type drift, and inline filters that only see the current 20-match page.
 
-- [ ] **Inline queue/champion filters and their option lists only cover the current 20-match page** `MED` · `medium` · ✅ verified
+- [x] **Inline queue/champion filters and their option lists only cover the current 20-match page** `MED` · `medium` · ✅ verified
   - **Fix:** Either move queue/champion filtering server-side (pass filter params into the recent-matches request) or make the intended scope explicit in the UI copy ("filtering this page"). Deriving filter options from a single page also makes the dropdown contents flicker as you page.
   - **Why:** A user who filters by e.g. ARAM can see "0 shown" even when ARAM games exist on later pages, and the queue dropdown lists only queues present in the current 20 matches. The filter reads as global but is page-local — a subtle correctness/UX trap.
   - **Where:** `apps/web/components/SummonerProfileUnified.tsx:106-179, 290-331`
-- [ ] **SummonerProfileClient is a 510-line orchestration god-component (23 useState, 7 useEffect)** `LOW` · `large` · ☑︎ partly-verified
+- [x] **SummonerProfileClient is a 510-line orchestration god-component (23 useState, 7 useEffect)** `LOW` · `large` · ☑︎ partly-verified
   - **Fix:** Extract cohesive hooks: useSummonerRefreshPolling, useMatchHistory(page), useRankHistory, useMatchDetails, useStaticData, and useSyncedProfileQuery (URL). The JSX component then composes hooks and shrinks to a layout shell.
   - **Why:** Very hard to test, reason about, or change in isolation; a bug in one concern (e.g. poll backoff) forces re-reading the whole file. High re-render surface — any of 23 state slices re-runs the whole component and its memo graph.
   - **Where:** `apps/web/components/SummonerProfileUnified.tsx:48-510 (state 76-104; effects 185-352)`
-- [ ] **Heavy prop drilling: ~29 props into MatchHistorySection and a static-data bundle threaded 5 levels deep** `LOW` · `medium` · ✅ verified
+- [x] **Heavy prop drilling: ~29 props into MatchHistorySection and a static-data bundle threaded 5 levels deep** `LOW` · `medium` · ✅ verified
   - **Fix:** Put the static-data bundle (champion/item/spell/rune maps + versions) behind a StaticDataContext provider mounted once in SummonerProfileClient; consumers read via a hook. Groups the remaining callbacks/state into a couple of cohesive objects.
   - **Why:** Signature churn: adding one static map touches every layer. Intermediate components (MatchHistorySection, MatchScoreboard) accept props they never read, only forward — pure passthrough noise that obscures which component actually consumes what.
   - **Where:** `apps/web/components/lol-profile/MatchHistorySection.tsx:48-78 (props type); apps/web/components/SummonerProfileUnified.tsx:465-504`
-- [ ] **Duplicated constants and formatting that belong in lib/ (regions, k-suffix, win-rate thresholds)** `LOW` · `small`
+- [x] **Duplicated constants and formatting that belong in lib/ (regions, k-suffix, win-rate thresholds)** `LOW` · `small`
   - **Fix:** Move REGIONS to a lib/regions module, add a formatCompact()/thousands helper to lib/format, and derive matchupVerdict from a shared threshold constant alongside winRateColorClass.
   - **Why:** Drift risk: a new region or a threshold tweak must be applied in multiple files; the 52/48 verdict boundary and the color boundary can silently diverge.
   - **Where:** `apps/web/components/SearchBar.tsx:11-23 & GlobalCommandPalette.tsx:43-55; ScoreboardTeamTable.tsx:34-36 & PerformanceCard.tsx:34-38 (& matchInsights.ts:142,148); app/lol/champions/[championId]/page.tsx:52-57`
-- [ ] **Index-based React keys on dynamic lists** `LOW` · `trivial`
+- [x] **Index-based React keys on dynamic lists** `LOW` · `trivial`
   - **Fix:** Key build variants by a stable identity (primaryStyleId+coreItems hash or a server-provided variant id) rather than array index.
   - **Why:** If build order ever changes across a re-render (e.g. re-sort or partial update), React reconciles by position, which can misassociate the uncontrolled `<details open>` state and animations. Low today because these lists are recomputed whole per navigation.
   - **Where:** `apps/web/app/lol/champions/[championId]/page.tsx:526-528; apps/web/app/lol/pro-builds/page.tsx:319,493`
-- [ ] **GlobalCommandPalette reads window layout during render and recomputes helpers every render** `LOW` · `small`
+- [x] **GlobalCommandPalette reads window layout during render and recomputes helpers every render** `LOW` · `small`
   - **Fix:** Compute the open-origin geometry once on open (in the open event handler / a ref) instead of every render; prefer deriving activeTierSection during render or clamping it inline over a syncing effect.
   - **Why:** Minor: reading layout during render is fragile (values captured once at open, stale on resize) and adds avoidable work per keystroke while the palette is open. The tier-list derived-state-in-effect causes an extra render pass when visibleTiers changes.
   - **Where:** `apps/web/components/GlobalCommandPalette.tsx:122-184, 476-487`
@@ -783,15 +783,15 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > The frontend is thoughtfully built on server components + ISR with backend precompute, streaming on the champion detail page, paginated match history, and consistently CLS-safe images (explicit width/height, next/font swap). The dominant risk is the Tier List: the entire ~170-row champion ladder renders in a single "use client" component with no virtualization, and each row mounts heavy per-row subcomponents including a self-contained Radix Tooltip.Provider — inflating hydration, TBT, and memory. Secondary risks are a site-wide first-load JS penalty from eagerly bundling framer-motion + cmdk in the root layout, a fully-blocking multi-fetch waterfall on the pro-builds index (no streaming), an unoptimized full-resolution splash JPG on every champion page, and over-eager Link prefetch across the dense tier-list table.
 
-- [ ] **Per-row Radix Tooltip.Provider anti-pattern (one Provider mounted per tier-list row)** `LOW` · `small` · ✅ verified
+- [x] **Per-row Radix Tooltip.Provider anti-pattern (one Provider mounted per tier-list row)** `LOW` · `small` · ✅ verified
   - **Fix:** Hoist a single `RadixTooltip.Provider` to the root layout (or the table root) and make the Tooltip wrapper render only Root/Trigger/Content. Correct the misleading comment.
   - **Why:** Hundreds of redundant Radix context Providers per tier-list render inflate the client component tree, hydration work, and memory, compounding the unvirtualized-list problem above. The pattern repeats anywhere Tooltip is used inside a list.
   - **Where:** `apps/web/components/ui/Tooltip.tsx:21-40 (used at TierListTable.tsx:365)`
-- [ ] **Hundreds of tiny immutable ddragon icons routed through the Next image optimizer with no format/TTL tuning** `LOW` · `small`
+- [x] **Hundreds of tiny immutable ddragon icons routed through the Next image optimizer with no format/TTL tuning** `LOW` · `small`
   - **Fix:** Consider `unoptimized` for the tiny fixed-size icons (or a lightweight custom loader hitting ddragon directly) and set `images.minimumCacheTTL` to a long value for the ones that stay optimized. Add explicit `formats` if AVIF/WebP is desired.
   - **Why:** Optimizing hundreds of ~24-64px immutable PNGs adds origin CPU + optimizer-cache churn for marginal byte savings (these files are already tiny), and without `minimumCacheTTL` the optimizer honors upstream cache headers only. This is a server-efficiency tradeoff more than a client CWV issue.
   - **Where:** `apps/web/next.config.mjs:4-32 ; apps/web/lib/staticData.ts:179-235`
-- [ ] **Stacked backdrop-blur sticky layers during tier-list scroll** `LOW` · `trivial`
+- [x] **Stacked backdrop-blur sticky layers during tier-list scroll** `LOW` · `trivial`
   - **Fix:** Use a solid/translucent (non-blur) background for the sticky table heads, reserving backdrop-blur for the single floating banner, per the design doc's own 'blur reserved for genuinely floating layers' rule.
   - **Why:** Backdrop-blur is GPU-expensive to repaint during scroll; multiple stacked blur layers on a long scrolling ladder can cause jank on low-end devices. Minor relative to the unvirtualized-list cost.
   - **Where:** `apps/web/app/globals.css:536-540 ; apps/web/app/lol/tierlist/page.tsx:180-184`
@@ -800,15 +800,15 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > Infra hygiene is genuinely strong for a self-hosted single-host stack: all three images run non-root and multi-stage, GH Actions are SHA-pinned, images are cosign-signed and path-filtered per component, and there is a thoughtful liveness/readiness split plus a thread-pool-proof worker watchdog and OpenTelemetry+Grafana metrics. The material gaps are all in deploy safety and alerting: prod auto-migrates on worker startup yet no CI stage ever executes migrations against a real Postgres (tests are SQLite), so a runtime-failing migration crash-loops the worker while poll-deploy reports the deploy as a success; poll-deploy does no post-deploy health verification and its own pipeline failures are silent; there are no metrics-based alert rules (Prometheus/Grafana) so nothing alerts on API errors, DB/Redis down, or the worker being fully down; and several safety-critical docs (auto-migrate, wud) are stale/contradictory. None are data-loss or security-critical, but the migration/deploy-safety cluster is a real production risk.
 
-- [ ] **Base images use floating tags (not digest-pinned) and SBOM/provenance attestations are disabled — inconsistent, weaker supply-chain than the rest of the pipeline** `LOW` · `small`
+- [x] **Base images use floating tags (not digest-pinned) and SBOM/provenance attestations are disabled — inconsistent, weaker supply-chain than the rest of the pipeline** `LOW` · `small`
   - **Fix:** Pin base images by digest (renovate/dependabot can bump them), and re-evaluate whether provenance/sbom can be re-enabled now that wud is gone — poll-deploy resolves the moving :main digest via explicit Accept headers regardless.
   - **Why:** Builds are not byte-reproducible and a mutated/compromised upstream tag silently changes prod; disabling SBOM/provenance forfeits supply-chain attestation even though the pipeline otherwise pins Actions by SHA and cosign-signs images (rigor applied unevenly).
   - **Where:** `apps/web/Dockerfile:1,27; Transcendence.WebAPI/Dockerfile:1,7; Transcendence.Service/Dockerfile:1,5; .github/workflows/docker-images.yml:163-164`
-- [ ] **compose.yml (the documented 'safe deploy source') ships TRN_ERROR_VERBOSITY=verbose for the web service, leaking internal exception text to clients** `LOW` · `trivial`
+- [x] **compose.yml (the documented 'safe deploy source') ships TRN_ERROR_VERBOSITY=verbose for the web service, leaking internal exception text to clients** `LOW` · `trivial`
   - **Fix:** Default the deploy compose to `safe` (verbose is a debugging opt-in) or scope verbose to non-prod, so a deploy from this file doesn't leak internals.
   - **Why:** Raw internal error messages (upstream host, connection/DNS detail, stack fragments) are exposed to end users in a compose file explicitly described (compose.yml:9-13) as a safe prod deploy source. Minor information disclosure and inconsistent with a production posture.
   - **Where:** `compose.yml:81; apps/web/lib/env.ts:15-21; apps/web/lib/trnProxy.ts:81-95,122-133`
-- [ ] **Grafana admin defaults to admin/admin when GRAFANA_ADMIN_PASSWORD is unset, with the port published** `LOW` · `trivial`
+- [x] **Grafana admin defaults to admin/admin when GRAFANA_ADMIN_PASSWORD is unset, with the port published** `LOW` · `trivial`
   - **Fix:** Drop the `:-admin` password default (fail closed / require the var) and add GRAFANA_ADMIN_PASSWORD to .env.example so it's an explicit, non-default secret.
   - **Why:** If the ops-tools profile is enabled without setting the password (and .env.example doesn't remind you to), the metrics UI — which exposes operational internals — is reachable with default credentials on the published port.
   - **Where:** `compose.yml:191-207`
@@ -817,27 +817,27 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > Documentation quality is above average and the recent TFT removal was executed cleanly (zero stale TFT references anywhere in docs or the OpenAPI spec). Env-var/compose mappings, referenced files, and the API.md endpoint list are almost entirely accurate, and DEVELOPMENT.md/ARCHITECTURE.md contain genuinely excellent operational runbook content. The most serious problem is a canonical doc (ARCHITECTURE.md) that still describes the old, explicitly-retired prod deploy mechanism (wud) — an ops runbook that would actively misdirect during an incident. Secondary gaps: a fully committed Prometheus/Grafana observability stack is undocumented despite ~60 documented metric names, plus a scatter of smaller inaccuracies (endpoint count, one undocumented endpoint, a wrong host URL).
 
-- [ ] **Committed Prometheus/Grafana observability stack is entirely undocumented despite extensive metric docs** `MED` · `small` · ✅ verified
+- [x] **Committed Prometheus/Grafana observability stack is entirely undocumented despite extensive metric docs** `MED` · `small` · ✅ verified
   - **Fix:** Add an 'Observability' subsection to DEVELOPMENT.md (and the README dev-tooling block) documenting the ops-tools Prometheus/Grafana stack, the 5 dashboards, ports (:9090/:3001), and admin creds; add PROMETHEUS_PORT/GRAFANA_PORT/GRAFANA_ADMIN_* to .env.example.
   - **Why:** The heavily documented metrics have no consumer story: a new operator cannot discover the dashboards exist, how to bring them up, or what URL/credentials to use. The telemetry documentation reads as dead-end reference with no path to actually view it.
   - **Where:** `compose.yml:175-211 & config/monitoring/grafana/dashboards/ (vs README.md:159-169, docs/DEVELOPMENT.md telemetry sections)`
-- [ ] **README misdescribes what the 'ops-tools' compose profile launches** `MED` · `trivial` · ✅ verified
+- [x] **README misdescribes what the 'ops-tools' compose profile launches** `MED` · `trivial` · ✅ verified
   - **Fix:** Update the README ops-tools line to list all three services and their ports, or split observability into its own documented command.
   - **Why:** A developer running the documented command gets an unexpected Prometheus + Grafana boot (extra containers, ports 9090/3001) with no explanation, and conversely won't realize those tools are available. Factual inaccuracy in a command table.
   - **Where:** `README.md:166 (vs compose.yml:160,175,191 all profiles:['ops-tools'])`
-- [ ] **OpenAPI spec exposes a match-timeline endpoint that docs/API.md never lists** `LOW` · `trivial` · ✅ verified
+- [x] **OpenAPI spec exposes a match-timeline endpoint that docs/API.md never lists** `LOW` · `trivial` · ✅ verified
   - **Fix:** Add the matches/{matchId}/timeline endpoint (auth + response shape) to the API.md summoner section.
   - **Why:** API.md declares itself a navigational summary with OpenAPI as source of truth but omits a live public endpoint, so a consumer relying on the human-readable list would miss it. Minor completeness gap, not a contract error.
   - **Where:** `docs/API.md:41-50 (vs openapi/transcendence.v1.json path /api/lol/summoners/{summonerId}/matches/{matchId}/timeline)`
-- [ ] **README overstates the API surface as '80+ endpoints'** `LOW` · `trivial`
+- [x] **README overstates the API surface as '80+ endpoints'** `LOW` · `trivial`
   - **Fix:** Change to '60+ endpoints' (or drop the count) to match the committed spec.
   - **Why:** The headline number in the canonical README is ~27% higher than the actual committed contract, eroding trust in the doc's precision, at odds with the product's stated 'precise' brand.
   - **Where:** `README.md:55`
-- [ ] **AGENTS.md points frontend debugging at the wrong host (apex kronic.one, not transcend.kronic.one)** `LOW` · `trivial`
+- [x] **AGENTS.md points frontend debugging at the wrong host (apex kronic.one, not transcend.kronic.one)** `LOW` · `trivial`
   - **Fix:** Fix AGENTS.md:93 to use https://transcend.kronic.one for consistency with the rest of the file.
   - **Why:** An agent following the debugging instructions verbatim opens the wrong (or a redirecting/unrelated) host, then screenshots/asserts against the wrong page.
   - **Where:** `AGENTS.md:93 (vs AGENTS.md:98,105 and README.md:20)`
-- [ ] **Inconsistent 'bring up the stack' command across canonical docs** `INFO` · `trivial`
+- [x] **Inconsistent 'bring up the stack' command across canonical docs** `INFO` · `trivial`
   - **Fix:** Pick one canonical command (the pnpm script) and reference it uniformly, or explicitly note the foreground-vs-detached tradeoff once.
   - **Why:** Minor onboarding friction: a new dev sees two different 'correct' ways to start the stack and the foreground variant blocks the terminal.
   - **Where:** `AGENTS.md:24 & docs/DEVELOPMENT.md:20 (vs README.md:131 / package.json:28)`
@@ -850,7 +850,7 @@ _Personalization, secondary surfaces, performance, and refactors_
   - **Fix:** Read the resolved theme synchronously from the `dark` class during render (or from the same source the FOUC head script uses) so the icon and aria-label are correct on first paint.
   - **Why:** A brief empty-icon flash on load, and assistive tech reading the toggle in the pre-hydration window may get an aria-label opposite to the actual theme. Cosmetic/minor, but on a control the design calls out as a signature.
   - **Where:** `apps/web/components/ui/ThemeToggle.tsx:18-49`
-- [ ] **Hero copy promises "matchup" search that the palette can't fulfill** `LOW` · `trivial`
+- [x] **Hero copy promises "matchup" search that the palette can't fulfill** `LOW` · `trivial`
   - **Fix:** Either add a matchup result/route (matchups live inside champion pages, so a "Champion X matchups" quick route would suffice) or drop "or matchup" from the headline to match what search actually returns.
   - **Why:** The single most prominent promise on the site names a capability the primary search does not surface, so a first-run user who takes the headline literally hits an empty result and mild distrust.
   - **Where:** `apps/web/app/page.tsx:112; apps/web/components/GlobalCommandPalette.tsx:667-834`
@@ -859,15 +859,15 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > The champion detail page is genuinely strong: op.gg/u.gg-class density with far higher polish, a well-orchestrated progressive-disclosure Builds card (timing-aware sectioned breakdown + open "Recommended" and collapsed alternatives), diverging DataBars with real 95% CI whiskers, and a plain-English sample banner. The main problems are (1) a systemic keyboard-accessibility gap — the global reset strips focus outlines and the shared tab/pill/button controls on these exact pages add none back; (2) the "which build do I actually use?" answer is undermined by a "Recommended" build showing a lower win rate than a collapsed "Alternative," and by the Pro Builds detail page being a raw data dump rather than a synthesized build; and (3) several comprehensibility rough edges (jumbled win-rate-by-rank order, cryptic Confidence pips, redundant error stacking). Nothing here is data-loss/security; severity tops out at High for the focus-visible failure.
 
-- [ ] **Action-red accent used decoratively for navigation emphasis (violates one-accent-with-intent)** `LOW` · `trivial`
+- [x] **Action-red accent used decoratively for navigation emphasis (violates one-accent-with-intent)** `LOW` · `trivial`
   - **Fix:** Make the two hero nav links visually equal (neutral), or justify red only on a genuine primary action. Restyle the 'More Ways to Explore' card as a neutral surface with standard secondary links; drop the `data-active` hack.
   - **Why:** CLAUDE.md principle 3: 'When the action red appears, it should mean act here … nothing decorative wears it.' Here red arbitrarily prioritizes Pro Builds over the equally-actionable Matchups link and paints a whole informational CTA card, diluting the 'act here' signal the rest of the system carefully reserves.
   - **Where:** `apps/web/app/lol/champions/[championId]/page.tsx:297-308; apps/web/app/lol/pro-builds/[championId]/page.tsx:489-510`
-- [ ] **Pro Builds region filter renders 11+ wrapping tabs while the champion page uses a compact Select** `LOW` · `trivial`
+- [x] **Pro Builds region filter renders 11+ wrapping tabs while the champion page uses a compact Select** `LOW` · `trivial`
   - **Fix:** Use `variant="select"` for region on the pro-builds pages to match the champion page, or collapse to a Select below a breakpoint.
   - **Why:** Inconsistent IA for the identical control, and on a phone 11 tabs wrap to several rows of chrome above the data — heavy for a filter that is usually left at Global. It also makes the pro-builds Filters block visually noisier than the champion page.
   - **Where:** `apps/web/app/lol/pro-builds/[championId]/page.tsx:288 and app/lol/pro-builds/page.tsx:266 (default variant="tabs") vs apps/web/components/FilterBar.tsx:79 (variant="select")`
-- [ ] **Matchup table sort lacks a direction indicator and aria-sort; "Sort by Win Rate" quietly means worst-first, and DataBars vanish on mobile** `LOW` · `small`
+- [x] **Matchup table sort lacks a direction indicator and aria-sort; "Sort by Win Rate" quietly means worst-first, and DataBars vanish on mobile** `LOW` · `small`
   - **Fix:** Add a direction caret + `aria-sort` to the sort controls (reuse the accessible Table header pattern) and label the default order ('Toughest first'). Consider a minimal inline bar (or the whisker as a tiny mark) on mobile so the confidence signal survives.
   - **Why:** Screen-reader users get no sort state; sighted users get no direction cue and may misread 'Sort by Win Rate' as best-first. On mobile the 'core data language' (diverging bar) and the only per-row confidence signal (the CI whisker) are gone exactly where the audience is largest.
   - **Where:** `apps/web/components/MatchupsTable.tsx:38-44,74-80; apps/web/components/ui/DataBar.tsx:53-54`
@@ -876,11 +876,11 @@ _Personalization, secondary surfaces, performance, and refactors_
 
 > The profile and auth surfaces show high craft and a coherent "Ladder" system: colorblind-safe recent-form pips (fill+shape redundancy), small-n win-rate guards, reduced-motion-gated expand animations, deep-linkable URL state, and layout-matching skeletons. The two biggest UX defects are (1) the mobile DOM order buries the primary content — match history sits below five secondary sidebar cards — and (2) a failed/not-found profile renders a permanent loading skeleton beneath the error banner, which reads as "broken" rather than "not found". Auth is functional but incomplete (no password recovery, no reveal toggle), the Favorite control has no persistent/toggle state, and several ad-hoc low-opacity text tints drop below WCAG AA in the light theme.
 
-- [ ] **Empty match history always blames the filters, even when the player has zero matches** `LOW` · `trivial`
+- [x] **Empty match history always blames the filters, even when the player has zero matches** `LOW` · `trivial`
   - **Fix:** Distinguish the two cases: if queue===ALL and championFilter is empty, show a true empty state ("No ranked matches recorded yet" + Update Now hint); only mention filters when one is actually active.
   - **Why:** Misleading copy for genuinely empty profiles; a new player sees filter-troubleshooting text that doesn't apply and gets no guidance (e.g. "Update Now" to trigger ingestion).
   - **Where:** `apps/web/components/lol-profile/MatchHistorySection.tsx:461-465`
-- [ ] **Champion filter substring-matches numeric champion IDs, producing surprising results** `LOW` · `trivial`
+- [x] **Champion filter substring-matches numeric champion IDs, producing surprising results** `LOW` · `trivial`
   - **Fix:** Match names by substring but require an exact/leading numeric match for IDs (or drop ID matching and rely on the name datalist), so digit input behaves predictably.
   - **Why:** Minor: the datalist offers names so most users type names, but numeric input yields opaque, unexpected filtering with no explanation.
   - **Where:** `apps/web/components/SummonerProfileUnified.tsx:161-167`

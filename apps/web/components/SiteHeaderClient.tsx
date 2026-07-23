@@ -19,7 +19,7 @@ const NAV_LINKS: NavLink[] = [
   { href: "/lol/items", label: "Build Atlas", mobileLabel: "Items" },
   { href: "/lol/multi-search", label: "Multi-Search", mobileLabel: "Scout" },
   { href: "/lol/live", label: "Live Game", mobileLabel: "Live" },
-  { href: "/lol/pro-builds", label: "Pro Builds", mobileLabel: "Pro" }
+  { href: "/lol/pro-builds", label: "Pro Solo Q", mobileLabel: "Pro" }
 ];
 
 function navLinkClass(pathname: string | null, prefix: string): string {

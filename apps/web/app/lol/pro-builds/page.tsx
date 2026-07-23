@@ -190,7 +190,7 @@ export default async function ProBuildsIndexPage({
   if (!tierListRes.ok) {
     return (
       <BackendErrorCard
-        title="Pro Builds"
+        title="Pro Solo Queue Builds"
         message={
           tierListRes.errorKind === "timeout"
             ? "This page is taking too long to load."
@@ -211,8 +211,8 @@ export default async function ProBuildsIndexPage({
   return (
     <div className="grid gap-4">
       <Toolbar
-        eyebrow="League · Pros"
-        title="Pro Builds"
+        eyebrow="League · Ranked Solo Queue"
+        title="Pro Solo Queue Builds"
         meta={
           <>
             <span className="type-tabular tabular-nums">{playrateChampions.length} ranked picks</span>
@@ -226,11 +226,19 @@ export default async function ProBuildsIndexPage({
             ) : null}
           </>
         }
-        filters={<AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />}
+        filters={<AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} variant="select" />}
       />
       <AnalyticsSampleBanner
         sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
       />
+
+      <Card className="bg-surface-2/50 px-5 py-4">
+        <p className="type-overline text-muted">Coverage note</p>
+        <p className="type-ui mt-1 text-fg/80">
+          This surface follows tracked professional players and high-elo specialists in ranked solo
+          queue. It does not represent tournament drafts, esports schedules, or official match results.
+        </p>
+      </Card>
 
       <Card className="page-panel p-0">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/40 px-5 py-4">
@@ -257,7 +265,7 @@ export default async function ProBuildsIndexPage({
 
         {playrateChampions.length === 0 ? (
           <p className="px-5 py-6 text-sm text-muted">
-            No pro picks available for the current selection yet. Try a different region or scope.
+            No tracked solo-queue picks are available for the current selection yet. Try a different region or scope.
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -437,9 +445,9 @@ export default async function ProBuildsIndexPage({
 
 function RecentProMatchesFallback() {
   return (
-    <Card className="p-0" aria-busy="true" aria-label="Loading recent pro matches">
+    <Card className="p-0" aria-busy="true" aria-label="Loading recent tracked solo-queue matches">
       <div className="border-b border-border/40 px-4 py-3">
-        <h2 className="type-section">Recent Pro Matches</h2>
+        <h2 className="type-section">Recent Tracked Solo Queue Matches</h2>
         <p className="type-ui mt-1 text-muted">Loading the latest tracked builds…</p>
       </div>
       <div className="grid gap-0">
@@ -517,11 +525,11 @@ async function RecentProMatches({
     <Card className="p-0">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-4 py-3">
         <div>
-          <h2 className="type-section">Recent Pro Matches</h2>
+          <h2 className="type-section">Recent Tracked Solo Queue Matches</h2>
           <p className="type-ui mt-1 text-muted">
             {recentMatchesFeed.length > 0
-              ? `${recentMatchesFeed.length} recent builds — open any row for champion-specific details.`
-              : "Click any row to open champion-specific pro builds and recent match details."}
+              ? `${recentMatchesFeed.length} recent builds. Open any row for champion-specific details.`
+              : "Click any row to open champion-specific solo-queue builds and recent match details."}
           </p>
         </div>
         {failedFeedCount > 0 ? (
@@ -533,7 +541,7 @@ async function RecentProMatches({
 
       {recentMatchesFeed.length === 0 ? (
         <p className="px-4 py-4 text-sm text-muted">
-          No pro matches are available for the current selection.
+          No tracked solo-queue matches are available for the current selection.
         </p>
       ) : (
         <ul className="grid gap-0">

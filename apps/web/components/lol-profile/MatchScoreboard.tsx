@@ -5,6 +5,7 @@ import Image from "next/image";
 
 import { ParticipantRuneCard } from "@/components/lol-profile/ParticipantRuneCard";
 import { ScoreboardTeamTable, type ScoreboardDensity } from "@/components/lol-profile/ScoreboardTeamTable";
+import { useStaticData } from "@/components/lol-profile/StaticDataContext";
 import { GoldDiffChart } from "@/components/lol-profile/GoldDiffChart";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { cn } from "@/lib/cn";
@@ -18,14 +19,10 @@ import {
   buildAlignedParticipantRows,
   matchKdaRatio,
   participantDisplayName,
-  type ChampionStatic,
-  type ItemStatic,
   type MatchDetail,
   type MatchParticipant,
   type MatchTeamObjectives,
-  type MatchTimeline,
-  type RuneStatic,
-  type SpellStatic
+  type MatchTimeline
 } from "@/components/lol-profile/shared";
 
 type ScoreboardTab = "overview" | "runes";
@@ -37,15 +34,12 @@ const TABS = [
 
 function RuneTabCell({
   participant,
-  roleKey,
-  championStatic,
-  runeStatic
+  roleKey
 }: {
   participant: MatchParticipant | null;
   roleKey: string;
-  championStatic: ChampionStatic | null;
-  runeStatic: RuneStatic | null;
 }) {
+  const { championStatic } = useStaticData();
   if (!participant) {
     return (
       <div className="rounded-control border border-dashed border-border/35 bg-surface/35 px-3 py-3 type-caption text-muted">
@@ -79,7 +73,7 @@ function RuneTabCell({
           </p>
         </div>
       </div>
-      <ParticipantRuneCard participant={participant} runeStatic={runeStatic} />
+      <ParticipantRuneCard participant={participant} />
     </div>
   );
 }
@@ -185,21 +179,13 @@ export function MatchScoreboard({
   summonerId,
   region,
   gameName,
-  tagLine,
-  championStatic,
-  itemStatic,
-  spellStatic,
-  runeStatic
+  tagLine
 }: {
   detail: MatchDetail;
   summonerId: string;
   region: string;
   gameName: string;
   tagLine: string;
-  championStatic: ChampionStatic | null;
-  itemStatic: ItemStatic | null;
-  spellStatic: SpellStatic | null;
-  runeStatic: RuneStatic | null;
 }) {
   const [tab, setTab] = useState<ScoreboardTab>("overview");
   const [timeline, setTimeline] = useState<MatchTimeline | null>(null);
@@ -280,10 +266,6 @@ export function MatchScoreboard({
             gameName={gameName}
             tagLine={tagLine}
             density={density}
-            championStatic={championStatic}
-            itemStatic={itemStatic}
-            spellStatic={spellStatic}
-            runeStatic={runeStatic}
           />
           <ScoreboardTeamTable
             participants={red}
@@ -295,10 +277,6 @@ export function MatchScoreboard({
             gameName={gameName}
             tagLine={tagLine}
             density={density}
-            championStatic={championStatic}
-            itemStatic={itemStatic}
-            spellStatic={spellStatic}
-            runeStatic={runeStatic}
           />
         </div>
       ) : (
@@ -307,8 +285,8 @@ export function MatchScoreboard({
             <div key={`${row.roleKey}-${rowIndex}`} className="flex flex-col gap-2">
               <p className="type-overline px-1 text-muted">{roleDisplayLabel(row.roleKey)}</p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <RuneTabCell participant={row.blue} roleKey={row.roleKey} championStatic={championStatic} runeStatic={runeStatic} />
-                <RuneTabCell participant={row.red} roleKey={row.roleKey} championStatic={championStatic} runeStatic={runeStatic} />
+                <RuneTabCell participant={row.blue} roleKey={row.roleKey} />
+                <RuneTabCell participant={row.red} roleKey={row.roleKey} />
               </div>
             </div>
           ))}

@@ -405,7 +405,11 @@ ranked-Solo/Duo corpus in bounded match batches. Incremental runs clone the acti
 population atoms, add only matches not recorded by a completed generation, then atomically promote
 the result. The active generation is unchanged when there are no new eligible matches. Static-data
 detection also enqueues an `onlyIfMissing` bootstrap so new patches begin warming without waiting for
-the hourly schedule.
+the hourly schedule. A PostgreSQL session advisory lock prevents startup, recurring, and manual
+triggers from running generations concurrently; a losing trigger exits immediately, and PostgreSQL
+releases the lock automatically if the owning worker connection dies. Hangfire PostgreSQL sliding
+invisibility renewal is enabled globally so long-running jobs retain queue ownership past the
+provider's default 30-minute invisibility window.
 
 ### Champion Analytics Ingestion
 

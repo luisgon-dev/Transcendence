@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 
 import { BuildResourceDetailPage } from "@/components/BuildResourcePages";
+import { itemDisplayName } from "@/lib/gameDisplay";
 import { fetchItemMap } from "@/lib/staticData";
 
 export async function generateMetadata({ params }: { params: Promise<{ itemId: string }> }): Promise<Metadata> {
   const { itemId } = await params;
   const itemMap = await fetchItemMap().catch(() => null);
-  const name = itemMap?.items[itemId]?.name ?? `Item ${itemId}`;
+  const name = itemDisplayName(itemMap?.items[itemId]);
   return {
     title: `${name} Stats and Best Champions`,
     description: `${name} ranked pick rate, win rate, sample size, and champion-role usage.`

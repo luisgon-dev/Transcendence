@@ -31,8 +31,8 @@ export default function Loading() {
       </div>
 
       {/* Sidebar + main, matching the xl:grid-cols split of the live page */}
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(280px,0.32fr)_minmax(0,1fr)] xl:items-start">
-        <div className="grid content-start gap-5">
+      <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[20rem_minmax(0,1fr)] xl:items-start">
+        <div className="grid min-w-0 content-start gap-5">
           <Card className="profile-section-card p-5">
             <Skeleton className="h-3 w-28" />
             <Skeleton className="mt-3 h-24 w-full" />
@@ -42,7 +42,7 @@ export default function Loading() {
             <Skeleton className="mt-3 h-40 w-full" />
           </Card>
         </div>
-        <div className="grid gap-6">
+        <div className="grid min-w-0 gap-6">
           <Card className="profile-section-card p-5">
             <Skeleton className="h-3 w-28" />
             <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -55,7 +55,7 @@ export default function Loading() {
             <Skeleton className="h-6 w-40" />
             <div className="mt-5 flex flex-col gap-4">
               {Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-24 w-full rounded-panel" />
+                <Skeleton key={i} className="h-28 w-full rounded-panel" />
               ))}
             </div>
           </Card>

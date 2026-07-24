@@ -2,6 +2,7 @@ import Image from "next/image";
 
 import { cn } from "@/lib/cn";
 import { formatGames, formatPercent, winRateColorClass } from "@/lib/format";
+import { itemDisplayName } from "@/lib/gameDisplay";
 import { itemIconUrl } from "@/lib/staticData";
 
 type ItemMeta = { name: string; plaintext?: string };
@@ -52,14 +53,13 @@ function ItemRow({
             );
           }
           const meta = items[String(itemId)];
-          const title = meta
-            ? `${meta.name}${meta.plaintext ? ` \u2014 ${meta.plaintext}` : ""}`
-            : `Item ${itemId}`;
+          const name = itemDisplayName(meta);
+          const title = meta?.plaintext ? `${name}: ${meta.plaintext}` : name;
           return (
             <Image
               key={`${idx}-${itemId}`}
               src={itemIconUrl(version, itemId)}
-              alt={meta?.name ?? `Item ${itemId}`}
+              alt={name}
               title={title}
               width={iconSize}
               height={iconSize}

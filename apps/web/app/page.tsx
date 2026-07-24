@@ -10,6 +10,7 @@ import { LaneIcon } from "@/components/ui/LaneIcon";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { cn } from "@/lib/cn";
 import { getBackendBaseUrl } from "@/lib/env";
+import { championDisplayName } from "@/lib/gameDisplay";
 import { selectStarterPicks } from "@/lib/homeGuidance";
 import { fetchLolAnalyticsStatus } from "@/lib/lolAnalyticsStatus";
 import { platformRegionToSlug } from "@/lib/lolRegions";
@@ -255,7 +256,7 @@ export default async function LandingPage() {
             <div className="grid">
               {lolTop.map((entry, index) => {
                 const champ = champions[String(entry.championId)];
-                const name = champ?.name ?? `Champion ${entry.championId}`;
+                const name = championDisplayName(champ);
                 return (
                   <Link
                     key={`${entry.championId}-${entry.role}`}

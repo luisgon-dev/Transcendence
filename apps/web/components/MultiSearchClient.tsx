@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Select";
 import { formatPercent, kdaColorClass, winRateColorClass } from "@/lib/format";
+import { championDisplayName } from "@/lib/gameDisplay";
 import { LOL_REGION_OPTIONS } from "@/lib/lolRegions";
 import { parseLobbyText } from "@/lib/multiSearch";
 import { rankTierColorClass, rankTierDisplayLabel } from "@/lib/ranks";
@@ -310,7 +311,7 @@ function PlayerRow({ result, region, staticData }: { result: MultiSearchResult; 
             {result.topChampions!.slice(0, 3).map((champion) => {
               const identity = staticData?.champions[String(champion.championId)];
               return (
-                <span key={champion.championId} className="group/champion relative" title={`${identity?.name ?? `Champion ${champion.championId}`}: ${champion.games} games, ${formatPercent(champion.winRate)} WR`}>
+                <span key={champion.championId} className="group/champion relative" title={`${championDisplayName(identity)}: ${champion.games} games, ${formatPercent(champion.winRate)} WR`}>
                   {identity && staticData ? (
                     <Image src={championIconUrl(staticData.version, identity.id)} alt={identity.name} width={34} height={34} className="h-[34px] w-[34px] rounded-md border border-border/55" />
                   ) : (

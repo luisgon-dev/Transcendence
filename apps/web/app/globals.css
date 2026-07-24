@@ -510,6 +510,67 @@ body::before {
     border-color: color-mix(in oklch, var(--t-primary), transparent 45%);
     box-shadow: 0 0 0 2px color-mix(in oklch, var(--t-primary), transparent 30%);
   }
+  .match-card-summary {
+    container: match-summary / inline-size;
+  }
+  .match-snapshot-grid {
+    display: grid;
+    min-width: 0;
+    gap: 1rem;
+  }
+  .match-snapshot-identity,
+  .match-snapshot-loadout,
+  .match-snapshot-stats {
+    min-width: 0;
+  }
+  .match-snapshot-stats {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    border-top: 1px solid color-mix(in oklch, var(--t-border), transparent 35%);
+    padding-top: 0.75rem;
+  }
+
+  @container match-summary (min-width: 36rem) {
+    .match-snapshot-grid {
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+    }
+    .match-snapshot-identity {
+      grid-column: 1;
+      grid-row: 1;
+    }
+    .match-snapshot-loadout {
+      grid-column: 1 / -1;
+      grid-row: 2;
+    }
+    .match-snapshot-stats {
+      grid-column: 2;
+      grid-row: 1;
+      flex-direction: column;
+      align-items: flex-end;
+      justify-self: end;
+      border-top: 0;
+      padding-top: 0;
+      text-align: right;
+    }
+  }
+
+  @container match-summary (min-width: 52rem) {
+    .match-snapshot-grid {
+      grid-template-columns: minmax(15rem, 1fr) minmax(14.5rem, auto) minmax(9rem, 0.55fr);
+    }
+    .match-snapshot-identity,
+    .match-snapshot-loadout,
+    .match-snapshot-stats {
+      grid-column: auto;
+      grid-row: auto;
+    }
+    .match-snapshot-loadout {
+      align-self: center;
+    }
+  }
   .match-detail-shell {
     position: relative; border-radius: var(--radius-card);
     border: 1px solid var(--t-border); background: var(--t-surface-2);

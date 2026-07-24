@@ -193,8 +193,8 @@ export function SummonerProfileClient({
             />
           )
         ) : (
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(280px,0.32fr)_minmax(0,1fr)] xl:items-start">
-            <div className="order-2 xl:order-1">
+          <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[20rem_minmax(0,1fr)] xl:items-start">
+            <div className="order-2 min-w-0 xl:order-1">
               <ProfileSidebar
                 profile={lookup.profile}
                 championStatic={staticData.championStatic}
@@ -206,7 +206,7 @@ export function SummonerProfileClient({
                 tagLine={tagLine}
               />
             </div>
-            <div className="order-1 grid gap-6 xl:order-2">
+            <div className="order-1 grid min-w-0 gap-6 [&>*]:min-w-0 [&>*]:max-w-full xl:order-2">
               <PerformanceCard
                 matches={matches.history?.items ?? []}
                 overviewStats={lookup.profile.overviewStats}

@@ -4,6 +4,7 @@ const QUEUE_ID_LABELS: Record<number, string> = {
   430: "Normal Blind",
   440: "Ranked Flex",
   450: "ARAM",
+  480: "Swiftplay",
   490: "Quickplay",
   700: "Clash",
   900: "ARURF",
@@ -57,17 +58,22 @@ export function formatQueueLabel(queueType?: string | null, queueId?: number | n
   }
 
   const raw = (queueType ?? "").trim();
-  if (!raw) return "Unknown Queue";
+  if (!raw) return "Other mode";
 
   if (/^\d+$/.test(raw)) {
     const parsed = Number(raw);
     const byParsedId = QUEUE_ID_LABELS[parsed];
-    return byParsedId ?? `Queue ${parsed}`;
+    return byParsedId ?? "Other mode";
   }
 
   const token = normalizeToken(raw);
   const byToken = QUEUE_TOKEN_LABELS[token];
   if (byToken) return byToken;
+
+  const numericQueueToken = token.match(/^QUEUE_(\d+)$/);
+  if (numericQueueToken) {
+    return QUEUE_ID_LABELS[Number(numericQueueToken[1])] ?? "Other mode";
+  }
 
   if (raw.includes("_")) {
     return titleCaseWords(raw.replaceAll("_", " "));

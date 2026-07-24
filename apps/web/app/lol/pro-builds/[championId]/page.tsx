@@ -17,6 +17,7 @@ import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { pickMostSevereAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { formatDateTimeMs, formatRelativeTime } from "@/lib/format";
+import { championDisplayName, itemDisplayName } from "@/lib/gameDisplay";
 import { fetchLolAnalyticsPatches } from "@/lib/lolAnalyticsPatches";
 import {
   buildProBuildFilterParams,
@@ -72,14 +73,13 @@ function ProItemsRow({
     <div className="flex flex-wrap items-center gap-1.5">
       {cleaned.map((itemId, idx) => {
         const meta = items[String(itemId)];
-        const title = meta
-          ? `${meta.name}${meta.plaintext ? ` - ${meta.plaintext}` : ""}`
-          : `Item ${itemId}`;
+        const name = itemDisplayName(meta);
+        const title = meta?.plaintext ? `${name}: ${meta.plaintext}` : name;
         return (
           <Image
             key={`${itemId}-${idx}`}
             src={itemIconUrl(itemVersion, itemId)}
-            alt={meta?.name ?? `Item ${itemId}`}
+            alt={name}
             title={title}
             width={size}
             height={size}
@@ -149,7 +149,7 @@ export default async function ProBuildsChampionPage({
   );
   const championId = Number(resolvedParams.championId);
   if (!Number.isFinite(championId) || championId <= 0) {
-    return <BackendErrorCard title="Pro Solo Queue Builds" message="Invalid champion id." />;
+    return <BackendErrorCard title="Pro Solo Queue Builds" message="That champion route is invalid." />;
   }
 
   const roleFilter = normalizeProBuildRole(resolvedSearchParams?.role);
@@ -229,7 +229,7 @@ export default async function ProBuildsChampionPage({
   const winrates = winratesRes.ok ? winratesRes.body : null;
   const proBuilds = proBuildsRes.ok ? proBuildsRes.body : null;
   const champion = champions[String(championId)];
-  const championName = champion?.name ?? `Champion ${championId}`;
+  const championName = championDisplayName(champion);
   const recentMatches = proBuilds?.recentProMatches ?? [];
   const topPlayers = proBuilds?.topPlayers ?? [];
   const commonBuilds = proBuilds?.commonBuilds ?? [];
@@ -511,7 +511,6 @@ export default async function ProBuildsChampionPage({
                       <p className={`text-sm font-semibold ${resultClass}`}>
                         {match.win ? "Win" : "Loss"}
                       </p>
-                      <p className="type-caption text-muted">{match.matchId ?? "Unknown match"}</p>
                     </div>
                   </div>
 

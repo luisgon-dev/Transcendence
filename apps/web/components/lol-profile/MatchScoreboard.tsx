@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 
 import { ParticipantRuneCard } from "@/components/lol-profile/ParticipantRuneCard";
-import { ScoreboardTeamTable, type ScoreboardDensity } from "@/components/lol-profile/ScoreboardTeamTable";
+import { ScoreboardTeamTable } from "@/components/lol-profile/ScoreboardTeamTable";
 import { useStaticData } from "@/components/lol-profile/StaticDataContext";
 import { GoldDiffChart } from "@/components/lol-profile/GoldDiffChart";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -77,11 +77,6 @@ function RuneTabCell({
     </div>
   );
 }
-
-const DENSITY_OPTIONS = [
-  { value: "compact" as const, label: "Compact" },
-  { value: "full" as const, label: "Detailed" }
-];
 
 const TAKEAWAY_TONE_CLASS: Record<TakeawayTone, string> = {
   good: "text-success",
@@ -170,10 +165,10 @@ function ObjectivesStrip({ objectives }: { objectives: MatchTeamObjectives[] }) 
   );
 }
 
-// Compact, tabbed post-game view that replaces the old 10-tall-cards detail panel.
-// Overview = two dense team scoreboards (op.gg-style); Runes = role-aligned rune
-// pages for side-by-side comparison. Runes also surface via a hover tooltip on each
-// scoreboard row's keystone, so a single player can be inspected without leaving Overview.
+// Tabbed post-game view. Overview always uses the complete scoreboard; Runes
+// aligns both teams by role for side-by-side comparison. Runes also surface via
+// a tooltip on each scoreboard row's keystone, so a single player can be
+// inspected without leaving Overview.
 export function MatchScoreboard({
   detail,
   summonerId,
@@ -189,7 +184,6 @@ export function MatchScoreboard({
 }) {
   const [tab, setTab] = useState<ScoreboardTab>("overview");
   const [timeline, setTimeline] = useState<MatchTimeline | null>(null);
-  const [density, setDensity] = useState<ScoreboardDensity>("compact");
 
   // Lazy-load the gold/xp-diff curve once the scoreboard mounts (i.e. the match is expanded).
   // Optional decoration — only present for matches with ingested timeline frames.
@@ -247,15 +241,6 @@ export function MatchScoreboard({
               <GoldDiffChart frames={timeline.frames} />
             </div>
           ) : null}
-          <div className="flex items-center justify-end px-1">
-            <SegmentedControl<ScoreboardDensity>
-              options={DENSITY_OPTIONS}
-              value={density}
-              onValueChange={setDensity}
-              ariaLabel="Scoreboard density"
-              className="w-fit"
-            />
-          </div>
           <ScoreboardTeamTable
             participants={blue}
             teamId={100}
@@ -265,7 +250,6 @@ export function MatchScoreboard({
             region={region}
             gameName={gameName}
             tagLine={tagLine}
-            density={density}
           />
           <ScoreboardTeamTable
             participants={red}
@@ -276,7 +260,6 @@ export function MatchScoreboard({
             region={region}
             gameName={gameName}
             tagLine={tagLine}
-            density={density}
           />
         </div>
       ) : (

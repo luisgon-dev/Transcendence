@@ -13,6 +13,7 @@ import {
   type BuildResourceSort
 } from "@/lib/buildResources";
 import { formatGames, formatPercent, winRateColorClass } from "@/lib/format";
+import { championDisplayName } from "@/lib/gameDisplay";
 import { roleDisplayLabel } from "@/lib/roles";
 import {
   championIconUrl,
@@ -92,7 +93,7 @@ export function BuildResourceIndex({
               <input
                 name="q"
                 defaultValue={query}
-                placeholder={isItems ? "Trinity Force or 3078" : "Press the Attack or 8005"}
+                placeholder={isItems ? "Trinity Force" : "Press the Attack"}
                 className="h-11 rounded-control border border-border/70 bg-bg/70 px-3 text-sm text-fg outline-none transition placeholder:text-muted focus:border-primary/45 focus:ring-2 focus:ring-primary/15"
               />
             </label>
@@ -119,7 +120,7 @@ export function BuildResourceIndex({
       ) : entries.length === 0 ? (
         <Card className="p-6">
           <h2 className="type-section">No matching {kind}</h2>
-          <p className="type-ui mt-2 text-muted">Try a different name, numeric ID, or region.</p>
+          <p className="type-ui mt-2 text-muted">Try a different name or region.</p>
         </Card>
       ) : (
         <section className="grid gap-3 lg:grid-cols-2">
@@ -140,13 +141,17 @@ export function BuildResourceIndex({
                   {icon ? (
                     <Image src={icon} alt="" width={56} height={56} sizes="56px" className="h-14 w-14 shrink-0 rounded-xl border border-border/55 bg-bg object-cover" />
                   ) : (
-                    <div className="grid h-14 w-14 shrink-0 place-items-center rounded-xl border border-border/55 bg-bg text-xs text-muted">{entry.resourceId}</div>
+                    <div
+                      className="grid h-14 w-14 shrink-0 place-items-center rounded-xl border border-border/55 bg-bg text-lg font-semibold text-muted"
+                      aria-label={`${noun} icon unavailable`}
+                    >
+                      ?
+                    </div>
                   )}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <h2 className="type-section truncate transition group-hover:text-primary">{entry.name}</h2>
-                        <p className="type-meta mt-1 text-muted">ID {entry.resourceId}</p>
                       </div>
                       <span className="type-meta shrink-0 text-primary">Explore →</span>
                     </div>
@@ -168,7 +173,7 @@ export function BuildResourceIndex({
                       return (
                         <span key={`${champion.championId}-${champion.role}`} className="inline-flex items-center gap-1.5 rounded-full border border-border/45 bg-bg/55 py-1 pl-1 pr-2 text-xs text-fg/72">
                           {meta && champions ? <Image src={championIconUrl(champions.version, meta.id)} alt="" width={22} height={22} sizes="22px" className="rounded-full" /> : null}
-                          <span>{meta?.name ?? `Champion ${champion.championId}`} · {roleDisplayLabel(champion.role)}</span>
+                          <span>{championDisplayName(meta)} · {roleDisplayLabel(champion.role)}</span>
                         </span>
                       );
                     })}

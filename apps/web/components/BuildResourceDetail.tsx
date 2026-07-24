@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { LaneIcon } from "@/components/ui/LaneIcon";
 import { buildResourceHref, type BuildResourceDetailResponse, type BuildResourceKind } from "@/lib/buildResources";
 import { formatGames, formatPercent, winRateColorClass } from "@/lib/format";
+import { championDisplayName } from "@/lib/gameDisplay";
 import { roleDisplayLabel } from "@/lib/roles";
 import {
   championIconUrl,
@@ -51,13 +52,18 @@ export function BuildResourceDetail({
           {icon ? (
             <Image src={icon} alt="" width={112} height={112} sizes="112px" priority className="h-24 w-24 rounded-2xl border border-border/60 bg-bg shadow-card sm:h-28 sm:w-28" />
           ) : (
-            <div className="grid h-24 w-24 place-items-center rounded-2xl border border-border/60 bg-bg text-sm text-muted sm:h-28 sm:w-28">{resource.resourceId}</div>
+            <div
+              className="grid h-24 w-24 place-items-center rounded-2xl border border-border/60 bg-bg text-2xl font-semibold text-muted sm:h-28 sm:w-28"
+              aria-label={`${isItems ? "Item" : "Rune"} icon unavailable`}
+            >
+              ?
+            </div>
           )}
           <div className="min-w-0">
             <div className="flex flex-wrap gap-2">
               <Badge>{activeRegionLabel}</Badge>
               <Badge className="border-primary/35 bg-primary/10 text-primary">Patch {response.patch}</Badge>
-              <Badge>{isItems ? "Item" : "Rune"} {resource.resourceId}</Badge>
+              <Badge>{isItems ? "Item" : "Rune"}</Badge>
             </div>
             <h1 className="type-display mt-4">{resource.name}</h1>
             {description ? <p className="type-lead mt-3 max-w-3xl">{description}</p> : null}
@@ -104,7 +110,7 @@ export function BuildResourceDetail({
                       <td className="px-5 py-3 sm:px-6">
                         <Link href={`/lol/champions/${row.championId}?${query.toString()}`} className="inline-flex items-center gap-2.5 font-semibold text-fg hover:text-primary">
                           {champion && champions ? <Image src={championIconUrl(champions.version, champion.id)} alt="" width={34} height={34} sizes="34px" className="rounded-lg" /> : null}
-                          <span>{champion?.name ?? `Champion ${row.championId}`}</span>
+                          <span>{championDisplayName(champion)}</span>
                         </Link>
                       </td>
                       <td className="px-3 py-3 text-fg/72">

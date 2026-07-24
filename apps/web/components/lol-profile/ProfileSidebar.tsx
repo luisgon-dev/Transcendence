@@ -6,10 +6,11 @@ import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { DataBar } from "@/components/ui/DataBar";
 import { Sparkline } from "@/components/ui/Sparkline";
-import { championIconUrl } from "@/lib/staticData";
 import { formatPercent, plural, winRateColorClass } from "@/lib/format";
+import { championDisplayName } from "@/lib/gameDisplay";
 import { rankEmblemUrl, rankTierDisplayLabel, rankToLadderPoints } from "@/lib/ranks";
 import { encodeRiotIdPath } from "@/lib/riotid";
+import { championIconUrl } from "@/lib/staticData";
 
 import {
   rankColorClass,
@@ -72,7 +73,7 @@ export function ProfileSidebar({
   const soloDelta = soloSeries.length >= 2 ? soloSeries.at(-1)! - soloSeries[0] : null;
 
   return (
-    <aside className="grid content-start gap-5 xl:sticky xl:top-24">
+    <aside className="grid min-w-0 content-start gap-5 [&>*]:min-w-0 [&>*]:max-w-full xl:sticky xl:top-24">
       <Card className="profile-section-card p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -207,7 +208,7 @@ export function ProfileSidebar({
                   )}
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-fg group-hover:text-primary">
-                      {champion?.name ?? `Champion ${m.championId}`}
+                      {championDisplayName(champion)}
                     </p>
                     <p className="type-caption text-muted tabular-nums">{m.championPoints.toLocaleString()} pts</p>
                   </div>
@@ -243,7 +244,7 @@ export function ProfileSidebar({
                   <div>
                     <p className="type-kicker text-muted">#{index + 1}</p>
                     <p className="mt-1 text-sm font-semibold text-fg group-hover:text-primary">
-                      {champion?.name ?? `Champion ${championStat.championId}`}
+                      {championDisplayName(champion)}
                     </p>
                   </div>
                   <DataBar value={championStat.winRate} games={championStat.games} />

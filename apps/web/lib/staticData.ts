@@ -1,5 +1,7 @@
 import { cache } from "react";
 
+import { runeDisplayName } from "@/lib/gameDisplay";
+
 export type ChampionMap = {
   version: string;
   champions: Record<string, { id: string; name: string; title?: string; difficulty?: number }>;
@@ -277,7 +279,7 @@ export const fetchRunesReforged = cache(async (): Promise<RuneStaticData> => {
       for (const perk of perks ?? []) {
         if (!perk?.id || !perk?.iconPath) continue;
         runeById[String(perk.id)] = {
-          name: perk.name?.trim() || `Rune ${perk.id}`,
+          name: runeDisplayName(perk),
           icon: communityDragonAssetUrl(perk.iconPath)
         };
       }

@@ -5,6 +5,7 @@ import type { components } from "@transcendence/api-client";
 import { cn } from "@/lib/cn";
 import { WinRateText } from "@/components/WinRateText";
 import { Confidence } from "@/components/ui/Confidence";
+import { itemDisplayName } from "@/lib/gameDisplay";
 import { itemIconUrl, summonerSpellIconUrl } from "@/lib/staticData";
 
 type SummonerSpellPairDto = components["schemas"]["SummonerSpellPairDto"];
@@ -76,13 +77,12 @@ function ItemIcon({
     );
   }
   const meta = items[String(itemId)];
-  const title = meta
-    ? `${meta.name}${meta.plaintext ? ` — ${meta.plaintext}` : ""}`
-    : `Item ${itemId}`;
+  const name = itemDisplayName(meta);
+  const title = meta?.plaintext ? `${name}: ${meta.plaintext}` : name;
   return (
     <Image
       src={itemIconUrl(version, itemId)}
-      alt={meta?.name ?? `Item ${itemId}`}
+      alt={name}
       title={title}
       width={size}
       height={size}

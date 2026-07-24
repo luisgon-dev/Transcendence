@@ -22,6 +22,7 @@ import {
   type SummonerLookupResponse,
   type SummonerProfileResponse
 } from "@/components/lol-profile/shared";
+import { championDisplayName } from "@/lib/gameDisplay";
 import { computeNextPollDelayMs } from "@/lib/polling";
 import { formatQueueLabel } from "@/lib/queues";
 import {
@@ -270,7 +271,7 @@ export function useMatchHistory({
     return (history?.facets?.championIds ?? [])
       .map((id) => ({
         id,
-        label: championStatic?.champions[String(id)]?.name ?? `Champion ${id}`
+        label: championDisplayName(championStatic?.champions[String(id)])
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [championStatic?.champions, history?.facets?.championIds]);

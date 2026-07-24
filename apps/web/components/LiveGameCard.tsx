@@ -112,7 +112,7 @@ function ParticipantRow({
         {participant.championId != null ? (
           <Image
             src={championSquareIconUrlById(participant.championId)}
-            alt={`Champion ${participant.championId}`}
+            alt="Selected champion"
             width={36}
             height={36}
             className="size-9 shrink-0 rounded-control border border-border bg-surface"
@@ -156,7 +156,7 @@ function ParticipantRow({
                 <span key={entry.championId} className="inline-flex items-center gap-1">
                   <Image
                     src={championSquareIconUrlById(entry.championId)}
-                    alt={`Champion ${entry.championId}`}
+                    alt="Recent champion"
                     width={20}
                     height={20}
                     className="size-5 rounded-sm border border-border"

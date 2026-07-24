@@ -90,29 +90,39 @@ public sealed class LeaderboardRepository(TranscendenceContext db) : ILeaderboar
         var normalizedRole = string.IsNullOrWhiteSpace(role) ? null : role.Trim().ToUpperInvariant();
         var candidateLimit = Math.Clamp(limit, 1, 100) * 4;
 
-        var participantQuery = db.MatchParticipants
-            .AsNoTracking()
-            .Where(participant =>
-                participant.ChampionId == championId &&
-                participant.Match.Status == FetchStatus.Success &&
-                participant.Match.MatchDate >= startMs &&
-                participant.Match.MatchDate <= endMs &&
-                (participant.Match.QueueId == queueId ||
-                 (participant.Match.QueueId == 0 && participant.Match.QueueType == queueId.ToString())) &&
-                participant.Match.PlatformRegion == platformRegion &&
-                participant.Summoner.GameName != null &&
-                participant.Summoner.TagLine != null);
+        // Use one explicit participant/match/summoner join before grouping. Grouping directly over
+        // navigation properties made EF translate Max(participant.Match.FetchedAt) into a correlated
+        // subquery that re-joined the same three large tables for every aggregate row.
+        var participantQuery =
+            from participant in db.MatchParticipants.AsNoTracking()
+            join match in db.Matches.AsNoTracking() on participant.MatchId equals match.Id
+            join summoner in db.Summoners.AsNoTracking() on participant.SummonerId equals summoner.Id
+            where participant.ChampionId == championId &&
+                  match.Status == FetchStatus.Success &&
+                  match.MatchDate >= startMs &&
+                  match.MatchDate <= endMs &&
+                  (match.QueueId == queueId ||
+                   (match.QueueId == 0 && match.QueueType == queueId.ToString())) &&
+                  match.PlatformRegion == platformRegion &&
+                  summoner.GameName != null &&
+                  summoner.TagLine != null
+            select new
+            {
+                Participant = participant,
+                Match = match,
+                Summoner = summoner
+            };
 
         if (normalizedRole is not null)
-            participantQuery = participantQuery.Where(participant => participant.TeamPosition == normalizedRole);
+            participantQuery = participantQuery.Where(row => row.Participant.TeamPosition == normalizedRole);
 
         var aggregates = await participantQuery
-            .GroupBy(participant => new
+            .GroupBy(row => new
             {
-                participant.SummonerId,
-                participant.Summoner.GameName,
-                participant.Summoner.TagLine,
-                participant.Summoner.ProfileIconId
+                row.Participant.SummonerId,
+                row.Summoner.GameName,
+                row.Summoner.TagLine,
+                row.Summoner.ProfileIconId
             })
             .Select(group => new
             {
@@ -121,11 +131,11 @@ public sealed class LeaderboardRepository(TranscendenceContext db) : ILeaderboar
                 TagLine = group.Key.TagLine!,
                 group.Key.ProfileIconId,
                 Games = group.Count(),
-                Wins = group.Sum(participant => participant.Win ? 1 : 0),
-                Kills = group.Sum(participant => (long)participant.Kills),
-                Deaths = group.Sum(participant => (long)participant.Deaths),
-                Assists = group.Sum(participant => (long)participant.Assists),
-                UpdatedAtUtc = group.Max(participant => participant.Match.FetchedAt)
+                Wins = group.Sum(row => row.Participant.Win ? 1 : 0),
+                Kills = group.Sum(row => (long)row.Participant.Kills),
+                Deaths = group.Sum(row => (long)row.Participant.Deaths),
+                Assists = group.Sum(row => (long)row.Participant.Assists),
+                UpdatedAtUtc = group.Max(row => row.Match.FetchedAt)
             })
             .Where(row => row.Games >= minimumGames)
             .OrderByDescending(row => row.Games)

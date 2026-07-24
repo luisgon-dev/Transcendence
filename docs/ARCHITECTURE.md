@@ -46,6 +46,13 @@ Transcendence is a backend + web monorepo:
   - `/api/static/*` (champions, items, runes, spells) serve cached Data Dragon / CommunityDragon static maps to the browser (`public, s-maxage=86400, stale-while-revalidate=86400`)
   - `/api/diagnostics/backend` is a server-side backend connectivity probe (GETs the analytics tier-list endpoint) that always returns HTTP `200` with `{ ok, backend, requestId, durationMs }`
 - Tailwind styling, SSR-first pages where possible
+- `cacheComponents` is enabled. Public/static work can be prerendered, while session-dependent account
+  navigation and page-specific dynamic regions stream behind fixed-size `<Suspense>` fallbacks. Backend
+  reads that opt into Next's persistent fetch cache omit the per-request correlation header because request
+  headers participate in the cache key; uncached and mutating calls retain a unique `x-trn-request-id`.
+- Browser Core Web Vitals are reported through `/api/telemetry/web-vitals`. The route logs only a bounded,
+  normalized route template plus metric/rating/navigation type—never Riot IDs or arbitrary paths—so field
+  performance can be compared without creating unbounded telemetry cardinality.
 - **Auth token refresh runs in `proxy.ts` (Next 16 middleware), not during render.** Auth uses a short-lived access token + a single-use, rotated refresh token (the backend revokes the presented refresh token on every `/api/auth/refresh`, no grace window). Refreshing inside a Server Component render can't persist the rotated cookie (cookie writes are illegal during render), which would burn the refresh token and silently log users out. So `proxy.ts` refreshes a stale access token on page navigations and writes the rotated cookies to **both** the forwarded request (so the SSR render reads the fresh token and doesn't refresh again) and the response (so the browser persists them). It is fail-safe: it only acts when a refresh token exists and the access token is stale, skips prefetch requests (so a speculative prefetch can't burn the single-use token), and on any failure (401/5xx/network/timeout/malformed) passes through **without** clearing cookies. The matcher excludes `/api/*` (route handlers refresh + clear in their own writable context via `getAccessTokenOrRefresh`/`getSessionMe`), `_next`, and static files. Pure helpers live in `lib/proxyAuth.ts`; cookie names + the staleness check in `lib/authCookieShared.ts`.
 - Riot Sign On uses two same-origin route handlers: `/api/session/riot/start` creates a 256-bit
   correlation state in an HttpOnly, SameSite=Lax, ten-minute cookie; `/api/session/riot/callback`
@@ -65,7 +72,11 @@ Transcendence is a backend + web monorepo:
   - `/lol/live` is the first-class live-game scout. It accepts a Riot ID, renders both teams with
     rank/form/streak/champion-pool and loadout context, and re-checks active games every minute.
     Profile sidebars reuse a compact version of the same card.
-  - `/lol/summoners/[region]/[riotId]` is the unified LoL profile + match history surface. Its RSC resolves the profile first, then fetches the requested match-history page and rank history through server-to-server calls while the route skeleton streams behind `<Suspense>`. React-cached champion, item, spell, and rune maps are passed into the client island in the same render; browser fetches are reserved for pagination, refresh completion, and best-effort recovery when a server dependency failed.
+  - `/lol/summoners/[region]/[riotId]` is the unified LoL profile + match history surface. Its RSC resolves
+    only the profile-critical payload and React-cached champion/item/spell/rune maps. Match and rank history
+    load independently in the client after the profile shell is usable; the large match-history client island
+    is code-split with a stable fallback. This keeps two non-critical backend queries and their JavaScript off
+    the first response while preserving pagination, refresh completion, and recovery behavior.
     - Legacy `/lol/summoners/[region]/[riotId]/matches*` routes redirect into this unified view using query state (`page`, `queue`, `expandMatchId`)
 - Public LoL patch badges now read backend analytics patch status instead of raw Data Dragon latest so web patch labels match the active analytics dataset
 - LoL analytics pages (tier list, champion, pro-builds) carry a historical patch selector (`AnalyticsPatchFilter`, backed by `lib/lolPatchFilters.ts` + `lib/lolAnalyticsPatches.ts`, surfaced via `FilterBar`) that reads `GET /api/lol/analytics/patches` and drives the `patch` query parameter
@@ -298,7 +309,21 @@ The discovery lane stalls when all workers park on a few long, non-stoppable job
 
 ### Deployment & rollback
 
-The stack ships continuously: a push to `main` triggers the `Docker Images` workflow, which builds and pushes the changed component images to GHCR tagged both `:main` (the moving tag) and `:sha-<short>` (immutable, one per commit). Runtime and build base images are tag-and-digest pinned, and each published application image includes maximum-mode build provenance plus an SBOM before cosign signing. On the prod host (`root@192.168.0.221`) a **systemd-timer digest poller** (`scripts/ops/poll-deploy.sh`, every ~60s — see `scripts/ops/README.md`, the authoritative deploy runbook) resolves the current top-level `:main` OCI manifest digest (including attested indexes) from GHCR and, when it changes, runs `docker compose pull` + `up -d --no-deps` for just that app service (postgres/redis untouched). The poller then gates success on the image's container healthcheck (web `/api/health`, WebAPI `/health/ready`, worker heartbeat) for a bounded window; only a healthy replacement emits the success notification. Pull, recreate, missing-healthcheck, and health-timeout failures make the systemd run fail and send Discord failures. Digest-resolution failures persist per-service counters and alert after three consecutive misses instead of silently freezing deploys. **wud is retired for the app containers** (wud 8.2.2 silently failed to resolve the GHCR digest for these packages); it may still linger in the stack but does not deploy `web`/`webapi`/`service`. On startup the **worker host** applies any pending EF migrations (`Database:AutoMigrate`, enabled in `config/backend.shared.json`) — only the worker can, since it is the migrations assembly; the WebAPI relies on it. So a migration-bearing deploy no longer needs a manual `dotnet ef database update` — which makes the CI **hot-table DDL gate** more important, since a migration that compiles but blocks on a hot table would still auto-apply on the worker. Hot-table index migrations remain the exception and must be applied out-of-band before the deploy (see DEVELOPMENT.md); the CI `migration-apply` job additionally applies the full chain to an ephemeral Postgres on every PR.
+The stack ships continuously: a push to `main` triggers the `Docker Images` workflow, which builds and pushes the changed component images to GHCR tagged both `:main` (the moving tag) and `:sha-<short>` (immutable, one per commit). Runtime and build base images are tag-and-digest pinned, and each published application image includes maximum-mode build provenance plus an SBOM before cosign signing. On the prod host (`root@192.168.0.221`) a **systemd-timer digest poller** (`scripts/ops/poll-deploy.sh`, every ~60s — see `scripts/ops/README.md`, the authoritative deploy runbook) resolves the current top-level `:main` OCI manifest digest (including attested indexes) from GHCR.
+
+Rollout order is worker → WebAPI → web. Before replacing the worker, the poller runs the newly pulled
+worker image once with `Database:AutoMigrate=true` and `Database:MigrateOnly=true`; the process applies
+pending migrations and exits without starting Hangfire. A migration failure quarantines that image digest
+and aborts the remaining rollout, so an API/web release cannot get ahead of its schema. Each replacement is
+then health-gated. On recreate or health failure, the previous local image ID is retagged and restored with
+`--pull never`; the failed digest remains quarantined until `:main` changes. Any component failure aborts
+later components in that poll cycle. PostgreSQL and Redis are never recreated by the poller.
+
+**wud is retired for the app containers** (wud 8.2.2 silently failed to resolve the GHCR digest for
+these packages); it may still linger in the stack but does not deploy `web`/`webapi`/`service`.
+Hot-table index migrations remain the exception and must be applied out-of-band before deployment
+(see DEVELOPMENT.md); the CI `migration-apply` job additionally applies the full chain to ephemeral
+PostgreSQL on every PR.
 
 **Rollback (break-glass).** Because every build also publishes an immutable `:sha-<short>` tag, rolling back is re-pointing the stack at a known-good commit instead of reverting and waiting for a rebuild:
 
@@ -310,13 +335,23 @@ A schema-affecting deploy cannot be fully undone by an image rollback alone — 
 
 ### Metrics-based alerting
 
-The WebAPI (`/metrics`, ASP.NET Core exporter) and worker (`:9464`, standalone Prometheus `HttpListener`) are scraped by Prometheus (`config/monitoring/prometheus.yml`), which Grafana (`grafana/grafana:13.1.0`) reads. Prometheus + Grafana are their own **single-source-of-truth stack** at `config/monitoring/` (`compose.yml` + a prod overlay `compose.prod.yml`), deployed identically local and prod (prod at `/root/transcendence-monitoring/`, synced from the repo — it is *not* part of the app's Portainer stack or the `poll-deploy` pipeline; see `config/monitoring/README.md`). Grafana is file-provisioned (`config/monitoring/grafana/provisioning`). Beyond the worker's own in-app **ingestion** health alerter (`IngestionHealthAlertJob` → `WebhookAlertNotifier`, posts to `Alerts:Webhook:Url`), Grafana owns **infrastructure** alerting so that an external process — not the dying worker — pages:
+The WebAPI (`/metrics`, ASP.NET Core exporter), worker (`:9464`, standalone Prometheus
+`HttpListener`), PostgreSQL exporter, Redis exporter, and host node exporter are scraped by Prometheus
+(`config/monitoring/prometheus.yml`), which Grafana reads. Prometheus + Grafana are their own
+**single-source-of-truth stack** at `config/monitoring/` (`compose.yml` + a prod overlay
+`compose.prod.yml`), deployed identically local and prod (prod at `/root/transcendence-monitoring/`,
+synced from the repo—not part of the app's Portainer stack or the `poll-deploy` pipeline; see
+`config/monitoring/README.md`). Grafana is file-provisioned. Beyond the worker's own in-app
+**ingestion** health alerter, Grafana owns **infrastructure** alerting so an external process pages:
 
-- **Provisioned rules** (`config/monitoring/grafana/provisioning/alerting/rules.yml`, folder `Transcendence`, evaluated every 1m): `WebAPI down` and `Worker down` (`up == 0`, `for 2m`, `noData → Alerting` so a vanished scrape target still pages), `API 5xx error ratio high` (5xx : total request ratio > 5%, `for 5m`), `API p95 latency high` (p95 `http_server_request_duration_seconds` > 1.5s, `for 10m`), and `Host disk space low` (fullest real filesystem < 15% free, `for 15m` — pages *before* a full disk crash-loops Postgres, as it did 2026-07-19). Each is a two-stage query — an *instant* PromQL query (refId A) feeding a Math condition (refId B) — routed via per-rule `notification_settings` so the default notification policy is left untouched.
-- **Scrape targets** (`config/monitoring/prometheus.yml`): `transcendence-webapi:8080` + `transcendence-service:9464` (app `/metrics`) and `transcendence-node-exporter:9100` — a `node-exporter` sidecar in the monitoring stack that mounts the host/CT root read-only (`--path.rootfs=/host`) to expose `node_filesystem_*` for the disk alert.
+- **Provisioned rules** (`config/monitoring/grafana/provisioning/alerting/rules.yml`, folder
+  `Transcendence`, evaluated every 1m): WebAPI, worker, PostgreSQL exporter, and Redis exporter down;
+  PostgreSQL connection use above 80%; Redis rejected connections; API 5xx ratio high; API p95
+  latency high; and host disk space low.
+- **Scrape targets**: application metrics, node-exporter, pinned `postgres_exporter` and
+  `redis_exporter`. PostgreSQL uses a dedicated login granted `pg_monitor`; `pg_stat_statements`,
+  `track_io_timing`, and 64 MB temp-file logging make expensive-query and spill analysis durable.
 - **Contact point** (`config/monitoring/grafana/provisioning/alerting/contactpoints.yml`): a Grafana-native `discord` receiver whose URL is interpolated from the `DISCORD_ALERT_WEBHOOK_URL` env var on the grafana container, so no secret is committed. Grafana 13 refuses to *start* on an empty contact-point URL, so unset falls back to a no-op placeholder URL (Grafana boots; alerts don't deliver anywhere real). Set it in prod (reuse the same webhook as the worker's `Alerts:Webhook:Url`).
-- **Postgres/Redis have no Prometheus target of their own** (only webapi + worker are scraped), so their loss is covered *indirectly*: the worker crash-loops without the DB (→ `Worker down`) and DB/cache faults surface as API 5xx (→ `API 5xx error ratio high`). Add `postgres_exporter`/`redis_exporter` if dedicated DB/Redis-down alerts are ever needed.
-
 This complements the deploy pipeline: poll-deploy catches startup/readiness failures before reporting success, while Grafana catches later regressions and a service that fails after the bounded deploy window.
 
 ### Match Detail Retention and Archival
@@ -529,8 +564,17 @@ The web app never exposes backend tokens to browser JS:
 Backend uses a layered approach (see source and README):
 
 - HybridCache (L1 in-memory + L2 Redis) for derived stats/analytics
+- Leaderboards use a normalized five-minute L2 / 30-second L1 HybridCache key and factory coalescing,
+  preventing identical region/queue/champion/role filters from repeatedly executing the aggregate.
+  `Transcendence.Leaderboards` records request count/duration with bounded kind/cache/result tags.
 - Persistent storage (PostgreSQL) for canonical match/summoner data
 - Summoner stats cache entries are tagged per summoner (`summoner-stats:{summonerId}`) so refresh jobs can invalidate all related stats keys in one operation
+
+Production connection pools are explicitly budgeted below PostgreSQL's `max_connections=100`:
+WebAPI 20 + worker 35, leaving headroom for migrations, monitoring, and operators. `Application Name`
+separates API and worker sessions in `pg_stat_activity`. Container CPU/memory/PID limits bound an
+individual application process; PostgreSQL remains intentionally uncapped so the database—not an
+arbitrary cgroup limit—owns memory/cache policy.
 
 ## Data Access
 

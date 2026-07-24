@@ -171,6 +171,7 @@ builder.Services.AddOpenTelemetry()
         .AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation()
         .AddRuntimeInstrumentation()
+        .AddMeter(LeaderboardTelemetry.MeterName)
         .AddMeter("Microsoft.Extensions.Caching.Hybrid")
         .AddPrometheusExporter());
 

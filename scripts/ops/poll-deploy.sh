@@ -47,9 +47,9 @@ HEALTH_POLL_SECONDS="${POLL_DEPLOY_HEALTH_POLL_SECONDS:-5}"
 
 # service (compose) : container name : ghcr image repo
 SERVICES=(
-  "web:transcendence-web:transcendence-web"
-  "webapi:transcendence-webapi:transcendence-webapi"
   "service:transcendence-service:transcendence-service"
+  "webapi:transcendence-webapi:transcendence-webapi"
+  "web:transcendence-web:transcendence-web"
 )
 
 log() { printf '%s poll-deploy: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
@@ -147,28 +147,96 @@ wait_for_healthy() {
   return 1
 }
 
+rollback_service() {
+  local svc="$1" container="$2" repo="$3" previous_image_id="$4" failed_digest="$5"
+  local failed_file="${STATE_DIR}/${svc}-failed-digest"
+  mkdir -p "$STATE_DIR"
+  printf '%s\n' "$failed_digest" >"$failed_file"
+
+  if [ -z "$previous_image_id" ]; then
+    log "ERROR ${svc}: rollback unavailable because the previous image ID is missing"
+    return 1
+  fi
+
+  log "ROLLBACK ${svc}: restoring previous image ${previous_image_id:0:19}"
+  if ! docker image tag "$previous_image_id" "${REGISTRY_HOST}/${OWNER}/${repo}:main"; then
+    log "ERROR ${svc}: could not retag previous image for rollback"
+    return 1
+  fi
+  if ! docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" \
+      up -d --no-deps --pull never "$svc" >/dev/null 2>&1; then
+    log "ERROR ${svc}: rollback recreate failed"
+    return 1
+  fi
+  if ! wait_for_healthy "$svc" "$container"; then
+    log "ERROR ${svc}: rollback image failed health verification"
+    return 1
+  fi
+
+  log "ROLLED BACK ${svc}; digest ${failed_digest:0:19} is quarantined until :main changes"
+  return 0
+}
+
+run_migrations() {
+  log "MIGRATE service: applying backward-compatible database migrations before replacement"
+  docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" \
+    run --rm --no-deps --pull never \
+    -e Database__AutoMigrate=true \
+    -e Database__MigrateOnly=true \
+    service >/dev/null 2>&1
+}
+
 deploy_one() {
-  local svc="$1" container="$2" repo="$3" remote current
+  local svc="$1" container="$2" repo="$3" remote current previous_image_id failed_file failed_digest
   remote="$(remote_digest "$repo")"
   if [ -z "$remote" ]; then record_resolution_failure "$svc" remote; return 1; fi
   clear_resolution_failure "$svc" remote
+  failed_file="${STATE_DIR}/${svc}-failed-digest"
+  failed_digest=""
+  if [ -r "$failed_file" ]; then
+    read -r failed_digest <"$failed_file" || failed_digest=""
+  fi
+  if [ "$remote" = "$failed_digest" ]; then
+    log "SKIP ${svc}: remote digest ${remote:0:19} previously failed and remains quarantined"
+    return 0
+  fi
   current="$(local_digest "$container")"
   if [ -z "$current" ]; then record_resolution_failure "$svc" local; return 1; fi
   clear_resolution_failure "$svc" local
-  if [ "$remote" = "$current" ]; then return 0; fi
+  if [ "$remote" = "$current" ]; then
+    rm -f "$failed_file"
+    return 0
+  fi
+  previous_image_id="$(docker inspect "$container" --format '{{.Image}}' 2>/dev/null)"
 
   log "UPDATE ${svc}: ${current:0:19} -> ${remote:0:19}; deploying"
-  if [ "${DRY_RUN:-0}" = "1" ]; then log "DRY_RUN ${svc}: would compose pull + up -d --no-deps"; return 0; fi
+  if [ "${DRY_RUN:-0}" = "1" ]; then
+    log "DRY_RUN ${svc}: would compose pull, migrate if needed, recreate, and health-check"
+    return 0
+  fi
   if ! docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" pull "$svc" >/dev/null 2>&1; then
     log "ERROR ${svc}: pull failed"; notify "⚠️ deploy: ${svc} pull failed"; return 1
   fi
-  if ! docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --no-deps "$svc" >/dev/null 2>&1; then
-    log "ERROR ${svc}: up -d failed"; notify "🚨 deploy: ${svc} up -d FAILED"; return 1
-  fi
-  if ! wait_for_healthy "$svc" "$container"; then
-    notify "🚨 deploy: ${svc} failed post-deploy health verification"
+  if [ "$svc" = "service" ] && ! run_migrations; then
+    mkdir -p "$STATE_DIR"
+    printf '%s\n' "$remote" >"$failed_file"
+    log "ERROR ${svc}: pre-deploy migration failed; existing worker remains active"
+    notify "🚨 deploy: ${svc} migration failed; release quarantined"
     return 1
   fi
+  if ! docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" \
+      up -d --no-deps --pull never "$svc" >/dev/null 2>&1; then
+    log "ERROR ${svc}: up -d failed"
+    rollback_service "$svc" "$container" "$repo" "$previous_image_id" "$remote" || true
+    notify "🚨 deploy: ${svc} up -d failed; rollback attempted"
+    return 1
+  fi
+  if ! wait_for_healthy "$svc" "$container"; then
+    rollback_service "$svc" "$container" "$repo" "$previous_image_id" "$remote" || true
+    notify "🚨 deploy: ${svc} failed health verification; rollback attempted"
+    return 1
+  fi
+  rm -f "$failed_file"
   local rev
   rev="$(docker inspect "$container" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' 2>/dev/null)"
   log "DEPLOYED ${svc} -> rev ${rev:0:12}"
@@ -184,7 +252,11 @@ main() {
   local rc=0
   for entry in "${SERVICES[@]}"; do
     IFS=':' read -r svc container repo <<<"$entry"
-    deploy_one "$svc" "$container" "$repo" || rc=1
+    if ! deploy_one "$svc" "$container" "$repo"; then
+      rc=1
+      log "ABORT remaining services: ${svc} did not deploy successfully"
+      break
+    fi
   done
   docker image prune -f >/dev/null 2>&1 || true
   exit $rc

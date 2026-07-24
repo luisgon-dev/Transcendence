@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
+  cacheComponents: true,
   images: {
     // Most remote images are small Data Dragon assets with versioned URLs. Keep transformed
     // WebP results warm for a week; this cuts repeated optimizer work while bounding staleness

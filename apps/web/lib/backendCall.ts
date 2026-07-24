@@ -1,5 +1,9 @@
 import "server-only";
 
+import {
+  buildBackendRequestHeaders,
+  isExplicitlyCacheableBackendRequest
+} from "@/lib/backendRequestHeaders";
 import { getBackendTimeoutMs } from "@/lib/env";
 import { fetchWithTimeout, isAbortError } from "@/lib/fetchWithTimeout";
 import { newRequestId } from "@/lib/requestId";
@@ -30,8 +34,11 @@ export async function fetchBackendJson<T>(
     timeoutMs?: number;
   } = {}
 ): Promise<BackendJsonResult<T>> {
-  const requestId = newRequestId();
-  const started = Date.now();
+  const cacheable = isExplicitlyCacheableBackendRequest(init);
+  // Synchronous randomness is intentionally avoided while Next prerenders a cacheable read.
+  // The ID is diagnostic-only in that path and is not sent upstream or used as cache identity.
+  const requestId = cacheable ? "cached-read" : newRequestId();
+  const started = cacheable ? null : Date.now();
   const effectiveTimeoutMs = timeoutMs ?? getBackendTimeoutMs();
 
   try {
@@ -39,16 +46,13 @@ export async function fetchBackendJson<T>(
       url,
       {
         ...init,
-        headers: {
-          ...(init.headers ?? {}),
-          "x-trn-request-id": requestId
-        }
+        headers: buildBackendRequestHeaders(init, requestId)
       },
       { timeoutMs: effectiveTimeoutMs }
     );
 
     const body = (await safeReadJson(res)) as T | null;
-    const durationMs = Date.now() - started;
+    const durationMs = started === null ? 0 : Date.now() - started;
 
     if (!res.ok) {
       return {
@@ -84,7 +88,7 @@ export async function fetchBackendJson<T>(
       body
     };
   } catch (err: unknown) {
-    const durationMs = Date.now() - started;
+    const durationMs = started === null ? 0 : Date.now() - started;
     return {
       requestId,
       url,

@@ -6,11 +6,8 @@
 # / 0 (ok) and is the alert condition. Firing alerts route to the `transcendence-discord` contact
 # point via per-rule notification_settings (leaving the default notification policy untouched).
 #
-# Coverage: WebAPI + worker liveness (up==0), API 5xx error ratio, API p95 latency. Postgres/Redis
-# have no Prometheus target of their own (only webapi + worker are scraped), so their loss is covered
-# *indirectly* — the worker crash-loops without the DB (→ WorkerDown) and DB/cache failures surface as
-# API 5xx (→ ApiHighErrorRate). Add postgres_exporter/redis_exporter if dedicated DB/Redis-down
-# alerts are ever needed.
+# Coverage: WebAPI, worker, Postgres exporter, and Redis exporter liveness; PostgreSQL connection
+# saturation; Redis rejected connections; API 5xx error ratio; API p95 latency; and host disk capacity.
 apiVersion: 1
 
 groups:
@@ -112,6 +109,201 @@ groups:
         annotations:
           summary: Transcendence worker is not reporting to Prometheus
           description: The transcendence-worker target has been down for over 2 minutes — all ingestion/analytics jobs are halted. NB the worker crash-loops if Postgres is unreachable, so this also fires on a DB outage.
+        notification_settings:
+          receiver: transcendence-discord
+          group_by:
+            - alertname
+            - grafana_folder
+
+      # --- PostgreSQL metrics target down ---------------------------------------------------------
+      - uid: trn-postgres-exporter-down
+        title: PostgreSQL metrics unavailable
+        condition: B
+        for: 2m
+        noDataState: Alerting
+        execErrState: Alerting
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              editorMode: code
+              expr: up{job="transcendence-postgres"}
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: prometheus
+                uid: prometheus
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: math
+              expression: $A < 1
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: __expr__
+                uid: __expr__
+        labels:
+          severity: critical
+        annotations:
+          summary: PostgreSQL metrics target is unavailable
+          description: Prometheus cannot scrape postgres_exporter. PostgreSQL may be down, unreachable, or rejecting the monitoring role.
+        notification_settings:
+          receiver: transcendence-discord
+          group_by:
+            - alertname
+            - grafana_folder
+
+      # --- Redis metrics target down --------------------------------------------------------------
+      - uid: trn-redis-exporter-down
+        title: Redis metrics unavailable
+        condition: B
+        for: 2m
+        noDataState: Alerting
+        execErrState: Alerting
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              editorMode: code
+              expr: up{job="transcendence-redis"}
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: prometheus
+                uid: prometheus
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: math
+              expression: $A < 1
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: __expr__
+                uid: __expr__
+        labels:
+          severity: critical
+        annotations:
+          summary: Redis metrics target is unavailable
+          description: Prometheus cannot scrape redis_exporter. Redis may be down or unreachable from the monitoring network.
+        notification_settings:
+          receiver: transcendence-discord
+          group_by:
+            - alertname
+            - grafana_folder
+
+      # --- Database/cache saturation ---------------------------------------------------------------
+      - uid: trn-postgres-connections-high
+        title: PostgreSQL connections high
+        condition: B
+        for: 10m
+        noDataState: OK
+        execErrState: Alerting
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              editorMode: code
+              expr: sum(pg_stat_database_numbackends{datname="transcendence"}) / max(pg_settings_max_connections)
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: prometheus
+                uid: prometheus
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: math
+              expression: $A > 0.8
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: __expr__
+                uid: __expr__
+        labels:
+          severity: warning
+        annotations:
+          summary: PostgreSQL connection use above 80%
+          description: PostgreSQL has used over 80% of max_connections for 10 minutes. Preserve operator and migration headroom before increasing application pools.
+        notification_settings:
+          receiver: transcendence-discord
+          group_by:
+            - alertname
+            - grafana_folder
+
+      - uid: trn-redis-rejected-connections
+        title: Redis rejecting connections
+        condition: B
+        for: 2m
+        noDataState: OK
+        execErrState: Alerting
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              editorMode: code
+              expr: increase(redis_rejected_connections_total[5m])
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: prometheus
+                uid: prometheus
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: math
+              expression: $A > 0
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: __expr__
+                uid: __expr__
+        labels:
+          severity: critical
+        annotations:
+          summary: Redis has rejected client connections
+          description: Redis rejected one or more connections in the last five minutes. Cache and distributed coordination may be degraded.
         notification_settings:
           receiver: transcendence-discord
           group_by:

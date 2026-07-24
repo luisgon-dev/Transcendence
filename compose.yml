@@ -1,7 +1,6 @@
 name: transcendence
 
 x-app-env: &app-env
-  ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
   ConnectionStrings__Redis: ${REDIS_CONNECTION}
   RiotApi__League__ApiKey: ${RIOT_API_KEY_LOL}
 
@@ -34,6 +33,12 @@ services:
       - "effective_cache_size=${POSTGRES_EFFECTIVE_CACHE_SIZE:-4GB}"
       - "-c"
       - "maintenance_work_mem=${POSTGRES_MAINTENANCE_WORK_MEM:-64MB}"
+      - "-c"
+      - "shared_preload_libraries=${POSTGRES_SHARED_PRELOAD_LIBRARIES:-pg_stat_statements}"
+      - "-c"
+      - "track_io_timing=${POSTGRES_TRACK_IO_TIMING:-on}"
+      - "-c"
+      - "log_temp_files=${POSTGRES_LOG_TEMP_FILES_KB:-65536}"
     shm_size: "${POSTGRES_SHM_SIZE:-64mb}"
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
@@ -73,6 +78,9 @@ services:
       dockerfile: apps/web/Dockerfile
     container_name: transcendence-web
     restart: unless-stopped
+    cpus: "${WEB_CPUS:-2.0}"
+    mem_limit: "${WEB_MEMORY_LIMIT:-1g}"
+    pids_limit: 256
     environment:
       NODE_ENV: production
       PORT: 3000
@@ -96,6 +104,9 @@ services:
       dockerfile: Transcendence.WebAPI/Dockerfile
     container_name: transcendence-webapi
     restart: unless-stopped
+    cpus: "${WEBAPI_CPUS:-4.0}"
+    mem_limit: "${WEBAPI_MEMORY_LIMIT:-2g}"
+    pids_limit: 512
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
@@ -120,6 +131,7 @@ services:
       Auth__RiotRso__ClientSecret: ${RIOT_RSO_CLIENT_SECRET:-}
       Auth__RiotRso__RedirectUri: ${RIOT_RSO_REDIRECT_URI:-https://transcend.kronic.one/api/session/riot/callback}
       OperationalLogs__DirectoryPath: /var/log/transcendence
+      ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Application Name=transcendence-webapi;Maximum Pool Size=${WEBAPI_DB_POOL_MAX:-20};Minimum Pool Size=0
       <<: *app-env
     ports:
       - "${WEBAPI_PORT:-8080}:8080"
@@ -140,9 +152,13 @@ services:
       dockerfile: Transcendence.Service/Dockerfile
     container_name: transcendence-service
     restart: unless-stopped
+    cpus: "${SERVICE_CPUS:-8.0}"
+    mem_limit: "${SERVICE_MEMORY_LIMIT:-6g}"
+    pids_limit: 1024
     environment:
       DOTNET_ENVIRONMENT: Production
       OperationalLogs__DirectoryPath: /var/log/transcendence
+      ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Application Name=transcendence-worker;Maximum Pool Size=${SERVICE_DB_POOL_MAX:-35};Minimum Pool Size=0
       <<: *app-env
     depends_on:
       postgres:

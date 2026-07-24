@@ -1,8 +1,6 @@
 import { ImageResponse } from "next/og";
 import type { NextRequest } from "next/server";
 
-export const runtime = "edge";
-
 function readParam(request: NextRequest, name: string, fallback: string, maxLength: number): string {
   const value = request.nextUrl.searchParams.get(name)?.trim();
   return (value || fallback).slice(0, maxLength);

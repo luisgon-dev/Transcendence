@@ -81,6 +81,37 @@ services:
     networks:
       - monitor
 
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.19.1
+    container_name: transcendence-postgres-exporter
+    restart: unless-stopped
+    command:
+      - "--collector.stat_statements"
+      - "--collector.stat_activity_autovacuum"
+      - "--collector.stat_checkpointer"
+    environment:
+      DATA_SOURCE_URI: "transcendence-postgres:5432/${POSTGRES_EXPORTER_DATABASE:-transcendence}?sslmode=disable"
+      DATA_SOURCE_USER: "${POSTGRES_EXPORTER_USER:-postgres}"
+      DATA_SOURCE_PASS: "${POSTGRES_EXPORTER_PASSWORD:-changme}"
+      PG_EXPORTER_COLLECTION_TIMEOUT: "15s"
+    labels:
+      wud.watch: "false"
+    networks:
+      - monitor
+
+  redis-exporter:
+    image: quay.io/oliver006/redis_exporter:v1.84.0
+    container_name: transcendence-redis-exporter
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: "redis://transcendence-redis:6379"
+      REDIS_EXPORTER_CONNECTION_TIMEOUT: "5s"
+      REDIS_EXPORTER_INCL_SYSTEM_METRICS: "true"
+    labels:
+      wud.watch: "false"
+    networks:
+      - monitor
+
 volumes:
   prometheus_data:
   grafana_data:

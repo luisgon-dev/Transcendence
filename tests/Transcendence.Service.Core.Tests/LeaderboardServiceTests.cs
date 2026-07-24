@@ -1,7 +1,10 @@
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Leaderboards.Implementations;
+using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.RiotApi;
 
 namespace Transcendence.Service.Core.Tests;
@@ -17,7 +20,8 @@ public sealed class LeaderboardServiceTests
                 new RegionalLeaderboardRow(Guid.NewGuid(), "First", "NA1", 1, "CHALLENGER", "I", 900, 100, 50, DateTime.UtcNow),
                 new RegionalLeaderboardRow(Guid.NewGuid(), "Second", "NA1", 2, "GRANDMASTER", "I", 700, 80, 40, DateTime.UtcNow)
             ]);
-        var service = new LeaderboardService(repository.Object);
+        using var services = BuildServices();
+        var service = CreateService(repository.Object, services);
 
         var result = await service.GetAsync("NA1", "solo", null, null, 2, 5);
 
@@ -36,7 +40,8 @@ public sealed class LeaderboardServiceTests
                 Row("Master", "MASTER", 30, 12, 40, 20, 50, 100, 40, 60),
                 Row("MoreGames", "PLATINUM", 5, 3, 50, 30, 60, 120, 60, 80)
             ]);
-        var service = new LeaderboardService(repository.Object);
+        using var services = BuildServices();
+        var service = CreateService(repository.Object, services);
 
         var result = await service.GetAsync("KR", "solo", 157, "mid", 10, 10);
 
@@ -63,6 +68,39 @@ public sealed class LeaderboardServiceTests
     {
         LeaderboardService.NormalizeRole(input).Should().Be(expected);
     }
+
+    [Fact]
+    public async Task Champion_leaderboard_reuses_cached_response_for_identical_filters()
+    {
+        var repository = new Mock<ILeaderboardRepository>();
+        repository.Setup(x => x.GetChampionAsync("KR", 420, 157, "MIDDLE", 10, 10, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Row("Cached", "MASTER", 20, 10, 20, 12, 30, 40, 20, 5)]);
+        using var services = BuildServices();
+        var service = CreateService(repository.Object, services);
+
+        var first = await service.GetAsync("kr", "solo", 157, "mid", 10, 10);
+        var second = await service.GetAsync("KR", "RANKED_SOLO_DUO", 157, "MIDDLE", 10, 10);
+
+        second.Should().BeEquivalentTo(first);
+        repository.Verify(
+            x => x.GetChampionAsync("KR", 420, 157, "MIDDLE", 10, 10, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    private static ServiceProvider BuildServices()
+    {
+        var services = new ServiceCollection();
+        services.AddHybridCache();
+        return services.BuildServiceProvider();
+    }
+
+    private static LeaderboardService CreateService(
+        ILeaderboardRepository repository,
+        IServiceProvider services) =>
+        new(
+            repository,
+            services.GetRequiredService<HybridCache>(),
+            new LeaderboardTelemetry());
 
     private static ChampionLeaderboardRow Row(
         string gameName,

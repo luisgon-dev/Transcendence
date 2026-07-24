@@ -5,9 +5,6 @@ import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { SummonerProfileClient } from "@/components/SummonerProfileClient";
 import type {
   ApiErrorResponse,
-  MatchSummary,
-  PagedResultDto,
-  RankHistoryEntry,
   SummonerLookupResponse
 } from "@/components/lol-profile/shared";
 import { fetchBackendJson } from "@/lib/backendCall";
@@ -274,29 +271,9 @@ async function SummonerProfileData({
     };
   }
 
-  let initialHistory: PagedResultDto<MatchSummary> | null = null;
-  let initialRankHistory: RankHistoryEntry[] | null = null;
-
-  const initialProfile = initialLookup?.status === "ready" ? initialLookup.profile : null;
-  if (initialProfile?.summonerId) {
-    const summonerId = encodeURIComponent(initialProfile.summonerId);
-    const baseUrl = `${getBackendBaseUrl()}/api/lol/summoners/${summonerId}`;
-    const [historyResult, rankHistoryResult] = await Promise.all([
-      fetchBackendJson<PagedResultDto<MatchSummary>>(
-        `${baseUrl}/matches/recent?page=${initialPage}&pageSize=20`,
-        { cache: "no-store" }
-      ),
-      fetchBackendJson<RankHistoryEntry[]>(`${baseUrl}/stats/rank-history`, {
-        cache: "no-store"
-      })
-    ]);
-
-    if (historyResult.ok) initialHistory = historyResult.body;
-    if (rankHistoryResult.ok && Array.isArray(rankHistoryResult.body)) {
-      initialRankHistory = rankHistoryResult.body;
-    }
-  }
-
+  // Profile identity and rank are the above-the-fold answer. Match and rank history already
+  // have resilient client fetchers, so do not hold the first streamed profile response behind
+  // two additional backend reads. This also removes their JSON from the initial RSC payload.
   const [championResult, itemResult, spellResult, runeResult] = await staticDataPromise;
 
   return (
@@ -311,8 +288,8 @@ async function SummonerProfileData({
       initialSort={initialSort}
       initialChampion={initialChampion}
       initialExpandMatchId={initialExpandMatchId}
-      initialHistory={initialHistory}
-      initialRankHistory={initialRankHistory}
+      initialHistory={null}
+      initialRankHistory={null}
       initialChampionStatic={championResult.status === "fulfilled" ? championResult.value : null}
       initialItemStatic={itemResult.status === "fulfilled" ? itemResult.value : null}
       initialSpellStatic={spellResult.status === "fulfilled" ? spellResult.value : null}

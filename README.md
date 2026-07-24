@@ -177,9 +177,10 @@ docker compose -f config/monitoring/compose.yml up -d
 # Grafana → http://localhost:3300 (admin + file-backed password)
 ```
 
-Grafana provisions five dashboards (fleet overview, read API, worker runtime, Riot API, and ingestion
-rate gate) plus alert rules. See [`config/monitoring/README.md`](config/monitoring/README.md) for local
-configuration and the production secret/deploy workflow.
+Grafana provisions five dashboards plus alert rules, while Prometheus scrapes the API, worker, host,
+PostgreSQL, and Redis through dedicated exporters. See
+[`config/monitoring/README.md`](config/monitoring/README.md) for local configuration, least-privilege
+database credentials, and the production deploy workflow.
 
 </details>
 

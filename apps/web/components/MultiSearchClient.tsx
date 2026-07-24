@@ -101,11 +101,10 @@ export function MultiSearchClient() {
     <div className="grid gap-6">
       <header className="page-hero grid gap-5 p-5 md:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)] md:p-7">
         <div className="max-w-2xl">
-          <p className="type-kicker text-primary">Champ select scout</p>
-          <h1 className="mt-3 type-page-title">Read the lobby before the game starts.</h1>
+          <p className="type-kicker text-primary">Multi-search</p>
+          <h1 className="mt-3 type-page-title">Compare your lobby.</h1>
           <p className="mt-3 max-w-[62ch] text-fg/72">
-            Paste up to five Riot IDs. Transcendence compares rank, main role, tracked form,
-            champion pool, and possible autofill pressure from stored match data.
+            Paste up to five Riot IDs to compare rank, main role, recent form, and champion pool.
           </p>
         </div>
         <div className="surface-subtle self-end rounded-card px-4 py-3">
@@ -177,8 +176,7 @@ export function MultiSearchClient() {
         <div className="rounded-card border border-dashed border-border px-6 py-10 text-center">
           <p className="type-section">Lobby comparison appears here</p>
           <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-muted">
-            Results use players already stored in Transcendence. Missing players are clearly marked,
-            so an incomplete sample never looks like a confident team read.
+            Results use stored profiles. Missing players are marked.
           </p>
         </div>
       )}

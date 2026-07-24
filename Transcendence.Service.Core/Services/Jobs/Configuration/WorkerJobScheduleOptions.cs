@@ -33,6 +33,8 @@ public class WorkerJobScheduleOptions
     public bool EnableRuneSelectionIntegrityBackfill { get; set; } = true;
     public bool EnableHighEloProfileRefresh { get; set; } = true;
     public string HighEloProfileRefreshCron { get; set; } = "0 */12 * * *";
+    public bool EnableProRosterDiscovery { get; set; } = true;
+    public string ProRosterDiscoveryCron { get; set; } = "15 3 * * *";
     public bool EnableRefreshLockLifecycleCleanup { get; set; } = true;
     public int RefreshLockLifecycleForensicsWindowMinutes { get; set; } = 30;
     public int RefreshLockLifecycleCleanupBatchSize { get; set; } = 250;

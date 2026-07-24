@@ -31,6 +31,7 @@ using Transcendence.WebAPI.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 ConfigureSharedBackendConfiguration(builder.Configuration, builder.Environment);
+var isOpenApiExport = ParseBool(builder.Configuration["OpenApi:ExportOnly"], false);
 builder.Logging.AddOperationalFileLogger(builder.Configuration, defaultServiceName: "webapi");
 var requireJwtKeyInDevelopment = ParseBool(builder.Configuration["Auth:Jwt:RequireKeyInDevelopment"], false);
 var bootstrapApiKey = builder.Configuration["Auth:BootstrapApiKey"];
@@ -281,13 +282,17 @@ builder.Services.AddAuthorization(options =>
             .RequireRole(SystemRoles.Admin));
 });
 
-// Configure Hangfire client (no server) for enqueueing jobs
-builder.Services.AddHangfire(config =>
-    config.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
-        .UseSimpleAssemblyNameTypeSerializer()
-        .UseRecommendedSerializerSettings()
-        .UsePostgreSqlStorage(options =>
-            options.UseNpgsqlConnection(builder.Configuration.GetConnectionString("MainDatabase"))));
+// Configure Hangfire client (no server) for enqueueing jobs. Swagger export does not
+// resolve controllers or enqueue work, so avoid initializing PostgreSQL-backed job storage.
+if (!isOpenApiExport)
+{
+    builder.Services.AddHangfire(config =>
+        config.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+            .UseSimpleAssemblyNameTypeSerializer()
+            .UseRecommendedSerializerSettings()
+            .UsePostgreSqlStorage(options =>
+                options.UseNpgsqlConnection(builder.Configuration.GetConnectionString("MainDatabase"))));
+}
 
 // Behind nginx + the Next.js BFF (which forwards X-Forwarded-For verbatim), honor the forwarded
 // headers so RemoteIpAddress is the real client rather than the proxy — this is what restores
@@ -340,8 +345,9 @@ app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => fa
 // Readiness: dependencies (PostgreSQL, Redis) reachable — gates traffic / deploy readiness.
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
 
-using (var scope = app.Services.CreateScope())
+if (!isOpenApiExport)
 {
+    using var scope = app.Services.CreateScope();
     var bootstrap = scope.ServiceProvider.GetRequiredService<IAdminBootstrapService>();
     var bootstrapLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
         .CreateLogger("AdminBootstrap");

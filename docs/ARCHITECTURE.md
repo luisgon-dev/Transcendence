@@ -58,7 +58,7 @@ Transcendence is a backend + web monorepo:
 - Frontend analysis routes:
   - `/lol/tierlist`
   - `/lol/champions/*` is the unified champion surface: win rates, builds (with the full rune tree), confidence-ranked same-team partner synergy, inline matchups summary, a sortable "All Matchups" table (`?sort=winRate|games`, anchored at `#matchups`), and a quick link to pro builds. The page reads `/api/lol/analytics/champions/{championId}/profile` so the role selection, cached build, synergy, and matchup aggregates arrive through one backend request instead of a client-side analytics waterfall. The standalone `/lol/matchups` surface was removed; `/lol/matchups` and `/lol/matchups/:championId` now 308-redirect into `/lol/champions/*` (preserving query state) via `next.config.mjs` `redirects()`.
-  - `/lol/pro-builds/*`: the **Pro Solo Queue Builds** surface is explicitly scoped to ranked solo-queue observations from tracked pros/high-elo specialists; it is not an esports schedule, tournament draft, or official-results feed. The index hero is a champion playrate ranking with a `scope` segmented control (Pro / High-Elo / All) plus a public "Tracked Pros" roster panel. The toolbar, playrate table, roster, and champion search render from the first fetch batch; the fan-out recent-match feed and its item map stream independently behind `<Suspense>` with a stable row skeleton.
+  - `/lol/pro-builds/*`: the **Pro Solo Queue Builds** surface is explicitly scoped to ranked solo-queue observations from tracked pros and verified high-elo one-tricks; it is not an esports schedule, tournament draft, or official-results feed. The default scope is reviewed pros only, with one switch to include one-tricks, plus a public "Tracked Pros" roster panel. The toolbar, playrate table, roster, and champion search render from the first fetch batch; the fan-out recent-match feed and its item map stream independently behind `<Suspense>` with a stable row skeleton.
   - `/lol/items/*` and `/lol/runes/*` are the Build Atlas: searchable index and detail pages for
     resource pick rate, win rate, sample size, and champion-role fit. The indexes, detail pages,
     header, command palette, landing discovery, and sitemap all expose the new surfaces.
@@ -422,16 +422,26 @@ detail is archived off-box and pruned to keep the database from growing unbounde
 
 ### Pro Roster and Solo-Queue Builds
 
-- Tracked pro/high-ELO roster entries are stored in `TrackedProSummoners` with optional pro/team metadata.
-- The same roster table is also used as a high-value analytics seed source. Automated high-elo refresh writes active roster rows with `IsPro=false`; pro-build analytics can select `pro`, `highelo`, or `all` roster scope.
-- Admin API (`/api/admin/pro-summoners`) allows manual curation and updates.
+- Tracked pro/high-ELO roster entries are stored in `TrackedProSummoners` with optional pro/team
+  metadata, source provenance, verification time, and one-trick evidence.
+- `pro-roster-discovery` reads Leaguepedia's structured player directory daily and upserts
+  `ProPlayerDiscoveryCandidates`. Because community-maintained solo-queue IDs can be incomplete or
+  stale, candidates remain private until an admin confirms the current Riot ID and platform. Approval
+  records the source external ID on the durable PUUID-backed roster row.
+- `high-elo-profile-refresh` still uses Riot's current Master/Grandmaster/Challenger leagues as the
+  discovery pool, but only sets `IsHighEloOtp` when the account has a complete latest-50 Ranked
+  Solo/Duo sample with at least 30 games on one champion. The job stores champion, sample, and
+  evaluation evidence and retires legacy auto-created rows that lack that evidence.
+- The same roster table is also used as a high-value analytics seed source. Pro-build analytics can
+  select `pro`, `highelo`, or `all`; missing/invalid scope defaults to `pro`.
+- Admin API (`/api/admin/pro-summoners`) allows manual curation, candidate approval/rejection, and updates.
 - Champion pro-build analytics joins tracked roster participants against ranked solo/duo match data using the selected roster scope for:
   - recent tracked ranked solo-queue matches
   - top players
   - common builds
 - When `role` is omitted the endpoint resolves the champion's most-played lane from the cached win-rate aggregate (mirrors the `/profile` endpoint) and computes lane-scoped pro builds, so the default `/lol/pro-builds/{championId}` landing view is a single lane rather than the heavy cross-role aggregate. The cross-role path (no resolvable lane) bounds its participant scan to the most-recent `Analytics:Compute:ProBuildMaxParticipantRows` rows (default 1500): without a `TeamPosition` filter, `role=ALL` + `scope=all` + `region=ALL` over a multi-thousand-PUUID roster otherwise materializes the heavy item/rune projection unbounded and command-timeouts.
 - Cross-champion pro analytics live on a dedicated `ProAnalyticsController` (`/api/lol/analytics/pro/*`, separate from the `{championId}` champion routes to avoid route ambiguity):
-  - `GET /pro/champions` ranks champions by tracked-player pick frequency. A `scope` parameter selects the roster predicate — `pro` (`IsPro`), `highelo` (`IsHighEloOtp`), or `all` (`IsPro || IsHighEloOtp`, the default) — so the surface stays populated from the continuously-ingested high-elo roster even when the manually-curated `IsPro` set is sparse. Aggregation mirrors the pro-build compute: materialize `{ ChampionId, Win, Puuid }` scalar rows (ranked solo/duo, patch, region→platform), then group in memory (games / wins / win rate / distinct players). Cached 24h (`proplayrate` tag).
+  - `GET /pro/champions` ranks champions by tracked-player pick frequency. A `scope` parameter selects the roster predicate — `pro` (`IsPro`, the default), `highelo` (`IsHighEloOtp`), or `all` (`IsPro || IsHighEloOtp`). Aggregation mirrors the pro-build compute: materialize `{ ChampionId, Win, Puuid }` scalar rows (ranked solo/duo, patch, region→platform), then group in memory (games / wins / win rate / distinct players). Cached 24h (`proplayrate` tag).
   - `GET /pro/players` exposes a public, slimmed projection of the `IsActive && IsPro` roster (no internal identifiers) for the Tracked Pros panel. Cached 24h (`proroster` tag).
   - Both tags compose under the shared `analytics` cache tag, so the existing analytics cache invalidation clears them.
 

@@ -6,6 +6,7 @@ import type { components } from "@transcendence/api-client";
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { AnalyticsRegionFilter } from "@/components/AnalyticsRegionFilter";
 import { BackendErrorCard } from "@/components/BackendErrorCard";
+import { ProScopeToggle } from "@/components/ProScopeToggle";
 import { Card } from "@/components/ui/Card";
 import { DataBar } from "@/components/ui/DataBar";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -26,16 +27,10 @@ type ProMatchBuildDto = components["schemas"]["ProMatchBuildDto"];
 type ProChampionPlayrateResponse = components["schemas"]["ProChampionPlayrateResponse"];
 type ProRosterResponse = components["schemas"]["ProRosterResponse"];
 
-const SCOPE_OPTIONS = [
-  { value: "all", label: "All" },
-  { value: "pro", label: "Pros" },
-  { value: "highelo", label: "High-Elo" }
-] as const;
-
 const SCOPE_TITLE: Record<ProBuildScope, string> = {
-  all: "Pro & High-Elo",
+  all: "Pro and One-Trick",
   pro: "Pro",
-  highelo: "High-Elo"
+  highelo: "One-Trick"
 };
 
 const SCOPE_NOUN: Record<ProBuildScope, string> = {
@@ -56,7 +51,7 @@ function buildProHomeHref({
   query: string | null;
 }) {
   const params = new URLSearchParams();
-  if (scope && scope !== "all") params.set("scope", scope);
+  if (scope && scope !== "pro") params.set("scope", scope);
   if (region && region !== "ALL") params.set("region", region);
   if (query) params.set("q", query);
   const qs = params.toString();
@@ -127,6 +122,7 @@ export default async function ProBuildsIndexPage({
   );
   const championQuery = normalizeChampionQuery(resolvedSearchParams?.q);
   const scope = normalizeProBuildScope(resolvedSearchParams?.scope);
+  const includeOneTricks = scope !== "pro";
   const tierListQuery = new URLSearchParams();
   if (activeRegion !== "ALL") tierListQuery.set("region", activeRegion);
 
@@ -211,7 +207,7 @@ export default async function ProBuildsIndexPage({
   return (
     <div className="grid gap-4">
       <Toolbar
-        eyebrow="League · Ranked Solo Queue"
+        eyebrow="Ranked Solo Queue"
         title="Pro Solo Queue Builds"
         meta={
           <>
@@ -233,10 +229,8 @@ export default async function ProBuildsIndexPage({
       />
 
       <Card className="bg-surface-2/50 px-5 py-4">
-        <p className="type-overline text-muted">Coverage note</p>
-        <p className="type-ui mt-1 text-fg/80">
-          This surface follows tracked professional players and high-elo specialists in ranked solo
-          queue. It does not represent tournament drafts, esports schedules, or official match results.
+        <p className="type-ui text-fg/80">
+          Ranked Solo/Duo matches from tracked professional accounts. Tournament matches are not included.
         </p>
       </Card>
 
@@ -248,19 +242,14 @@ export default async function ProBuildsIndexPage({
               Champions most picked by tracked {SCOPE_NOUN[scope]} this patch.
             </p>
           </div>
-          <div role="group" aria-label="Pro pool scope" className="flex items-center gap-2 text-xs">
-            {SCOPE_OPTIONS.map((option) => (
-              <Link
-                key={option.value}
-                href={buildProHomeHref({ scope: option.value, region: activeRegion, query: championQuery })}
-                className="control-tab type-ui px-3 py-2"
-                data-active={option.value === scope}
-                aria-current={option.value === scope ? "page" : undefined}
-              >
-                {option.label}
-              </Link>
-            ))}
-          </div>
+          <ProScopeToggle
+            checked={includeOneTricks}
+            href={buildProHomeHref({
+              scope: includeOneTricks ? "pro" : "all",
+              region: activeRegion,
+              query: championQuery
+            })}
+          />
         </div>
 
         {playrateChampions.length === 0 ? (
@@ -334,7 +323,7 @@ export default async function ProBuildsIndexPage({
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="type-section">Tracked Pros</h2>
-              <p className="type-ui mt-1 text-muted">Pro players we follow — open any profile.</p>
+              <p className="type-ui mt-1 text-muted">Open a tracked pro profile.</p>
             </div>
             <span className="type-tabular tabular-nums text-muted">{rosterPlayers.length} players</span>
           </div>
@@ -373,7 +362,7 @@ export default async function ProBuildsIndexPage({
         <h2 className="type-section">Search Champions</h2>
         <form action="/lol/pro-builds" method="get" className="mt-3 flex flex-wrap items-center gap-2">
           {activeRegion !== "ALL" ? <input type="hidden" name="region" value={activeRegion} /> : null}
-          {scope !== "all" ? <input type="hidden" name="scope" value={scope} /> : null}
+          {scope !== "pro" ? <input type="hidden" name="scope" value={scope} /> : null}
           <input
             type="text"
             name="q"

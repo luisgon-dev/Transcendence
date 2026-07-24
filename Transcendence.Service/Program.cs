@@ -161,6 +161,7 @@ builder.Services.Configure<RuneSelectionIntegrityBackfillJobOptions>(
     builder.Configuration.GetSection("Jobs:RuneSelectionIntegrityBackfill"));
 builder.Services.Configure<SummonerBootstrapOptions>(builder.Configuration.GetSection("Jobs:SummonerBootstrap"));
 builder.Services.Configure<MultiRegionIngestionOptions>(builder.Configuration.GetSection("Jobs:MultiRegionIngestion"));
+builder.Services.Configure<ProRosterDiscoveryOptions>(builder.Configuration.GetSection("Jobs:ProRosterDiscovery"));
 builder.Services.Configure<ChampionAnalyticsComputeOptions>(builder.Configuration.GetSection("Analytics:Compute"));
 builder.Services.Configure<TieringOptions>(builder.Configuration.GetSection("Analytics:Tiering"));
 builder.Services.Configure<PrecomputedAnalyticsOptions>(

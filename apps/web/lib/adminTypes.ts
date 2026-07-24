@@ -240,6 +240,28 @@ export type ProSummoner = {
   isPro: boolean;
   isHighEloOtp: boolean;
   isActive: boolean;
+  source: string;
+  sourceExternalId: string | null;
+  lastVerifiedAtUtc: string | null;
+  otpChampionId: number | null;
+  otpGames: number | null;
+  otpSampleSize: number | null;
+  otpEvaluatedAtUtc: string | null;
   createdAtUtc: string;
   updatedAtUtc: string;
+};
+
+export type ProPlayerDiscoveryCandidate = {
+  id: string;
+  source: string;
+  externalId: string;
+  proName: string;
+  teamName: string | null;
+  role: string | null;
+  soloQueueIds: string | null;
+  status: string;
+  approvedTrackedProSummonerId: string | null;
+  firstSeenAtUtc: string;
+  lastSeenAtUtc: string;
+  reviewedAtUtc: string | null;
 };

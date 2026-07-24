@@ -27,6 +27,35 @@ public record TrackedProSummonerDto(
     bool IsPro,
     bool IsHighEloOtp,
     bool IsActive,
+    string Source,
+    string? SourceExternalId,
+    DateTime? LastVerifiedAtUtc,
+    int? OtpChampionId,
+    int? OtpGames,
+    int? OtpSampleSize,
+    DateTime? OtpEvaluatedAtUtc,
     DateTime CreatedAtUtc,
     DateTime UpdatedAtUtc
+);
+
+public record ProPlayerDiscoveryCandidateDto(
+    Guid Id,
+    string Source,
+    string ExternalId,
+    string ProName,
+    string? TeamName,
+    string? Role,
+    string? SoloQueueIds,
+    string Status,
+    Guid? ApprovedTrackedProSummonerId,
+    DateTime FirstSeenAtUtc,
+    DateTime LastSeenAtUtc,
+    DateTime? ReviewedAtUtc
+);
+
+public record ApproveProPlayerCandidateRequest(
+    [property: Required] string GameName,
+    [property: Required] string TagLine,
+    [property: Required] string PlatformRegion,
+    string? Puuid = null
 );

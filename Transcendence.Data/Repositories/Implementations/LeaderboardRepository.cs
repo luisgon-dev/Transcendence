@@ -99,7 +99,7 @@ public sealed class LeaderboardRepository(TranscendenceContext db) : ILeaderboar
                 participant.Match.MatchDate <= endMs &&
                 (participant.Match.QueueId == queueId ||
                  (participant.Match.QueueId == 0 && participant.Match.QueueType == queueId.ToString())) &&
-                participant.Summoner.PlatformRegion == platformRegion &&
+                participant.Match.PlatformRegion == platformRegion &&
                 participant.Summoner.GameName != null &&
                 participant.Summoner.TagLine != null);
 

@@ -337,12 +337,14 @@ Note:
 
 ## OpenAPI + TypeScript Client
 
-Source of truth: `openapi/transcendence.v1.json` (committed). The generated client schema is rebuilt locally from that spec and is not committed.
+Source of truth: `openapi/transcendence.v1.json` (committed). The generated client schema is rebuilt from that spec and committed with API changes.
 
 ```bash
 pnpm api:gen
 pnpm api:check
 ```
+
+The exporter starts the WebAPI with the internal `OpenApi:ExportOnly=true` flag, which skips database-backed admin bootstrap work. It also clears the previous contract before downloading Swagger so a startup failure cannot pass by reusing stale output.
 
 If hooks are installed (`pnpm hooks:install`), pre-commit runs path-aware checks automatically before each commit:
 - `pnpm precommit:api-sync` runs only when staged files touch API-relevant paths (`Transcendence.WebAPI/`, `Transcendence.Service.Core/`, `Transcendence.Data/`, `scripts/openapi/export.sh`, committed OpenAPI spec), regenerates the client locally, and stages the refreshed spec.
@@ -354,8 +356,11 @@ Key worker settings live under `Jobs:*` in `Transcendence.Service/appsettings.js
 The public Web API also consumes `Jobs:MultiRegionIngestion` from `Transcendence.WebAPI/appsettings.json` so `/api/analytics/regions` and region-filter normalization stay aligned with the ingestion regions exposed to the frontend.
 
 Production defaults in `Transcendence.Service/appsettings.json` are coverage-first for LoL:
-- `stable` keeps adaptive refresh (self-paced, ramp-aware), champion analytics ingestion, summoner maintenance, high-elo profile refresh, and low-frequency timeline backfill enabled.
-- `high-elo-profile-refresh` keeps the tracked high-value roster populated for analytics ingestion.
+- `stable` keeps adaptive refresh (self-paced, ramp-aware), champion analytics ingestion, summoner maintenance, high-elo profile refresh, pro-roster discovery, and low-frequency timeline backfill enabled.
+- `high-elo-profile-refresh` refreshes Master+ accounts and admits only evidence-backed one-tricks (30 or more games on one champion in the latest 50 stored Ranked Solo/Duo games).
+- `pro-roster-discovery` stages Leaguepedia player-directory rows for admin review; source outages are non-fatal and retain the last good candidate set.
+- `Jobs:Schedule:EnableProRosterDiscovery` defaults to `true`; `Jobs:Schedule:ProRosterDiscoveryCron` defaults to `15 3 * * *`.
+- `Jobs:ProRosterDiscovery:Endpoint`, `PageSize`, `MaxPages`, and `PageDelaySeconds` control the external directory read. Pages are paced at 65 seconds by default to respect the source's anonymous Cargo rate limit, and successfully read pages are retained if a later page is throttled. Candidates must still be approved under `/admin/pro-summoners` before they enter public analytics.
 - `match-timeline-backfill` is intentionally slower than ingestion because tier lists and core champion stats do not require timeline rows.
 - `Jobs:Schedule:PurgeBacklogOnPatchRolloverOnStartup` is disabled and startup rollover logic preserves queued current-patch catch-up work.
 
@@ -368,7 +373,7 @@ Which recurring jobs are active is determined by:
 - the per-job `Enable*` flags under `Jobs:Schedule` (for example `EnableChampionAnalyticsIngestion`, `EnableMatchTimelineBackfill`), and
 - the resolved **scheduling profile** (`Jobs:Schedule:Profile`, falling back to `DefaultProfile`, default `stable`), whose `Jobs:SchedulingProfiles:Profiles:<name>:JobOverrides` can flip a job's `Enabled`/`Cron`/`MandatoryBaseline`. Profile overrides win over the descriptor defaults. `poll-live-games` is enabled in `stable`, bounded by `Jobs:LiveGamePolling`, and defaults to opted-in favorite summoners only.
 
-The base `appsettings.json` ships `Jobs:Schedule:Profile = "stable"` (there is no `appsettings.Development.json`), so a local worker resolves the **same `stable` profile as production** unless you override `Jobs:Schedule:Profile` (or individual `Enable*` / `JobOverrides` values) via user-secrets or environment variables. Under `stable` the enabled jobs are the LoL analytics-coverage set (adaptive analytics refresh, champion-analytics ingestion, summoner maintenance, each a single self-pacing job that tightens cadence during the new-patch ramp window, plus match-timeline backfill, live-game polling for opted-in favorites, and high-elo profile refresh), plus the baseline jobs (`detect-patch`, `retry-failed-matches`, `refresh-lock-lifecycle-cleanup`); `rune-selection-integrity-backfill` and the daily `refresh-champion-analytics` are disabled.
+The base `appsettings.json` ships `Jobs:Schedule:Profile = "stable"` (there is no `appsettings.Development.json`), so a local worker resolves the **same `stable` profile as production** unless you override `Jobs:Schedule:Profile` (or individual `Enable*` / `JobOverrides` values) via user-secrets or environment variables. Under `stable` the enabled jobs are the LoL analytics-coverage set (adaptive analytics refresh, champion-analytics ingestion, summoner maintenance, each a single self-pacing job that tightens cadence during the new-patch ramp window, plus match-timeline backfill, live-game polling for opted-in favorites, high-elo profile refresh, and pro-roster discovery), plus the baseline jobs (`detect-patch`, `retry-failed-matches`, `refresh-lock-lifecycle-cleanup`); `rune-selection-integrity-backfill` and the daily `refresh-champion-analytics` are disabled.
 
 The worker watchdog requests graceful generic-host shutdown on a stale producer heartbeat, waiting
 `Worker:Watchdog:GracefulShutdownTimeout` (default `00:00:15`) before its hard-exit/container-restart

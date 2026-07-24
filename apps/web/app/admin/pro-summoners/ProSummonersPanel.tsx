@@ -3,15 +3,17 @@
 import { useRef, useState, useTransition } from "react";
 
 import {
+  approveProCandidateAction,
   bulkCreateProSummonersAction,
   createProSummonerAction,
   deleteProSummonerAction,
+  rejectProCandidateAction,
   refreshProSummonerAction,
   type BulkImportResult
 } from "@/app/admin/actions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import type { ProSummoner } from "@/lib/adminTypes";
+import type { ProPlayerDiscoveryCandidate, ProSummoner } from "@/lib/adminTypes";
 
 const PLATFORM_REGIONS = [
   "NA1",
@@ -27,7 +29,13 @@ const PLATFORM_REGIONS = [
   "RU"
 ] as const;
 
-export function ProSummonersPanel({ rows }: { rows: ProSummoner[] }) {
+export function ProSummonersPanel({
+  rows,
+  candidates
+}: {
+  rows: ProSummoner[];
+  candidates: ProPlayerDiscoveryCandidate[];
+}) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [showCsvImport, setShowCsvImport] = useState(false);
 
@@ -52,6 +60,7 @@ export function ProSummonersPanel({ rows }: { rows: ProSummoner[] }) {
 
       {showAddForm && <AddSummonerForm />}
       {showCsvImport && <CsvImportForm />}
+      <DiscoveryCandidates candidates={candidates} />
 
       <div className="page-panel p-4">
         <h2 className="text-lg font-semibold">
@@ -77,6 +86,91 @@ export function ProSummonersPanel({ rows }: { rows: ProSummoner[] }) {
         </div>
       </div>
     </section>
+  );
+}
+
+function DiscoveryCandidates({ candidates }: { candidates: ProPlayerDiscoveryCandidate[] }) {
+  return (
+    <div className="page-panel p-4">
+      <div>
+        <h2 className="text-lg font-semibold">Pro account candidates ({candidates.length})</h2>
+        <p className="mt-1 text-sm text-fg/60">
+          Leaguepedia names are staged here. Confirm the current Riot ID before adding an account.
+        </p>
+      </div>
+      {candidates.length === 0 ? (
+        <p className="mt-4 text-sm text-fg/65">No candidates need review.</p>
+      ) : (
+        <div className="mt-4 grid gap-3">
+          {candidates.map((candidate) => (
+            <CandidateRow key={candidate.id} candidate={candidate} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CandidateRow({ candidate }: { candidate: ProPlayerDiscoveryCandidate }) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <div className="rounded-xl border border-border/50 bg-surface-2/25 p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="font-semibold">{candidate.proName}</p>
+          <p className="text-xs text-fg/60">
+            {[candidate.teamName, candidate.role].filter(Boolean).join(" · ") || "No current team"}
+          </p>
+          <p className="mt-1 whitespace-pre-wrap text-xs text-fg/75">
+            Source accounts: {candidate.soloQueueIds || "None listed"}
+          </p>
+        </div>
+        <form
+          action={(formData) => {
+            startTransition(async () => {
+              await rejectProCandidateAction(formData);
+            });
+          }}
+        >
+          <input type="hidden" name="id" value={candidate.id} />
+          <Button type="submit" size="sm" variant="ghost" disabled={pending}>
+            Reject
+          </Button>
+        </form>
+      </div>
+      <form
+        action={(formData) => {
+          setError(null);
+          startTransition(async () => {
+            const result = await approveProCandidateAction(formData);
+            setError(result?.error ?? null);
+          });
+        }}
+        className="mt-3 grid gap-2 sm:grid-cols-[1fr_8rem_8rem_1fr_auto]"
+      >
+        <input type="hidden" name="id" value={candidate.id} />
+        <Input name="gameName" placeholder="Riot game name" required />
+        <Input name="tagLine" placeholder="Tag" required />
+        <select
+          name="platformRegion"
+          required
+          aria-label={`Region for ${candidate.proName}`}
+          className="control-select h-11 w-full bg-surface/50 px-3 text-sm text-fg focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
+        >
+          <option value="">Region</option>
+          {PLATFORM_REGIONS.map((region) => (
+            <option key={region} value={region}>{region}</option>
+          ))}
+        </select>
+        <Input name="puuid" placeholder="PUUID (optional)" />
+        <Button type="submit" size="sm" disabled={pending}>
+          {pending ? "Adding..." : "Approve"}
+        </Button>
+      </form>
+      {error ? <p className="mt-2 text-xs text-danger">{error}</p> : null}
+    </div>
   );
 }
 
@@ -216,7 +310,14 @@ function SummonerRow({ row }: { row: ProSummoner }) {
       </td>
       <td className="py-2">{row.platformRegion}</td>
       <td className="py-2">
-        {[row.proName, row.teamName].filter(Boolean).join(" / ") || "-"}
+        <p>{[row.proName, row.teamName].filter(Boolean).join(" / ") || "-"}</p>
+        <p className="text-xs text-fg/55">
+          {row.isPro ? "Pro" : "One-trick"}
+          {row.isHighEloOtp && row.otpGames && row.otpSampleSize
+            ? ` · ${row.otpGames}/${row.otpSampleSize} games`
+            : ""}
+          {` · ${row.source}`}
+        </p>
       </td>
       <td className="py-2">{new Date(row.updatedAtUtc).toLocaleString()}</td>
       <td className="py-2">

@@ -37,9 +37,9 @@ describe("normalizeProBuildScope", () => {
     expect(normalizeProBuildScope(" highelo ")).toBe("highelo");
   });
 
-  it("falls back to all for invalid or missing values", () => {
-    expect(normalizeProBuildScope(undefined)).toBe("all");
-    expect(normalizeProBuildScope("pros")).toBe("all");
+  it("falls back to pro for invalid or missing values", () => {
+    expect(normalizeProBuildScope(undefined)).toBe("pro");
+    expect(normalizeProBuildScope("pros")).toBe("pro");
   });
 });
 
@@ -58,11 +58,11 @@ describe("buildProBuildFilterParams", () => {
     const params = buildProBuildFilterParams({
       role: "MIDDLE",
       region: "KR",
-      scope: "pro",
+      scope: "all",
       patch: "14.5"
     });
 
-    expect(params.toString()).toBe("role=MIDDLE&region=KR&scope=pro&patch=14.5");
+    expect(params.toString()).toBe("role=MIDDLE&region=KR&scope=all&patch=14.5");
   });
 });
 

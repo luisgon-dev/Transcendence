@@ -127,6 +127,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<RefreshLockLifecycleJob>();
         services.AddScoped<BackfillMatchPlatformRegionJob>();
         services.AddScoped<IngestionHealthAlertJob>();
+        services.AddHttpClient<ProRosterDiscoveryJob>(client =>
+        {
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("Transcendence/1.0 (pro-roster-discovery)");
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
         services.AddScoped<IIngestionPriorityScoringPolicy, IngestionPriorityScoringPolicy>();
         services.AddSingleton<IQueueDepthProbe, HangfireQueueDepthProbe>();
 

@@ -50,11 +50,14 @@ APP_ARGS=(
   "--Swagger:Enable=$Swagger__Enable"
   # The export only boots the API to dump swagger against a throwaway connection — never migrate.
   "--Database:AutoMigrate=false"
+  "--OpenApi:ExportOnly=true"
 )
 
 SWAGGER_URL="${SWAGGER_URL:-http://127.0.0.1:5057/swagger/v1/swagger.json}"
 SWAGGER_OUT="$ROOT/openapi/transcendence.v1.json"
 TMP_ROOT="${TMPDIR:-/tmp}"
+# A failed export must never pass by reusing the previously committed contract.
+: > "$SWAGGER_OUT"
 
 if LOG_FILE="$(mktemp "${TMP_ROOT%/}/trn-openapi-XXXXXX.log" 2>/dev/null)"; then
   :
@@ -80,8 +83,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
+EXPORTED=false
 for _ in $(seq 1 60); do
   if curl --fail --silent --show-error "$SWAGGER_URL" -o "$SWAGGER_OUT"; then
+    EXPORTED=true
     break
   fi
 
@@ -94,7 +99,7 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 
-if [[ ! -s "$SWAGGER_OUT" ]]; then
+if [[ "$EXPORTED" != true || ! -s "$SWAGGER_OUT" ]]; then
   echo "Failed to download swagger from $SWAGGER_URL."
   cat "$LOG_FILE"
   exit 1

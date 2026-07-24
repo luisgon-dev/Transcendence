@@ -18,6 +18,7 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<HistoricalRank> HistoricalRanks { get; set; }
     public DbSet<ChampionMastery> ChampionMasteries { get; set; }
     public DbSet<TrackedProSummoner> TrackedProSummoners { get; set; }
+    public DbSet<ProPlayerDiscoveryCandidate> ProPlayerDiscoveryCandidates { get; set; }
     public DbSet<SummonerIngestionCursor> SummonerIngestionCursors { get; set; }
     public DbSet<RankedSeason> RankedSeasons { get; set; }
     public DbSet<SummonerFullHistoryBackfill> SummonerFullHistoryBackfills { get; set; }
@@ -157,7 +158,6 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             .HasIndex(x => x.QueueFamily);
         modelBuilder.Entity<Match>()
             .HasIndex(x => new { x.PlatformRegion, x.Status, x.Patch });
-
         // Summoner lookups by Puuid
         modelBuilder.Entity<Summoner>()
             .Property(s => s.Puuid)
@@ -586,9 +586,26 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Puuid).IsRequired();
             entity.Property(x => x.PlatformRegion).IsRequired();
+            entity.Property(x => x.Source).HasMaxLength(64).IsRequired().HasDefaultValue("manual");
+            entity.Property(x => x.SourceExternalId).HasMaxLength(256);
             entity.HasIndex(x => new { x.Puuid, x.PlatformRegion }).IsUnique();
             entity.HasIndex(x => x.IsActive);
             entity.HasIndex(x => x.UpdatedAtUtc);
+            entity.HasIndex(x => new { x.Source, x.SourceExternalId });
+        });
+
+        modelBuilder.Entity<ProPlayerDiscoveryCandidate>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Source).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.ExternalId).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.ProName).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.TeamName).HasMaxLength(128);
+            entity.Property(x => x.Role).HasMaxLength(64);
+            entity.Property(x => x.SoloQueueIds).HasMaxLength(2048);
+            entity.Property(x => x.Status).HasMaxLength(32).IsRequired();
+            entity.HasIndex(x => new { x.Source, x.ExternalId }).IsUnique();
+            entity.HasIndex(x => new { x.Status, x.LastSeenAtUtc });
         });
 
         modelBuilder.Entity<SummonerIngestionCursor>(entity =>

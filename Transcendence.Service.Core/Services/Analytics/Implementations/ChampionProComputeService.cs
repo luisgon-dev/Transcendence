@@ -359,11 +359,11 @@ public sealed class ChampionProComputeService : IChampionProComputeService
     }
 
     internal static string NormalizeProScope(string? scope) =>
-        (scope ?? "all").Trim().ToLowerInvariant() switch
+        (scope ?? "pro").Trim().ToLowerInvariant() switch
         {
-            "pro" => "pro",
+            "all" => "all",
             "highelo" => "highelo",
-            _ => "all"
+            _ => "pro"
         };
 
     public async Task<ChampionProBuildsResponse> ComputeProBuildsFromStatsAsync(

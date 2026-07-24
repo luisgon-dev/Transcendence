@@ -1,23 +1,18 @@
 "use client";
 
 import { Command } from "cmdk";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Dialog, VisuallyHidden } from "radix-ui";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import { ArrowCornerIcon, SearchIcon, SparkIcon } from "@/components/ui/icons";
+import { SearchIcon } from "@/components/ui/icons";
 import { Select } from "@/components/ui/Select";
-import {
-  getGlobalSearchOpenDetail,
-  GLOBAL_SEARCH_OPEN_EVENT,
-  type GlobalSearchOpenOrigin
-} from "@/lib/globalSearch";
+import { GLOBAL_SEARCH_OPEN_EVENT } from "@/lib/globalSearch";
 import { buildLolPublicSummonerSearchPath } from "@/lib/lolPublicApi";
 import { LOL_REGION_OPTIONS } from "@/lib/lolRegions";
-import { DEFAULT_TIERLIST_RANK_TIER, rankTierDisplayLabel } from "@/lib/ranks";
 import { encodeRiotIdPath, parseRiotIdInput } from "@/lib/riotid";
+import { searchMatchScore } from "@/lib/searchNormalization";
 import { championIconUrl } from "@/lib/staticData";
 
 type ChampionSearchItem = {
@@ -43,135 +38,60 @@ type SummonerSearchResponse = {
   items: SummonerSearchItem[];
 };
 
-const TIER_LINKS = [
+type NavigationItem = {
+  label: string;
+  detail: string;
+  href: string;
+  keywords: string;
+};
+
+const NAVIGATION_ITEMS: readonly NavigationItem[] = [
   {
-    label: `Tier List · All Roles (${rankTierDisplayLabel(DEFAULT_TIERLIST_RANK_TIER)})`,
-    href: "/lol/tierlist"
+    label: "Tier List",
+    detail: "Champion rankings",
+    href: "/lol/tierlist",
+    keywords: "tiers rankings"
   },
   {
-    label: `Tier List · Top (${rankTierDisplayLabel(DEFAULT_TIERLIST_RANK_TIER)})`,
-    href: "/lol/tierlist?role=TOP"
+    label: "Leaderboards",
+    detail: "Regional and champion rankings",
+    href: "/lol/leaderboards",
+    keywords: "rank ladder"
   },
   {
-    label: `Tier List · Jungle (${rankTierDisplayLabel(DEFAULT_TIERLIST_RANK_TIER)})`,
-    href: "/lol/tierlist?role=JUNGLE"
+    label: "Champions",
+    detail: "Champion list",
+    href: "/lol/champions",
+    keywords: "champion analytics"
   },
   {
-    label: `Tier List · Middle (${rankTierDisplayLabel(DEFAULT_TIERLIST_RANK_TIER)})`,
-    href: "/lol/tierlist?role=MIDDLE"
+    label: "Build Atlas",
+    detail: "Items and runes",
+    href: "/lol/items",
+    keywords: "items runes builds"
   },
   {
-    label: `Tier List · Bottom (${rankTierDisplayLabel(DEFAULT_TIERLIST_RANK_TIER)})`,
-    href: "/lol/tierlist?role=BOTTOM"
+    label: "Live Game",
+    detail: "Current match lookup",
+    href: "/lol/live",
+    keywords: "spectator current match"
   },
   {
-    label: `Tier List · Support (${rankTierDisplayLabel(DEFAULT_TIERLIST_RANK_TIER)})`,
-    href: "/lol/tierlist?role=UTILITY"
+    label: "Pro Solo Q",
+    detail: "Professional solo queue builds",
+    href: "/lol/pro-builds",
+    keywords: "pros pro builds"
   },
-  { label: "Tier List · All Ranks", href: "/lol/tierlist?rankTier=all" },
-  { label: "Tier List · Challenger", href: "/lol/tierlist?rankTier=CHALLENGER" },
-  { label: "Champions", href: "/lol/champions" },
-  { label: "Item Analytics · Pick rates and champion fit", href: "/lol/items" },
-  { label: "Rune Analytics · Pick rates and champion fit", href: "/lol/runes" },
-  { label: "Leaderboards · Regional and champion", href: "/lol/leaderboards" },
-  { label: "Pro Solo Queue Builds", href: "/lol/pro-builds" },
-  { label: "Multi-Search · Champ Select Scout", href: "/lol/multi-search" }
-] as const;
+  {
+    label: "Multi-Search",
+    detail: "Search several players",
+    href: "/lol/multi-search",
+    keywords: "multi search scout team"
+  }
+];
 
 const RESULT_ITEM_CLASS =
-  "group flex min-h-[52px] cursor-pointer items-center gap-3 rounded-card border border-transparent px-3 py-2.5 text-left text-fg/90 transition duration-150 data-[selected=true]:translate-x-1 data-[selected=true]:border-primary/25 data-[selected=true]:bg-primary/10 data-[selected=true]:shadow-card";
-
-const PANEL_ENTRY_EASE = [0.16, 1, 0.3, 1] as const;
-
-const resultsContainerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.045,
-      delayChildren: 0.08
-    }
-  },
-  exit: {
-    opacity: 0,
-    transition: {
-      duration: 0.12
-    }
-  }
-};
-
-const resultsSectionVariants = {
-  hidden: { opacity: 0, y: 14 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: {
-      duration: 0.26,
-      ease: PANEL_ENTRY_EASE
-    }
-  }
-};
-
-function capturePanelOpening(
-  origin: GlobalSearchOpenOrigin | null,
-  prefersReducedMotion: boolean
-) {
-  const viewportWidth = window.innerWidth;
-  const panelWidth = Math.max(320, Math.min(880, viewportWidth - 24));
-  const topOffset = Math.max(72, Math.round(window.innerHeight * 0.09));
-
-  if (prefersReducedMotion) {
-    return {
-      topOffset,
-      enterState: {
-        opacity: 0,
-        x: 0,
-        y: -10,
-        scaleX: 1,
-        scaleY: 1,
-        borderRadius: 24
-      }
-    };
-  }
-
-  if (!origin) {
-    return {
-      topOffset,
-      enterState: {
-        opacity: 0,
-        x: 0,
-        y: -18,
-        scaleX: 0.985,
-        scaleY: 0.97,
-        borderRadius: 24
-      }
-    };
-  }
-
-  return {
-    topOffset,
-    enterState: {
-      opacity: 0.76,
-      x: origin.centerX - viewportWidth / 2,
-      y: origin.centerY - topOffset,
-      scaleX: Math.min(1, Math.max(0.18, origin.width / panelWidth)),
-      scaleY: Math.min(1, Math.max(0.15, origin.height / 280)),
-      borderRadius: Math.max(18, Math.round(origin.height / 2))
-    }
-  };
-}
-
-const DEFAULT_PANEL_OPENING = {
-  topOffset: 96,
-  enterState: {
-    opacity: 0,
-    x: 0,
-    y: -18,
-    scaleX: 0.985,
-    scaleY: 0.97,
-    borderRadius: 24
-  }
-};
+  "group flex min-h-12 cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-left text-fg/82 outline-none transition-colors data-[selected=true]:bg-primary/12 data-[selected=true]:text-fg";
 
 function isEditableTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;
@@ -184,11 +104,9 @@ function useDebouncedValue<T>(value: T, delayMs: number) {
   const [debounced, setDebounced] = useState(value);
 
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      setDebounced(value);
-    }, delayMs);
+    const timeoutId = window.setTimeout(() => setDebounced(value), delayMs);
     return () => window.clearTimeout(timeoutId);
-  }, [value, delayMs]);
+  }, [delayMs, value]);
 
   return debounced;
 }
@@ -197,70 +115,36 @@ function profileIconSrc(version: string, profileIconId: number) {
   return `https://ddragon.leagueoflegends.com/cdn/${version}/img/profileicon/${profileIconId}.png`;
 }
 
-function splitQuickLinkLabel(label: string) {
-  const [title, detail] = label.split("·").map((part) => part.trim());
-  return {
-    title: title || label,
-    detail: detail || null
-  };
+function resultValue(kind: string, id: string | number) {
+  return `${kind}:${id}`;
 }
 
-function SearchSection({
-  title,
-  countLabel,
-  children,
-  className
+function ResultGroup({
+  heading,
+  children
 }: {
-  title: string;
-  countLabel: string;
+  heading: string;
   children: React.ReactNode;
-  className?: string;
 }) {
   return (
-    <section
-      className={`surface-subtle rounded-card p-2.5 sm:p-3 ${className ?? ""}`}
-    >
-      <div className="mb-2 flex items-center justify-between gap-3 px-1">
-        <p className="type-kicker text-primary/88">{title}</p>
-        <p className="type-ui type-tabular text-fg/65">{countLabel}</p>
-      </div>
-      <div className="grid gap-1">{children}</div>
-    </section>
-  );
-}
-
-function SearchHint({
-  children,
-  tone = "default"
-}: {
-  children: React.ReactNode;
-  tone?: "default" | "accent";
-}) {
-  return (
-    <div
-      className={`rounded-xl border px-3 py-3 text-sm leading-6 ${
-        tone === "accent"
-          ? "border-primary/24 bg-primary/11 text-fg/92"
-          : "surface-subtle text-fg/72"
-      }`}
+    <Command.Group
+      heading={heading}
+      className="px-2 py-1.5 text-xs text-muted [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.12em]"
     >
       {children}
-    </div>
+    </Command.Group>
   );
 }
 
 export function GlobalCommandPalette() {
   const router = useRouter();
-  const prefersReducedMotion = useReducedMotion() ?? false;
   const inputRef = useRef<HTMLInputElement | null>(null);
-  // The element focused when the palette opened, so focus returns there on close. Captured manually
-  // because forceMount (kept for the exit animation) disrupts Radix's own focus-restore capture.
   const lastFocusedRef = useRef<HTMLElement | null>(null);
   const suggestionCacheRef = useRef<Map<string, SummonerSearchItem[]>>(new Map());
   const [open, setOpen] = useState(false);
-  const [panelOpening, setPanelOpening] = useState(DEFAULT_PANEL_OPENING);
   const [query, setQuery] = useState("");
   const [region, setRegion] = useState("na");
+  const [selectedValue, setSelectedValue] = useState("");
   const [champions, setChampions] = useState<ChampionSearchItem[]>([]);
   const [ddragonVersion, setDdragonVersion] = useState<string | null>(null);
   const [championsLoaded, setChampionsLoaded] = useState(false);
@@ -268,43 +152,39 @@ export function GlobalCommandPalette() {
   const [summonerLoading, setSummonerLoading] = useState(false);
 
   const debouncedQuery = useDebouncedValue(query, 120);
-  const normalizedQuery = debouncedQuery.trim().toLowerCase();
+  const trimmedQuery = debouncedQuery.trim();
   const parsedRiotId = parseRiotIdInput(query.trim());
 
   useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k" && !e.altKey && !e.shiftKey) {
-        if (isEditableTarget(e.target)) return;
-        e.preventDefault();
-        lastFocusedRef.current = document.activeElement as HTMLElement | null;
-        setPanelOpening(capturePanelOpening(null, prefersReducedMotion));
-        setOpen(true);
-      }
-      // Escape (and outside-click / focus-out) close is owned by the Radix Dialog below, which also
-      // dismisses a nested Region dropdown first — so no manual Escape handling here.
-    }
-
-    function onOpenEvent(event: Event) {
+    function openPalette() {
       lastFocusedRef.current = document.activeElement as HTMLElement | null;
-      setPanelOpening(
-        capturePanelOpening(getGlobalSearchOpenDetail(event).origin, prefersReducedMotion)
-      );
       setOpen(true);
     }
 
+    function onKeyDown(event: KeyboardEvent) {
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        event.key.toLowerCase() === "k" &&
+        !event.altKey &&
+        !event.shiftKey &&
+        !isEditableTarget(event.target)
+      ) {
+        event.preventDefault();
+        openPalette();
+      }
+    }
+
     window.addEventListener("keydown", onKeyDown);
-    window.addEventListener(GLOBAL_SEARCH_OPEN_EVENT, onOpenEvent);
+    window.addEventListener(GLOBAL_SEARCH_OPEN_EVENT, openPalette);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener(GLOBAL_SEARCH_OPEN_EVENT, onOpenEvent);
+      window.removeEventListener(GLOBAL_SEARCH_OPEN_EVENT, openPalette);
     };
-  }, [prefersReducedMotion]);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
-    const rafId = window.requestAnimationFrame(() => {
-      inputRef.current?.focus();
-    });
+    const rafId = window.requestAnimationFrame(() => inputRef.current?.focus());
     return () => window.cancelAnimationFrame(rafId);
   }, [open]);
 
@@ -313,44 +193,41 @@ export function GlobalCommandPalette() {
 
     let active = true;
     void fetch("/api/static/champions", { cache: "force-cache" })
-      .then(async (res) => {
-        if (!res.ok) throw new Error("Failed to load champions.");
-        const json = (await res.json()) as ChampionsResponse;
-        const parsed = Object.entries(json.champions)
-          .map(([championId, data]) => ({
-            championId: Number(championId),
-            name: data.name,
-            slug: data.id
-          }))
-          .filter((item) => Number.isFinite(item.championId))
-          .sort((a, b) => a.name.localeCompare(b.name));
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Failed to load champions.");
+        const payload = (await response.json()) as ChampionsResponse;
+        if (!active) return;
 
-        if (!active) return;
-        setDdragonVersion(json.version);
-        setChampions(parsed);
-        setChampionsLoaded(true);
+        setDdragonVersion(payload.version);
+        setChampions(
+          Object.entries(payload.champions)
+            .map(([championId, champion]) => ({
+              championId: Number(championId),
+              name: champion.name,
+              slug: champion.id
+            }))
+            .filter((champion) => Number.isFinite(champion.championId))
+            .sort((a, b) => a.name.localeCompare(b.name))
+        );
       })
-      .catch(() => {
-        if (!active) return;
-        setChampionsLoaded(true);
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setChampionsLoaded(true);
       });
 
     return () => {
       active = false;
     };
-  }, [open, championsLoaded]);
+  }, [championsLoaded, open]);
 
   useEffect(() => {
-    if (!open) return;
-
-    const trimmedQuery = debouncedQuery.trim();
-    if (trimmedQuery.length < 2) {
+    if (!open || trimmedQuery.length < 2) {
       setSummonerResults([]);
       setSummonerLoading(false);
       return;
     }
 
-    const cacheKey = `${region}|${trimmedQuery.toLowerCase()}`;
+    const cacheKey = `${region}|${trimmedQuery.toLocaleLowerCase()}`;
     const cached = suggestionCacheRef.current.get(cacheKey);
     if (cached) {
       setSummonerResults(cached);
@@ -360,466 +237,334 @@ export function GlobalCommandPalette() {
 
     const abortController = new AbortController();
     setSummonerLoading(true);
-
-    void fetch(buildLolPublicSummonerSearchPath(region, trimmedQuery, 8), {
+    void fetch(buildLolPublicSummonerSearchPath(region, trimmedQuery, 6), {
       cache: "no-store",
       signal: abortController.signal
     })
-      .then(async (res) => {
-        if (!res.ok) throw new Error("Summoner search failed.");
-        const json = (await res.json()) as SummonerSearchResponse;
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Summoner search failed.");
+        const payload = (await response.json()) as SummonerSearchResponse;
         if (abortController.signal.aborted) return;
-        const items = Array.isArray(json.items) ? json.items : [];
+        const items = Array.isArray(payload.items) ? payload.items : [];
         setSummonerResults(items);
-
         suggestionCacheRef.current.set(cacheKey, items);
         if (suggestionCacheRef.current.size > 60) {
-          const oldest = suggestionCacheRef.current.keys().next().value as string | undefined;
-          if (oldest) suggestionCacheRef.current.delete(oldest);
+          const oldestKey = suggestionCacheRef.current.keys().next().value as string | undefined;
+          if (oldestKey) suggestionCacheRef.current.delete(oldestKey);
         }
       })
       .catch(() => {
-        if (abortController.signal.aborted) return;
-        setSummonerResults([]);
+        if (!abortController.signal.aborted) setSummonerResults([]);
       })
       .finally(() => {
-        if (abortController.signal.aborted) return;
-        setSummonerLoading(false);
+        if (!abortController.signal.aborted) setSummonerLoading(false);
       });
 
-    return () => {
-      abortController.abort();
-    };
-  }, [debouncedQuery, open, region]);
+    return () => abortController.abort();
+  }, [open, region, trimmedQuery]);
 
   const championResults = useMemo(() => {
-    if (!normalizedQuery) return champions.slice(0, 8);
+    if (!trimmedQuery) return champions.slice(0, 5);
     return champions
-      .filter((champion) => champion.name.toLowerCase().includes(normalizedQuery))
-      .sort((a, b) => {
-        const aStarts = a.name.toLowerCase().startsWith(normalizedQuery) ? 0 : 1;
-        const bStarts = b.name.toLowerCase().startsWith(normalizedQuery) ? 0 : 1;
-        return aStarts - bStarts || a.name.localeCompare(b.name);
-      })
-      .slice(0, 10);
-  }, [champions, normalizedQuery]);
+      .map((champion) => ({
+        champion,
+        score: Math.min(
+          searchMatchScore(champion.name, trimmedQuery) ?? Number.POSITIVE_INFINITY,
+          searchMatchScore(champion.slug, trimmedQuery) ?? Number.POSITIVE_INFINITY
+        )
+      }))
+      .filter((result) => Number.isFinite(result.score))
+      .sort(
+        (a, b) =>
+          a.score - b.score ||
+          a.champion.name.length - b.champion.name.length ||
+          a.champion.name.localeCompare(b.champion.name)
+      )
+      .slice(0, 8)
+      .map((result) => result.champion);
+  }, [champions, trimmedQuery]);
 
-  const tierResults = useMemo(() => {
-    if (!normalizedQuery) return TIER_LINKS;
-    return TIER_LINKS.filter((item) =>
-      item.label.toLowerCase().includes(normalizedQuery)
-    );
-  }, [normalizedQuery]);
+  const navigationResults = useMemo(() => {
+    if (!trimmedQuery) return NAVIGATION_ITEMS;
+    return NAVIGATION_ITEMS.map((item) => ({
+      item,
+      score: searchMatchScore(`${item.label} ${item.keywords}`, trimmedQuery)
+    }))
+      .filter((result) => result.score != null)
+      .sort((a, b) => a.score! - b.score! || a.item.label.localeCompare(b.item.label))
+      .map((result) => result.item);
+  }, [trimmedQuery]);
 
-  const summonerResultPaths = useMemo(
-    () =>
-      summonerResults.map((item) =>
-        `/lol/summoners/${item.region}/${encodeRiotIdPath({
-          gameName: item.gameName,
-          tagLine: item.tagLine
-        })}`
-      ),
-    [summonerResults]
-  );
+  const directPlayerPath = parsedRiotId
+    ? `/lol/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`
+    : null;
+  const directPlayerValue = parsedRiotId
+    ? resultValue("direct-player", `${parsedRiotId.gameName}-${parsedRiotId.tagLine}-${region}`)
+    : null;
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    if (directPlayerValue) {
+      setSelectedValue(directPlayerValue);
+      return;
+    }
+    if (championResults[0]) {
+      setSelectedValue(resultValue("champion", championResults[0].championId));
+      return;
+    }
+    if (navigationResults[0]) {
+      setSelectedValue(resultValue("navigation", navigationResults[0].href));
+      return;
+    }
+    if (summonerResults[0]) {
+      setSelectedValue(
+        resultValue(
+          "player",
+          `${summonerResults[0].platformRegion}-${summonerResults[0].gameName}-${summonerResults[0].tagLine}`
+        )
+      );
+      return;
+    }
+    setSelectedValue("");
+  }, [
+    championResults,
+    directPlayerValue,
+    navigationResults,
+    open,
+    summonerResults
+  ]);
 
   const prefetchTargets = useMemo(() => {
-    const paths = summonerResultPaths.slice(0, 3);
-    if (paths.length === 0 && parsedRiotId) {
-      paths.push(`/lol/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`);
-    }
-
-    for (const championPath of championResults
+    const targets = championResults
       .slice(0, 3)
-      .map((c) => `/lol/champions/${c.championId}`)) {
-      paths.push(championPath);
-    }
-    for (const tier of tierResults.slice(0, 2)) paths.push(tier.href);
-    return paths;
-  }, [championResults, tierResults, parsedRiotId, region, summonerResultPaths]);
+      .map((champion) => `/lol/champions/${champion.championId}`);
+    if (directPlayerPath) targets.push(directPlayerPath);
+    for (const item of navigationResults.slice(0, 2)) targets.push(item.href);
+    return targets;
+  }, [championResults, directPlayerPath, navigationResults]);
 
   useEffect(() => {
     if (!open) return;
-    for (const path of prefetchTargets) {
-      router.prefetch(path);
-    }
+    for (const target of prefetchTargets) router.prefetch(target);
   }, [open, prefetchTargets, router]);
 
   function navigate(path: string) {
     setOpen(false);
     setQuery("");
+    setSelectedValue("");
     router.push(path);
   }
 
-  function handleQueryKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key !== "Enter") return;
-    if (!parsedRiotId) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-    navigate(`/lol/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`);
+  function renderChampionGroup() {
+    if (championResults.length === 0) return null;
+    return (
+      <ResultGroup heading="Champions">
+        {championResults.map((champion) => (
+          <Command.Item
+            key={champion.championId}
+            value={resultValue("champion", champion.championId)}
+            onSelect={() => navigate(`/lol/champions/${champion.championId}`)}
+            className={RESULT_ITEM_CLASS}
+          >
+            {ddragonVersion ? (
+              <Image
+                src={championIconUrl(ddragonVersion, champion.slug)}
+                alt=""
+                width={34}
+                height={34}
+                className="size-[34px] rounded-md"
+              />
+            ) : (
+              <span className="size-[34px] rounded-md bg-surface-2" />
+            )}
+            <span className="min-w-0 flex-1 truncate font-medium">{champion.name}</span>
+            <span className="text-xs text-muted group-data-[selected=true]:text-fg/65">
+              Champion
+            </span>
+          </Command.Item>
+        ))}
+      </ResultGroup>
+    );
   }
 
-  const regionLabel = LOL_REGION_OPTIONS.find((item) => item.value === region)?.label ?? region.toUpperCase();
-  const directOpenPath = parsedRiotId
-    ? `/lol/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`
-    : null;
-  const showEmpty =
-    championResults.length === 0 &&
-    tierResults.length === 0 &&
-    summonerResults.length === 0 &&
-    !parsedRiotId;
-  const sectionVariants = prefersReducedMotion
-    ? {
-        hidden: { opacity: 0 },
-        visible: {
-          opacity: 1,
-          transition: { duration: 0.12 }
-        }
-      }
-    : resultsSectionVariants;
-  return (
-    // Radix Dialog supplies the modal a11y the hand-rolled overlay lacked: role="dialog" + aria-modal,
-    // a focus trap, focus return to the launcher on close, Escape-to-close, and page scroll lock — while
-    // forceMount keeps the nodes present so framer-motion still owns the enter/exit animation.
-    <Dialog.Root open={open} onOpenChange={setOpen}>
-      <Dialog.Portal forceMount>
-        <AnimatePresence initial={false}>
-          {open ? (
-            <div className="command-palette-overlay fixed inset-0 z-50">
-              <Dialog.Overlay asChild forceMount>
-                <motion.div
-                  className="absolute inset-0 bg-bg/80 backdrop-blur-md"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: prefersReducedMotion ? 0.12 : 0.2, ease: PANEL_ENTRY_EASE }}
-                />
-              </Dialog.Overlay>
-
-              <div
-            className="command-palette-shell absolute inset-x-0 top-0 flex justify-center px-3"
-            style={{ paddingTop: `${panelOpening.topOffset}px` }}
+  function renderPlayerGroup() {
+    if (!directPlayerPath && summonerResults.length === 0 && !summonerLoading) return null;
+    return (
+      <ResultGroup heading="Players">
+        {directPlayerPath && parsedRiotId && directPlayerValue ? (
+          <Command.Item
+            value={directPlayerValue}
+            onSelect={() => navigate(directPlayerPath)}
+            className={RESULT_ITEM_CLASS}
           >
-            <Dialog.Content
-              asChild
-              forceMount
-              aria-label="Global search"
-              aria-modal="true"
-              aria-describedby={undefined}
-              onOpenAutoFocus={(event) => {
-                event.preventDefault();
-                inputRef.current?.focus();
-              }}
-              onCloseAutoFocus={(event) => {
-                event.preventDefault();
-                lastFocusedRef.current?.focus?.();
-              }}
+            <span className="flex size-[34px] items-center justify-center rounded-md bg-primary/12 font-semibold text-primary">
+              #
+            </span>
+            <span className="min-w-0 flex-1 truncate font-medium">
+              {parsedRiotId.gameName}
+              <span className="text-fg/55">#{parsedRiotId.tagLine}</span>
+            </span>
+            <span className="text-xs uppercase text-muted">{region}</span>
+          </Command.Item>
+        ) : null}
+        {summonerResults.map((summoner) => {
+          const path = `/lol/summoners/${summoner.region}/${encodeRiotIdPath(summoner)}`;
+          const value = resultValue(
+            "player",
+            `${summoner.platformRegion}-${summoner.gameName}-${summoner.tagLine}`
+          );
+          return (
+            <Command.Item
+              key={value}
+              value={value}
+              onSelect={() => navigate(path)}
+              className={RESULT_ITEM_CLASS}
             >
-            <motion.div
-              className="command-palette-panel pointer-events-auto w-[min(880px,calc(100vw-24px))] overflow-hidden border border-border/70 bg-surface shadow-overlay"
-              initial={panelOpening.enterState}
-              animate={{
-                opacity: 1,
-                x: 0,
-                y: 0,
-                scaleX: 1,
-                scaleY: 1,
-                borderRadius: 24
-              }}
-              exit={
-                prefersReducedMotion
-                  ? { opacity: 0, y: -6 }
-                  : {
-                      opacity: 0,
-                      y: -16,
-                      scaleX: 0.985,
-                      scaleY: 0.98
-                    }
-              }
-              transition={
-                prefersReducedMotion
-                  ? { duration: 0.12 }
-                  : {
-                      type: "spring",
-                      stiffness: 300,
-                      damping: 32,
-                      mass: 0.82,
-                      opacity: { duration: 0.16, ease: PANEL_ENTRY_EASE }
-                    }
-              }
-              style={{ transformOrigin: "top center" }}
-            >
-              <VisuallyHidden.Root asChild>
-                <Dialog.Title>Global search</Dialog.Title>
-              </VisuallyHidden.Root>
-              <Command label="Global search input" shouldFilter={false} className="relative w-full">
-                <motion.div
-                  variants={resultsContainerVariants}
-                  initial="hidden"
-                  animate="visible"
-                  exit="exit"
-                  className="border-b border-border/50 px-4 pb-4 pt-4 sm:px-5 sm:pb-5 sm:pt-5"
-                >
-                  <motion.div variants={sectionVariants} className="flex items-center justify-between gap-3">
-                    <p className="type-kicker text-primary">Search</p>
-                    <span className="type-caption hidden text-muted sm:inline">Esc to close</span>
-                  </motion.div>
+              {ddragonVersion ? (
+                <Image
+                  src={profileIconSrc(ddragonVersion, summoner.profileIconId)}
+                  alt=""
+                  width={34}
+                  height={34}
+                  className="size-[34px] rounded-md"
+                />
+              ) : (
+                <span className="size-[34px] rounded-md bg-surface-2" />
+              )}
+              <span className="min-w-0 flex-1 truncate font-medium">
+                {summoner.gameName}
+                <span className="text-fg/55">#{summoner.tagLine}</span>
+              </span>
+              <span className="text-xs text-muted">{summoner.platformRegion}</span>
+            </Command.Item>
+          );
+        })}
+        {summonerLoading ? (
+          <p className="px-3 py-2 text-sm text-muted">Searching players…</p>
+        ) : null}
+      </ResultGroup>
+    );
+  }
 
-                  <motion.div
-                    variants={sectionVariants}
-                    className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end"
-                  >
-                    <div className="relative flex-1">
-                      <SearchIcon className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary/75" />
-                      <Command.Input
-                        ref={inputRef}
-                        value={query}
-                        onValueChange={setQuery}
-                        onKeyDown={handleQueryKeyDown}
-                        placeholder="Search champions, tier list, or summoner"
-                        className="type-ui h-12 w-full rounded-control border border-border/65 bg-surface-2/55 pl-11 pr-4 text-fg shadow-inset outline-none transition placeholder:text-muted/70 focus:border-primary/65 focus:bg-surface-2/70 focus:ring-2 focus:ring-primary/18"
-                        aria-label="Global search input"
-                      />
-                    </div>
+  function renderNavigationGroup() {
+    if (navigationResults.length === 0) return null;
+    return (
+      <ResultGroup heading="Navigation">
+        {navigationResults.map((item) => (
+          <Command.Item
+            key={item.href}
+            value={resultValue("navigation", item.href)}
+            onSelect={() => navigate(item.href)}
+            className={RESULT_ITEM_CLASS}
+          >
+            <span className="flex size-[34px] items-center justify-center rounded-md bg-surface-2 text-muted">
+              ↗
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-medium">{item.label}</span>
+              <span className="block truncate text-xs text-muted">{item.detail}</span>
+            </span>
+          </Command.Item>
+        ))}
+      </ResultGroup>
+    );
+  }
 
-                    <div className="sm:w-[124px]">
-                      <label className="type-kicker mb-2 block text-fg/65">Region</label>
-                      <Select
-                        value={region}
-                        onValueChange={setRegion}
-                        options={[...LOL_REGION_OPTIONS]}
-                        ariaLabel="Summoner region"
-                        className="h-12 w-full rounded-control border-border/65 bg-surface-2/55 text-fg shadow-inset"
-                      />
-                    </div>
-                  </motion.div>
+  const hasResults =
+    championResults.length > 0 ||
+    navigationResults.length > 0 ||
+    summonerResults.length > 0 ||
+    Boolean(directPlayerPath) ||
+    summonerLoading;
+  const championFirst = !parsedRiotId && championResults.length > 0;
 
-                  {parsedRiotId && directOpenPath ? (
-                    <motion.button
-                      variants={sectionVariants}
-                      type="button"
-                      onClick={() => navigate(directOpenPath)}
-                      className="surface-chip-accent mt-3 flex w-full items-center justify-between gap-3 rounded-control px-4 py-3 text-left transition hover:border-primary/38 hover:bg-primary/13"
-                    >
-                      <div className="grid gap-1">
-                        <span className="type-kicker text-primary/92">Direct Open</span>
-                        <span className="type-ui text-fg/92">
-                          {parsedRiotId.gameName}#{parsedRiotId.tagLine} in {regionLabel}
-                        </span>
-                      </div>
-                      <span className="type-kicker rounded-full border border-primary/30 px-2.5 py-1 text-primary">
-                        Enter
-                      </span>
-                    </motion.button>
-                  ) : null}
-                </motion.div>
+  return (
+    <Dialog.Root
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) {
+          setQuery("");
+          setSelectedValue("");
+        }
+      }}
+    >
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-bg/76" />
+        <Dialog.Content
+          aria-label="Global search"
+          aria-modal="true"
+          aria-describedby={undefined}
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            inputRef.current?.focus();
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            lastFocusedRef.current?.focus?.();
+          }}
+          className="fixed left-1/2 top-[max(1rem,8vh)] z-50 w-[min(720px,calc(100vw-24px))] -translate-x-1/2 overflow-hidden rounded-2xl border border-border/75 bg-surface shadow-overlay focus:outline-none"
+        >
+          <VisuallyHidden.Root asChild>
+            <Dialog.Title>Global search</Dialog.Title>
+          </VisuallyHidden.Root>
+          <Command
+            label="Global search input"
+            shouldFilter={false}
+            value={selectedValue}
+            onValueChange={setSelectedValue}
+          >
+            <div className="flex items-center gap-2 border-b border-border/55 p-3">
+              <SearchIcon className="ml-1 size-5 shrink-0 text-muted" />
+              <Command.Input
+                ref={inputRef}
+                value={query}
+                onValueChange={setQuery}
+                placeholder="Search champions, players, or pages"
+                aria-label="Global search input"
+                className="h-11 min-w-0 flex-1 bg-transparent px-1 text-base text-fg outline-none placeholder:text-muted"
+              />
+              <Select
+                value={region}
+                onValueChange={setRegion}
+                options={[...LOL_REGION_OPTIONS]}
+                ariaLabel="Summoner region"
+                className="h-10 w-[106px] shrink-0"
+              />
+            </div>
 
-                <Command.List className="max-h-[min(68vh,640px)] overflow-y-auto px-3 pb-4 pt-4 sm:px-4 sm:pb-5">
-                  {showEmpty ? (
-                    <motion.div
-                      initial={{ opacity: 0, y: prefersReducedMotion ? 0 : 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.18, ease: PANEL_ENTRY_EASE }}
-                    >
-                      <Command.Empty className="surface-subtle rounded-card px-4 py-8 text-left">
-                        <p className="type-kicker text-primary/88">No Match Yet</p>
-                        <p className="mt-3 text-base text-fg/88">
-                          Nothing lines up with that search.
-                        </p>
-                        <p className="mt-2 max-w-[48ch] text-sm leading-6 text-fg/62">
-                          Try a champion name, a route like tier list or pro solo queue, or a full Riot ID like
-                          <span className="font-medium text-fg/82"> Kronic#NA1</span>.
-                        </p>
-                      </Command.Empty>
-                    </motion.div>
-                  ) : (
-                    <motion.div
-                      variants={resultsContainerVariants}
-                      initial="hidden"
-                      animate="visible"
-                      exit="exit"
-                      className="grid gap-3 md:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]"
-                    >
-                      <motion.div variants={sectionVariants}>
-                        <SearchSection
-                          title="Summoners"
-                          countLabel={summonerLoading ? "Searching" : `${summonerResults.length}`}
-                          className="md:row-span-2"
-                        >
-                          {summonerResults.map((item) => {
-                            const path = `/lol/summoners/${item.region}/${encodeRiotIdPath({
-                              gameName: item.gameName,
-                              tagLine: item.tagLine
-                            })}`;
+            <Command.List className="max-h-[min(66vh,560px)] overflow-y-auto py-1">
+              {!hasResults ? (
+                <Command.Empty className="px-5 py-10 text-center text-sm text-muted">
+                  No results. Try a champion, page, or Riot ID.
+                </Command.Empty>
+              ) : parsedRiotId ? (
+                <>
+                  {renderPlayerGroup()}
+                  {renderChampionGroup()}
+                  {renderNavigationGroup()}
+                </>
+              ) : championFirst ? (
+                <>
+                  {renderChampionGroup()}
+                  {renderPlayerGroup()}
+                  {renderNavigationGroup()}
+                </>
+              ) : (
+                <>
+                  {renderNavigationGroup()}
+                  {renderPlayerGroup()}
+                  {renderChampionGroup()}
+                </>
+              )}
+            </Command.List>
 
-                            return (
-                              <Command.Item
-                                key={`summoner-${item.platformRegion}-${item.gameName}-${item.tagLine}`}
-                                value={`summoner-${item.gameName}-${item.tagLine}-${item.platformRegion}`}
-                                onSelect={() => navigate(path)}
-                                className={RESULT_ITEM_CLASS}
-                              >
-                                {ddragonVersion ? (
-                                  <Image
-                                    src={profileIconSrc(ddragonVersion, item.profileIconId)}
-                                    alt=""
-                                    width={36}
-                                    height={36}
-                                    className="h-9 w-9 rounded-lg border border-border/55 object-cover"
-                                    sizes="36px"
-                                  />
-                                ) : (
-                                  <span className="type-caption inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border/55 bg-surface/60 text-muted">
-                                    ?
-                                  </span>
-                                )}
-                                <div className="min-w-0 flex-1">
-                                  <p className="type-ui truncate font-medium text-fg">
-                                    {item.gameName}
-                                    <span className="text-fg/58">#{item.tagLine}</span>
-                                  </p>
-                                  <p className="type-caption truncate text-fg/65">
-                                    Live profile lookup
-                                  </p>
-                                </div>
-                                <span className="type-kicker surface-chip rounded-full px-2 py-1 text-fg/68">
-                                  {item.platformRegion}
-                                </span>
-                              </Command.Item>
-                            );
-                          })}
-
-                          {summonerLoading ? (
-                            <SearchHint tone="accent">Searching live summoner suggestions for {regionLabel}.</SearchHint>
-                          ) : null}
-
-                          {!summonerLoading &&
-                          summonerResults.length === 0 &&
-                          parsedRiotId ? (
-                            <Command.Item
-                              key="summoner-open"
-                              value={`summoner-${parsedRiotId.gameName}-${parsedRiotId.tagLine}-${region}`}
-                              onSelect={() => navigate(directOpenPath!)}
-                              className={RESULT_ITEM_CLASS}
-                            >
-                              <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-primary/25 bg-primary/10 text-primary">
-                                <ArrowCornerIcon className="h-4 w-4" />
-                              </span>
-                              <div className="min-w-0 flex-1">
-                                <p className="type-ui truncate font-medium text-fg">
-                                  Open {parsedRiotId.gameName}#{parsedRiotId.tagLine}
-                                </p>
-                                <p className="type-caption text-fg/65">{regionLabel} direct profile route</p>
-                              </div>
-                            </Command.Item>
-                          ) : null}
-
-                          {!summonerLoading &&
-                          summonerResults.length === 0 &&
-                          !parsedRiotId &&
-                          query.trim().length > 0 ? (
-                            <SearchHint>
-                              No summoner suggestions yet. Enter a full Riot ID in the format
-                              <span className="font-medium text-fg/82"> GameName#TAG</span> to open the profile directly.
-                            </SearchHint>
-                          ) : null}
-
-                          {!summonerLoading &&
-                          summonerResults.length === 0 &&
-                          query.trim().length === 0 ? (
-                            <SearchHint>
-                              Start with a Riot ID, like <span className="font-medium text-fg/82">Kronic#NA1</span>, for a direct player jump.
-                            </SearchHint>
-                          ) : null}
-                        </SearchSection>
-                      </motion.div>
-
-                      <motion.div variants={sectionVariants}>
-                        <SearchSection
-                          title="Champions"
-                          countLabel={`${championResults.length}`}
-                        >
-                          {championResults.length > 0 ? (
-                            championResults.map((champion) => {
-                              const championHref = `/lol/champions/${champion.championId}`;
-                              return (
-                                <Command.Item
-                                  key={`champion-${champion.championId}`}
-                                  value={`champion-${champion.name}`}
-                                  onSelect={() => navigate(championHref)}
-                                  onMouseEnter={() => router.prefetch(championHref)}
-                                  onFocus={() => router.prefetch(championHref)}
-                                  className={RESULT_ITEM_CLASS}
-                                >
-                                  {ddragonVersion && champion.slug ? (
-                                    <Image
-                                      src={championIconUrl(ddragonVersion, champion.slug)}
-                                      alt=""
-                                      width={36}
-                                      height={36}
-                                      className="h-9 w-9 shrink-0 rounded-lg border border-border/50"
-                                    />
-                                  ) : (
-                                    <span className="surface-subtle inline-flex h-9 w-9 items-center justify-center rounded-lg text-primary/88">
-                                      <SparkIcon className="h-4 w-4" />
-                                    </span>
-                                  )}
-                                  <div className="min-w-0 flex-1">
-                                    <p className="type-ui truncate font-medium text-fg">{champion.name}</p>
-                                    <p className="type-caption text-fg/65">Champion profile and matchup data</p>
-                                  </div>
-                                </Command.Item>
-                              );
-                            })
-                          ) : (
-                            <SearchHint>No champions match that query.</SearchHint>
-                          )}
-                        </SearchSection>
-                      </motion.div>
-
-                      <motion.div variants={sectionVariants}>
-                        <SearchSection
-                          title="Pages"
-                          countLabel={`${tierResults.length}`}
-                        >
-                          {tierResults.length > 0 ? (
-                            tierResults.map((item) => {
-                              const parts = splitQuickLinkLabel(item.label);
-                              return (
-                                <Command.Item
-                                  key={item.href}
-                                  value={`tier-${item.label}`}
-                                  onSelect={() => navigate(item.href)}
-                                  className={RESULT_ITEM_CLASS}
-                                >
-                                  <span className="surface-subtle inline-flex h-9 w-9 items-center justify-center rounded-lg text-primary/84">
-                                    <ArrowCornerIcon className="h-4 w-4" />
-                                  </span>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="type-ui truncate font-medium text-fg">{parts.title}</p>
-                                    <p className="type-caption truncate text-fg/65">
-                                      {parts.detail ?? "Open page"}
-                                    </p>
-                                  </div>
-                                </Command.Item>
-                              );
-                            })
-                          ) : (
-                            <SearchHint>No pages match that search.</SearchHint>
-                          )}
-                        </SearchSection>
-                      </motion.div>
-                    </motion.div>
-                  )}
-                </Command.List>
-              </Command>
-            </motion.div>
-            </Dialog.Content>
-          </div>
-        </div>
-      ) : null}
-        </AnimatePresence>
+            <div className="flex items-center justify-between border-t border-border/50 px-4 py-2 text-xs text-muted">
+              <span>↑↓ Select</span>
+              <span>Enter Open · Esc Close</span>
+            </div>
+          </Command>
+        </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
   );

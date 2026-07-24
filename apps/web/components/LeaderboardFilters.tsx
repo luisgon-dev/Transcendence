@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 
 import { Select } from "@/components/ui/Select";
 import type { ChampionMap } from "@/lib/staticData";
@@ -32,6 +32,12 @@ export function LeaderboardFilters({
   const router = useRouter();
   const pathname = usePathname();
   const [pending, startTransition] = useTransition();
+  const [localFilters, setLocalFilters] = useState(filters);
+
+  useEffect(() => {
+    setLocalFilters(filters);
+  }, [filters]);
+
   const championOptions = [
     { value: "ALL", label: "All champions" },
     ...Object.entries(champions)
@@ -40,49 +46,56 @@ export function LeaderboardFilters({
   ];
 
   function update(next: Filters) {
+    setLocalFilters(next);
     startTransition(() => {
-      router.push(`${pathname}?${leaderboardSearchParams(next).toString()}`, { scroll: false });
+      router.replace(`${pathname}?${leaderboardSearchParams(next).toString()}`, { scroll: false });
     });
   }
 
   return (
-    <div aria-busy={pending} className="flex w-full flex-wrap gap-2 opacity-100 transition-opacity aria-busy:opacity-65">
+    <div
+      aria-busy={pending}
+      className="flex w-full flex-wrap items-center gap-2 opacity-100 transition-opacity aria-busy:opacity-65"
+    >
       <Select
-        value={filters.region}
-        onValueChange={(region) => update({ ...filters, region })}
+        value={localFilters.region}
+        onValueChange={(region) => update({ ...localFilters, region })}
         options={[...LOL_REGION_OPTIONS]}
         ariaLabel="Leaderboard region"
         className="min-w-24"
       />
       <Select
-        value={filters.queue}
-        onValueChange={(queue) => update({ ...filters, queue: queue as Filters["queue"] })}
+        value={localFilters.queue}
+        onValueChange={(queue) => update({ ...localFilters, queue: queue as Filters["queue"] })}
         options={QUEUE_OPTIONS}
         ariaLabel="Ranked queue"
         className="min-w-40"
       />
       <Select
-        value={filters.championId ? String(filters.championId) : "ALL"}
+        value={localFilters.championId ? String(localFilters.championId) : "ALL"}
         onValueChange={(championId) =>
           update({
-            ...filters,
+            ...localFilters,
             championId: championId === "ALL" ? null : Number(championId),
-            role: championId === "ALL" ? null : filters.role
+            role: championId === "ALL" ? null : localFilters.role
           })
         }
         options={championOptions}
         ariaLabel="Champion leaderboard filter"
         className="min-w-44"
       />
-      {filters.championId ? (
+      {localFilters.championId ? (
         <Select
-          value={filters.role ?? "ALL"}
-          onValueChange={(role) => update({ ...filters, role: role === "ALL" ? null : role })}
+          value={localFilters.role ?? "ALL"}
+          onValueChange={(role) => update({ ...localFilters, role: role === "ALL" ? null : role })}
           options={ROLE_OPTIONS}
           ariaLabel="Champion role"
           className="min-w-32"
         />
       ) : null}
+      <span className="sr-only" aria-live="polite">
+        {pending ? "Updating leaderboard" : ""}
+      </span>
     </div>
   );
 }

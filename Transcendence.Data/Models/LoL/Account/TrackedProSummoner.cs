@@ -12,6 +12,13 @@ public class TrackedProSummoner
     public bool IsPro { get; set; } = true;
     public bool IsHighEloOtp { get; set; }
     public bool IsActive { get; set; } = true;
+    public string Source { get; set; } = "manual";
+    public string? SourceExternalId { get; set; }
+    public DateTime? LastVerifiedAtUtc { get; set; }
+    public int? OtpChampionId { get; set; }
+    public int? OtpGames { get; set; }
+    public int? OtpSampleSize { get; set; }
+    public DateTime? OtpEvaluatedAtUtc { get; set; }
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
 }

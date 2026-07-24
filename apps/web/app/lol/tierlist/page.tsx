@@ -200,7 +200,7 @@ export default async function TierListPage({
           meta row while docked, so the separate freshness strip below no longer needs to stick. */}
       <Toolbar
         className="tierlist-toolbar-dock z-30"
-        eyebrow="League Analytics"
+        eyebrow="Current patch"
         title="Tier List"
         meta={
           <>

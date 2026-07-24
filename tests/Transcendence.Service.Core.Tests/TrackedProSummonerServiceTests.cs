@@ -132,6 +132,43 @@ public class TrackedProSummonerServiceTests
         (await harness.Db.TrackedProSummoners.AnyAsync()).Should().BeFalse();
     }
 
+    [Fact]
+    public async Task ApproveCandidateAsync_PreservesCompetitiveIdentityAndSource()
+    {
+        await using var harness = await TrackedProHarness.CreateAsync();
+        var candidate = new ProPlayerDiscoveryCandidate
+        {
+            Id = Guid.NewGuid(),
+            Source = "leaguepedia",
+            ExternalId = "Faker",
+            ProName = "Faker",
+            TeamName = "T1",
+            Role = "Mid",
+            SoloQueueIds = "Hide on bush#KR1",
+            Status = "pending"
+        };
+        harness.Db.ProPlayerDiscoveryCandidates.Add(candidate);
+        await harness.Db.SaveChangesAsync();
+
+        var result = await harness.Service.ApproveCandidateAsync(
+            candidate.Id,
+            new ApproveProPlayerCandidateRequest("Hide on bush", "KR1", "KR", "faker-puuid"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeEquivalentTo(new
+        {
+            Puuid = "faker-puuid",
+            PlatformRegion = "KR",
+            ProName = "Faker",
+            TeamName = "T1",
+            IsPro = true,
+            Source = "leaguepedia",
+            SourceExternalId = "Faker"
+        });
+        candidate.Status.Should().Be("approved");
+        candidate.ApprovedTrackedProSummonerId.Should().Be(result.Value!.Id);
+    }
+
     private static TrackedProSummoner NewTracked(string puuid) => new()
     {
         Id = Guid.NewGuid(),

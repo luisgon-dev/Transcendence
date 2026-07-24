@@ -33,12 +33,23 @@ describe("GlobalCommandPalette", () => {
             version: "16.14.1",
             champions: {
               "103": { id: "Ahri", name: "Ahri" },
-              "86": { id: "Garen", name: "Garen" }
+              "86": { id: "Garen", name: "Garen" },
+              "145": { id: "Kaisa", name: "Kai'Sa" }
             }
           });
         }
 
-        return jsonResponse({ items: [] });
+        return jsonResponse({
+          items: [
+            {
+              platformRegion: "NA1",
+              region: "na",
+              gameName: "KaisaMain",
+              tagLine: "NA1",
+              profileIconId: 29
+            }
+          ]
+        });
       })
     );
   });
@@ -73,9 +84,42 @@ describe("GlobalCommandPalette", () => {
 
     const input = await screen.findByRole("combobox", { name: "Global search input" });
     await user.type(input, "Kronic#NA1");
-    expect(await screen.findByText("Kronic#NA1 in NA")).toBeTruthy();
+    expect(await screen.findByRole("option", { name: /Kronic#NA1/i })).toBeTruthy();
 
     await user.keyboard("{Enter}");
     await waitFor(() => expect(router.push).toHaveBeenCalledWith("/lol/summoners/na/Kronic-NA1"));
+  });
+
+  it("normalizes punctuationless champion names and selects the champion before players", async () => {
+    const user = userEvent.setup();
+    render(<GlobalCommandPalette />);
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+
+    const input = await screen.findByRole("combobox", { name: "Global search input" });
+    await user.type(input, "kaisa");
+
+    const championLabel = await screen.findByText("Kai'Sa");
+    const champion = championLabel.closest('[role="option"]');
+    expect(champion).not.toBeNull();
+    await waitFor(() => expect(champion.getAttribute("data-selected")).toBe("true"));
+
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith("/lol/champions/145"));
+  });
+
+  it("keeps multi-search available as command navigation", async () => {
+    const user = userEvent.setup();
+    render(<GlobalCommandPalette />);
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+
+    const input = await screen.findByRole("combobox", { name: "Global search input" });
+    await user.type(input, "multi search");
+    await screen.findByRole("option", { name: /Multi-Search/i });
+    await waitFor(() =>
+      expect(screen.getByRole("option", { name: /Multi-Search/i }).getAttribute("data-selected")).toBe("true")
+    );
+
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith("/lol/multi-search"));
   });
 });

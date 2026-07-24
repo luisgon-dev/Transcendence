@@ -186,6 +186,7 @@ Returns a public ranked leaderboard for one platform region. Query parameters:
 - `minimumChampionGames`: `1` to `100` (default `5`)
 
 Regional boards are ordered by tier, league points, wins, and losses. Champion boards are ordered by champion-game sample, ranked tier, league points, and champion win rate. Responses include the resolved platform region and queue, generation time, profile identity, current rank and record, plus champion games, wins, win rate, and KDA when champion filters are active.
+Champion-board region filtering uses the match's recorded platform region, so an account transfer does not move historical games between regional boards.
 
 Early-patch semantics:
 - Analytics endpoints default to the active patch and support a `patch` query parameter for stored historical patches.
@@ -302,7 +303,7 @@ Additional analytics fields:
 `GET /api/lol/analytics/champions/{championId}/pro-builds` supports optional filters:
 - `region` (`ALL` or supported platform-region token such as `NA1|EUW1|EUN1|KR`)
 - `role` — when omitted (or `ALL`), the champion's **most-played lane** is resolved from the cached win-rate aggregate (mirrors the profile endpoint) and echoed back as `role`, so the landing view is lane-scoped instead of the heavier cross-role aggregate. Any other unrecognized role is rejected with `400`.
-- `scope`: `pro` (official pros, `IsPro`), `highelo` (auto-discovered Challenger/GM/Master one-tricks, `IsHighEloOtp`), or `all` (either). Defaults to `all`.
+- `scope`: `pro` (reviewed professional accounts, `IsPro`), `highelo` (verified Master+ one-tricks, `IsHighEloOtp`), or `all` (either). Defaults to `pro`.
 - `patch`
 
 The cross-role aggregate (no resolvable lane) bounds its participant scan to the most-recent `Analytics:Compute:ProBuildMaxParticipantRows` rows (default 1500) so the wide `role=ALL` + `scope=all` + `region=ALL` pool cannot command-timeout.
@@ -315,7 +316,7 @@ Response includes:
 
 `GET /api/lol/analytics/pro/champions` (public) returns champions ranked by pick/play frequency among tracked pro / high-elo players (the "Pro Solo Queue Builds" home ranking). These are ranked solo-queue observations, not tournament drafts, esports schedules, or official match results. Optional filters:
 - `region` (`ALL` or supported platform-region token such as `NA1|EUW1|EUN1|KR`)
-- `scope`: `pro` (official pros, `IsPro`), `highelo` (auto-discovered Challenger/GM/Master one-tricks, `IsHighEloOtp`), or `all` (either). Defaults to `all`.
+- `scope`: `pro` (reviewed professional accounts, `IsPro`), `highelo` (verified Master+ one-tricks, `IsHighEloOtp`), or `all` (either). Defaults to `pro`.
 - `patch`
 
 Response: `{ patch, region, scope, champions[], sample }` where each champion entry is `{ championId, games, wins, winRate, uniquePlayers }`, ordered by games descending. Cached 24h (`analytics` + `proplayrate` tags).
@@ -460,6 +461,14 @@ Auth behavior notes:
 - `PUT /api/admin/pro-summoners/{id}`
 - `DELETE /api/admin/pro-summoners/{id}`
 - `POST /api/admin/pro-summoners/{id}/refresh`
+- `GET /api/admin/pro-summoners/candidates?status=pending|approved|rejected`
+- `POST /api/admin/pro-summoners/candidates/{id}/approve`
+- `POST /api/admin/pro-summoners/candidates/{id}/reject`
+
+The candidate endpoints expose staged Leaguepedia directory rows. Approval requires a confirmed
+Riot game name, tag line, and platform region (plus optional PUUID), creates the durable tracked
+professional account, and records the source identity. Candidate rows never appear in public
+pro-build analytics before approval.
 
 ### User Preferences (`UserOnly`)
 

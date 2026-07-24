@@ -4,7 +4,7 @@ import { MultiSearchClient } from "@/components/MultiSearchClient";
 import { socialImageUrl } from "@/lib/seo";
 
 const title = "Champ Select Multi-Search";
-const description = "Paste up to five Riot IDs to compare ranks, main roles, tracked form, champion pools, and autofill risk.";
+const description = "Compare ranks, roles, recent form, and champion pools for up to five Riot IDs.";
 const image = socialImageUrl(title, "Team scout", "Ranks, role coverage, champion pools, and autofill signals");
 
 export const metadata: Metadata = {

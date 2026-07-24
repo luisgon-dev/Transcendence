@@ -3633,6 +3633,195 @@
         ]
       }
     },
+    "/api/admin/pro-summoners/candidates": {
+      "get": {
+        "tags": [
+          "ProSummoners"
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "pending"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProPlayerDiscoveryCandidateDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProPlayerDiscoveryCandidateDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProPlayerDiscoveryCandidateDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          { }
+        ]
+      }
+    },
+    "/api/admin/pro-summoners/candidates/{id}/approve": {
+      "post": {
+        "tags": [
+          "ProSummoners"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ApproveProPlayerCandidateRequest"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ApproveProPlayerCandidateRequest"
+                  }
+                ]
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ApproveProPlayerCandidateRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackedProSummonerDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackedProSummonerDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackedProSummonerDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          { }
+        ]
+      }
+    },
+    "/api/admin/pro-summoners/candidates/{id}/reject": {
+      "post": {
+        "tags": [
+          "ProSummoners"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          { }
+        ]
+      }
+    },
     "/api/admin/pro-summoners/{id}/refresh": {
       "post": {
         "tags": [
@@ -6309,6 +6498,33 @@
         },
         "additionalProperties": false
       },
+      "ApproveProPlayerCandidateRequest": {
+        "required": [
+          "gameName",
+          "platformRegion",
+          "tagLine"
+        ],
+        "type": "object",
+        "properties": {
+          "gameName": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "tagLine": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "platformRegion": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "puuid": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "AuthMeResponse": {
         "required": [
           "roles"
@@ -8926,6 +9142,67 @@
         },
         "additionalProperties": false
       },
+      "ProPlayerDiscoveryCandidateDto": {
+        "required": [
+          "externalId",
+          "firstSeenAtUtc",
+          "id",
+          "lastSeenAtUtc",
+          "proName",
+          "source",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "source": {
+            "type": "string"
+          },
+          "externalId": {
+            "type": "string"
+          },
+          "proName": {
+            "type": "string"
+          },
+          "teamName": {
+            "type": "string",
+            "nullable": true
+          },
+          "role": {
+            "type": "string",
+            "nullable": true
+          },
+          "soloQueueIds": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string"
+          },
+          "approvedTrackedProSummonerId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "firstSeenAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastSeenAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reviewedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "ProPlayerDto": {
         "required": [
           "platformRegion"
@@ -10434,6 +10711,7 @@
           "isPro",
           "platformRegion",
           "puuid",
+          "source",
           "updatedAtUtc"
         ],
         "type": "object",
@@ -10472,6 +10750,38 @@
           },
           "isActive": {
             "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          },
+          "sourceExternalId": {
+            "type": "string",
+            "nullable": true
+          },
+          "lastVerifiedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "otpChampionId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "otpGames": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "otpSampleSize": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "otpEvaluatedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           },
           "createdAtUtc": {
             "type": "string",

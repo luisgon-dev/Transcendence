@@ -5,7 +5,7 @@ import { socialImageUrl } from "@/lib/seo";
 
 const title = "Live Game Scout";
 const description =
-  "Scout an active League match with ranks, recent form, streaks, champion pools, spells, and runes.";
+  "View ranks, recent form, champion pools, spells, and runes for an active League match.";
 const image = socialImageUrl(title, "Live matchup", "Ranks, streaks, champion pools, spells, and runes");
 
 export const metadata: Metadata = {

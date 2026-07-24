@@ -92,6 +92,53 @@ public class ProSummonersController(
         return NoContent();
     }
 
+    [HttpGet("candidates")]
+    [ProducesResponseType(typeof(List<ProPlayerDiscoveryCandidateDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListCandidates(
+        [FromQuery] string status = "pending",
+        CancellationToken ct = default)
+    {
+        return Ok(await trackedProSummonerService.ListCandidatesAsync(status, ct));
+    }
+
+    [HttpPost("candidates/{id:guid}/approve")]
+    [EnableRateLimiting("admin-write")]
+    [ProducesResponseType(typeof(TrackedProSummonerDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ApproveCandidate(
+        [FromRoute] Guid id,
+        [FromBody] ApproveProPlayerCandidateRequest request,
+        CancellationToken ct = default)
+    {
+        var outcome = await trackedProSummonerService.ApproveCandidateAsync(id, request, ct);
+        if (!outcome.IsSuccess)
+            return BadRequest(outcome.ValidationError);
+
+        var approved = outcome.Value!;
+        await WriteAuditAsync("pro-summoners.candidate.approve", id.ToString(), new
+        {
+            approved.Id,
+            approved.Puuid,
+            approved.PlatformRegion,
+            approved.ProName,
+            approved.TeamName,
+            approved.Source
+        }, ct);
+        return Ok(approved);
+    }
+
+    [HttpPost("candidates/{id:guid}/reject")]
+    [EnableRateLimiting("admin-write")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RejectCandidate([FromRoute] Guid id, CancellationToken ct = default)
+    {
+        if (!await trackedProSummonerService.RejectCandidateAsync(id, ct))
+            return NotFound();
+        await WriteAuditAsync("pro-summoners.candidate.reject", id.ToString(), null, ct);
+        return NoContent();
+    }
+
     [HttpPost("{id:guid}/refresh")]
     [EnableRateLimiting("admin-write")]
     [ProducesResponseType(

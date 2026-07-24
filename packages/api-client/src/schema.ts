@@ -3082,6 +3082,185 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/pro-summoners/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    status?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProPlayerDiscoveryCandidateDto"][];
+                        "application/json": components["schemas"]["ProPlayerDiscoveryCandidateDto"][];
+                        "text/json": components["schemas"]["ProPlayerDiscoveryCandidateDto"][];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/pro-summoners/candidates/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ApproveProPlayerCandidateRequest"];
+                    "text/json": components["schemas"]["ApproveProPlayerCandidateRequest"];
+                    "application/*+json": components["schemas"]["ApproveProPlayerCandidateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TrackedProSummonerDto"];
+                        "application/json": components["schemas"]["TrackedProSummonerDto"];
+                        "text/json": components["schemas"]["TrackedProSummonerDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/pro-summoners/candidates/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/pro-summoners/{id}/refresh": {
         parameters: {
             query?: never;
@@ -4682,6 +4861,12 @@ export interface components {
             /** Format: date-time */
             lastUsedAt?: string | null;
         };
+        ApproveProPlayerCandidateRequest: {
+            gameName: string;
+            tagLine: string;
+            platformRegion: string;
+            puuid?: string | null;
+        };
         AuthMeResponse: {
             subject?: string | null;
             name?: string | null;
@@ -5414,6 +5599,25 @@ export interface components {
             spell2Id: number;
             skillOrder?: components["schemas"]["SkillOrderDto"] | null;
         };
+        ProPlayerDiscoveryCandidateDto: {
+            /** Format: uuid */
+            id: string;
+            source: string;
+            externalId: string;
+            proName: string;
+            teamName?: string | null;
+            role?: string | null;
+            soloQueueIds?: string | null;
+            status: string;
+            /** Format: uuid */
+            approvedTrackedProSummonerId?: string | null;
+            /** Format: date-time */
+            firstSeenAtUtc: string;
+            /** Format: date-time */
+            lastSeenAtUtc: string;
+            /** Format: date-time */
+            reviewedAtUtc?: string | null;
+        };
         ProPlayerDto: {
             proName?: string | null;
             teamName?: string | null;
@@ -5876,6 +6080,18 @@ export interface components {
             isPro: boolean;
             isHighEloOtp: boolean;
             isActive: boolean;
+            source: string;
+            sourceExternalId?: string | null;
+            /** Format: date-time */
+            lastVerifiedAtUtc?: string | null;
+            /** Format: int32 */
+            otpChampionId?: number | null;
+            /** Format: int32 */
+            otpGames?: number | null;
+            /** Format: int32 */
+            otpSampleSize?: number | null;
+            /** Format: date-time */
+            otpEvaluatedAtUtc?: string | null;
             /** Format: date-time */
             createdAtUtc: string;
             /** Format: date-time */

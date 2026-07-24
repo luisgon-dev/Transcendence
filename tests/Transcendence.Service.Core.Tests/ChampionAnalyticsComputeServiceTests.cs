@@ -15,6 +15,18 @@ namespace Transcendence.Service.Core.Tests;
 
 public class ChampionAnalyticsComputeServiceTests
 {
+    [Theory]
+    [InlineData(null, "pro")]
+    [InlineData("", "pro")]
+    [InlineData("unknown", "pro")]
+    [InlineData("PRO", "pro")]
+    [InlineData("all", "all")]
+    [InlineData(" highelo ", "highelo")]
+    public void NormalizeProScope_DefaultsToPros(string? input, string expected)
+    {
+        ChampionProComputeService.NormalizeProScope(input).Should().Be(expected);
+    }
+
     [Fact]
     public async Task ComputeTierListAsync_DoesNotPopulatePatchMovementFromPreviousPatchHotPath()
     {

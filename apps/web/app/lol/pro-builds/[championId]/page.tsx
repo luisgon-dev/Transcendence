@@ -6,6 +6,7 @@ import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { AnalyticsPatchFilter } from "@/components/AnalyticsPatchFilter";
 import { AnalyticsRegionFilter } from "@/components/AnalyticsRegionFilter";
+import { ProScopeToggle } from "@/components/ProScopeToggle";
 import { RoleFilterTabs } from "@/components/RoleFilterTabs";
 import { RuneSetupDisplay } from "@/components/RuneSetupDisplay";
 import { WinRateText } from "@/components/WinRateText";
@@ -39,16 +40,10 @@ import {
 type ChampionWinRateSummary = components["schemas"]["ChampionWinRateSummary"];
 type ChampionProBuildsResponse = components["schemas"]["ChampionProBuildsResponse"];
 
-const SCOPE_OPTIONS: readonly { value: ProBuildScope; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "pro", label: "Pros" },
-  { value: "highelo", label: "High-Elo" }
-];
-
 const SCOPE_LABEL: Record<ProBuildScope, string> = {
-  all: "Pro & High-Elo",
+  all: "Pros and One-Tricks",
   pro: "Pros",
-  highelo: "High-Elo"
+  highelo: "One-Tricks"
 };
 
 function proFeedErrorMessage(result: BackendJsonResult<ChampionProBuildsResponse>) {
@@ -248,7 +243,7 @@ export default async function ProBuildsChampionPage({
   const alternativeBuilds = usableCommonBuilds.slice(1);
   const roleExtraParams: Record<string, string> = {};
   if (regionFilter !== "ALL") roleExtraParams.region = regionFilter;
-  if (scopeFilter !== "all") roleExtraParams.scope = scopeFilter;
+  if (scopeFilter !== "pro") roleExtraParams.scope = scopeFilter;
   if (patchFilter) roleExtraParams.patch = patchFilter;
 
   const effectivePatch =
@@ -258,6 +253,7 @@ export default async function ProBuildsChampionPage({
   // off that so the most-played lane lights up and navigation preserves it.
   const effectiveRole = normalizeProBuildRole(proBuilds?.role ?? roleFilter);
   const effectiveScope = normalizeProBuildScope(proBuilds?.scope ?? scopeFilter);
+  const includeOneTricks = scopeFilter !== "pro";
   const sampleNotice = pickMostSevereAnalyticsSample(
     (proBuilds as { sample?: unknown } | null)?.sample as AnalyticsSampleLike,
     (winrates as { sample?: unknown } | null)?.sample as AnalyticsSampleLike
@@ -279,8 +275,7 @@ export default async function ProBuildsChampionPage({
               Pro Solo Queue Builds
             </h1>
             <p className="type-ui mt-2 text-fg/75">
-              Ranked solo-queue builds from tracked pros and high-MMR specialists for {championName}.
-              Not tournament match data.
+              Ranked Solo/Duo builds from tracked professional accounts for {championName}.
             </p>
           </div>
         </div>
@@ -308,24 +303,15 @@ export default async function ProBuildsChampionPage({
             extraParams={roleExtraParams}
           />
           <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} variant="select" />
-          <div role="group" aria-label="Pro pool scope" className="flex flex-wrap gap-x-3 gap-y-3 sm:gap-x-4 sm:gap-y-2">
-            {SCOPE_OPTIONS.map((option) => (
-              <Link
-                key={option.value}
-                href={buildProBuildPageHref(championId, {
-                  role: effectiveRole,
-                  region: regionFilter,
-                  scope: option.value,
-                  patch: patchFilter
-                })}
-                className="control-tab type-ui min-h-11 px-3.5 py-2"
-                data-active={option.value === scopeFilter}
-                aria-current={option.value === scopeFilter ? "page" : undefined}
-              >
-                {option.label}
-              </Link>
-            ))}
-          </div>
+          <ProScopeToggle
+            checked={includeOneTricks}
+            href={buildProBuildPageHref(championId, {
+              role: effectiveRole,
+              region: regionFilter,
+              scope: includeOneTricks ? "pro" : "all",
+              patch: patchFilter
+            })}
+          />
           <AnalyticsPatchFilter patches={patchOptions} activePatch={patchFilter} />
           {patchFilter ? (
             <Link

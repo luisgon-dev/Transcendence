@@ -358,8 +358,8 @@ public class ChampionAnalyticsServiceTests
                 Patch = "15.1"
             });
         harness.ProService
-            .Setup(x => x.ComputeProBuildsFromStatsAsync(103, "ALL", "MIDDLE", "all", "15.1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ChampionProBuildsResponse(103, "15.1", "MIDDLE", "ALL", "all", [], [], []));
+            .Setup(x => x.ComputeProBuildsFromStatsAsync(103, "ALL", "MIDDLE", "pro", "15.1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ChampionProBuildsResponse(103, "15.1", "MIDDLE", "ALL", "pro", [], [], []));
         await harness.Db.SaveChangesAsync();
 
         var resolvedRole = await harness.Service.RefreshDefaultProfileCacheAsync(
@@ -383,7 +383,7 @@ public class ChampionAnalyticsServiceTests
             x => x.ComputeMatchupsFromStatsAsync(103, "MIDDLE", "EMERALD_PLUS", "ALL", "15.1", It.IsAny<CancellationToken>()),
             Times.Once);
         harness.ProService.Verify(
-            x => x.ComputeProBuildsFromStatsAsync(103, "ALL", "MIDDLE", "all", "15.1", It.IsAny<CancellationToken>()),
+            x => x.ComputeProBuildsFromStatsAsync(103, "ALL", "MIDDLE", "pro", "15.1", It.IsAny<CancellationToken>()),
             Times.Once);
     }
 

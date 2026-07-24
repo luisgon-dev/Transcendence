@@ -37,6 +37,7 @@ public sealed class WorkerRecurringJobPolicy(
     public const string RuneSelectionIntegrityBackfillJobId = "rune-selection-integrity-backfill";
     public const string PollLiveGamesJobId = "poll-live-games";
     public const string HighEloProfileRefreshJobId = "high-elo-profile-refresh";
+    public const string ProRosterDiscoveryJobId = "pro-roster-discovery";
     public const string RefreshLockLifecycleCleanupJobId = "refresh-lock-lifecycle-cleanup";
     public const string IngestionHealthAlertJobId = "ingestion-health-alert";
     public const string RefreshPrecomputedAnalyticsJobId = "refresh-precomputed-analytics";
@@ -63,6 +64,7 @@ public sealed class WorkerRecurringJobPolicy(
         RuneSelectionIntegrityBackfillJobId,
         PollLiveGamesJobId,
         HighEloProfileRefreshJobId,
+        ProRosterDiscoveryJobId,
         RefreshLockLifecycleCleanupJobId,
         IngestionHealthAlertJobId,
         RefreshPrecomputedAnalyticsJobId,
@@ -160,6 +162,12 @@ public sealed class WorkerRecurringJobPolicy(
                 schedule.HighEloProfileRefreshCron,
                 schedule.EnableHighEloProfileRefresh,
                 ConfigureHighEloProfileRefresh),
+            CreateDescriptor(
+                ProRosterDiscoveryJobId,
+                "Jobs:Schedule:ProRosterDiscoveryCron",
+                schedule.ProRosterDiscoveryCron,
+                schedule.EnableProRosterDiscovery,
+                ConfigureProRosterDiscovery),
             CreateDescriptor(
                 PollLiveGamesJobId,
                 "Jobs:Schedule:LiveGamePollingCron",
@@ -326,6 +334,15 @@ public sealed class WorkerRecurringJobPolicy(
         recurringJobManager.AddOrUpdate<AddOrUpdateHighEloProfiles>(
             HighEloProfileRefreshJobId,
             job => job.Execute(CancellationToken.None),
+            cronExpression,
+            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
+    private static void ConfigureProRosterDiscovery(
+        IRecurringJobManager recurringJobManager,
+        string cronExpression) =>
+        recurringJobManager.AddOrUpdate<ProRosterDiscoveryJob>(
+            ProRosterDiscoveryJobId,
+            job => job.ExecuteAsync(CancellationToken.None),
             cronExpression,
             new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
 

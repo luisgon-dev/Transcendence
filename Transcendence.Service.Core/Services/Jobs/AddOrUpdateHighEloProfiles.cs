@@ -100,6 +100,22 @@ public class AddOrUpdateHighEloProfiles(
                 platform,
                 summonerPuuids.Count);
 
+            // Older versions treated every Master+ account as an OTP. Clear those unverified,
+            // auto-created rows before rebuilding the roster from match evidence below.
+            await context.TrackedProSummoners
+                .Where(x =>
+                    x.PlatformRegion == platform.ToString() &&
+                    !x.IsPro &&
+                    x.IsHighEloOtp &&
+                    x.OtpEvaluatedAtUtc == null &&
+                    x.ProName == null &&
+                    x.TeamName == null)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(x => x.IsHighEloOtp, false)
+                    .SetProperty(x => x.IsActive, false)
+                    .SetProperty(x => x.Source, "riot-high-elo")
+                    .SetProperty(x => x.UpdatedAtUtc, DateTime.UtcNow), stoppingToken);
+
             foreach (var summonerPuuid in summonerPuuids)
             {
                 try
@@ -107,9 +123,10 @@ public class AddOrUpdateHighEloProfiles(
                     var summoner =
                         await summonerService.GetSummonerByPuuidAsync(summonerPuuid, platform, stoppingToken);
                     await summonerRepository.AddOrUpdateSummonerAsync(summoner, stoppingToken);
-                    await UpsertTrackedHighValueSummonerAsync(summoner, platform, stoppingToken);
+                    var isOtp = await ReconcileTrackedOtpAsync(summoner, platform, stoppingToken);
                     pendingChanges++;
-                    rosterUpdates++;
+                    if (isOtp)
+                        rosterUpdates++;
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -149,16 +166,30 @@ public class AddOrUpdateHighEloProfiles(
         }
     }
 
-    private async Task UpsertTrackedHighValueSummonerAsync(
+    private async Task<bool> ReconcileTrackedOtpAsync(
         Data.Models.LoL.Account.Summoner summoner,
         PlatformRoute platform,
         CancellationToken stoppingToken)
     {
         if (string.IsNullOrWhiteSpace(summoner.Puuid))
-            return;
+            return false;
 
         var nowUtc = DateTime.UtcNow;
         var platformRegion = platform.ToString();
+        var championIds = await context.MatchParticipants
+            .AsNoTracking()
+            .Where(participant =>
+                participant.Puuid == summoner.Puuid &&
+                participant.Match.PlatformRegion == platformRegion &&
+                participant.Match.Status == Data.Models.LoL.Match.FetchStatus.Success &&
+                (participant.Match.QueueId == QueueCatalog.RankedSoloDuoQueueId ||
+                 (participant.Match.QueueId == 0 &&
+                  participant.Match.QueueType == QueueCatalog.RankedSoloDuoQueueId.ToString())))
+            .OrderByDescending(participant => participant.Match.MatchDate)
+            .Take(50)
+            .Select(participant => participant.ChampionId)
+            .ToListAsync(stoppingToken);
+        var qualification = EvaluateOtp(championIds);
         var existing = await context.TrackedProSummoners
             .FirstOrDefaultAsync(
                 x => x.Puuid == summoner.Puuid && x.PlatformRegion == platformRegion,
@@ -166,6 +197,9 @@ public class AddOrUpdateHighEloProfiles(
 
         if (existing == null)
         {
+            if (!qualification.IsQualified)
+                return false;
+
             context.TrackedProSummoners.Add(new TrackedProSummoner
             {
                 Id = Guid.NewGuid(),
@@ -174,20 +208,62 @@ public class AddOrUpdateHighEloProfiles(
                 GameName = summoner.GameName,
                 TagLine = summoner.TagLine,
                 IsPro = false,
-                // These are auto-discovered Challenger/GM/Master players — flag them so the
-                // "high-elo" / "all" pro-analytics scopes can include them (IsPro stays curated).
                 IsHighEloOtp = true,
                 IsActive = true,
+                Source = "riot-high-elo",
+                LastVerifiedAtUtc = nowUtc,
+                OtpChampionId = qualification.ChampionId,
+                OtpGames = qualification.ChampionGames,
+                OtpSampleSize = qualification.SampleSize,
+                OtpEvaluatedAtUtc = nowUtc,
                 UpdatedAtUtc = nowUtc,
                 CreatedAtUtc = nowUtc
             });
-            return;
+            return true;
         }
 
         existing.GameName = summoner.GameName;
         existing.TagLine = summoner.TagLine;
-        existing.IsHighEloOtp = true;
-        existing.IsActive = true;
+        existing.IsHighEloOtp = qualification.IsQualified;
+        if (qualification.IsQualified)
+            existing.IsActive = true;
+        else if (!existing.IsPro && existing.Source == "riot-high-elo")
+            existing.IsActive = false;
+        if (!existing.IsPro)
+            existing.Source = "riot-high-elo";
+        existing.LastVerifiedAtUtc = nowUtc;
+        existing.OtpChampionId = qualification.ChampionId;
+        existing.OtpGames = qualification.ChampionGames;
+        existing.OtpSampleSize = qualification.SampleSize;
+        existing.OtpEvaluatedAtUtc = nowUtc;
         existing.UpdatedAtUtc = nowUtc;
+        return qualification.IsQualified;
     }
+
+    public static OtpQualification EvaluateOtp(IReadOnlyCollection<int> championIds)
+    {
+        const int sampleSize = 50;
+        const int requiredChampionGames = 30;
+        if (championIds.Count < sampleSize)
+            return new OtpQualification(false, null, 0, championIds.Count);
+
+        var topChampion = championIds
+            .Take(sampleSize)
+            .GroupBy(championId => championId)
+            .Select(group => new { ChampionId = group.Key, Games = group.Count() })
+            .OrderByDescending(row => row.Games)
+            .ThenBy(row => row.ChampionId)
+            .First();
+        return new OtpQualification(
+            topChampion.Games >= requiredChampionGames,
+            topChampion.ChampionId,
+            topChampion.Games,
+            sampleSize);
+    }
+
+    public sealed record OtpQualification(
+        bool IsQualified,
+        int? ChampionId,
+        int ChampionGames,
+        int SampleSize);
 }

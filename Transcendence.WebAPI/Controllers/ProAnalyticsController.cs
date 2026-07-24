@@ -19,7 +19,7 @@ public class ProAnalyticsController(IChampionAnalyticsService analyticsService) 
     /// Champions ranked by how often tracked pros / high-elo players pick them.
     /// </summary>
     /// <param name="region">Optional region filter (e.g., NA, EUW, KR). Defaults to ALL.</param>
-    /// <param name="scope">Roster scope: "pro", "highelo", or "all". Defaults to all.</param>
+    /// <param name="scope">Roster scope: "pro", "highelo", or "all". Defaults to pro.</param>
     /// <param name="patch">Optional patch version. Defaults to the active analytics patch.</param>
     /// <param name="ct">Cancellation token</param>
     [HttpGet("champions")]

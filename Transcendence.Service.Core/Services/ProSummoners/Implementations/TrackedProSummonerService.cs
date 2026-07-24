@@ -30,6 +30,13 @@ public sealed class TrackedProSummonerService(TranscendenceContext db) : ITracke
                 x.IsPro,
                 x.IsHighEloOtp,
                 x.IsActive,
+                x.Source,
+                x.SourceExternalId,
+                x.LastVerifiedAtUtc,
+                x.OtpChampionId,
+                x.OtpGames,
+                x.OtpSampleSize,
+                x.OtpEvaluatedAtUtc,
                 x.CreatedAtUtc,
                 x.UpdatedAtUtc))
             .ToListAsync(ct);
@@ -51,6 +58,13 @@ public sealed class TrackedProSummonerService(TranscendenceContext db) : ITracke
                 x.IsPro,
                 x.IsHighEloOtp,
                 x.IsActive,
+                x.Source,
+                x.SourceExternalId,
+                x.LastVerifiedAtUtc,
+                x.OtpChampionId,
+                x.OtpGames,
+                x.OtpSampleSize,
+                x.OtpEvaluatedAtUtc,
                 x.CreatedAtUtc,
                 x.UpdatedAtUtc))
             .FirstOrDefaultAsync(ct);
@@ -116,6 +130,8 @@ public sealed class TrackedProSummonerService(TranscendenceContext db) : ITracke
             IsPro = request.IsPro,
             IsHighEloOtp = request.IsHighEloOtp,
             IsActive = request.IsActive,
+            Source = "manual",
+            LastVerifiedAtUtc = now,
             CreatedAtUtc = now,
             UpdatedAtUtc = now
         };
@@ -146,6 +162,7 @@ public sealed class TrackedProSummonerService(TranscendenceContext db) : ITracke
         entity.IsPro = request.IsPro;
         entity.IsHighEloOtp = request.IsHighEloOtp;
         entity.IsActive = request.IsActive;
+        entity.LastVerifiedAtUtc = DateTime.UtcNow;
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
         await db.SaveChangesAsync(ct);
@@ -163,6 +180,81 @@ public sealed class TrackedProSummonerService(TranscendenceContext db) : ITracke
         return true;
     }
 
+    public async Task<IReadOnlyList<ProPlayerDiscoveryCandidateDto>> ListCandidatesAsync(
+        string status,
+        CancellationToken ct = default)
+    {
+        var normalizedStatus = NormalizeCandidateStatus(status);
+        return await db.ProPlayerDiscoveryCandidates
+            .AsNoTracking()
+            .Where(x => x.Status == normalizedStatus)
+            .OrderByDescending(x => x.LastSeenAtUtc)
+            .ThenBy(x => x.ProName)
+            .Take(500)
+            .Select(x => new ProPlayerDiscoveryCandidateDto(
+                x.Id,
+                x.Source,
+                x.ExternalId,
+                x.ProName,
+                x.TeamName,
+                x.Role,
+                x.SoloQueueIds,
+                x.Status,
+                x.ApprovedTrackedProSummonerId,
+                x.FirstSeenAtUtc,
+                x.LastSeenAtUtc,
+                x.ReviewedAtUtc))
+            .ToListAsync(ct);
+    }
+
+    public async Task<TrackedProCreateResult> ApproveCandidateAsync(
+        Guid id,
+        ApproveProPlayerCandidateRequest request,
+        CancellationToken ct = default)
+    {
+        var candidate = await db.ProPlayerDiscoveryCandidates.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (candidate is null)
+            return TrackedProCreateResult.Invalid("Discovery candidate was not found.");
+        if (candidate.Status == "approved")
+            return TrackedProCreateResult.Invalid("Discovery candidate is already approved.");
+
+        var outcome = await CreateAsync(new UpsertTrackedProSummonerRequest(
+            request.GameName,
+            request.TagLine,
+            request.PlatformRegion,
+            request.Puuid,
+            candidate.ProName,
+            candidate.TeamName,
+            IsPro: true,
+            IsHighEloOtp: false,
+            IsActive: true), ct);
+        if (!outcome.IsSuccess)
+            return outcome;
+
+        var created = await db.TrackedProSummoners
+            .FirstAsync(x => x.Id == outcome.Value!.Id, ct);
+        created.Source = candidate.Source;
+        created.SourceExternalId = candidate.ExternalId;
+        created.LastVerifiedAtUtc = DateTime.UtcNow;
+        candidate.Status = "approved";
+        candidate.ApprovedTrackedProSummonerId = created.Id;
+        candidate.ReviewedAtUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return TrackedProCreateResult.Success(ToDto(created));
+    }
+
+    public async Task<bool> RejectCandidateAsync(Guid id, CancellationToken ct = default)
+    {
+        var candidate = await db.ProPlayerDiscoveryCandidates.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (candidate is null)
+            return false;
+
+        candidate.Status = "rejected";
+        candidate.ReviewedAtUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+
     private static TrackedProSummonerDto ToDto(TrackedProSummoner entity) => new(
         entity.Id,
         entity.Puuid,
@@ -174,9 +266,24 @@ public sealed class TrackedProSummonerService(TranscendenceContext db) : ITracke
         entity.IsPro,
         entity.IsHighEloOtp,
         entity.IsActive,
+        entity.Source,
+        entity.SourceExternalId,
+        entity.LastVerifiedAtUtc,
+        entity.OtpChampionId,
+        entity.OtpGames,
+        entity.OtpSampleSize,
+        entity.OtpEvaluatedAtUtc,
         entity.CreatedAtUtc,
         entity.UpdatedAtUtc);
 
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string NormalizeCandidateStatus(string? status) =>
+        status?.Trim().ToLowerInvariant() switch
+        {
+            "approved" => "approved",
+            "rejected" => "rejected",
+            _ => "pending"
+        };
 }

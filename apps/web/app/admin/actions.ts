@@ -144,6 +144,39 @@ export async function refreshProSummonerAction(formData: FormData) {
     () => revalidatePath("/admin/pro-summoners"));
 }
 
+export async function approveProCandidateAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "").trim();
+  const gameName = String(formData.get("gameName") ?? "").trim();
+  const tagLine = String(formData.get("tagLine") ?? "").trim();
+  const platformRegion = String(formData.get("platformRegion") ?? "").trim();
+  if (!id || !gameName || !tagLine || !platformRegion) {
+    return { error: "Riot game name, tag line, and region are required." };
+  }
+
+  try {
+    await adminPost(`/api/admin/pro-summoners/candidates/${encodeURIComponent(id)}/approve`, {
+      gameName,
+      tagLine,
+      platformRegion,
+      puuid: String(formData.get("puuid") ?? "").trim() || null
+    });
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Failed to approve candidate." };
+  }
+
+  revalidatePath("/admin/pro-summoners");
+  return { error: null };
+}
+
+export async function rejectProCandidateAction(formData: FormData) {
+  return simpleAdminAction(
+    formData,
+    "id",
+    (id) => `/api/admin/pro-summoners/candidates/${id}/reject`,
+    () => revalidatePath("/admin/pro-summoners")
+  );
+}
+
 export type BulkImportResult = {
   created: number;
   errors: string[];

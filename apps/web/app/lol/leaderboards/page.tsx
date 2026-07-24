@@ -71,7 +71,7 @@ export default async function LeaderboardsPage({
   if (!response.ok || !response.body) {
     return (
       <div className="grid gap-4">
-        <Toolbar eyebrow="Ranked Competition" title="Leaderboards" filters={filterBar} />
+        <Toolbar eyebrow="Ranked" title="Leaderboards" filters={filterBar} />
         <BackendErrorCard
           title="Leaderboard unavailable"
           message="We couldn't load this ranked board right now."
@@ -88,7 +88,7 @@ export default async function LeaderboardsPage({
   return (
     <div className="grid gap-4">
       <Toolbar
-        eyebrow="Ranked Competition"
+        eyebrow="Ranked"
         title="Leaderboards"
         meta={
           <>

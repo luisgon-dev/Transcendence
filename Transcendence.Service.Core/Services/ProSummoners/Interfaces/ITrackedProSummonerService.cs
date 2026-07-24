@@ -18,6 +18,17 @@ public interface ITrackedProSummonerService
         CancellationToken ct = default);
 
     Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);
+
+    Task<IReadOnlyList<ProPlayerDiscoveryCandidateDto>> ListCandidatesAsync(
+        string status,
+        CancellationToken ct = default);
+
+    Task<TrackedProCreateResult> ApproveCandidateAsync(
+        Guid id,
+        ApproveProPlayerCandidateRequest request,
+        CancellationToken ct = default);
+
+    Task<bool> RejectCandidateAsync(Guid id, CancellationToken ct = default);
 }
 
 public sealed record TrackedProCreateResult(TrackedProSummonerDto? Value, string? ValidationError)

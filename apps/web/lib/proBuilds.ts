@@ -20,9 +20,9 @@ export function normalizeProBuildRole(role: string | undefined | null): ProBuild
 }
 
 export function normalizeProBuildScope(scope: string | undefined | null): ProBuildScope {
-  if (!scope) return "all";
+  if (!scope) return "pro";
   const normalized = scope.trim().toLowerCase();
-  return PRO_BUILD_SCOPES.includes(normalized as ProBuildScope) ? (normalized as ProBuildScope) : "all";
+  return PRO_BUILD_SCOPES.includes(normalized as ProBuildScope) ? (normalized as ProBuildScope) : "pro";
 }
 
 export function normalizeProBuildPatch(patch: string | undefined | null): string | null {
@@ -45,7 +45,7 @@ export function buildProBuildFilterParams({
   const params = new URLSearchParams();
   if (role !== "ALL") params.set("role", role);
   if (region !== "ALL") params.set("region", region);
-  if (scope && scope !== "all") params.set("scope", scope);
+  if (scope && scope !== "pro") params.set("scope", scope);
   if (patch) params.set("patch", patch);
   return params;
 }

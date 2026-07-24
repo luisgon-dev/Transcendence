@@ -89,7 +89,7 @@ public interface IChampionAnalyticsService
 
     /// <summary>
     /// Gets champions ranked by pro / high-elo pick frequency, with caching.
-    /// Scope: "pro" | "highelo" | "all" (default all). Cached for 24 hours.
+    /// Scope: "pro" | "highelo" | "all" (default pro). Cached for 24 hours.
     /// </summary>
     Task<ProChampionPlayrateResponse> GetProChampionPlayrateAsync(
         string? region,

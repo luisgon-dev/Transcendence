@@ -104,9 +104,9 @@ export default async function ChampionsPage({
   return (
     <div className="grid gap-4">
       <Toolbar
-        eyebrow="League Directory"
+        eyebrow="Champions"
         title="Champions"
-        meta={<span>Builds, win rates, and matchups for every champion</span>}
+        meta={<span>Builds, win rates, and matchups</span>}
         filters={<AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />}
       />
       <AnalyticsSampleBanner

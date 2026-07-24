@@ -699,10 +699,10 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             championId, effectiveRole, tierForCompute, normalizedRegion, currentPatch, ct);
         await _cache.SetAsync(matchupsKey, matchups, AnalyticsCacheOptions, matchupsTags, ct);
 
-        // ── Pro-builds default (most-played lane, region=ALL, scope=all) ──
+        // ── Pro-builds default (most-played lane, region=ALL, scope=pro) ──
         if (includeProBuilds)
         {
-            var proScope = ChampionProComputeService.NormalizeProScope(null); // "all"
+            var proScope = ChampionProComputeService.NormalizeProScope(null); // "pro"
             const string proRegion = "ALL";
             var proKey = BuildProBuildsKey(championId, proRegion, effectiveRole, proScope, currentPatch);
             var proTags = new[] { AnalyticsCacheTag, CacheTags.ForPatch(currentPatch), "probuilds" };

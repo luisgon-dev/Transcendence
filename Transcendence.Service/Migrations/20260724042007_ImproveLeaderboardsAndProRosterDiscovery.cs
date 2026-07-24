@@ -84,11 +84,6 @@ namespace Transcendence.Service.Migrations
                 columns: new[] { "Source", "SourceExternalId" });
 
             migrationBuilder.CreateIndex(
-                name: "IX_Matches_Leaderboard",
-                table: "Matches",
-                columns: new[] { "PlatformRegion", "Status", "QueueId", "MatchDate" });
-
-            migrationBuilder.CreateIndex(
                 name: "IX_ProPlayerDiscoveryCandidates_Source_ExternalId",
                 table: "ProPlayerDiscoveryCandidates",
                 columns: new[] { "Source", "ExternalId" },
@@ -109,10 +104,6 @@ namespace Transcendence.Service.Migrations
             migrationBuilder.DropIndex(
                 name: "IX_TrackedProSummoners_Source_SourceExternalId",
                 table: "TrackedProSummoners");
-
-            migrationBuilder.DropIndex(
-                name: "IX_Matches_Leaderboard",
-                table: "Matches");
 
             migrationBuilder.DropColumn(
                 name: "LastVerifiedAtUtc",

@@ -13,7 +13,7 @@ using Transcendence.Data;
 namespace Transcendence.Service.Migrations
 {
     [DbContext(typeof(TranscendenceContext))]
-    [Migration("20260724034851_ImproveLeaderboardsAndProRosterDiscovery")]
+    [Migration("20260724042007_ImproveLeaderboardsAndProRosterDiscovery")]
     partial class ImproveLeaderboardsAndProRosterDiscovery
     {
         /// <inheritdoc />
@@ -1795,9 +1795,6 @@ namespace Transcendence.Service.Migrations
                     b.HasIndex("QueueType");
 
                     b.HasIndex("PlatformRegion", "Status", "Patch");
-
-                    b.HasIndex("PlatformRegion", "Status", "QueueId", "MatchDate")
-                        .HasDatabaseName("IX_Matches_Leaderboard");
 
                     b.ToTable("Matches");
                 });

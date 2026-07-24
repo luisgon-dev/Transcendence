@@ -1793,9 +1793,6 @@ namespace Transcendence.Service.Migrations
 
                     b.HasIndex("PlatformRegion", "Status", "Patch");
 
-                    b.HasIndex("PlatformRegion", "Status", "QueueId", "MatchDate")
-                        .HasDatabaseName("IX_Matches_Leaderboard");
-
                     b.ToTable("Matches");
                 });
 

@@ -46,6 +46,10 @@
       "ProvisionalWindowHours": 96,
       "MaturingWindowHours": 240
     },
+    "Precompute": {
+      "MatchupChampionBatchSize": 16,
+      "CommandTimeoutSeconds": 120
+    },
     "BuildAtlas": {
       "MatchBatchSize": 500,
       "CommandTimeoutSeconds": 120

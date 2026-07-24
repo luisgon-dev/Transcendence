@@ -409,7 +409,20 @@ the hourly schedule. A PostgreSQL session advisory lock prevents startup, recurr
 triggers from running generations concurrently; a losing trigger exits immediately, and PostgreSQL
 releases the lock automatically if the owning worker connection dies. Hangfire PostgreSQL sliding
 invisibility renewal is enabled globally so long-running jobs retain queue ownership past the
-provider's default 30-minute invisibility window.
+provider's default 30-minute invisibility window. Failed generations retain their manifest and
+failure reason for diagnosis, but their resource/population payload and processed-match ledger are
+deleted immediately (and swept again after each successful promotion). Cleanup is best-effort after
+promotion so a storage-hygiene failure can never demote a successfully published generation.
+
+### Precomputed Champion Analytics
+
+The hourly `refresh-precomputed-analytics` job replaces the active patch's champion tabular,
+matchup, build, and pro-surface atoms in one transaction. The matchup phase partitions the
+all-champion lane-pair/timeline aggregation into disjoint champion batches so PostgreSQL can use the
+champion-side covering index without a single corpus-wide command exceeding its timeout:
+
+- `Analytics:Precompute:MatchupChampionBatchSize` (default `16`, clamped to 1–100)
+- `Analytics:Precompute:CommandTimeoutSeconds` (default `120`, clamped to 30–600)
 
 ### Champion Analytics Ingestion
 

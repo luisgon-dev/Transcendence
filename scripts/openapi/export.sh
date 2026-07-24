@@ -6,7 +6,9 @@ cd "$ROOT"
 
 mkdir -p "$ROOT/openapi"
 
-if command -v dotnet >/dev/null 2>&1; then
+if [[ -n "${TRN_DOTNET_BIN:-}" ]]; then
+  DOTNET_BIN="$TRN_DOTNET_BIN"
+elif command -v dotnet >/dev/null 2>&1; then
   DOTNET_BIN="dotnet"
 elif command -v dotnet.exe >/dev/null 2>&1; then
   DOTNET_BIN="dotnet.exe"

@@ -9,14 +9,14 @@ namespace Transcendence.Service.Core.Tests;
 /// <see cref="RegionalRoute.SEA"/>, which is correct for Match-V5 but 404s for Account-V1 (which has
 /// no SEA cluster). <see cref="RiotRoutingExtensions.ToAccountRegional"/> clamps SEA -> ASIA. This
 /// was a real prod bug — every OC1 summoner enrichment 404'd, yielding 0 seeds for the region.
+/// Philippines and Thailand moved into SG2 in January 2025, so the retired PH2/TH2 routes are
+/// intentionally excluded.
 /// </summary>
 public class RiotRoutingExtensionsTests
 {
     [Theory]
     [InlineData(PlatformRoute.OC1)]   // OCE -> SEA (Match-V5) -> must clamp to ASIA for Account-V1
-    [InlineData(PlatformRoute.PH2)]
     [InlineData(PlatformRoute.SG2)]
-    [InlineData(PlatformRoute.TH2)]
     [InlineData(PlatformRoute.TW2)]
     [InlineData(PlatformRoute.VN2)]
     public void ToAccountRegional_ClampsSeaPlatformsToAsia(PlatformRoute platform)

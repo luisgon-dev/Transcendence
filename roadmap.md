@@ -22,6 +22,22 @@
 | **P3** | Polish, Refactors & Cleanup | 71 | 0 | 12 | 59 |
 | | **Total** | **149** | | | |
 
+## Post-audit production follow-ups — 2026-07-23
+
+These operational findings were discovered while validating the completed audit roadmap in
+production. They are tracked separately so the original 149-finding totals remain intact.
+
+- [x] Partition champion-matchup precomputation into bounded champion batches and give the
+  analytics query an explicit, configurable timeout.
+- [x] Retain failed Build Atlas manifests for diagnosis while deleting their unusable snapshot
+  payload and processed-match ledger.
+- [x] Reconcile the local WebAPI service-boundary refactor with `main`; the deployed implementation
+  is a strict superset, so no duplicate cherry-pick is required.
+- [x] Replace obsolete .NET/OpenTelemetry APIs, retired Riot platform constants, and Node 20 GitHub
+  Actions runtimes; document the immutable EF migration warning exception.
+- [x] Upgrade direct and transitive npm/NuGet dependencies until both package-manager vulnerability
+  audits report zero advisories.
+
 ---
 
 ## P0 — Stop the Bleeding — Correctness, Security & Deploy Safety

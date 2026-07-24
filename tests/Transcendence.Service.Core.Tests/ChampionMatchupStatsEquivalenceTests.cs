@@ -27,8 +27,20 @@ public class ChampionMatchupStatsEquivalenceTests
     public async Task Matchups_StatsPath_EqualsRawCompute_AcrossRankScopes()
     {
         await using var ctx = await SeededAsync();
-        await new PrecomputedAnalyticsRefresher(ctx.Db, BuildService(ctx.Db), ProService(ctx.Db), Options.Create(new TieringOptions()), NullLogger<PrecomputedAnalyticsRefresher>.Instance)
+        var previousTimeout = ctx.Db.Database.GetCommandTimeout();
+        await new PrecomputedAnalyticsRefresher(
+                ctx.Db,
+                BuildService(ctx.Db),
+                ProService(ctx.Db),
+                Options.Create(new TieringOptions()),
+                NullLogger<PrecomputedAnalyticsRefresher>.Instance,
+                Options.Create(new PrecomputedAnalyticsOptions
+                {
+                    MatchupChampionBatchSize = 1,
+                    CommandTimeoutSeconds = 45
+                }))
             .RefreshMatchupsAsync(Patch, CancellationToken.None);
+        ctx.Db.Database.GetCommandTimeout().Should().Be(previousTimeout);
         var svc = Service(ctx.Db);
 
         foreach (var tier in new string?[] { null, "ALL", "EMERALD_PLUS", "EMERALD", "DIAMOND" })

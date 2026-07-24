@@ -633,6 +633,13 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         await _cache.RemoveByTagAsync(CacheTags.ForPatch(patch), ct);
     }
 
+    public async Task InvalidateProAnalyticsCacheAsync(CancellationToken ct)
+    {
+        await _cache.RemoveByTagAsync("proplayrate", ct);
+        await _cache.RemoveByTagAsync("probuilds", ct);
+        await _cache.RemoveByTagAsync("proroster", ct);
+    }
+
     public async Task<string?> RefreshDefaultProfileCacheAsync(
         int championId,
         string? rankTier,

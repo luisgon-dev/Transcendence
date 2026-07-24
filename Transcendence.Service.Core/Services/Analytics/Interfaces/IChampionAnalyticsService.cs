@@ -150,6 +150,12 @@ public interface IChampionAnalyticsService
     Task InvalidateAnalyticsCacheForPatchAsync(string patch, CancellationToken ct);
 
     /// <summary>
+    /// Invalidates roster, playrate, and pro-build cache entries after the tracked roster or its
+    /// durable snapshots change, without evicting unrelated champion analytics.
+    /// </summary>
+    Task InvalidateProAnalyticsCacheAsync(CancellationToken ct);
+
+    /// <summary>
     /// Recomputes and OVERWRITES (gap-free, via HybridCache SetAsync) the cached analytics the
     /// default champion profile page reads: win rates (at <paramref name="rankTier"/>, region=ALL,
     /// no role), then builds + matchups for the resolved most-played lane, and optionally the

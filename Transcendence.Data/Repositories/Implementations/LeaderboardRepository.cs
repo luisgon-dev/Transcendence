@@ -92,10 +92,12 @@ public sealed class LeaderboardRepository(TranscendenceContext db) : ILeaderboar
 
         // Use one explicit participant/match/summoner join before grouping. Grouping directly over
         // navigation properties made EF translate Max(participant.Match.FetchedAt) into a correlated
-        // subquery that re-joined the same three large tables for every aggregate row.
+        // subquery that re-joined the same three large tables for every aggregate row. Ignore the
+        // global "not permanently unfetchable" filters here because match.Status == Success below is
+        // stricter; otherwise the participant filter adds a second redundant Matches join.
         var participantQuery =
-            from participant in db.MatchParticipants.AsNoTracking()
-            join match in db.Matches.AsNoTracking() on participant.MatchId equals match.Id
+            from participant in db.MatchParticipants.IgnoreQueryFilters().AsNoTracking()
+            join match in db.Matches.IgnoreQueryFilters().AsNoTracking() on participant.MatchId equals match.Id
             join summoner in db.Summoners.AsNoTracking() on participant.SummonerId equals summoner.Id
             where participant.ChampionId == championId &&
                   match.Status == FetchStatus.Success &&

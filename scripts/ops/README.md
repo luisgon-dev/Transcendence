@@ -10,11 +10,13 @@ the registry digest has changed, so pushes never auto-deployed and each release 
 be recreated by hand (see task **P1.3b**).
 
 `poll-deploy.sh` replaces wud for the three app services (`web`, `webapi`, `service`)
-with a deterministic, **outbound-only** digest poll:
+with a deterministic, **outbound-only** release poll:
 
-1. Resolve the current `:main` manifest digest from ghcr with an anonymous pull token
-   (the packages are public).
-2. Compare it to the digest the running container was pulled at.
+1. Resolve the current `:main` manifest digest from GHCR and its
+   `org.opencontainers.image.revision` label (the packages are public).
+2. Compare both to the running container. The revision comparison is required because GHCR/Buildx
+   can publish a rebuilt tag whose reported manifest digest is unchanged; digest-only comparison
+   would silently miss that release.
 3. If they differ, deploy in dependency order: `service` → `webapi` → `web`. Before replacing the
    worker, run the newly pulled image once with `Database__MigrateOnly=true`; only a successful
    migration continues the release.
@@ -25,7 +27,7 @@ with a deterministic, **outbound-only** digest poll:
 
 No inbound exposure, no CI secret, no self-hosted runner. A `flock` guard prevents
 overlapping runs. Runs every ~60s via the systemd timer (≈ wud's old cadence). Remote and
-local digest-resolution failures are counted per service under `/var/lib/transcendence-deploy`;
+local digest/revision-resolution failures are counted per service under `/var/lib/transcendence-deploy`;
 the third consecutive failure sends one Discord alert, and a successful resolution resets the
 counter. The bounded health wait defaults to 420 seconds so the worker's four-minute startup
 grace can complete.

@@ -12,6 +12,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { ChevronRightIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 import { MatchScoreboard } from "@/components/lol-profile/MatchScoreboard";
+import { PerformanceIndicator } from "@/components/lol-profile/PerformanceIndicator";
 import { useStaticData } from "@/components/lol-profile/StaticDataContext";
 import {
   formatCompactNumber,
@@ -291,7 +292,8 @@ function MatchHistoryCard({
           </div>
 
           <div className="match-snapshot-stats">
-            <div>
+            <div className="flex flex-col items-start gap-2 @min-[36rem]:items-end">
+              <PerformanceIndicator performance={match.performance} compact />
               <p className="text-xl font-semibold leading-tight tracking-tight text-fg tabular-nums">
                 <span>{match.kills}</span>
                 <span className="text-muted"> / </span>

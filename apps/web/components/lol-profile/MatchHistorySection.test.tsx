@@ -39,6 +39,17 @@ const MATCH: MatchSummary = {
     primarySelections: [8005, 8009, 9103, 8014],
     subSelections: [8345, 8347],
     statShards: [5005, 5008, 5001]
+  },
+  performance: {
+    score: 9.1,
+    teamRank: 1,
+    teamSize: 5,
+    label: "MVP",
+    killParticipation: 0.74,
+    damageShare: 0.32,
+    goldShare: 0.26,
+    visionShare: 0.16,
+    csPerMin: 8.4
   }
 };
 
@@ -131,6 +142,11 @@ describe("MatchHistorySection", () => {
     expect(screen.getByLabelText("Item build preview")).toBeTruthy();
     expect(screen.getByText("8.4 CS/min")).toBeTruthy();
     expect(screen.getByText("3.40 KDA")).toBeTruthy();
+    expect(screen.getByText("MVP")).toBeTruthy();
+    expect(screen.getByText("9.1")).toBeTruthy();
+    expect(screen.getByTestId("performance-indicator").getAttribute("title")).toContain(
+      "74% kill participation"
+    );
     expect(screen.getByText("Details")).toBeTruthy();
 
     await user.click(matchButton);

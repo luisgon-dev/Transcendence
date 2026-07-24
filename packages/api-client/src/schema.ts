@@ -5364,6 +5364,25 @@ export interface components {
             queueType: string;
             queueFamily: string;
         };
+        MatchPerformanceSummary: {
+            /** Format: double */
+            score: number;
+            /** Format: int32 */
+            teamRank: number;
+            /** Format: int32 */
+            teamSize: number;
+            label?: string | null;
+            /** Format: double */
+            killParticipation: number;
+            /** Format: double */
+            damageShare: number;
+            /** Format: double */
+            goldShare: number;
+            /** Format: double */
+            visionShare: number;
+            /** Format: double */
+            csPerMin: number;
+        };
         MatchRuneDetailDto: {
             /** Format: int32 */
             primaryStyleId: number;
@@ -5542,6 +5561,7 @@ export interface components {
             summonerSpell2Id: number;
             items: number[];
             runes: components["schemas"]["ParticipantRunesDto"];
+            performance: components["schemas"]["MatchPerformanceSummary"];
         };
         ParticipantRunesDto: {
             /** Format: int32 */
@@ -5777,6 +5797,7 @@ export interface components {
             items: number[];
             runes: components["schemas"]["MatchRuneSummaryDto"];
             runesDetail: components["schemas"]["MatchRuneDetailDto"];
+            performance: components["schemas"]["MatchPerformanceSummary"];
         };
         RecentMatchSummaryDtoPagedResultDto: {
             items: components["schemas"]["RecentMatchSummaryDto"][];

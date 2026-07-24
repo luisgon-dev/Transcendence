@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { ParticipantRuneCard } from "@/components/lol-profile/ParticipantRuneCard";
+import { PerformanceIndicator } from "@/components/lol-profile/PerformanceIndicator";
 import { useStaticData } from "@/components/lol-profile/StaticDataContext";
 import { TableScroll, Table, Th, Td } from "@/components/ui/Table";
 import { Tooltip } from "@/components/ui/Tooltip";
@@ -171,7 +172,10 @@ function ScoreboardRow({
                 {displayName}
               </p>
             )}
-            <p className="type-caption text-muted">{roleDisplayLabel(normalizeRoleKey(participant.teamPosition))}</p>
+            <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+              <p className="type-caption text-muted">{roleDisplayLabel(normalizeRoleKey(participant.teamPosition))}</p>
+              <PerformanceIndicator performance={participant.performance} compact />
+            </div>
           </div>
         </div>
       </Td>

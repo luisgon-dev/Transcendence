@@ -155,6 +155,18 @@ export type MatchRuneDetail = {
   statShards: number[];
 };
 
+export type MatchPerformance = {
+  score: number;
+  teamRank: number;
+  teamSize: number;
+  label?: string | null;
+  killParticipation: number;
+  damageShare: number;
+  goldShare: number;
+  visionShare: number;
+  csPerMin: number;
+};
+
 export type MatchSummary = {
   matchId: string;
   matchDate: number;
@@ -174,6 +186,7 @@ export type MatchSummary = {
   summonerSpell2Id: number;
   items: number[];
   runesDetail: MatchRuneDetail;
+  performance?: MatchPerformance | null;
 };
 
 export type PagedResultDto<T> = {
@@ -219,6 +232,7 @@ export type MatchDetail = {
     summonerSpell2Id: number;
     items: number[];
     runes: MatchRuneDetail;
+    performance?: MatchPerformance | null;
   }>;
   bans?: Array<{ teamId: number; bannedChampionIds: number[] }>;
   objectives?: MatchTeamObjectives[];

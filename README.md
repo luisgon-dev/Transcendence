@@ -68,7 +68,7 @@ The live site redeploys automatically once changes land on `main`.
 | **Data** | EF Core 10 over PostgreSQL; Redis for caching &amp; data protection |
 | **Frontend** | Next.js 16.2 (App Router), React 19.2, TypeScript |
 | **API contract** | OpenAPI → generated `@transcendence/api-client` (openapi-typescript + tsup) |
-| **Tooling** | pnpm 10.22.0, Node 22, .NET SDK 10.0.102 |
+| **Tooling** | pnpm 10.22.0, Node 22, .NET SDK 10.0.302 |
 | **Testing** | xUnit (.NET), Vitest (web), Playwright 1.58 (e2e) |
 | **CI/CD** | GitHub Actions — tests, lint, OpenAPI sync check, Docker image builds |
 
@@ -110,7 +110,7 @@ flowchart LR
 
 ## 🚀 Quick Start
 
-> **Prerequisites:** [.NET SDK 10.0.102](global.json) · [Node 22](.nvmrc) · [pnpm 10.22.0](package.json) · Docker (for PostgreSQL &amp; Redis).
+> **Prerequisites:** [.NET SDK 10.0.302](global.json) · [Node 22](.nvmrc) · [pnpm 10.22.0](package.json) · Docker (for PostgreSQL &amp; Redis).
 >
 > Install [pnpm](https://pnpm.io/installation) (the repo pins `pnpm@10.22.0` via the `packageManager` field), then run any script with `pnpm <script>`. Already a Corepack user? `corepack enable` picks up the pinned version automatically — both work.
 

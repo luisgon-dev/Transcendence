@@ -96,6 +96,43 @@ public sealed class BuildResourceSnapshotRefresherTests
             snapshot.Status == BuildResourceSnapshotStatus.Building)).Should().Be(0);
     }
 
+    [Fact]
+    public async Task RefreshAsync_AfterPromotion_RemovesFailedGenerationPayloadButKeepsFailureManifest()
+    {
+        await using var harness = await Harness.CreateAsync();
+        var failedSnapshot = new BuildResourceSnapshot
+        {
+            Id = Guid.NewGuid(),
+            Patch = Harness.PatchVersion,
+            Status = BuildResourceSnapshotStatus.Failed,
+            IsActive = false,
+            IsFullRebuild = true,
+            StartedAtUtc = DateTime.UtcNow.AddHours(-1),
+            CompletedAtUtc = DateTime.UtcNow.AddMinutes(-30),
+            ProcessedMatchCount = 1,
+            FailureReason = "expected fixture failure"
+        };
+        harness.Db.BuildResourceSnapshots.Add(failedSnapshot);
+        harness.Db.BuildResourceProcessedMatches.Add(new BuildResourceProcessedMatch
+        {
+            SnapshotId = failedSnapshot.Id,
+            MatchId = Guid.NewGuid()
+        });
+        harness.AddMatch("MATCH_ONE", win: true);
+        await harness.Db.SaveChangesAsync();
+
+        await harness.Refresher.RefreshAsync(
+            Harness.PatchVersion, forceFullRebuild: true, CancellationToken.None);
+
+        var manifest = await harness.Db.BuildResourceSnapshots.AsNoTracking()
+            .SingleAsync(snapshot => snapshot.Id == failedSnapshot.Id);
+        manifest.Status.Should().Be(BuildResourceSnapshotStatus.Failed);
+        manifest.FailureReason.Should().Be("expected fixture failure");
+        (await harness.Db.BuildResourceProcessedMatches
+                .CountAsync(row => row.SnapshotId == failedSnapshot.Id))
+            .Should().Be(0);
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         public const string PatchVersion = "16.14";

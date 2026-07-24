@@ -163,6 +163,8 @@ builder.Services.Configure<SummonerBootstrapOptions>(builder.Configuration.GetSe
 builder.Services.Configure<MultiRegionIngestionOptions>(builder.Configuration.GetSection("Jobs:MultiRegionIngestion"));
 builder.Services.Configure<ChampionAnalyticsComputeOptions>(builder.Configuration.GetSection("Analytics:Compute"));
 builder.Services.Configure<TieringOptions>(builder.Configuration.GetSection("Analytics:Tiering"));
+builder.Services.Configure<PrecomputedAnalyticsOptions>(
+    builder.Configuration.GetSection("Analytics:Precompute"));
 builder.Services.Configure<BuildResourceSnapshotOptions>(
     builder.Configuration.GetSection("Analytics:BuildAtlas"));
 builder.Services.AddSingleton<IWorkerRecurringJobPolicy, WorkerRecurringJobPolicy>();
@@ -201,7 +203,11 @@ if (builder.Configuration.GetValue("Telemetry:Enabled", true))
             .AddMeter("Microsoft.Extensions.Caching.Hybrid")
             .AddRuntimeInstrumentation()
             .AddHttpClientInstrumentation()
-            .AddPrometheusHttpListener(o => o.UriPrefixes = new[] { $"http://+:{metricsPort}/" }));
+            .AddPrometheusHttpListener(options =>
+            {
+                options.Host = "+";
+                options.Port = metricsPort;
+            }));
 }
 
 // worker that initiates services

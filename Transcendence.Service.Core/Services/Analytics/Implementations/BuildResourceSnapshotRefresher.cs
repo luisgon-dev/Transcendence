@@ -177,7 +177,7 @@ public sealed class BuildResourceSnapshotRefresher(
             context.ChangeTracker.Clear();
 
             await PromoteAsync(snapshot.Id, normalizedPatch, ct);
-            await CleanupRetiredPayloadsAsync(normalizedPatch, ct);
+            await CleanupPayloadsBestEffortAsync(normalizedPatch, ct);
 
             logger.LogInformation(
                 "Build Atlas snapshot {SnapshotId} patch {Patch} promoted: full={Full}, newMatches={NewMatches}, resourceRows={ResourceRows}, populationRows={PopulationRows}.",
@@ -399,12 +399,30 @@ public sealed class BuildResourceSnapshotRefresher(
                     .SetProperty(snapshot => snapshot.Status, BuildResourceSnapshotStatus.Failed)
                     .SetProperty(snapshot => snapshot.CompletedAtUtc, DateTime.UtcNow)
                     .SetProperty(snapshot => snapshot.FailureReason, failure), ct);
+            await DeleteSnapshotPayloadAsync(snapshotId, deleteProcessedMatches: true, ct);
         }
         catch (Exception markFailure)
         {
             logger.LogError(markFailure,
                 "Failed to mark Build Atlas snapshot {SnapshotId} as failed after refresh error.",
                 snapshotId);
+        }
+    }
+
+    private async Task CleanupPayloadsBestEffortAsync(string patch, CancellationToken ct)
+    {
+        try
+        {
+            await CleanupRetiredPayloadsAsync(patch, ct);
+            await CleanupFailedPayloadsAsync(patch, ct);
+        }
+        catch (Exception cleanupFailure)
+        {
+            // Promotion has already committed. Cleanup is storage hygiene and must never demote a
+            // successfully published generation or make the Hangfire job retry the completed work.
+            logger.LogWarning(cleanupFailure,
+                "Build Atlas snapshot payload cleanup failed for patch {Patch}; the Ready generation remains active.",
+                patch);
         }
     }
 
@@ -429,12 +447,40 @@ public sealed class BuildResourceSnapshotRefresher(
         if (oldSnapshotIds.Count == 0)
             return;
 
+        foreach (var snapshotId in oldSnapshotIds)
+            await DeleteSnapshotPayloadAsync(snapshotId, deleteProcessedMatches: false, ct);
+    }
+
+    private async Task CleanupFailedPayloadsAsync(string patch, CancellationToken ct)
+    {
+        var failedSnapshotIds = await context.BuildResourceSnapshots.AsNoTracking()
+            .Where(snapshot =>
+                snapshot.Patch == patch &&
+                snapshot.Status == BuildResourceSnapshotStatus.Failed)
+            .Select(snapshot => snapshot.Id)
+            .ToListAsync(ct);
+
+        foreach (var snapshotId in failedSnapshotIds)
+            await DeleteSnapshotPayloadAsync(snapshotId, deleteProcessedMatches: true, ct);
+    }
+
+    private async Task DeleteSnapshotPayloadAsync(
+        Guid snapshotId,
+        bool deleteProcessedMatches,
+        CancellationToken ct)
+    {
         await context.BuildResourceStats
-            .Where(row => oldSnapshotIds.Contains(row.SnapshotId))
+            .Where(row => row.SnapshotId == snapshotId)
             .ExecuteDeleteAsync(ct);
         await context.BuildResourcePopulationStats
-            .Where(row => oldSnapshotIds.Contains(row.SnapshotId))
+            .Where(row => row.SnapshotId == snapshotId)
             .ExecuteDeleteAsync(ct);
+        if (deleteProcessedMatches)
+        {
+            await context.BuildResourceProcessedMatches
+                .Where(row => row.SnapshotId == snapshotId)
+                .ExecuteDeleteAsync(ct);
+        }
     }
 
     private readonly record struct ResourceKey(

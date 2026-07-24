@@ -13,6 +13,8 @@
 **/*.jfm
 **/azds.yaml
 **/bin
+**/bin?Debug
+**/bin?Release
 **/charts
 **/docker-compose*
 **/Dockerfile*
@@ -23,6 +25,8 @@
 **/dist
 **/npm-debug.log
 **/obj
+**/obj?Debug
+**/obj?Release
 **/secrets.dev.yaml
 **/values.dev.yaml
 LICENSE

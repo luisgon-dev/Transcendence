@@ -205,8 +205,12 @@ if (builder.Configuration.GetValue("Telemetry:Enabled", true))
             .AddHttpClientInstrumentation()
             .AddPrometheusHttpListener(options =>
             {
-                options.Host = "+";
-                options.Port = metricsPort;
+                // The prerelease Host/Port replacement cannot express HttpListener's strong
+                // wildcard: UriBuilder rejects "+" and "0.0.0.0" is not a supported prefix.
+                // Keep the transitional property until the exporter provides a wildcard-safe API.
+#pragma warning disable CS0618 // UriPrefixes is required for wildcard container-network binding.
+                options.UriPrefixes = [$"http://+:{metricsPort}/"];
+#pragma warning restore CS0618
             }));
 }
 

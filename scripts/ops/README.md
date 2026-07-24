@@ -165,3 +165,42 @@ docker compose -p transcendence --env-file "$COMPOSE_DIR/stack.env" \
 PostgreSQL is `pgautoupgrade/pgautoupgrade:18.3-alpine` (PG 18),
 data volume mounted at `/var/lib/postgresql` (PGDATA under `/var/lib/postgresql/18/docker`); the
 repo `compose.yml` mirrors this so it's a safe deploy source.
+
+## `postgres-performance-report.sh` — steady-state database review
+
+This read-only report turns PostgreSQL's cumulative statistics into a repeatable tuning record. It
+captures the runnable Hangfire backlog, recent completion progress, I/O and temp work, connections by
+application, top statements by total and mean time, table size/growth, scan mix, vacuum health, and
+large low-use indexes. It never resets statistics, runs `EXPLAIN`, drops indexes, vacuums, or changes
+settings.
+
+Reports are stored under `/var/lib/transcendence-performance` for 30 days. Each run compares table
+sizes with the prior snapshot. When runnable backlog exceeds `MAX_STEADY_BACKLOG` (default 500), the
+report is marked **busy** so load from ingestion/backfill is not mistaken for normal production.
+
+Install the script and low-priority daily timer on the Docker host:
+
+```bash
+install -D -m 0755 postgres-performance-report.sh \
+  /root/deploy/postgres-performance-report.sh
+install -D -m 0644 transcendence-postgres-performance-report.service \
+  /etc/systemd/system/transcendence-postgres-performance-report.service
+install -D -m 0644 transcendence-postgres-performance-report.timer \
+  /etc/systemd/system/transcendence-postgres-performance-report.timer
+install -d -m 0750 /var/lib/transcendence-performance
+systemctl daemon-reload
+systemctl enable --now transcendence-postgres-performance-report.timer
+```
+
+Operate and review:
+
+```bash
+systemctl start transcendence-postgres-performance-report.service
+systemctl status transcendence-postgres-performance-report.service
+systemctl list-timers transcendence-postgres-performance-report.timer
+less /var/lib/transcendence-performance/latest.md
+```
+
+Use `MAX_STEADY_BACKLOG=2000` only when deliberately redefining the busy threshold. A low `idx_scan`
+count is a review signal, not permission to drop an index; compare multiple steady reports and inspect
+constraints/query plans first.

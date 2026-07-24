@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Transcendence PostgreSQL performance report daily
+
+[Timer]
+OnCalendar=*-*-* 04:20:00
+RandomizedDelaySec=20m
+Persistent=true
+Unit=transcendence-postgres-performance-report.service
+
+[Install]
+WantedBy=timers.target

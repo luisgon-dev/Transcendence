@@ -337,10 +337,30 @@ preinstalled, so Testcontainers works with no extra configuration).
 
 Current `web:test` scope:
 - Utility/unit tests in `apps/web/lib/*.test.ts`
-- Runs in Vitest `node` environment (no DOM harness needed for current test suite)
+- Component, route-handler, and telemetry tests in `apps/web/**/*.test.ts(x)`
+- Runs in Vitest's `jsdom` environment
 
 Note:
 - `apps/web` package scripts `dev`, `build`, `lint`, and `test` prebuild `@transcendence/api-client` automatically, so direct commands such as `pnpm --filter web build` and `pnpm --filter web test` work without a separate manual client build step.
+
+## Performance Gates
+
+Performance budgets are part of the main CI workflow, not an optional benchmark:
+
+- `pnpm perf:web` builds the production Next.js app and runs Lighthouse CI three times against the landing,
+  login, and terms routes using a mobile profile. `lighthouserc.cjs` enforces the median performance
+  score, LCP, CLS, total blocking time, time-to-interactive, and transfer-size budgets. CI retains the
+  HTML/JSON reports for 14 days.
+- The `performance-api` CI job migrates PostgreSQL 18, seeds 200 summoners and 4,000 ranked matches,
+  starts a release WebAPI against PostgreSQL + Redis, and runs `scripts/perf/api-load.js` with k6 1.3.0.
+  It covers readiness, cached regional/champion leaderboards, and a varied champion-query matrix.
+  Thresholds fail the build on response/check errors or p95 latency regressions.
+- Run `pnpm perf:api` locally after starting an equivalently seeded API, or call k6 directly with
+  `BASE_URL=http://127.0.0.1:8080`. The CI seed is intentionally synthetic and deterministic; production
+  field performance is evaluated separately through the Web Vitals dashboard.
+
+Budget changes must include a measured reason in the PR. Do not raise a threshold merely to make a
+regression pass.
 
 ## OpenAPI + TypeScript Client
 

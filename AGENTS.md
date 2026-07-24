@@ -10,6 +10,8 @@ pnpm web:dev          # dev server
 pnpm web:build        # production build
 pnpm web:test         # Vitest
 pnpm web:lint         # ESLint
+pnpm perf:web         # production build + Lighthouse performance budgets
+pnpm perf:api         # k6 API load budgets (requires a seeded running API)
 
 # Backend (.NET)
 pnpm backend:test     # run all .NET test projects

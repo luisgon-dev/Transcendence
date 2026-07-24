@@ -69,8 +69,8 @@ The live site redeploys automatically once changes land on `main`.
 | **Frontend** | Next.js 16.2 (App Router), React 19.2, TypeScript |
 | **API contract** | OpenAPI → generated `@transcendence/api-client` (openapi-typescript + tsup) |
 | **Tooling** | pnpm 10.22.0, Node 22, .NET SDK 10.0.302 |
-| **Testing** | xUnit (.NET), Vitest (web), Playwright 1.58 (e2e) |
-| **CI/CD** | GitHub Actions — tests, lint, OpenAPI sync check, Docker image builds |
+| **Testing** | xUnit (.NET), Vitest (web), Playwright 1.58 (e2e), Lighthouse CI, k6 |
+| **CI/CD** | GitHub Actions — tests, performance budgets, OpenAPI sync, signed Docker image builds |
 
 ## 🗺 Architecture
 
@@ -177,8 +177,8 @@ docker compose -f config/monitoring/compose.yml up -d
 # Grafana → http://localhost:3300 (admin + file-backed password)
 ```
 
-Grafana provisions five dashboards plus alert rules, while Prometheus scrapes the API, worker, host,
-PostgreSQL, and Redis through dedicated exporters. See
+Grafana provisions API, worker, ingestion, infrastructure, and real-user Web Vitals dashboards plus
+alert rules. Prometheus scrapes the web frontend, API, worker, host, PostgreSQL, and Redis. See
 [`config/monitoring/README.md`](config/monitoring/README.md) for local configuration, least-privilege
 database credentials, and the production deploy workflow.
 
@@ -228,6 +228,8 @@ All commands run from the repo root via `pnpm <script>`.
 | `web:dev` | Next.js dev server (`:3000`) |
 | `web:build` · `web:lint` · `web:test` | Build / lint / Vitest for the web app |
 | `backend:test` | Run both .NET test projects |
+| `perf:web` | Build the production frontend and enforce Lighthouse budgets |
+| `perf:api` | Run the k6 API suite against `BASE_URL` (requires k6 and a seeded API) |
 | `api:gen` | Export the OpenAPI spec **and** regenerate the TS client |
 | `api:check` | Verify the committed spec &amp; client haven't drifted (used in CI) |
 | `e2e:local` | Run Playwright against `localhost:3000` |

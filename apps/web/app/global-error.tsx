@@ -8,19 +8,20 @@ import { RouteError } from "@/components/RouteError";
 const displayFont = Bricolage_Grotesque({
   subsets: ["latin"],
   variable: "--font-display-face",
-  display: "swap"
+  display: "optional"
 });
 
 const bodyFont = Hanken_Grotesk({
   subsets: ["latin"],
   variable: "--font-body",
-  display: "swap"
+  display: "optional"
 });
 
 const monoFont = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-mono-face",
-  display: "swap"
+  display: "optional",
+  preload: false
 });
 
 // global-error replaces the root layout, so it must resolve the theme itself to

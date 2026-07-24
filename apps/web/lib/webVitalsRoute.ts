@@ -46,3 +46,7 @@ export function webVitalsRouteTemplate(pathname: string) {
   }
   return KNOWN_STATIC_ROUTES.has(pathname) ? pathname : "/_other";
 }
+
+export function isWebVitalsRouteTemplate(value: string) {
+  return webVitalsRouteTemplate(value) === value;
+}

@@ -6,8 +6,8 @@
 # / 0 (ok) and is the alert condition. Firing alerts route to the `transcendence-discord` contact
 # point via per-rule notification_settings (leaving the default notification policy untouched).
 #
-# Coverage: WebAPI, worker, Postgres exporter, and Redis exporter liveness; PostgreSQL connection
-# saturation; Redis rejected connections; API 5xx error ratio; API p95 latency; and host disk capacity.
+# Coverage: web, WebAPI, worker, Postgres exporter, and Redis exporter liveness; PostgreSQL connection
+# saturation; Redis rejected connections; API errors/latency; browser Web Vitals; and host disk capacity.
 apiVersion: 1
 
 groups:
@@ -60,6 +60,55 @@ groups:
         annotations:
           summary: Transcendence WebAPI is not reporting to Prometheus
           description: The transcendence-webapi target has been down (or unscrapeable) for over 2 minutes — the public API is likely unavailable.
+        notification_settings:
+          receiver: transcendence-discord
+          group_by:
+            - alertname
+            - grafana_folder
+
+      # --- Web frontend metrics target down -------------------------------------------------------
+      - uid: trn-web-down
+        title: Web frontend metrics unavailable
+        condition: B
+        for: 2m
+        noDataState: Alerting
+        execErrState: Alerting
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              editorMode: code
+              expr: up{job="transcendence-web"}
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: prometheus
+                uid: prometheus
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: math
+              expression: $A < 1
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: __expr__
+                uid: __expr__
+        labels:
+          severity: critical
+        annotations:
+          summary: Transcendence web metrics endpoint is unavailable
+          description: Prometheus has been unable to scrape the Next.js web container for over 2 minutes. The frontend may be down, or browser performance telemetry may be unavailable.
         notification_settings:
           receiver: transcendence-discord
           group_by:
@@ -403,6 +452,57 @@ groups:
         annotations:
           summary: WebAPI p95 request latency above 1.5s
           description: The WebAPI 95th-percentile request duration has exceeded 1.5s for over 10 minutes — reads are degraded.
+        notification_settings:
+          receiver: transcendence-discord
+          group_by:
+            - alertname
+            - grafana_folder
+
+      # --- Browser Core Web Vitals ---------------------------------------------------------------
+      # Alert only after at least 20 observations in 30 minutes, so sparse traffic cannot page on
+      # one slow device. The resulting alert instance retains the metric label (LCP, INP, or CLS).
+      - uid: trn-web-vital-p75
+        title: Browser Core Web Vital p75 degraded
+        condition: B
+        for: 15m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              editorMode: code
+              expr: ((histogram_quantile(0.75, sum by (metric, le) (rate(transcendence_web_vital_duration_milliseconds_bucket{metric="LCP"}[30m]))) > 2500) and on(metric) (sum by (metric) (increase(transcendence_web_vital_reports_total{metric="LCP"}[30m])) >= 20)) or ((histogram_quantile(0.75, sum by (metric, le) (rate(transcendence_web_vital_duration_milliseconds_bucket{metric="INP"}[30m]))) > 200) and on(metric) (sum by (metric) (increase(transcendence_web_vital_reports_total{metric="INP"}[30m])) >= 20)) or ((histogram_quantile(0.75, sum by (metric, le) (rate(transcendence_web_vital_cls_bucket[30m]))) > 0.1) and on(metric) (sum by (metric) (increase(transcendence_web_vital_reports_total{metric="CLS"}[30m])) >= 20))
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: prometheus
+                uid: prometheus
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: math
+              expression: $A > 0
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: __expr__
+                uid: __expr__
+        labels:
+          severity: warning
+        annotations:
+          summary: Browser p75 is above the Core Web Vitals good threshold
+          description: Real-user p75 has exceeded LCP 2.5s, INP 200ms, or CLS 0.1 for at least 15 minutes with a minimum 20-report sample.
         notification_settings:
           receiver: transcendence-discord
           group_by:

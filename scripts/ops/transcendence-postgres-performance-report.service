@@ -1,0 +1,19 @@
+[Unit]
+Description=Transcendence read-only PostgreSQL performance report
+Documentation=https://github.com/luisgon-dev/Transcendence/blob/main/scripts/ops/README.md
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/root/deploy/postgres-performance-report.sh
+Nice=10
+IOSchedulingClass=idle
+CPUWeight=20
+MemoryMax=256M
+TimeoutStartSec=10min
+ProtectSystem=strict
+StateDirectory=transcendence-performance
+StateDirectoryMode=0750
+PrivateTmp=true
+NoNewPrivileges=true

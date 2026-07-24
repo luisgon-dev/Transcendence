@@ -50,9 +50,12 @@ Transcendence is a backend + web monorepo:
   navigation and page-specific dynamic regions stream behind fixed-size `<Suspense>` fallbacks. Backend
   reads that opt into Next's persistent fetch cache omit the per-request correlation header because request
   headers participate in the cache key; uncached and mutating calls retain a unique `x-trn-request-id`.
-- Browser Core Web Vitals are reported through `/api/telemetry/web-vitals`. The route logs only a bounded,
-  normalized route template plus metric/rating/navigation type—never Riot IDs or arbitrary paths—so field
-  performance can be compared without creating unbounded telemetry cardinality.
+- Browser Core Web Vitals are reported through `/api/telemetry/web-vitals`. The route logs and aggregates
+  only a bounded metric, rating, normalized route template, and normalized navigation type, never Riot IDs
+  or arbitrary paths. The web container exposes cumulative Prometheus histograms at
+  `/api/telemetry/metrics`; timing metrics use millisecond buckets while CLS stays dimensionless. Labels are
+  deliberately limited to metric/route/rating, so route-level p75 field performance remains useful without
+  unbounded telemetry cardinality.
 - **Auth token refresh runs in `proxy.ts` (Next 16 middleware), not during render.** Auth uses a short-lived access token + a single-use, rotated refresh token (the backend revokes the presented refresh token on every `/api/auth/refresh`, no grace window). Refreshing inside a Server Component render can't persist the rotated cookie (cookie writes are illegal during render), which would burn the refresh token and silently log users out. So `proxy.ts` refreshes a stale access token on page navigations and writes the rotated cookies to **both** the forwarded request (so the SSR render reads the fresh token and doesn't refresh again) and the response (so the browser persists them). It is fail-safe: it only acts when a refresh token exists and the access token is stale, skips prefetch requests (so a speculative prefetch can't burn the single-use token), and on any failure (401/5xx/network/timeout/malformed) passes through **without** clearing cookies. The matcher excludes `/api/*` (route handlers refresh + clear in their own writable context via `getAccessTokenOrRefresh`/`getSessionMe`), `_next`, and static files. Pure helpers live in `lib/proxyAuth.ts`; cookie names + the staleness check in `lib/authCookieShared.ts`.
 - Riot Sign On uses two same-origin route handlers: `/api/session/riot/start` creates a 256-bit
   correlation state in an HttpOnly, SameSite=Lax, ten-minute cookie; `/api/session/riot/callback`
@@ -335,8 +338,9 @@ A schema-affecting deploy cannot be fully undone by an image rollback alone — 
 
 ### Metrics-based alerting
 
-The WebAPI (`/metrics`, ASP.NET Core exporter), worker (`:9464`, standalone Prometheus
-`HttpListener`), PostgreSQL exporter, Redis exporter, and host node exporter are scraped by Prometheus
+The web frontend (`/api/telemetry/metrics`), WebAPI (`/metrics`, ASP.NET Core exporter), worker
+(`:9464`, standalone Prometheus `HttpListener`), PostgreSQL exporter, Redis exporter, and host node
+exporter are scraped by Prometheus
 (`config/monitoring/prometheus.yml`), which Grafana reads. Prometheus + Grafana are their own
 **single-source-of-truth stack** at `config/monitoring/` (`compose.yml` + a prod overlay
 `compose.prod.yml`), deployed identically local and prod (prod at `/root/transcendence-monitoring/`,
@@ -345,14 +349,21 @@ synced from the repo—not part of the app's Portainer stack or the `poll-deploy
 **ingestion** health alerter, Grafana owns **infrastructure** alerting so an external process pages:
 
 - **Provisioned rules** (`config/monitoring/grafana/provisioning/alerting/rules.yml`, folder
-  `Transcendence`, evaluated every 1m): WebAPI, worker, PostgreSQL exporter, and Redis exporter down;
-  PostgreSQL connection use above 80%; Redis rejected connections; API 5xx ratio high; API p95
-  latency high; and host disk space low.
+  `Transcendence`, evaluated every 1m): web, WebAPI, worker, PostgreSQL exporter, and Redis exporter
+  down; PostgreSQL connection use above 80%; Redis rejected connections; API 5xx ratio high; API p95
+  latency high; sample-gated real-user p75 LCP/INP/CLS degradation; and host disk space low.
 - **Scrape targets**: application metrics, node-exporter, pinned `postgres_exporter` and
   `redis_exporter`. PostgreSQL uses a dedicated login granted `pg_monitor`; `pg_stat_statements`,
   `track_io_timing`, and 64 MB temp-file logging make expensive-query and spill analysis durable.
 - **Contact point** (`config/monitoring/grafana/provisioning/alerting/contactpoints.yml`): a Grafana-native `discord` receiver whose URL is interpolated from the `DISCORD_ALERT_WEBHOOK_URL` env var on the grafana container, so no secret is committed. Grafana 13 refuses to *start* on an empty contact-point URL, so unset falls back to a no-op placeholder URL (Grafana boots; alerts don't deliver anywhere real). Set it in prod (reuse the same webhook as the worker's `Alerts:Webhook:Url`).
 This complements the deploy pipeline: poll-deploy catches startup/readiness failures before reporting success, while Grafana catches later regressions and a service that fails after the bounded deploy window.
+
+The host also runs `scripts/ops/postgres-performance-report.sh` daily from a low-priority systemd
+timer. It is read-only and records query cost, I/O/temp work, connection use, table growth, scan mix,
+vacuum health, large low-use indexes, and Hangfire progress under
+`/var/lib/transcendence-performance`. Reports captured above the runnable-backlog threshold are marked
+busy and are not treated as steady-state tuning evidence. The workflow never resets statistics,
+executes arbitrary plans, drops indexes, or changes database settings.
 
 ### Match Detail Retention and Archival
 

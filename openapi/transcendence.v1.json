@@ -8290,6 +8290,58 @@
         },
         "additionalProperties": false
       },
+      "MatchPerformanceSummary": {
+        "required": [
+          "csPerMin",
+          "damageShare",
+          "goldShare",
+          "killParticipation",
+          "score",
+          "teamRank",
+          "teamSize",
+          "visionShare"
+        ],
+        "type": "object",
+        "properties": {
+          "score": {
+            "type": "number",
+            "format": "double"
+          },
+          "teamRank": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "teamSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "killParticipation": {
+            "type": "number",
+            "format": "double"
+          },
+          "damageShare": {
+            "type": "number",
+            "format": "double"
+          },
+          "goldShare": {
+            "type": "number",
+            "format": "double"
+          },
+          "visionShare": {
+            "type": "number",
+            "format": "double"
+          },
+          "csPerMin": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
       "MatchRuneDetailDto": {
         "required": [
           "primarySelections",
@@ -8802,6 +8854,7 @@
           "kills",
           "magicDamageDealtToChampions",
           "neutralMinionsKilled",
+          "performance",
           "physicalDamageDealtToChampions",
           "runes",
           "summonerSpell1Id",
@@ -8909,6 +8962,13 @@
             "allOf": [
               {
                 "$ref": "#/components/schemas/ParticipantRunesDto"
+              }
+            ]
+          },
+          "performance": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MatchPerformanceSummary"
               }
             ]
           }
@@ -9593,6 +9653,7 @@
           "kills",
           "matchDate",
           "matchId",
+          "performance",
           "queueId",
           "queueType",
           "runes",
@@ -9683,6 +9744,13 @@
             "allOf": [
               {
                 "$ref": "#/components/schemas/MatchRuneDetailDto"
+              }
+            ]
+          },
+          "performance": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MatchPerformanceSummary"
               }
             ]
           }

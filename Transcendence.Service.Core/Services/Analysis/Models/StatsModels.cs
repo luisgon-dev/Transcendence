@@ -139,7 +139,25 @@ public record RecentMatchSummary(
     int SummonerSpell2Id,
     IReadOnlyList<int> Items,  // 7 item IDs (6 items + trinket), 0 for empty slots
     MatchRuneSummary Runes,
-    MatchRuneDetail RunesDetail
+    MatchRuneDetail RunesDetail,
+    MatchPerformanceSummary Performance
+);
+
+/// <summary>
+/// A transparent, team-relative performance readout for one match participant.
+/// The score is derived from kill participation, damage, gold, vision, farm, and
+/// survival percentiles within that participant's team.
+/// </summary>
+public record MatchPerformanceSummary(
+    double Score,
+    int TeamRank,
+    int TeamSize,
+    string? Label,
+    double KillParticipation,
+    double DamageShare,
+    double GoldShare,
+    double VisionShare,
+    double CsPerMin
 );
 
 public record MatchRuneSummary(

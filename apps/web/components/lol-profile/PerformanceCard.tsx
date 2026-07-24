@@ -4,6 +4,7 @@ import { LaneIcon } from "@/components/ui/LaneIcon";
 import { Stat } from "@/components/ui/Stat";
 import { cn } from "@/lib/cn";
 import { formatCompactNumber, formatGames, plural } from "@/lib/format";
+import { deriveRecentForm, type RecentFormTone } from "@/lib/matchPerformance";
 import { LANE_ROLES, roleDisplayLabel } from "@/lib/roles";
 
 import {
@@ -23,6 +24,45 @@ type RoleRow = {
   avgKda: number;
   topChampion: string | null;
 };
+
+const FORM_TONE_CLASS: Record<RecentFormTone, string> = {
+  up: "border-success/30 bg-success/8 text-success",
+  steady: "border-border bg-surface-2/60 text-fg/78",
+  down: "border-loss/30 bg-loss/8 text-loss"
+};
+
+const FORM_TEXT_CLASS: Record<RecentFormTone, string> = {
+  up: "text-success",
+  steady: "text-muted",
+  down: "text-loss"
+};
+
+function FormDirectionIcon({ tone }: { tone: RecentFormTone }) {
+  if (tone === "steady") {
+    return (
+      <svg viewBox="0 0 16 16" className="size-4" aria-hidden="true">
+        <path d="M3 8h10" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className={cn("size-4", tone === "down" && "rotate-90")}
+      aria-hidden="true"
+    >
+      <path
+        d="M3 11 11 3m-5 0h5v5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 function formatStat(value: number | null | undefined, decimals: number): string {
   if (value == null || !Number.isFinite(value)) return "—";
@@ -107,8 +147,9 @@ export function PerformanceCard({
 
   const hasRoles = roleRows.length > 0;
   const hasAverages = overviewStats != null;
+  const recentForm = deriveRecentForm(matches);
   const coverageLabel = formatHistoryCoverage(fullHistory);
-  if (!hasRoles && !hasAverages) return null;
+  if (!hasRoles && !hasAverages && !recentForm) return null;
 
   return (
     <Card className="profile-section-card p-5">
@@ -116,6 +157,32 @@ export function PerformanceCard({
         <p className="type-kicker text-muted">{activeSeason?.displayName ?? "Active season"} · Solo/Duo</p>
         <h2 className="mt-2 type-section">How you play</h2>
       </div>
+
+      {recentForm ? (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-control border border-border/75 bg-surface-2/45 px-3 py-2.5">
+          <div className="flex items-center gap-2.5">
+            <span
+              className={cn(
+                "grid size-8 shrink-0 place-items-center rounded-control border",
+                FORM_TONE_CLASS[recentForm.tone]
+              )}
+            >
+              <FormDirectionIcon tone={recentForm.tone} />
+            </span>
+            <div>
+              <p className="type-overline text-muted">Recent form</p>
+              <p className="text-sm font-semibold text-fg">{recentForm.label}</p>
+            </div>
+          </div>
+          <div className="text-right tabular-nums">
+            <p className="text-sm font-semibold text-fg">{recentForm.recentAverage.toFixed(1)} impact</p>
+            <p className={cn("type-caption", FORM_TEXT_CLASS[recentForm.tone])}>
+              {recentForm.delta >= 0 ? "+" : ""}
+              {recentForm.delta.toFixed(1)} vs previous {recentForm.previousGames}
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       {hasAverages ? (
         <div className="mt-4 grid gap-2">

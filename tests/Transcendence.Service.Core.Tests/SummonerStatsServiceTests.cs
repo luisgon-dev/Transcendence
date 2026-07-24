@@ -145,6 +145,11 @@ public class SummonerStatsServiceTests
         result.TotalCount.Should().Be(2);
         result.Items.Should().OnlyContain(x => x.QueueId == 420 || x.QueueType == "420");
         result.Items.Should().OnlyContain(x => x.Items.Count == 7);
+        result.Items.Should().OnlyContain(x =>
+            x.Performance.Score == 5.5 &&
+            x.Performance.TeamRank == 1 &&
+            x.Performance.TeamSize == 1 &&
+            x.Performance.Label == null);
         result.Facets!.Queues.Should().HaveCount(3);
         result.Facets.ChampionIds.Should().HaveCount(2);
 
@@ -336,6 +341,8 @@ public class SummonerStatsServiceTests
         detail.Participants[0].Runes.PrimarySelections.Should().Equal([8005, 9111]);
         detail.Participants[0].Runes.SubSelections.Should().Equal([8473]);
         detail.Participants[0].Runes.StatShards.Should().Equal([5008]);
+        detail.Participants[0].Performance.Score.Should().Be(5.5);
+        detail.Participants[0].Performance.Label.Should().BeNull();
     }
 
     [Fact]

@@ -48,7 +48,22 @@ const DETAIL: MatchDetail = {
   queueType: "RANKED_SOLO_5x5",
   patch: "16.14",
   participants: [
-    participant({ puuid: "kronic", gameName: "Kronic", tagLine: "NA1" }),
+    participant({
+      puuid: "kronic",
+      gameName: "Kronic",
+      tagLine: "NA1",
+      performance: {
+        score: 8.7,
+        teamRank: 1,
+        teamSize: 5,
+        label: "ACE",
+        killParticipation: 0.72,
+        damageShare: 0.31,
+        goldShare: 0.24,
+        visionShare: 0.17,
+        csPerMin: 6.4
+      }
+    }),
     participant({
       puuid: "opponent",
       gameName: "Opponent",
@@ -57,7 +72,18 @@ const DETAIL: MatchDetail = {
       win: true,
       kills: 7,
       deaths: 2,
-      assists: 5
+      assists: 5,
+      performance: {
+        score: 9.2,
+        teamRank: 1,
+        teamSize: 5,
+        label: "MVP",
+        killParticipation: 0.78,
+        damageShare: 0.34,
+        goldShare: 0.27,
+        visionShare: 0.13,
+        csPerMin: 7.1
+      }
     })
   ],
   bans: [],
@@ -85,5 +111,7 @@ describe("MatchScoreboard", () => {
     expect(screen.getAllByRole("columnheader", { name: "Vision" })).toHaveLength(2);
     expect(screen.getAllByRole("columnheader", { name: "Gold" })).toHaveLength(2);
     expect(screen.getAllByLabelText("Summoner spells")).toHaveLength(2);
+    expect(screen.getByText("ACE")).toBeTruthy();
+    expect(screen.getByText("MVP")).toBeTruthy();
   });
 });

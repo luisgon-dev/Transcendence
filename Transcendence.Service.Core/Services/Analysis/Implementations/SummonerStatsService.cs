@@ -710,8 +710,11 @@ public class SummonerMatchHistoryService(
     ILogger<SummonerMatchHistoryService> logger)
     : ISummonerMatchHistoryService
 {
-    private const string RecentMatchesCacheKeyPrefix = "stats:recent:";
-    private const string MatchDetailCacheKeyPrefix = "match:detail:";
+    // Versioned because both payloads now carry required performance summaries.
+    // A new prefix avoids deserializing pre-deploy distributed-cache entries that
+    // were written against the older record constructors.
+    private const string RecentMatchesCacheKeyPrefix = "stats:recent:v2:";
+    private const string MatchDetailCacheKeyPrefix = "match:detail:v2:";
     private const string MatchTimelineCacheKeyPrefix = "match:timeline:";
     private const string SummonerStatsCacheTagPrefix = "summoner-stats:";
 
@@ -833,6 +836,13 @@ public class SummonerMatchHistoryService(
         if (participantData.Count == 0)
             return new PagedResult<RecentMatchSummary>([], page, pageSize, total, facets);
 
+        // The page projection contains only the viewed summoner. Load the bounded set of
+        // participants from those matches once so the displayed score is relative to real
+        // teammates, rather than an opaque absolute KDA threshold.
+        var performanceByParticipant = await LoadMatchPerformanceAsync(
+            participantData.Select(value => value.MatchEntityId).Distinct().ToList(),
+            ct);
+
         // Get items and runes for these participants
         var participantIds = participantData.Select(p => p.ParticipantId).Distinct().ToList();
 
@@ -952,11 +962,50 @@ public class SummonerMatchHistoryService(
                 p.SummonerSpell2Id,
                 itemList,
                 runeSummary,
-                runeDetail
+                runeDetail,
+                performanceByParticipant.GetValueOrDefault(p.ParticipantId) ??
+                BuildFallbackPerformance(p)
             );
         }).ToList();
 
         return new PagedResult<RecentMatchSummary>(items, page, pageSize, total, facets);
+    }
+
+    private async Task<IReadOnlyDictionary<Guid, MatchPerformanceSummary>> LoadMatchPerformanceAsync(
+        IReadOnlyCollection<Guid> matchIds,
+        CancellationToken ct)
+    {
+        if (matchIds.Count == 0)
+            return new Dictionary<Guid, MatchPerformanceSummary>();
+
+        var participants = await db.MatchParticipants
+            .AsNoTracking()
+            .Where(participant => matchIds.Contains(participant.MatchId))
+            .Select(participant => new MatchPerformanceScorer.Input(
+                participant.MatchId,
+                participant.Id,
+                participant.TeamId,
+                participant.Win,
+                participant.Kills,
+                participant.Deaths,
+                participant.Assists,
+                participant.GoldEarned,
+                participant.TotalDamageDealtToChampions,
+                participant.VisionScore,
+                participant.TotalMinionsKilled + participant.NeutralMinionsKilled,
+                participant.Match.Duration))
+            .ToListAsync(ct);
+
+        return MatchPerformanceScorer.Score(participants);
+    }
+
+    private static MatchPerformanceSummary BuildFallbackPerformance(RecentMatchProjection participant)
+    {
+        var csPerMin = participant.Duration > 0
+            ? (participant.TotalMinionsKilled + participant.NeutralMinionsKilled) /
+              (participant.Duration / 60.0)
+            : 0;
+        return new MatchPerformanceSummary(5.5, 1, 1, null, 0, 0, 0, 0, Math.Round(csPerMin, 2));
     }
 
     private static async Task<MatchHistoryFacets> LoadMatchHistoryFacetsAsync(
@@ -1206,7 +1255,27 @@ public class SummonerMatchHistoryService(
                     return new RuneSelectionMetadata(first.RunePathId, first.Slot);
                 });
 
-        var participants = match.Participants.Select(p => MapParticipant(p, runeMetadata)).ToList();
+        var performanceByParticipant = MatchPerformanceScorer.Score(
+            match.Participants.Select(participant => new MatchPerformanceScorer.Input(
+                participant.MatchId,
+                participant.Id,
+                participant.TeamId,
+                participant.Win,
+                participant.Kills,
+                participant.Deaths,
+                participant.Assists,
+                participant.GoldEarned,
+                participant.TotalDamageDealtToChampions,
+                participant.VisionScore,
+                participant.TotalMinionsKilled + participant.NeutralMinionsKilled,
+                match.Duration)));
+        var participants = match.Participants
+            .Select(participant => MapParticipant(
+                participant,
+                runeMetadata,
+                performanceByParticipant.GetValueOrDefault(participant.Id) ??
+                new MatchPerformanceSummary(5.5, 1, 1, null, 0, 0, 0, 0, 0)))
+            .ToList();
 
         var bans = match.Bans
             .GroupBy(b => b.TeamId)
@@ -1246,7 +1315,8 @@ public class SummonerMatchHistoryService(
 
     private static ParticipantDetailDto MapParticipant(
         Data.Models.LoL.Match.MatchParticipant p,
-        Dictionary<int, RuneSelectionMetadata> runeMetadata)
+        Dictionary<int, RuneSelectionMetadata> runeMetadata,
+        MatchPerformanceSummary performance)
     {
         var items = p.Items
             .OrderBy(i => i.SlotIndex)
@@ -1285,7 +1355,8 @@ public class SummonerMatchHistoryService(
             p.SummonerSpell1Id,
             p.SummonerSpell2Id,
             items,
-            runes
+            runes,
+            performance
         );
     }
 

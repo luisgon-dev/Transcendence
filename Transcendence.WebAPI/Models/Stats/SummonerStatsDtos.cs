@@ -1,3 +1,5 @@
+using Transcendence.Service.Core.Services.Analysis.Models;
+
 namespace Transcendence.WebAPI.Models.Stats;
 
 public record SummonerOverviewDto(
@@ -81,7 +83,8 @@ public record RecentMatchSummaryDto(
     int SummonerSpell2Id,
     IReadOnlyList<int> Items,
     MatchRuneSummaryDto Runes,
-    MatchRuneDetailDto RunesDetail
+    MatchRuneDetailDto RunesDetail,
+    MatchPerformanceSummary Performance
 );
 
 public record MatchRuneSummaryDto(

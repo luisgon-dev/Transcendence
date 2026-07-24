@@ -33,8 +33,10 @@ production. They are tracked separately so the original 149-finding totals remai
   payload and processed-match ledger.
 - [x] Reconcile the local WebAPI service-boundary refactor with `main`; the deployed implementation
   is a strict superset, so no duplicate cherry-pick is required.
-- [x] Replace obsolete .NET/OpenTelemetry APIs, retired Riot platform constants, and Node 20 GitHub
-  Actions runtimes; document the immutable EF migration warning exception.
+- [x] Replace obsolete .NET APIs, retired Riot platform constants, and Node 20 GitHub Actions
+  runtimes; document the immutable EF migration warning exception. The prerelease OpenTelemetry
+  exporter's obsolete wildcard-prefix property remains narrowly suppressed because its replacement
+  cannot yet represent the worker's required container-network wildcard binding.
 - [x] Upgrade direct and transitive npm/NuGet dependencies until both package-manager vulnerability
   audits report zero advisories.
 

@@ -16,6 +16,7 @@ import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { formatDateTimeMs, formatGames, formatRelativeTime } from "@/lib/format";
+import { championDisplayName, itemDisplayName } from "@/lib/gameDisplay";
 import { buildProBuildPageHref, normalizeProBuildScope, type ProBuildScope } from "@/lib/proBuilds";
 import { encodeRiotIdPath } from "@/lib/riotid";
 import { championIconUrl, fetchChampionMap, fetchItemMap, itemIconUrl } from "@/lib/staticData";
@@ -273,7 +274,7 @@ export default async function ProBuildsIndexPage({
                   const championId = entry.championId ?? 0;
                   const champion = championById.get(championId);
                   const slug = champion?.slug ?? "Unknown";
-                  const name = champion?.name ?? `Champion ${championId}`;
+                  const name = championDisplayName(champion);
                   return (
                     <tr
                       key={championId || idx}
@@ -367,7 +368,7 @@ export default async function ProBuildsIndexPage({
             type="text"
             name="q"
             defaultValue={championQuery ?? ""}
-            placeholder="Search champion name or id (e.g., Ahri or 103)"
+            placeholder="Search champion name (for example, Ahri)"
             className="control-input min-w-[220px] flex-1"
           />
           <button
@@ -537,7 +538,7 @@ async function RecentProMatches({
           {recentMatchesFeed.map((entry, idx) => {
             const champion = championById.get(entry.championId);
             const championSlug = champion?.slug ?? "Unknown";
-            const championName = champion?.name ?? `Champion ${entry.championId}`;
+            const championName = championDisplayName(champion);
             const playedAt = entry.match.playedAt ?? 0;
             const hasTimestamp = Number.isFinite(playedAt) && playedAt > 0;
             const items = (entry.match.items ?? [])
@@ -587,8 +588,8 @@ async function RecentProMatches({
                             <Image
                               key={`${itemId}-${itemIdx}`}
                               src={itemIconUrl(itemStatic.version, itemId)}
-                              alt={itemMeta?.name ?? `Item ${itemId}`}
-                              title={itemMeta?.name ?? `Item ${itemId}`}
+                              alt={itemDisplayName(itemMeta)}
+                              title={itemDisplayName(itemMeta)}
                               width={24}
                               height={24}
                               className="rounded-md border border-border/40"
@@ -602,7 +603,6 @@ async function RecentProMatches({
                       <p className={`text-sm font-semibold ${entry.match.win ? "text-wr-high" : "text-wr-low"}`}>
                         {entry.match.win ? "Win" : "Loss"}
                       </p>
-                      <p className="text-xs text-muted">{entry.match.matchId ?? "Unknown match id"}</p>
                       <p className="mt-1 text-xs text-muted">Patch {entry.patch ?? "Unknown"}</p>
                     </div>
 

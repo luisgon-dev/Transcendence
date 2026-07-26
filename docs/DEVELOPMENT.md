@@ -170,7 +170,11 @@ docker compose -f config/monitoring/compose.yml up -d
 
 Grafana is file-provisioned from `config/monitoring/grafana/provisioning`, including five dashboards
 (fleet overview, read API, worker runtime, Riot API, and ingestion rate gate), its datasource, and
-`alerting/rules.yml` + `alerting/contactpoints.yml`. The provisioned rules (WebAPI/worker down, API 5xx ratio, API p95 latency) evaluate against Prometheus and notify a Discord/Slack-compatible webhook:
+`alerting/rules.yml` + `alerting/contactpoints.yml`. Prometheus scrapes the API, worker, host,
+PostgreSQL, and Redis; provisioned liveness alerts cover each application/database/cache target in
+addition to PostgreSQL connection saturation, Redis rejected connections, API 5xx ratio, p95 latency,
+and host disk space. PostgreSQL exporter credentials belong in
+`config/monitoring/.env` and should use a dedicated `pg_monitor` role (see the monitoring runbook).
 
 - **`DISCORD_ALERT_WEBHOOK_URL`** (in `config/monitoring/.env`, see `.env.example`) — the `discord` contact point's URL is interpolated from it (`$VAR` provisioning interpolation). Grafana 13 **refuses to start** on an empty contact-point URL, so when unset the base compose falls back to a no-op placeholder URL: Grafana boots and the rules are visible in Grafana → Alerting, but alerts don't deliver anywhere real. In prod, set it to the same incoming webhook the worker's ingestion alerter uses (`Alerts__Webhook__Url`). Locally the `up == 0` rules go `pending`/`Alerting` because no webapi/worker target is scraped — expected.
 
@@ -189,6 +193,9 @@ Migration policy:
 
 Automatic migrations on startup (`Database:AutoMigrate`):
 - The **worker host** (`Transcendence.Service`) applies pending migrations on startup when `Database:AutoMigrate` is `true` (set in `config/backend.shared.json`, so it ships baked into the image). Only the worker can — it is the migrations assembly (`MigrationsAssembly("Transcendence.Service")`); the WebAPI host doesn't reference it and so never migrates (it relies on the worker). EF Core 9+ takes a database-wide migration lock, so concurrent worker instances stay safe. This removes the manual post-deploy `dotnet ef database update` step a migration-bearing release used to require (the WebAPI may briefly 500 on a brand-new table during the deploy window until the worker finishes).
+- `Database:MigrateOnly=true` is the deploy-pipeline mode: after migrations finish, the worker host
+  exits before starting Hangfire or recurring-job startup. `poll-deploy.sh` runs the newly pulled worker
+  image in this mode before replacing any app service, then aborts/quarantines the release on failure.
 - Locally, `dotnet run` with the shared config also auto-migrates your dev DB, so the manual `database update` above is optional; override with `Database:AutoMigrate=false` (user-secrets / `appsettings.Development.json`) if you want manual control. The OpenAPI export host force-disables it (`--Database:AutoMigrate=false`) since it boots against a throwaway connection.
 - **Hot-table index migrations are the exception** — auto-migrate would run them as a blocking `CREATE INDEX`. Apply them via the out-of-band recipe below (create the index concurrently, then record the migration in `__EFMigrationsHistory`) **before** the deploy so the migration is already applied and auto-migrate skips it. The migration-safety CI gate failing your PR is the signal to use the recipe.
 - **CI applies the full chain to real Postgres.** Because prod auto-migrates on worker startup, a migration that compiles and passes the drift check but fails at *runtime* (PG-specific DDL, ordering, or type error) would crash-loop the worker while the deploy still reports success. The `migration-apply` job (`.github/workflows/ci-web-backend.yml`) spins up an ephemeral `postgres:16` service and runs `dotnet ef database update` from an empty database on every PR to surface those failures pre-merge — SQLite/InMemory tests cannot. It applies to an *empty* DB, so data-dependent migration failures still need a seeded follow-up. The `Transcendence.IntegrationTests` tier (see Backend Tests) additionally applies the chain **in-process** against a Testcontainers Postgres 18 and asserts every migration is applied with none pending — catching migration/model drift and PG-runtime faults from within `dotnet test`.
@@ -330,10 +337,30 @@ preinstalled, so Testcontainers works with no extra configuration).
 
 Current `web:test` scope:
 - Utility/unit tests in `apps/web/lib/*.test.ts`
-- Runs in Vitest `node` environment (no DOM harness needed for current test suite)
+- Component, route-handler, and telemetry tests in `apps/web/**/*.test.ts(x)`
+- Runs in Vitest's `jsdom` environment
 
 Note:
 - `apps/web` package scripts `dev`, `build`, `lint`, and `test` prebuild `@transcendence/api-client` automatically, so direct commands such as `pnpm --filter web build` and `pnpm --filter web test` work without a separate manual client build step.
+
+## Performance Gates
+
+Performance budgets are part of the main CI workflow, not an optional benchmark:
+
+- `pnpm perf:web` builds the production Next.js app and runs Lighthouse CI three times against the landing,
+  login, and terms routes using a mobile profile. `lighthouserc.cjs` enforces the median performance
+  score, LCP, CLS, total blocking time, time-to-interactive, and transfer-size budgets. CI retains the
+  HTML/JSON reports for 14 days.
+- The `performance-api` CI job migrates PostgreSQL 18, seeds 200 summoners and 4,000 ranked matches,
+  starts a release WebAPI against PostgreSQL + Redis, and runs `scripts/perf/api-load.js` with k6 1.3.0.
+  It covers readiness, cached regional/champion leaderboards, and a varied champion-query matrix.
+  Thresholds fail the build on response/check errors or p95 latency regressions.
+- Run `pnpm perf:api` locally after starting an equivalently seeded API, or call k6 directly with
+  `BASE_URL=http://127.0.0.1:8080`. The CI seed is intentionally synthetic and deterministic; production
+  field performance is evaluated separately through the Web Vitals dashboard.
+
+Budget changes must include a measured reason in the PR. Do not raise a threshold merely to make a
+regression pass.
 
 ## OpenAPI + TypeScript Client
 
@@ -354,6 +381,20 @@ If hooks are installed (`pnpm hooks:install`), pre-commit runs path-aware checks
 
 Key worker settings live under `Jobs:*` in `Transcendence.Service/appsettings.json`.
 The public Web API also consumes `Jobs:MultiRegionIngestion` from `Transcendence.WebAPI/appsettings.json` so `/api/analytics/regions` and region-filter normalization stay aligned with the ingestion regions exposed to the frontend.
+
+Host-level concurrency is configurable without rebuilding:
+
+- `Worker:ThreadPoolMinThreads` (default `200`, never lower than the logical CPU count)
+- `Jobs:Hangfire:Workers:Main` (default `24`)
+- `Jobs:Hangfire:Workers:Analytics` (default `4`)
+- `Jobs:Hangfire:Workers:Timeline` (default `8`)
+- `Jobs:Hangfire:Workers:Discovery` (default `8`)
+- `Jobs:Hangfire:Workers:History` (default `2`)
+
+Tune worker pools against observed database/Riot capacity rather than host CPU alone. Production
+Compose separately caps WebAPI connections at 20 and worker connections at 35, leaving 45 connections
+of a 100-connection PostgreSQL server for migrations, exporters, and operations. The same Compose file
+sets CPU/memory/PID guardrails for web (2 CPU/1 GiB), API (4 CPU/2 GiB), and worker (8 CPU/6 GiB).
 
 Production defaults in `Transcendence.Service/appsettings.json` are coverage-first for LoL:
 - `stable` keeps adaptive refresh (self-paced, ramp-aware), champion analytics ingestion, summoner maintenance, high-elo profile refresh, pro-roster discovery, and low-frequency timeline backfill enabled.

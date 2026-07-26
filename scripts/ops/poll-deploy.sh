@@ -9,15 +9,17 @@
 #   digest for these packages (reports updateAvailable=false even when the registry
 #   digest changed), so pushes never auto-deployed. See task P1.3b.
 #
-#   This script replaces wud for the three app services with a dead-simple, reliable
-#   digest poll: it is OUTBOUND-ONLY (prod -> ghcr), needs no inbound exposure, no CI
-#   secret, and no self-hosted runner. Run it every ~60s via the systemd timer
+#   This script replaces wud for the three app services with an OUTBOUND-ONLY
+#   release poll (prod -> ghcr): it compares both the manifest digest and signed
+#   OCI revision label, needs no inbound exposure, no CI secret, and no self-hosted
+#   runner. Run it every ~60s via the systemd timer
 #   (scripts/ops/transcendence-deploy.timer).
 #
 # WHAT IT DOES
-#   For each app service, resolve the current `:main` manifest digest from ghcr
-#   (anonymous token — the packages are public) and compare it to the digest the
-#   running container was pulled at. If they differ, `compose pull` + `up -d` just
+#   For each app service, resolve the current `:main` manifest digest and OCI revision
+#   label from ghcr and compare both to the running container. The revision comparison
+#   catches registries/build pipelines that reuse a manifest digest across rebuilt tags.
+#   If either differs, `compose pull` + `up -d` just
 #   that service (--no-deps, so postgres/redis are never touched), then optionally
 #   post a Discord notification.
 #
@@ -47,9 +49,9 @@ HEALTH_POLL_SECONDS="${POLL_DEPLOY_HEALTH_POLL_SECONDS:-5}"
 
 # service (compose) : container name : ghcr image repo
 SERVICES=(
-  "web:transcendence-web:transcendence-web"
-  "webapi:transcendence-webapi:transcendence-webapi"
   "service:transcendence-service:transcendence-service"
+  "webapi:transcendence-webapi:transcendence-webapi"
+  "web:transcendence-web:transcendence-web"
 )
 
 log() { printf '%s poll-deploy: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
@@ -70,6 +72,13 @@ remote_digest() {
     | tr -d '\r' | sed -n 's/^[Dd]ocker-[Cc]ontent-[Dd]igest: //p' | head -1
 }
 
+remote_revision() {
+  local repo="$1"
+  docker buildx imagetools inspect "${REGISTRY_HOST}/${OWNER}/${repo}:main" \
+    --format '{{index .Image.Config.Labels "org.opencontainers.image.revision"}}' \
+    2>/dev/null
+}
+
 # The manifest digest the running container's image was pulled at.
 local_digest() {
   local container="$1" image_id
@@ -77,6 +86,13 @@ local_digest() {
   [ -z "$image_id" ] && return 1
   docker image inspect "$image_id" --format '{{range .RepoDigests}}{{println .}}{{end}}' 2>/dev/null \
     | sed -n "s#^${REGISTRY_HOST}/${OWNER}/[^@]*@##p" | head -1
+}
+
+local_revision() {
+  local container="$1"
+  docker inspect "$container" \
+    --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' \
+    2>/dev/null
 }
 
 notify() {
@@ -147,28 +163,104 @@ wait_for_healthy() {
   return 1
 }
 
+rollback_service() {
+  local svc="$1" container="$2" repo="$3" previous_image_id="$4" failed_release="$5"
+  local failed_file="${STATE_DIR}/${svc}-failed-digest"
+  mkdir -p "$STATE_DIR"
+  printf '%s\n' "$failed_release" >"$failed_file"
+
+  if [ -z "$previous_image_id" ]; then
+    log "ERROR ${svc}: rollback unavailable because the previous image ID is missing"
+    return 1
+  fi
+
+  log "ROLLBACK ${svc}: restoring previous image ${previous_image_id:0:19}"
+  if ! docker image tag "$previous_image_id" "${REGISTRY_HOST}/${OWNER}/${repo}:main"; then
+    log "ERROR ${svc}: could not retag previous image for rollback"
+    return 1
+  fi
+  if ! docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" \
+      up -d --no-deps --pull never "$svc" >/dev/null 2>&1; then
+    log "ERROR ${svc}: rollback recreate failed"
+    return 1
+  fi
+  if ! wait_for_healthy "$svc" "$container"; then
+    log "ERROR ${svc}: rollback image failed health verification"
+    return 1
+  fi
+
+  log "ROLLED BACK ${svc}; release is quarantined until :main changes"
+  return 0
+}
+
+run_migrations() {
+  log "MIGRATE service: applying backward-compatible database migrations before replacement"
+  docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" \
+    run --rm --no-deps --pull never \
+    -e Database__AutoMigrate=true \
+    -e Database__MigrateOnly=true \
+    service >/dev/null 2>&1
+}
+
 deploy_one() {
-  local svc="$1" container="$2" repo="$3" remote current
+  local svc="$1" container="$2" repo="$3"
+  local remote current remote_rev current_rev release_id previous_image_id failed_file failed_release
   remote="$(remote_digest "$repo")"
   if [ -z "$remote" ]; then record_resolution_failure "$svc" remote; return 1; fi
   clear_resolution_failure "$svc" remote
+  remote_rev="$(remote_revision "$repo")"
+  if [ -z "$remote_rev" ]; then record_resolution_failure "$svc" remote-revision; return 1; fi
+  clear_resolution_failure "$svc" remote-revision
+  release_id="${remote}:${remote_rev}"
+  failed_file="${STATE_DIR}/${svc}-failed-digest"
+  failed_release=""
+  if [ -r "$failed_file" ]; then
+    read -r failed_release <"$failed_file" || failed_release=""
+  fi
+  if [ "$release_id" = "$failed_release" ]; then
+    log "SKIP ${svc}: remote release ${remote_rev:0:12} previously failed and remains quarantined"
+    return 0
+  fi
   current="$(local_digest "$container")"
   if [ -z "$current" ]; then record_resolution_failure "$svc" local; return 1; fi
   clear_resolution_failure "$svc" local
-  if [ "$remote" = "$current" ]; then return 0; fi
+  current_rev="$(local_revision "$container")"
+  if [ -z "$current_rev" ]; then record_resolution_failure "$svc" local-revision; return 1; fi
+  clear_resolution_failure "$svc" local-revision
+  if [ "$remote" = "$current" ] && [ "$remote_rev" = "$current_rev" ]; then
+    rm -f "$failed_file"
+    return 0
+  fi
+  previous_image_id="$(docker inspect "$container" --format '{{.Image}}' 2>/dev/null)"
 
-  log "UPDATE ${svc}: ${current:0:19} -> ${remote:0:19}; deploying"
-  if [ "${DRY_RUN:-0}" = "1" ]; then log "DRY_RUN ${svc}: would compose pull + up -d --no-deps"; return 0; fi
+  log "UPDATE ${svc}: rev ${current_rev:0:12} -> ${remote_rev:0:12}; deploying"
+  if [ "${DRY_RUN:-0}" = "1" ]; then
+    log "DRY_RUN ${svc}: would compose pull, migrate if needed, recreate, and health-check"
+    return 0
+  fi
   if ! docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" pull "$svc" >/dev/null 2>&1; then
     log "ERROR ${svc}: pull failed"; notify "⚠️ deploy: ${svc} pull failed"; return 1
   fi
-  if ! docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --no-deps "$svc" >/dev/null 2>&1; then
-    log "ERROR ${svc}: up -d failed"; notify "🚨 deploy: ${svc} up -d FAILED"; return 1
-  fi
-  if ! wait_for_healthy "$svc" "$container"; then
-    notify "🚨 deploy: ${svc} failed post-deploy health verification"
+  if [ "$svc" = "service" ] && ! run_migrations; then
+    mkdir -p "$STATE_DIR"
+    printf '%s\n' "$release_id" >"$failed_file"
+    log "ERROR ${svc}: pre-deploy migration failed; existing worker remains active"
+    notify "🚨 deploy: ${svc} migration failed; release quarantined"
     return 1
   fi
+  if ! docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" \
+      up -d --no-deps --pull never "$svc" >/dev/null 2>&1; then
+    log "ERROR ${svc}: up -d failed"
+    rollback_service "$svc" "$container" "$repo" "$previous_image_id" "$release_id" || true
+    notify "🚨 deploy: ${svc} up -d failed; rollback attempted"
+    return 1
+  fi
+  if ! wait_for_healthy "$svc" "$container"; then
+    rollback_service "$svc" "$container" "$repo" "$previous_image_id" "$release_id" || true
+    notify "🚨 deploy: ${svc} failed health verification; rollback attempted"
+    return 1
+  fi
+  rm -f "$failed_file"
   local rev
   rev="$(docker inspect "$container" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' 2>/dev/null)"
   log "DEPLOYED ${svc} -> rev ${rev:0:12}"
@@ -184,7 +276,11 @@ main() {
   local rc=0
   for entry in "${SERVICES[@]}"; do
     IFS=':' read -r svc container repo <<<"$entry"
-    deploy_one "$svc" "$container" "$repo" || rc=1
+    if ! deploy_one "$svc" "$container" "$repo"; then
+      rc=1
+      log "ABORT remaining services: ${svc} did not deploy successfully"
+      break
+    fi
   done
   docker image prune -f >/dev/null 2>&1 || true
   exit $rc

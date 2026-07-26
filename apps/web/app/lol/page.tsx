@@ -12,6 +12,7 @@ import { fetchLolAnalyticsStatus } from "@/lib/lolAnalyticsStatus";
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { getBackendBaseUrl } from "@/lib/env";
 import { formatGames, formatPercent } from "@/lib/format";
+import { championDisplayName } from "@/lib/gameDisplay";
 import { roleDisplayLabel } from "@/lib/roles";
 import { championIconUrl, fetchChampionMap } from "@/lib/staticData";
 import { normalizeTierListEntries } from "@/lib/tierlist";
@@ -146,7 +147,7 @@ export default async function HomePage({
                 <tbody>
                   {topRows.map((entry, index) => {
                     const champ = champions[String(entry.championId)];
-                    const name = champ?.name ?? `Champion ${entry.championId}`;
+                    const name = championDisplayName(champ);
                     const title = champ?.title ?? "";
                     return (
                       <tr key={`${entry.championId}-${entry.role}`} className="border-b border-border/20">
@@ -195,7 +196,7 @@ export default async function HomePage({
               ) : (
                 trendingRows.map((entry, index) => {
                   const champ = champions[String(entry.championId)];
-                  const name = champ?.name ?? `Champion ${entry.championId}`;
+                  const name = championDisplayName(champ);
                   return (
                     <Link
                       key={`${entry.championId}-trend`}

@@ -1,3 +1,5 @@
+using Transcendence.Service.Core.Services.Analysis.Models;
+
 namespace Transcendence.Service.Core.Services.RiotApi.DTOs;
 
 /// <summary>
@@ -84,7 +86,8 @@ public record ParticipantDetailDto(
     int SummonerSpell1Id,
     int SummonerSpell2Id,
     IReadOnlyList<int> Items,
-    ParticipantRunesDto Runes
+    ParticipantRunesDto Runes,
+    MatchPerformanceSummary Performance
 );
 
 /// <summary>

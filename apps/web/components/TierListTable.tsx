@@ -18,6 +18,7 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/cn";
 import { formatEbStory } from "@/lib/confidence";
 import { formatGames, formatPercent } from "@/lib/format";
+import { championDisplayName } from "@/lib/gameDisplay";
 import { roleDisplayLabel } from "@/lib/roles";
 import { championIconUrl } from "@/lib/staticData";
 import {
@@ -323,7 +324,7 @@ export function TierListTable({
 
   function renderRow(entry: RowEntry) {
     const champion = champions[String(entry.championId)];
-    const championName = champion?.name ?? `Champion ${entry.championId}`;
+    const championName = championDisplayName(champion);
     const championSlug = champion?.id ?? "Unknown";
     const championSubtitle = champion?.title ?? "";
     const rowParams = new URLSearchParams();

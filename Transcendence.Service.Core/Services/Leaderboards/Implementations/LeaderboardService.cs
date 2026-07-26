@@ -1,12 +1,24 @@
+using System.Diagnostics;
+using Microsoft.Extensions.Caching.Hybrid;
 using Transcendence.Data.Repositories.Interfaces;
+using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Leaderboards.Interfaces;
 using Transcendence.Service.Core.Services.Leaderboards.Models;
 using Transcendence.Service.Core.Services.RiotApi;
 
 namespace Transcendence.Service.Core.Services.Leaderboards.Implementations;
 
-public sealed class LeaderboardService(ILeaderboardRepository repository) : ILeaderboardService
+public sealed class LeaderboardService(
+    ILeaderboardRepository repository,
+    HybridCache cache,
+    LeaderboardTelemetry telemetry) : ILeaderboardService
 {
+    private static readonly HybridCacheEntryOptions CacheOptions = new()
+    {
+        Expiration = TimeSpan.FromMinutes(5),
+        LocalCacheExpiration = TimeSpan.FromSeconds(30)
+    };
+
     private static readonly IReadOnlyDictionary<string, int> TierOrder =
         new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
         {
@@ -32,10 +44,60 @@ public sealed class LeaderboardService(ILeaderboardRepository repository) : ILea
         CancellationToken ct = default)
     {
         var normalizedQueue = NormalizeQueue(queue);
-        var rankedFlex = normalizedQueue == QueueCatalog.QueueFamilyRankedFlex;
         var safeLimit = Math.Clamp(limit, 1, 100);
         var normalizedRole = NormalizeRole(role);
+        var safeMinimumGames = Math.Clamp(minimumChampionGames, 1, 100);
+        var normalizedPlatform = platformRegion.Trim().ToUpperInvariant();
+        var kind = championId is null ? "regional" : "champion";
+        var cacheKey = championId is null
+            ? $"leaderboards:v1:regional:{normalizedPlatform}:{normalizedQueue}:{safeLimit}"
+            : $"leaderboards:v1:champion:{normalizedPlatform}:{normalizedQueue}:{championId.Value}:{normalizedRole ?? "ALL"}:{safeMinimumGames}:{safeLimit}";
+        var cacheMiss = false;
+        var succeeded = false;
+        var started = Stopwatch.GetTimestamp();
 
+        try
+        {
+            var result = await cache.GetOrCreateAsync(
+                cacheKey,
+                async token =>
+                {
+                    cacheMiss = true;
+                    return await ComputeAsync(
+                        normalizedPlatform,
+                        normalizedQueue,
+                        championId,
+                        normalizedRole,
+                        safeLimit,
+                        safeMinimumGames,
+                        token);
+                },
+                CacheOptions,
+                tags: ["leaderboards"],
+                cancellationToken: ct);
+            succeeded = true;
+            return result;
+        }
+        finally
+        {
+            telemetry.Record(
+                kind,
+                cacheMiss,
+                succeeded,
+                Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+        }
+    }
+
+    private async Task<LeaderboardResponse> ComputeAsync(
+        string platformRegion,
+        string normalizedQueue,
+        int? championId,
+        string? normalizedRole,
+        int safeLimit,
+        int minimumChampionGames,
+        CancellationToken ct)
+    {
+        var rankedFlex = normalizedQueue == QueueCatalog.QueueFamilyRankedFlex;
         if (championId is null)
         {
             var rows = await repository.GetRegionalAsync(platformRegion, rankedFlex, safeLimit, ct);
@@ -66,7 +128,7 @@ public sealed class LeaderboardService(ILeaderboardRepository repository) : ILea
             queueId,
             championId.Value,
             normalizedRole,
-            Math.Clamp(minimumChampionGames, 1, 100),
+            minimumChampionGames,
             safeLimit,
             ct);
         var sorted = championRows

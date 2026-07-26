@@ -1,29 +1,35 @@
 import type { Metadata } from "next";
 import { Bricolage_Grotesque, Hanken_Grotesk, JetBrains_Mono } from "next/font/google";
+import { Suspense } from "react";
 
 import "@/app/globals.css";
 import { GlobalCommandPaletteLoader } from "@/components/GlobalCommandPaletteLoader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
+import { WebVitalsReporter } from "@/components/WebVitalsReporter";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { getMetadataBase, SITE_NAME, socialImageUrl } from "@/lib/seo";
 
 const displayFont = Bricolage_Grotesque({
   subsets: ["latin"],
   variable: "--font-display-face",
-  display: "swap"
+  // On a slow first visit, keep the metrically-compatible fallback instead of repainting the page
+  // several seconds later and turning the font swap into the LCP.
+  display: "optional"
 });
 
 const bodyFont = Hanken_Grotesk({
   subsets: ["latin"],
   variable: "--font-body",
-  display: "swap"
+  display: "optional"
 });
 
 const monoFont = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-mono-face",
-  display: "swap"
+  display: "optional",
+  // Mono is reserved for machine identifiers and is absent from most public routes.
+  preload: false
 });
 
 export const metadata: Metadata = {
@@ -101,12 +107,22 @@ export default function RootLayout({
       <body className="antialiased">
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <TooltipProvider>
-          <SiteHeader />
+          <Suspense
+            fallback={
+              <div
+                aria-hidden
+                className="h-[69px] border-b border-border/55 bg-bg/88 sm:h-[77px]"
+              />
+            }
+          >
+            <SiteHeader />
+          </Suspense>
           <main className="site-main mx-auto flex w-full max-w-[1440px] flex-1 flex-col px-4 py-8 md:px-6 md:py-10 lg:px-8">
             {children}
           </main>
           <SiteFooter />
           <GlobalCommandPaletteLoader />
+          <WebVitalsReporter />
         </TooltipProvider>
       </body>
     </html>

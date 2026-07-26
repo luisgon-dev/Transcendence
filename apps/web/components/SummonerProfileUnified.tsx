@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useReducedMotion } from "framer-motion";
 
-import { MatchHistorySection } from "@/components/lol-profile/MatchHistorySection";
 import { PerformanceCard } from "@/components/lol-profile/PerformanceCard";
 import { ProfileHeroCard } from "@/components/lol-profile/ProfileHeroCard";
 import { ProfileSidebar } from "@/components/lol-profile/ProfileSidebar";
@@ -44,6 +43,38 @@ const SORT_OPTIONS: Array<{ value: MatchSortOption; label: string }> = [
   { value: "DMG_DESC", label: "Highest Damage" }
 ];
 
+const MatchHistorySection = dynamic(
+  () =>
+    import("@/components/lol-profile/MatchHistorySection").then(
+      (module) => module.MatchHistorySection
+    ),
+  {
+    loading: () => (
+      <Card className="profile-section-card p-5">
+        <div className="grid gap-3">
+          <Skeleton className="h-11 w-full" />
+          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-40 w-full" />
+        </div>
+      </Card>
+    )
+  }
+);
+
+function usePrefersReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+
+  useEffect(() => {
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReduced(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  return reduced;
+}
+
 export function SummonerProfileClient({
   region,
   gameName,
@@ -80,7 +111,7 @@ export function SummonerProfileClient({
   initialRuneStatic?: RuneStatic | null;
 }) {
   const pathname = usePathname();
-  const prefersReducedMotion = Boolean(useReducedMotion());
+  const prefersReducedMotion = usePrefersReducedMotion();
   const title = `${gameName}#${tagLine}`;
   const staticData = useProfileStaticData({
     championStatic: initialChampionStatic,
@@ -193,8 +224,8 @@ export function SummonerProfileClient({
             />
           )
         ) : (
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(280px,0.32fr)_minmax(0,1fr)] xl:items-start">
-            <div className="order-2 xl:order-1">
+          <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[20rem_minmax(0,1fr)] xl:items-start">
+            <div className="order-2 min-w-0 xl:order-1">
               <ProfileSidebar
                 profile={lookup.profile}
                 championStatic={staticData.championStatic}
@@ -206,7 +237,7 @@ export function SummonerProfileClient({
                 tagLine={tagLine}
               />
             </div>
-            <div className="order-1 grid gap-6 xl:order-2">
+            <div className="order-1 grid min-w-0 gap-6 [&>*]:min-w-0 [&>*]:max-w-full xl:order-2">
               <PerformanceCard
                 matches={matches.history?.items ?? []}
                 overviewStats={lookup.profile.overviewStats}

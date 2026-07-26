@@ -28,7 +28,8 @@ type AuthMeResponse = components["schemas"]["AuthMeResponse"];
 function isDynamicServerUsageError(error: unknown) {
   return (
     error instanceof Error &&
-    error.message.includes("Dynamic server usage")
+    (error.message.includes("Dynamic server usage") ||
+      error.message.includes("During prerendering, `cookies()` rejects"))
   );
 }
 

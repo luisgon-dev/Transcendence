@@ -12,12 +12,15 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { ChevronRightIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 import { MatchScoreboard } from "@/components/lol-profile/MatchScoreboard";
+import { PerformanceIndicator } from "@/components/lol-profile/PerformanceIndicator";
 import { useStaticData } from "@/components/lol-profile/StaticDataContext";
 import {
+  formatCompactNumber,
   formatDateTimeMs,
   formatDurationSeconds,
   formatRelativeTime
 } from "@/lib/format";
+import { championDisplayName, itemDisplayName } from "@/lib/gameDisplay";
 import { formatQueueLabel } from "@/lib/queues";
 import { roleDisplayLabel } from "@/lib/roles";
 import { encodeRiotIdPath } from "@/lib/riotid";
@@ -114,201 +117,202 @@ function MatchHistoryCard({
   const { championStatic, itemStatic, spellStatic, runeStatic } = useStaticData();
   const queueLabel = formatQueueLabel(match.queueType, match.queueId);
   const champion = championStatic?.champions[String(match.championId)];
-  const championName = champion?.name ?? `Champion ${match.championId}`;
+  const championName = championDisplayName(champion);
   const roleLabel = match.teamPosition ? roleDisplayLabel(match.teamPosition) : "Unknown";
   const primaryRuneId = sortRuneSelections(match.runesDetail?.primarySelections ?? [], runeStatic?.runeSortById)[0] ?? 0;
   const primaryRuneMeta = runeStatic?.runeById[String(primaryRuneId)];
   const subStyleMeta = runeStatic?.styleById[String(match.runesDetail?.subStyleId ?? 0)];
   const spellIds = [match.summonerSpell1Id, match.summonerSpell2Id];
   const itemSlots = Array.from({ length: 7 }, (_, idx) => match.items[idx] ?? 0);
+  const relativeTime = formatRelativeTime(match.matchDate);
+  const exactDateTime = formatDateTimeMs(match.matchDate);
   const matchMetaId = `match-meta-${match.matchId}`;
   const matchPanelId = `match-panel-${match.matchId}`;
 
   return (
     <div
-      className={`match-card-shell ${
+      className={`match-card-shell min-w-0 max-w-full ${
         match.win ? "match-card-shell--win border-win/28" : "match-card-shell--loss border-loss/28"
       } rounded-panel border`}
     >
       <button
-        className="relative z-10 w-full px-4 py-4 text-left focus-visible:outline-none md:px-5 md:py-5"
+        className="match-card-summary relative z-10 block w-full min-w-0 max-w-full px-4 py-4 text-left focus-visible:outline-none md:px-5 md:py-5"
         onClick={() => void onToggleExpanded(match.matchId)}
         aria-expanded={expanded}
         aria-controls={matchPanelId}
         aria-describedby={matchMetaId}
         aria-label={`${match.win ? "Victory" : "Defeat"} on ${championName}. KDA ${match.kills}/${match.deaths}/${match.assists}. ${formatDurationSeconds(match.durationSeconds)}.`}
       >
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.95fr)_auto] xl:items-center">
-          <div className="grid gap-3">
-            <div className="flex flex-wrap items-center gap-2">
+        <div className="match-snapshot-grid">
+          <div className="match-snapshot-identity min-w-0">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <span
-                className={`type-overline rounded-full px-2.5 py-1 ${
-                  match.win ? "bg-win/15 text-win" : "bg-loss/15 text-loss"
-                }`}
+                className={`type-overline font-semibold ${match.win ? "text-win" : "text-loss"}`}
               >
                 {match.win ? "VICTORY" : "DEFEAT"}
               </span>
-              <span className="type-caption surface-chip rounded-full px-2.5 py-1 font-medium text-fg/92">
-                {queueLabel}
-              </span>
-              <span className="type-caption surface-chip rounded-full px-2.5 py-1 font-medium text-fg/92">
-                {roleLabel}
-              </span>
-              <span className="type-caption surface-chip rounded-full px-2.5 py-1 font-medium text-fg/92">
+              <span className="text-border-strong" aria-hidden="true">·</span>
+              <span className="type-caption font-medium text-fg/82">{queueLabel}</span>
+              <span className="text-border-strong" aria-hidden="true">·</span>
+              <span className="type-caption tabular-nums text-fg/72">
                 {formatDurationSeconds(match.durationSeconds)}
               </span>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
-              <div className="flex min-w-0 items-center gap-3">
+            <div className="mt-3 flex min-w-0 items-center gap-3">
+              <div className="flex shrink-0 items-center gap-2">
                 {champion && championStatic ? (
                   <Image
                     src={championIconUrl(championStatic.version, champion.id)}
                     alt={championName}
-                    width={52}
-                    height={52}
+                    width={48}
+                    height={48}
                     className="rounded-control border border-border/60 shadow-soft"
                   />
                 ) : (
-                  <div className="h-[52px] w-[52px] rounded-control border border-border/60 bg-surface/60" />
+                  <div className="h-12 w-12 rounded-control border border-border/60 bg-surface/60" />
                 )}
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
-                    <p className="truncate text-lg font-semibold">{championName}</p>
-                    <p className="text-xs text-muted">{formatRelativeTime(match.matchDate)}</p>
+
+                <div className="grid grid-cols-2 items-center gap-1.5">
+                  <div className="flex flex-col gap-1" aria-label="Summoner spells">
+                    {spellIds.map((spellId, spellIdx) => {
+                      const spellMeta = spellStatic?.spells[String(spellId)];
+                      return spellMeta && spellStatic ? (
+                        <Image
+                          key={`${match.matchId}-spell-${spellIdx}-${spellId}`}
+                          src={summonerSpellIconUrl(spellStatic.version, spellMeta.id)}
+                          alt={spellMeta.name}
+                          title={spellMeta.name}
+                          width={21}
+                          height={21}
+                          className="rounded border border-border/50"
+                        />
+                      ) : (
+                        <span
+                          key={`${match.matchId}-spell-empty-${spellIdx}-${spellId}`}
+                          className="h-[21px] w-[21px] rounded border border-border/40 bg-surface/60"
+                          aria-hidden="true"
+                        />
+                      );
+                    })}
                   </div>
-                  <p id={matchMetaId} className="mt-1 text-sm text-fg/72">
-                    {formatDateTimeMs(match.matchDate)}
-                  </p>
+
+                  <div className="flex flex-col items-center gap-1" aria-label="Rune preview">
+                    {primaryRuneMeta ? (
+                      <Image
+                        src={runeIconUrl(primaryRuneMeta.icon)}
+                        alt={primaryRuneMeta.name}
+                        title={primaryRuneMeta.name}
+                        width={22}
+                        height={22}
+                        className="rounded-full border border-border/40 bg-surface-2/70 p-0.5"
+                      />
+                    ) : (
+                      <span
+                        className="h-[22px] w-[22px] rounded-full border border-border/40 bg-surface-2/70"
+                        aria-hidden="true"
+                      />
+                    )}
+                    {subStyleMeta ? (
+                      <Image
+                        src={runeIconUrl(subStyleMeta.icon)}
+                        alt={subStyleMeta.name}
+                        title={subStyleMeta.name}
+                        width={18}
+                        height={18}
+                        className="rounded-full border border-border/30 bg-surface-2/70 p-0.5"
+                      />
+                    ) : (
+                      <span
+                        className="h-[18px] w-[18px] rounded-full border border-border/30 bg-surface-2/70"
+                        aria-hidden="true"
+                      />
+                    )}
+                  </div>
                 </div>
+              </div>
+
+              <div className="min-w-0">
+                <p className="truncate text-lg font-semibold leading-tight text-fg">{championName}</p>
+                <p className="mt-1 truncate type-caption text-muted">
+                  {roleLabel}
+                  <span className="px-1.5" aria-hidden="true">·</span>
+                  <time id={matchMetaId} title={exactDateTime} aria-label={`${relativeTime}; ${exactDateTime}`}>
+                    {relativeTime}
+                  </time>
+                </p>
               </div>
             </div>
           </div>
 
-          <div className="grid gap-3">
-            <div className="surface-subtle grid gap-3 rounded-card p-3 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5" aria-label="Summoner spells">
-                  {spellIds.map((spellId, spellIdx) => {
-                    const spellMeta = spellStatic?.spells[String(spellId)];
-                    return spellMeta && spellStatic ? (
+          <div className="match-snapshot-loadout min-w-0">
+            <div className="flex flex-wrap items-center gap-1" aria-label="Item build preview">
+              {itemSlots.map((itemId, itemIdx) => {
+                const itemMeta = itemStatic?.items[String(itemId)];
+                return (
+                  <span
+                    key={`${match.matchId}-item-slot-${itemIdx}`}
+                    className={cn(
+                      "inline-flex shrink-0",
+                      itemIdx === 6 && "ml-1 border-l border-border/65 pl-2"
+                    )}
+                  >
+                    {!itemId ? (
+                      <span
+                        className="h-7 w-7 rounded border border-border/35 bg-surface/55"
+                        aria-hidden="true"
+                      />
+                    ) : itemStatic ? (
                       <Image
-                        key={`${match.matchId}-spell-${spellIdx}-${spellId}`}
-                        src={summonerSpellIconUrl(spellStatic.version, spellMeta.id)}
-                        alt={spellMeta.name}
-                        title={spellMeta.name}
-                        width={24}
-                        height={24}
-                        className="rounded-md border border-border/50"
+                        src={itemIconUrl(itemStatic.version, itemId)}
+                        alt={itemDisplayName(itemMeta)}
+                        title={itemDisplayName(itemMeta)}
+                        width={28}
+                        height={28}
+                        className="rounded border border-border/35"
                       />
                     ) : (
-                      <div
-                        key={`${match.matchId}-spell-empty-${spellIdx}-${spellId}`}
-                        className="h-6 w-6 rounded-md border border-border/40 bg-surface/60"
+                      <span
+                        className="h-7 w-7 rounded border border-border/35 bg-surface/55"
                         aria-hidden="true"
                       />
-                    );
-                  })}
-                </div>
-
-                <div className="flex items-center gap-1.5" aria-label="Rune preview">
-                  {primaryRuneMeta ? (
-                    <Image
-                      src={runeIconUrl(primaryRuneMeta.icon)}
-                      alt={primaryRuneMeta.name}
-                      title={primaryRuneMeta.name}
-                      width={24}
-                      height={24}
-                      className="rounded-full border border-border/40 bg-surface-2/70 p-0.5"
-                    />
-                  ) : (
-                    <span
-                      className="h-6 w-6 rounded-full border border-border/40 bg-surface-2/70"
-                      aria-hidden="true"
-                    />
-                  )}
-                  {subStyleMeta ? (
-                    <Image
-                      src={runeIconUrl(subStyleMeta.icon)}
-                      alt={subStyleMeta.name}
-                      title={subStyleMeta.name}
-                      width={24}
-                      height={24}
-                      className="rounded-full border border-border/40 bg-surface-2/70 p-0.5"
-                    />
-                  ) : (
-                    <span
-                      className="h-6 w-6 rounded-full border border-border/40 bg-surface-2/70"
-                      aria-hidden="true"
-                    />
-                  )}
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-1.5 sm:justify-end" aria-label="Item build preview">
-                {itemSlots.map((itemId, itemIdx) => {
-                  if (!itemId) {
-                    return (
-                      <div
-                        key={`${match.matchId}-item-empty-${itemIdx}`}
-                        className="h-6 w-6 rounded-md border border-border/35 bg-surface/60"
-                        aria-hidden="true"
-                      />
-                    );
-                  }
-
-                  const itemMeta = itemStatic?.items[String(itemId)];
-                  return itemStatic ? (
-                    <Image
-                      key={`${match.matchId}-item-${itemIdx}-${itemId}`}
-                      src={itemIconUrl(itemStatic.version, itemId)}
-                      alt={itemMeta?.name ?? `Item ${itemId}`}
-                      title={itemMeta?.name ?? `Item ${itemId}`}
-                      width={24}
-                      height={24}
-                      className="rounded-md border border-border/35"
-                    />
-                  ) : (
-                    <div
-                      key={`${match.matchId}-item-loading-${itemIdx}-${itemId}`}
-                      className="h-6 w-6 rounded-md border border-border/35 bg-surface/60"
-                      aria-hidden="true"
-                    />
-                  );
-                })}
-              </div>
+                    )}
+                  </span>
+                );
+              })}
             </div>
 
-            <div className="flex flex-wrap gap-2 text-xs text-fg/70">
-              <span className="surface-chip rounded-full px-2.5 py-1">
-                {match.damageToChamps.toLocaleString()} damage
-              </span>
-              <span className="surface-chip rounded-full px-2.5 py-1">
-                {match.visionScore} vision
-              </span>
-              <span className="surface-chip rounded-full px-2.5 py-1">
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 type-caption text-fg/68">
+              <span className="tabular-nums">{formatCompactNumber(match.damageToChamps)} dmg</span>
+              <span className="tabular-nums">{match.visionScore} vision</span>
+              <span className="tabular-nums">
                 {match.csPerMin.toFixed(1)} CS/min
               </span>
             </div>
           </div>
 
-          <div className="grid gap-2 xl:justify-items-end">
-            <div className="surface-subtle rounded-card px-4 py-3 text-right">
-              <p className="text-xl font-semibold leading-tight tracking-tight text-fg">
-                <span>{match.kills}</span>/<span className="text-loss/90">{match.deaths}</span>/<span>{match.assists}</span>
+          <div className="match-snapshot-stats">
+            <div className="flex flex-col items-start gap-2 @min-[36rem]:items-end">
+              <PerformanceIndicator performance={match.performance} compact />
+              <p className="text-xl font-semibold leading-tight tracking-tight text-fg tabular-nums">
+                <span>{match.kills}</span>
+                <span className="text-muted"> / </span>
+                <span className="text-loss/90">{match.deaths}</span>
+                <span className="text-muted"> / </span>
+                <span>{match.assists}</span>
               </p>
-              <p className="mt-1 text-xs font-medium text-fg/82">
+              <p className="mt-1 type-caption font-medium text-fg/78 tabular-nums">
                 {matchKdaRatio(match).toFixed(2)} KDA
               </p>
             </div>
             <span className="flex items-center justify-end gap-1.5 type-overline text-muted">
+              {expanded ? "Collapse" : "Details"}
               <ChevronRightIcon
                 className={cn(
                   "size-3 shrink-0 transition-transform duration-150",
                   expanded && "rotate-90"
                 )}
               />
-              {expanded ? "Collapse details" : "Expand details"}
             </span>
           </div>
         </div>
@@ -377,8 +381,8 @@ export function MatchHistorySection({
   prefersReducedMotion,
 }: MatchHistorySectionProps) {
   return (
-    <section className="flex flex-col gap-5">
-      <Card className="profile-section-card rounded-panel p-5 md:p-6">
+    <section className="flex min-w-0 max-w-full flex-col gap-5">
+      <Card className="profile-section-card min-w-0 max-w-full rounded-panel p-5 md:p-6">
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>

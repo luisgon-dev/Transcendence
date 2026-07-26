@@ -62,6 +62,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITrackedProSummonerService, TrackedProSummonerService>();
         services.AddSingleton<IRefreshLockLifecycleTelemetry, RefreshLockLifecycleTelemetry>();
         services.AddSingleton<IIngestionThroughputTelemetry, IngestionThroughputTelemetry>();
+        services.AddSingleton<LeaderboardTelemetry>();
 
         // Analytics services
         services.AddScoped<IChampionWinRateComputeService, ChampionWinRateComputeService>();

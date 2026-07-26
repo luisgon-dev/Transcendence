@@ -2,13 +2,13 @@
 
 The **single source of truth** for the Transcendence observability stack. One deployable unit for both
 local dev and prod. It is a separate compose from the app (repo-root `compose.yml`) but joins the app's
-Docker network so Prometheus can scrape `webapi`/`service` by name.
+Docker network so Prometheus can scrape `web`/`webapi`/`service` by name.
 
 ```
 config/monitoring/
   compose.yml            # base stack (local-friendly defaults, env-driven)
   compose.prod.yml       # prod overlay (admin-password file secret)
-  prometheus.yml         # scrape config (webapi:8080, service:9464)
+  prometheus.yml         # web, API, worker, PostgreSQL, Redis, host, and Prometheus targets
   grafana/
     provisioning/        # datasources, dashboards provider, alerting (rules + contact points)
     dashboards/          # dashboard JSON
@@ -45,7 +45,8 @@ rsync -av --delete \
 
 # on prod (first time only): create the env + admin-password secret
 #   /root/transcendence-monitoring/.env               -> DISCORD_ALERT_WEBHOOK_URL, GRAFANA_ROOT_URL,
-#                                                         GRAFANA_COOKIE_SECURE, PROMETHEUS_EXTERNAL_URL
+#                                                         GRAFANA_COOKIE_SECURE, PROMETHEUS_EXTERNAL_URL,
+#                                                         POSTGRES_EXPORTER_*
 #   /root/transcendence-monitoring/secrets/grafana_admin_password  (chmod 600)
 
 ssh root@192.168.0.221 'cd /root/transcendence-monitoring && \
@@ -55,11 +56,37 @@ ssh root@192.168.0.221 'cd /root/transcendence-monitoring && \
 Because provisioning is bind-mounted, editing a dashboard or an alert rule in this repo and re-syncing
 (then recreating Grafana) is the whole update loop — no more one-off `scp`.
 
+Create a dedicated PostgreSQL exporter role rather than using the application owner:
+
+```sql
+CREATE ROLE transcendence_exporter LOGIN PASSWORD '<random>';
+GRANT pg_monitor TO transcendence_exporter;
+```
+
+Set `POSTGRES_EXPORTER_DATABASE`, `POSTGRES_EXPORTER_USER`, and
+`POSTGRES_EXPORTER_PASSWORD` in the production monitoring `.env`. Query-level metrics also require
+PostgreSQL to start with `shared_preload_libraries=pg_stat_statements`, followed once by:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+```
+
+The app Compose enables `track_io_timing`, logs temp files of at least 64 MiB, and stages the preload
+setting. Preloading requires a deliberate PostgreSQL restart; do not repeatedly restart a saturated
+database just to activate metrics. The exporter continues to expose general database health without
+the optional query-statements collector.
+
 ## Alerting
 
 Grafana-provisioned alert rules live in `grafana/provisioning/alerting/`:
 
-- `rules.yml` — WebAPI down, Worker down (`up == 0`), API 5xx error ratio, API p95 latency.
+- `rules.yml` — web/WebAPI/worker/PostgreSQL-exporter/Redis-exporter down, PostgreSQL connection use
+  above 80%, Redis rejected connections, API 5xx ratio, API p95 latency, sample-gated real-user p75
+  LCP/INP/CLS degradation, and host disk capacity.
 - `contactpoints.yml` — a `discord` receiver; URL from `DISCORD_ALERT_WEBHOOK_URL`.
+
+`grafana/dashboards/web-vitals.json` shows route-filtered report volume, rating mix, p75 LCP/INP, and
+p75 CLS from the Next.js Web Vitals endpoint. A new web process starts with empty in-memory histogram
+state; Prometheus retains previously scraped samples according to its normal retention policy.
 
 See `docs/ARCHITECTURE.md` → *Metrics-based alerting* for the rule semantics and DB/Redis coverage.

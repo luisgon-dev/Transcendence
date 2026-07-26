@@ -88,6 +88,17 @@ Profile responses include additional season/history metadata:
 - `championId` (optional; filters before pagination)
 - Responses include stable `facets.queues` and `facets.championIds` collected across the summoner's
   full stored history, independent of the current page and active filters.
+- Each match includes `performance`, a team-relative impact readout:
+  - `score` is a deterministic `1.0` to `10.0` weighted percentile score within that match and team
+  - `teamRank` / `teamSize` make the comparison scope explicit
+  - `label` is `MVP` for the top-ranked player on the winning team, `ACE` for the top-ranked player on
+    the losing team, and `null` otherwise
+  - `killParticipation`, `damageShare`, `goldShare`, `visionShare`, and `csPerMin` expose the real
+    inputs used for UI explanations
+  - weights are kill participation 30%, champion damage 25%, vision 15%, gold 10%, farm 10%, and
+    survival 10%; each input is percentile-ranked within the participant's team before weighting
+  - the score is computed from existing participant rows when the cached recent-history response is
+    built. It does not require a migration, stored label, or background precomputation.
 
 `GET /api/lol/summoners/search` supports:
 - `region` (required; platform route or alias such as `NA1` or `na`)
@@ -116,6 +127,8 @@ Stats and profile read surfaces now fail closed on backend errors:
   - `queueId` is included alongside `queueType`
 - `GET /api/lol/summoners/{summonerId}/matches/{matchId}`
   - Participant runes continue to return full selections (`primarySelections`, `subSelections`, `statShards`)
+  - Every participant includes the same `performance` readout used by recent history, allowing the
+    expanded scoreboard to show team rank and MVP/ACE labels without a second scoring implementation.
   - Match payload includes `queueId` and `queueType`
 
 #### Refresh Priority Behavior

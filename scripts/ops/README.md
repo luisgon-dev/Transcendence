@@ -10,19 +10,24 @@ the registry digest has changed, so pushes never auto-deployed and each release 
 be recreated by hand (see task **P1.3b**).
 
 `poll-deploy.sh` replaces wud for the three app services (`web`, `webapi`, `service`)
-with a deterministic, **outbound-only** digest poll:
+with a deterministic, **outbound-only** release poll:
 
-1. Resolve the current `:main` manifest digest from ghcr with an anonymous pull token
-   (the packages are public).
-2. Compare it to the digest the running container was pulled at.
-3. If they differ, `docker compose pull` + `up -d --no-deps <svc>` (postgres/redis are
-   never touched), then wait for that image's container healthcheck to pass before posting
-   the success notification via `ALERTS_WEBHOOK_URL`. A failed or missing healthcheck makes
-   the systemd run fail and sends a deploy-failure notification.
+1. Resolve the current `:main` manifest digest from GHCR and its
+   `org.opencontainers.image.revision` label (the packages are public).
+2. Compare both to the running container. The revision comparison is required because GHCR/Buildx
+   can publish a rebuilt tag whose reported manifest digest is unchanged; digest-only comparison
+   would silently miss that release.
+3. If they differ, deploy in dependency order: `service` → `webapi` → `web`. Before replacing the
+   worker, run the newly pulled image once with `Database__MigrateOnly=true`; only a successful
+   migration continues the release.
+4. Recreate one service at a time with `--no-deps` (PostgreSQL/Redis are never touched), wait for its
+   healthcheck, then continue. A component failure aborts all later components for that poll.
+5. On recreate/health failure, retag and restore the prior local image with `--pull never`. The failed
+   digest is quarantined until `:main` changes, preventing a minute-by-minute rollback loop.
 
 No inbound exposure, no CI secret, no self-hosted runner. A `flock` guard prevents
 overlapping runs. Runs every ~60s via the systemd timer (≈ wud's old cadence). Remote and
-local digest-resolution failures are counted per service under `/var/lib/transcendence-deploy`;
+local digest/revision-resolution failures are counted per service under `/var/lib/transcendence-deploy`;
 the third consecutive failure sends one Discord alert, and a successful resolution resets the
 counter. The bounded health wait defaults to 420 seconds so the worker's four-minute startup
 grace can complete.
@@ -52,8 +57,9 @@ docker inspect transcendence-web --format '{{.State.Health.Status}}' # current g
 systemctl disable --now transcendence-deploy.timer  # pause auto-deploy (e.g. during an incident)
 ```
 
-Rollback is unchanged: pin a service to an immutable `:sha-<short>` tag in the compose
-file and `compose up -d` it (see `docs/ARCHITECTURE.md` "Deployment & rollback").
+The automatic rollback protects single-service replacement failures. Break-glass rollback remains:
+pin a service to an immutable `:sha-<short>` tag in the compose file and `compose up -d` it (see
+`docs/ARCHITECTURE.md` "Deployment & rollback").
 
 > If wud's app-container watching is ever wanted back, note it is unreliable here; this
 > poller is the source of truth. wud still works fine for the public Docker Hub
@@ -109,19 +115,36 @@ to Postgres's out-of-box values (local dev is unaffected — do **not** raise th
 Docker VM). The values live in the compose file / stack env, which sit outside the
 `postgres_data` volume, so the tuning survives a DB volume rebuild.
 
-**Current prod state (applied 2026-06-21, zero downtime).** The **Portainer** compose's
-`postgres` service now hardcodes the values directly in its `command` (failsafe — they can't
-silently fall back to the 128MB default), added without restarting the container:
+**Current prod state (verified 2026-07-24).** The **Portainer** compose's `postgres` service hardcodes
+the memory values plus query/I/O instrumentation in its command:
 
 ```yaml
 # in <COMPOSE_DIR>/docker-compose.yml, postgres service
-command: ["postgres","-c","shared_buffers=4GB","-c","work_mem=24MB","-c","effective_cache_size=12GB","-c","maintenance_work_mem=512MB"]
+command:
+  - postgres
+  - -c
+  - shared_buffers=4GB
+  - -c
+  - work_mem=24MB
+  - -c
+  - effective_cache_size=12GB
+  - -c
+  - maintenance_work_mem=512MB
+  - -c
+  - shared_preload_libraries=pg_stat_statements
+  - -c
+  - track_io_timing=on
+  - -c
+  - log_temp_files=65536
 ```
 
-The running container was **not** restarted: the values are already live via `postgresql.auto.conf`,
-and the new `-c` flags take effect on the next deliberate postgres restart (and on a fresh volume).
-After that restart, single-source them by dropping the auto.conf override — do **not** do this
-before the restart, since the reloadable params would drop live:
+The database was deliberately restarted on 2026-07-24 and `pg_stat_statements` was created. General,
+query, I/O, and temp-spill metrics are scraped by the dedicated PostgreSQL exporter. Connection pools
+are budgeted at WebAPI 20 + worker 35 under `max_connections=100`; `Application Name` makes the two
+callers distinguishable in `pg_stat_activity`.
+
+The old memory values may also remain in `postgresql.auto.conf`. The command-line values are
+authoritative; they can be reset from auto.conf after verifying the container flags:
 
 ```bash
 docker exec transcendence-postgres psql -U postgres -d transcendence \
@@ -138,7 +161,46 @@ docker compose -p transcendence --env-file "$COMPOSE_DIR/stack.env" \
   -f "$COMPOSE_DIR/docker-compose.yml" up -d postgres
 ```
 
-`poll-deploy.sh` only redeploys the app containers, so it never touches postgres — this is a
-one-time manual step. **Note:** prod postgres is `pgautoupgrade/pgautoupgrade:18.3-alpine` (PG 18),
+`poll-deploy.sh` only redeploys the app containers, so it never touches PostgreSQL. **Note:** prod
+PostgreSQL is `pgautoupgrade/pgautoupgrade:18.3-alpine` (PG 18),
 data volume mounted at `/var/lib/postgresql` (PGDATA under `/var/lib/postgresql/18/docker`); the
 repo `compose.yml` mirrors this so it's a safe deploy source.
+
+## `postgres-performance-report.sh` — steady-state database review
+
+This read-only report turns PostgreSQL's cumulative statistics into a repeatable tuning record. It
+captures the runnable Hangfire backlog, recent completion progress, I/O and temp work, connections by
+application, top statements by total and mean time, table size/growth, scan mix, vacuum health, and
+large low-use indexes. It never resets statistics, runs `EXPLAIN`, drops indexes, vacuums, or changes
+settings.
+
+Reports are stored under `/var/lib/transcendence-performance` for 30 days. Each run compares table
+sizes with the prior snapshot. When runnable backlog exceeds `MAX_STEADY_BACKLOG` (default 500), the
+report is marked **busy** so load from ingestion/backfill is not mistaken for normal production.
+
+Install the script and low-priority daily timer on the Docker host:
+
+```bash
+install -D -m 0755 postgres-performance-report.sh \
+  /root/deploy/postgres-performance-report.sh
+install -D -m 0644 transcendence-postgres-performance-report.service \
+  /etc/systemd/system/transcendence-postgres-performance-report.service
+install -D -m 0644 transcendence-postgres-performance-report.timer \
+  /etc/systemd/system/transcendence-postgres-performance-report.timer
+install -d -m 0750 /var/lib/transcendence-performance
+systemctl daemon-reload
+systemctl enable --now transcendence-postgres-performance-report.timer
+```
+
+Operate and review:
+
+```bash
+systemctl start transcendence-postgres-performance-report.service
+systemctl status transcendence-postgres-performance-report.service
+systemctl list-timers transcendence-postgres-performance-report.timer
+less /var/lib/transcendence-performance/latest.md
+```
+
+Use `MAX_STEADY_BACKLOG=2000` only when deliberately redefining the busy threshold. A low `idx_scan`
+count is a review signal, not permission to drop an index; compare multiple steady reports and inspect
+constraints/query plans first.

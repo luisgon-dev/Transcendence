@@ -17,17 +17,16 @@ using Transcendence.Service.Core.Services.Jobs.Priority;
 using Transcendence.Service.Workers;
 using Transcendence.Service.Workers.Startup;
 
-// Pre-warm the thread pool. This worker runs ~46 Hangfire workers of async I/O-bound jobs whose
-// continuations, CancellationTokenSource.CancelAfter timers, and the per-region rate-limiter refill
-// timers (Camille's and our RiotRateGate) all need pool threads. The default min pool (= CPU count) grows
-// only ~1 thread/sec, so a burst of jobs starves it — timer callbacks don't fire, the rate limiters never
-// refill, and consumers park forever on an empty token bucket while CPU sits idle (the ingestion stall).
-// A high floor keeps timers responsive so the limiters always replenish.
-ThreadPool.SetMinThreads(200, 200);
-
 var builder = Host.CreateApplicationBuilder(args);
 ConfigureSharedBackendConfiguration(builder.Configuration, builder.Environment);
 builder.Logging.AddOperationalFileLogger(builder.Configuration, defaultServiceName: "service");
+
+// Keep timer callbacks responsive under a burst of async Hangfire work. The floor is configurable so
+// smaller environments do not inherit production's concurrency assumptions.
+var threadPoolMinThreads = Math.Max(
+    Environment.ProcessorCount,
+    builder.Configuration.GetValue("Worker:ThreadPoolMinThreads", 200));
+ThreadPool.SetMinThreads(threadPoolMinThreads, threadPoolMinThreads);
 
 // Add services to the container.
 builder.Services.AddDbContextPool<TranscendenceContext>(options =>
@@ -35,6 +34,11 @@ builder.Services.AddDbContextPool<TranscendenceContext>(options =>
         b => b.MigrationsAssembly("Transcendence.Service")));
 
 var hangfireRetryAttempts = Math.Max(0, builder.Configuration.GetValue<int?>("Jobs:Hangfire:GlobalRetryAttempts") ?? 1);
+var mainWorkerCount = Math.Max(1, builder.Configuration.GetValue("Jobs:Hangfire:Workers:Main", 24));
+var analyticsWorkerCount = Math.Max(1, builder.Configuration.GetValue("Jobs:Hangfire:Workers:Analytics", 4));
+var timelineWorkerCount = Math.Max(1, builder.Configuration.GetValue("Jobs:Hangfire:Workers:Timeline", 8));
+var discoveryWorkerCount = Math.Max(1, builder.Configuration.GetValue("Jobs:Hangfire:Workers:Discovery", 8));
+var historyWorkerCount = Math.Max(1, builder.Configuration.GetValue("Jobs:Hangfire:Workers:History", 2));
 
 builder.Services.AddHangfire(config =>
     config.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
@@ -58,7 +62,7 @@ builder.Services.AddHangfireServer(options =>
     options.Queues = ["refresh-high", "default", "refresh-low"];
     // Refresh jobs are I/O-bound (awaiting the Riot API, throttled per-region by Camille), so a
     // worker count well above CPU count keeps more regions/summoners in flight concurrently.
-    options.WorkerCount = 24;
+    options.WorkerCount = mainWorkerCount;
 });
 
 // Dedicated worker pool for the analytics warm/refresh lane. The main pool above pulls queues
@@ -71,7 +75,7 @@ builder.Services.AddHangfireServer(options =>
     options.Queues = [HangfireQueues.AnalyticsWarm];
     // Sized for the lane's recurring jobs (default-profile warm + adaptive + ramp refresh) running
     // concurrently; each fans out internally, so a small dedicated pool is plenty.
-    options.WorkerCount = 4;
+    options.WorkerCount = analyticsWorkerCount;
 });
 
 // Dedicated worker pool for per-match timeline ingestion. The main pool's shared refresh-low queue
@@ -83,7 +87,7 @@ builder.Services.AddHangfireServer(options =>
 {
     options.ServerName = HangfireQueues.TimelineIngest;
     options.Queues = [HangfireQueues.TimelineIngest];
-    options.WorkerCount = 8;
+    options.WorkerCount = timelineWorkerCount;
 });
 
 // Dedicated worker pool for match DISCOVERY (the heaviest pipeline): the per-region champion-analytics
@@ -100,7 +104,7 @@ builder.Services.AddHangfireServer(options =>
     // consumers generate requests faster than the key allows, so Camille's rate limiter parks them and
     // every Riot-calling job stalls (observed outage). Keep it modest so the steady request rate fits
     // the key; raise only if the key's tier genuinely supports more sustained throughput.
-    options.WorkerCount = 8;
+    options.WorkerCount = discoveryWorkerCount;
 });
 
 // Full player-history backfills are user-initiated but potentially long-running. Keep them off the
@@ -109,7 +113,7 @@ builder.Services.AddHangfireServer(options =>
 {
     options.ServerName = HangfireQueues.HistoryBackfill;
     options.Queues = [HangfireQueues.HistoryBackfill];
-    options.WorkerCount = 2;
+    options.WorkerCount = historyWorkerCount;
 });
 
 builder.Services.AddHttpClient();
@@ -238,6 +242,14 @@ await DatabaseMigrator.MigrateIfEnabledAsync(
     host.Services,
     builder.Configuration.GetValue("Database:AutoMigrate", false),
     host.Services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(DatabaseMigrator)));
+
+if (builder.Configuration.GetValue("Database:MigrateOnly", false))
+{
+    host.Services.GetRequiredService<ILoggerFactory>()
+        .CreateLogger("DatabaseMigration")
+        .LogInformation("Database migration-only run completed; worker host will not start.");
+    return;
+}
 
 host.Run();
 

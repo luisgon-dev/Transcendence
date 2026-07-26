@@ -394,6 +394,8 @@ FodyWeavers.xsd
 test-results/
 playwright-report/
 blob-report/
+.lighthouseci/
+.performance-artifacts/
 .playwright-cli/
 **/.playwright-cli/
 homepage.png

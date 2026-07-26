@@ -2,11 +2,13 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { ParticipantRuneCard } from "@/components/lol-profile/ParticipantRuneCard";
+import { PerformanceIndicator } from "@/components/lol-profile/PerformanceIndicator";
 import { useStaticData } from "@/components/lol-profile/StaticDataContext";
 import { TableScroll, Table, Th, Td } from "@/components/ui/Table";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/cn";
 import { formatCompactNumber } from "@/lib/format";
+import { itemDisplayName } from "@/lib/gameDisplay";
 import { encodeRiotIdPath } from "@/lib/riotid";
 import { roleDisplayLabel } from "@/lib/roles";
 import {
@@ -26,8 +28,6 @@ import {
 } from "@/components/lol-profile/shared";
 
 const ROLE_ORDER: Record<string, number> = { TOP: 0, JUNGLE: 1, MIDDLE: 2, BOTTOM: 3, UTILITY: 4 };
-
-export type ScoreboardDensity = "compact" | "full";
 
 function RuneTrigger({ participant }: { participant: MatchParticipant }) {
   const { runeStatic } = useStaticData();
@@ -89,7 +89,6 @@ function ScoreboardRow({
   participant,
   durationSeconds,
   maxDamage,
-  density,
   region,
   gameName,
   tagLine
@@ -97,7 +96,6 @@ function ScoreboardRow({
   participant: MatchParticipant;
   durationSeconds: number;
   maxDamage: number;
-  density: ScoreboardDensity;
   region: string;
   gameName: string;
   tagLine: string;
@@ -140,26 +138,24 @@ function ScoreboardRow({
             ) : null}
           </div>
 
-          {density === "full" ? (
-            <span className="flex shrink-0 flex-col gap-0.5" aria-label="Summoner spells">
-              {[participant.summonerSpell1Id, participant.summonerSpell2Id].map((spellId, spellIdx) => {
-                const spellMeta = spellStatic?.spells[String(spellId)];
-                return spellMeta && spellStatic ? (
-                  <Image
-                    key={`${spellId}-${spellIdx}`}
-                    src={summonerSpellIconUrl(spellStatic.version, spellMeta.id)}
-                    alt={spellMeta.name}
-                    title={spellMeta.name}
-                    width={16}
-                    height={16}
-                    className="rounded border border-border/40"
-                  />
-                ) : (
-                  <span key={`${spellId}-${spellIdx}`} className="h-4 w-4 rounded border border-border/40 bg-surface/60" />
-                );
-              })}
-            </span>
-          ) : null}
+          <span className="flex shrink-0 flex-col gap-0.5" aria-label="Summoner spells">
+            {[participant.summonerSpell1Id, participant.summonerSpell2Id].map((spellId, spellIdx) => {
+              const spellMeta = spellStatic?.spells[String(spellId)];
+              return spellMeta && spellStatic ? (
+                <Image
+                  key={`${spellId}-${spellIdx}`}
+                  src={summonerSpellIconUrl(spellStatic.version, spellMeta.id)}
+                  alt={spellMeta.name}
+                  title={spellMeta.name}
+                  width={16}
+                  height={16}
+                  className="rounded border border-border/40"
+                />
+              ) : (
+                <span key={`${spellId}-${spellIdx}`} className="h-4 w-4 rounded border border-border/40 bg-surface/60" />
+              );
+            })}
+          </span>
 
           <RuneTrigger participant={participant} />
 
@@ -176,7 +172,10 @@ function ScoreboardRow({
                 {displayName}
               </p>
             )}
-            <p className="type-caption text-muted">{roleDisplayLabel(normalizeRoleKey(participant.teamPosition))}</p>
+            <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+              <p className="type-caption text-muted">{roleDisplayLabel(normalizeRoleKey(participant.teamPosition))}</p>
+              <PerformanceIndicator performance={participant.performance} compact />
+            </div>
           </div>
         </div>
       </Td>
@@ -223,17 +222,13 @@ function ScoreboardRow({
         ) : null}
       </Td>
 
-      {density === "full" ? (
-        <>
-          <Td align="right" className="hidden whitespace-nowrap text-sm tabular-nums text-fg/82 sm:table-cell">
-            {participant.visionScore}
-          </Td>
+      <Td align="right" className="whitespace-nowrap text-sm tabular-nums text-fg/82">
+        {participant.visionScore}
+      </Td>
 
-          <Td align="right" className="hidden whitespace-nowrap text-sm tabular-nums text-fg/82 sm:table-cell">
-            {formatCompactNumber(participant.goldEarned)}
-          </Td>
-        </>
-      ) : null}
+      <Td align="right" className="whitespace-nowrap text-sm tabular-nums text-fg/82">
+        {formatCompactNumber(participant.goldEarned)}
+      </Td>
 
       <Td>
         <div className="flex flex-wrap items-center gap-1">
@@ -248,8 +243,8 @@ function ScoreboardRow({
               <Image
                 key={`${itemId}-${itemIdx}`}
                 src={itemIconUrl(itemStatic.version, itemId)}
-                alt={itemMeta?.name ?? `Item ${itemId}`}
-                title={itemMeta?.name ?? `Item ${itemId}`}
+                alt={itemDisplayName(itemMeta)}
+                title={itemDisplayName(itemMeta)}
                 width={22}
                 height={22}
                 className="rounded border border-border/35"
@@ -272,8 +267,7 @@ export function ScoreboardTeamTable({
   bans,
   region,
   gameName,
-  tagLine,
-  density = "compact"
+  tagLine
 }: {
   participants: MatchParticipant[];
   teamId: 100 | 200;
@@ -283,7 +277,6 @@ export function ScoreboardTeamTable({
   region: string;
   gameName: string;
   tagLine: string;
-  density?: ScoreboardDensity;
 }) {
   const { championStatic } = useStaticData();
   const ordered = participants
@@ -334,19 +327,15 @@ export function ScoreboardTeamTable({
       </div>
 
       <TableScroll className="match-detail-shell">
-        <Table className="min-w-[600px]">
+        <Table className="min-w-[760px]">
           <thead>
             <tr>
               <Th>{isBlue ? "Blue Team" : "Red Team"}</Th>
               <Th align="right">KDA</Th>
               <Th align="right">CS</Th>
               <Th align="right">Damage</Th>
-              {density === "full" ? (
-                <>
-                  <Th align="right" className="hidden sm:table-cell">Vision</Th>
-                  <Th align="right" className="hidden sm:table-cell">Gold</Th>
-                </>
-              ) : null}
+              <Th align="right">Vision</Th>
+              <Th align="right">Gold</Th>
               <Th>Items</Th>
             </tr>
           </thead>
@@ -357,7 +346,6 @@ export function ScoreboardTeamTable({
                 participant={participant}
                 durationSeconds={durationSeconds}
                 maxDamage={maxDamage}
-                density={density}
                 region={region}
                 gameName={gameName}
                 tagLine={tagLine}

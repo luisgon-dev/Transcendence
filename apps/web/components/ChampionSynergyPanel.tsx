@@ -5,6 +5,7 @@ import type { components } from "@transcendence/api-client";
 import { Card } from "@/components/ui/Card";
 import { LaneIcon } from "@/components/ui/LaneIcon";
 import { formatGames, formatPercent, winRateColorClass } from "@/lib/format";
+import { championDisplayName } from "@/lib/gameDisplay";
 import { roleDisplayLabel } from "@/lib/roles";
 import { championIconUrl } from "@/lib/staticData";
 import { formatStrengthDelta } from "@/lib/tierlist";
@@ -83,7 +84,7 @@ export function ChampionSynergyPanel({
                   ) : null}
                   <div className="min-w-0">
                     <p className="truncate font-semibold text-fg transition group-hover:text-primary">
-                      {champion?.name ?? `Champion ${partner.partnerChampionId}`}
+                      {championDisplayName(champion)}
                     </p>
                     <p className="mt-0.5 inline-flex items-center gap-1 text-xs text-muted">
                       <LaneIcon role={partner.partnerRole} className="h-3.5 w-3.5" />

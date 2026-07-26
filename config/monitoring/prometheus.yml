@@ -18,6 +18,12 @@ scrape_configs:
     static_configs:
       - targets: ["transcendence-webapi:8080"]
 
+  # Next.js aggregates browser Web Vitals into bounded route-template histograms.
+  - job_name: transcendence-web
+    metrics_path: /api/telemetry/metrics
+    static_configs:
+      - targets: ["transcendence-web:3000"]
+
   # The worker has no HTTP server, so it exposes /metrics via a standalone Prometheus HttpListener.
   - job_name: transcendence-worker
     metrics_path: /metrics
@@ -28,3 +34,11 @@ scrape_configs:
   - job_name: node
     static_configs:
       - targets: ["transcendence-node-exporter:9100"]
+
+  - job_name: transcendence-postgres
+    static_configs:
+      - targets: ["transcendence-postgres-exporter:9187"]
+
+  - job_name: transcendence-redis
+    static_configs:
+      - targets: ["transcendence-redis-exporter:9121"]

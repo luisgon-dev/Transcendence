@@ -43,11 +43,15 @@
     "web:build": "pnpm --filter web build",
     "web:lint": "pnpm --filter web lint",
     "web:test": "pnpm --filter web test",
+    "perf:web": "pnpm web:build && pnpm perf:web:ci",
+    "perf:web:ci": "pnpm exec lhci autorun",
+    "perf:api": "k6 run scripts/perf/api-load.js",
     "e2e": "npx playwright test",
     "e2e:local": "BASE_URL=http://localhost:3000 npx playwright test",
     "e2e:stack": "bash scripts/e2e/run-compose-stack.sh"
   },
   "devDependencies": {
+    "@lhci/cli": "0.15.1",
     "@playwright/test": "^1.58.2"
   }
 }

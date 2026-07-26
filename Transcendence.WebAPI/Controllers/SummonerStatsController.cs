@@ -151,7 +151,8 @@ public class SummonerStatsController(
                     m.RunesDetail.SubStyleId,
                     m.RunesDetail.PrimarySelections,
                     m.RunesDetail.SubSelections,
-                    m.RunesDetail.StatShards)
+                    m.RunesDetail.StatShards),
+                m.Performance
             )).ToList(),
             result.Page,
             result.PageSize,

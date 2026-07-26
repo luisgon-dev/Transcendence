@@ -26,6 +26,7 @@ import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { pickMostSevereAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { formatGames, matchupVerdict } from "@/lib/format";
+import { championDisplayName } from "@/lib/gameDisplay";
 import { fetchLolAnalyticsPatches } from "@/lib/lolAnalyticsPatches";
 import { normalizeAnalyticsPatch } from "@/lib/lolPatchFilters";
 import { resolveDefaultedRankTier, rankTierDisplayLabel, rankTierLadderOrdinal } from "@/lib/ranks";
@@ -74,10 +75,9 @@ export async function generateMetadata({
     params,
     searchParams ?? Promise.resolve({} as ChampionSearchParams)
   ]);
-  const championNumber = Number(championId);
   const queue = analyticsQueueOption(resolvedSearchParams.queue);
   const selectedPatch = normalizeAnalyticsPatch(resolvedSearchParams.patch);
-  let championName = Number.isFinite(championNumber) ? `Champion ${championNumber}` : "Champion";
+  let championName = "Champion analytics";
   let patch = selectedPatch;
 
   try {
@@ -85,10 +85,11 @@ export async function generateMetadata({
       fetchChampionMap(),
       selectedPatch ? Promise.resolve([]) : fetchLolAnalyticsPatches(queue.value)
     ]);
-    championName = champions[championId]?.name ?? championName;
+    const champion = champions[championId];
+    if (champion?.name?.trim()) championName = championDisplayName(champion);
     patch ??= patches.find((candidate) => candidate.isActive)?.patch ?? patches[0]?.patch ?? null;
   } catch {
-    // Metadata degrades to the route identity if static data is temporarily unavailable.
+    // Metadata stays human-readable if static data is temporarily unavailable.
   }
 
   const patchLabel = patch ? ` for patch ${patch}` : "";
@@ -211,7 +212,7 @@ export default async function ChampionDetailPage({
     return (
       <BackendErrorCard
         title="Champion"
-        message="Invalid champion id."
+        message="That champion route is invalid."
       />
     );
   }
@@ -219,7 +220,7 @@ export default async function ChampionDetailPage({
   // Identity (cached static data) — paints the shell immediately while the profile streams in.
   const { version, champions } = await fetchChampionMap();
   const champ = champions[String(championId)];
-  const champName = champ?.name ?? `Champion ${championId}`;
+  const champName = championDisplayName(champ);
   const champSlug = champ?.id ?? "Unknown";
   return (
     <div className="grid gap-8">
@@ -525,7 +526,7 @@ async function ChampionSections({
       winRate: entry.winRate ?? null,
       games: entry.games ?? null,
       opponentSlug: opponent?.id ?? "Unknown",
-      opponentName: opponent?.name ?? `Champion ${opponentId}`,
+      opponentName: championDisplayName(opponent),
       verdict: matchupVerdict(entry.winRate)
     };
   });

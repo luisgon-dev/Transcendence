@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { cache, Suspense } from "react";
 import type { components } from "@transcendence/api-client/schema";
 
 import { GlobalSearchLauncher } from "@/components/GlobalSearchLauncher";
@@ -10,6 +11,7 @@ import { LaneIcon } from "@/components/ui/LaneIcon";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { cn } from "@/lib/cn";
 import { getBackendBaseUrl } from "@/lib/env";
+import { championDisplayName } from "@/lib/gameDisplay";
 import { selectStarterPicks } from "@/lib/homeGuidance";
 import { fetchLolAnalyticsStatus } from "@/lib/lolAnalyticsStatus";
 import { platformRegionToSlug } from "@/lib/lolRegions";
@@ -116,7 +118,7 @@ async function loadHomeLiveData(): Promise<HomeLiveData> {
   }
 }
 
-async function loadVerifiedMain(): Promise<RiotAccountLink | null> {
+const loadVerifiedMain = cache(async (): Promise<RiotAccountLink | null> => {
   try {
     const token = await getAccessTokenOrRefresh();
     if (!token.ok) return null;
@@ -127,13 +129,68 @@ async function loadVerifiedMain(): Promise<RiotAccountLink | null> {
   } catch {
     return null;
   }
+});
+
+function TierListBrowseLink() {
+  return (
+    <Link
+      href="/lol/tierlist"
+      className={cn(
+        "rounded-sm font-semibold text-primary transition-colors hover:text-primary/80",
+        FOCUS_RING
+      )}
+    >
+      Open the current-patch tier list
+    </Link>
+  );
+}
+
+async function HomeWelcome() {
+  const verifiedMain = await loadVerifiedMain();
+  return (
+    <div className="mb-3 min-h-4">
+      {verifiedMain ? (
+        <p className="type-kicker text-primary">Welcome back, {verifiedMain.gameName}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function HomeBrowsePromptFallback() {
+  return (
+    <p className="type-note text-muted">
+      Prefer to browse? <TierListBrowseLink />.
+    </p>
+  );
+}
+
+async function HomeBrowsePrompt() {
+  const verifiedMain = await loadVerifiedMain();
+  return (
+    <p className="type-note text-muted">
+      {verifiedMain ? (
+        <>
+          <Link
+            href={`/lol/summoners/${platformRegionToSlug(verifiedMain.platformRegion)}/${encodeRiotIdPath(verifiedMain)}`}
+            className={cn(
+              "rounded-sm font-semibold text-primary transition-colors hover:text-primary/80",
+              FOCUS_RING
+            )}
+          >
+            Open {verifiedMain.gameName}#{verifiedMain.tagLine}
+          </Link>{" "}
+          or browse the{" "}
+        </>
+      ) : (
+        <>Prefer to browse? </>
+      )}
+      <TierListBrowseLink />.
+    </p>
+  );
 }
 
 export default async function LandingPage() {
-  const [{ version, champions, patch, tierEntries }, verifiedMain] = await Promise.all([
-    loadHomeLiveData(),
-    loadVerifiedMain()
-  ]);
+  const { version, champions, patch, tierEntries } = await loadHomeLiveData();
   const lolTop = tierEntries.slice(0, 5);
   const starterPicks = selectStarterPicks(tierEntries, champions);
   const hasPicks = lolTop.length > 0;
@@ -141,9 +198,9 @@ export default async function LandingPage() {
   return (
     <div className="grid gap-8">
       <section className="page-hero p-6 sm:p-8 md:p-10">
-        {verifiedMain ? (
-          <p className="type-kicker mb-3 text-primary">Welcome back, {verifiedMain.gameName}</p>
-        ) : null}
+        <Suspense fallback={<div aria-hidden className="mb-3 min-h-4" />}>
+          <HomeWelcome />
+        </Suspense>
         <h1 className="type-display max-w-3xl">Look up any League player or champion.</h1>
         <p className="type-lead mt-5 max-w-2xl">
           Current-patch tier lists, builds, and live profiles, refreshed continuously from ranked
@@ -152,34 +209,9 @@ export default async function LandingPage() {
 
         <div className="mt-8 grid gap-3">
           <GlobalSearchLauncher className="h-14 w-full max-w-2xl ring-offset-surface" />
-          <p className="type-note text-muted">
-            {verifiedMain ? (
-              <>
-                <Link
-                  href={`/lol/summoners/${platformRegionToSlug(verifiedMain.platformRegion)}/${encodeRiotIdPath(verifiedMain)}`}
-                  className={cn(
-                    "rounded-sm font-semibold text-primary transition-colors hover:text-primary/80",
-                    FOCUS_RING
-                  )}
-                >
-                  Open {verifiedMain.gameName}#{verifiedMain.tagLine}
-                </Link>{" "}
-                or browse the{" "}
-              </>
-            ) : (
-              <>Prefer to browse? </>
-            )}
-            <Link
-              href="/lol/tierlist"
-              className={cn(
-                "rounded-sm font-semibold text-primary transition-colors hover:text-primary/80",
-                FOCUS_RING
-              )}
-            >
-              Open the current-patch tier list
-            </Link>
-            .
-          </p>
+          <Suspense fallback={<HomeBrowsePromptFallback />}>
+            <HomeBrowsePrompt />
+          </Suspense>
         </div>
       </section>
 
@@ -255,7 +287,7 @@ export default async function LandingPage() {
             <div className="grid">
               {lolTop.map((entry, index) => {
                 const champ = champions[String(entry.championId)];
-                const name = champ?.name ?? `Champion ${entry.championId}`;
+                const name = championDisplayName(champ);
                 return (
                   <Link
                     key={`${entry.championId}-${entry.role}`}

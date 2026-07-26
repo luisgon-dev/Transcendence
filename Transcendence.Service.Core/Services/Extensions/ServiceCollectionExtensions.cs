@@ -119,6 +119,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<RefreshChampionAnalyticsJob>();
         services.AddScoped<WarmDefaultChampionProfilesJob>();
         services.AddScoped<RefreshPrecomputedAnalyticsJob>();
+        services.AddScoped<RefreshProAnalyticsJob>();
         services.AddScoped<RefreshBuildResourceAnalyticsJob>();
         services.AddScoped<LiveGamePollingJob>();
         services.AddScoped<ILiveGameProbeJob, LiveGameProbeJob>();

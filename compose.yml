@@ -97,6 +97,23 @@ services:
     networks:
       - transcendence-net
 
+  operational-logs-init:
+    # Named volumes are created as root:root. The .NET images run as their non-root APP_UID,
+    # so prepare the shared log directory before either writer starts. Reusing the WebAPI image
+    # keeps the ownership target tied to the image's APP_UID instead of hard-coding a numeric UID.
+    image: ${WEBAPI_IMAGE:-ghcr.io/luisgon-dev/transcendence-webapi:main}
+    build:
+      context: .
+      dockerfile: Transcendence.WebAPI/Dockerfile
+    container_name: transcendence-operational-logs-init
+    restart: "no"
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - 'chown -R "$${APP_UID}:$${APP_UID}" /var/log/transcendence && chmod 0755 /var/log/transcendence'
+    volumes:
+      - operational_logs:/var/log/transcendence
+
   webapi:
     image: ${WEBAPI_IMAGE:-ghcr.io/luisgon-dev/transcendence-webapi:main}
     build:
@@ -140,6 +157,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      operational-logs-init:
+        condition: service_completed_successfully
     volumes:
       - operational_logs:/var/log/transcendence
     networks:
@@ -165,6 +184,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      operational-logs-init:
+        condition: service_completed_successfully
     volumes:
       - operational_logs:/var/log/transcendence
     networks:

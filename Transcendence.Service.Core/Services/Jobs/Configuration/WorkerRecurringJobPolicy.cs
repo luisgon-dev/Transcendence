@@ -41,6 +41,7 @@ public sealed class WorkerRecurringJobPolicy(
     public const string RefreshLockLifecycleCleanupJobId = "refresh-lock-lifecycle-cleanup";
     public const string IngestionHealthAlertJobId = "ingestion-health-alert";
     public const string RefreshPrecomputedAnalyticsJobId = "refresh-precomputed-analytics";
+    public const string RefreshProAnalyticsJobId = "refresh-pro-analytics";
     public const string RefreshBuildResourceAnalyticsJobId = "refresh-build-resource-analytics";
 
     private static readonly HashSet<string> MandatoryBaselineJobIds = new(StringComparer.OrdinalIgnoreCase)
@@ -68,6 +69,7 @@ public sealed class WorkerRecurringJobPolicy(
         RefreshLockLifecycleCleanupJobId,
         IngestionHealthAlertJobId,
         RefreshPrecomputedAnalyticsJobId,
+        RefreshProAnalyticsJobId,
         RefreshBuildResourceAnalyticsJobId
     ];
 
@@ -126,6 +128,12 @@ public sealed class WorkerRecurringJobPolicy(
                 schedule.RefreshPrecomputedAnalyticsCron,
                 schedule.EnableRefreshPrecomputedAnalytics,
                 ConfigureRefreshPrecomputedAnalytics),
+            CreateDescriptor(
+                RefreshProAnalyticsJobId,
+                "Jobs:Schedule:RefreshProAnalyticsCron",
+                schedule.RefreshProAnalyticsCron,
+                schedule.EnableRefreshProAnalytics,
+                ConfigureRefreshProAnalytics),
             CreateDescriptor(
                 RefreshBuildResourceAnalyticsJobId,
                 "Jobs:Schedule:RefreshBuildResourceAnalyticsCron",
@@ -279,6 +287,15 @@ public sealed class WorkerRecurringJobPolicy(
         string cronExpression) =>
         recurringJobManager.AddOrUpdate<RefreshPrecomputedAnalyticsJob>(
             RefreshPrecomputedAnalyticsJobId,
+            job => job.ExecuteAsync(CancellationToken.None),
+            cronExpression,
+            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
+    private static void ConfigureRefreshProAnalytics(
+        IRecurringJobManager recurringJobManager,
+        string cronExpression) =>
+        recurringJobManager.AddOrUpdate<RefreshProAnalyticsJob>(
+            RefreshProAnalyticsJobId,
             job => job.ExecuteAsync(CancellationToken.None),
             cronExpression,
             new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });

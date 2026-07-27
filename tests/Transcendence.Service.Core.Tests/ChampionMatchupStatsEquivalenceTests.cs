@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Account;
+using Transcendence.Data.Models.LoL.Analytics;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Service.Core.Services.Analytics.Implementations;
 using Transcendence.Service.Core.Services.Analytics.Models;
@@ -68,8 +69,150 @@ public class ChampionMatchupStatsEquivalenceTests
         stats.Should().BeEquivalentTo(raw, o => o.WithStrictOrdering());
     }
 
+    [Fact]
+    public async Task Matchups_BuildingGeneration_IsInvisibleUntilPromotion()
+    {
+        await using var ctx = await SeededAsync();
+        var refresher = Refresher(ctx.Db);
+        await refresher.RefreshMatchupsAsync(Patch, CancellationToken.None);
+        var service = Service(ctx.Db);
+        var before = await service.ComputeMatchupsFromStatsAsync(
+            100, "MIDDLE", "ALL", null, Patch, CancellationToken.None);
+
+        var building = new ChampionMatchupSnapshot
+        {
+            Id = Guid.NewGuid(),
+            Patch = Patch,
+            Status = ChampionMatchupSnapshotStatus.Building,
+            StartedAtUtc = DateTime.UtcNow,
+            SourceCutoffUtc = DateTime.UtcNow
+        };
+        ctx.Db.ChampionMatchupSnapshots.Add(building);
+        ctx.Db.ChampionMatchupStats.Add(new ChampionMatchupStat
+        {
+            Id = Guid.NewGuid(),
+            SnapshotId = building.Id,
+            Patch = Patch,
+            RankTier = "EMERALD",
+            ChampionId = 100,
+            Role = "MIDDLE",
+            OpponentChampionId = 999,
+            Games = 10_000,
+            Wins = 10_000,
+            ComputedAtUtc = DateTime.UtcNow
+        });
+        await ctx.Db.SaveChangesAsync();
+
+        var duringBuild = await service.ComputeMatchupsFromStatsAsync(
+            100, "MIDDLE", "ALL", null, Patch, CancellationToken.None);
+
+        duringBuild.Should().BeEquivalentTo(before, options => options.WithStrictOrdering(),
+            "readers must resolve only the active Ready generation");
+    }
+
+    [Fact]
+    public async Task Matchups_ResumesPartiallyCommittedGeneration_WithoutDuplicatingFacts()
+    {
+        await using var ctx = await SeededAsync();
+        var refresher = Refresher(ctx.Db);
+        var firstRows = await refresher.RefreshMatchupsAsync(Patch, CancellationToken.None);
+        var factCount = await ctx.Db.ChampionMatchupFacts.CountAsync();
+        var sourceCount = await ctx.Db.ChampionMatchupSourceMatches.CountAsync();
+        var firstActive = await ctx.Db.ChampionMatchupSnapshots
+            .AsNoTracking()
+            .SingleAsync(snapshot => snapshot.Patch == Patch && snapshot.IsActive);
+        var partialChampionId = await ctx.Db.ChampionMatchupFacts
+            .AsNoTracking()
+            .Select(fact => fact.ChampionId)
+            .OrderBy(championId => championId)
+            .FirstAsync();
+        var allChampionCount = await ctx.Db.ChampionMatchupFacts
+            .AsNoTracking()
+            .Select(fact => fact.ChampionId)
+            .Distinct()
+            .CountAsync();
+        var building = new ChampionMatchupSnapshot
+        {
+            Id = Guid.NewGuid(),
+            Patch = Patch,
+            Status = ChampionMatchupSnapshotStatus.Building,
+            StartedAtUtc = DateTime.UtcNow.AddSeconds(1),
+            SourceCutoffUtc = DateTime.UtcNow.AddSeconds(1),
+            AttemptCount = 1,
+            SourceFactCount = factCount,
+            TotalChampionCount = allChampionCount,
+            ProcessedChampionCount = 1
+        };
+        ctx.Db.ChampionMatchupSnapshots.Add(building);
+
+        var partialRows = await ctx.Db.ChampionMatchupStats
+            .AsNoTracking()
+            .Where(stat => stat.SnapshotId == firstActive.Id && stat.ChampionId == partialChampionId)
+            .ToListAsync();
+        ctx.Db.ChampionMatchupStats.AddRange(partialRows.Select(stat => new ChampionMatchupStat
+        {
+            Id = Guid.NewGuid(),
+            SnapshotId = building.Id,
+            Patch = stat.Patch,
+            RankTier = stat.RankTier,
+            ChampionId = stat.ChampionId,
+            Role = stat.Role,
+            OpponentChampionId = stat.OpponentChampionId,
+            Games = stat.Games,
+            Wins = stat.Wins,
+            TimelineGames = stat.TimelineGames,
+            SumGoldDiffAt15 = stat.SumGoldDiffAt15,
+            SumXpDiffAt15 = stat.SumXpDiffAt15,
+            LatestTimelineAtUtc = stat.LatestTimelineAtUtc,
+            ComputedAtUtc = stat.ComputedAtUtc
+        }));
+
+        // Simulate a crash midway through freezing ranks. The resume path must fill the missing rows.
+        var oneRank = await ctx.Db.ChampionMatchupRankSnapshots
+            .AsNoTracking()
+            .Where(rank => rank.SnapshotId == firstActive.Id)
+            .Select(rank => new { rank.SummonerId, rank.RankTier })
+            .FirstAsync();
+        ctx.Db.ChampionMatchupRankSnapshots.Add(new ChampionMatchupRankSnapshot
+        {
+            SnapshotId = building.Id,
+            SummonerId = oneRank.SummonerId,
+            RankTier = oneRank.RankTier
+        });
+        await ctx.Db.SaveChangesAsync();
+        ctx.Db.ChangeTracker.Clear();
+
+        var resumedRows = await refresher.RefreshMatchupsAsync(Patch, CancellationToken.None);
+        var active = await ctx.Db.ChampionMatchupSnapshots
+            .AsNoTracking()
+            .SingleAsync(snapshot => snapshot.Patch == Patch && snapshot.IsActive);
+
+        active.Id.Should().Be(building.Id);
+        active.Status.Should().Be(ChampionMatchupSnapshotStatus.Ready);
+        active.AttemptCount.Should().Be(2);
+        active.ProcessedChampionCount.Should().Be(active.TotalChampionCount);
+        resumedRows.Should().Be(firstRows);
+        (await ctx.Db.ChampionMatchupFacts.CountAsync()).Should().Be(factCount);
+        (await ctx.Db.ChampionMatchupSourceMatches.CountAsync()).Should().Be(sourceCount);
+    }
+
     private static ChampionMatchupComputeService Service(TranscendenceContext db) =>
         new(db);
+
+    private static PrecomputedAnalyticsRefresher Refresher(TranscendenceContext db) =>
+        new(
+            db,
+            BuildService(db),
+            ProService(db),
+            Options.Create(new TieringOptions()),
+            NullLogger<PrecomputedAnalyticsRefresher>.Instance,
+            Options.Create(new PrecomputedAnalyticsOptions
+            {
+                MatchupSourceMatchBatchSize = 10,
+                MatchupChampionBatchSize = 1,
+                CommandTimeoutSeconds = 45,
+                RetainedMatchupGenerations = 3
+            }));
 
     private static ChampionProComputeService ProService(TranscendenceContext db) =>
         new(db,

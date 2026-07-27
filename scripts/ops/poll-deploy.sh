@@ -56,6 +56,29 @@ SERVICES=(
 
 log() { printf '%s poll-deploy: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 
+run_logged() {
+  local label="$1"
+  shift
+  local output_file rc
+  mkdir -p "$STATE_DIR"
+  output_file="${STATE_DIR}/last-command.log"
+  : >"$output_file"
+  chmod 0600 "$output_file"
+
+  "$@" >"$output_file" 2>&1
+  rc=$?
+  if [ "$rc" -eq 0 ]; then
+    rm -f "$output_file"
+    return 0
+  fi
+
+  log "ERROR ${label} exited ${rc}; command output follows"
+  while IFS= read -r line; do
+    log "  ${line}"
+  done < <(tail -n 40 "$output_file")
+  return "$rc"
+}
+
 # Resolve the remote :main manifest digest via an anonymous ghcr pull token.
 remote_digest() {
   local repo="$1" tok
@@ -165,7 +188,8 @@ wait_for_healthy() {
 
 rollback_service() {
   local svc="$1" container="$2" repo="$3" previous_image_id="$4" failed_release="$5"
-  local failed_file="${STATE_DIR}/${svc}-failed-digest"
+  local failed_file="${STATE_DIR}/${svc}-failed-digest" previous_container_id="${6:-}"
+  local current_container_id previous_name
   mkdir -p "$STATE_DIR"
   printf '%s\n' "$failed_release" >"$failed_file"
 
@@ -174,13 +198,49 @@ rollback_service() {
     return 1
   fi
 
-  log "ROLLBACK ${svc}: restoring previous image ${previous_image_id:0:19}"
-  if ! docker image tag "$previous_image_id" "${REGISTRY_HOST}/${OWNER}/${repo}:main"; then
+  # Compose can fail after renaming the old container but before the replacement takes ownership of
+  # the canonical name. Prefer restoring that exact still-running container; it is the fastest and
+  # safest rollback and avoids another recreate during an already-partial operation.
+  if [ -n "$previous_container_id" ] && docker inspect "$previous_container_id" >/dev/null 2>&1; then
+    current_container_id="$(docker inspect "$container" --format '{{.Id}}' 2>/dev/null || true)"
+    if [ -n "$current_container_id" ] && [ "$current_container_id" != "$previous_container_id" ]; then
+      log "ROLLBACK ${svc}: removing partial replacement ${current_container_id:0:19}"
+      if ! run_logged "${svc} remove partial replacement" docker rm -f "$current_container_id"; then
+        return 1
+      fi
+    fi
+
+    previous_name="$(docker inspect "$previous_container_id" --format '{{.Name}}' 2>/dev/null | sed 's#^/##')"
+    if [ "$previous_name" != "$container" ]; then
+      log "ROLLBACK ${svc}: restoring canonical container name from ${previous_name:-unknown}"
+      if ! run_logged "${svc} restore container name" docker rename "$previous_container_id" "$container"; then
+        return 1
+      fi
+    fi
+    if ! run_logged "${svc} restart previous container" docker start "$previous_container_id"; then
+      return 1
+    fi
+    if wait_for_healthy "$svc" "$container"; then
+      log "ROLLED BACK ${svc} by restoring the previous container; release is quarantined until :main changes"
+      return 0
+    fi
+    log "WARN ${svc}: exact-container recovery failed health verification; falling back to recreate"
+  fi
+
+  log "ROLLBACK ${svc}: recreating previous image ${previous_image_id:0:19}"
+  if ! run_logged "${svc} retag previous image" \
+      docker image tag "$previous_image_id" "${REGISTRY_HOST}/${OWNER}/${repo}:main"; then
     log "ERROR ${svc}: could not retag previous image for rollback"
     return 1
   fi
-  if ! docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" \
-      up -d --no-deps --pull never "$svc" >/dev/null 2>&1; then
+  current_container_id="$(docker inspect "$container" --format '{{.Id}}' 2>/dev/null || true)"
+  if [ -n "$current_container_id" ] &&
+     ! run_logged "${svc} remove failed replacement" docker rm -f "$current_container_id"; then
+    return 1
+  fi
+  if ! run_logged "${svc} rollback recreate" \
+      docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" \
+      up -d --no-deps --pull never "$svc"; then
     log "ERROR ${svc}: rollback recreate failed"
     return 1
   fi
@@ -195,16 +255,17 @@ rollback_service() {
 
 run_migrations() {
   log "MIGRATE service: applying backward-compatible database migrations before replacement"
-  docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" \
+  run_logged "service migration" \
+    docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" \
     run --rm --no-deps --pull never \
     -e Database__AutoMigrate=true \
     -e Database__MigrateOnly=true \
-    service >/dev/null 2>&1
+    service
 }
 
 deploy_one() {
   local svc="$1" container="$2" repo="$3"
-  local remote current remote_rev current_rev release_id previous_image_id failed_file failed_release
+  local remote current remote_rev current_rev release_id previous_image_id previous_container_id failed_file failed_release
   remote="$(remote_digest "$repo")"
   if [ -z "$remote" ]; then record_resolution_failure "$svc" remote; return 1; fi
   clear_resolution_failure "$svc" remote
@@ -232,13 +293,15 @@ deploy_one() {
     return 0
   fi
   previous_image_id="$(docker inspect "$container" --format '{{.Image}}' 2>/dev/null)"
+  previous_container_id="$(docker inspect "$container" --format '{{.Id}}' 2>/dev/null)"
 
   log "UPDATE ${svc}: rev ${current_rev:0:12} -> ${remote_rev:0:12}; deploying"
   if [ "${DRY_RUN:-0}" = "1" ]; then
     log "DRY_RUN ${svc}: would compose pull, migrate if needed, recreate, and health-check"
     return 0
   fi
-  if ! docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" pull "$svc" >/dev/null 2>&1; then
+  if ! run_logged "${svc} pull" \
+      docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" pull "$svc"; then
     log "ERROR ${svc}: pull failed"; notify "⚠️ deploy: ${svc} pull failed"; return 1
   fi
   if [ "$svc" = "service" ] && ! run_migrations; then
@@ -248,15 +311,18 @@ deploy_one() {
     notify "🚨 deploy: ${svc} migration failed; release quarantined"
     return 1
   fi
-  if ! docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" \
-      up -d --no-deps --pull never "$svc" >/dev/null 2>&1; then
+  if ! run_logged "${svc} up -d" \
+      docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" \
+      up -d --no-deps --pull never "$svc"; then
     log "ERROR ${svc}: up -d failed"
-    rollback_service "$svc" "$container" "$repo" "$previous_image_id" "$release_id" || true
+    rollback_service \
+      "$svc" "$container" "$repo" "$previous_image_id" "$release_id" "$previous_container_id" || true
     notify "🚨 deploy: ${svc} up -d failed; rollback attempted"
     return 1
   fi
   if ! wait_for_healthy "$svc" "$container"; then
-    rollback_service "$svc" "$container" "$repo" "$previous_image_id" "$release_id" || true
+    rollback_service \
+      "$svc" "$container" "$repo" "$previous_image_id" "$release_id" "$previous_container_id" || true
     notify "🚨 deploy: ${svc} failed health verification; rollback attempted"
     return 1
   fi

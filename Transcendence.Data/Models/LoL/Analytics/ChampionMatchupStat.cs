@@ -21,6 +21,8 @@ namespace Transcendence.Data.Models.LoL.Analytics;
 public class ChampionMatchupStat
 {
     public Guid Id { get; set; }
+    public Guid? SnapshotId { get; set; }
+    public ChampionMatchupSnapshot? Snapshot { get; set; }
 
     public string Patch { get; set; } = "";
     public string RankTier { get; set; } = "";

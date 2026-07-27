@@ -179,7 +179,7 @@ public class AddOrUpdateHighEloProfiles(
         var championIds = await context.MatchParticipants
             .AsNoTracking()
             .Where(participant =>
-                participant.Puuid == summoner.Puuid &&
+                participant.SummonerId == summoner.Id &&
                 participant.Match.PlatformRegion == platformRegion &&
                 participant.Match.Status == Data.Models.LoL.Match.FetchStatus.Success &&
                 (participant.Match.QueueId == QueueCatalog.RankedSoloDuoQueueId ||

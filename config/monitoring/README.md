@@ -82,11 +82,14 @@ Grafana-provisioned alert rules live in `grafana/provisioning/alerting/`:
 
 - `rules.yml` — web/WebAPI/worker/PostgreSQL-exporter/Redis-exporter down, PostgreSQL connection use
   above 80%, Redis rejected connections, API 5xx ratio, API p95 latency, sample-gated real-user p75
-  LCP/INP/CLS degradation, and host disk capacity.
+  LCP/INP/CLS degradation, matchup-generation failures/freshness, and host disk capacity.
 - `contactpoints.yml` — a `discord` receiver; URL from `DISCORD_ALERT_WEBHOOK_URL`.
 
 `grafana/dashboards/web-vitals.json` shows route-filtered report volume, rating mix, p75 LCP/INP, and
 p75 CLS from the Next.js Web Vitals endpoint. A new web process starts with empty in-memory histogram
 state; Prometheus retains previously scraped samples according to its normal retention policy.
+
+`grafana/dashboards/analytics-refresh.json` shows active matchup-generation age/size, resume attempt,
+lifecycle failures/splits, and incremental source/fact throughput.
 
 See `docs/ARCHITECTURE.md` → *Metrics-based alerting* for the rule semantics and DB/Redis coverage.

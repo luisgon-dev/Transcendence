@@ -41,6 +41,10 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<ScopeMatchCountStat> ScopeMatchCountStats { get; set; }
     public DbSet<ChampionBanScopeStat> ChampionBanScopeStats { get; set; }
     public DbSet<ChampionScopeGradeStat> ChampionScopeGradeStats { get; set; }
+    public DbSet<ChampionMatchupSnapshot> ChampionMatchupSnapshots { get; set; }
+    public DbSet<ChampionMatchupFact> ChampionMatchupFacts { get; set; }
+    public DbSet<ChampionMatchupSourceMatch> ChampionMatchupSourceMatches { get; set; }
+    public DbSet<ChampionMatchupRankSnapshot> ChampionMatchupRankSnapshots { get; set; }
     public DbSet<ChampionMatchupStat> ChampionMatchupStats { get; set; }
     public DbSet<ChampionBuildSnapshot> ChampionBuildSnapshots { get; set; }
     public DbSet<BuildResourceSnapshot> BuildResourceSnapshots { get; set; }
@@ -778,16 +782,59 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             entity.HasIndex(x => new { x.Patch, x.QueueFamily, x.PlatformRegion, x.RankScope, x.Role });
         });
 
+        modelBuilder.Entity<ChampionMatchupSnapshot>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Patch).HasMaxLength(32);
+            entity.Property(x => x.FailureReason).HasMaxLength(1024);
+            entity.HasIndex(x => new { x.Patch, x.Status, x.CompletedAtUtc });
+            entity.HasIndex(x => x.Patch)
+                .IsUnique()
+                .HasFilter("\"IsActive\"");
+        });
+
+        modelBuilder.Entity<ChampionMatchupFact>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Patch).HasMaxLength(32);
+            entity.Property(x => x.Role).HasMaxLength(32);
+            entity.HasIndex(x => new { x.MatchId, x.ChampionParticipantId }).IsUnique();
+            entity.HasIndex(x => new { x.Patch, x.ChampionId, x.UpdatedAtUtc });
+            entity.HasIndex(x => new { x.Patch, x.SummonerId });
+        });
+
+        modelBuilder.Entity<ChampionMatchupSourceMatch>(entity =>
+        {
+            entity.HasKey(x => x.MatchId);
+            entity.Property(x => x.Patch).HasMaxLength(32);
+            entity.HasIndex(x => new { x.Patch, x.ProcessedAtUtc });
+        });
+
+        modelBuilder.Entity<ChampionMatchupRankSnapshot>(entity =>
+        {
+            entity.HasKey(x => new { x.SnapshotId, x.SummonerId });
+            entity.Property(x => x.RankTier).HasMaxLength(32);
+            entity.HasOne(x => x.Snapshot)
+                .WithMany(x => x.RankSnapshots)
+                .HasForeignKey(x => x.SnapshotId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<ChampionMatchupStat>(entity =>
         {
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Patch).HasMaxLength(32);
             entity.Property(x => x.RankTier).HasMaxLength(32);
             entity.Property(x => x.Role).HasMaxLength(32);
-            entity.HasIndex(x => new { x.Patch, x.RankTier, x.ChampionId, x.Role, x.OpponentChampionId })
+            entity.HasIndex(x => new
+                { x.SnapshotId, x.Patch, x.RankTier, x.ChampionId, x.Role, x.OpponentChampionId })
                 .IsUnique();
             // Matchup read: one champion+role, rolled up over the tiers in scope.
-            entity.HasIndex(x => new { x.Patch, x.ChampionId, x.Role });
+            entity.HasIndex(x => new { x.SnapshotId, x.Patch, x.ChampionId, x.Role });
+            entity.HasOne(x => x.Snapshot)
+                .WithMany(x => x.Stats)
+                .HasForeignKey(x => x.SnapshotId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ChampionBuildSnapshot>(entity =>

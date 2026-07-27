@@ -22,15 +22,18 @@ with a deterministic, **outbound-only** release poll:
    migration continues the release.
 4. Recreate one service at a time with `--no-deps` (PostgreSQL/Redis are never touched), wait for its
    healthcheck, then continue. A component failure aborts all later components for that poll.
-5. On recreate/health failure, retag and restore the prior local image with `--pull never`. The failed
-   digest is quarantined until `:main` changes, preventing a minute-by-minute rollback loop.
+5. On recreate/health failure, restore the exact prior container if Compose left it partially
+   renamed. If that container is gone, retag and recreate the prior local image with `--pull never`.
+   The failed digest is quarantined until `:main` changes, preventing a minute-by-minute rollback loop.
 
 No inbound exposure, no CI secret, no self-hosted runner. A `flock` guard prevents
 overlapping runs. Runs every ~60s via the systemd timer (≈ wud's old cadence). Remote and
 local digest/revision-resolution failures are counted per service under `/var/lib/transcendence-deploy`;
 the third consecutive failure sends one Discord alert, and a successful resolution resets the
 counter. The bounded health wait defaults to 420 seconds so the worker's four-minute startup
-grace can complete.
+grace can complete. Failed Compose command output is stored mode `0600` while needed and copied into
+the systemd journal (last 40 lines), so pull/migration/recreate failures are diagnosable instead of
+being hidden by output redirection.
 
 Optional overrides are `POLL_DEPLOY_RESOLUTION_ALERT_THRESHOLD`,
 `POLL_DEPLOY_HEALTH_TIMEOUT_SECONDS`, `POLL_DEPLOY_HEALTH_POLL_SECONDS`, and
@@ -64,6 +67,19 @@ pin a service to an immutable `:sha-<short>` tag in the compose file and `compos
 > If wud's app-container watching is ever wanted back, note it is unreliable here; this
 > poller is the source of truth. wud still works fine for the public Docker Hub
 > sidecars (portainer/dozzle/grafana/prometheus).
+
+## `install-matchup-performance-db.sql` — online matchup source preparation
+
+Run once before deploying the resumable matchup migration:
+
+```bash
+psql "$DATABASE_URL" -f install-matchup-performance-db.sql
+```
+
+It creates the successful-ranked-match and minute-15 timeline indexes with
+`CREATE INDEX CONCURRENTLY`, then applies persistent table-local autovacuum/analyze thresholds and
+runs `ANALYZE`. The script is idempotent, must run outside a transaction, and does not replace the EF
+migration that creates the new narrow fact/generation tables.
 
 ## `archive-old-patches.sh` — match-detail retention (archive-then-prune)
 

@@ -204,6 +204,7 @@ if (builder.Configuration.GetValue("Telemetry:Enabled", true))
         .WithMetrics(metrics => metrics
             .AddMeter("Transcendence.IngestionThroughput")
             .AddMeter("Transcendence.RefreshLocks")
+            .AddMeter(Transcendence.Service.Core.Services.Diagnostics.PrecomputedAnalyticsTelemetry.MeterName)
             .AddMeter(Transcendence.Service.Core.Services.RiotApi.RiotRateGateTelemetry.MeterName)
             .AddMeter("Microsoft.Extensions.Caching.Hybrid")
             .AddRuntimeInstrumentation()

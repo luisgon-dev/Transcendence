@@ -9,9 +9,9 @@ namespace Transcendence.Service.Core.Services.Analytics.Interfaces;
 public interface IPrecomputedAnalyticsRefresher
 {
     /// <summary>
-    /// Rebuilds every durable analytics surface in the required core → matchup → build → pro order and
-    /// commits them as one patch-level transaction. A failed phase leaves the previously completed
-    /// snapshot visible across every surface.
+    /// Rebuilds every durable analytics surface with phase-level publication. Builds run only after the
+    /// core succeeds; pro and matchup surfaces remain independent so a failure cannot roll back unrelated
+    /// completed work. Throws an aggregate exception after all eligible phases have been attempted.
     /// </summary>
     Task<PrecomputedAnalyticsFullRefreshResult> RefreshAllAsync(string patch, CancellationToken ct);
 
@@ -23,9 +23,9 @@ public interface IPrecomputedAnalyticsRefresher
     Task<PrecomputedAnalyticsRefreshResult> RefreshTabularCoreAsync(string patch, CancellationToken ct);
 
     /// <summary>
-    /// Rebuilds the all-region lane-matchup aggregates (<c>ChampionMatchupStat</c>) for
-    /// <paramref name="patch"/> — one big lane-pair self-join + timeline-diff aggregation grouped over every
-    /// champion at once — replacing the patch's rows transactionally. Returns the row count written.
+    /// Incrementally materializes narrow all-region lane-pair facts, then builds
+    /// <c>ChampionMatchupStat</c> in bounded resumable batches under an immutable generation. Readers keep
+    /// the prior Ready generation until the replacement is atomically promoted. Returns the active row count.
     /// </summary>
     Task<int> RefreshMatchupsAsync(string patch, CancellationToken ct);
 

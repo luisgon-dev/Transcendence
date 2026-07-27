@@ -16,6 +16,7 @@ namespace Transcendence.Service.Core.Services.Jobs;
 /// <see cref="HangfireQueues.AnalyticsWarm"/> lane so it is unaffected by shared-queue saturation.
 /// </summary>
 [DisableConcurrentExecution(timeoutInSeconds: 60 * 60)]
+[AutomaticRetry(Attempts = 0)]
 public class RefreshPrecomputedAnalyticsJob(
     TranscendenceContext db,
     IPrecomputedAnalyticsRefresher refresher,
@@ -39,13 +40,18 @@ public class RefreshPrecomputedAnalyticsJob(
             return;
         }
 
-        var result = await refresher.RefreshAllAsync(patch, ct);
-
-        // Now that the precomputed atoms for this patch are committed, drop the patch-scoped
-        // analytics read-cache so the served data and the "updated N ago" freshness label advance
-        // together. Scoped to the current patch tag only (CacheTags.ForPatch) so other patches, the
-        // pro roster, and playrate entries stay warm.
-        await analyticsService.InvalidateAnalyticsCacheForPatchAsync(patch, ct);
+        PrecomputedAnalyticsFullRefreshResult result;
+        try
+        {
+            result = await refresher.RefreshAllAsync(patch, ct);
+        }
+        finally
+        {
+            // Phases publish independently. Invalidate even when a later phase fails so any earlier
+            // committed surface and its freshness label become visible immediately.
+            await analyticsService.InvalidateAnalyticsCacheForPatchAsync(patch, CancellationToken.None);
+            await analyticsService.InvalidateProAnalyticsCacheAsync(CancellationToken.None);
+        }
 
         logger.LogInformation(
             "Precompute refresh patch {Patch} completed in {ElapsedMs}ms: {RoleTier} role-tier, {ScopeMatch} scope-match, {Ban} ban, {Matchup} matchup, {Build} build, {Pro} pro rows.",

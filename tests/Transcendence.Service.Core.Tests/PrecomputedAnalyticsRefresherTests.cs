@@ -166,7 +166,7 @@ public class PrecomputedAnalyticsRefresherTests
     }
 
     [Fact]
-    public async Task RefreshAll_WhenFinalPhaseFails_RollsBackEveryEarlierSurface()
+    public async Task RefreshAll_WhenOnePhaseFails_PublishesIndependentCompletedSurfaces()
     {
         await using var ctx = await SeededAsync();
         await Refresh(ctx.Db);
@@ -195,11 +195,16 @@ public class PrecomputedAnalyticsRefresherTests
 
         var act = () => refresher.RefreshAllAsync(Patch, CancellationToken.None);
 
-        await act.Should().ThrowAsync<InvalidOperationException>();
+        await act.Should().ThrowAsync<AggregateException>();
         ctx.Db.ChangeTracker.Clear();
         var persisted = await ctx.Db.ScopeMatchCountStats.AsNoTracking().ToListAsync();
-        Total(persisted, "NA1", "ALL").Should().Be(6,
-            "the previous complete snapshot remains visible when a later phase fails");
+        Total(persisted, "NA1", "ALL").Should().Be(7,
+            "a pro-surface failure must not roll back the independently completed tabular core");
+        (await ctx.Db.ChampionMatchupSnapshots
+                .AsNoTracking()
+                .CountAsync(snapshot => snapshot.Patch == Patch && snapshot.IsActive))
+            .Should().Be(1,
+                "the independent matchup generation should still finish and promote");
     }
 
     [Fact]

@@ -168,8 +168,8 @@ Prometheus + Grafana are their own stack — the single source of truth for both
 docker compose -f config/monitoring/compose.yml up -d
 ```
 
-Grafana is file-provisioned from `config/monitoring/grafana/provisioning`, including five dashboards
-(fleet overview, read API, worker runtime, Riot API, and ingestion rate gate), its datasource, and
+Grafana is file-provisioned from `config/monitoring/grafana/provisioning`, including six dashboards
+(fleet overview, read API, worker runtime, analytics refresh, Riot API, and ingestion rate gate), its datasource, and
 `alerting/rules.yml` + `alerting/contactpoints.yml`. Prometheus scrapes the API, worker, host,
 PostgreSQL, and Redis; provisioned liveness alerts cover each application/database/cache target in
 addition to PostgreSQL connection saturation, Redis rejected connections, API 5xx ratio, p95 latency,
@@ -462,13 +462,35 @@ promotion so a storage-hygiene failure can never demote a successfully published
 
 ### Precomputed Champion Analytics
 
-The hourly `refresh-precomputed-analytics` job replaces the active patch's champion tabular,
-matchup, build, and pro-surface atoms in one transaction. The matchup phase partitions the
-all-champion lane-pair/timeline aggregation into disjoint champion batches so PostgreSQL can use the
-champion-side covering index without a single corpus-wide command exceeding its timeout:
+The hourly `refresh-precomputed-analytics` job publishes the tabular core, builds, pro surfaces, and
+matchups at independent transaction boundaries. Builds are skipped when their core dependency fails;
+the other surfaces are still attempted, and completed phases remain published. Automatic Hangfire
+retries are disabled for this deterministic full-corpus job so one slow execution does not multiply
+database load.
 
-- `Analytics:Precompute:MatchupChampionBatchSize` (default `16`, clamped to 1–100)
-- `Analytics:Precompute:CommandTimeoutSeconds` (default `120`, clamped to 30–600)
+Matchups no longer rebuild through a corpus-wide participant/timeline self-join. New eligible matches
+are materialized into narrow durable lane-pair facts, current ranks are frozen per immutable
+generation, and champion batches commit independently. An interrupted generation resumes from its
+persisted rank/champion progress; a timed-out multi-champion batch recursively splits. Only a complete
+Ready generation is visible to reads.
+
+- `Analytics:Precompute:MatchupSourceMatchBatchSize` (default `250`, clamped to 10–2,000)
+- `Analytics:Precompute:MatchupChampionBatchSize` (default `8`, clamped to 1–100)
+- `Analytics:Precompute:CommandTimeoutSeconds` (default `45`, clamped to 15–600)
+- `Analytics:Precompute:MaxGenerationResumeAttempts` (default `3`, clamped to 1–20)
+- `Analytics:Precompute:RetainedMatchupGenerations` (default `2`, clamped to 1–10)
+
+Before the first production run, apply the online source-table preparation outside EF's migration
+transaction:
+
+```bash
+psql "$DATABASE_URL" -f scripts/ops/install-matchup-performance-db.sql
+```
+
+The script creates the eligible-match and minute-15 covering indexes with
+`CREATE INDEX CONCURRENTLY`, persists table-specific autovacuum/analyze thresholds for the
+append-heavy source tables, and refreshes planner statistics. It is idempotent and intentionally
+separate from the EF migration so ingestion writes are never blocked by a normal index build.
 
 ### Champion Analytics Ingestion
 

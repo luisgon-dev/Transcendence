@@ -47,8 +47,11 @@
       "MaturingWindowHours": 240
     },
     "Precompute": {
-      "MatchupChampionBatchSize": 16,
-      "CommandTimeoutSeconds": 120
+      "MatchupSourceMatchBatchSize": 250,
+      "MatchupChampionBatchSize": 8,
+      "CommandTimeoutSeconds": 45,
+      "MaxGenerationResumeAttempts": 3,
+      "RetainedMatchupGenerations": 2
     },
     "BuildAtlas": {
       "MatchBatchSize": 500,

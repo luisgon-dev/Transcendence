@@ -7,7 +7,8 @@
 # point via per-rule notification_settings (leaving the default notification policy untouched).
 #
 # Coverage: web, WebAPI, worker, Postgres exporter, and Redis exporter liveness; PostgreSQL connection
-# saturation; Redis rejected connections; API errors/latency; browser Web Vitals; and host disk capacity.
+# saturation; Redis rejected connections; API errors/latency; browser Web Vitals; matchup generation
+# failures/freshness; and host disk capacity.
 apiVersion: 1
 
 groups:
@@ -60,6 +61,103 @@ groups:
         annotations:
           summary: Transcendence WebAPI is not reporting to Prometheus
           description: The transcendence-webapi target has been down (or unscrapeable) for over 2 minutes — the public API is likely unavailable.
+        notification_settings:
+          receiver: transcendence-discord
+          group_by:
+            - alertname
+            - grafana_folder
+
+      # --- Matchup generation freshness -----------------------------------------------------------
+      - uid: trn-matchup-generation-stale
+        title: Matchup analytics generation stale
+        condition: B
+        for: 10m
+        noDataState: OK
+        execErrState: Alerting
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 86400
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              editorMode: code
+              expr: (time() - max_over_time(transcendence_analytics_matchup_last_success_unixtime_seconds{job="transcendence-worker"}[24h])) and (max_over_time(transcendence_analytics_matchup_last_success_unixtime_seconds{job="transcendence-worker"}[24h]) > 0)
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: prometheus
+                uid: prometheus
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: math
+              expression: $A > 7200
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: __expr__
+                uid: __expr__
+        labels:
+          severity: critical
+        annotations:
+          summary: No matchup generation has promoted for two hours
+          description: The resumable matchup pipeline has not published a complete generation within two hourly cycles. Inspect refresh errors, resume attempt, database load, and runnable analytics-warm jobs.
+        notification_settings:
+          receiver: transcendence-discord
+          group_by:
+            - alertname
+            - grafana_folder
+
+      - uid: trn-matchup-generation-failures
+        title: Matchup analytics generation repeatedly failing
+        condition: B
+        for: 5m
+        noDataState: OK
+        execErrState: Alerting
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 7200
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              editorMode: code
+              expr: sum(increase(transcendence_analytics_matchup_refresh_events_total{job="transcendence-worker",phase="generation",result="error"}[2h]))
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: prometheus
+                uid: prometheus
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: math
+              expression: $A >= 2
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: __expr__
+                uid: __expr__
+        labels:
+          severity: warning
+        annotations:
+          summary: Matchup generation failed at least twice in two hours
+          description: The pipeline is resuming or abandoning generations repeatedly. Check the generation failure reason and batch split telemetry before increasing timeouts.
         notification_settings:
           receiver: transcendence-discord
           group_by:

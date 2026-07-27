@@ -35,11 +35,28 @@ public partial class ChampionMatchupComputeService
     {
         var normalizedQueue = AnalyticsQueueCatalog.Normalize(queueFamily);
         var regionFilter = AnalyticsRegionCatalog.NormalizeToFilter(region);
+        var activeSnapshotId = normalizedQueue == QueueCatalog.QueueFamilyRankedSoloDuo && regionFilter == null
+            ? await _context.ChampionMatchupSnapshots
+                .AsNoTracking()
+                .Where(snapshot =>
+                    snapshot.Patch == patch &&
+                    snapshot.IsActive &&
+                    snapshot.Status == Data.Models.LoL.Analytics.ChampionMatchupSnapshotStatus.Ready)
+                .Select(snapshot => (Guid?)snapshot.Id)
+                .FirstOrDefaultAsync(ct)
+            : null;
+        var hasLegacyStats = activeSnapshotId == null &&
+                             normalizedQueue == QueueCatalog.QueueFamilyRankedSoloDuo &&
+                             regionFilter == null &&
+                             await _context.ChampionMatchupStats
+                                 .AsNoTracking()
+                                 .AnyAsync(stat => stat.Patch == patch && stat.SnapshotId == null, ct);
         // Only the all-region scope is precomputed; a specific region or an un-refreshed patch falls back
-        // to the raw self-join compute.
+        // to the raw self-join compute. During rollout, legacy rows remain readable until the first
+        // complete generation is promoted; Building generations are never visible.
         if (normalizedQueue != QueueCatalog.QueueFamilyRankedSoloDuo ||
             regionFilter != null ||
-            !await HasMatchupStatsAsync(patch, ct))
+            (activeSnapshotId == null && !hasLegacyStats))
             return await ComputeMatchupsAsync(championId, role, rankTier, region, normalizedQueue, patch, ct);
 
         var rankTierScope = AnalyticsScopeMath.ParseRankTierScope(rankTier);
@@ -48,7 +65,11 @@ public partial class ChampionMatchupComputeService
         var normalizedRegion = AnalyticsRegionCatalog.NormalizeOrDefault(region);
 
         var query = _context.ChampionMatchupStats.AsNoTracking()
-            .Where(x => x.Patch == patch && x.ChampionId == championId && x.Role == role);
+            .Where(x =>
+                x.Patch == patch &&
+                x.SnapshotId == activeSnapshotId &&
+                x.ChampionId == championId &&
+                x.Role == role);
         if (tierFilter != null)
             query = query.Where(x => tierFilter.Contains(x.RankTier));
 
@@ -82,12 +103,5 @@ public partial class ChampionMatchupComputeService
 
         return BuildMatchupsResponse(championId, role, rankTierScope, normalizedRegion, patch, aggregates);
     }
-
-    // ---- shared helpers for the stats path ----
-
-
-    private Task<bool> HasMatchupStatsAsync(string patch, CancellationToken ct) =>
-        _context.ChampionMatchupStats.AsNoTracking().AnyAsync(x => x.Patch == patch, ct);
-
 
 }

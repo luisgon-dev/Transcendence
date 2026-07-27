@@ -64,9 +64,9 @@ The automatic rollback protects single-service replacement failures. Break-glass
 pin a service to an immutable `:sha-<short>` tag in the compose file and `compose up -d` it (see
 `docs/ARCHITECTURE.md` "Deployment & rollback").
 
-> If wud's app-container watching is ever wanted back, note it is unreliable here; this
-> poller is the source of truth. wud still works fine for the public Docker Hub
-> sidecars (portainer/dozzle/grafana/prometheus).
+> The app Compose services explicitly set `wud.watch=false`; keep that exclusion in place because
+> this poller is the app release source of truth and two independent recreators can race each other.
+> wud may continue watching public Docker Hub sidecars (portainer/dozzle/grafana/prometheus).
 
 ## `install-matchup-performance-db.sql` — online matchup source preparation
 

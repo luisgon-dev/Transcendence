@@ -326,7 +326,8 @@ recreated with `--pull never`. The failed digest remains quarantined until `:mai
 failure aborts later components in that poll cycle. PostgreSQL and Redis are never recreated by the poller.
 
 **wud is retired for the app containers** (wud 8.2.2 silently failed to resolve the GHCR digest for
-these packages); it may still linger in the stack but does not deploy `web`/`webapi`/`service`.
+these packages); it may still linger in the stack for sidecars, but Compose pins `wud.watch=false`
+on `web`, `webapi`, and `service` so it cannot race the systemd poller during a release.
 Hot-table index migrations remain the exception and must be applied out-of-band before deployment
 (see DEVELOPMENT.md); the CI `migration-apply` job additionally applies the full chain to ephemeral
 PostgreSQL on every PR.

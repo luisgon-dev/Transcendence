@@ -77,6 +77,8 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
     container_name: transcendence-web
+    labels:
+      wud.watch: "false"
     restart: unless-stopped
     cpus: "${WEB_CPUS:-2.0}"
     mem_limit: "${WEB_MEMORY_LIMIT:-1g}"
@@ -120,6 +122,8 @@ services:
       context: .
       dockerfile: Transcendence.WebAPI/Dockerfile
     container_name: transcendence-webapi
+    labels:
+      wud.watch: "false"
     restart: unless-stopped
     cpus: "${WEBAPI_CPUS:-4.0}"
     mem_limit: "${WEBAPI_MEMORY_LIMIT:-2g}"
@@ -170,6 +174,8 @@ services:
       context: .
       dockerfile: Transcendence.Service/Dockerfile
     container_name: transcendence-service
+    labels:
+      wud.watch: "false"
     restart: unless-stopped
     cpus: "${SERVICE_CPUS:-8.0}"
     mem_limit: "${SERVICE_MEMORY_LIMIT:-6g}"

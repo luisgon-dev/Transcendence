@@ -220,6 +220,8 @@ builder.Services.AddHybridCache(options =>
 builder.Services.AddTranscendenceCore();
 builder.Services.Configure<ChampionAnalyticsComputeOptions>(builder.Configuration.GetSection("Analytics:Compute"));
 builder.Services.Configure<TieringOptions>(builder.Configuration.GetSection("Analytics:Tiering"));
+builder.Services.Configure<BuildLabModelingOptions>(builder.Configuration.GetSection("Analytics:BuildLab"));
+builder.Services.Configure<SavedBuildOptions>(builder.Configuration.GetSection("Analytics:SavedBuilds"));
 builder.Services.Configure<ChampionAnalyticsIngestionJobOptions>(
     builder.Configuration.GetSection("Jobs:ChampionAnalyticsIngestion"));
 builder.Services.Configure<MultiRegionIngestionOptions>(builder.Configuration.GetSection("Jobs:MultiRegionIngestion"));

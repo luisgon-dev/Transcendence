@@ -20,6 +20,18 @@ public readonly record struct BuildPurchase(int ItemId, int TimestampMs, BuildIt
 /// <summary>A participant's ordered build-relevant purchase path.</summary>
 public sealed record ParticipantBuildPath(int ParticipantId, IReadOnlyList<BuildPurchase> Purchases);
 
+/// <summary>One lossless item lifecycle event, including components and reversals.</summary>
+public readonly record struct ParticipantItemLifecycleEvent(
+    int ParticipantId,
+    int EventIndex,
+    MatchItemEventType EventType,
+    int TimestampMs,
+    int? ItemId,
+    int? BeforeId,
+    int? AfterId,
+    bool IsBuildRelevant,
+    BuildItemCategory? BuildCategory);
+
 /// <summary>A participant's derived skill-leveling summary.</summary>
 public sealed record ParticipantSkillSequence(int ParticipantId, string Sequence, string FirstThree, string MaxOrder);
 
@@ -36,6 +48,88 @@ public static class TimelineBuildParser
     public const string ItemUndoType = "ITEM_UNDO";
     public const string ItemDestroyedType = "ITEM_DESTROYED";
     public const string SkillLevelUpType = "SKILL_LEVEL_UP";
+    public const string ChampionKillType = "CHAMPION_KILL";
+    public const string BuildingKillType = "BUILDING_KILL";
+    public const string EliteMonsterKillType = "ELITE_MONSTER_KILL";
+
+    // The raw jsonb payload table is written for exactly two consumers: the modeler's pre-decision
+    // state query (the three kill/objective types it filters on) and lossless item-lifecycle replay.
+    // Every other Match-V5 event type is ~1 KB of jsonb nobody reads, so it is never persisted.
+    private static readonly HashSet<string> PersistedPayloadEventTypes =
+    [
+        ItemPurchasedType,
+        ItemSoldType,
+        ItemUndoType,
+        ItemDestroyedType,
+        ChampionKillType,
+        BuildingKillType,
+        EliteMonsterKillType
+    ];
+
+    public static bool IsPersistedPayloadEvent(string? type) =>
+        type is not null && PersistedPayloadEventTypes.Contains(type);
+
+    /// <summary>
+    /// Projects every item lifecycle event without netting it out. Event indexes are stable per
+    /// participant after chronological ordering and allow exact inventory replay.
+    /// </summary>
+    public static IReadOnlyList<ParticipantItemLifecycleEvent> BuildItemLifecycle(
+        IEnumerable<TimelineBuildEvent> events,
+        Func<int, BuildItemMetadata?> itemLookup,
+        int starterCutoffMs = BuildItemClassifier.DefaultStarterCutoffMs)
+    {
+        var result = new List<ParticipantItemLifecycleEvent>();
+        var indexes = new Dictionary<int, int>();
+
+        foreach (var timelineEvent in events
+                     .Where(e => e.ParticipantId is > 0 && IsItemLifecycleEvent(e.Type))
+                     .OrderBy(e => e.Timestamp))
+        {
+            var participantId = timelineEvent.ParticipantId!.Value;
+            var eventIndex = indexes.GetValueOrDefault(participantId);
+            indexes[participantId] = eventIndex + 1;
+
+            var eventType = timelineEvent.Type switch
+            {
+                ItemPurchasedType => MatchItemEventType.Purchased,
+                ItemSoldType => MatchItemEventType.Sold,
+                ItemUndoType => MatchItemEventType.Undo,
+                ItemDestroyedType => MatchItemEventType.Destroyed,
+                _ => throw new InvalidOperationException("Unsupported item lifecycle event.")
+            };
+
+            var classificationItemId = timelineEvent.ItemId is > 0
+                ? timelineEvent.ItemId
+                : timelineEvent.AfterId is > 0
+                    ? timelineEvent.AfterId
+                    : timelineEvent.BeforeId;
+            BuildItemCategory? category = null;
+            if (classificationItemId is > 0)
+            {
+                var metadata = itemLookup(classificationItemId.Value);
+                if (metadata.HasValue)
+                {
+                    category = BuildItemClassifier.Classify(
+                        metadata.Value,
+                        (int)timelineEvent.Timestamp,
+                        starterCutoffMs);
+                }
+            }
+
+            result.Add(new ParticipantItemLifecycleEvent(
+                participantId,
+                eventIndex,
+                eventType,
+                (int)timelineEvent.Timestamp,
+                timelineEvent.ItemId,
+                timelineEvent.BeforeId,
+                timelineEvent.AfterId,
+                category.HasValue,
+                category));
+        }
+
+        return result;
+    }
 
     /// <summary>
     /// Replays purchase/undo/sell/destroy events per participant into an ordered acquisition list,
@@ -157,6 +251,9 @@ public static class TimelineBuildParser
 
         return list;
     }
+
+    private static bool IsItemLifecycleEvent(string? type) =>
+        type is ItemPurchasedType or ItemSoldType or ItemUndoType or ItemDestroyedType;
 
     private static void RemoveLast(List<(int ItemId, int TimestampMs)> acquisitions, int itemId)
     {

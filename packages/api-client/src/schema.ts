@@ -4,6 +4,246 @@
  */
 
 export interface paths {
+    "/api/admin/analytics/build-lab": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["BuildLabGenerationAdminResponse"];
+                        "application/json": components["schemas"]["BuildLabGenerationAdminResponse"];
+                        "text/json": components["schemas"]["BuildLabGenerationAdminResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/analytics/build-lab/generations/{generationId}/promote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    generationId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/analytics/build-lab/generations/{generationId}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    generationId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/analytics/build-lab/generations/{generationId}/fail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    generationId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["BuildLabFailGenerationRequest"];
+                    "text/json": components["schemas"]["BuildLabFailGenerationRequest"];
+                    "application/*+json": components["schemas"]["BuildLabFailGenerationRequest"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/overview": {
         parameters: {
             query?: never;
@@ -1915,6 +2155,73 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/lol/analytics/build-lab/{championId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    role?: string;
+                    opponentChampionId?: number;
+                    patch?: string;
+                    region?: string;
+                    section?: string;
+                    mode?: string;
+                    itemPath?: number[];
+                    runeSelections?: number[];
+                    spellPair?: number[];
+                };
+                header?: never;
+                path: {
+                    championId: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["BuildLabResponse"];
+                        "application/json": components["schemas"]["BuildLabResponse"];
+                        "text/json": components["schemas"]["BuildLabResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/lol/analytics/items": {
         parameters: {
             query?: never;
@@ -3332,6 +3639,481 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/lol/saved-builds/{shareId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    shareId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PublicSavedBuildDto"];
+                        "application/json": components["schemas"]["PublicSavedBuildDto"];
+                        "text/json": components["schemas"]["PublicSavedBuildDto"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/me/lol/saved-builds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    page?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SavedBuildListDto"];
+                        "application/json": components["schemas"]["SavedBuildListDto"];
+                        "text/json": components["schemas"]["SavedBuildListDto"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SaveBuildRequest"];
+                    "text/json": components["schemas"]["SaveBuildRequest"];
+                    "application/*+json": components["schemas"]["SaveBuildRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SavedBuildDto"];
+                        "application/json": components["schemas"]["SavedBuildDto"];
+                        "text/json": components["schemas"]["SavedBuildDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/me/lol/saved-builds/{savedBuildId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    savedBuildId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SaveBuildRequest"];
+                    "text/json": components["schemas"]["SaveBuildRequest"];
+                    "application/*+json": components["schemas"]["SaveBuildRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SavedBuildDto"];
+                        "application/json": components["schemas"]["SavedBuildDto"];
+                        "text/json": components["schemas"]["SavedBuildDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    savedBuildId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/me/lol/saved-builds/{savedBuildId}/repair": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    savedBuildId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SavedBuildRepairRequest"];
+                    "text/json": components["schemas"]["SavedBuildRepairRequest"];
+                    "application/*+json": components["schemas"]["SavedBuildRepairRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SavedBuildDto"];
+                        "application/json": components["schemas"]["SavedBuildDto"];
+                        "text/json": components["schemas"]["SavedBuildDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/me/lol/saved-builds/{savedBuildId}/share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    savedBuildId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SavedBuildShareDto"];
+                        "application/json": components["schemas"]["SavedBuildShareDto"];
+                        "text/json": components["schemas"]["SavedBuildShareDto"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    savedBuildId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/lol/summoners/search": {
         parameters: {
             query?: never;
@@ -4482,6 +5264,32 @@ export interface components {
             gameName: string;
             tagLine: string;
         };
+        AdjustedActionEstimateDto: {
+            actionKey: string;
+            actionIds: number[];
+            /** Format: double */
+            adjustedWpa?: number | null;
+            /** Format: double */
+            confidenceLow?: number | null;
+            /** Format: double */
+            confidenceHigh?: number | null;
+            /** Format: double */
+            rawWinRate?: number | null;
+            /** Format: double */
+            pickRate?: number | null;
+            /** Format: int64 */
+            observedCount: number;
+            /** Format: double */
+            effectiveSampleSize: number;
+            /** Format: double */
+            averageTimingMinutes?: number | null;
+            evidenceQuality: string;
+            fallbackScope: string;
+            regionScope: string;
+            baselineDefinition: string;
+            isPublishable: boolean;
+            unavailableReason?: string | null;
+        };
         AdminAnalysisMetricsResponse: {
             /** Format: date-time */
             generatedAtUtc: string;
@@ -4880,6 +5688,112 @@ export interface components {
             accessTokenExpiresAtUtc: string;
             tokenType: string;
         };
+        BuildLabContextDto: {
+            /** Format: int32 */
+            championId: number;
+            role: string;
+            /** Format: int32 */
+            opponentChampionId?: number | null;
+            requestedPatch: string;
+            effectivePatch: string;
+            requestedRegion: string;
+            effectiveRegion: string;
+            section: string;
+            mode: string;
+        };
+        BuildLabFailGenerationRequest: {
+            reason?: string | null;
+        };
+        BuildLabGenerationAdminResponse: {
+            generations: components["schemas"]["BuildLabGenerationDto"][];
+            /** Format: int32 */
+            activeChampionRoleScopes: number;
+            /** Format: int32 */
+            activeMatchupScopes: number;
+        };
+        BuildLabGenerationDto: {
+            /** Format: uuid */
+            id: string;
+            status: string;
+            isActive: boolean;
+            patch: string;
+            rankScope: string;
+            datasetVersion: string;
+            modelVersion: string;
+            codeRevision: string;
+            /** Format: date-time */
+            sourceCutoffUtc: string;
+            /** Format: int64 */
+            matchCount: number;
+            /** Format: int64 */
+            actionEstimateCount: number;
+            /** Format: int64 */
+            publishableActionCount: number;
+            artifactUri?: string | null;
+            validationMetricsJson: string;
+            failureReason?: string | null;
+            leaseOwner?: string | null;
+            /** Format: date-time */
+            leaseExpiresAtUtc?: string | null;
+            /** Format: date-time */
+            heartbeatAtUtc?: string | null;
+            promotionHistoryJson: string;
+            /** Format: date-time */
+            createdAtUtc: string;
+            /** Format: date-time */
+            completedAtUtc?: string | null;
+            /** Format: date-time */
+            promotedAtUtc?: string | null;
+        };
+        BuildLabPathEstimateDto: {
+            itemPath: number[];
+            /** Format: double */
+            estimatedWinProbability?: number | null;
+            /** Format: double */
+            adjustedLift?: number | null;
+            /** Format: double */
+            confidenceLow?: number | null;
+            /** Format: double */
+            confidenceHigh?: number | null;
+            /** Format: int64 */
+            observedCount: number;
+            /** Format: double */
+            effectiveSampleSize: number;
+            isPublishable: boolean;
+            unavailableReason?: string | null;
+        };
+        BuildLabProvenanceDto: {
+            /** Format: uuid */
+            generationId?: string | null;
+            datasetVersion: string;
+            modelVersion: string;
+            staticDataVersion: string;
+            /** Format: date-time */
+            sourceCutoffUtc?: string | null;
+            /** Format: date-time */
+            generatedAtUtc?: string | null;
+            /** Format: int64 */
+            matchCount: number;
+            rankScope: string;
+            includedPatches: string[];
+            includedRegions: string[];
+        };
+        BuildLabResponse: {
+            available: boolean;
+            context: components["schemas"]["BuildLabContextDto"];
+            provenance: components["schemas"]["BuildLabProvenanceDto"];
+            selectedPath: number[];
+            pathEstimate?: components["schemas"]["BuildLabPathEstimateDto"] | null;
+            stages: components["schemas"]["BuildLabStageDto"][];
+            unavailableReason?: string | null;
+        };
+        BuildLabStageDto: {
+            family: string;
+            /** Format: int32 */
+            stage: number;
+            label: string;
+            candidates: components["schemas"]["AdjustedActionEstimateDto"][];
+        };
         BuildResourceAnalyticsDetailResponse: {
             resourceType: string;
             patch: string;
@@ -5040,6 +5954,15 @@ export interface components {
             queueFamily: string;
             trend?: components["schemas"]["ChampionTrendResponse"] | null;
             synergies?: components["schemas"]["ChampionSynergiesResponse"] | null;
+            recommendation?: components["schemas"]["ChampionRecommendationSummary"] | null;
+        };
+        ChampionRecommendationSummary: {
+            available: boolean;
+            provenance: components["schemas"]["BuildLabProvenanceDto"];
+            firstItem?: components["schemas"]["AdjustedActionEstimateDto"] | null;
+            rune?: components["schemas"]["AdjustedActionEstimateDto"] | null;
+            spellPair?: components["schemas"]["AdjustedActionEstimateDto"] | null;
+            unavailableReason?: string | null;
         };
         ChampionStatDto: {
             /** Format: int32 */
@@ -5742,6 +6665,33 @@ export interface components {
             displayName: string;
             queueScope: string;
         };
+        PublicSavedBuildDto: {
+            name: string;
+            /** Format: int32 */
+            championId: number;
+            role: string;
+            /** Format: int32 */
+            opponentChampionId?: number | null;
+            patch: string;
+            region: string;
+            rankingMode: string;
+            itemPath: number[];
+            runeSelections: number[];
+            /** Format: int32 */
+            spell1Id?: number | null;
+            /** Format: int32 */
+            spell2Id?: number | null;
+            /** Format: uuid */
+            sourceGenerationId?: string | null;
+            /** Format: uuid */
+            currentGenerationId?: string | null;
+            analyticsChanged: boolean;
+            compatibilityStatus: string;
+            unavailableItemIds: number[];
+            unavailableItems: components["schemas"]["SavedBuildUnavailableItemDto"][];
+            /** Format: date-time */
+            updatedAtUtc: string;
+        };
         RankHistoryEntryDto: {
             queueType?: string | null;
             tier?: string | null;
@@ -5870,6 +6820,85 @@ export interface components {
             losses: number;
             /** Format: double */
             winRate: number;
+        };
+        SaveBuildRequest: {
+            name: string;
+            /** Format: int32 */
+            championId: number;
+            role: string;
+            /** Format: int32 */
+            opponentChampionId?: number | null;
+            patch?: string | null;
+            region?: string | null;
+            rankingMode?: string | null;
+            itemPath?: number[] | null;
+            runeSelections?: number[] | null;
+            /** Format: int32 */
+            spell1Id?: number | null;
+            /** Format: int32 */
+            spell2Id?: number | null;
+        };
+        SavedBuildDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: int32 */
+            championId: number;
+            role: string;
+            /** Format: int32 */
+            opponentChampionId?: number | null;
+            patch: string;
+            region: string;
+            rankingMode: string;
+            itemPath: number[];
+            runeSelections: number[];
+            /** Format: int32 */
+            spell1Id?: number | null;
+            /** Format: int32 */
+            spell2Id?: number | null;
+            /** Format: uuid */
+            sourceGenerationId?: string | null;
+            /** Format: uuid */
+            currentGenerationId?: string | null;
+            analyticsChanged: boolean;
+            compatibilityStatus: string;
+            unavailableItemIds: number[];
+            unavailableItems: components["schemas"]["SavedBuildUnavailableItemDto"][];
+            /** Format: uuid */
+            shareId?: string | null;
+            /** Format: date-time */
+            createdAtUtc: string;
+            /** Format: date-time */
+            updatedAtUtc: string;
+        };
+        SavedBuildListDto: {
+            items: components["schemas"]["SavedBuildDto"][];
+            /** Format: int32 */
+            page: number;
+            /** Format: int32 */
+            pageSize: number;
+            /** Format: int32 */
+            totalCount: number;
+            hasMore: boolean;
+        };
+        SavedBuildRepairChoice: {
+            /** Format: int32 */
+            itemId: number;
+            action: string;
+            /** Format: int32 */
+            replacementItemId?: number | null;
+        };
+        SavedBuildRepairRequest: {
+            choices?: components["schemas"]["SavedBuildRepairChoice"][] | null;
+        };
+        SavedBuildShareDto: {
+            /** Format: uuid */
+            shareId: string;
+        };
+        SavedBuildUnavailableItemDto: {
+            /** Format: int32 */
+            itemId: number;
+            reason: string;
         };
         SituationalSlotDto: {
             /** Format: int32 */

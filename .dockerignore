@@ -19,6 +19,9 @@
 **/docker-compose*
 **/Dockerfile*
 **/node_modules
+**/.venv
+**/*.egg-info
+**/.pytest_cache
 **/.next
 **/out
 **/coverage

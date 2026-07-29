@@ -22,6 +22,8 @@ const GlobalCommandPalette = dynamic(
   { ssr: false }
 );
 
-export function GlobalCommandPaletteLoader() {
-  return <GlobalCommandPalette />;
+// buildLabEnabled arrives as a prop from a Server Component: TRN_FEATURE_BUILD_LAB is unprefixed,
+// so reading it here would be `undefined` in the browser and the flag permanently false.
+export function GlobalCommandPaletteLoader({ buildLabEnabled = false }: { buildLabEnabled?: boolean }) {
+  return <GlobalCommandPalette buildLabEnabled={buildLabEnabled} />;
 }

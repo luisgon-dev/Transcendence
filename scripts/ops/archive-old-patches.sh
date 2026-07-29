@@ -24,6 +24,10 @@
 # Restore a table:  zcat <Table>.csv.gz | docker exec -i transcendence-postgres \
 #                     psql -U postgres -d transcendence -c "COPY \"<Table>\" FROM STDIN WITH (FORMAT csv, HEADER true)"
 #   (restore parents before children: Matches -> MatchParticipants -> Items/Runes, then the rest.)
+#   NOTE the $TABLES list below is exhaustive by contract — a cascade child that is not listed is
+#   silently destroyed by the prune with no archive. Add new Match children there when they land.
+#   A listed table that does not exist yet (migration not applied on this host) fails its pre-export
+#   count and skips the whole patch, so an incomplete schema can never prune un-archived rows.
 #
 # Safety: DRY-RUN by default (APPLY=1 to archive+prune). Verify-before-delete is mandatory; any table
 # that fails verification skips the prune for that patch (archive on the NAS is left intact).
@@ -51,7 +55,13 @@ pgq()   { docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -v ON_ER
 pgx()   { docker exec -i "${PGENV[@]}" "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 "$@"; }    # planner per $PGENV
 pgval() { pgq -tAc "$1"; }            # planner-neutral scalar reads
 
-TABLES=(Matches MatchParticipants MatchParticipantItems MatchParticipantRunes MatchBans MatchParticipantTimelineSnapshots MatchTimelineFetchStates)
+# EVERY table with an ON DELETE CASCADE path to "Matches" must be listed here: the prune is a single
+# DELETE on "Matches", so anything missing is destroyed by the cascade WITHOUT ever being archived.
+# Cross-check against TranscendenceContext's Match relationships when a child table is added.
+TABLES=(Matches MatchParticipants MatchParticipantItems MatchParticipantRunes MatchBans
+        MatchTeamObjectives MatchParticipantTimelineSnapshots MatchTimelineFetchStates
+        MatchParticipantItemPurchases MatchParticipantSkillOrders
+        MatchParticipantItemEvents MatchParticipantRankContexts MatchTimelineEventPayloads)
 # Row source for table $1 — every table joined to the frozen per-patch work table of match IDs.
 sel_for() { case "$1" in
   Matches)                           echo "SELECT m.* FROM \"Matches\" m JOIN ${WORK} a ON m.\"Id\"=a.\"Id\"";;
@@ -59,8 +69,14 @@ sel_for() { case "$1" in
   MatchParticipantItems)             echo "SELECT i.* FROM \"MatchParticipantItems\" i JOIN \"MatchParticipants\" mp ON i.\"MatchParticipantId\"=mp.\"Id\" JOIN ${WORK} a ON mp.\"MatchId\"=a.\"Id\"";;
   MatchParticipantRunes)             echo "SELECT r.* FROM \"MatchParticipantRunes\" r JOIN \"MatchParticipants\" mp ON r.\"MatchParticipantId\"=mp.\"Id\" JOIN ${WORK} a ON mp.\"MatchId\"=a.\"Id\"";;
   MatchBans)                         echo "SELECT b.* FROM \"MatchBans\" b JOIN ${WORK} a ON b.\"MatchId\"=a.\"Id\"";;
+  MatchTeamObjectives)               echo "SELECT o.* FROM \"MatchTeamObjectives\" o JOIN ${WORK} a ON o.\"MatchId\"=a.\"Id\"";;
   MatchParticipantTimelineSnapshots) echo "SELECT ts.* FROM \"MatchParticipantTimelineSnapshots\" ts JOIN ${WORK} a ON ts.\"MatchId\"=a.\"Id\"";;
   MatchTimelineFetchStates)          echo "SELECT fs.* FROM \"MatchTimelineFetchStates\" fs JOIN ${WORK} a ON fs.\"MatchId\"=a.\"Id\"";;
+  MatchParticipantItemPurchases)     echo "SELECT ip.* FROM \"MatchParticipantItemPurchases\" ip JOIN ${WORK} a ON ip.\"MatchId\"=a.\"Id\"";;
+  MatchParticipantSkillOrders)       echo "SELECT so.* FROM \"MatchParticipantSkillOrders\" so JOIN ${WORK} a ON so.\"MatchId\"=a.\"Id\"";;
+  MatchParticipantItemEvents)        echo "SELECT ie.* FROM \"MatchParticipantItemEvents\" ie JOIN ${WORK} a ON ie.\"MatchId\"=a.\"Id\"";;
+  MatchParticipantRankContexts)      echo "SELECT rc.* FROM \"MatchParticipantRankContexts\" rc JOIN ${WORK} a ON rc.\"MatchId\"=a.\"Id\"";;
+  MatchTimelineEventPayloads)        echo "SELECT ep.* FROM \"MatchTimelineEventPayloads\" ep JOIN ${WORK} a ON ep.\"MatchId\"=a.\"Id\"";;
 esac; }
 
 mapfile -t PATCHES < <(pgval "

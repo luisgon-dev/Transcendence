@@ -34,6 +34,9 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<MatchTimelineFetchState> MatchTimelineFetchStates { get; set; }
     public DbSet<MatchParticipantTimelineSnapshot> MatchParticipantTimelineSnapshots { get; set; }
     public DbSet<MatchParticipantItemPurchase> MatchParticipantItemPurchases { get; set; }
+    public DbSet<MatchParticipantItemEvent> MatchParticipantItemEvents { get; set; }
+    public DbSet<MatchParticipantRankContext> MatchParticipantRankContexts { get; set; }
+    public DbSet<MatchTimelineEventPayload> MatchTimelineEventPayloads { get; set; }
     public DbSet<MatchParticipantSkillOrder> MatchParticipantSkillOrders { get; set; }
 
     // Precomputed analytics aggregates (refreshed on a cadence; the read path rolls these up by scope)
@@ -52,6 +55,9 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<BuildResourcePopulationStat> BuildResourcePopulationStats { get; set; }
     public DbSet<BuildResourceProcessedMatch> BuildResourceProcessedMatches { get; set; }
     public DbSet<AnalyticsResponseSnapshot> AnalyticsResponseSnapshots { get; set; }
+    public DbSet<BuildLabGeneration> BuildLabGenerations { get; set; }
+    public DbSet<AdjustedActionEstimate> AdjustedActionEstimates { get; set; }
+    public DbSet<AdjustedPathEstimate> AdjustedPathEstimates { get; set; }
 
     // Versioned static data
     public DbSet<Patch> Patches { get; set; }
@@ -69,6 +75,7 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<UserRefreshToken> UserRefreshTokens { get; set; }
     public DbSet<UserPasswordResetToken> UserPasswordResetTokens { get; set; }
     public DbSet<UserFavoriteSummoner> UserFavoriteSummoners { get; set; }
+    public DbSet<UserSavedBuild> UserSavedBuilds { get; set; }
     public DbSet<UserPreferences> UserPreferences { get; set; }
     public DbSet<UserRiotAccount> UserRiotAccounts { get; set; }
     public DbSet<AdminAuditEvent> AdminAuditEvents { get; set; }
@@ -359,6 +366,24 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<UserSavedBuild>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.Role).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Patch).HasMaxLength(32);
+            entity.Property(x => x.Region).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.RankingMode).HasMaxLength(24).IsRequired();
+            entity.Property(x => x.ItemPathJson).HasColumnType("jsonb");
+            entity.Property(x => x.RuneSelectionsJson).HasColumnType("jsonb");
+            entity.HasIndex(x => new { x.UserAccountId, x.UpdatedAtUtc });
+            entity.HasIndex(x => x.ShareId).IsUnique();
+            entity.HasOne(x => x.UserAccount)
+                .WithMany(x => x.SavedBuilds)
+                .HasForeignKey(x => x.UserAccountId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<UserPreferences>(entity =>
         {
             entity.HasKey(x => x.UserAccountId);
@@ -548,6 +573,52 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
         });
 
         modelBuilder.Entity<MatchParticipantItemPurchase>()
+            .HasQueryFilter(x => x.Match.Status != FetchStatus.PermanentlyUnfetchable);
+
+        modelBuilder.Entity<MatchParticipantItemEvent>(entity =>
+        {
+            entity.HasKey(x => new { x.MatchId, x.ParticipantId, x.EventIndex });
+            entity.HasIndex(x => new { x.MatchId, x.ParticipantId, x.TimestampMs });
+            entity.HasOne(x => x.Match)
+                .WithMany()
+                .HasForeignKey(x => x.MatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MatchParticipantItemEvent>()
+            .HasQueryFilter(x => x.Match.Status != FetchStatus.PermanentlyUnfetchable);
+
+        modelBuilder.Entity<MatchParticipantRankContext>(entity =>
+        {
+            entity.HasKey(x => new { x.MatchId, x.ParticipantId });
+            entity.Property(x => x.Tier).HasMaxLength(32);
+            entity.Property(x => x.Division).HasMaxLength(16);
+            entity.Property(x => x.Source).HasMaxLength(64);
+            entity.HasIndex(x => new { x.Tier, x.ObservedAtUtc });
+            entity.HasOne(x => x.Match)
+                .WithMany()
+                .HasForeignKey(x => x.MatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MatchParticipantRankContext>()
+            .HasQueryFilter(x => x.Match.Status != FetchStatus.PermanentlyUnfetchable);
+
+        modelBuilder.Entity<MatchTimelineEventPayload>(entity =>
+        {
+            entity.HasKey(x => new { x.MatchId, x.EventIndex });
+            entity.Property(x => x.EventType).HasMaxLength(64);
+            entity.Property(x => x.PayloadJson).HasColumnType("jsonb");
+            // EventType before TimestampMs: the modeler filters MatchId + EventType IN (...) and only
+            // then orders by time, so a timestamp-first index cannot serve the predicate.
+            entity.HasIndex(x => new { x.MatchId, x.EventType, x.TimestampMs });
+            entity.HasOne(x => x.Match)
+                .WithMany()
+                .HasForeignKey(x => x.MatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MatchTimelineEventPayload>()
             .HasQueryFilter(x => x.Match.Status != FetchStatus.PermanentlyUnfetchable);
 
         modelBuilder.Entity<MatchParticipantSkillOrder>(entity =>
@@ -902,6 +973,96 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             entity.Property(x => x.Patch).HasMaxLength(32);
             // Doubles as the UPSERT target and the read point-lookup.
             entity.HasIndex(x => new { x.Feature, x.ScopeKey, x.Patch }).IsUnique();
+        });
+
+        modelBuilder.Entity<BuildLabGeneration>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Patch).HasMaxLength(32);
+            entity.Property(x => x.RankScope).HasMaxLength(32);
+            entity.Property(x => x.DatasetVersion).HasMaxLength(64);
+            entity.Property(x => x.StaticDataVersion).HasMaxLength(64);
+            entity.Property(x => x.ModelVersion).HasMaxLength(64);
+            entity.Property(x => x.CodeRevision).HasMaxLength(64);
+            entity.Property(x => x.IncludedPatchesJson).HasColumnType("jsonb");
+            entity.Property(x => x.IncludedRegionsJson).HasColumnType("jsonb");
+            entity.Property(x => x.ArtifactManifestJson).HasColumnType("text");
+            entity.Property(x => x.ValidationMetricsJson).HasColumnType("jsonb");
+            entity.Property(x => x.FailureReason).HasMaxLength(1024);
+            entity.Property(x => x.LeaseOwner).HasMaxLength(128);
+            entity.Property(x => x.PromotionHistoryJson).HasColumnType("jsonb");
+            entity.HasIndex(x => new { x.Patch, x.Status, x.CompletedAtUtc });
+            // Lease reaper: equality on Status, range scan on the expiry.
+            entity.HasIndex(x => new { x.Status, x.LeaseExpiresAtUtc });
+            entity.HasIndex(x => x.IsActive)
+                .IsUnique()
+                .HasFilter("\"IsActive\"");
+        });
+
+        modelBuilder.Entity<AdjustedActionEstimate>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Role).HasMaxLength(32);
+            entity.Property(x => x.Patch).HasMaxLength(32);
+            entity.Property(x => x.RegionScope).HasMaxLength(16);
+            entity.Property(x => x.DecisionFamily).HasMaxLength(24);
+            entity.Property(x => x.PathPrefixHash).HasMaxLength(64);
+            entity.Property(x => x.PathPrefixJson).HasColumnType("jsonb");
+            entity.Property(x => x.ActionKey).HasMaxLength(128);
+            entity.Property(x => x.ActionIdsJson).HasColumnType("jsonb");
+            entity.Property(x => x.EvidenceQuality).HasMaxLength(24);
+            entity.Property(x => x.FallbackScope).HasMaxLength(32);
+            entity.Property(x => x.BaselineDefinition).HasMaxLength(256).HasDefaultValue(string.Empty);
+            entity.Property(x => x.UnavailableReason).HasMaxLength(512);
+            entity.HasIndex(x => new
+            {
+                x.GenerationId,
+                x.ChampionId,
+                x.Role,
+                x.OpponentChampionId,
+                x.RegionScope,
+                x.DecisionFamily,
+                x.Stage,
+                x.PathPrefixHash,
+                x.ActionKey
+            }).IsUnique();
+            entity.HasIndex(x => new
+            {
+                x.GenerationId,
+                x.ChampionId,
+                x.Role,
+                x.DecisionFamily,
+                x.Stage,
+                x.PathPrefixHash
+            });
+            entity.HasOne(x => x.Generation)
+                .WithMany(x => x.ActionEstimates)
+                .HasForeignKey(x => x.GenerationId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AdjustedPathEstimate>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Role).HasMaxLength(32);
+            entity.Property(x => x.Patch).HasMaxLength(32);
+            entity.Property(x => x.RegionScope).HasMaxLength(16);
+            entity.Property(x => x.PathHash).HasMaxLength(64);
+            entity.Property(x => x.ItemPathJson).HasColumnType("jsonb");
+            entity.Property(x => x.UnavailableReason).HasMaxLength(512);
+            entity.HasIndex(x => new
+            {
+                x.GenerationId,
+                x.ChampionId,
+                x.Role,
+                x.OpponentChampionId,
+                x.RegionScope,
+                x.PathHash
+            }).IsUnique();
+            entity.HasOne(x => x.Generation)
+                .WithMany(x => x.PathEstimates)
+                .HasForeignKey(x => x.GenerationId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

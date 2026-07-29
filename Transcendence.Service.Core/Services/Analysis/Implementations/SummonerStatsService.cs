@@ -1191,7 +1191,7 @@ public class SummonerMatchHistoryService(
 
         var rows = await (
             from s in db.MatchParticipantTimelineSnapshots.AsNoTracking()
-            where s.MatchId == match.Id
+            where s.MatchId == match.Id && (s.MinuteMark % 2 == 0 || s.MinuteMark == 15)
             join p in db.MatchParticipants.AsNoTracking()
                 on new { s.MatchId, s.ParticipantId } equals new { p.MatchId, p.ParticipantId }
             select new { s.MinuteMark, p.TeamId, s.Gold, s.Xp }

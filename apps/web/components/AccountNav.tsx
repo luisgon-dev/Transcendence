@@ -2,11 +2,12 @@ import Link from "next/link";
 
 import { logoutAction } from "@/app/account/actions";
 import { Button } from "@/components/ui/Button";
+import { analyticsFeatureFlags } from "@/lib/analyticsFeatureFlags";
 import { hasAdminRole } from "@/lib/authz";
 import { getSessionMe } from "@/lib/session";
 
 export async function AccountNav() {
-  const me = await getSessionMe();
+  const [me, flags] = await Promise.all([getSessionMe(), analyticsFeatureFlags()]);
 
   if (!me.authenticated) {
     return (
@@ -37,6 +38,14 @@ export async function AccountNav() {
       >
         Favorites
       </Link>
+      {flags.buildLab ? (
+        <Link
+          className="type-ui hidden min-h-11 items-center rounded-full px-3 py-2 font-medium text-fg/70 transition-[color,background-color,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-px hover:bg-surface-2/55 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/26 focus-visible:ring-offset-2 focus-visible:ring-offset-bg xl:inline-flex"
+          href="/account/saved-builds"
+        >
+          Saved builds
+        </Link>
+      ) : null}
       <form action={logoutAction}>
         <Button
           variant="ghost"

@@ -169,6 +169,14 @@ public class WorkerSchedulingPolicyTests
             x.JobId == WorkerRecurringJobPolicy.RefreshProAnalyticsJobId &&
             x.IsEnabled &&
             x.CronExpression == "20 * * * *");
+        descriptors.Should().Contain(x =>
+            x.JobId == WorkerRecurringJobPolicy.RefreshChampionMatchupsJobId &&
+            x.IsEnabled &&
+            x.CronExpression == "35 * * * *");
+        descriptors.Should().Contain(x =>
+            x.JobId == WorkerRecurringJobPolicy.RefreshChampionBuildSnapshotsJobId &&
+            x.IsEnabled &&
+            x.CronExpression == "10 */6 * * *");
         descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.RefreshChampionAnalyticsAdaptiveJobId && x.IsEnabled && x.CronExpression == "*/5 * * * *");
         descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.ChampionAnalyticsIngestionJobId && x.IsEnabled && x.CronExpression == "*/2 * * * *");
         descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.SummonerMaintenanceJobId && x.IsEnabled && x.CronExpression == "*/5 * * * *");

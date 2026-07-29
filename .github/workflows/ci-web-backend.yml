@@ -26,6 +26,31 @@ jobs:
       - name: Backend Tests
         run: dotnet test Transcendence.sln -v minimal
 
+  modeler:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: analytics/modeler
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Every other action in this repo is SHA-pinned; rather than add an unpinned
+      # actions/setup-python, use the runner's own interpreter (ubuntu-latest ships >= 3.12,
+      # which is what pyproject.toml requires — a runner image that drops below it fails here
+      # loudly at install time). A venv keeps the install off the externally-managed system
+      # site-packages.
+      - name: Create virtualenv
+        run: python3 -m venv .venv
+
+      - name: Install modeler with test extra
+        run: .venv/bin/python -m pip install --disable-pip-version-check -e '.[test]'
+
+      - name: Modeler Tests
+        run: .venv/bin/python -m pytest
+
   web:
     runs-on: ubuntu-latest
 

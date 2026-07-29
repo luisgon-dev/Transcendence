@@ -17,6 +17,8 @@ public class AnalyticsLaneIsolationTests
 {
     [Theory]
     [InlineData(typeof(RefreshPrecomputedAnalyticsJob))]
+    [InlineData(typeof(RefreshChampionBuildSnapshotsJob))]
+    [InlineData(typeof(RefreshChampionMatchupsJob))]
     [InlineData(typeof(RefreshProAnalyticsJob))]
     [InlineData(typeof(RefreshBuildResourceAnalyticsJob))]
     [InlineData(typeof(WarmDefaultChampionProfilesJob))]

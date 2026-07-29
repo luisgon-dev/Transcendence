@@ -11,12 +11,18 @@ public class WorkerJobScheduleOptions
     // so these fire often and the job decides whether a tick does real work.
     public string RefreshChampionAnalyticsAdaptiveCron { get; set; } = "*/5 * * * *";
     public string WarmDefaultChampionProfilesCron { get; set; } = "0 * * * *";
-    // Offset 30 min from the warm job (:00) so the two heavy analytics passes don't collide on the HDD-backed DB.
+    // Tabular core only; heavier response snapshots and matchups have independent ownership below.
     public string RefreshPrecomputedAnalyticsCron { get; set; } = "30 * * * *";
+    // Matchups are incremental/resumable and must not wait behind the much longer build snapshot sweep.
+    public string RefreshChampionMatchupsCron { get; set; } = "35 * * * *";
+    // Full serialized build responses are expensive and atomically replaced; refresh them less often.
+    public string RefreshChampionBuildSnapshotsCron { get; set; } = "10 */6 * * *";
     // Lightweight roster-backed snapshots run independently so a heavy matchup timeout cannot stale pro surfaces.
     public string RefreshProAnalyticsCron { get; set; } = "20 * * * *";
     // Independent from the champion precompute job, which may run long or fail on matchup aggregation.
     public string RefreshBuildResourceAnalyticsCron { get; set; } = "40 * * * *";
+    public string CreateBuildLabGenerationCron { get; set; } = "15 2 * * *";
+    public string PromoteBuildLabGenerationCron { get; set; } = "*/10 * * * *";
     public string ChampionAnalyticsIngestionCron { get; set; } = "*/2 * * * *";
     public string SummonerMaintenanceCron { get; set; } = "*/5 * * * *";
     public string MatchTimelineBackfillCron { get; set; } = "*/10 * * * *";
@@ -28,8 +34,12 @@ public class WorkerJobScheduleOptions
     public bool EnableAdaptiveAnalyticsRefresh { get; set; } = true;
     public bool EnableWarmDefaultChampionProfiles { get; set; } = true;
     public bool EnableRefreshPrecomputedAnalytics { get; set; } = true;
+    public bool EnableRefreshChampionMatchups { get; set; } = true;
+    public bool EnableRefreshChampionBuildSnapshots { get; set; } = true;
     public bool EnableRefreshProAnalytics { get; set; } = true;
     public bool EnableRefreshBuildResourceAnalytics { get; set; } = true;
+    public bool EnableCreateBuildLabGeneration { get; set; }
+    public bool EnablePromoteBuildLabGeneration { get; set; }
     public bool EnableChampionAnalyticsIngestion { get; set; } = true;
     public bool EnableSummonerMaintenance { get; set; } = true;
     public bool EnableMatchTimelineBackfill { get; set; } = true;

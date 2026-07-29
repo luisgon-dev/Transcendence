@@ -3,7 +3,6 @@ import { Bricolage_Grotesque, Hanken_Grotesk, JetBrains_Mono } from "next/font/g
 import { Suspense } from "react";
 
 import "@/app/globals.css";
-import { GlobalCommandPaletteLoader } from "@/components/GlobalCommandPaletteLoader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { WebVitalsReporter } from "@/components/WebVitalsReporter";
@@ -121,7 +120,6 @@ export default function RootLayout({
             {children}
           </main>
           <SiteFooter />
-          <GlobalCommandPaletteLoader />
           <WebVitalsReporter />
         </TooltipProvider>
       </body>

@@ -12,5 +12,6 @@ public record ChampionProfileAnalyticsResponse(
     ChampionGradeDto? Grade = null,
     string QueueFamily = "RANKED_SOLO_DUO",
     ChampionTrendResponse? Trend = null,
-    ChampionSynergiesResponse? Synergies = null
+    ChampionSynergiesResponse? Synergies = null,
+    ChampionRecommendationSummary? Recommendation = null
 );

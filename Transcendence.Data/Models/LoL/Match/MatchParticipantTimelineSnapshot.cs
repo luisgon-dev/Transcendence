@@ -7,8 +7,11 @@ public class MatchParticipantTimelineSnapshot
     public int MinuteMark { get; set; }
 
     public int Gold { get; set; }
+    public int CurrentGold { get; set; }
     public int Xp { get; set; }
     public int Cs { get; set; }
+    public int LaneCs { get; set; }
+    public int JungleCs { get; set; }
     public int Level { get; set; }
     public int FrameTimestampMs { get; set; }
     public DateTime DerivedAtUtc { get; set; }

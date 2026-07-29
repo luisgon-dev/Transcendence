@@ -4,9 +4,12 @@ using Camille.RiotGames.MatchV5;
 using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Service.Core.Services.Analytics;
+using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.RiotApi;
 using DataMatch = Transcendence.Data.Models.LoL.Match.Match;
@@ -24,13 +27,40 @@ public class MatchTimelineIngestionJob(
     IBackgroundJobClient backgroundJobClient,
     IRiotRateGate rateGate,
     IOptions<TimelineIngestionOptions> options,
+    IOptions<BuildLabModelingOptions> buildLabOptions,
     ILogger<MatchTimelineIngestionJob> logger)
 {
     /// <summary>
-    /// Bumped when the timeline job begins deriving new per-match data so already-<c>Success</c>
-    /// matches are re-ingested once. v1 added ordered item purchases + skill orders.
+    /// What every ingest captures regardless of configuration: ordered item purchases + skill orders.
     /// </summary>
-    public const int CurrentTimelineSchemaVersion = 1;
+    public const int BaselineTimelineSchemaVersion = 1;
+
+    /// <summary>
+    /// The Build Lab schema: one-minute feature frames, lossless item lifecycle events, raw event
+    /// payloads, and rank observation provenance. Every one of those is gated on
+    /// <c>Analytics:BuildLab:Enabled</c>, so this version is stamped ONLY when the flag was on for the
+    /// ingest — a row at this version is therefore proof the extras are present, which is what the
+    /// generation cohort filter relies on.
+    /// </summary>
+    public const int CurrentTimelineSchemaVersion = 2;
+
+    /// <summary>
+    /// The schema version an ingest targets, and therefore the staleness bar for re-ingestion.
+    /// Deliberately flag-dependent: with Build Lab off nothing derives the v2 extras, so treating
+    /// already-ingested v1 matches as stale would re-fetch every timeline on the active patch from a
+    /// low-rate Riot key for data that would not be captured. Turning the flag on raises the bar to
+    /// v2, which is what makes the backfill re-ingest those matches once — no const bump needed.
+    /// </summary>
+    public static int TargetSchemaVersion(bool buildLabEnabled) =>
+        buildLabEnabled ? CurrentTimelineSchemaVersion : BaselineTimelineSchemaVersion;
+
+    // Camille's event union serializes every member of every event shape, so the default options
+    // write ~40 mostly-null fields per row into jsonb; dropping nulls collapses each payload to the
+    // fields the event actually carries.
+    private static readonly JsonSerializerOptions PayloadSerializerOptions = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
 
     [Queue(HangfireQueues.TimelineIngest)]
     public async Task IngestMatchTimelineAsync(string matchId, CancellationToken ct = default)
@@ -72,7 +102,9 @@ public class MatchTimelineIngestionJob(
             .FirstAsync(x => x.MatchId == match.Id, ct);
 
         var maxRetryAttempts = Math.Max(1, jobOptions.MaxRetryAttempts);
-        if (state.Status == MatchTimelineFetchStatus.Success && state.SchemaVersion >= CurrentTimelineSchemaVersion)
+        var buildLabEnabled = buildLabOptions.Value.Enabled;
+        var targetSchemaVersion = TargetSchemaVersion(buildLabEnabled);
+        if (state.Status == MatchTimelineFetchStatus.Success && state.SchemaVersion >= targetSchemaVersion)
             return;
 
         if (state.Status == MatchTimelineFetchStatus.PermanentlyFailed && state.RetryCount >= maxRetryAttempts)
@@ -120,10 +152,13 @@ public class MatchTimelineIngestionJob(
 
             BackfillParticipantIdsFromTimeline(match.Participants, timeline.Info.Participants);
 
-            // Capture a multi-frame curve: a regular cadence up to game length, plus the
-            // analytics anchor mark (kept so champion-analytics gold/xp-diff@N stays intact).
+            // Build Lab needs every one-minute frame for leak-free pre-decision modeling, but that
+            // doubles the ~22.5M-row snapshot table, and the only read path (the profile curve)
+            // projects even minutes plus the anchor. So the one-minute cadence is coupled to the
+            // feature flag: with Build Lab off the configured FrameIntervalMinutes still governs.
             var anchorMark = Math.Max(1, jobOptions.MinuteMark);
-            var minuteMarks = BuildMinuteMarks(match.Duration, Math.Max(1, jobOptions.FrameIntervalMinutes), anchorMark);
+            var frameIntervalMinutes = buildLabEnabled ? 1 : Math.Max(1, jobOptions.FrameIntervalMinutes);
+            var minuteMarks = BuildMinuteMarks(match.Duration, frameIntervalMinutes, anchorMark);
 
             var snapshots = new List<MatchParticipantTimelineSnapshot>();
             foreach (var mark in minuteMarks)
@@ -164,7 +199,9 @@ public class MatchTimelineIngestionJob(
 
             // Derive and stage the ordered build path (item purchases + skill orders) from the same
             // frames; committed atomically with the snapshots by the SaveChangesAsync below.
-            var buildPathCoverageOk = await StageBuildPathRowsAsync(match, timeline.Info.Frames, ct);
+            var buildPathCoverageOk = await StageBuildPathRowsAsync(match, timeline.Info.Frames, buildLabEnabled, ct);
+            if (buildLabEnabled)
+                await StageTimelineEventPayloadsAsync(match, timeline.Info.Frames, ct);
 
             state.Status = MatchTimelineFetchStatus.Success;
             state.RetryCount = 0;
@@ -173,8 +210,11 @@ public class MatchTimelineIngestionJob(
             state.SourcePatch = match.Patch;
             // Only mark the build-path schema as captured when item metadata was available; otherwise
             // leave it stale so the backfill re-ingests once metadata exists (snapshots/skills still land).
+            // Assigned (not raised to a maximum) on purpose: re-ingesting a previously-v2 match with the
+            // flag off rewrites its snapshots at the coarse cadence, so the row must stop claiming the
+            // Build Lab extras and fall out of the cohort until it is ingested with the flag on again.
             if (buildPathCoverageOk)
-                state.SchemaVersion = CurrentTimelineSchemaVersion;
+                state.SchemaVersion = targetSchemaVersion;
 
             await db.SaveChangesAsync(ct);
             await writeTx.CommitAsync(ct);
@@ -302,8 +342,11 @@ public class MatchTimelineIngestionJob(
                 ParticipantId = participant.ParticipantId,
                 MinuteMark = minuteMark,
                 Gold = participantFrame.TotalGold,
+                CurrentGold = participantFrame.CurrentGold,
                 Xp = participantFrame.Xp,
                 Cs = participantFrame.MinionsKilled + participantFrame.JungleMinionsKilled,
+                LaneCs = participantFrame.MinionsKilled,
+                JungleCs = participantFrame.JungleMinionsKilled,
                 Level = participantFrame.Level,
                 FrameTimestampMs = frame.Timestamp,
                 DerivedAtUtc = DateTime.UtcNow,
@@ -336,8 +379,14 @@ public class MatchTimelineIngestionJob(
     /// Returns <c>false</c> when item purchases exist but no <c>ItemVersion</c> metadata is available
     /// for the patch yet (e.g. the patch-rollover race): the caller then leaves <c>SchemaVersion</c>
     /// un-advanced so the match is re-ingested once metadata lands instead of baking in an empty path.
+    /// The lossless item lifecycle and rank context rows are Build Lab inputs only, so
+    /// <paramref name="buildLabEnabled"/> gates them: with the flag off neither table is touched at all.
     /// </summary>
-    private async Task<bool> StageBuildPathRowsAsync(DataMatch match, FramesTimeLine[] frames, CancellationToken ct)
+    private async Task<bool> StageBuildPathRowsAsync(
+        DataMatch match,
+        FramesTimeLine[] frames,
+        bool buildLabEnabled,
+        CancellationToken ct)
     {
         var events = ProjectBuildEvents(frames);
 
@@ -364,6 +413,11 @@ public class MatchTimelineIngestionJob(
         var skillSequences = events.Count == 0
             ? []
             : TimelineBuildParser.BuildSkillSequences(events);
+        var lifecycleEvents = events.Count == 0 || !buildLabEnabled
+            ? []
+            : TimelineBuildParser.BuildItemLifecycle(
+                events,
+                itemId => itemMetadata.TryGetValue(itemId, out var metadata) ? metadata : (BuildItemMetadata?)null);
 
         var purchaseRows = new List<MatchParticipantItemPurchase>();
         foreach (var path in purchasePaths)
@@ -395,6 +449,22 @@ public class MatchTimelineIngestionJob(
                 MaxOrder = sequence.MaxOrder
             })
             .ToList();
+        var lifecycleRows = lifecycleEvents
+            .Select(itemEvent => new MatchParticipantItemEvent
+            {
+                MatchId = match.Id,
+                Match = match,
+                ParticipantId = itemEvent.ParticipantId,
+                EventIndex = itemEvent.EventIndex,
+                EventType = itemEvent.EventType,
+                TimestampMs = itemEvent.TimestampMs,
+                ItemId = itemEvent.ItemId,
+                BeforeId = itemEvent.BeforeId,
+                AfterId = itemEvent.AfterId,
+                IsBuildRelevant = itemEvent.IsBuildRelevant,
+                BuildCategory = itemEvent.BuildCategory
+            })
+            .ToList();
 
         // Replace any prior rows for this match so re-ingestion is idempotent.
         var existingPurchases = await db.MatchParticipantItemPurchases
@@ -405,6 +475,19 @@ public class MatchTimelineIngestionJob(
         if (purchaseRows.Count > 0)
             db.MatchParticipantItemPurchases.AddRange(purchaseRows);
 
+        // Left entirely alone when Build Lab is off: not replaced either, so a corpus captured while the
+        // flag was on survives a flag-off re-ingest (the SchemaVersion drop keeps it out of modeling).
+        if (buildLabEnabled)
+        {
+            var existingLifecycleEvents = await db.MatchParticipantItemEvents
+                .Where(x => x.MatchId == match.Id)
+                .ToListAsync(ct);
+            if (existingLifecycleEvents.Count > 0)
+                db.MatchParticipantItemEvents.RemoveRange(existingLifecycleEvents);
+            if (lifecycleRows.Count > 0)
+                db.MatchParticipantItemEvents.AddRange(lifecycleRows);
+        }
+
         var existingSkillOrders = await db.MatchParticipantSkillOrders
             .Where(x => x.MatchId == match.Id)
             .ToListAsync(ct);
@@ -413,7 +496,65 @@ public class MatchTimelineIngestionJob(
         if (skillRows.Count > 0)
             db.MatchParticipantSkillOrders.AddRange(skillRows);
 
+        if (buildLabEnabled)
+            await StageRankContextRowsAsync(match, ct);
+
         return coverageOk;
+    }
+
+    private async Task StageRankContextRowsAsync(DataMatch match, CancellationToken ct)
+    {
+        var participantSummonerIds = match.Participants
+            .Where(participant => participant.ParticipantId > 0)
+            .Select(participant => participant.SummonerId)
+            .Distinct()
+            .ToList();
+        var ranks = participantSummonerIds.Count == 0
+            ? []
+            : await db.Ranks
+                .AsNoTracking()
+                .Where(rank => participantSummonerIds.Contains(rank.SummonerId) &&
+                               (rank.QueueType == "RANKED_SOLO_5x5" ||
+                                rank.QueueType == "RANKED_SOLO_5X5" ||
+                                rank.QueueType == "RANKED_SOLO_5V5"))
+                .OrderByDescending(rank => rank.UpdatedAt)
+                .ToListAsync(ct);
+        var rankBySummoner = ranks
+            .GroupBy(rank => rank.SummonerId)
+            .ToDictionary(group => group.Key, group => group.First());
+        var matchUtc = DateTimeOffset.FromUnixTimeMilliseconds(match.MatchDate).UtcDateTime;
+
+        var rows = match.Participants
+            .Where(participant => participant.ParticipantId > 0)
+            .Select(participant =>
+            {
+                rankBySummoner.TryGetValue(participant.SummonerId, out var rank);
+                return new MatchParticipantRankContext
+                {
+                    MatchId = match.Id,
+                    Match = match,
+                    ParticipantId = participant.ParticipantId,
+                    Tier = rank?.Tier,
+                    Division = rank?.RankNumber,
+                    LeaguePoints = rank?.LeaguePoints,
+                    ObservedAtUtc = rank?.UpdatedAt,
+                    // Signed on purpose: a rank observed after the match is a post-outcome variable,
+                    // and an absolute distance makes it indistinguishable from a pre-match reading.
+                    ObservationOffsetSeconds = rank == null
+                        ? null
+                        : (long)(rank.UpdatedAt - matchUtc).TotalSeconds,
+                    Source = rank == null ? null : "STORED_SOLO_RANK"
+                };
+            })
+            .ToList();
+
+        var existing = await db.MatchParticipantRankContexts
+            .Where(x => x.MatchId == match.Id)
+            .ToListAsync(ct);
+        if (existing.Count > 0)
+            db.MatchParticipantRankContexts.RemoveRange(existing);
+        if (rows.Count > 0)
+            db.MatchParticipantRankContexts.AddRange(rows);
     }
 
     private static List<TimelineBuildEvent> ProjectBuildEvents(FramesTimeLine[] frames)
@@ -442,6 +583,37 @@ public class MatchTimelineIngestionJob(
         }
 
         return events;
+    }
+
+    private async Task StageTimelineEventPayloadsAsync(
+        DataMatch match,
+        FramesTimeLine[] frames,
+        CancellationToken ct)
+    {
+        var rows = frames
+            .Where(frame => frame?.Events != null)
+            .SelectMany(frame => frame.Events ?? [])
+            .Where(timelineEvent => timelineEvent != null &&
+                                    TimelineBuildParser.IsPersistedPayloadEvent(timelineEvent.Type))
+            .OrderBy(timelineEvent => timelineEvent.Timestamp)
+            .Select((timelineEvent, index) => new MatchTimelineEventPayload
+            {
+                MatchId = match.Id,
+                Match = match,
+                EventIndex = index,
+                TimestampMs = (int)timelineEvent.Timestamp,
+                EventType = timelineEvent.Type ?? "UNKNOWN",
+                PayloadJson = JsonSerializer.Serialize(timelineEvent, PayloadSerializerOptions)
+            })
+            .ToList();
+
+        // Set-based: nothing reads the prior payloads, so materializing them into the change tracker
+        // only to mark them Deleted is pure overhead on a per-match hot path.
+        await db.MatchTimelineEventPayloads
+            .Where(row => row.MatchId == match.Id)
+            .ExecuteDeleteAsync(ct);
+        if (rows.Count > 0)
+            db.MatchTimelineEventPayloads.AddRange(rows);
     }
 
     private async Task<Dictionary<int, BuildItemMetadata>> LoadItemMetadataAsync(

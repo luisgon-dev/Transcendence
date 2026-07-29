@@ -3,8 +3,9 @@
 // The public proxy forwards to the backend WITHOUT any credentials (no session
 // cookie, no API key). Without an allowlist it would relay anonymous traffic to
 // *any* `/api/*` backend route. We restrict it to the only anonymous surface the
-// public frontend actually uses: LoL summoner reads. Mutating profile refreshes
-// go through `/api/trn/user/...` so the BFF can attach a signed-in user's JWT.
+// public frontend actually uses: LoL summoner reads, Build Lab estimates, and
+// token-addressed shared builds. Mutating requests go through `/api/trn/user/...`
+// so the BFF can attach a signed-in user's JWT.
 //
 // `normalizeProxyPath` (lib/proxyPath.ts) already rejects path traversal
 // (`.`/`..`/embedded separators); this is the orthogonal "which routes" gate.
@@ -17,13 +18,31 @@ const PUBLIC_NAMESPACES = new Set(["lol"]);
  * writes, arbitrary paths, PUT/DELETE) is rejected by the route handler.
  */
 export function isAllowedPublicProxyPath(method: string, path: string[]): boolean {
-  // `lol/summoners/...`
   if (path.length < 2) return false;
   if (!PUBLIC_NAMESPACES.has(path[0])) return false;
-  if (path[1] !== "summoners") return false;
+  if (method !== "GET") return false;
 
-  // Summoner reads.
-  if (method === "GET") return true;
+  if (path[1] === "summoners") return true;
+
+  // `lol/analytics/build-lab/{championId}` only. Other analytics routes keep
+  // using server-side rendering or their existing authenticated boundaries.
+  if (
+    path[1] === "analytics" &&
+    path[2] === "build-lab" &&
+    path.length === 4 &&
+    /^\d+$/.test(path[3])
+  ) {
+    return true;
+  }
+
+  // Public saved builds are read-only and addressed by an unguessable share id.
+  if (
+    path[1] === "saved-builds" &&
+    path.length === 3 &&
+    /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(path[2])
+  ) {
+    return true;
+  }
 
   return false;
 }

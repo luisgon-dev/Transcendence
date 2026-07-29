@@ -37,6 +37,10 @@ jobs:
             image_suffix: web
             dockerfile: ./apps/web/Dockerfile
             filter_key: web
+          - component: analytics-modeler
+            image_suffix: analytics-modeler
+            dockerfile: ./analytics/modeler/Dockerfile
+            filter_key: modeler
 
     steps:
       - name: Checkout repository
@@ -75,6 +79,9 @@ jobs:
               - '.nvmrc'
               - 'apps/web/Dockerfile'
               - '.github/workflows/docker-images.yml'
+            modeler:
+              - 'analytics/modeler/**'
+              - '.github/workflows/docker-images.yml'
 
       - name: Plan component build
         id: plan
@@ -83,6 +90,7 @@ jobs:
           WEBAPI_CHANGED: ${{ steps.changes.outputs.webapi }}
           SERVICE_CHANGED: ${{ steps.changes.outputs.service }}
           WEB_CHANGED: ${{ steps.changes.outputs.web }}
+          MODELER_CHANGED: ${{ steps.changes.outputs.modeler }}
         run: |
           if [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -99,6 +107,9 @@ jobs:
               ;;
             web)
               run="${WEB_CHANGED:-false}"
+              ;;
+            modeler)
+              run="${MODELER_CHANGED:-false}"
               ;;
           esac
 

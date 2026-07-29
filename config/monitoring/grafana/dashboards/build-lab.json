@@ -1,0 +1,405 @@
+{
+  "uid": "trn-build-lab",
+  "title": "Transcendence — Build Lab",
+  "tags": ["transcendence", "analytics", "build-lab"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-7d", "to": "now" },
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Active Generation Age",
+      "description": "Seconds since the active generation was promoted. 0 = Build Lab disabled or nothing promoted yet.",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 129600 },
+              { "color": "red", "value": 172800 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(transcendence_buildlab_active_generation_age_seconds{job=\"transcendence-worker\"})",
+          "legendFormat": "age",
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Dataset Lag",
+      "description": "now - the active generation's frozen SourceCutoffUtc. Grows when timeline ingestion stalls even if generations keep promoting.",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 172800 },
+              { "color": "red", "value": 259200 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(transcendence_buildlab_dataset_lag_seconds{job=\"transcendence-worker\"})",
+          "legendFormat": "lag",
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Time in Modeling (wedge detector)",
+      "description": "Age of the oldest Modeling generation's heartbeat. A healthy run renews it every BUILD_LAB_HEARTBEAT_SECONDS (default 60), and a stopped modeler is reaped within lease + one promote tick (900 + 600 = 1500s), so anything sustained above ~25 minutes means the reaper is not running either. A dead modeler that never claimed shows up as PendingDataset age instead.",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1500 },
+              { "color": "red", "value": 2700 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(transcendence_buildlab_generation_status_age_seconds{job=\"transcendence-worker\",status=\"Modeling\"})",
+          "legendFormat": "modeling",
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Published Estimates (active generation)",
+      "description": "Rows with IsPublishable in the active generation. Zero action estimates means every Build Lab request returns unavailable.",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": true } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "transcendence_buildlab_published_estimates{job=\"transcendence-worker\"}",
+          "legendFormat": "{{kind}}",
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Generation Status Age by Status",
+      "description": "Seconds since the oldest generation in each status last transitioned. A status with no generation reports 0.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["max"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "transcendence_buildlab_generation_status_age_seconds{job=\"transcendence-worker\"}",
+          "legendFormat": "{{status}}",
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Generation Lifecycle Events",
+      "description": "create / training / promote / rollback outcomes. A promote with result=rejected is a gate refusal, which is normal and self-healing; result=error is a fault.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "bars", "fillOpacity": 60 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["sum"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (phase, result) (increase(transcendence_buildlab_generation_events_total{job=\"transcendence-worker\"}[1h]))",
+          "legendFormat": "{{phase}} {{result}}",
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Lost Training Runs",
+      "description": "Generations reaped out of Modeling with an expired lease, over 24h — the create cron runs once a day, so one event means the day's only training attempt was lost. Read the generation FailureReason before touching any Analytics:BuildLab threshold — build-lab-v1 refuses lowered gates.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 14 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "bars", "fillOpacity": 60 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["sum"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(transcendence_buildlab_generation_events_total{job=\"transcendence-worker\",phase=\"training\",result=\"error\"}[24h]))",
+          "legendFormat": "lost training runs (24h)",
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Published Coverage (scopes)",
+      "description": "Distinct champion-role and champion-role-vs-opponent scopes the active generation publishes at least one estimate for. The estimate count can stay healthy while coverage collapses onto a handful of champions, which is what makes this the answer-availability signal.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 21 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "transcendence_buildlab_coverage_scopes{job=\"transcendence-worker\"}",
+          "legendFormat": "{{scope}}",
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Calibration Error (active generation)",
+      "description": "Expected calibration error from the active generation's validation metrics. Promotion rejects a candidate above 0.015 overall or 0.025 in its worst time band (the threshold line marks the tighter of the two), so a series above them means a generation was published without those gates. 0 means not measured, not perfectly calibrated.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 21 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 4,
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 0.015 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "transcendence_buildlab_calibration_error{job=\"transcendence-worker\"}",
+          "legendFormat": "{{metric}}",
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Effective Sample Size (publishable estimates)",
+      "description": "Evidence behind the published rows. The minimum tracks the weakest cell that still cleared the gates, so it should never fall under the v1 floor of 500 (threshold line) — if it does, grading did not apply. The mean tracks the corpus as a whole.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 21 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 500 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "transcendence_buildlab_effective_sample_size{job=\"transcendence-worker\"}",
+          "legendFormat": "{{stat}}",
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Estimate Grades (evidence mix)",
+      "description": "Action estimates in the active generation by evidence grade. INSUFFICIENT is a cell that failed a sample/interval gate; GLOBAL_FALLBACK is a regional cell that collapsed onto the pooled global baseline after multiple-comparison correction.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 29 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "fillOpacity": 20, "stacking": { "mode": "normal" } }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "transcendence_buildlab_estimate_grades{job=\"transcendence-worker\"}",
+          "legendFormat": "{{quality}}",
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Global-Fallback Share",
+      "description": "Share of graded action estimates that fell back to the pooled global baseline. A rising share means regional evidence is thinning even while the published count holds — no absolute threshold is charted because the feature has no production baseline yet.",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 29 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "values": false },
+        "graphMode": "area"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(transcendence_buildlab_estimate_grades{job=\"transcendence-worker\",quality=\"GLOBAL_FALLBACK\"}) / clamp_min(sum(transcendence_buildlab_estimate_grades{job=\"transcendence-worker\"}), 1)",
+          "legendFormat": "global fallback",
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "Adjusted WPA Drift on Promotion",
+      "description": "Absolute Adjusted WPA movement the most recent promotion introduced over the keys both generations published. Holds its value until the next promotion and reads 0 when nothing has been superseded. Read it against the 0.03 published confidence-width gate: drift beyond that is movement the evidence intervals do not explain.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 29 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 4,
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineInterpolation": "stepAfter" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "transcendence_buildlab_estimate_drift{job=\"transcendence-worker\"}",
+          "legendFormat": "{{stat}}",
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        }
+      ]
+    }
+  ]
+}

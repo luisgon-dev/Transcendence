@@ -21,6 +21,7 @@ public class UserAccount
     public ICollection<UserRefreshToken> RefreshTokens { get; set; } = new List<UserRefreshToken>();
     public ICollection<UserPasswordResetToken> PasswordResetTokens { get; set; } = new List<UserPasswordResetToken>();
     public ICollection<UserFavoriteSummoner> FavoriteSummoners { get; set; } = new List<UserFavoriteSummoner>();
+    public ICollection<UserSavedBuild> SavedBuilds { get; set; } = new List<UserSavedBuild>();
     public UserPreferences? Preferences { get; set; }
     public UserRiotAccount? RiotAccount { get; set; }
 }

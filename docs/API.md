@@ -490,6 +490,113 @@ pro-build analytics before approval.
   `isLive` convenience flag. `isLive` is true only for an `in_game` observation no more than ten
   minutes old, so a stale worker snapshot cannot present a player as currently live.
 
+### Build Lab and Adjusted WPA
+
+`GET /api/lol/analytics/build-lab/{championId}` is the public, rate-limited decision-analytics
+surface. `role` is required. Optional context includes `opponentChampionId`, `patch`, and `region`;
+`section=items|runes|spells` and `mode=supported|impact|common` control the decision family and
+ranking. Ordered `itemPath`, `runeSelections`, and `spellPair` query values condition the next
+supported stage and make the complete state permalinkable.
+
+The response distinguishes requested from effective context and includes promoted generation,
+dataset, static-data, model, cutoff, patch, and region provenance. Unsupported selected prefixes
+remain selected and return an explicit unavailable reason; the API never silently broadens or discards
+a path.
+
+**A gate-failing cell withholds its numbers, not its evidence.** When `isPublishable` is false the
+response nulls `adjustedWpa`, `confidenceLow`, `confidenceHigh`, **and the descriptive `rawWinRate` /
+`pickRate`** — a gated candidate must not render a headline win rate one click behind its own
+"insufficient evidence" label. `observedCount` and `effectiveSampleSize` are *always* populated, so a
+client can show how thin a cell is and `evidenceQuality` / `unavailableReason` say why it was withheld.
+The same rule applies to `pathEstimate`: `estimatedWinProbability`, `adjustedLift`, and both bounds are
+null when the path failed its gates, while its counts remain visible.
+
+**Regional fallback is decided per cell, not per response.** For a regional request each individual
+estimate keeps its regional number only when that cell is publishable *and* differs meaningfully
+from the pooled global baseline after multiple-comparison correction; otherwise that one cell serves
+the global estimate. A single response therefore mixes regional and global rows, and each row states
+which it is (`fallbackScope`) — there is no whole-response switch to `GLOBAL`, and a region with a
+few thin cells does not lose its regional numbers everywhere. `context.effectiveRegion` reports the
+requested region as soon as *any* row in the response is regional, so it summarizes the mix rather
+than promising every row is regional.
+
+**Patch resolution.** Omitting `patch` serves the active generation's own patch. An explicit `patch`
+is servable when it is the active generation's patch **or** appears in that generation's borrowed
+`includedPatches` set (`provenance.includedPatches`); anything else returns `available: false` with an
+explicit "outside the promoted generation's modeled patch set" reason instead of silently answering
+for a different patch. `context.requestedPatch` echoes what the caller asked for and
+`context.effectivePatch` is the generation's patch, so the two differ whenever a borrowed patch was
+requested. Because promotion retires every other generation, a borrowed patch is only ever addressable
+through the active generation.
+
+`GET /api/lol/analytics/champions/{championId}/profile` now includes an optional
+`recommendation` summary for Ranked Solo/Duo. It contains the best-supported first item, rune
+choice, and spell pair from the same promoted generation so the champion page does not need a
+second request.
+
+Saved builds are complete decision/filter states, not frozen estimates:
+
+- `GET /api/users/me/lol/saved-builds?page=&pageSize=` (`UserOnly`)
+- `POST /api/users/me/lol/saved-builds` (`UserOnly`)
+- `PUT|DELETE /api/users/me/lol/saved-builds/{savedBuildId}` (`UserOnly`, owner only)
+- `POST /api/users/me/lol/saved-builds/{savedBuildId}/repair` (`UserOnly`, owner only)
+- `POST|DELETE /api/users/me/lol/saved-builds/{savedBuildId}/share` (`UserOnly`, owner only)
+- `GET /api/lol/saved-builds/{shareId}` (public, unguessable read-only token, rate limited)
+
+The list is a paginated envelope `{ items, page, pageSize, totalCount, hasMore }` ordered by
+`updatedAtUtc` descending. `pageSize` is clamped to the configured maximum and `page` is clamped
+against `totalCount`, so an absurd page number returns an empty page rather than an error. `POST`
+enforces a **per-account cap** and answers `409 Conflict` (ProblemDetails) at the limit — delete a build
+before saving another; the cap is deliberately a conflict, not a 400, because the request itself is
+valid. `DELETE` is idempotent (204 even when the build is already gone). Share revocation takes effect
+on the next read, and the public share route is metered per client IP so the token space cannot be
+brute-forced.
+
+Each build reports its own drift and repairability:
+
+- `compatibilityStatus` is a single most-blocking state, evaluated in this order: `ITEMS_RETIRED` (at
+  least one item is unusable), then `NO_SOURCE_GENERATION` (saved while no generation was active, so
+  there is no baseline to compare against), then `PATCH_CHANGED` (saved on an older patch), else
+  `CURRENT`. Inspect `unavailableItems` and `patch` for the full picture rather than the label alone.
+- `unavailableItems` pairs each blocked item with a reason: `RETIRED` (absent from the active patch's
+  static data) or `REMOVED_FROM_STORE` (still present but no longer purchasable). `unavailableItemIds`
+  is the same set flattened for older clients. Items are reported, never silently replaced.
+- `POST .../repair` takes explicit `{ itemId, action, replacementItemId }` choices where `action` is
+  `DROP` or `REPLACE`; a `REPLACE` must name an item valid on the active patch. Repair is always the
+  user's decision.
+- `analyticsChanged` is a **material** change, not a generation-id difference. It is true only when the
+  saved setup's own outcome moved under the new active generation: its publishability flipped, or its
+  adjusted lift moved further than the configured epsilon. A promotion that leaves this build's numbers
+  effectively where they were reports `false`, so the flag means "your build's answer changed", not
+  "the model was rebuilt".
+
+Admin generation control is `AdminOnly` and rate limited (`admin-write`):
+
+- `GET /api/admin/analytics/build-lab`
+- `POST /api/admin/analytics/build-lab/generations/{generationId}/promote`
+- `POST /api/admin/analytics/build-lab/generations/{generationId}/rollback`
+- `POST /api/admin/analytics/build-lab/generations/{generationId}/fail`
+
+Promotion revalidates the model calibration/baseline/leakage gates and every action/path evidence
+gate inside an atomic active-generation switch, and re-derives the artifact-manifest checksum. That
+checksum covers `artifactManifestJson` only — it proves the manifest is populated and self-consistent
+with the digest the modeler stored, **not** that the Parquet/model bundle at `artifactUri` is intact.
+
+`promote` answers `204` on success and `409` when the generation is not a valid candidate, failed a
+gate, or lost a race for the active pointer. `rollback` answers `204`, `404` when the target is not a
+`Ready`/`Retired` generation, and **`409` when a competing promotion took the active pointer
+concurrently** — retry once it settles. `fail` abandons a `PendingDataset`/`Modeling`/`Candidate`
+generation with an optional `reason` (`204`, or `404` when it is in no failable state); use it to clear a
+generation wedged in `Modeling` because the offline modeler died holding the lease. All three write an
+`AdminAuditLog` entry (`analytics.buildlab.promote|rollback|fail`) with the actor, target generation,
+request id, and success flag, including on the failure paths.
+
+The generation rows returned by `GET` expose the lease/liveness columns — `leaseOwner`,
+`leaseExpiresAtUtc`, `heartbeatAtUtc` — plus `promotionHistoryJson`, an append-only log of every
+`promote`/`rollback`/`fail` with actor and reason. A `Modeling` row whose lease has expired is reaped
+automatically by the worker after `Analytics:BuildLab:LeaseTimeoutMinutes`; `fail` is the manual
+equivalent.
+
 ## OpenAPI Generation Workflow
 
 The repo keeps the exported spec committed and uses it to generate the TypeScript client during build/check flows.

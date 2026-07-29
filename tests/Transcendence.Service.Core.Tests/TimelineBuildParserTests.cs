@@ -94,6 +94,35 @@ public class TimelineBuildParserTests
     }
 
     [Fact]
+    public void BuildItemLifecycle_PreservesComponentsUndoSaleAndDestructionInOrder()
+    {
+        var events = new[]
+        {
+            Purchase(1, BfSword, 300_000),
+            Purchase(1, Kraken, 600_000),
+            Undo(1, beforeId: Kraken, afterId: 0, 601_000),
+            Purchase(1, InfinityEdge, 900_000),
+            Sold(1, InfinityEdge, 1_000_000),
+            Destroyed(1, BfSword, 1_100_000)
+        };
+
+        var lifecycle = TimelineBuildParser.BuildItemLifecycle(events.Reverse(), Lookup);
+
+        lifecycle.Select(row => row.EventIndex).Should().Equal(0, 1, 2, 3, 4, 5);
+        lifecycle.Select(row => row.EventType).Should().Equal(
+            MatchItemEventType.Purchased,
+            MatchItemEventType.Purchased,
+            MatchItemEventType.Undo,
+            MatchItemEventType.Purchased,
+            MatchItemEventType.Sold,
+            MatchItemEventType.Destroyed);
+        lifecycle[0].ItemId.Should().Be(BfSword);
+        lifecycle[0].IsBuildRelevant.Should().BeFalse("components remain lossless facts even when they are not public stages");
+        lifecycle[2].BeforeId.Should().Be(Kraken);
+        lifecycle[2].AfterId.Should().Be(0);
+    }
+
+    [Fact]
     public void BuildPurchasePaths_SoldAndDestroyedRemoveItemsFromThePath()
     {
         var events = new[]

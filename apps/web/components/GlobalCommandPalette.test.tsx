@@ -100,11 +100,40 @@ describe("GlobalCommandPalette", () => {
 
     const championLabel = await screen.findByText("Kai'Sa");
     const champion = championLabel.closest('[role="option"]');
-    expect(champion).not.toBeNull();
+    if (!champion) throw new Error("Expected a champion command option.");
     await waitFor(() => expect(champion.getAttribute("data-selected")).toBe("true"));
 
     await user.keyboard("{Enter}");
     await waitFor(() => expect(router.push).toHaveBeenCalledWith("/lol/champions/145"));
+  });
+
+  it("keeps the item library navigable while Build Lab is disabled", async () => {
+    const user = userEvent.setup();
+    render(<GlobalCommandPalette />);
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+
+    const input = await screen.findByRole("combobox", { name: "Global search input" });
+    await user.type(input, "items");
+    await screen.findByRole("option", { name: /Build Atlas/i });
+    expect(screen.queryByRole("option", { name: /Build Lab/i })).toBeNull();
+
+    await user.clear(input);
+    await user.type(input, "runes");
+    await screen.findByRole("option", { name: /Rune usage and win rates/i });
+  });
+
+  it("adds Build Lab beside the library once the flag is enabled", async () => {
+    const user = userEvent.setup();
+    render(<GlobalCommandPalette buildLabEnabled />);
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+
+    const input = await screen.findByRole("combobox", { name: "Global search input" });
+    await user.type(input, "build");
+    await screen.findByRole("option", { name: /Build Lab/i });
+    expect(screen.getByRole("option", { name: /Build Atlas/i })).toBeTruthy();
+
+    await user.click(screen.getByRole("option", { name: /Build Lab/i }));
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith("/lol/builds"));
   });
 
   it("keeps multi-search available as command navigation", async () => {

@@ -41,8 +41,12 @@ public sealed class WorkerRecurringJobPolicy(
     public const string RefreshLockLifecycleCleanupJobId = "refresh-lock-lifecycle-cleanup";
     public const string IngestionHealthAlertJobId = "ingestion-health-alert";
     public const string RefreshPrecomputedAnalyticsJobId = "refresh-precomputed-analytics";
+    public const string RefreshChampionMatchupsJobId = "refresh-champion-matchups";
+    public const string RefreshChampionBuildSnapshotsJobId = "refresh-champion-build-snapshots";
     public const string RefreshProAnalyticsJobId = "refresh-pro-analytics";
     public const string RefreshBuildResourceAnalyticsJobId = "refresh-build-resource-analytics";
+    public const string CreateBuildLabGenerationJobId = "create-build-lab-generation";
+    public const string PromoteBuildLabGenerationJobId = "promote-build-lab-generation";
 
     private static readonly HashSet<string> MandatoryBaselineJobIds = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -69,8 +73,12 @@ public sealed class WorkerRecurringJobPolicy(
         RefreshLockLifecycleCleanupJobId,
         IngestionHealthAlertJobId,
         RefreshPrecomputedAnalyticsJobId,
+        RefreshChampionMatchupsJobId,
+        RefreshChampionBuildSnapshotsJobId,
         RefreshProAnalyticsJobId,
-        RefreshBuildResourceAnalyticsJobId
+        RefreshBuildResourceAnalyticsJobId,
+        CreateBuildLabGenerationJobId,
+        PromoteBuildLabGenerationJobId
     ];
 
     private readonly WorkerSchedulingProfileOptions profileOptions = profileOptionsAccessor.Value;
@@ -129,6 +137,18 @@ public sealed class WorkerRecurringJobPolicy(
                 schedule.EnableRefreshPrecomputedAnalytics,
                 ConfigureRefreshPrecomputedAnalytics),
             CreateDescriptor(
+                RefreshChampionMatchupsJobId,
+                "Jobs:Schedule:RefreshChampionMatchupsCron",
+                schedule.RefreshChampionMatchupsCron,
+                schedule.EnableRefreshChampionMatchups,
+                ConfigureRefreshChampionMatchups),
+            CreateDescriptor(
+                RefreshChampionBuildSnapshotsJobId,
+                "Jobs:Schedule:RefreshChampionBuildSnapshotsCron",
+                schedule.RefreshChampionBuildSnapshotsCron,
+                schedule.EnableRefreshChampionBuildSnapshots,
+                ConfigureRefreshChampionBuildSnapshots),
+            CreateDescriptor(
                 RefreshProAnalyticsJobId,
                 "Jobs:Schedule:RefreshProAnalyticsCron",
                 schedule.RefreshProAnalyticsCron,
@@ -140,6 +160,18 @@ public sealed class WorkerRecurringJobPolicy(
                 schedule.RefreshBuildResourceAnalyticsCron,
                 schedule.EnableRefreshBuildResourceAnalytics,
                 ConfigureRefreshBuildResourceAnalytics),
+            CreateDescriptor(
+                CreateBuildLabGenerationJobId,
+                "Jobs:Schedule:CreateBuildLabGenerationCron",
+                schedule.CreateBuildLabGenerationCron,
+                schedule.EnableCreateBuildLabGeneration,
+                ConfigureCreateBuildLabGeneration),
+            CreateDescriptor(
+                PromoteBuildLabGenerationJobId,
+                "Jobs:Schedule:PromoteBuildLabGenerationCron",
+                schedule.PromoteBuildLabGenerationCron,
+                schedule.EnablePromoteBuildLabGeneration,
+                ConfigurePromoteBuildLabGeneration),
             CreateDescriptor(
                 ChampionAnalyticsIngestionJobId,
                 "Jobs:Schedule:ChampionAnalyticsIngestionCron",
@@ -291,6 +323,24 @@ public sealed class WorkerRecurringJobPolicy(
             cronExpression,
             new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
 
+    private static void ConfigureRefreshChampionMatchups(
+        IRecurringJobManager recurringJobManager,
+        string cronExpression) =>
+        recurringJobManager.AddOrUpdate<RefreshChampionMatchupsJob>(
+            RefreshChampionMatchupsJobId,
+            job => job.ExecuteAsync(CancellationToken.None),
+            cronExpression,
+            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
+    private static void ConfigureRefreshChampionBuildSnapshots(
+        IRecurringJobManager recurringJobManager,
+        string cronExpression) =>
+        recurringJobManager.AddOrUpdate<RefreshChampionBuildSnapshotsJob>(
+            RefreshChampionBuildSnapshotsJobId,
+            job => job.ExecuteAsync(CancellationToken.None),
+            cronExpression,
+            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
     private static void ConfigureRefreshProAnalytics(
         IRecurringJobManager recurringJobManager,
         string cronExpression) =>
@@ -306,6 +356,24 @@ public sealed class WorkerRecurringJobPolicy(
         recurringJobManager.AddOrUpdate<RefreshBuildResourceAnalyticsJob>(
             RefreshBuildResourceAnalyticsJobId,
             job => job.ExecuteAsync(false, false, CancellationToken.None),
+            cronExpression,
+            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
+    private static void ConfigureCreateBuildLabGeneration(
+        IRecurringJobManager recurringJobManager,
+        string cronExpression) =>
+        recurringJobManager.AddOrUpdate<CreateBuildLabGenerationJob>(
+            CreateBuildLabGenerationJobId,
+            job => job.ExecuteAsync(CancellationToken.None),
+            cronExpression,
+            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
+    private static void ConfigurePromoteBuildLabGeneration(
+        IRecurringJobManager recurringJobManager,
+        string cronExpression) =>
+        recurringJobManager.AddOrUpdate<PromoteBuildLabGenerationJob>(
+            PromoteBuildLabGenerationJobId,
+            job => job.ExecuteAsync(CancellationToken.None),
             cronExpression,
             new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
 

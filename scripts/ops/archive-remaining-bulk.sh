@@ -13,7 +13,16 @@ WORK="_match_archive_pending"
 SSH_NAS=(ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 "root@${NAS_HOST}")
 pg(){ docker exec -i "$PG" psql -U "$PGU" -d "$PGD" -v ON_ERROR_STOP=1 "$@"; }   # default planner = seq scan (HDD-friendly for bulk)
 
-TABLES=(Matches MatchParticipants MatchParticipantItems MatchParticipantRunes MatchBans MatchParticipantTimelineSnapshots MatchTimelineFetchStates)
+# EVERY table with an ON DELETE CASCADE path to "Matches" must be listed here: the prune is a single
+# DELETE on "Matches", so anything missing is destroyed by the cascade WITHOUT ever being archived.
+# Kept in lockstep with $TABLES in archive-old-patches.sh (cross-check TranscendenceContext's Match
+# relationships when a child table is added). Parents lead so a restore can replay the files in list
+# order; cascade safety does not depend on the order because every export + verify completes before
+# the first DELETE.
+TABLES=(Matches MatchParticipants MatchParticipantItems MatchParticipantRunes MatchBans
+        MatchTeamObjectives MatchParticipantTimelineSnapshots MatchTimelineFetchStates
+        MatchParticipantItemPurchases MatchParticipantSkillOrders
+        MatchParticipantItemEvents MatchParticipantRankContexts MatchTimelineEventPayloads)
 # Row source for table $1 — every table joined to the frozen work table of match IDs.
 where_for(){ case "$1" in
   Matches)                           echo "SELECT m.* FROM \"Matches\" m JOIN ${WORK} a ON m.\"Id\"=a.\"Id\"";;
@@ -21,8 +30,14 @@ where_for(){ case "$1" in
   MatchParticipantItems)             echo "SELECT i.* FROM \"MatchParticipantItems\" i JOIN \"MatchParticipants\" mp ON i.\"MatchParticipantId\"=mp.\"Id\" JOIN ${WORK} a ON mp.\"MatchId\"=a.\"Id\"";;
   MatchParticipantRunes)             echo "SELECT r.* FROM \"MatchParticipantRunes\" r JOIN \"MatchParticipants\" mp ON r.\"MatchParticipantId\"=mp.\"Id\" JOIN ${WORK} a ON mp.\"MatchId\"=a.\"Id\"";;
   MatchBans)                         echo "SELECT b.* FROM \"MatchBans\" b JOIN ${WORK} a ON b.\"MatchId\"=a.\"Id\"";;
+  MatchTeamObjectives)               echo "SELECT o.* FROM \"MatchTeamObjectives\" o JOIN ${WORK} a ON o.\"MatchId\"=a.\"Id\"";;
   MatchParticipantTimelineSnapshots) echo "SELECT ts.* FROM \"MatchParticipantTimelineSnapshots\" ts JOIN ${WORK} a ON ts.\"MatchId\"=a.\"Id\"";;
   MatchTimelineFetchStates)          echo "SELECT fs.* FROM \"MatchTimelineFetchStates\" fs JOIN ${WORK} a ON fs.\"MatchId\"=a.\"Id\"";;
+  MatchParticipantItemPurchases)     echo "SELECT ip.* FROM \"MatchParticipantItemPurchases\" ip JOIN ${WORK} a ON ip.\"MatchId\"=a.\"Id\"";;
+  MatchParticipantSkillOrders)       echo "SELECT so.* FROM \"MatchParticipantSkillOrders\" so JOIN ${WORK} a ON so.\"MatchId\"=a.\"Id\"";;
+  MatchParticipantItemEvents)        echo "SELECT ie.* FROM \"MatchParticipantItemEvents\" ie JOIN ${WORK} a ON ie.\"MatchId\"=a.\"Id\"";;
+  MatchParticipantRankContexts)      echo "SELECT rc.* FROM \"MatchParticipantRankContexts\" rc JOIN ${WORK} a ON rc.\"MatchId\"=a.\"Id\"";;
+  MatchTimelineEventPayloads)        echo "SELECT ep.* FROM \"MatchTimelineEventPayloads\" ep JOIN ${WORK} a ON ep.\"MatchId\"=a.\"Id\"";;
 esac; }
 
 echo "Mode: $([ "$APPLY" = 1 ] && echo APPLY || echo DRY-RUN) | keep newest ${KEEP} | NAS root@${NAS_HOST}:${NAS_DIR}"

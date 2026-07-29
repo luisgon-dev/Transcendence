@@ -339,6 +339,88 @@ namespace Transcendence.Service.Migrations
                     b.ToTable("UserRoles");
                 });
 
+            modelBuilder.Entity("Transcendence.Data.Models.Auth.UserSavedBuild", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ChampionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ItemPathJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<int?>("OpponentChampionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Patch")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("RankingMode")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<string>("Region")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("RuneSelectionsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid?>("ShareId")
+                        .HasColumnType("uuid");
+
+                    b.Property<double?>("SourceAdjustedLift")
+                        .HasColumnType("double precision");
+
+                    b.Property<Guid?>("SourceGenerationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool?>("SourceIsPublishable")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("Spell1Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Spell2Id")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserAccountId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ShareId")
+                        .IsUnique();
+
+                    b.HasIndex("UserAccountId", "UpdatedAtUtc");
+
+                    b.ToTable("UserSavedBuilds");
+                });
+
             modelBuilder.Entity("Transcendence.Data.Models.LiveGame.LiveGameSnapshot", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1222,6 +1304,204 @@ namespace Transcendence.Service.Migrations
                     b.ToTable("TrackedProSummoners");
                 });
 
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Analytics.AdjustedActionEstimate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActionIdsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("ActionKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<double?>("AdjustedWpa")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("AverageTimingMinutes")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("BaselineDefinition")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasDefaultValue("");
+
+                    b.Property<int>("ChampionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("ComputedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double?>("ConfidenceHigh")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("ConfidenceLow")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("CovariateBalance")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("DecisionFamily")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<double>("EffectiveSampleSize")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("EvidenceQuality")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<string>("FallbackScope")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("GenerationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsPublishable")
+                        .HasColumnType("boolean");
+
+                    b.Property<long>("ObservedCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("OpponentChampionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Patch")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("PathPrefixHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("PathPrefixJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<double>("PickRate")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("PropensityOverlap")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("RawWinRate")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("RegionScope")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<bool>("StableAcrossFolds")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Stage")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UnavailableReason")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GenerationId", "ChampionId", "Role", "DecisionFamily", "Stage", "PathPrefixHash");
+
+                    b.HasIndex("GenerationId", "ChampionId", "Role", "OpponentChampionId", "RegionScope", "DecisionFamily", "Stage", "PathPrefixHash", "ActionKey")
+                        .IsUnique();
+
+                    b.ToTable("AdjustedActionEstimates");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Analytics.AdjustedPathEstimate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<double?>("AdjustedLift")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("ChampionId")
+                        .HasColumnType("integer");
+
+                    b.Property<double?>("ConfidenceHigh")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("ConfidenceLow")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("EffectiveSampleSize")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("EstimatedWinProbability")
+                        .HasColumnType("double precision");
+
+                    b.Property<Guid>("GenerationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsPublishable")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ItemPathJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<long>("ObservedCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("OpponentChampionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Patch")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("PathHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("RegionScope")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("UnavailableReason")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GenerationId", "ChampionId", "Role", "OpponentChampionId", "RegionScope", "PathHash")
+                        .IsUnique();
+
+                    b.ToTable("AdjustedPathEstimates");
+                });
+
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Analytics.AnalyticsResponseSnapshot", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1256,6 +1536,122 @@ namespace Transcendence.Service.Migrations
                         .IsUnique();
 
                     b.ToTable("AnalyticsResponseSnapshots");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Analytics.BuildLabGeneration", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ArtifactManifestJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ArtifactSha256")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ArtifactUri")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CodeRevision")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DatasetVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<DateTime?>("HeartbeatAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("IncludedPatchesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("IncludedRegionsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LeaseAcquiredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LeaseExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LeaseOwner")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<long>("MatchCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ModelVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Patch")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime?>("PromotedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PromotionHistoryJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("RankScope")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime?>("RetiredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("SourceCutoffUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("StaticDataVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ValidationMetricsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive")
+                        .IsUnique()
+                        .HasFilter("\"IsActive\"");
+
+                    b.HasIndex("Status", "LeaseExpiresAtUtc");
+
+                    b.HasIndex("Patch", "Status", "CompletedAtUtc");
+
+                    b.ToTable("BuildLabGenerations");
                 });
 
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Analytics.BuildResourcePopulationStat", b =>
@@ -2113,6 +2509,45 @@ namespace Transcendence.Service.Migrations
                     b.ToTable("MatchParticipantItems");
                 });
 
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.MatchParticipantItemEvent", b =>
+                {
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ParticipantId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EventIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("AfterId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("BeforeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("BuildCategory")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EventType")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsBuildRelevant")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("ItemId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TimestampMs")
+                        .HasColumnType("integer");
+
+                    b.HasKey("MatchId", "ParticipantId", "EventIndex");
+
+                    b.HasIndex("MatchId", "ParticipantId", "TimestampMs");
+
+                    b.ToTable("MatchParticipantItemEvents");
+                });
+
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.MatchParticipantItemPurchase", b =>
                 {
                     b.Property<Guid>("MatchId")
@@ -2136,6 +2571,42 @@ namespace Transcendence.Service.Migrations
                     b.HasKey("MatchId", "ParticipantId", "PurchaseIndex");
 
                     b.ToTable("MatchParticipantItemPurchases");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.MatchParticipantRankContext", b =>
+                {
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ParticipantId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Division")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int?>("LeaguePoints")
+                        .HasColumnType("integer");
+
+                    b.Property<long?>("ObservationOffsetSeconds")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("ObservedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Source")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Tier")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("MatchId", "ParticipantId");
+
+                    b.HasIndex("Tier", "ObservedAtUtc");
+
+                    b.ToTable("MatchParticipantRankContexts");
                 });
 
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.MatchParticipantRune", b =>
@@ -2205,6 +2676,9 @@ namespace Transcendence.Service.Migrations
                     b.Property<int>("Cs")
                         .HasColumnType("integer");
 
+                    b.Property<int>("CurrentGold")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("DerivedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -2212,6 +2686,12 @@ namespace Transcendence.Service.Migrations
                         .HasColumnType("integer");
 
                     b.Property<int>("Gold")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("JungleCs")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LaneCs")
                         .HasColumnType("integer");
 
                     b.Property<int>("Level")
@@ -2282,6 +2762,33 @@ namespace Transcendence.Service.Migrations
                     b.HasKey("MatchId", "TeamId");
 
                     b.ToTable("MatchTeamObjectives");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.MatchTimelineEventPayload", b =>
+                {
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("EventIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("TimestampMs")
+                        .HasColumnType("integer");
+
+                    b.HasKey("MatchId", "EventIndex");
+
+                    b.HasIndex("MatchId", "EventType", "TimestampMs");
+
+                    b.ToTable("MatchTimelineEventPayloads");
                 });
 
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.MatchTimelineFetchState", b =>
@@ -2606,6 +3113,17 @@ namespace Transcendence.Service.Migrations
                     b.Navigation("UserAccount");
                 });
 
+            modelBuilder.Entity("Transcendence.Data.Models.Auth.UserSavedBuild", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.Auth.UserAccount", "UserAccount")
+                        .WithMany("SavedBuilds")
+                        .HasForeignKey("UserAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("UserAccount");
+                });
+
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Account.ChampionMastery", b =>
                 {
                     b.HasOne("Transcendence.Data.Models.LoL.Account.Summoner", "Summoner")
@@ -2714,6 +3232,28 @@ namespace Transcendence.Service.Migrations
                     b.Navigation("Summoner");
                 });
 
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Analytics.AdjustedActionEstimate", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.LoL.Analytics.BuildLabGeneration", "Generation")
+                        .WithMany("ActionEstimates")
+                        .HasForeignKey("GenerationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Generation");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Analytics.AdjustedPathEstimate", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.LoL.Analytics.BuildLabGeneration", "Generation")
+                        .WithMany("PathEstimates")
+                        .HasForeignKey("GenerationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Generation");
+                });
+
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Analytics.BuildResourcePopulationStat", b =>
                 {
                     b.HasOne("Transcendence.Data.Models.LoL.Analytics.BuildResourceSnapshot", "Snapshot")
@@ -2809,7 +3349,29 @@ namespace Transcendence.Service.Migrations
                     b.Navigation("MatchParticipant");
                 });
 
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.MatchParticipantItemEvent", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.LoL.Match.Match", "Match")
+                        .WithMany()
+                        .HasForeignKey("MatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Match");
+                });
+
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.MatchParticipantItemPurchase", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.LoL.Match.Match", "Match")
+                        .WithMany()
+                        .HasForeignKey("MatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Match");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.MatchParticipantRankContext", b =>
                 {
                     b.HasOne("Transcendence.Data.Models.LoL.Match.Match", "Match")
                         .WithMany()
@@ -2857,6 +3419,17 @@ namespace Transcendence.Service.Migrations
                 {
                     b.HasOne("Transcendence.Data.Models.LoL.Match.Match", "Match")
                         .WithMany("TeamObjectives")
+                        .HasForeignKey("MatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Match");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.MatchTimelineEventPayload", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.LoL.Match.Match", "Match")
+                        .WithMany()
                         .HasForeignKey("MatchId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -2917,6 +3490,8 @@ namespace Transcendence.Service.Migrations
                     b.Navigation("RiotAccount");
 
                     b.Navigation("Roles");
+
+                    b.Navigation("SavedBuilds");
                 });
 
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Account.Summoner", b =>
@@ -2940,6 +3515,13 @@ namespace Transcendence.Service.Migrations
                     b.Navigation("SeasonCoverages");
 
                     b.Navigation("SeasonOverviewStats");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.LoL.Analytics.BuildLabGeneration", b =>
+                {
+                    b.Navigation("ActionEstimates");
+
+                    b.Navigation("PathEstimates");
                 });
 
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Analytics.BuildResourceSnapshot", b =>

@@ -43,6 +43,7 @@ type NavigationItem = {
   detail: string;
   href: string;
   keywords: string;
+  requiresBuildLab?: boolean;
 };
 
 const NAVIGATION_ITEMS: readonly NavigationItem[] = [
@@ -65,10 +66,23 @@ const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     keywords: "champion analytics"
   },
   {
+    label: "Build Lab",
+    detail: "Adjusted item, rune, and spell decisions",
+    href: "/lol/builds",
+    keywords: "items runes spells builds wpa lab",
+    requiresBuildLab: true
+  },
+  {
     label: "Build Atlas",
     detail: "Items and runes",
     href: "/lol/items",
-    keywords: "items runes builds"
+    keywords: "items runes builds atlas library"
+  },
+  {
+    label: "Runes",
+    detail: "Rune usage and win rates",
+    href: "/lol/runes",
+    keywords: "runes keystone shards library"
   },
   {
     label: "Live Game",
@@ -136,7 +150,7 @@ function ResultGroup({
   );
 }
 
-export function GlobalCommandPalette() {
+export function GlobalCommandPalette({ buildLabEnabled = false }: { buildLabEnabled?: boolean }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
@@ -285,15 +299,18 @@ export function GlobalCommandPalette() {
   }, [champions, trimmedQuery]);
 
   const navigationResults = useMemo(() => {
-    if (!trimmedQuery) return NAVIGATION_ITEMS;
-    return NAVIGATION_ITEMS.map((item) => ({
+    const navigationItems = buildLabEnabled
+      ? NAVIGATION_ITEMS
+      : NAVIGATION_ITEMS.filter((item) => !item.requiresBuildLab);
+    if (!trimmedQuery) return navigationItems;
+    return navigationItems.map((item) => ({
       item,
       score: searchMatchScore(`${item.label} ${item.keywords}`, trimmedQuery)
     }))
       .filter((result) => result.score != null)
       .sort((a, b) => a.score! - b.score! || a.item.label.localeCompare(b.item.label))
       .map((result) => result.item);
-  }, [trimmedQuery]);
+  }, [buildLabEnabled, trimmedQuery]);
 
   const directPlayerPath = parsedRiotId
     ? `/lol/summoners/${region}/${encodeRiotIdPath(parsedRiotId)}`

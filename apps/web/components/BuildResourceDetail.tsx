@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { LaneIcon } from "@/components/ui/LaneIcon";
 import { buildResourceHref, type BuildResourceDetailResponse, type BuildResourceKind } from "@/lib/buildResources";
+import { analyticsFeatureFlags } from "@/lib/analyticsFeatureFlags";
 import { formatGames, formatPercent, winRateColorClass } from "@/lib/format";
 import { championDisplayName } from "@/lib/gameDisplay";
 import { roleDisplayLabel } from "@/lib/roles";
@@ -17,7 +18,7 @@ import {
   type RuneStaticData
 } from "@/lib/staticData";
 
-export function BuildResourceDetail({
+export async function BuildResourceDetail({
   kind,
   response,
   champions,
@@ -40,6 +41,10 @@ export function BuildResourceDetail({
     ? itemMap ? itemIconUrl(itemMap.version, resource.resourceId) : null
     : runeMeta ? runeIconUrl(runeMeta.icon) : null;
   const description = itemMeta?.plaintext ?? resource.description;
+  // A reference link is only a link if its destination exists: /lol/builds 404s while buildLab is
+  // off, so the reference flag can never render one on its own.
+  const flags = await analyticsFeatureFlags();
+  const showBuildLabLinks = flags.buildReferenceLinks && flags.buildLab;
 
   return (
     <div className="grid gap-7">
@@ -67,6 +72,14 @@ export function BuildResourceDetail({
             </div>
             <h1 className="type-display mt-4">{resource.name}</h1>
             {description ? <p className="type-lead mt-3 max-w-3xl">{description}</p> : null}
+            {showBuildLabLinks ? (
+              <Link
+                href="/lol/builds"
+                className="type-ui mt-5 inline-flex min-h-11 items-center rounded-control bg-primary px-4 font-semibold text-primary-fg transition hover:bg-primary/92"
+              >
+                Compare this in champion context
+              </Link>
+            ) : null}
           </div>
         </div>
 
@@ -98,6 +111,7 @@ export function BuildResourceDetail({
                   <th className="px-3 py-3 text-right">Win rate</th>
                   <th className="px-3 py-3 text-right">Share</th>
                   <th className="px-5 py-3 text-right sm:px-6">Games</th>
+                  {showBuildLabLinks ? <th className="px-5 py-3 text-right sm:px-6">Analyze</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -120,6 +134,16 @@ export function BuildResourceDetail({
                       <td className={`px-3 py-3 text-right font-semibold ${winRateColorClass(row.winRate)}`}>{formatPercent(row.winRate, { input: "ratio" })}</td>
                       <td className="px-3 py-3 text-right text-fg/68">{formatPercent(row.shareOfResourceUses, { input: "ratio" })}</td>
                       <td className="px-5 py-3 text-right text-fg/72 sm:px-6">{formatGames(row.games)}</td>
+                      {showBuildLabLinks ? (
+                        <td className="px-5 py-3 text-right sm:px-6">
+                          <Link
+                            href={`/lol/builds/${row.championId}?${query.toString()}`}
+                            className="font-semibold text-primary hover:underline"
+                          >
+                            Build Lab
+                          </Link>
+                        </td>
+                      ) : null}
                     </tr>
                   );
                 })}

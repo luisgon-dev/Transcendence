@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 import { adminDelete, adminPost } from "@/lib/adminBackend";
 
@@ -92,6 +93,67 @@ export async function bulkDeleteJobsAction(formData: FormData) {
 export async function invalidateAnalyticsCacheAction() {
   await adminPost("/api/admin/cache/invalidate");
   revalidatePath("/admin");
+}
+
+const BUILD_LAB_PATH = "/admin/analytics/build-lab";
+
+// adminBackend collapses a failed call into one Error whose message carries the upstream status. A
+// 409 on promote/rollback is the expected concurrent-promotion (or failed-gate) outcome, not a bug
+// worth an error page, so it is reported on the page instead of thrown.
+function generationActionMessage(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : "";
+  if (message.includes("(409)")) {
+    return "Another generation owns the active pointer, or this one did not pass its gates. Refresh and retry.";
+  }
+  if (message.includes("(404)")) return "That generation no longer exists.";
+  return fallback;
+}
+
+async function generationAction(
+  formData: FormData,
+  path: (encodedId: string) => string,
+  fallbackError: string,
+  body?: unknown
+) {
+  const id = String(formData.get("generationId") ?? "").trim();
+  if (!id) return;
+
+  let failure: string | null = null;
+  try {
+    await adminPost(path(encodeURIComponent(id)), body);
+  } catch (error) {
+    failure = generationActionMessage(error, fallbackError);
+  }
+
+  revalidatePath(BUILD_LAB_PATH);
+  // redirect() throws its own control-flow signal, so it must stay outside the try above.
+  if (failure) redirect(`${BUILD_LAB_PATH}?error=${encodeURIComponent(failure)}`);
+}
+
+export async function promoteBuildLabGenerationAction(formData: FormData) {
+  return generationAction(
+    formData,
+    (id) => `/api/admin/analytics/build-lab/generations/${id}/promote`,
+    "The generation could not be promoted."
+  );
+}
+
+export async function rollbackBuildLabGenerationAction(formData: FormData) {
+  return generationAction(
+    formData,
+    (id) => `/api/admin/analytics/build-lab/generations/${id}/rollback`,
+    "The generation could not be made active."
+  );
+}
+
+export async function failBuildLabGenerationAction(formData: FormData) {
+  const reason = String(formData.get("reason") ?? "").trim();
+  return generationAction(
+    formData,
+    (id) => `/api/admin/analytics/build-lab/generations/${id}/fail`,
+    "The generation could not be abandoned.",
+    { reason: reason || null }
+  );
 }
 
 export async function revokeApiKeyAction(formData: FormData) {

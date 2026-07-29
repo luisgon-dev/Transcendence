@@ -8,7 +8,9 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: "*",
       allow: "/",
-      disallow: ["/admin/", "/api/", "/favorites", "/login"]
+      // Shared-build links are capability URLs: revoking one cannot un-index it, so they must
+      // never be crawled in the first place.
+      disallow: ["/admin/", "/api/", "/favorites", "/login", "/lol/builds/shared/"]
     },
     sitemap: `${origin}/sitemap.xml`,
     host: origin

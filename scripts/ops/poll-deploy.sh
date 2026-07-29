@@ -9,7 +9,7 @@
 #   digest for these packages (reports updateAvailable=false even when the registry
 #   digest changed), so pushes never auto-deployed. See task P1.3b.
 #
-#   This script replaces wud for the three app services with an OUTBOUND-ONLY
+#   This script replaces wud for the app services with an OUTBOUND-ONLY
 #   release poll (prod -> ghcr): it compares both the manifest digest and signed
 #   OCI revision label, needs no inbound exposure, no CI secret, and no self-hosted
 #   runner. Run it every ~60s via the systemd timer
@@ -22,6 +22,10 @@
 #   If either differs, `compose pull` + `up -d` just
 #   that service (--no-deps, so postgres/redis are never touched), then optionally
 #   post a Discord notification.
+#
+#   Services flagged `optional` in $SERVICES (analytics-modeler) are polled last, are skipped in
+#   silence when their container is absent (Compose profile off on this host), verify as "running"
+#   because they ship no healthcheck, and never set the run's exit status.
 #
 # INSTALL (on prod, as root):
 #   install -D -m 0755 poll-deploy.sh /root/deploy/poll-deploy.sh
@@ -43,16 +47,30 @@ RESOLUTION_ALERT_THRESHOLD="${POLL_DEPLOY_RESOLUTION_ALERT_THRESHOLD:-3}"
 HEALTH_TIMEOUT_SECONDS="${POLL_DEPLOY_HEALTH_TIMEOUT_SECONDS:-420}"
 HEALTH_POLL_SECONDS="${POLL_DEPLOY_HEALTH_POLL_SECONDS:-5}"
 
+# analytics-modeler sits behind a Compose profile; without the profile enabled `pull`/`up -d` cannot
+# resolve it. Every compose invocation below names exactly one service, so enabling the profile here
+# can never start anything extra.
+export COMPOSE_PROFILES="${COMPOSE_PROFILES:+${COMPOSE_PROFILES},}analytics-modeling"
+
 [[ "$RESOLUTION_ALERT_THRESHOLD" =~ ^[1-9][0-9]*$ ]] || RESOLUTION_ALERT_THRESHOLD=3
 [[ "$HEALTH_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]] || HEALTH_TIMEOUT_SECONDS=420
 [[ "$HEALTH_POLL_SECONDS" =~ ^[1-9][0-9]*$ ]] || HEALTH_POLL_SECONDS=5
 
-# service (compose) : container name : ghcr image repo
+# service (compose) : container name : ghcr image repo [ : "optional" ]
+# "optional" = the service ships no container healthcheck, may not be deployed on this host
+# (compose profile), and must never gate an app rollout. Optional entries therefore go LAST: the loop
+# in main() aborts on the first failure, so anything before them could block their siblings.
 SERVICES=(
   "service:transcendence-service:transcendence-service"
   "webapi:transcendence-webapi:transcendence-webapi"
   "web:transcendence-web:transcendence-web"
+  "analytics-modeler:transcendence-analytics-modeler:transcendence-analytics-modeler:optional"
 )
+
+# Set per-service by deploy_one: 1 when the image declares no healthcheck, so a running container —
+# not a passing healthcheck — is the success signal. Read by wait_for_healthy on both the deploy and
+# the rollback path (rollback_service calls it indirectly, hence a global rather than a parameter).
+ALLOW_NO_HEALTHCHECK=0
 
 log() { printf '%s poll-deploy: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 
@@ -173,9 +191,21 @@ wait_for_healthy() {
       unhealthy|exited|dead|no-healthcheck:exited|no-healthcheck:dead)
         break
         ;;
-      no-healthcheck:*)
-        log "ERROR ${svc}: deployed image has no container healthcheck (${status#no-healthcheck:})"
+      no-healthcheck:running)
+        if [ "$ALLOW_NO_HEALTHCHECK" = "1" ]; then
+          log "RUNNING ${svc}: image declares no healthcheck; a running container is the success signal"
+          return 0
+        fi
+        log "ERROR ${svc}: deployed image has no container healthcheck (running)"
         return 1
+        ;;
+      no-healthcheck:*)
+        # A healthcheck-less service that is still created/restarting keeps polling until the timeout;
+        # for app services a missing healthcheck stays an immediate hard failure.
+        if [ "$ALLOW_NO_HEALTHCHECK" != "1" ]; then
+          log "ERROR ${svc}: deployed image has no container healthcheck (${status#no-healthcheck:})"
+          return 1
+        fi
         ;;
     esac
     sleep "$HEALTH_POLL_SECONDS"
@@ -264,8 +294,18 @@ run_migrations() {
 }
 
 deploy_one() {
-  local svc="$1" container="$2" repo="$3"
+  local svc="$1" container="$2" repo="$3" optional="${4:-}"
   local remote current remote_rev current_rev release_id previous_image_id previous_container_id failed_file failed_release
+  if [ "$optional" = "optional" ]; then
+    ALLOW_NO_HEALTHCHECK=1
+    # Profile-gated services are absent on hosts that do not run them; that is not a deploy fault, so
+    # exit before the digest lookups instead of tripping the resolution-failure alert every poll.
+    if ! docker inspect "$container" >/dev/null 2>&1; then
+      return 0
+    fi
+  else
+    ALLOW_NO_HEALTHCHECK=0
+  fi
   remote="$(remote_digest "$repo")"
   if [ -z "$remote" ]; then record_resolution_failure "$svc" remote; return 1; fi
   clear_resolution_failure "$svc" remote
@@ -341,8 +381,12 @@ main() {
   [ -f "$COMPOSE_FILE" ] || { log "FATAL compose file not found: $COMPOSE_FILE"; exit 1; }
   local rc=0
   for entry in "${SERVICES[@]}"; do
-    IFS=':' read -r svc container repo <<<"$entry"
-    if ! deploy_one "$svc" "$container" "$repo"; then
+    IFS=':' read -r svc container repo optional <<<"$entry"
+    if ! deploy_one "$svc" "$container" "$repo" "$optional"; then
+      if [ "$optional" = "optional" ]; then
+        log "WARN ${svc}: optional service did not deploy; app services are unaffected"
+        continue
+      fi
       rc=1
       log "ABORT remaining services: ${svc} did not deploy successfully"
       break

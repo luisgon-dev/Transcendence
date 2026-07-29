@@ -5,6 +5,7 @@ import { AnalyticsRegionFilter } from "@/components/AnalyticsRegionFilter";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import type { AnalyticsRegionOption } from "@/lib/analyticsRegionShared";
+import { analyticsFeatureFlags } from "@/lib/analyticsFeatureFlags";
 import {
   buildResourceHref,
   filterAndSortBuildResources,
@@ -24,7 +25,7 @@ import {
   type RuneStaticData
 } from "@/lib/staticData";
 
-export function BuildResourceIndex({
+export async function BuildResourceIndex({
   kind,
   response,
   champions,
@@ -50,6 +51,10 @@ export function BuildResourceIndex({
   const isItems = kind === "items";
   const noun = isItems ? "Item" : "Rune";
   const entries = filterAndSortBuildResources(response?.entries ?? [], query, sort);
+  // A reference link is only a link if its destination exists: /lol/builds 404s while buildLab is
+  // off, so the reference flag can never render one on its own.
+  const flags = await analyticsFeatureFlags();
+  const showBuildLabLinks = flags.buildReferenceLinks && flags.buildLab;
 
   return (
     <div className="grid gap-7">
@@ -59,23 +64,25 @@ export function BuildResourceIndex({
           {response?.patch ? <Badge className="border-primary/35 bg-primary/10 text-primary">Patch {response.patch}</Badge> : null}
           <Badge>{response ? `${formatGames(response.totalParticipantGames)} player-games` : "Analytics unavailable"}</Badge>
         </div>
-        <p className="type-kicker mt-6 text-primary/85">Build Atlas</p>
-        <h1 className="type-display mt-3 max-w-4xl">{noun} analytics, grounded in real ranked builds.</h1>
+        <p className="type-kicker mt-6 text-primary/85">Resource library</p>
+        <h1 className="type-display mt-3 max-w-4xl">{noun} mechanics and observed ranked usage.</h1>
         <p className="type-lead mt-4 max-w-3xl">
           See what gets picked, how it performs, and which champion-role pairs use it most. Win rate is observational, so read it beside sample size and pick rate.
         </p>
         <div className="mt-7 flex flex-wrap gap-3">
+          {showBuildLabLinks ? (
+            <Link
+              href="/lol/builds"
+              className="type-ui inline-flex min-h-11 items-center rounded-control bg-primary px-4 font-semibold text-primary-fg transition hover:bg-primary/92"
+            >
+              Compare choices in Build Lab
+            </Link>
+          ) : null}
           <Link
             href={buildResourceHref(isItems ? "runes" : "items", null, activeRegion)}
             className="type-ui inline-flex min-h-11 items-center rounded-control border border-border/70 bg-surface/75 px-4 font-semibold text-fg transition hover:border-primary/35 hover:text-primary"
           >
             Browse {isItems ? "runes" : "items"}
-          </Link>
-          <Link
-            href={activeRegion === "ALL" ? "/lol/champions" : `/lol/champions?region=${encodeURIComponent(activeRegion)}`}
-            className="type-ui inline-flex min-h-11 items-center rounded-control px-3 font-semibold text-fg/70 transition hover:text-fg"
-          >
-            Champion builds
           </Link>
         </div>
       </section>

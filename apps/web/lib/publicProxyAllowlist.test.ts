@@ -18,9 +18,30 @@ describe("isAllowedPublicProxyPath", () => {
 
   });
 
+  describe("allows narrowly scoped public analytics reads", () => {
+    it("allows a champion Build Lab estimate", () => {
+      expect(
+        isAllowedPublicProxyPath("GET", ["lol", "analytics", "build-lab", "266"])
+      ).toBe(true);
+    });
+
+    it("allows a token-addressed shared build", () => {
+      expect(
+        isAllowedPublicProxyPath("GET", [
+          "lol",
+          "saved-builds",
+          "6d4c3c55-5cf3-477a-8dab-c9d8ba1ddeea"
+        ])
+      ).toBe(true);
+    });
+  });
+
   describe("blocks everything outside the public surface", () => {
     it("rejects non-summoner namespaces", () => {
       expect(isAllowedPublicProxyPath("GET", ["lol", "analytics", "tier-list"])).toBe(false);
+      expect(isAllowedPublicProxyPath("GET", ["lol", "analytics", "build-lab"])).toBe(false);
+      expect(isAllowedPublicProxyPath("GET", ["lol", "analytics", "build-lab", "266", "extra"])).toBe(false);
+      expect(isAllowedPublicProxyPath("GET", ["lol", "saved-builds", "not-a-share-id"])).toBe(false);
       expect(isAllowedPublicProxyPath("GET", ["lol", "champions", "Aatrox"])).toBe(false);
     });
 
@@ -34,6 +55,14 @@ describe("isAllowedPublicProxyPath", () => {
     it("rejects POST requests on the anonymous summoner surface", () => {
       expect(isAllowedPublicProxyPath("POST", ["lol", "summoners", "na", "Faker", "NA1"])).toBe(false);
       expect(isAllowedPublicProxyPath("POST", ["lol", "summoners", "na", "Faker", "NA1", "refresh"])).toBe(false);
+      expect(isAllowedPublicProxyPath("POST", ["lol", "analytics", "build-lab", "266"])).toBe(false);
+      expect(
+        isAllowedPublicProxyPath("POST", [
+          "lol",
+          "saved-builds",
+          "6d4c3c55-5cf3-477a-8dab-c9d8ba1ddeea"
+        ])
+      ).toBe(false);
     });
 
     it("rejects PUT and DELETE on the public surface", () => {

@@ -56,6 +56,28 @@
     "BuildAtlas": {
       "MatchBatchSize": 500,
       "CommandTimeoutSeconds": 120
+    },
+    "BuildLab": {
+      "Enabled": false,
+      "DatasetVersion": "build-lab-v1",
+      "CodeRevision": "local",
+      "PriorPatchesToBorrow": 2,
+      "MinimumObservedActions": 1000,
+      "MinimumEffectiveSampleSize": 500,
+      "MaximumConfidenceIntervalWidth": 0.03,
+      "MinimumPropensityOverlap": 0.9,
+      "MaximumCovariateBalance": 0.1,
+      "MaximumOverallEce": 0.015,
+      "MaximumTimeBandEce": 0.025,
+      "RetainedGenerations": 4,
+      "LeaseTimeoutMinutes": 120,
+      "RetiredGenerationGraceMinutes": 30
+    },
+    "SavedBuilds": {
+      "MaximumPerUser": 200,
+      "DefaultPageSize": 50,
+      "MaximumPageSize": 200,
+      "MaterialLiftDelta": 0.005
     }
   }
 }

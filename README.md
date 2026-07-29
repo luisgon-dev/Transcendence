@@ -25,7 +25,7 @@ Tier lists, champion builds, tracked pro solo-queue picks, and live summoner pro
 
 ## What is it?
 
-Transcendence is a Riot analytics platform built for both the competitive climber and the casual browser. Climbers come for tier lists, matchups, and optimal builds; casual players come to check post-game stats and explore champions. Under the hood it's a single monorepo: a **.NET 10** Web API and background worker feed a **Next.js 16** frontend, with PostgreSQL, Redis, Hangfire, and a generated TypeScript API client wiring it all together.
+Transcendence is a Riot analytics platform built for both the competitive climber and the casual browser. Climbers come for tier lists, matchups, and context-adjusted Build Lab decisions; casual players come to check post-game stats and explore champions. Under the hood it's a single monorepo: a **.NET 10** Web API and background worker feed a **Next.js 16** frontend, with an isolated offline Python modeler, PostgreSQL, Redis, Hangfire, object-storage artifacts, and a generated TypeScript API client wiring it all together.
 
 The live site redeploys automatically once changes land on `main`.
 
@@ -65,6 +65,7 @@ The live site redeploys automatically once changes land on `main`.
 | --- | --- |
 | **Backend API** | ASP.NET Core (.NET 10), Swagger / OpenAPI, health checks |
 | **Worker** | .NET Worker Service + Hangfire (prioritized job queues) |
+| **Offline analytics** | Python, Parquet, calibrated structural WP + cross-fitted doubly robust estimates |
 | **Data** | EF Core 10 over PostgreSQL; Redis for caching &amp; data protection |
 | **Frontend** | Next.js 16.2 (App Router), React 19.2, TypeScript |
 | **API contract** | OpenAPI → generated `@transcendence/api-client` (openapi-typescript + tsup) |
@@ -160,11 +161,12 @@ pnpm web:test     # Vitest
 <details>
 <summary><strong>Optional: developer tooling and observability</strong></summary>
 
-Two utility services ship in the app `compose.yml` behind profiles:
+Three services ship in the app `compose.yml` behind profiles:
 
 ```bash
 docker compose --profile local-tools up   # pgAdmin → http://localhost:5050
 docker compose --profile ops-tools up      # Dozzle (container log viewer) → http://localhost:9999
+docker compose --profile analytics-modeling up -d analytics-modeler   # offline Build Lab modeler
 ```
 
 Prometheus and Grafana run from the dedicated monitoring stack after the app network exists:
@@ -177,8 +179,8 @@ docker compose -f config/monitoring/compose.yml up -d
 # Grafana → http://localhost:3300 (admin + file-backed password)
 ```
 
-Grafana provisions API, worker, ingestion, infrastructure, and real-user Web Vitals dashboards plus
-alert rules. Prometheus scrapes the web frontend, API, worker, host, PostgreSQL, and Redis. See
+Grafana provisions API, worker, ingestion, Build Lab, infrastructure, and real-user Web Vitals
+dashboards plus alert rules. Prometheus scrapes the web frontend, API, worker, host, PostgreSQL, and Redis. See
 [`config/monitoring/README.md`](config/monitoring/README.md) for local configuration, least-privilege
 database credentials, and the production deploy workflow.
 
@@ -205,6 +207,7 @@ pnpm backend:test
 ```
 Transcendence/
 ├─ Transcendence.WebAPI/         # REST API — auth, Hangfire admin, Swagger, health checks
+├─ analytics/modeler/            # Offline Build Lab dataset/model/estimate worker
 ├─ Transcendence.Service/        # Hangfire background worker (prioritized job queues)
 ├─ Transcendence.Service.Core/   # Shared domain: services, jobs, Riot integrations, analytics
 ├─ Transcendence.Data/           # EF Core — DbContext, models, repositories

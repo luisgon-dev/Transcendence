@@ -28,4 +28,12 @@ public class MatchTimelineIngestionJobTests
         marks.Should().Contain(15); // anchor kept even though the game is shorter
         marks.Should().NotContain(12); // never sample past game length (besides the anchor)
     }
+
+    [Fact]
+    public void BuildMinuteMarks_OneMinuteModelCadencePreservesEveryMinute()
+    {
+        var marks = MatchTimelineIngestionJob.BuildMinuteMarks(20 * 60, 1, 15);
+
+        marks.Should().Equal(Enumerable.Range(1, 20));
+    }
 }

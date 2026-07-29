@@ -68,6 +68,43 @@ pin a service to an immutable `:sha-<short>` tag in the compose file and `compos
 > this poller is the app release source of truth and two independent recreators can race each other.
 > wud may continue watching public Docker Hub sidecars (portainer/dozzle/grafana/prometheus).
 
+### `analytics-modeler` release (manual, not polled)
+
+`transcendence-analytics-modeler` is built, tagged, labelled, SBOM'd, and cosign-signed by the same
+`Docker Images` workflow as the three app images (path-filtered on `analytics/modeler/**`), but
+`SERVICES` in `poll-deploy.sh` still lists only `service`/`webapi`/`web`. Two properties of the script
+have to change before the modeler can be added, and both are real, not cosmetic:
+
+- **Optional service.** The modeler lives behind the `analytics-modeling` Compose profile, so on a host
+  where the profile is off the container does not exist. `local_digest`/`local_revision` would return
+  empty, `record_resolution_failure` would fire, `deploy_one` would return non-zero, and `main` would
+  `break` — aborting the whole poll cycle and alerting every 60s. It needs an explicit optional flag
+  whose missing container is a silent skip (and it must be polled **last** so it can never gate the app
+  services).
+- **No healthcheck.** The modeler is a batch poller with no server to probe, so
+  `container_health_status` reports `no-healthcheck:running` and `wait_for_healthy` returns failure on
+  the `no-healthcheck:*` branch — every modeler deploy would "fail" and roll back. It needs a
+  running-after-grace verification path for services declared as healthcheck-less. Do **not** paper over
+  this by adding a trivially-passing healthcheck to Compose; a healthcheck that cannot fail is worse
+  than none.
+
+Until that lands, release it by hand on prod:
+
+```bash
+cd "$COMPOSE_DIR"   # /var/lib/docker/volumes/portainer_data/_data/compose/2
+docker compose -p transcendence --env-file stack.env -f docker-compose.yml \
+  --profile analytics-modeling pull analytics-modeler
+docker compose -p transcendence --env-file stack.env -f docker-compose.yml \
+  --profile analytics-modeling up -d --no-deps analytics-modeler
+docker inspect transcendence-analytics-modeler \
+  --format '{{ index .Config.Labels "org.opencontainers.image.revision"}}'   # verify the build
+docker logs -f transcendence-analytics-modeler
+```
+
+Rollback is the same `MODELER_IMAGE=ghcr.io/luisgon-dev/transcendence-analytics-modeler:sha-<short>`
+pin used for the app images. Stopping the modeler mid-generation is safe: it marks the in-flight
+generation `Failed` on SIGTERM, and the worker's lease reaper would have done so anyway.
+
 ## `install-matchup-performance-db.sql` — online matchup source preparation
 
 Run once before deploying the resumable matchup migration:
@@ -117,6 +154,33 @@ tail -f /root/trn-archive.log                                # run history
 incident** — the `COPY` of millions of rows saturates the HDD. Restore instructions are
 in each script's header. Deleted rows free pages for reuse inside Postgres; the file does
 not shrink without `VACUUM FULL` (intentionally avoided — it locks the table).
+
+#### The `TABLES` list is exhaustive by contract
+
+The prune is a single cascading `DELETE` on `Matches`, so **a child table missing from a script's
+`TABLES` array is destroyed by the cascade without ever being archived** — silently, with a successful
+exit code. Adding a `Match` child in `TranscendenceContext` therefore requires adding it to
+`archive-old-patches.sh` *and* `archive-remaining-bulk.sh` in the same change. Cross-check against
+every `HasForeignKey(x => x.MatchId)` with `OnDelete(DeleteBehavior.Cascade)` plus the two
+participant-level children (`MatchParticipantItems`, `MatchParticipantRunes`). The current full set is:
+
+```
+Matches MatchParticipants MatchParticipantItems MatchParticipantRunes MatchBans
+MatchTeamObjectives MatchParticipantTimelineSnapshots MatchTimelineFetchStates
+MatchParticipantItemPurchases MatchParticipantSkillOrders
+MatchParticipantItemEvents MatchParticipantRankContexts MatchTimelineEventPayloads
+```
+
+A listed table that does not exist on the host yet (migration not applied) fails its pre-export count,
+which skips the entire patch — the failure mode is fail-closed, never prune-without-archive.
+
+> **Known gap in existing archives.** `MatchTeamObjectives`, `MatchParticipantItemPurchases`, and
+> `MatchParticipantSkillOrders` were absent from both scripts' lists before this change, so any patch
+> already archived and pruned has **no NAS copy of those three tables**. They are unrecoverable for
+> those patches; only the retained (unpruned) patches still hold them. Restores from older archives
+> will produce `Matches` with no objectives/purchase-order/skill-order detail, which is expected, not
+> corruption. `archive-remaining-bulk.sh` still carries the old seven-table list and must be updated
+> before it is ever run again.
 
 ## Postgres memory tuning (declarative)
 

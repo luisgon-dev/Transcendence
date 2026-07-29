@@ -8,14 +8,11 @@ using Transcendence.Service.Core.Services.Analytics.Interfaces;
 namespace Transcendence.Service.Core.Services.Jobs;
 
 /// <summary>
-/// Rebuilds the precomputed champion-analytics aggregate tables (win-rate/pick-rate/role-rank source +
-/// ban-rate numerator/denominator) for the active patch on a cadence, so the analytics read path serves
-/// win-rates and the tier list as fast indexed lookups instead of raw-match scans. The heavy GROUP BY /
-/// distinct-match work runs here, off the request path. Resolving the active patch each run means a patch
-/// rollover is picked up automatically on the next cycle. Runs on the reserved
-/// <see cref="HangfireQueues.AnalyticsWarm"/> lane so it is unaffected by shared-queue saturation.
+/// Rebuilds only the tabular champion-analytics core (win-rate/pick-rate/role-rank source +
+/// ban-rate numerator/denominator). Build snapshots and matchup generations have independent jobs so a
+/// long build sweep cannot delay matchup freshness, and neither surface extends this job's ownership.
 /// </summary>
-[DisableConcurrentExecution(timeoutInSeconds: 60 * 60)]
+[DisableConcurrentExecution(timeoutInSeconds: 30 * 60)]
 [AutomaticRetry(Attempts = 0)]
 public class RefreshPrecomputedAnalyticsJob(
     TranscendenceContext db,
@@ -40,28 +37,25 @@ public class RefreshPrecomputedAnalyticsJob(
             return;
         }
 
-        PrecomputedAnalyticsFullRefreshResult result;
+        PrecomputedAnalyticsRefreshResult result;
         try
         {
-            result = await refresher.RefreshAllAsync(patch, ct);
+            result = await refresher.RefreshTabularCoreAsync(patch, ct);
         }
         finally
         {
-            // Phases publish independently. Invalidate even when a later phase fails so any earlier
-            // committed surface and its freshness label become visible immediately.
+            // The replacement is transactional. Invalidate in finally so a commit that completed before
+            // a cancellation/follow-up failure is not hidden behind a stale process cache.
             await analyticsService.InvalidateAnalyticsCacheForPatchAsync(patch, CancellationToken.None);
-            await analyticsService.InvalidateProAnalyticsCacheAsync(CancellationToken.None);
         }
 
         logger.LogInformation(
-            "Precompute refresh patch {Patch} completed in {ElapsedMs}ms: {RoleTier} role-tier, {ScopeMatch} scope-match, {Ban} ban, {Matchup} matchup, {Build} build, {Pro} pro rows.",
+            "Tabular analytics refresh patch {Patch} completed in {ElapsedMs}ms: {RoleTier} role-tier, {ScopeMatch} scope-match, {Ban} ban, {Grade} grade rows.",
             patch,
             stopwatch.ElapsedMilliseconds,
-            result.Core.RoleTierRows,
-            result.Core.ScopeMatchCountRows,
-            result.Core.BanScopeRows,
-            result.MatchupRows,
-            result.BuildRows,
-            result.ProRows);
+            result.RoleTierRows,
+            result.ScopeMatchCountRows,
+            result.BanScopeRows,
+            result.GradeRows);
     }
 }

@@ -10,12 +10,15 @@ import { cn } from "@/lib/cn";
 
 const COMPACT_HEADER_PATHS = new Set(["/account/login", "/account/register"]);
 
-type NavLink = { href: string; label: string; mobileLabel?: string };
+type NavLink = { href: string; label: string; mobileLabel?: string; requiresBuildLab?: boolean };
 
+// Build Lab ships behind a flag; the item/rune library is unconditional, so navigation never loses
+// a surface when the flag is off.
 const NAV_LINKS: NavLink[] = [
   { href: "/lol/tierlist", label: "Tier List" },
   { href: "/lol/leaderboards", label: "Leaderboards", mobileLabel: "Ranks" },
   { href: "/lol/champions", label: "Champions" },
+  { href: "/lol/builds", label: "Build Lab", mobileLabel: "Builds", requiresBuildLab: true },
   { href: "/lol/items", label: "Build Atlas", mobileLabel: "Items" },
   { href: "/lol/live", label: "Live Game", mobileLabel: "Live" },
   { href: "/lol/pro-builds", label: "Pro Solo Q", mobileLabel: "Pro" }
@@ -33,10 +36,12 @@ function navLinkClass(pathname: string | null, prefix: string): string {
 
 export function SiteHeaderClient({
   children,
-  patch
+  patch,
+  buildLabEnabled = false
 }: {
   children: React.ReactNode;
   patch?: string | null;
+  buildLabEnabled?: boolean;
 }) {
   const pathname = usePathname();
   const compact = pathname ? COMPACT_HEADER_PATHS.has(pathname) : false;
@@ -70,7 +75,7 @@ export function SiteHeaderClient({
 
         {!compact ? (
           <nav className="order-3 flex w-full min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap border-t border-border/30 pt-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden md:order-2 md:w-auto md:flex-1 md:border-t-0 md:pt-0 md:pl-3">
-            {NAV_LINKS.map((link) => (
+            {NAV_LINKS.filter((link) => buildLabEnabled || !link.requiresBuildLab).map((link) => (
               <Link key={link.href} href={link.href} className={navLinkClass(pathname, link.href)}>
                 <span className="sm:hidden">{link.mobileLabel ?? link.label}</span>
                 <span className="hidden sm:inline">{link.label}</span>

@@ -659,3 +659,536 @@ groups:
           group_by:
             - alertname
             - grafana_folder
+
+      # --- Build Lab -------------------------------------------------------------------------------
+      # Build Lab ships disabled (`Analytics:BuildLab:Enabled=false`), and the worker reports 0 for
+      # every gauge while it is off or while no generation is in the relevant state. Each rule below
+      # therefore guards on `> 0` and uses noDataState: OK, so a disabled feature never pages.
+
+      # The dead-modeler detector. A generation is created in PendingDataset and only the Python
+      # modeler can claim it (`BUILD_LAB_POLL_SECONDS`, default 300, so a healthy claim happens within
+      # ~5 minutes). If the modeler container is not running, the row is never claimed, never leased,
+      # and never reaped — the reaper only touches Modeling — so no other Build Lab rule can see it:
+      # the Modeling gauge stays 0, no training-failure event is emitted, and the create job refuses to
+      # create a second in-flight generation for the patch. Threshold 6h = 72x the poll interval, and
+      # the create cron runs once a day (02:15), so a dead modeler pages the same morning while a claim
+      # that is merely queued behind a still-running training run does not.
+      - uid: trn-buildlab-unclaimed-generation
+        title: Build Lab generation unclaimed by the modeler
+        condition: B
+        for: 15m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 86400
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              editorMode: code
+              expr: max(transcendence_buildlab_generation_status_age_seconds{job="transcendence-worker",status="PendingDataset"}) > 0
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: prometheus
+                uid: prometheus
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: math
+              expression: $A > 21600
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: __expr__
+                uid: __expr__
+        labels:
+          severity: warning
+        annotations:
+          summary: A pending Build Lab generation has waited over six hours for the modeler
+          description: No modeler has leased the pending generation. Confirm transcendence-analytics-modeler is running (`docker compose --profile analytics-modeling up -d analytics-modeler`) and can reach the database; until it claims the row, no new generation can be created for this patch.
+        notification_settings:
+          receiver: transcendence-discord
+          group_by:
+            - alertname
+            - grafana_folder
+
+      # The wedge detector, for the case the reaper cannot resolve. A generation in Modeling is owned by
+      # the modeler, which renews HeartbeatAtUtc/LeaseExpiresAtUtc every BUILD_LAB_HEARTBEAT_SECONDS
+      # (default 60), and this gauge is the age of that heartbeat. So a healthy run reports ~60s. When
+      # heartbeats stop, the lease expires BUILD_LAB_LEASE_SECONDS (default 900) after the last one and
+      # the next promote tick (`*/10 * * * *`) reaps the row: bounded at 900 + 600 = 1500s. Threshold
+      # 2700s allows two missed promote ticks on top of that, so the only way to sustain it is a reaper
+      # that is not running (promote job disabled, worker dead) or a Modeling row with no lease deadline
+      # at all, which waits out the far slower LeaseTimeoutMinutes (default 120) backstop. The old 3h
+      # threshold was unreachable: the reaper always won first.
+      - uid: trn-buildlab-modeling-wedged
+        title: Build Lab generation wedged in Modeling
+        condition: B
+        for: 10m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 21600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              editorMode: code
+              expr: max(transcendence_buildlab_generation_status_age_seconds{job="transcendence-worker",status="Modeling"}) > 0
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: prometheus
+                uid: prometheus
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: math
+              expression: $A > 2700
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: __expr__
+                uid: __expr__
+        labels:
+          severity: warning
+        annotations:
+          summary: A Build Lab generation has been Modeling without a heartbeat for 45 minutes
+          description: The modeler leased a generation and stopped heartbeating, and the lease reaper has not reclaimed it. Confirm the promote-build-lab-generation recurring job is enabled and running, then check transcendence-analytics-modeler logs and the row's lease/heartbeat columns; a wedged generation also blocks creation of the next one for that patch.
+        notification_settings:
+          receiver: transcendence-discord
+          group_by:
+            - alertname
+            - grafana_folder
+
+      # One lost training run is the whole signal. Only a reaped Modeling lease emits this event, at most
+      # one generation is in flight per patch, and the create cron runs once a day — so two failures in
+      # six hours (the previous condition) could not happen even with a permanently dead modeler, while a
+      # single event means the day's only training attempt was lost. The window is therefore a full day
+      # and the condition is "any": increase() extrapolates over its range, so a single +1 step does not
+      # reliably evaluate to exactly 1.
+      - uid: trn-buildlab-training-failures
+        title: Build Lab lost a training run
+        condition: B
+        for: 5m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 86400
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              editorMode: code
+              expr: sum(increase(transcendence_buildlab_generation_events_total{job="transcendence-worker",phase="training",result="error"}[24h]))
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: prometheus
+                uid: prometheus
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: math
+              expression: $A > 0
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: __expr__
+                uid: __expr__
+        labels:
+          severity: warning
+        annotations:
+          summary: A Build Lab generation reached Failed during modeling in the last day
+          description: A modeling lease was reaped, so that generation's training run is lost and the create job only retries tomorrow. Read the generation FailureReason and the modeler logs; never relax an Analytics:BuildLab threshold in response — build-lab-v1 refuses lowered gates by design.
+        notification_settings:
+          receiver: transcendence-discord
+          group_by:
+            - alertname
+            - grafana_folder
+
+      # A promotion that fails its gates is normal and self-healing; a promotion that has not
+      # succeeded for two days while a generation pipeline is running means the served estimates are
+      # drifting away from the live patch.
+      - uid: trn-buildlab-generation-stale
+        title: Build Lab active generation stale
+        condition: B
+        for: 30m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 604800
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              editorMode: code
+              expr: max(transcendence_buildlab_active_generation_age_seconds{job="transcendence-worker"}) > 0
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: prometheus
+                uid: prometheus
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: math
+              expression: $A > 172800
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: __expr__
+                uid: __expr__
+        labels:
+          severity: warning
+        annotations:
+          summary: No Build Lab generation has promoted in two days
+          description: The active generation is over 48h old. Public Adjusted WPA is still served (from that generation) but is increasingly stale against the live patch. Check candidate gate failures and dataset lag.
+        notification_settings:
+          receiver: transcendence-discord
+          group_by:
+            - alertname
+            - grafana_folder
+
+      # Dataset lag = now - the active generation's frozen SourceCutoffUtc. Distinct from generation
+      # age: a generation can promote quickly and still be trained on a week-old cutoff if the
+      # timeline corpus stopped advancing.
+      - uid: trn-buildlab-dataset-lag
+        title: Build Lab dataset lag high
+        condition: B
+        for: 30m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 604800
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              editorMode: code
+              expr: max(transcendence_buildlab_dataset_lag_seconds{job="transcendence-worker"}) > 0
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: prometheus
+                uid: prometheus
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: math
+              expression: $A > 259200
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: __expr__
+                uid: __expr__
+        labels:
+          severity: warning
+        annotations:
+          summary: Build Lab is serving estimates from a source cutoff over three days old
+          description: The active generation's frozen source cutoff is more than 72h behind now. Timeline ingestion at schema v2 may have stalled, or generation creation is not running.
+        notification_settings:
+          receiver: transcendence-discord
+          group_by:
+            - alertname
+            - grafana_folder
+
+      # An operator (or an automated guard) reverting the active pointer is always worth a message —
+      # informational rather than a fault, so it stays at info severity.
+      - uid: trn-buildlab-rollback
+        title: Build Lab generation rolled back
+        condition: B
+        for: 0m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              editorMode: code
+              expr: sum(increase(transcendence_buildlab_generation_events_total{job="transcendence-worker",phase="rollback",result="success"}[15m]))
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: prometheus
+                uid: prometheus
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: math
+              expression: $A >= 1
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: __expr__
+                uid: __expr__
+        labels:
+          severity: info
+        annotations:
+          summary: The Build Lab active generation pointer was rolled back
+          description: A Ready or Retired generation was made active again. Expect served Adjusted WPA values and provenance to change; confirm this was intentional.
+        notification_settings:
+          receiver: transcendence-discord
+          group_by:
+            - alertname
+            - grafana_folder
+
+      # A generation that promotes with zero publishable action estimates cannot happen (promotion
+      # rejects it), so this only fires if the count collapses on an already-active generation —
+      # i.e. the public surface silently went empty.
+      - uid: trn-buildlab-no-published-estimates
+        title: Build Lab active generation publishes nothing
+        condition: B
+        for: 15m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              editorMode: code
+              expr: max(transcendence_buildlab_published_estimates{job="transcendence-worker",kind="action"}) and (max(transcendence_buildlab_active_generation_age_seconds{job="transcendence-worker"}) > 0)
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: prometheus
+                uid: prometheus
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: math
+              expression: $A < 1
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: __expr__
+                uid: __expr__
+        labels:
+          severity: critical
+        annotations:
+          summary: The active Build Lab generation has no publishable action estimates
+          description: An active generation is serving zero publishable estimates, so every Build Lab request returns unavailable. Inspect the evidence gates and consider rolling back to the previous generation.
+        notification_settings:
+          receiver: transcendence-discord
+          group_by:
+            - alertname
+            - grafana_folder
+
+      # Coverage collapse, measured against the surface's own recent peak rather than an absolute floor:
+      # during the initial ramp coverage only grows (so this cannot page while the corpus fills), and the
+      # 20-scope floor on the 7d peak keeps a first, deliberately tiny generation out of scope. An empty
+      # or disabled pipeline reports 0, whose peak is 0, so the `and` yields no series and the rule stays
+      # Normal on noDataState: OK.
+      - uid: trn-buildlab-coverage-collapse
+        title: Build Lab champion-role coverage collapsed
+        condition: B
+        for: 30m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 604800
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              editorMode: code
+              expr: (max(transcendence_buildlab_coverage_scopes{job="transcendence-worker",scope="champion_role"}) / clamp_min(max(max_over_time(transcendence_buildlab_coverage_scopes{job="transcendence-worker",scope="champion_role"}[7d])), 1)) and (max(max_over_time(transcendence_buildlab_coverage_scopes{job="transcendence-worker",scope="champion_role"}[7d])) >= 20)
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: prometheus
+                uid: prometheus
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: math
+              expression: $A < 0.5
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: __expr__
+                uid: __expr__
+        labels:
+          severity: warning
+        annotations:
+          summary: The active Build Lab generation covers under half the champion-role scopes it did this week
+          description: Published champion-role coverage fell below 50% of its 7-day peak, so Build Lab silently stopped answering for champions it used to answer for even though the estimate count may still look healthy. Check the evidence gates, the generation's match count, and dataset lag.
+        notification_settings:
+          receiver: transcendence-discord
+          group_by:
+            - alertname
+            - grafana_folder
+
+      # An invariant, not a tuning knob: promotion re-applies the evidence gates, so every publishable
+      # row must carry an effective sample size at or above Analytics:BuildLab:MinimumEffectiveSampleSize
+      # (v1 floor 500, and build-lab-v1 refuses to lower it). A weakest published cell under that floor
+      # means grading did not run or did not apply. Nothing published reports 0, which the `> 0` filter
+      # drops rather than treating as a violation.
+      - uid: trn-buildlab-evidence-gate-breach
+        title: Build Lab published an estimate below the evidence floor
+        condition: B
+        for: 15m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              editorMode: code
+              expr: max(transcendence_buildlab_effective_sample_size{job="transcendence-worker",stat="minimum"} > 0)
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: prometheus
+                uid: prometheus
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: math
+              expression: $A < 500
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: __expr__
+                uid: __expr__
+        labels:
+          severity: warning
+        annotations:
+          summary: The weakest published Build Lab estimate is below the v1 effective-sample-size floor
+          description: A publishable action estimate carries an effective sample size under 500, which promotion's evidence gates should have made impossible. Treat it as a grading or gate-application fault, not as a threshold to lower, and consider rolling back the generation.
+        notification_settings:
+          receiver: transcendence-discord
+          group_by:
+            - alertname
+            - grafana_folder
+
+      # The same shape of invariant for calibration: promotion rejects a candidate whose validation
+      # metrics exceed Analytics:BuildLab:MaximumOverallEce (0.015) or MaximumTimeBandEce (0.025), so an
+      # active generation reporting worse than that was published without those gates. An unreported or
+      # unparseable metric is 0, which fails both comparisons and correctly stays quiet.
+      - uid: trn-buildlab-calibration-breach
+        title: Build Lab active generation exceeds its calibration gates
+        condition: B
+        for: 15m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              editorMode: code
+              expr: max(transcendence_buildlab_calibration_error{job="transcendence-worker",metric="overall_ece"} > 0.015) or max(transcendence_buildlab_calibration_error{job="transcendence-worker",metric="max_time_band_ece"} > 0.025)
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: prometheus
+                uid: prometheus
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: math
+              expression: $A > 0
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: __expr__
+                uid: __expr__
+        labels:
+          severity: warning
+        annotations:
+          summary: The active Build Lab generation reports calibration error above the promotion gates
+          description: The served generation's overall ECE is above 0.015 or its worst time-band ECE above 0.025, which promotion should have rejected. Every published Adjusted WPA is anchored on that calibrated score, so treat the numbers as untrustworthy and roll back.
+        notification_settings:
+          receiver: transcendence-discord
+          group_by:
+            - alertname
+            - grafana_folder

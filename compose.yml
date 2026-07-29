@@ -88,6 +88,9 @@ services:
       PORT: 3000
       TRN_BACKEND_BASE_URL: http://webapi:8080
       TRN_BACKEND_API_KEY: ${WEB_TRN_BACKEND_API_KEY}
+      TRN_FEATURE_BUILD_LAB: ${TRN_FEATURE_BUILD_LAB:-false}
+      TRN_FEATURE_CHAMPION_RECOMMENDATIONS: ${TRN_FEATURE_CHAMPION_RECOMMENDATIONS:-false}
+      TRN_FEATURE_BUILD_REFERENCE_LINKS: ${TRN_FEATURE_BUILD_REFERENCE_LINKS:-false}
       # Safe is the production default. Set TRN_ERROR_VERBOSITY=verbose only for a short-lived
       # local debugging session; verbose mode can expose upstream/internal failure detail.
       TRN_ERROR_VERBOSITY: ${TRN_ERROR_VERBOSITY:-safe}
@@ -153,6 +156,9 @@ services:
       Auth__RiotRso__RedirectUri: ${RIOT_RSO_REDIRECT_URI:-https://transcend.kronic.one/api/session/riot/callback}
       OperationalLogs__DirectoryPath: /var/log/transcendence
       ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Application Name=transcendence-webapi;Maximum Pool Size=${WEBAPI_DB_POOL_MAX:-20};Minimum Pool Size=0
+      # The serving layer reads the same flag: BuildLabService answers "not enabled" without it, so
+      # the API would stay dark even after a generation was promoted by the worker.
+      Analytics__BuildLab__Enabled: ${BUILD_LAB_ENABLED:-false}
       <<: *app-env
     ports:
       - "${WEBAPI_PORT:-8080}:8080"
@@ -184,6 +190,13 @@ services:
       DOTNET_ENVIRONMENT: Production
       OperationalLogs__DirectoryPath: /var/log/transcendence
       ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Application Name=transcendence-worker;Maximum Pool Size=${SERVICE_DB_POOL_MAX:-35};Minimum Pool Size=0
+      Analytics__BuildLab__Enabled: ${BUILD_LAB_ENABLED:-false}
+      Analytics__BuildLab__CodeRevision: ${BUILD_LAB_CODE_REVISION:-local}
+      # Must stay comfortably above BUILD_LAB_LEASE_SECONDS: this is the window after which the
+      # coordinator reaps a heartbeat-less `Modeling` generation as abandoned.
+      Analytics__BuildLab__LeaseTimeoutMinutes: ${BUILD_LAB_LEASE_TIMEOUT_MINUTES:-120}
+      Jobs__Schedule__EnableCreateBuildLabGeneration: ${BUILD_LAB_ENABLED:-false}
+      Jobs__Schedule__EnablePromoteBuildLabGeneration: ${BUILD_LAB_ENABLED:-false}
       <<: *app-env
     depends_on:
       postgres:
@@ -194,6 +207,53 @@ services:
         condition: service_completed_successfully
     volumes:
       - operational_logs:/var/log/transcendence
+    networks:
+      - transcendence-net
+
+  analytics-modeler:
+    # Published like every other app service so prod can pull `:main` (the poll-deploy path);
+    # `build:` stays for local `--build` iteration exactly as web/webapi/service do.
+    image: ${MODELER_IMAGE:-ghcr.io/luisgon-dev/transcendence-analytics-modeler:main}
+    build:
+      context: .
+      dockerfile: analytics/modeler/Dockerfile
+    container_name: transcendence-analytics-modeler
+    labels:
+      wud.watch: "false"
+    restart: unless-stopped
+    profiles: ["analytics-modeling"]
+    cpus: "${BUILD_LAB_MODELER_CPUS:-4.0}"
+    mem_limit: "${BUILD_LAB_MODELER_MEMORY_LIMIT:-8g}"
+    pids_limit: 512
+    environment:
+      BUILD_LAB_DATABASE_URL: host=postgres port=5432 dbname=${POSTGRES_DB} user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} application_name=transcendence-modeler
+      # Required, >= 32 chars, and never committed: it keys the surrogate match/participant IDs in
+      # the deidentified export. Rotating it re-pseudonymizes future exports.
+      # Deliberately `:-` and not `:?`: Compose interpolates the whole file before it filters by
+      # profile, so a required-variable form here would break `docker compose up` for the DEFAULT
+      # stack on any host that has no salt. The modeler itself refuses to start without a >=32-char
+      # value (Settings.from_env), so the failure stays scoped to the container that needs the secret.
+      BUILD_LAB_DEIDENTIFICATION_SALT: ${BUILD_LAB_DEIDENTIFICATION_SALT:-}
+      BUILD_LAB_ARTIFACT_DIR: /artifacts
+      BUILD_LAB_POLL_SECONDS: ${BUILD_LAB_POLL_SECONDS:-300}
+      BUILD_LAB_RUN_ONCE: ${BUILD_LAB_RUN_ONCE:-false}
+      # Keep BUILD_LAB_LEASE_SECONDS below the worker's Analytics:BuildLab:LeaseTimeoutMinutes so the
+      # heartbeat renews before the .NET reaper reclaims a healthy run.
+      BUILD_LAB_LEASE_SECONDS: ${BUILD_LAB_LEASE_SECONDS:-900}
+      BUILD_LAB_HEARTBEAT_SECONDS: ${BUILD_LAB_HEARTBEAT_SECONDS:-60}
+      BUILD_LAB_MAX_TRAINING_ROWS: ${BUILD_LAB_MAX_TRAINING_ROWS:-250000}
+      # BUILD_LAB_LEASE_OWNER is intentionally NOT set: the modeler derives `hostname:pid`, so two
+      # instances can never claim the same lease identity.
+      LOG_LEVEL: ${BUILD_LAB_LOG_LEVEL:-INFO}
+      BUILD_LAB_S3_ENDPOINT: ${BUILD_LAB_S3_ENDPOINT:-}
+      BUILD_LAB_S3_BUCKET: ${BUILD_LAB_S3_BUCKET:-}
+      BUILD_LAB_S3_ACCESS_KEY: ${BUILD_LAB_S3_ACCESS_KEY:-}
+      BUILD_LAB_S3_SECRET_KEY: ${BUILD_LAB_S3_SECRET_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - build_lab_artifacts:/artifacts
     networks:
       - transcendence-net
 
@@ -240,6 +300,7 @@ volumes:
   redis_data:
   pgadmin_data:
   operational_logs:
+  build_lab_artifacts:
 
 networks:
   transcendence-net:

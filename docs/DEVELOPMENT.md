@@ -335,6 +335,11 @@ chain, and the auth/authz middleware — things SQLite and the EF InMemory provi
 It runs in CI via the solution-wide `dotnet test Transcendence.sln` step (GitHub `ubuntu-latest` has Docker
 preinstalled, so Testcontainers works with no extra configuration).
 
+**Python modeler tier (`analytics/modeler/tests`).** The offline Build Lab pipeline is not part of the
+.NET solution, so it has its own `modeler` CI job in `.github/workflows/ci-web-backend.yml`: it creates
+a venv on the runner's interpreter, installs `-e '.[test]'`, and runs `pytest`. Locally that is the
+same two commands from `analytics/modeler` (see "Build Lab modeling and promotion").
+
 Current `web:test` scope:
 - Utility/unit tests in `apps/web/lib/*.test.ts`
 - Component, route-handler, and telemetry tests in `apps/web/**/*.test.ts(x)`
@@ -460,13 +465,187 @@ failure reason for diagnosis, but their resource/population payload and processe
 deleted immediately (and swept again after each successful promotion). Cleanup is best-effort after
 promotion so a storage-hygiene failure can never demote a successfully published generation.
 
+### Build Lab modeling and promotion
+
+Build Lab is shadow-only by default. `Analytics:BuildLab:Enabled`,
+`Jobs:Schedule:EnableCreateBuildLabGeneration`, and
+`Jobs:Schedule:EnablePromoteBuildLabGeneration` all default to `false`. Note that Emerald+ coverage at
+timeline schema v2 cannot accrue *before* enablement — the flag is what makes ingestion capture and
+stamp v2 at all — so the flip is the start of the backfill, not the reward for it. Enable it only with
+object storage configured and disk headroom confirmed, and read "Enabling Build Lab on an existing
+corpus" below first: the flip costs a multi-day, rate-gated re-ingestion of the retained corpus.
+
+The offline modeler is built and published like every other app service
+(`ghcr.io/luisgon-dev/transcendence-analytics-modeler`, path-filtered on `analytics/modeler/**`) and
+runs under an optional Compose profile so it never starts with the default stack:
+
+```bash
+docker compose --profile analytics-modeling up -d analytics-modeler          # published :main image
+docker compose --profile analytics-modeling up --build analytics-modeler     # local iteration
+```
+
+Environment variables Compose actually supplies, and the code that reads each one:
+
+| Variable | Consumed by |
+| --- | --- |
+| `BUILD_LAB_ENABLED` | `Analytics__BuildLab__Enabled` on the **worker** (generation/promotion, timeline extras + the effective timeline schema version) *and* the **WebAPI** (serving — without it the API answers "not enabled" even after a promotion), plus both `Jobs__Schedule__Enable{Create,Promote}BuildLabGeneration` keys — one switch, not four |
+| `BUILD_LAB_CODE_REVISION` | worker: `Analytics__BuildLab__CodeRevision` (generation provenance) |
+| `BUILD_LAB_LEASE_TIMEOUT_MINUTES` | worker: `Analytics__BuildLab__LeaseTimeoutMinutes` (default `120`, floor 1) — **backstop only**, for a `Modeling` row with `LeaseExpiresAtUtc IS NULL`; normal reclamation runs off the modeler's own lease deadline (see "Leases and the wedge state") |
+| `BUILD_LAB_DATABASE_URL` | modeler; Compose supplies the PostgreSQL service URL |
+| `BUILD_LAB_DEIDENTIFICATION_SALT` | modeler — **secret**, no default, must be ≥ 32 chars or the container refuses to start |
+| `BUILD_LAB_ARTIFACT_DIR` | modeler (default `/artifacts`) |
+| `BUILD_LAB_POLL_SECONDS` | modeler (default `300`, floor `30`) |
+| `BUILD_LAB_RUN_ONCE` | modeler; `true` processes one pending generation and exits |
+| `BUILD_LAB_LEASE_SECONDS`, `BUILD_LAB_HEARTBEAT_SECONDS` | modeler lease renewal (defaults `900` / `60`; the heartbeat is additionally clamped to ≤ ¼ of the lease) |
+| `BUILD_LAB_MAX_TRAINING_ROWS` | modeler; chronological sample ceiling for the design matrix (default `250000`, floor `20000`) |
+| `BUILD_LAB_LOG_LEVEL` | modeler `LOG_LEVEL` (default `INFO`) |
+| `BUILD_LAB_S3_*` (`ENDPOINT`/`BUCKET`/`ACCESS_KEY`/`SECRET_KEY`) | modeler artifact upload |
+| `BUILD_LAB_MODELER_CPUS`, `BUILD_LAB_MODELER_MEMORY_LIMIT` | Compose container guardrails |
+| `MODELER_IMAGE` | Compose image pin for rollback (`:sha-<short>`) |
+| `TRN_FEATURE_BUILD_LAB`, `TRN_FEATURE_CHAMPION_RECOMMENDATIONS`, `TRN_FEATURE_BUILD_REFERENCE_LINKS` | web; independently expose each consumer surface after promotion |
+
+`BUILD_LAB_LEASE_OWNER` is read by the modeler but deliberately **not** set in Compose: it defaults to
+`hostname:pid`, so two modeler instances can never claim the same lease identity. Set it only for a
+one-off manual run you want to recognise in the generation rows.
+
+Everything else under `Analytics:BuildLab` (the publication thresholds below, `DatasetVersion`,
+`PriorPatchesToBorrow`, `RetainedGenerations`, `RetiredGenerationGraceMinutes`) is config-file only —
+set it in `config/backend.shared.json`, not through an env var.
+
+`BUILD_LAB_DEIDENTIFICATION_SALT` is a secret and ships as an **empty** placeholder in `.env.example`;
+generate a real one (`openssl rand -hex 32`) into the deployed `.env` before enabling Build Lab and
+never commit it. It keys the HMAC surrogate match/participant ids in the Parquet export, so a guessable
+salt makes the export re-identifiable, and rotating it re-pseudonymizes every future export (old
+exports keep their old surrogates and cannot be joined to new ones). Compose passes it with `:-` rather
+than the required-variable `:?` form on purpose: Compose interpolates the whole file *before* it filters
+by profile, so `:?` would break `docker compose up` for the default stack on any host without a salt.
+The modeler enforces the requirement itself and exits with a clear message.
+
+The S3 settings target any S3-compatible object store. If they are absent, artifacts stay in the
+`build_lab_artifacts` volume and the manifest URI is `file://...`. Training exports contain
+generation-scoped surrogate match/participant identifiers and never contain Riot IDs or PUUIDs.
+
+**Leases and the wedge state.** `Modeling` is the only status the .NET side cannot leave on its own —
+the Python modeler owns it. The modeler claims a `PendingDataset` row and stamps
+`LeaseExpiresAtUtc = now + BUILD_LAB_LEASE_SECONDS`, then pushes that deadline (and `HeartbeatAtUtc`)
+forward every `BUILD_LAB_HEARTBEAT_SECONDS` from a background thread. Both Build Lab jobs run the
+reaper first, and the reaper reads the two columns differently:
+
+- **`LeaseExpiresAtUtc` in the past** → failed, owner named in `FailureReason`. This is the path that
+  actually runs: a healthy run is never reclaimed because each heartbeat moves the deadline, and a dead
+  modeler is reclaimed one `BUILD_LAB_LEASE_SECONDS` (default 900) after its last heartbeat, at the
+  next `promote-build-lab-generation` tick — so ~25 minutes at the default 10-minute cron.
+- **`LeaseExpiresAtUtc IS NULL`** → failed once `HeartbeatAtUtc ?? LeaseAcquiredAtUtc ?? CreatedAtUtc`
+  is older than `LeaseTimeoutMinutes` (default 120). The modeler always writes a deadline, so this is a
+  backstop for a `Modeling` row that got there some other way (manual SQL, a future writer). Raising or
+  lowering `LEASE_TIMEOUT_MINUTES` therefore does **not** change how fast a dead modeler is reclaimed
+  — `BUILD_LAB_LEASE_SECONDS` does — and the old advice to keep
+  `LEASE_SECONDS < LEASE_TIMEOUT_MINUTES × 60` is not what protects a healthy run.
+
+Reaping matters because the coordinator refuses to create a second in-flight generation for a patch, so
+a wedged row blocks the pipeline. `POST /api/admin/analytics/build-lab/generations/{id}/fail` is the
+manual equivalent. A `PendingDataset` row is **not** reaped — nothing holds it — so a modeler that never
+starts leaves it queued forever, silently: watch the `trn-buildlab-unclaimed-generation` alert
+(`config/monitoring/`), not the wedge alert, for that failure.
+
+Run the modeler tests from `analytics/modeler` after installing its test extra (CI runs the same two
+commands in the `modeler` job):
+
+```bash
+python -m pip install -e '.[test]'
+python -m pytest
+```
+
+Publication defaults under `Analytics:BuildLab` are 1,000 observed actions, effective sample size
+500, confidence width at most 0.03, overlap at least 0.90, weighted balance at most 0.10, overall ECE
+at most 0.015, and time-band ECE at most 0.025. These are configuration for stricter operation and
+observability; `build-lab-v1` rejects any lowering. Introduce a new `DatasetVersion` and complete a
+fresh shadow validation to change methodology.
+
+Promotion is the gate that makes those numbers meaningful. `PromoteCandidateAsync` refuses a
+candidate whose structural win model fails overall/time-band ECE, fails to beat the descriptive
+baseline on Brier score and log loss, or fails the held-out-patch or leakage check; the generation is
+marked `Failed` and can never become active. So no served Adjusted WPA figure originates from a
+generation whose win model missed calibration.
+
+`ArtifactSha256` is the SHA-256 of `ArtifactManifestJson`, so the promoter's check proves the stored
+manifest is internally consistent with the checksum the modeler recorded in the same transaction. It
+is **not** a content hash of the Parquet/joblib bundle at `ArtifactUri` and does not detect a
+corrupted or swapped artifact in object storage — verify the bundle out-of-band before trusting a
+re-hydrated artifact.
+
+#### Deploying timeline schema v2
+
+`MatchTimelineIngestionJob` carries two versions: `BaselineTimelineSchemaVersion = 1` (ordered item
+purchases + skill orders, `FrameIntervalMinutes` frames — what every ingest captures) and
+`CurrentTimelineSchemaVersion = 2` (the Build Lab payload). `TargetSchemaVersion(buildLabEnabled)`
+picks between them, and the job only re-ingests a `Success` timeline whose `SchemaVersion` is **below
+the target**. So **deploying this change with `BUILD_LAB_ENABLED=false` re-fetches nothing**: the
+target stays v1, the corpus is already at v1, and no Riot budget is spent. The multi-day sweep is
+bought by the flag flip, not by the deploy — see "Enabling Build Lab on an existing corpus".
+
+- **Migration lock window.** `AddBuildLabAnalytics` adds three `integer NOT NULL DEFAULT 0` columns
+  to `MatchParticipantTimelineSnapshots` (~22.5M rows) and creates the new Build Lab / event tables.
+  A constant default is a metadata-only `ADD COLUMN` on PostgreSQL 11+, so there is no table
+  rewrite; the hot-table lint passes it for exactly that reason. It still takes a brief
+  `ACCESS EXCLUSIVE` lock, which queues behind any long-running reader — do not deploy during an
+  analytics sweep or an `archive-old-patches.sh` run.
+- **Storage sizing.** With `Analytics:BuildLab:Enabled=false` the frame cadence stays at
+  `Jobs:TimelineIngestion:FrameIntervalMinutes` (default 2) and the three modeling-only tables stay
+  empty. **Turning Build Lab on drops the cadence to one minute, which roughly doubles
+  `MatchParticipantTimelineSnapshots`** (~22.5M → ~45M rows for the retained corpus) and starts writing
+  `MatchTimelineEventPayloads` — one `jsonb` row per *persisted* event (the item lifecycle plus
+  `CHAMPION_KILL`/`BUILDING_KILL`/`ELITE_MONSTER_KILL`, with null union members dropped; every other
+  Match-V5 event type is discarded at ingestion) — plus `MatchParticipantItemEvents` and
+  `MatchParticipantRankContexts`. Confirm free space against the retention policy (`KEEP_PATCHES`, see
+  `scripts/ops/README.md`) *before* flipping the flag.
+- **The flag gates the payload *and* the stamp, together.** The one-minute cadence, the item lifecycle
+  events, the raw event payloads, the rank contexts, **and** the version the ingest stamps are all
+  derived from `Analytics:BuildLab:Enabled` on the same run. So a v2 row is proof the extras are
+  present, a v1 row is proof they are not, and the generation cohort filter (which requires
+  `SchemaVersion >= 2` *and* an Emerald+ rank context per participant) can trust the stamp. A flag-off
+  deployment can never manufacture a v2 row that silently lacks the payload.
+
+#### Enabling Build Lab on an existing corpus
+
+Enabling is a **config flip**, and the cost is a one-time re-ingestion of every retained timeline
+against a low-rate Riot key. Do it in this order:
+
+1. Confirm free disk against the doubled snapshot table plus the three modeling tables *before*
+   flipping (see **Storage sizing** above), and confirm `KEEP_PATCHES` retention is actually running.
+   Retention decides how many patches get re-fetched.
+2. Set `BUILD_LAB_DEIDENTIFICATION_SALT` in the deployed `.env` (`openssl rand -hex 32`).
+3. Flip `BUILD_LAB_ENABLED=true` and recreate the worker and WebAPI. The ingestion target rises to v2,
+   so **every `Success` timeline in the retained corpus becomes stale and is re-fetched once**, at the
+   job's normal rate-gated pace: a multi-day background sweep competing with new-match ingestion for the
+   same Riot budget. Nothing else is required to start it — there is no `const` to bump.
+4. Start the modeler profile (`docker compose --profile analytics-modeling up -d analytics-modeler`).
+   Do not defer this: the same flag enables the daily create job, and once the first matches reach v2 a
+   `PendingDataset` generation appears that only the modeler can claim —
+   `trn-buildlab-unclaimed-generation` pages six hours later if it is not running. Early generations
+   will fail their evidence gates while coverage is thin, which is the intended behaviour.
+5. Leave `TRN_FEATURE_BUILD_LAB` (and the two sibling web flags) `false` until a generation has actually
+   promoted. Backend enablement and public exposure are separate switches on purpose.
+
+**Turning it back off** stops the payload writes and drops the target to v1 immediately; existing v2
+rows are left alone (they are `>= 1`, so never re-fetched) and stay usable if the flag is flipped on
+again. Only a row that fails and retries while the flag is off is rewritten down to v1.
+
 ### Precomputed Champion Analytics
 
-The hourly `refresh-precomputed-analytics` job publishes the tabular core, builds, pro surfaces, and
-matchups at independent transaction boundaries. Builds are skipped when their core dependency fails;
-the other surfaces are still attempted, and completed phases remain published. Automatic Hangfire
-retries are disabled for this deterministic full-corpus job so one slow execution does not multiply
-database load.
+Champion analytics surfaces have independent recurring-job ownership on the four-worker
+`analytics-warm` pool:
+
+- `refresh-precomputed-analytics` publishes only the tabular core
+  (`Jobs:Schedule:RefreshPrecomputedAnalyticsCron`, default `30 * * * *`).
+- `refresh-champion-matchups` advances the incremental/resumable matchup generation
+  (`Jobs:Schedule:RefreshChampionMatchupsCron`, default `35 * * * *`).
+- `refresh-champion-build-snapshots` atomically replaces serialized champion build responses
+  (`Jobs:Schedule:RefreshChampionBuildSnapshotsCron`, default `10 */6 * * *`).
+- `refresh-pro-analytics` and `refresh-build-resource-analytics` retain their independent schedules.
+
+Each job has its own concurrency boundary. Deterministic full-corpus jobs disable automatic retries,
+so a slow build sweep cannot amplify database load or delay matchup ownership.
 
 Matchups no longer rebuild through a corpus-wide participant/timeline self-join. New eligible matches
 are materialized into narrow durable lane-pair facts, current ranks are frozen per immutable

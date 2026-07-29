@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Analytics;
+using Transcendence.Service.Core.Services.RiotApi;
 
 namespace Transcendence.WebAPI.Controllers;
 
@@ -14,7 +15,8 @@ namespace Transcendence.WebAPI.Controllers;
 public class ChampionAnalyticsController(
     IChampionAnalyticsService analyticsService,
     IServiceScopeFactory? serviceScopeFactory,
-    IChampionSynergyService? synergyService = null) : ControllerBase
+    IChampionSynergyService? synergyService = null,
+    IBuildLabService? buildLabService = null) : ControllerBase
 {
     private static readonly HashSet<string> ValidRoles = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -86,6 +88,7 @@ public class ChampionAnalyticsController(
         ChampionGradeDto? grade;
         ChampionTrendResponse trend;
         ChampionSynergiesResponse synergies;
+        ChampionRecommendationSummary? recommendation;
         if (serviceScopeFactory == null)
         {
             builds = await analyticsService.GetBuildsAsync(
@@ -100,6 +103,11 @@ public class ChampionAnalyticsController(
                 ? EmptySynergies(championId, effectiveRole, rankTier, region, patch, normalizedQueue)
                 : await synergyService.GetSynergiesAsync(
                     championId, effectiveRole, rankTier, region, normalizedQueue, patch, ct);
+            recommendation = buildLabService == null ||
+                             normalizedQueue != QueueCatalog.QueueFamilyRankedSoloDuo
+                ? null
+                : await buildLabService.GetChampionRecommendationAsync(
+                    championId, effectiveRole, null, patch, region, ct);
         }
         else
         {
@@ -117,13 +125,18 @@ public class ChampionAnalyticsController(
             var synergiesTask = RunInSynergyScopeAsync(
                 scoped => scoped.GetSynergiesAsync(
                     championId, effectiveRole, rankTier, region, normalizedQueue, patch, ct));
+            var recommendationTask = normalizedQueue == QueueCatalog.QueueFamilyRankedSoloDuo
+                ? RunInBuildLabScopeAsync(scoped => scoped.GetChampionRecommendationAsync(
+                    championId, effectiveRole, null, patch, region, ct))
+                : Task.FromResult<ChampionRecommendationSummary?>(null);
 
-            await Task.WhenAll(buildsTask, matchupsTask, gradeTask, trendTask, synergiesTask);
+            await Task.WhenAll(buildsTask, matchupsTask, gradeTask, trendTask, synergiesTask, recommendationTask);
             builds = await buildsTask;
             matchups = await matchupsTask;
             grade = await gradeTask;
             trend = await trendTask;
             synergies = await synergiesTask;
+            recommendation = await recommendationTask;
         }
 
         return Ok(new ChampionProfileAnalyticsResponse(
@@ -135,7 +148,8 @@ public class ChampionAnalyticsController(
             grade,
             normalizedQueue,
             trend,
-            synergies));
+            synergies,
+            recommendation));
     }
 
     [HttpGet("{championId}/synergies")]
@@ -327,6 +341,13 @@ public class ChampionAnalyticsController(
         using var scope = serviceScopeFactory!.CreateScope();
         var scopedSynergyService = scope.ServiceProvider.GetRequiredService<IChampionSynergyService>();
         return await action(scopedSynergyService);
+    }
+
+    private async Task<T?> RunInBuildLabScopeAsync<T>(Func<IBuildLabService, Task<T>> action)
+    {
+        using var scope = serviceScopeFactory!.CreateScope();
+        var scopedBuildLabService = scope.ServiceProvider.GetService<IBuildLabService>();
+        return scopedBuildLabService == null ? default : await action(scopedBuildLabService);
     }
 
     private static ChampionSynergiesResponse EmptySynergies(

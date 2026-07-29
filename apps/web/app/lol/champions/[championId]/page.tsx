@@ -9,6 +9,10 @@ import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { BuildBreakdown } from "@/components/BuildBreakdown";
 import { ChampionTrendChart, type ChampionTrend } from "@/components/ChampionTrendChart";
 import { ChampionSynergyPanel } from "@/components/ChampionSynergyPanel";
+import {
+  ChampionRecommendation,
+  type ChampionRecommendationSummary
+} from "@/components/ChampionRecommendation";
 import { FilterBar } from "@/components/FilterBar";
 import { MatchupsTable, type MatchupRow } from "@/components/MatchupsTable";
 import { ItemBuildDisplay } from "@/components/ItemBuildDisplay";
@@ -22,6 +26,7 @@ import { DataBar } from "@/components/ui/DataBar";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { analyticsQueueOption, normalizeAnalyticsQueue } from "@/lib/analyticsQueues";
+import { analyticsFeatureFlags } from "@/lib/analyticsFeatureFlags";
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { pickMostSevereAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
@@ -36,7 +41,9 @@ import {
   fetchChampionMap,
   fetchItemMap,
   fetchRunesReforged,
-  fetchSummonerSpellMap
+  fetchSummonerSpellMap,
+  type ItemMap,
+  type RuneStaticData
 } from "@/lib/staticData";
 import { formatEbStory } from "@/lib/confidence";
 import { socialImageUrl } from "@/lib/seo";
@@ -50,8 +57,13 @@ type ChampionWinRateSummary = components["schemas"]["ChampionWinRateSummary"] & 
 };
 type ChampionProfileAnalyticsResponse = components["schemas"]["ChampionProfileAnalyticsResponse"] & {
   trend?: ChampionTrend | null;
+  recommendation?: ChampionRecommendationSummary | null;
 };
 type MatchupEntryDto = components["schemas"]["MatchupEntryDto"];
+type ChampionBuildRow = NonNullable<
+  NonNullable<ChampionProfileAnalyticsResponse["builds"]>["builds"]
+>[number];
+type ItemLookup = ItemMap["items"];
 
 type ChampionSearchParams = {
   role?: string;
@@ -494,6 +506,8 @@ async function ChampionSections({
   const matchups = profile.matchups ?? null;
   const trend = profile.trend ?? null;
   const synergies = profile.synergies ?? null;
+  const recommendation = profile.recommendation ?? null;
+  const flags = await analyticsFeatureFlags();
   const effectiveRole = queueOption.hasRoles
     ? normalizeRole(profile.effectiveRole) ?? explicitRole ?? pickMostPlayedRole(winrates) ?? "MIDDLE"
     : "ALL";
@@ -537,8 +551,40 @@ async function ChampionSections({
   if (activeQueue !== "solo") linkParams.set("queue", activeQueue);
   const linkQuery = linkParams.toString();
 
+  const showRecommendation =
+    flags.championRecommendations && queueOption.hasRoles && Boolean(recommendation);
+  // Only a publishable generation earns the answer-first summary. Without one the page keeps the
+  // full descriptive build experience below, unchanged.
+  const recommendationLive = showRecommendation && recommendation?.available === true;
+  const recommendationOpponentId = recommendation?.context?.opponentChampionId ?? null;
+  const buildLabParams = new URLSearchParams({ role: effectiveRole });
+  if (selectedPatch) buildLabParams.set("patch", selectedPatch);
+  if (activeRegion !== "ALL") buildLabParams.set("region", activeRegion);
+  const buildLabHref = `/lol/builds/${championId}?${buildLabParams.toString()}`;
+
   return (
     <>
+      {showRecommendation && recommendation ? (
+        <ChampionRecommendation
+          recommendation={recommendation}
+          championId={championId}
+          role={effectiveRole}
+          patch={selectedPatch}
+          region={activeRegion}
+          pageRankTier={normalizedRankTier ?? "ALL"}
+          opponentName={
+            recommendationOpponentId
+              ? championDisplayName(champions[String(recommendationOpponentId)])
+              : null
+          }
+          itemVersion={itemVersion}
+          items={items}
+          runeById={runeById}
+          spellVersion={spellStatic.version}
+          spells={spellStatic.spells}
+        />
+      ) : null}
+
       {queueOption.hasRoles ? (
         <ChampionSynergyPanel
           championName={champName}
@@ -592,9 +638,14 @@ async function ChampionSections({
       <div className={queueOption.hasRoles ? "grid min-w-0 gap-6 lg:grid-cols-2 lg:items-start" : "grid min-w-0 gap-6"}>
         {/* ── Builds ── */}
         <Card className="min-w-0 p-5" id="builds">
-          <h2 className="type-section">
-            Builds
-          </h2>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2 className="type-section">Builds</h2>
+            {flags.buildLab && queueOption.hasRoles ? (
+              <Link href={buildLabHref} className="text-sm font-semibold text-primary hover:underline">
+                Compare alternatives in Build Lab
+              </Link>
+            ) : null}
+          </div>
           {!builds ? (
             <div className="mt-2">
               <p className="text-sm text-fg/75">Build data is unavailable right now.</p>
@@ -619,8 +670,9 @@ async function ChampionSections({
                 minGames={buildMinGames}
               />
 
-              {/* Global Core Items */}
-              {globalCoreItems.length > 0 ? (
+              {/* Global core items restate the sectioned core path above, so they only earn their
+                  place when no adjusted recommendation is published. */}
+              {globalCoreItems.length > 0 && !recommendationLive ? (
                 <ItemBuildDisplay
                   allItems={[]}
                   coreItems={globalCoreItems}
@@ -630,70 +682,41 @@ async function ChampionSections({
                 />
               ) : null}
 
-              <p className="type-note text-muted">
-                Recommended balances sample size and results (games × win rate). An alternative may
-                show a higher rate from fewer games.
-              </p>
-
-              {buildRows.map((b, idx) => (
-                <details
-                  key={`${b.primaryStyleId ?? 0}-${b.subStyleId ?? 0}-${(b.coreItems ?? []).join("-")}-${(b.items ?? []).join("-")}`}
-                  open={idx === 0}
-                  className="group rounded-lg border border-border/60 bg-surface-2/40"
-                >
-                  {/* Recommended is open; alternatives collapse to a summary row (progressive disclosure). */}
+              {/* With a published recommendation the per-variant deep dive is redundant here: it
+                  collapses to one disclosure and full comparison happens in Build Lab. Without one,
+                  the descriptive experience stays exactly as it was. */}
+              {recommendationLive ? (
+                <details className="group rounded-lg border border-border/60 bg-surface-2/30">
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-3 [&::-webkit-details-marker]:hidden">
                     <span className="flex items-center gap-2 text-sm font-semibold text-fg">
-                      <svg
-                        viewBox="0 0 12 12"
-                        aria-hidden="true"
-                        className="size-3 shrink-0 text-muted transition-transform duration-150 group-open:rotate-90"
-                      >
-                        <path
-                          d="M4.5 3 7.5 6 4.5 9"
-                          stroke="currentColor"
-                          strokeWidth="1.4"
-                          fill="none"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                      {idx === 0 ? "Recommended Build · Most proven" : `Alternative ${idx}`}
+                      <ChevronGlyph />
+                      Observed variants · {buildRows.length}
                     </span>
-                    <span className="text-xs text-muted">
-                      <WinRateText value={b.winRate} decimals={1} games={b.games} />
-                    </span>
+                    <span className="type-note text-muted">Descriptive, not adjusted</span>
                   </summary>
-
                   <div className="border-t border-border/40 p-3">
-                    {/* Items: Core + Situational */}
-                    <ItemBuildDisplay
-                      allItems={b.items ?? []}
-                      coreItems={b.coreItems ?? []}
-                      situationalItems={b.situationalItems ?? []}
-                      version={itemVersion}
+                    <BuildVariants
+                      rows={buildRows}
+                      itemVersion={itemVersion}
                       items={items}
-                      winRate={b.winRate}
-                      games={b.games}
+                      runeTrees={runeTrees}
+                      runeById={runeById}
+                      styleById={styleById}
+                      openFirst={false}
                     />
-
-                    {/* Runes */}
-                    <div className="mt-3 border-t border-border/40 pt-3">
-                      <p className="mb-2 text-xs font-medium text-muted">Runes</p>
-                      <RuneTreeDisplay
-                        primaryStyleId={b.primaryStyleId ?? 0}
-                        subStyleId={b.subStyleId ?? 0}
-                        primarySelections={b.primaryRunes ?? []}
-                        subSelections={b.subRunes ?? []}
-                        statShards={b.statShards ?? []}
-                        trees={runeTrees}
-                        runeById={runeById}
-                        styleById={styleById}
-                      />
-                    </div>
                   </div>
                 </details>
-              ))}
+              ) : (
+                <BuildVariants
+                  rows={buildRows}
+                  itemVersion={itemVersion}
+                  items={items}
+                  runeTrees={runeTrees}
+                  runeById={runeById}
+                  styleById={styleById}
+                  openFirst
+                />
+              )}
             </div>
           )}
         </Card>
@@ -723,6 +746,102 @@ async function ChampionSections({
       {/* Patch history is useful context, but secondary to the current-patch decisions above. */}
       <ChampionTrendChart championName={champName} trend={trend} />
     </>
+  );
+}
+
+function ChevronGlyph() {
+  return (
+    <svg
+      viewBox="0 0 12 12"
+      aria-hidden="true"
+      className="size-3 shrink-0 text-muted transition-transform duration-150 group-open:rotate-90 motion-reduce:transition-none"
+    >
+      <path
+        d="M4.5 3 7.5 6 4.5 9"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/**
+ * The descriptive observed build variants. Recommended is open (and alternatives collapse) on the
+ * legacy path; when the adjusted recommendation is live the whole list sits behind one disclosure,
+ * so nothing auto-expands.
+ */
+function BuildVariants({
+  rows,
+  itemVersion,
+  items,
+  runeTrees,
+  runeById,
+  styleById,
+  openFirst
+}: {
+  rows: ChampionBuildRow[];
+  itemVersion: string;
+  items: ItemLookup;
+  runeTrees: RuneStaticData["trees"];
+  runeById: RuneStaticData["runeById"];
+  styleById: RuneStaticData["styleById"];
+  openFirst: boolean;
+}) {
+  return (
+    <div className="grid gap-4">
+      <p className="type-note text-muted">
+        Recommended balances sample size and results (games × win rate). An alternative may show a
+        higher rate from fewer games.
+      </p>
+      {rows.map((b, idx) => (
+        <details
+          key={`${b.primaryStyleId ?? 0}-${b.subStyleId ?? 0}-${(b.coreItems ?? []).join("-")}-${(b.items ?? []).join("-")}`}
+          open={openFirst && idx === 0}
+          className="group rounded-lg border border-border/60 bg-surface-2/40"
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-3 [&::-webkit-details-marker]:hidden">
+            <span className="flex items-center gap-2 text-sm font-semibold text-fg">
+              <ChevronGlyph />
+              {idx === 0 ? "Recommended Build · Most proven" : `Alternative ${idx}`}
+            </span>
+            <span className="text-xs text-muted">
+              <WinRateText value={b.winRate} decimals={1} games={b.games} />
+            </span>
+          </summary>
+
+          <div className="border-t border-border/40 p-3">
+            {/* Items: Core + Situational */}
+            <ItemBuildDisplay
+              allItems={b.items ?? []}
+              coreItems={b.coreItems ?? []}
+              situationalItems={b.situationalItems ?? []}
+              version={itemVersion}
+              items={items}
+              winRate={b.winRate}
+              games={b.games}
+            />
+
+            {/* Runes */}
+            <div className="mt-3 border-t border-border/40 pt-3">
+              <p className="mb-2 text-xs font-medium text-muted">Runes</p>
+              <RuneTreeDisplay
+                primaryStyleId={b.primaryStyleId ?? 0}
+                subStyleId={b.subStyleId ?? 0}
+                primarySelections={b.primaryRunes ?? []}
+                subSelections={b.subRunes ?? []}
+                statShards={b.statShards ?? []}
+                trees={runeTrees}
+                runeById={runeById}
+                styleById={styleById}
+              />
+            </div>
+          </div>
+        </details>
+      ))}
+    </div>
   );
 }
 

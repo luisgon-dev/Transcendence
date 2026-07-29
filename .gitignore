@@ -298,6 +298,8 @@ coverage/
 pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+# TypeScript incremental build state — machine-local, churns on every build.
+*.tsbuildinfo
 
 # Workspace monorepo packages (override Visual Studio's NuGet `packages/` ignore)
 !/packages/
@@ -343,6 +345,14 @@ paket-files/
 # Python Tools for Visual Studio (PTVS)
 __pycache__/
 *.pyc
+
+# Python (analytics/modeler): virtualenvs, editable-install metadata, test caches
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # Cake - Uncomment if you are using it
 # tools/**

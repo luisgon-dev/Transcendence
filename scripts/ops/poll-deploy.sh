@@ -136,6 +136,26 @@ local_revision() {
     2>/dev/null
 }
 
+# Analytics:BuildLab:CodeRevision is stamped into every generation manifest, so it has to match the
+# worker image actually being deployed. Compose interpolates it from stack.env and nothing else
+# maintained it, so it pinned whatever revision happened to be current when the stack was last
+# hand-edited — manifests then recorded a revision that never produced them.
+sync_build_lab_revision() {
+  local rev="$1"
+  [ -n "$rev" ] || return 0
+  if [ ! -w "$ENV_FILE" ]; then
+    log "WARN ${ENV_FILE} not writable; BUILD_LAB_CODE_REVISION left at its current value"
+    return 0
+  fi
+  if grep -q '^BUILD_LAB_CODE_REVISION=' "$ENV_FILE"; then
+    grep -qx "BUILD_LAB_CODE_REVISION=${rev}" "$ENV_FILE" && return 0
+    sed -i "s|^BUILD_LAB_CODE_REVISION=.*|BUILD_LAB_CODE_REVISION=${rev}|" "$ENV_FILE"
+  else
+    printf 'BUILD_LAB_CODE_REVISION=%s\n' "$rev" >>"$ENV_FILE"
+  fi
+  log "synced BUILD_LAB_CODE_REVISION -> ${rev:0:12}"
+}
+
 notify() {
   local msg="$1" url
   url="$(sed -n 's/^ALERTS_WEBHOOK_URL=//p' "$ENV_FILE" 2>/dev/null | head -1)"
@@ -339,6 +359,10 @@ deploy_one() {
   if [ "${DRY_RUN:-0}" = "1" ]; then
     log "DRY_RUN ${svc}: would compose pull, migrate if needed, recreate, and health-check"
     return 0
+  fi
+  # Before the recreate, so the container that comes up carries the revision it was built from.
+  if [ "$svc" = "service" ]; then
+    sync_build_lab_revision "$remote_rev"
   fi
   if ! run_logged "${svc} pull" \
       docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" pull "$svc"; then

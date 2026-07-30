@@ -218,6 +218,40 @@ public sealed class BuildLabGenerationCoordinatorTests
     }
 
     [Fact]
+    public async Task PromoteReadyCandidatesAsync_WhenDisabled_NeitherReapsNorPromotes()
+    {
+        await using var harness = await BuildLabHarness.CreateAsync();
+        var now = DateTime.UtcNow;
+        // Prod has been observed with the recurring-schedule flag true while Analytics:BuildLab:Enabled
+        // was false, so the recurring path must be inert on its own rather than trusting the schedule.
+        var expired = Candidate();
+        expired.Status = BuildLabGenerationStatus.Modeling;
+        expired.LeaseOwner = "modeler-1";
+        expired.LeaseAcquiredAtUtc = now.AddHours(-4);
+        expired.LeaseExpiresAtUtc = now.AddMinutes(-5);
+        var candidate = Candidate();
+        harness.Db.BuildLabGenerations.AddRange(expired, candidate);
+        harness.Db.AdjustedActionEstimates.Add(PassingEstimate(candidate.Id));
+        await harness.Db.SaveChangesAsync();
+        using var telemetry = new BuildLabTelemetry();
+        var coordinator = Coordinator(harness, telemetry, new BuildLabModelingOptions
+        {
+            Enabled = false,
+            LeaseTimeoutMinutes = 120
+        });
+
+        var promoted = await coordinator.PromoteReadyCandidatesAsync();
+
+        promoted.Should().Be(0);
+        var untouchedLease = await Reload(harness, expired.Id);
+        untouchedLease.Status.Should().Be(BuildLabGenerationStatus.Modeling);
+        untouchedLease.LeaseOwner.Should().Be("modeler-1");
+        var untouchedCandidate = await Reload(harness, candidate.Id);
+        untouchedCandidate.Status.Should().Be(BuildLabGenerationStatus.Candidate);
+        untouchedCandidate.IsActive.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task PromoteReadyCandidatesAsync_ContinuesPastOneCandidatesFailure()
     {
         // The harness deliberately withholds the SQLite shim for the PostgreSQL advisory-lock statement

@@ -125,6 +125,12 @@ public sealed class BuildLabGenerationCoordinator(
 
     public async Task<int> PromoteReadyCandidatesAsync(CancellationToken ct = default)
     {
+        // The recurring schedule flag and Analytics:BuildLab:Enabled are separate keys and prod has
+        // been observed with them diverged, so the recurring path guards on Enabled itself. The
+        // operator-driven PromoteCandidateAsync deliberately stays reachable for shadow validation.
+        if (!options.Enabled)
+            return 0;
+
         await ReapExpiredModelingLeasesAsync(ct);
 
         var candidates = await context.BuildLabGenerations

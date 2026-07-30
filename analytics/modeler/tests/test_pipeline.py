@@ -1,5 +1,6 @@
 import inspect
 import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -1204,6 +1205,34 @@ def test_first_item_path_estimates_publish_the_timing_the_champion_page_renders(
     # Without this family the champion page's first-item card renders "—" forever.
     assert timings["FIRST_ITEM_PATH"] == pytest.approx(8.75)
     assert all(timing is not None for timing in timings.values())
+
+
+def test_dockerfile_layers_cover_every_declared_dependency():
+    root = Path(__file__).resolve().parents[1]
+    dockerfile = (root / "Dockerfile").read_text(encoding="utf-8")
+    pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
+
+    declared = re.findall(r'^\s*"([A-Za-z0-9_.-]+)(?:\[[^\]]*\])?[<>=!~]', pyproject, re.MULTILINE)
+    installed = "\n".join(
+        line for line in dockerfile.splitlines() if line.startswith("RUN pip install")
+    )
+    # The project is installed with --no-deps, so anything missing from the split layers would be
+    # absent at runtime rather than merely mis-layered.
+    assert declared, "no dependencies parsed out of pyproject.toml"
+    missing = [name for name in declared if name not in installed]
+    assert not missing, f"pyproject deps absent from the Dockerfile install layers: {missing}"
+    assert "--no-deps" in dockerfile
+
+    # One oversized layer is what broke `docker pull` on the containerd image store: keep the
+    # scientific stack spread across separate RUN layers.
+    dependency_layers = [
+        line for line in dockerfile.splitlines()
+        if line.startswith("RUN pip install") and "--no-deps" not in line
+    ]
+    assert len(dependency_layers) >= 4, dependency_layers
+    for package in ("numpy", "pandas", "scikit-learn", "pyarrow"):
+        owning = [line for line in dependency_layers if package in line]
+        assert len(owning) == 1, f"{package} must be installed in exactly one layer: {owning}"
 
 
 def test_the_image_prepares_the_artifact_volume_for_the_runtime_uid(monkeypatch):

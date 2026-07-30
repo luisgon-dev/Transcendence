@@ -129,10 +129,18 @@ describe("GlobalCommandPalette", () => {
 
     const input = await screen.findByRole("combobox", { name: "Global search input" });
     await user.type(input, "build");
+    // The point of the entry: Build Lab sits beside the library rather than replacing it. Both match
+    // "build" because each carries it in `keywords`.
     await screen.findByRole("option", { name: /Build Lab/i });
     expect(screen.getByRole("option", { name: /Build Atlas/i })).toBeTruthy();
 
-    await user.click(screen.getByRole("option", { name: /Build Lab/i }));
+    // Narrow to a single match before clicking. While two options match, cmdk re-filters as it
+    // re-renders, so a node queried before the click can already be detached when it lands — which
+    // fails on a slow runner and passes locally.
+    await user.clear(input);
+    await user.type(input, "build lab");
+    const buildLab = await screen.findByRole("option", { name: /Build Lab/i });
+    await user.click(buildLab);
     await waitFor(() => expect(router.push).toHaveBeenCalledWith("/lol/builds"));
   });
 

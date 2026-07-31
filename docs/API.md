@@ -511,6 +511,26 @@ client can show how thin a cell is and `evidenceQuality` / `unavailableReason` s
 The same rule applies to `pathEstimate`: `estimatedWinProbability`, `adjustedLift`, and both bounds are
 null when the path failed its gates, while its counts remain visible.
 
+**`evidenceTier` decides how much of a cell may be shown.** Publication is not all-or-nothing.
+Patches ship fortnightly, and a cell needs far more evidence to pin a ≤3pp interval than to say which
+side of "typical" it falls on, so gating everything on the interval would leave the lab empty for most
+of a patch.
+
+| `evidenceTier` | Meaning | Client renders |
+| --- | --- | --- |
+| `NUMERIC` | Every v1 gate passed | `adjustedWpa` and its interval |
+| `BUCKETED` | Sample gates passed; only the interval-width gate failed, and the posterior still concentrates in one bucket | `evidenceBucket` (`ABOVE_AVERAGE` / `TYPICAL` / `BELOW_AVERAGE`); no number |
+| `DESCRIPTIVE` | Not enough evidence for either | pick rate and timing only |
+
+`evidenceBucket` is non-null only at the `BUCKETED` tier — a numeric cell shows its number and a
+descriptive one has not earned a direction. Bucketing never relaxes the sample, overlap, balance, or
+stability gates; it trades away *only* the interval width, and only when the modeler measured at least
+80% posterior mass on one side. `available` is true once any candidate is numeric **or** bucketed.
+
+Ranking is deliberately independent of the tier: `mode=supported` orders by the interval's lower bound
+where one exists and by the point estimate otherwise, so a bucketed candidate is ranked on the evidence
+it has rather than sinking below cells with no evidence at all.
+
 **Regional fallback is decided per cell, not per response.** For a regional request each individual
 estimate keeps its regional number only when that cell is publishable *and* differs meaningfully
 from the pooled global baseline after multiple-comparison correction; otherwise that one cell serves

@@ -18,5 +18,8 @@ internal sealed class SqliteCompatibleTranscendenceContext(DbContextOptions<Tran
         modelBuilder.Entity<ItemVersion>()
             .Property(x => x.BuildsInto)
             .HasDefaultValueSql("'[]'");
+        modelBuilder.Entity<ChampionVersion>()
+            .Property(x => x.Roles)
+            .HasDefaultValueSql("'[]'");
     }
 }

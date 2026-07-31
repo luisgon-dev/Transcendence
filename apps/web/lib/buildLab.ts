@@ -51,6 +51,15 @@ export type BuildLabContext = {
   mode: string;
 };
 
+export type EvidenceTier = "NUMERIC" | "BUCKETED" | "DESCRIPTIVE";
+export type EvidenceBucket = "ABOVE_AVERAGE" | "TYPICAL" | "BELOW_AVERAGE";
+
+export const EVIDENCE_BUCKET_LABEL: Record<EvidenceBucket, string> = {
+  ABOVE_AVERAGE: "Above average",
+  TYPICAL: "Typical",
+  BELOW_AVERAGE: "Below average"
+};
+
 export type AdjustedActionEstimate = {
   actionKey: string;
   actionIds: number[];
@@ -71,6 +80,13 @@ export type AdjustedActionEstimate = {
   regionScope: string;
   /** The comparison set the lift is measured against — disclosed, never implied. */
   baselineDefinition: string;
+  /**
+   * How much of the estimate may be shown. A fortnightly patch rarely earns a <=3pp interval in
+   * time, so a cell that cannot support a number can still support a direction.
+   */
+  evidenceTier: EvidenceTier;
+  /** Only meaningful at the BUCKETED tier. */
+  evidenceBucket?: EvidenceBucket | null;
   isPublishable: boolean;
   unavailableReason?: string | null;
 };
@@ -472,6 +488,17 @@ export function buildLabRegionOptions(
 export function wpaToneClass(value?: number | null) {
   if (value == null || value === 0) return "text-fg";
   return value > 0 ? "text-success" : "text-danger";
+}
+
+/** Same win/loss semantics as a numeric lift, so a direction reads the same way a number would. */
+export function bucketToneClass(bucket?: EvidenceBucket | null) {
+  if (bucket === "ABOVE_AVERAGE") return "text-success";
+  if (bucket === "BELOW_AVERAGE") return "text-danger";
+  return "text-fg";
+}
+
+export function bucketLabel(bucket?: EvidenceBucket | null) {
+  return bucket ? EVIDENCE_BUCKET_LABEL[bucket] : "Insufficient evidence";
 }
 
 export function humanizeToken(value: string | null | undefined) {

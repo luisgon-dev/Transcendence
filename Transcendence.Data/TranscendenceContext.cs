@@ -63,6 +63,7 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<Patch> Patches { get; set; }
     public DbSet<RuneVersion> RuneVersions { get; set; }
     public DbSet<ItemVersion> ItemVersions { get; set; }
+    public DbSet<ChampionVersion> ChampionVersions { get; set; }
 
     // Join tables for match participants
     public DbSet<MatchParticipantRune> MatchParticipantRunes { get; set; }
@@ -449,6 +450,25 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             entity.HasOne(iv => iv.Patch)
                 .WithMany()
                 .HasForeignKey(iv => iv.PatchVersion);
+        });
+
+        modelBuilder.Entity<ChampionVersion>(entity =>
+        {
+            entity.HasKey(cv => new
+            {
+                cv.ChampionId,
+                cv.PatchVersion
+            });
+
+            entity.Property(cv => cv.Alias).HasMaxLength(64);
+            entity.Property(cv => cv.Name).HasMaxLength(64);
+            entity.Property(cv => cv.BalanceHash).HasMaxLength(64);
+            entity.Property(cv => cv.Roles)
+                .HasDefaultValueSql("'{}'::text[]");
+
+            entity.HasOne(cv => cv.Patch)
+                .WithMany()
+                .HasForeignKey(cv => cv.PatchVersion);
         });
 
         // Match participant join tables configuration

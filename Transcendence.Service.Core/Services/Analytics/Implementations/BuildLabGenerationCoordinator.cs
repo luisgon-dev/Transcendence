@@ -650,7 +650,17 @@ public sealed class BuildLabGenerationCoordinator(
                     .SetProperty(estimate => estimate.UnavailableReason, gate.UnavailableReason), ct);
         }
 
+        // Tier before publishability: a row that misses only the interval-width gate can still carry
+        // a direction, and that is what keeps the lab populated between patches. Ranking always uses
+        // the posterior mean, so this governs presentation only.
+        await estimates
+            .Where(BuildLabEvidenceGate.QualifiesForBucketedTier(options))
+            .ExecuteUpdateAsync(update => update
+                .SetProperty(estimate => estimate.EvidenceTier, EvidenceTier.Bucketed), ct);
+
         var passing = BuildLabEvidenceGate.WherePassesEveryGate(estimates, options);
+        await passing.ExecuteUpdateAsync(update => update
+            .SetProperty(estimate => estimate.EvidenceTier, EvidenceTier.Numeric), ct);
         // Pooled estimates are graded first and are never withheld in favour of a regional twin, so this is
         // their final verdict and the regional comparison below can read IsPublishable from them directly.
         await passing

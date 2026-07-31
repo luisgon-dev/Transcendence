@@ -6175,6 +6175,7 @@
           "baselineDefinition",
           "effectiveSampleSize",
           "evidenceQuality",
+          "evidenceTier",
           "fallbackScope",
           "isPublishable",
           "observedCount",
@@ -6241,6 +6242,13 @@
           },
           "baselineDefinition": {
             "type": "string"
+          },
+          "evidenceTier": {
+            "type": "string"
+          },
+          "evidenceBucket": {
+            "type": "string",
+            "nullable": true
           },
           "isPublishable": {
             "type": "boolean"

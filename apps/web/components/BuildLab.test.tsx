@@ -50,6 +50,8 @@ const gatedCandidate: AdjustedActionEstimate = {
   fallbackScope: "NONE",
   regionScope: "NA1",
   baselineDefinition: "Other first legendary items bought in the same decision.",
+  evidenceTier: "DESCRIPTIVE",
+  evidenceBucket: null,
   isPublishable: false,
   unavailableReason: "Withheld: 42 observed games is below the publication gate for this cell."
 };
@@ -69,6 +71,8 @@ const publishableCandidate: AdjustedActionEstimate = {
   fallbackScope: "GLOBAL_FALLBACK",
   regionScope: "GLOBAL",
   baselineDefinition: "Other first legendary items bought in the same decision.",
+  evidenceTier: "NUMERIC",
+  evidenceBucket: null,
   isPublishable: true,
   unavailableReason: null
 };
@@ -238,6 +242,64 @@ describe("BuildLab", () => {
     expect(screen.getByText("Estimated win probability").nextElementSibling?.textContent).toBe("—");
 
     await waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled());
+  });
+
+  it("publishes a direction for a bucketed candidate instead of withholding everything", async () => {
+    // A fortnightly patch rarely earns a <=3pp interval in time. A cell whose posterior still
+    // concentrates on one side of "typical" says so rather than going dark.
+    renderLab({
+      response: {
+        stages: [
+          {
+            family: "ITEM",
+            stage: 1,
+            label: "First item",
+            candidates: [
+              {
+                ...gatedCandidate,
+                actionKey: "ITEM:3153",
+                evidenceTier: "BUCKETED",
+                evidenceBucket: "ABOVE_AVERAGE",
+                unavailableReason: "The confidence interval is too wide."
+              }
+            ]
+          }
+        ]
+      }
+    });
+    const row = candidateRow("Blade of the Ruined King");
+    const cells = within(row).getAllByRole("cell");
+
+    expect(cells[1].textContent).toBe("Above average");
+    expect(cells[1].textContent).not.toContain("Insufficient evidence");
+    // The number is still withheld: only the direction was earned.
+    expect(cells[2].textContent).toBe("Direction only");
+  });
+
+  it("renders a below-average bucket in the loss tone, not the action accent", async () => {
+    renderLab({
+      response: {
+        stages: [
+          {
+            family: "ITEM",
+            stage: 1,
+            label: "First item",
+            candidates: [
+              {
+                ...gatedCandidate,
+                evidenceTier: "BUCKETED",
+                evidenceBucket: "BELOW_AVERAGE"
+              }
+            ]
+          }
+        ]
+      }
+    });
+    const cells = within(candidateRow("Blade of the Ruined King")).getAllByRole("cell");
+
+    expect(cells[1].textContent).toBe("Below average");
+    expect(cells[1].className).toContain("text-danger");
+    expect(cells[1].className).not.toContain("text-primary");
   });
 
   it("states why a gated candidate is unavailable and shows no headline estimate for it", async () => {

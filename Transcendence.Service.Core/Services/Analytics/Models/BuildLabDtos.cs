@@ -38,6 +38,10 @@ public record AdjustedActionEstimateDto(
     string FallbackScope,
     string RegionScope,
     string BaselineDefinition,
+    /// <summary>NUMERIC / BUCKETED / DESCRIPTIVE — how much of the estimate may be rendered.</summary>
+    string EvidenceTier,
+    /// <summary>ABOVE_AVERAGE / TYPICAL / BELOW_AVERAGE. Only meaningful at the BUCKETED tier.</summary>
+    string? EvidenceBucket,
     bool IsPublishable,
     string? UnavailableReason);
 

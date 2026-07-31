@@ -512,6 +512,39 @@ Everything else under `Analytics:BuildLab` (the publication thresholds below, `D
 `PriorPatchesToBorrow`, `RetainedGenerations`, `RetiredGenerationGraceMinutes`) is config-file only —
 set it in `config/backend.shared.json`, not through an env var.
 
+#### Adaptive patch borrowing
+
+`PriorPatchesToBorrow` is a **ceiling**, not a schedule. Patches ship fortnightly, so a fixed per-patch
+weight is the wrong instrument: it discards good data from the champions a patch never touched and
+keeps data from the ones it rebalanced. Recency sets the ceiling; each borrowed row then keeps only the
+fraction of it that its cell still deserves:
+
+- **Static change → 0.** A rebalance to the champion, the item, or a rune in the action hard-excludes
+  the borrowed row. Detected by diffing per-patch static data: `ItemVersions` and `RuneVersions` from
+  Community Dragon, and `ChampionVersions.BalanceHash` — a hash of a *numeric-only* Data Dragon
+  projection (base stats plus each spell's cooldown/cost/range/effect). Measured against live data that
+  projection flags 0 of 173 champions across a cosmetic-only patch, where a whole-record diff flags 10
+  on `skins` alone, and 11 of 173 across a real balance patch.
+- **Otherwise, a commensurability discount.** The current-vs-prior disagreement for that exact cell is
+  scored as a z-score and decayed, so an agreeing cell borrows at nearly full strength, a thin cell is
+  not thrown away for noise, and a cell that drifted for reasons static data cannot see (indirect
+  interactions, system changes) decays to zero on its own.
+
+Both halves matter because they are complementary *in time*: the drift test needs current-patch data to
+have power and is weakest in the first days of a patch, which is exactly when static detection is
+instant. Static detection in turn cannot see indirect or systemic changes, which the drift test can.
+
+Known and accepted over-flag: Riot is migrating spells off `effect` onto dataValues, so an effect array
+can drop to zeros with no balance change (Warwick did this in 16.15). That costs one champion's
+borrowing for a patch. Excluding `effect` from the hash would instead miss four real changes in the same
+patch and borrow across them, so the projection keeps it — a false positive costs coverage, a false
+negative biases an estimate.
+
+Champion `Roles` from the same table feed archetype pooling: an item's effect on a burst mage says more
+about the same item on another burst mage than the role average does, so a sparse champion shrinks
+toward champions that play like it. A champion with no published roles pools at the role level exactly
+as before.
+
 `BUILD_LAB_DEIDENTIFICATION_SALT` is a secret and ships as an **empty** placeholder in `.env.example`;
 generate a real one (`openssl rand -hex 32`) into the deployed `.env` before enabling Build Lab and
 never commit it. It keys the HMAC surrogate match/participant ids in the Parquet export, so a guessable

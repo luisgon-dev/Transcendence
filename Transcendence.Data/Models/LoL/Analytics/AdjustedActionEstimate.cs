@@ -36,6 +36,12 @@ public class AdjustedActionEstimate
     public bool StableAcrossFolds { get; set; }
     public bool IsPublishable { get; set; }
     public string EvidenceQuality { get; set; } = "INSUFFICIENT";
+    /// <summary>How precisely this estimate may be described; see <see cref="Analytics.EvidenceTier"/>.</summary>
+    public EvidenceTier EvidenceTier { get; set; } = EvidenceTier.Descriptive;
+    /// <summary>ABOVE_AVERAGE / TYPICAL / BELOW_AVERAGE. Only rendered at the bucketed tier.</summary>
+    public string EvidenceBucket { get; set; } = "TYPICAL";
+    /// <summary>Posterior mass the modeler measured for <see cref="EvidenceBucket"/>, in [0,1].</summary>
+    public double BucketConfidence { get; set; }
     public string FallbackScope { get; set; } = "NONE";
     /// <summary>Names the comparison set this estimate was measured against, per decision family.</summary>
     public string BaselineDefinition { get; set; } = string.Empty;

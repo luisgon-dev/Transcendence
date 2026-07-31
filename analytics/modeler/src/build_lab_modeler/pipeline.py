@@ -20,6 +20,7 @@ from uuid import UUID, uuid4
 import boto3
 import joblib
 import numpy as np
+from scipy.special import erfc
 import pandas as pd
 import psycopg
 from psycopg.rows import dict_row
@@ -93,6 +94,17 @@ GLOBAL_PRIOR_VARIANCE = 0.02**2
 # A rank observed after the match started can encode the outcome, so those rows are kept but
 # discounted rather than allowed to carry full weight.
 POST_MATCH_RANK_WEIGHT = 0.25
+# Disagreement, in sigma, at which a borrowed cell keeps ~61% of its weight. Two sigma roughly
+# halves it and a real meta break drives it to zero, with no cliff to hand-tune.
+COMMENSURABILITY_TOLERANCE_Z = 2.0
+# A borrowed cell the current patch has never observed cannot be checked for drift either way, so it
+# is admitted at a fraction of its recency weight rather than trusted or discarded outright.
+UNVERIFIED_BORROW_WEIGHT = 0.35
+# Champions with no published roles pool at the role level, exactly as before archetypes existed.
+UNKNOWN_ARCHETYPE = "unknown"
+# Lift, in win-probability points, separating "typical" from above/below average. Mirrors
+# BuildLabEvidenceGate.BucketThreshold; the two must move together.
+BUCKET_THRESHOLD = 0.005
 EMPTY_PATH_HASH = hashlib.sha256(b"").hexdigest()
 ID_PATTERN = re.compile(r"\d+")
 
@@ -350,11 +362,20 @@ def model_generation(
         timeline_state_events,
         participant_teams,
     )
-    changed_item_ids = load_materially_changed_items(connection, included_patches)
+    changes = load_patch_change_set(connection, included_patches)
+    archetypes = load_champion_archetypes(connection, generation["Patch"])
+    LOG.info(
+        "Patch change set across %s: %d items, %d runes, %d champions; %d champions carry an archetype.",
+        ", ".join(included_patches),
+        len(changes.items),
+        len(changes.runes),
+        len(changes.champions),
+        len(archetypes),
+    )
     item_decisions = exclude_incompatible_prior_item_rows(
         item_decisions,
         generation["Patch"],
-        changed_item_ids,
+        set(changes.items),
     )
     decisions = pd.concat(
         [
@@ -364,7 +385,16 @@ def model_generation(
         ],
         ignore_index=True,
     )
-    decisions = apply_row_weights(decisions, generation["Patch"], included_patches, rank_offset)
+    decisions = decisions.assign(
+        archetype=decisions["champion_id"].astype(int).map(archetypes).fillna(UNKNOWN_ARCHETYPE)
+    )
+    decisions = apply_row_weights(
+        decisions,
+        generation["Patch"],
+        included_patches,
+        rank_offset,
+        changes,
+    )
     decisions = exclude_drifted_prior_actions(decisions, generation["Patch"])
     if decisions.empty or decisions["won"].nunique() < 2:
         raise RuntimeError("The frozen dataset does not contain both match outcomes.")
@@ -486,9 +516,15 @@ def apply_row_weights(
     current_patch: str,
     included_patches: Iterable[str],
     rank_offset_column: str | None,
+    changes: PatchChangeSet | None = None,
 ) -> pd.DataFrame:
     recency = patch_recency_weights(current_patch, included_patches)
     weights = decisions["patch"].map(recency).fillna(0.0).astype(float)
+    if changes is not None and not decisions.empty:
+        # Recency is the ceiling; commensurability decides how much of it a borrowed row keeps.
+        # The product flows into the Kish ESS, so over-borrowing cannot manufacture precision — the
+        # effective-sample gate absorbs it.
+        weights = weights * commensurability_weights(decisions, current_patch, changes)
     # Only the signed column can tell a pre-match reading from a post-match one. Rows written under
     # the old unsigned semantics are all non-negative, so discounting on sign there would silently
     # devalue the whole cohort; they are carried at full weight and flagged as unknown instead.
@@ -511,11 +547,96 @@ def apply_row_weights(
 
 
 def patch_recency_weights(current_patch: str, included_patches: Iterable[str]) -> dict[str, float]:
+    """Recency floor only. Adaptive borrowing scales these per cell; see `commensurability_weights`."""
     ordered = [current_patch] + [patch for patch in included_patches if patch != current_patch]
     return {
         patch: weight
         for patch, weight in zip(ordered[:3], [1.0, 0.60, 0.35], strict=False)
     }
+
+
+def commensurability_weights(
+    decisions: pd.DataFrame,
+    current_patch: str,
+    changes: PatchChangeSet,
+) -> pd.Series:
+    """
+    Per-row borrowing multiplier in [0, 1] for rows from a *prior* patch.
+
+    Patches ship fortnightly, so a fixed per-patch weight is the wrong instrument: it discards good
+    data from the ~94% of champions a patch does not touch, and keeps data from the ones it does.
+    This scales each borrowed row by how commensurable its cell still looks:
+
+      * a static change to the champion, the item, or a rune in the action -> 0 (hard exclude).
+        Riot told us the cell changed, so no amount of agreement should rescue it.
+      * otherwise a power-prior style discount on the current-vs-prior disagreement in observed
+        outcome for that exact cell, so an unchanged cell borrows at near full strength and a cell
+        that drifted for reasons the static data cannot see decays smoothly to zero.
+
+    The discount is a z-score, not a raw win-rate delta: a thinly observed prior cell must not be
+    thrown away for noise, and must not be trusted merely because it is thin.
+
+    Current-patch rows are always 1.0 and are never touched here.
+    """
+    if decisions.empty:
+        return pd.Series(dtype=float)
+
+    is_prior = decisions["patch"].astype(str) != current_patch
+    weights = pd.Series(1.0, index=decisions.index)
+    if not is_prior.any():
+        return weights
+
+    action_ids = decisions["action_ids"].map(_parse_action_ids)
+    blocked = pd.Series(False, index=decisions.index)
+    if changes.champions:
+        blocked |= decisions["champion_id"].astype(int).isin(changes.champions)
+    if changes.items or changes.runes:
+        touched = frozenset(changes.items | changes.runes)
+        blocked |= action_ids.map(lambda ids: bool(touched.intersection(ids)))
+
+    weights = weights.where(~(is_prior & blocked), 0.0)
+
+    key_columns = ["champion_id", "role", "family", "stage", "action_key"]
+    summary = (
+        decisions.assign(_is_current=~is_prior)
+        .groupby(key_columns + ["_is_current"], dropna=False)["won"]
+        .agg(["count", "mean"])
+        .reset_index()
+    )
+    current = summary.loc[summary["_is_current"]].set_index(key_columns)
+    prior = summary.loc[~summary["_is_current"]].set_index(key_columns)
+    shared = current.index.intersection(prior.index)
+    if len(shared) == 0:
+        # Nothing to compare against: an unseen cell keeps only the recency floor.
+        return weights.where(~is_prior, weights * UNVERIFIED_BORROW_WEIGHT)
+
+    current_n = current.loc[shared, "count"].to_numpy(dtype=float)
+    prior_n = prior.loc[shared, "count"].to_numpy(dtype=float)
+    current_p = current.loc[shared, "mean"].to_numpy(dtype=float)
+    prior_p = prior.loc[shared, "mean"].to_numpy(dtype=float)
+    pooled = (current_p * current_n + prior_p * prior_n) / np.maximum(current_n + prior_n, 1.0)
+    standard_error = np.sqrt(
+        np.maximum(pooled * (1.0 - pooled), 1e-6) * (1.0 / np.maximum(current_n, 1.0) + 1.0 / np.maximum(prior_n, 1.0))
+    )
+    z = np.abs(current_p - prior_p) / np.maximum(standard_error, 1e-6)
+    # Gaussian decay: agreement (z~0) borrows fully, a two-sigma split roughly halves the row, and a
+    # genuine meta break drives the cell to zero without a cliff to tune.
+    alpha = np.exp(-0.5 * np.square(z / COMMENSURABILITY_TOLERANCE_Z))
+
+    lookup = pd.Series(alpha, index=shared)
+    row_keys = pd.MultiIndex.from_frame(decisions[key_columns])
+    row_alpha = pd.Series(row_keys.map(lookup), index=decisions.index).astype(float)
+    # A prior cell with no current-patch counterpart cannot be verified either way.
+    row_alpha = row_alpha.fillna(UNVERIFIED_BORROW_WEIGHT)
+
+    return weights.where(~is_prior, weights * row_alpha)
+
+
+def _parse_action_ids(value: object) -> frozenset[int]:
+    try:
+        return frozenset(int(item) for item in json.loads(str(value)))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return frozenset()
 
 
 def deidentified_export(decisions: pd.DataFrame, salt: str) -> pd.DataFrame:
@@ -717,12 +838,104 @@ def load_materially_changed_items(
             COALESCE("Description", '') || '|' ||
             "PriceTotal"::text || '|' ||
             COALESCE("BuildsFrom"::text, '') || '|' ||
-            COALESCE("BuildsInto"::text, '')
+            COALESCE("BuildsInto"::text, '') || '|' ||
+            "InStore"::text
         )) > 1
         """,
         (patches,),
     ).fetchall()
     return {int(row["ItemId"]) for row in rows}
+
+
+def load_materially_changed_runes(
+    connection: psycopg.Connection,
+    patches: list[str],
+) -> set[int]:
+    """Runes are a balance lever too, and a rune change invalidates borrowed rune-page rows."""
+    if len(patches) < 2:
+        return set()
+    rows = connection.execute(
+        """
+        SELECT "RuneId"
+        FROM "RuneVersions"
+        WHERE "PatchVersion" = ANY(%s)
+        GROUP BY "RuneId"
+        HAVING COUNT(DISTINCT MD5(
+            COALESCE("Name", '') || '|' ||
+            COALESCE("Description", '') || '|' ||
+            "Slot"::text || '|' ||
+            "RunePathId"::text
+        )) > 1
+        """,
+        (patches,),
+    ).fetchall()
+    return {int(row["RuneId"]) for row in rows}
+
+
+def load_materially_changed_champions(
+    connection: psycopg.Connection,
+    patches: list[str],
+) -> set[int]:
+    """
+    Champion rebalances are the most common patch lever and invalidate every borrowed row for that
+    champion, whatever the item. `BalanceHash` is a hash of a numeric-only projection of Data Dragon
+    (base stats plus each spell's cooldown/cost/range/effect), so cosmetic churn does not register.
+    """
+    if len(patches) < 2:
+        return set()
+    rows = connection.execute(
+        """
+        SELECT "ChampionId"
+        FROM "ChampionVersions"
+        WHERE "PatchVersion" = ANY(%s)
+        GROUP BY "ChampionId"
+        HAVING COUNT(DISTINCT "BalanceHash") > 1
+        """,
+        (patches,),
+    ).fetchall()
+    return {int(row["ChampionId"]) for row in rows}
+
+
+@dataclass(frozen=True)
+class PatchChangeSet:
+    """What a patch actually touched, per entity. Empty sets mean "nothing changed"."""
+
+    items: frozenset[int]
+    runes: frozenset[int]
+    champions: frozenset[int]
+
+    @property
+    def is_empty(self) -> bool:
+        return not (self.items or self.runes or self.champions)
+
+
+def load_patch_change_set(connection: psycopg.Connection, patches: list[str]) -> PatchChangeSet:
+    return PatchChangeSet(
+        items=frozenset(load_materially_changed_items(connection, patches)),
+        runes=frozenset(load_materially_changed_runes(connection, patches)),
+        champions=frozenset(load_materially_changed_champions(connection, patches)),
+    )
+
+
+def load_champion_archetypes(connection: psycopg.Connection, patch: str) -> dict[int, str]:
+    """
+    Champion -> archetype, used as a pooling level so a sparse champion borrows strength from
+    champions that play like it rather than from every champion at once. Roles are stored sorted, so
+    the joined key is stable; a champion with no roles pools at the role level as before.
+    """
+    rows = connection.execute(
+        """
+        SELECT "ChampionId", "Roles"
+        FROM "ChampionVersions"
+        WHERE "PatchVersion" = %s
+        """,
+        (patch,),
+    ).fetchall()
+    archetypes: dict[int, str] = {}
+    for row in rows:
+        roles = [str(role).strip().lower() for role in (row["Roles"] or []) if str(role).strip()]
+        archetypes[int(row["ChampionId"])] = "+".join(sorted(roles)) if roles else UNKNOWN_ARCHETYPE
+    return archetypes
 
 
 def load_timeline_state_events(connection, patches: list[str], cutoff) -> pd.DataFrame:
@@ -1482,6 +1695,9 @@ def build_action_estimates(
                     **result,
                     "champion_id": int(champion_id),
                     "role": role,
+                    "archetype": str(group["archetype"].iloc[0])
+                    if "archetype" in group.columns
+                    else UNKNOWN_ARCHETYPE,
                     "opponent_id": int(opponent_id),
                     "region": region,
                     "family": family,
@@ -1501,7 +1717,16 @@ def build_action_estimates(
             )
     apply_partial_pooling(
         records,
-        [["family", "stage", "action_key"], ["family", "stage", "action_key", "role"]],
+        [
+            ["family", "stage", "action_key"],
+            ["family", "stage", "action_key", "role"],
+            # Archetype sits between role and champion: an item's effect on a burst mage says far
+            # more about the same item on another burst mage than the role average does, so a sparse
+            # champion shrinks toward champions that play like it. `between_group_variance` is
+            # method-of-moments, so if archetype explains no variance this level contributes almost
+            # nothing rather than flattening genuine champion-specific effects.
+            ["family", "stage", "action_key", "role", "archetype"],
+        ],
     )
     return [
         (
@@ -1533,6 +1758,8 @@ def build_action_estimates(
             "SHADOW",
             "GLOBAL" if record["region"] == "GLOBAL" else "REGIONAL_OVERRIDE",
             record["baseline_definition"],
+            record["evidence_bucket"],
+            record["bucket_confidence"],
             None,
         )
         for record in records
@@ -1840,13 +2067,27 @@ def apply_partial_pooling(records: list[dict], levels: list[list[str]]) -> None:
     variance = np.array([max(float(record["standard_error"]), 1e-6) ** 2 for record in records])
     prior_mean = np.zeros(len(records))
     prior_variance = np.full(len(records), GLOBAL_PRIOR_VARIANCE)
+    parent_of = [0] * len(records)
     for keys in levels:
         groups: dict[tuple, list[int]] = {}
         for position, record in enumerate(records):
             groups.setdefault(tuple(record[key] for key in keys), []).append(position)
         next_mean = prior_mean.copy()
         next_variance = prior_variance.copy()
-        for members in groups.values():
+        group_of = list(parent_of)
+        for group_id, members in enumerate(groups.values()):
+            # A level that reproduces its parent's membership refines nothing, so applying the
+            # update would shrink the same records toward their own mean a second time. Champions
+            # with no published archetype hit this, and must land exactly where role-level pooling
+            # left them rather than being quietly pulled tighter.
+            if len({parent_of[position] for position in members}) == 1 and len(members) == sum(
+                1 for position in range(len(records)) if parent_of[position] == parent_of[members[0]]
+            ):
+                for position in members:
+                    group_of[position] = group_id
+                continue
+            for position in members:
+                group_of[position] = group_id
             index = np.array(members)
             spread = between_group_variance(raw[index], variance[index])
             precision = 1.0 / (variance[index] + spread)
@@ -1858,14 +2099,41 @@ def apply_partial_pooling(records: list[dict], levels: list[list[str]]) -> None:
             next_mean[index] = (group_mean / group_variance + parent_mean / parent_variance) / combined
             next_variance[index] = spread + 1.0 / combined
         prior_mean, prior_variance = next_mean, next_variance
+        parent_of = group_of
     posterior_variance = 1.0 / (1.0 / variance + 1.0 / prior_variance)
     posterior_mean = (raw / variance + prior_mean / prior_variance) * posterior_variance
     posterior_error = np.sqrt(posterior_variance)
+    bucket, bucket_confidence = posterior_buckets(posterior_mean, posterior_error)
     for position, record in enumerate(records):
         record["estimate"] = float(posterior_mean[position])
         record["posterior_standard_error"] = float(posterior_error[position])
+        record["evidence_bucket"] = bucket[position]
+        record["bucket_confidence"] = float(bucket_confidence[position])
         record["low"] = float(posterior_mean[position] - 1.96 * posterior_error[position])
         record["high"] = float(posterior_mean[position] + 1.96 * posterior_error[position])
+
+
+def posterior_buckets(
+    mean: np.ndarray,
+    error: np.ndarray,
+) -> tuple[list[str], np.ndarray]:
+    """
+    Favoured bucket per estimate and the posterior mass behind it.
+
+    A cell needs far more evidence to pin a <=3pp interval than to say which side of "typical" it
+    falls on, so the serving layer publishes a direction when it cannot publish a number. The mass is
+    computed here, where the posterior lives, so promotion can grade it with a plain column
+    comparison instead of materialising every row to evaluate a normal tail.
+    """
+    safe_error = np.maximum(error, 1e-9)
+    # P(lift > +threshold) and P(lift < -threshold) under the posterior.
+    above = 0.5 * erfc((BUCKET_THRESHOLD - mean) / (safe_error * math.sqrt(2)))
+    below = 0.5 * erfc((BUCKET_THRESHOLD + mean) / (safe_error * math.sqrt(2)))
+    typical = np.clip(1.0 - above - below, 0.0, 1.0)
+    stacked = np.vstack([below, typical, above])
+    labels = np.array(["BELOW_AVERAGE", "TYPICAL", "ABOVE_AVERAGE"])
+    winner = stacked.argmax(axis=0)
+    return list(labels[winner]), stacked.max(axis=0)
 
 
 def between_group_variance(values: np.ndarray, variance: np.ndarray) -> float:
@@ -2082,10 +2350,11 @@ def insert_estimates(connection, rows: list[tuple]) -> None:
             "RawWinRate", "PickRate", "ObservedCount", "EffectiveSampleSize",
             "AverageTimingMinutes", "PropensityOverlap", "CovariateBalance",
             "StableAcrossFolds", "IsPublishable", "EvidenceQuality", "FallbackScope",
-            "BaselineDefinition", "UnavailableReason", "ComputedAtUtc"
+            "BaselineDefinition", "EvidenceBucket", "BucketConfidence",
+            "UnavailableReason", "ComputedAtUtc"
         ) VALUES (
             %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s::jsonb,
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
         )
         ON CONFLICT DO NOTHING
         """,

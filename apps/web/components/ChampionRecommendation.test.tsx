@@ -24,6 +24,8 @@ function estimate(overrides: Partial<AdjustedActionEstimate> = {}): AdjustedActi
     fallbackScope: "NONE",
     regionScope: "NA1",
     baselineDefinition: "Other first legendary items bought in the same decision.",
+    evidenceTier: "NUMERIC" as const,
+    evidenceBucket: null,
     isPublishable: true,
     unavailableReason: null,
     ...overrides

@@ -1,4 +1,5 @@
 import inspect
+import json
 import logging
 import re
 from datetime import datetime, timezone
@@ -15,11 +16,15 @@ from build_lab_modeler.pipeline import (
     FEATURE_COLUMNS,
     GLOBAL_PRIOR_VARIANCE,
     TIMED_FAMILIES,
+    UNKNOWN_ARCHETYPE,
+    UNVERIFIED_BORROW_WEIGHT,
     GenerationHeartbeat,
     LeaseLost,
+    PatchChangeSet,
     Settings,
     apply_partial_pooling,
     apply_row_weights,
+    commensurability_weights,
     average_timing,
     build_action_estimates,
     build_item_decisions,
@@ -1309,3 +1314,210 @@ def test_run_once_still_surfaces_an_unreachable_database(monkeypatch, tmp_path):
     # A one-shot invocation (CI / manual) must fail loudly rather than swallow the outage.
     with pytest.raises(operational_error):
         pipeline.run()
+
+
+# --- Phase A: adaptive per-cell borrowing -------------------------------------------------
+
+
+def _borrow_frame(current_win_rate: float, prior_win_rate: float, n: int = 400, champion: int = 103):
+    """One cell observed on both the current and the prior patch, with controllable disagreement."""
+    rows = []
+    for patch, rate in (("16.15", current_win_rate), ("16.14", prior_win_rate)):
+        wins = int(round(rate * n))
+        for index in range(n):
+            rows.append(
+                {
+                    "patch": patch,
+                    "champion_id": champion,
+                    "role": "MIDDLE",
+                    "family": "ITEM",
+                    "stage": 1,
+                    "action_key": "item:3157",
+                    "action_ids": json.dumps([3157]),
+                    "won": 1 if index < wins else 0,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+NO_CHANGES = PatchChangeSet(items=frozenset(), runes=frozenset(), champions=frozenset())
+
+
+def test_borrowing_stays_strong_when_the_prior_patch_agrees():
+    frame = _borrow_frame(0.50, 0.50)
+
+    weights = commensurability_weights(frame, "16.15", NO_CHANGES)
+
+    current = weights[frame["patch"] == "16.15"]
+    prior = weights[frame["patch"] == "16.14"]
+    assert (current == 1.0).all(), "current-patch rows are never discounted"
+    assert prior.min() > 0.95, "an agreeing prior patch should borrow at close to full strength"
+
+
+def test_borrowing_collapses_across_a_meta_break():
+    # 50% -> 70% on 400 observations a side is a ~6 sigma split: the cell is not the same cell.
+    frame = _borrow_frame(0.50, 0.70)
+
+    weights = commensurability_weights(frame, "16.15", NO_CHANGES)
+
+    assert weights[frame["patch"] == "16.14"].max() < 0.05
+    assert (weights[frame["patch"] == "16.15"] == 1.0).all()
+
+
+def test_borrowing_decays_monotonically_with_disagreement():
+    previous = 1.1
+    for prior_rate in (0.50, 0.54, 0.58, 0.62, 0.70):
+        weight = commensurability_weights(_borrow_frame(0.50, prior_rate), "16.15", NO_CHANGES)
+        current = weight[_borrow_frame(0.50, prior_rate)["patch"] == "16.14"].max()
+        assert current < previous, f"weight must fall as disagreement grows (at {prior_rate})"
+        previous = current
+
+
+def test_a_thin_prior_cell_is_not_discarded_for_noise():
+    # Same 20-point gap, but on 12 observations it is well inside noise, so it must not be treated
+    # as a meta break the way the 400-observation version is.
+    thin = commensurability_weights(_borrow_frame(0.50, 0.70, n=12), "16.15", NO_CHANGES)
+    thick = commensurability_weights(_borrow_frame(0.50, 0.70, n=400), "16.15", NO_CHANGES)
+
+    assert thin[_borrow_frame(0.50, 0.70, n=12)["patch"] == "16.14"].max() > 0.5
+    assert thick[_borrow_frame(0.50, 0.70, n=400)["patch"] == "16.14"].max() < 0.05
+
+
+@pytest.mark.parametrize(
+    "changes,reason",
+    [
+        (PatchChangeSet(frozenset({3157}), frozenset(), frozenset()), "item was rebalanced"),
+        (PatchChangeSet(frozenset(), frozenset(), frozenset({103})), "champion was rebalanced"),
+        (PatchChangeSet(frozenset(), frozenset({3157}), frozenset()), "rune in the action changed"),
+    ],
+)
+def test_a_static_change_hard_excludes_the_prior_patch(changes, reason):
+    # Perfect agreement: only the static change set can be what zeroes these rows.
+    frame = _borrow_frame(0.50, 0.50)
+
+    weights = commensurability_weights(frame, "16.15", changes)
+
+    assert (weights[frame["patch"] == "16.14"] == 0.0).all(), reason
+    assert (weights[frame["patch"] == "16.15"] == 1.0).all(), "current patch is never excluded"
+
+
+def test_a_static_change_to_another_champion_does_not_block_this_one():
+    frame = _borrow_frame(0.50, 0.50, champion=103)
+    changes = PatchChangeSet(frozenset(), frozenset(), frozenset({64}))
+
+    weights = commensurability_weights(frame, "16.15", changes)
+
+    assert weights[frame["patch"] == "16.14"].min() > 0.95
+
+
+def test_a_prior_cell_with_no_current_counterpart_is_admitted_cautiously():
+    frame = _borrow_frame(0.50, 0.50)
+    frame = frame.loc[frame["patch"] == "16.14"].reset_index(drop=True)
+
+    weights = commensurability_weights(frame, "16.15", NO_CHANGES)
+
+    assert weights.max() == pytest.approx(UNVERIFIED_BORROW_WEIGHT)
+
+
+def test_adaptive_weights_flow_into_the_row_weights_and_drop_zeroed_rows():
+    frame = _borrow_frame(0.50, 0.50)
+    changes = PatchChangeSet(frozenset({3157}), frozenset(), frozenset())
+
+    weighted = apply_row_weights(frame, "16.15", ["16.15", "16.14"], None, changes)
+
+    assert set(weighted["patch"]) == {"16.15"}, "hard-excluded rows carry zero weight and are dropped"
+    assert (weighted["patch_weight"] == 1.0).all()
+
+
+def test_row_weights_are_unchanged_when_no_change_set_is_supplied():
+    frame = _borrow_frame(0.50, 0.50)
+
+    weighted = apply_row_weights(frame, "16.15", ["16.15", "16.14"], None)
+
+    prior = weighted.loc[weighted["patch"] == "16.14", "patch_weight"]
+    assert prior.nunique() == 1
+    assert prior.iloc[0] == pytest.approx(0.60), "falls back to the recency floor"
+
+
+# --- Phase B: archetype pooling -------------------------------------------------------------
+
+
+def _pool_records(divergent_estimate: float | None = None):
+    """Six champions sharing an action; four mages, two marksmen."""
+    records = []
+    for index, (champion, archetype, estimate) in enumerate(
+        [
+            (1, "mage", 0.020),
+            (2, "mage", 0.022),
+            (3, "mage", 0.018),
+            (4, "mage", divergent_estimate if divergent_estimate is not None else 0.021),
+            (5, "marksman", -0.015),
+            (6, "marksman", -0.017),
+        ]
+    ):
+        records.append(
+            {
+                "champion_id": champion,
+                "role": "MIDDLE",
+                "archetype": archetype,
+                "family": "ITEM",
+                "stage": 1,
+                "action_key": "item:3157",
+                "raw_estimate": estimate,
+                "standard_error": 0.010,
+            }
+        )
+    return records
+
+
+ARCHETYPE_LEVELS = [
+    ["family", "stage", "action_key"],
+    ["family", "stage", "action_key", "role"],
+    ["family", "stage", "action_key", "role", "archetype"],
+]
+ROLE_LEVELS = ARCHETYPE_LEVELS[:2]
+
+
+def test_archetype_pooling_narrows_the_posterior_for_a_typical_champion():
+    with_archetype = _pool_records()
+    without = _pool_records()
+    apply_partial_pooling(with_archetype, ARCHETYPE_LEVELS)
+    apply_partial_pooling(without, ROLE_LEVELS)
+
+    tighter = with_archetype[0]["posterior_standard_error"]
+    looser = without[0]["posterior_standard_error"]
+    assert tighter <= looser, "adding a level must not widen a well-supported cell"
+
+
+def test_archetype_pooling_does_not_flatten_a_genuinely_divergent_champion():
+    # Champion 4 is a mage whose true effect is the opposite sign of its archetype.
+    records = _pool_records(divergent_estimate=-0.030)
+    apply_partial_pooling(records, ARCHETYPE_LEVELS)
+
+    divergent = next(r for r in records if r["champion_id"] == 4)
+    peers = [r["estimate"] for r in records if r["champion_id"] in (1, 2, 3)]
+
+    assert divergent["estimate"] < min(peers), "a divergent champion must not be pulled to its peers"
+    assert divergent["estimate"] < 0, "the sign of a strongly-observed divergence must survive"
+
+
+def test_posterior_interval_matches_the_posterior_it_reports():
+    records = _pool_records()
+    apply_partial_pooling(records, ARCHETYPE_LEVELS)
+
+    for record in records:
+        width = record["high"] - record["low"]
+        assert width == pytest.approx(2 * 1.96 * record["posterior_standard_error"], rel=1e-9)
+        assert record["low"] < record["estimate"] < record["high"]
+
+
+def test_unknown_archetype_degrades_to_role_level_pooling():
+    records = _pool_records()
+    for record in records:
+        record["archetype"] = UNKNOWN_ARCHETYPE
+    reference = _pool_records()
+    apply_partial_pooling(records, ARCHETYPE_LEVELS)
+    apply_partial_pooling(reference, ROLE_LEVELS)
+
+    for pooled, expected in zip(records, reference, strict=True):
+        assert pooled["estimate"] == pytest.approx(expected["estimate"], rel=1e-6)

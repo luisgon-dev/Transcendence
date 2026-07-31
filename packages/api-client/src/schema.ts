@@ -5287,6 +5287,8 @@ export interface components {
             fallbackScope: string;
             regionScope: string;
             baselineDefinition: string;
+            evidenceTier: string;
+            evidenceBucket?: string | null;
             isPublishable: boolean;
             unavailableReason?: string | null;
         };

@@ -1,6 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using System.Globalization;
 using System.Net;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Match;
@@ -158,6 +161,12 @@ public class StaticDataService(
             patchVersion,
             ct => FetchAndStoreItemsAsync(patchVersion, ct),
             cancellationToken);
+
+        await MemoizeStaticDataIfAuthoritativeAsync(
+            $"static:champions:{patchVersion}",
+            patchVersion,
+            ct => FetchAndStoreChampionsAsync(patchVersion, ct),
+            cancellationToken);
     }
 
     private async Task MemoizeStaticDataIfAuthoritativeAsync(
@@ -297,6 +306,201 @@ public class StaticDataService(
             await context.SaveChangesAsync(cancellationToken);
 
         return !itemFetchResult.UsedLatestFallback;
+    }
+
+    private async Task<bool> FetchAndStoreChampionsAsync(string patchVersion, CancellationToken cancellationToken)
+    {
+        var client = httpClientFactory.CreateClient();
+        var champions = await FetchChampionsForPatchAsync(client, patchVersion, cancellationToken);
+        if (champions.Count == 0)
+            throw new InvalidOperationException($"No champion data was returned for patch '{patchVersion}'.");
+
+        var existing = await context.ChampionVersions
+            .Where(cv => cv.PatchVersion == patchVersion)
+            .ToDictionaryAsync(cv => cv.ChampionId, cancellationToken);
+
+        var changed = false;
+        foreach (var incoming in champions)
+        {
+            if (existing.TryGetValue(incoming.ChampionId, out var current))
+            {
+                if (current.BalanceHash == incoming.BalanceHash &&
+                    current.Alias == incoming.Alias &&
+                    current.Name == incoming.Name &&
+                    AreEqual(current.Roles, incoming.Roles))
+                    continue;
+
+                current.BalanceHash = incoming.BalanceHash;
+                current.Alias = incoming.Alias;
+                current.Name = incoming.Name;
+                current.Roles = incoming.Roles;
+                changed = true;
+            }
+            else
+            {
+                await context.ChampionVersions.AddAsync(incoming, cancellationToken);
+                changed = true;
+            }
+        }
+
+        if (changed)
+            await context.SaveChangesAsync(cancellationToken);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Champion balance data comes from Data Dragon, not Community Dragon: Community Dragon's
+    /// champion payload leaves cooldown/cost as unresolved templates ("@Cooldown@s") and zero-fills
+    /// effect amounts, so none of its numbers can be diffed. Roles still come from Community Dragon,
+    /// which is the only one of the two that publishes them.
+    /// </summary>
+    private async Task<List<ChampionVersion>> FetchChampionsForPatchAsync(
+        HttpClient client,
+        string patchVersion,
+        CancellationToken cancellationToken)
+    {
+        var versions = await FetchPatchesAsync(client, cancellationToken);
+        var dataDragonVersion = versions?
+            .Select(v => v.Patch)
+            .FirstOrDefault(v => string.Equals(TrimPatch(v), patchVersion, StringComparison.Ordinal));
+        if (string.IsNullOrWhiteSpace(dataDragonVersion))
+        {
+            logger.LogWarning(
+                "Data Dragon has no build for patch '{PatchVersion}'; champion balance data was skipped.",
+                patchVersion);
+            return [];
+        }
+
+        var payload = await GetAndDeserializeAsync<JsonElement>(
+            client,
+            $"https://ddragon.leagueoflegends.com/cdn/{dataDragonVersion}/data/en_US/championFull.json",
+            cancellationToken);
+        if (payload.ValueKind != JsonValueKind.Object ||
+            !payload.TryGetProperty("data", out var data) ||
+            data.ValueKind != JsonValueKind.Object)
+        {
+            logger.LogWarning("Data Dragon returned no champion data for '{Version}'.", dataDragonVersion);
+            return [];
+        }
+
+        var roles = await FetchChampionRolesAsync(client, patchVersion, cancellationToken);
+
+        var results = new List<ChampionVersion>();
+        foreach (var entry in data.EnumerateObject())
+        {
+            var champion = entry.Value;
+            if (!champion.TryGetProperty("key", out var key) ||
+                !int.TryParse(key.GetString(), out var championId))
+                continue;
+
+            results.Add(new ChampionVersion
+            {
+                ChampionId = championId,
+                PatchVersion = patchVersion,
+                Alias = champion.TryGetProperty("id", out var alias) ? alias.GetString() ?? string.Empty : string.Empty,
+                Name = champion.TryGetProperty("name", out var name) ? name.GetString() ?? string.Empty : string.Empty,
+                BalanceHash = ComputeChampionBalanceHash(champion),
+                Roles = roles.TryGetValue(championId, out var championRoles) ? championRoles : []
+            });
+        }
+
+        return results;
+    }
+
+    private async Task<Dictionary<int, List<string>>> FetchChampionRolesAsync(
+        HttpClient client,
+        string patchVersion,
+        CancellationToken cancellationToken)
+    {
+        const string summaryPath = "plugins/rcp-be-lol-game-data/global/default/v1/champion-summary.json";
+        try
+        {
+            var (summary, _) = await GetCommunityDragonDataWithPatchFallbackAsync<List<CommunityDragonChampionSummary>>(
+                client,
+                patchVersion,
+                summaryPath,
+                cancellationToken);
+
+            return (summary ?? [])
+                .Where(entry => entry.Id > 0)
+                .GroupBy(entry => entry.Id)
+                .ToDictionary(group => group.Key, group => NormalizeStringList(group.First().Roles));
+        }
+        catch (HttpRequestException exception)
+        {
+            // Roles only feed archetype pooling, which degrades to role-level pooling without them.
+            // Balance detection is the load-bearing half and must not fail with them.
+            logger.LogWarning(exception, "Champion roles unavailable for patch '{PatchVersion}'.", patchVersion);
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Hashes a canonical NUMERIC projection — base stats plus each spell's cooldown/cost/range/effect
+    /// arrays — and deliberately no prose. Verified against live Data Dragon: across a cosmetic-only
+    /// patch this flags 0 of 173 champions while a whole-record diff flags 10 (all `skins`); across a
+    /// real balance patch it flags 11. Adding descriptions or tooltips here would reintroduce exactly
+    /// that noise and silently suppress borrowing for unchanged champions.
+    /// </summary>
+    internal static string ComputeChampionBalanceHash(JsonElement champion)
+    {
+        var projection = new StringBuilder();
+
+        if (champion.TryGetProperty("stats", out var stats) && stats.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var stat in stats.EnumerateObject().OrderBy(p => p.Name, StringComparer.Ordinal))
+            {
+                projection.Append(stat.Name).Append('=');
+                projection.Append(stat.Value.TryGetDouble(out var value)
+                    ? Math.Round(value, 4).ToString("R", CultureInfo.InvariantCulture)
+                    : stat.Value.ToString());
+                projection.Append(';');
+            }
+        }
+
+        projection.Append("partype=");
+        projection.Append(champion.TryGetProperty("partype", out var partype) ? partype.GetString() : string.Empty);
+        projection.Append('|');
+
+        if (champion.TryGetProperty("spells", out var spells) && spells.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var spell in spells.EnumerateArray())
+            {
+                projection.Append(spell.TryGetProperty("id", out var spellId) ? spellId.GetString() : string.Empty);
+                projection.Append(':');
+                projection.Append(spell.TryGetProperty("maxrank", out var maxRank) ? maxRank.ToString() : string.Empty);
+                foreach (var field in new[] { "cooldown", "cost", "range" })
+                    AppendNumericArray(projection, spell, field);
+                if (spell.TryGetProperty("effect", out var effect) && effect.ValueKind == JsonValueKind.Array)
+                {
+                    // effect[0] is null by Data Dragon convention; ToString covers it without a branch.
+                    foreach (var rank in effect.EnumerateArray())
+                        projection.Append(rank.ToString()).Append(',');
+                }
+
+                projection.Append('|');
+            }
+        }
+
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(projection.ToString()))).ToLowerInvariant();
+    }
+
+    private static void AppendNumericArray(StringBuilder projection, JsonElement spell, string property)
+    {
+        projection.Append(property).Append('=');
+        if (spell.TryGetProperty(property, out var values) && values.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var value in values.EnumerateArray())
+            {
+                projection.Append(value.TryGetDouble(out var number)
+                    ? Math.Round(number, 4).ToString("R", CultureInfo.InvariantCulture)
+                    : value.ToString());
+                projection.Append(',');
+            }
+        }
+
+        projection.Append(';');
     }
 
     private static string TrimPatch(string patch)

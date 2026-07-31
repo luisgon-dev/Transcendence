@@ -18,9 +18,46 @@ public static class BuildLabEvidenceGate
     public const double V1MaximumOverallEce = 0.015;
     public const double V1MaximumTimeBandEce = 0.025;
 
+    /// <summary>
+    /// Lift, in win-probability points, that separates "typical" from "above/below average". Wide
+    /// enough that a bucket claim is about a real difference rather than estimator noise.
+    /// </summary>
+    public const double BucketThreshold = 0.005;
+
+    /// <summary>
+    /// Posterior mass a single bucket must hold before the bucket itself is publishable. A cell that
+    /// straddles two buckets says nothing, so it stays descriptive.
+    /// </summary>
+    public const double BucketConfidence = 0.80;
+
     public readonly record struct PublicationGate(
         string UnavailableReason,
         Expression<Func<AdjustedActionEstimate, bool>> Fails);
+
+    /// <summary>
+    /// Rows that cannot support a number but can still support a direction.
+    /// </summary>
+    /// <remarks>
+    /// Publication is deliberately not all-or-nothing: patches ship fortnightly, and a cell needs far
+    /// more evidence for a &lt;=3pp interval than for a direction, so gating everything on the interval
+    /// leaves the lab empty for most of a patch.
+    ///
+    /// Every sample gate still applies — bucketing thin evidence is no more honest than publishing a
+    /// number for it. Only the interval-width gate is traded away, and only when the posterior
+    /// actually concentrates in one bucket. <c>BucketConfidence</c> is the posterior mass the modeler
+    /// measured for the favoured bucket, so the decision stays set-based over hundreds of thousands
+    /// of rows instead of materialising them to evaluate a normal tail in memory.
+    /// </remarks>
+    public static Expression<Func<AdjustedActionEstimate, bool>> QualifiesForBucketedTier(
+        BuildLabModelingOptions options) =>
+        estimate =>
+            estimate.ObservedCount >= options.MinimumObservedActions &&
+            estimate.EffectiveSampleSize >= options.MinimumEffectiveSampleSize &&
+            estimate.PropensityOverlap >= options.MinimumPropensityOverlap &&
+            estimate.CovariateBalance <= options.MaximumCovariateBalance &&
+            estimate.StableAcrossFolds &&
+            estimate.AdjustedWpa != null &&
+            estimate.BucketConfidence >= BucketConfidence;
 
     /// <summary>
     /// Ordered most significant first. Promotion grades hundreds of thousands of rows through these

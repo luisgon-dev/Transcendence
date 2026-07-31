@@ -226,8 +226,12 @@ public sealed class BuildLabService(
                 pathRow.IsPublishable,
                 pathRow.UnavailableReason);
 
+        // A section is available once it can say *something*, not only once it can print a number.
+        // A bucketed candidate carries a direction the posterior actually supports, which is the
+        // whole reason the tier exists: a fortnightly patch rarely earns a <=3pp interval in time.
         var available =
-            stages.Any(stage => stage.Candidates.Any(candidate => candidate.IsPublishable)) ||
+            stages.Any(stage => stage.Candidates.Any(candidate =>
+                candidate.IsPublishable || candidate.EvidenceTier == "BUCKETED")) ||
             pathEstimate is { IsPublishable: true };
         return new BuildLabResponse(
             available,
@@ -410,6 +414,10 @@ public sealed class BuildLabService(
             string.IsNullOrWhiteSpace(estimate.BaselineDefinition)
                 ? BaselineDefinition
                 : estimate.BaselineDefinition,
+            estimate.EvidenceTier.ToString().ToUpperInvariant(),
+            // A bucket is only a claim at the bucketed tier: a numeric cell shows its number, and a
+            // descriptive one has not earned a direction.
+            estimate.EvidenceTier == EvidenceTier.Bucketed ? estimate.EvidenceBucket : null,
             estimate.IsPublishable,
             estimate.UnavailableReason);
 
@@ -422,7 +430,12 @@ public sealed class BuildLabService(
                 .ThenByDescending(estimate => estimate.ObservedCount),
             "COMMON" => estimates.OrderByDescending(estimate => estimate.PickRate ?? double.MinValue)
                 .ThenByDescending(estimate => estimate.ObservedCount),
-            _ => estimates.OrderByDescending(estimate => estimate.ConfidenceLow ?? double.MinValue)
+            // Ranking is deliberately not gated on the display tier. A bucketed candidate has a
+            // posterior mean worth ordering by even though its interval is too wide to print, so
+            // ordering falls back to the point estimate rather than dropping the row to last.
+            _ => estimates
+                .OrderByDescending(estimate =>
+                    estimate.ConfidenceLow ?? estimate.AdjustedWpa ?? double.MinValue)
                 .ThenByDescending(estimate => estimate.EffectiveSampleSize)
         };
 

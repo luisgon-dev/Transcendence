@@ -28,6 +28,8 @@ import {
   savedRuneSelections,
   selectBuildLabCandidate,
   undoLastBuildLabSelection,
+  bucketLabel,
+  bucketToneClass,
   wpaToneClass,
   type AdjustedActionEstimate,
   type BuildLabMode,
@@ -320,15 +322,27 @@ function StageTable({
               <td
                 className={cn(
                   "px-3 py-3 text-right font-semibold tabular-nums",
-                  candidate.isPublishable ? wpaToneClass(candidate.adjustedWpa) : "text-muted"
+                  candidate.isPublishable
+                    ? wpaToneClass(candidate.adjustedWpa)
+                    : candidate.evidenceTier === "BUCKETED"
+                      ? bucketToneClass(candidate.evidenceBucket)
+                      : "text-muted"
                 )}
               >
-                {candidate.isPublishable ? formatWpa(candidate.adjustedWpa) : "Insufficient evidence"}
+                {/* A bucketed cell states the direction its posterior supports and withholds the
+                    number its interval cannot. Only a descriptive cell says nothing. */}
+                {candidate.isPublishable
+                  ? formatWpa(candidate.adjustedWpa)
+                  : candidate.evidenceTier === "BUCKETED"
+                    ? bucketLabel(candidate.evidenceBucket)
+                    : "Insufficient evidence"}
               </td>
               <td className="px-3 py-3 text-right tabular-nums text-fg/72">
                 {candidate.isPublishable
                   ? `${formatWpa(candidate.confidenceLow)} to ${formatWpa(candidate.confidenceHigh)}`
-                  : "—"}
+                  : candidate.evidenceTier === "BUCKETED"
+                    ? "Direction only"
+                    : "—"}
               </td>
               <td className="px-3 py-3 text-right tabular-nums text-fg/72">
                 {formatCompactCount(candidate.observedCount)} /{" "}

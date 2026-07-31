@@ -57,7 +57,8 @@ public class StaticDataServiceTests
     }
 
     [Theory]
-    [InlineData(false, 2)]
+    // One removal per memoized static-data fetch: runes, items, and champion balance data.
+    [InlineData(false, 3)]
     [InlineData(true, 0)]
     public async Task EnsureStaticDataForPatchAsync_RemovesOnlyNonAuthoritativeCacheEntries(
         bool shouldCache,

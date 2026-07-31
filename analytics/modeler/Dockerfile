@@ -19,16 +19,16 @@ WORKDIR /app
 # roughly balanced; do not collapse them back together.
 #
 # --no-compile keeps shipped .pyc out of the layers: PYTHONDONTWRITEBYTECODE is set and the runtime
-# uid cannot write into site-packages, so that bytecode would never be reused anyway.
+# uid cannot write into site-packages, so that bytecode would never be reused anyway. It prevents
+# the files at creation time on purpose. Do NOT add a later layer that deletes files belonging to
+# an earlier one (vendored test suites, __pycache__ from the base image): that writes overlayfs
+# whiteouts across layers, and extracting them fails on this host with
+# "failed to Lchown ...: no such file or directory".
 RUN pip install --no-compile "numpy>=2.1,<3"
 RUN pip install --no-compile "pandas>=2.2,<3"
 RUN pip install --no-compile "scikit-learn>=1.6,<2" "joblib>=1.4,<2"
 RUN pip install --no-compile "pyarrow>=18,<21"
 RUN pip install --no-compile "boto3>=1.35,<2" "psycopg[binary]>=3.2,<4"
-
-# numpy/scipy/pandas ship their own test suites; nothing in this image runs them.
-RUN find /usr/local/lib/python3.12/site-packages -type d -name tests -prune -exec rm -rf {} + \
- && find /usr/local/lib/python3.12/site-packages -type d -name __pycache__ -prune -exec rm -rf {} +
 
 COPY analytics/modeler/pyproject.toml ./
 COPY analytics/modeler/src ./src

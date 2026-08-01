@@ -1012,8 +1012,9 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             entity.Property(x => x.LeaseOwner).HasMaxLength(128);
             entity.Property(x => x.PromotionHistoryJson).HasColumnType("jsonb");
             entity.HasIndex(x => new { x.Patch, x.Status, x.CompletedAtUtc });
-            // Lease reaper: equality on Status, range scan on the expiry.
-            entity.HasIndex(x => new { x.Status, x.LeaseExpiresAtUtc });
+            // The abandoned-run reaper selects purely on Status; liveness comes from the advisory
+            // lock, so there is no expiry column to range-scan.
+            entity.HasIndex(x => x.Status);
             entity.HasIndex(x => x.IsActive)
                 .IsUnique()
                 .HasFilter("\"IsActive\"");

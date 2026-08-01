@@ -180,41 +180,51 @@ public sealed class BuildLabGenerationCoordinatorTests
     }
 
     [Fact]
-    public async Task PromoteReadyCandidatesAsync_FailsAnExpiredModelingLeaseAndSparesAFreshHeartbeat()
+    public async Task PromoteReadyCandidatesAsync_FailsAModelingRunNoModelerIsHolding()
     {
-        await using var harness = await BuildLabHarness.CreateAsync();
-        var now = DateTime.UtcNow;
-        var expired = Candidate();
-        expired.Status = BuildLabGenerationStatus.Modeling;
-        expired.LeaseOwner = "modeler-1";
-        expired.LeaseAcquiredAtUtc = now.AddHours(-4);
-        expired.LeaseExpiresAtUtc = now.AddMinutes(-5);
-        var alive = Candidate();
-        alive.Status = BuildLabGenerationStatus.Modeling;
-        alive.LeaseOwner = "modeler-2";
-        alive.LeaseAcquiredAtUtc = now.AddHours(-4);
-        alive.LeaseExpiresAtUtc = null;
-        alive.HeartbeatAtUtc = now;
-        harness.Db.BuildLabGenerations.AddRange(expired, alive);
+        // Liveness is the advisory lock, not a timestamp. Acquiring it proves the modeler's session
+        // is gone, however recently the row was touched — the timeout this replaced reaped six
+        // consecutive healthy runs whose renewal thread simply could not win the GIL.
+        await using var harness = await BuildLabHarness.CreateAsync(modelerHoldsLock: false);
+        var abandoned = Candidate();
+        abandoned.Status = BuildLabGenerationStatus.Modeling;
+        abandoned.LeaseOwner = "modeler-1";
+        abandoned.CreatedAtUtc = DateTime.UtcNow;
+        harness.Db.BuildLabGenerations.Add(abandoned);
         await harness.Db.SaveChangesAsync();
         using var telemetry = new BuildLabTelemetry();
-        var coordinator = Coordinator(harness, telemetry, new BuildLabModelingOptions
-        {
-            Enabled = true,
-            LeaseTimeoutMinutes = 120
-        });
+        var coordinator = Coordinator(harness, telemetry, new BuildLabModelingOptions { Enabled = true });
 
         var promoted = await coordinator.PromoteReadyCandidatesAsync();
 
         promoted.Should().Be(0);
-        var reapedRow = await Reload(harness, expired.Id);
-        reapedRow.Status.Should().Be(BuildLabGenerationStatus.Failed);
-        reapedRow.FailureReason.Should().Contain("modeler-1");
-        reapedRow.LeaseOwner.Should().BeNull();
-        var aliveRow = await Reload(harness, alive.Id);
-        aliveRow.Status.Should().Be(BuildLabGenerationStatus.Modeling);
-        aliveRow.FailureReason.Should().BeNull();
-        aliveRow.LeaseOwner.Should().Be("modeler-2");
+        var reaped = await Reload(harness, abandoned.Id);
+        reaped.Status.Should().Be(BuildLabGenerationStatus.Failed);
+        reaped.FailureReason.Should().Contain("modeler-1");
+        reaped.LeaseOwner.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PromoteReadyCandidatesAsync_SparesARunWhoseModelerStillHoldsTheLock()
+    {
+        // The case the old timeout got wrong: a long, healthy run must survive regardless of how
+        // long it has been going, because its session is demonstrably still alive.
+        await using var harness = await BuildLabHarness.CreateAsync(modelerHoldsLock: true);
+        var running = Candidate();
+        running.Status = BuildLabGenerationStatus.Modeling;
+        running.LeaseOwner = "modeler-2";
+        running.CreatedAtUtc = DateTime.UtcNow.AddHours(-6);
+        harness.Db.BuildLabGenerations.Add(running);
+        await harness.Db.SaveChangesAsync();
+        using var telemetry = new BuildLabTelemetry();
+        var coordinator = Coordinator(harness, telemetry, new BuildLabModelingOptions { Enabled = true });
+
+        await coordinator.PromoteReadyCandidatesAsync();
+
+        var untouched = await Reload(harness, running.Id);
+        untouched.Status.Should().Be(BuildLabGenerationStatus.Modeling);
+        untouched.FailureReason.Should().BeNull();
+        untouched.LeaseOwner.Should().Be("modeler-2");
     }
 
     [Fact]
@@ -224,26 +234,22 @@ public sealed class BuildLabGenerationCoordinatorTests
         var now = DateTime.UtcNow;
         // Prod has been observed with the recurring-schedule flag true while Analytics:BuildLab:Enabled
         // was false, so the recurring path must be inert on its own rather than trusting the schedule.
-        var expired = Candidate();
-        expired.Status = BuildLabGenerationStatus.Modeling;
-        expired.LeaseOwner = "modeler-1";
-        expired.LeaseAcquiredAtUtc = now.AddHours(-4);
-        expired.LeaseExpiresAtUtc = now.AddMinutes(-5);
+        var abandoned = Candidate();
+        abandoned.Status = BuildLabGenerationStatus.Modeling;
+        abandoned.LeaseOwner = "modeler-1";
+        abandoned.CreatedAtUtc = now.AddHours(-4);
         var candidate = Candidate();
-        harness.Db.BuildLabGenerations.AddRange(expired, candidate);
+        harness.Db.BuildLabGenerations.AddRange(abandoned, candidate);
         harness.Db.AdjustedActionEstimates.Add(PassingEstimate(candidate.Id));
         await harness.Db.SaveChangesAsync();
         using var telemetry = new BuildLabTelemetry();
         var coordinator = Coordinator(harness, telemetry, new BuildLabModelingOptions
-        {
-            Enabled = false,
-            LeaseTimeoutMinutes = 120
-        });
+        { Enabled = false });
 
         var promoted = await coordinator.PromoteReadyCandidatesAsync();
 
         promoted.Should().Be(0);
-        var untouchedLease = await Reload(harness, expired.Id);
+        var untouchedLease = await Reload(harness, abandoned.Id);
         untouchedLease.Status.Should().Be(BuildLabGenerationStatus.Modeling);
         untouchedLease.LeaseOwner.Should().Be("modeler-1");
         var untouchedCandidate = await Reload(harness, candidate.Id);

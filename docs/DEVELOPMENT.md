@@ -490,13 +490,11 @@ Environment variables Compose actually supplies, and the code that reads each on
 | --- | --- |
 | `BUILD_LAB_ENABLED` | `Analytics__BuildLab__Enabled` on the **worker** (generation/promotion, timeline extras + the effective timeline schema version) *and* the **WebAPI** (serving — without it the API answers "not enabled" even after a promotion), plus both `Jobs__Schedule__Enable{Create,Promote}BuildLabGeneration` keys — one switch, not four |
 | `BUILD_LAB_CODE_REVISION` | worker: `Analytics__BuildLab__CodeRevision` (generation provenance) |
-| `BUILD_LAB_LEASE_TIMEOUT_MINUTES` | worker: `Analytics__BuildLab__LeaseTimeoutMinutes` (default `120`, floor 1) — **backstop only**, for a `Modeling` row with `LeaseExpiresAtUtc IS NULL`; normal reclamation runs off the modeler's own lease deadline (see "Leases and the wedge state") |
 | `BUILD_LAB_DATABASE_URL` | modeler; Compose supplies the PostgreSQL service URL |
 | `BUILD_LAB_DEIDENTIFICATION_SALT` | modeler — **secret**, no default, must be ≥ 32 chars or the container refuses to start |
 | `BUILD_LAB_ARTIFACT_DIR` | modeler (default `/artifacts`) |
 | `BUILD_LAB_POLL_SECONDS` | modeler (default `300`, floor `30`) |
 | `BUILD_LAB_RUN_ONCE` | modeler; `true` processes one pending generation and exits |
-| `BUILD_LAB_LEASE_SECONDS`, `BUILD_LAB_HEARTBEAT_SECONDS` | modeler lease renewal (defaults `900` / `60`; the heartbeat is additionally clamped to ≤ ¼ of the lease) |
 | `BUILD_LAB_MAX_TRAINING_ROWS` | modeler; chronological sample ceiling for the design matrix (default `250000`, floor `20000`) |
 | `BUILD_LAB_LOG_LEVEL` | modeler `LOG_LEVEL` (default `INFO`) |
 | `BUILD_LAB_S3_*` (`ENDPOINT`/`BUCKET`/`ACCESS_KEY`/`SECRET_KEY`) | modeler artifact upload |
@@ -558,22 +556,18 @@ The S3 settings target any S3-compatible object store. If they are absent, artif
 `build_lab_artifacts` volume and the manifest URI is `file://...`. Training exports contain
 generation-scoped surrogate match/participant identifiers and never contain Riot IDs or PUUIDs.
 
-**Leases and the wedge state.** `Modeling` is the only status the .NET side cannot leave on its own —
-the Python modeler owns it. The modeler claims a `PendingDataset` row and stamps
-`LeaseExpiresAtUtc = now + BUILD_LAB_LEASE_SECONDS`, then pushes that deadline (and `HeartbeatAtUtc`)
-forward every `BUILD_LAB_HEARTBEAT_SECONDS` from a background thread. Both Build Lab jobs run the
-reaper first, and the reaper reads the two columns differently:
+The modeler holds a **PostgreSQL session advisory lock** (`build-lab-generation-modeling`) for the
+whole run, and both Build Lab jobs run the reaper first. The reaper decides liveness by trying to take
+that same lock: if it succeeds, no modeler session exists, so every `Modeling` row is failed with the
+owner named in `FailureReason`. A dead modeler is therefore reclaimed on the next
+`promote-build-lab-generation` tick — within ~10 minutes at the default cron — with nothing to
+configure.
 
-- **`LeaseExpiresAtUtc` in the past** → failed, owner named in `FailureReason`. This is the path that
-  actually runs: a healthy run is never reclaimed because each heartbeat moves the deadline, and a dead
-  modeler is reclaimed one `BUILD_LAB_LEASE_SECONDS` (default 900) after its last heartbeat, at the
-  next `promote-build-lab-generation` tick — so ~25 minutes at the default 10-minute cron.
-- **`LeaseExpiresAtUtc IS NULL`** → failed once `HeartbeatAtUtc ?? LeaseAcquiredAtUtc ?? CreatedAtUtc`
-  is older than `LeaseTimeoutMinutes` (default 120). The modeler always writes a deadline, so this is a
-  backstop for a `Modeling` row that got there some other way (manual SQL, a future writer). Raising or
-  lowering `LEASE_TIMEOUT_MINUTES` therefore does **not** change how fast a dead modeler is reclaimed
-  — `BUILD_LAB_LEASE_SECONDS` does — and the old advice to keep
-  `LEASE_SECONDS < LEASE_TIMEOUT_MINUTES × 60` is not what protects a healthy run.
+There is deliberately no heartbeat, expiry column, or timeout. The previous design renewed a deadline
+from a background thread and reaped **six consecutive healthy generations**, because loading the frozen
+dataset assembles millions of rows through a raw DBAPI cursor and holds the GIL for minutes, so the
+renewal thread could not be scheduled. Liveness now belongs to the TCP session, which cannot be starved.
+This is also the pattern `RefreshBuildResourceAnalyticsJob` and `MatchTimelineIngestionJob` already use.
 
 Reaping matters because the coordinator refuses to create a second in-flight generation for a patch, so
 a wedged row blocks the pipeline. `POST /api/admin/analytics/build-lab/generations/{id}/fail` is the

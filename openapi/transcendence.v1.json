@@ -7750,16 +7750,6 @@
             "type": "string",
             "nullable": true
           },
-          "leaseExpiresAtUtc": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
-          "heartbeatAtUtc": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
           "promotionHistoryJson": {
             "type": "string"
           },

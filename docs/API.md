@@ -611,10 +611,10 @@ generation wedged in `Modeling` because the offline modeler died holding the lea
 `AdminAuditLog` entry (`analytics.buildlab.promote|rollback|fail`) with the actor, target generation,
 request id, and success flag, including on the failure paths.
 
-The generation rows returned by `GET` expose the lease/liveness columns — `leaseOwner`,
-`leaseExpiresAtUtc`, `heartbeatAtUtc` — plus `promotionHistoryJson`, an append-only log of every
-`promote`/`rollback`/`fail` with actor and reason. A `Modeling` row whose lease has expired is reaped
-automatically by the worker after `Analytics:BuildLab:LeaseTimeoutMinutes`; `fail` is the manual
+The generation rows returned by `GET` expose `leaseOwner` (diagnostic only — which modeler process
+claimed the run) plus `promotionHistoryJson`, an append-only log of every `promote`/`rollback`/`fail`
+with actor and reason. A `Modeling` row with no live modeler is reaped automatically: the worker
+decides that by probing the modeling advisory lock, not by any timeout. `fail` is the manual
 equivalent.
 
 ## OpenAPI Generation Workflow

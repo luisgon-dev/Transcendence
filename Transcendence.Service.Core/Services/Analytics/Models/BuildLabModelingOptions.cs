@@ -14,7 +14,6 @@ public sealed class BuildLabModelingOptions
     public double MaximumOverallEce { get; set; } = 0.015;
     public double MaximumTimeBandEce { get; set; } = 0.025;
     public int RetainedGenerations { get; set; } = 4;
-    public int LeaseTimeoutMinutes { get; set; } = 120;
     public int RetiredGenerationGraceMinutes { get; set; } = 30;
 }
 

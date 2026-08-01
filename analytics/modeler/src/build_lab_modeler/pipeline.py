@@ -129,8 +129,6 @@ class Settings:
     s3_secret_key: str | None
     deidentification_salt: str
     lease_owner: str
-    lease_seconds: int
-    heartbeat_seconds: int
     max_training_rows: int
     retained_generations: int
 
@@ -145,10 +143,6 @@ class Settings:
                 "BUILD_LAB_DEIDENTIFICATION_SALT is required and must be at least 32 characters. "
                 "It must never be derivable from anything published beside the export."
             )
-        # A reaper exists to catch a *dead* worker, not a slow one. At 900s it caught five healthy
-        # runs in a row: each loader phase alone can exceed fifteen minutes on this corpus, so the
-        # deadline has to clear the longest single phase even with inline renewals in place.
-        lease_seconds = max(120, int(os.getenv("BUILD_LAB_LEASE_SECONDS", "3600")))
         return cls(
             database_url=database_url,
             artifact_dir=Path(os.getenv("BUILD_LAB_ARTIFACT_DIR", "/artifacts")),
@@ -161,10 +155,6 @@ class Settings:
             deidentification_salt=salt,
             lease_owner=os.getenv("BUILD_LAB_LEASE_OWNER")
             or f"{socket.gethostname()}:{os.getpid()}",
-            lease_seconds=lease_seconds,
-            heartbeat_seconds=max(15, min(lease_seconds // 4, int(
-                os.getenv("BUILD_LAB_HEARTBEAT_SECONDS", "60")
-            ))),
             max_training_rows=max(20_000, int(os.getenv("BUILD_LAB_MAX_TRAINING_ROWS", "250000"))),
             # Mirrors BuildLabModelingOptions.RetainedGenerations and the Math.Max(2, ...) floor the
             # coordinator applies, so artifact retention and row retention keep the same set.
@@ -208,115 +198,60 @@ def install_shutdown_handlers() -> None:
 
 def process_next(settings: Settings) -> bool:
     with psycopg.connect(settings.database_url, row_factory=dict_row) as connection:
-        generation = lease_generation(connection, settings)
-        if generation is None:
+        # Exclusivity for the whole run, released by the session itself if this process dies.
+        if not try_acquire_modeling_lock(connection):
+            LOG.info("Another modeler holds the modeling lock; nothing to do this tick.")
             return False
-        heartbeat = GenerationHeartbeat(settings, generation["Id"])
-        heartbeat.start()
         try:
-            model_generation(connection, generation, settings, heartbeat)
-        except LeaseLost as exc:
-            # The row is no longer ours, so everything this run wrote rolled back with its
-            # transaction and only the owner that reclaimed it may set a terminal status.
-            LOG.warning("Build Lab generation %s: %s", generation["Id"], exc)
-        except ShutdownRequested as exc:
-            mark_failed_safely(connection, generation["Id"], str(exc), settings.lease_owner)
-            raise
-        except Exception as exc:
-            LOG.exception("Build Lab generation %s failed.", generation["Id"])
-            mark_failed_safely(connection, generation["Id"], str(exc), settings.lease_owner)
-        finally:
-            heartbeat.stop()
-        return True
-
-
-class GenerationHeartbeat:
-    """Renews the coordinator lease so the expired-lease reaper never kills a healthy run.
-
-    The claimer owns the lease deadline: it writes LeaseExpiresAtUtc when it claims the generation and
-    moves it forward on every renewal. The reaper's LeaseTimeoutMinutes is the outer bound on a
-    heartbeat, so a renewal that matches no row means the lease is provably gone and the run must not
-    publish anything.
-    """
-
-    def __init__(self, settings: Settings, generation_id) -> None:
-        self._settings = settings
-        self._generation_id = generation_id
-        self._stop = threading.Event()
-        self._lease_lost = threading.Event()
-        self._thread = threading.Thread(target=self._loop, daemon=True)
-
-    def start(self) -> None:
-        self._thread.start()
-
-    def stop(self) -> None:
-        self._stop.set()
-        self._thread.join(timeout=5)
-
-    @property
-    def lease_lost(self) -> bool:
-        return self._lease_lost.is_set()
-
-    def raise_if_lease_lost(self) -> None:
-        if self._lease_lost.is_set():
-            raise LeaseLost(
-                "the modeling lease was reclaimed while the generation was still being modeled"
-            )
-
-    def touch(self) -> None:
-        """
-        Renew from the *calling* thread, at a point where the run has demonstrably progressed.
-
-        The background thread is not sufficient on its own. Loading the frozen dataset assembles
-        millions of rows through a raw DBAPI cursor, which is pure-Python work that holds the GIL for
-        minutes at a time, so the timer thread simply does not get scheduled. Observed directly: five
-        consecutive generations were reaped 25-30 minutes in, with heartbeat staleness climbing from
-        12s to 193s and beyond while the loader ran. Renewing inline is immune to that because it runs
-        on the thread doing the work.
-        """
-        if self._lease_lost.is_set():
-            return
-        self._renew()
-
-    def _loop(self) -> None:
-        while not self._stop.wait(self._settings.heartbeat_seconds):
-            if not self._renew():
-                return
-
-    def _renew(self) -> bool:
-        """False only once the lease is provably gone; a transport error is retried, not assumed."""
-        try:
-            with psycopg.connect(self._settings.database_url) as connection:
-                renewed = connection.execute(
-                    """
-                    UPDATE "BuildLabGenerations"
-                    SET "HeartbeatAtUtc" = NOW(),
-                        "LeaseExpiresAtUtc" = NOW() + make_interval(secs => %s)
-                    WHERE "Id" = %s AND "Status" = 1 AND "LeaseOwner" = %s
-                    """,
-                    (
-                        self._settings.lease_seconds,
-                        self._generation_id,
-                        self._settings.lease_owner,
-                    ),
-                )
-                connection.commit()
-        except Exception:
-            LOG.warning("Heartbeat for generation %s failed.", self._generation_id, exc_info=True)
+            generation = lease_generation(connection, settings)
+            if generation is None:
+                return False
+            try:
+                model_generation(connection, generation, settings)
+            except ShutdownRequested as exc:
+                mark_failed_safely(connection, generation["Id"], str(exc), settings.lease_owner)
+                raise
+            except Exception as exc:
+                LOG.exception("Build Lab generation %s failed.", generation["Id"])
+                mark_failed_safely(connection, generation["Id"], str(exc), settings.lease_owner)
             return True
-        if renewed.rowcount == 0:
-            self._lease_lost.set()
-            LOG.warning(
-                "The modeling lease for generation %s is no longer held by %s, so the run will not "
-                "publish. Only the reaper or an operator can move the row out from under it.",
-                self._generation_id,
-                self._settings.lease_owner,
-            )
-            return False
-        return True
+        finally:
+            release_modeling_lock(connection)
+
+
+MODELING_LOCK_KEY = "build-lab-generation-modeling"
+
+
+def try_acquire_modeling_lock(connection: psycopg.Connection) -> bool:
+    """
+    Session-scoped advisory lock held for the whole run.
+
+    This replaces an application-level lease with heartbeats and an expiry column. PostgreSQL ties a
+    session lock to the connection, so a crashed, OOM-killed, or `docker kill`ed modeler releases it
+    the moment its TCP session drops — with no timer thread to schedule, no deadline to renew, and no
+    reaper timeout to keep in sync across two languages. The previous design reaped six consecutive
+    healthy generations because the renewal thread could not win the GIL against a pandas load.
+
+    It is also the convention already used for every other long exclusive job here; see
+    RefreshBuildResourceAnalyticsJob and MatchTimelineIngestionJob.
+    """
+    acquired = connection.execute(
+        "SELECT pg_try_advisory_lock(hashtextextended(%s, 0))", (MODELING_LOCK_KEY,)
+    ).fetchone()
+    return bool(next(iter(acquired.values()))) if acquired else False
+
+
+def release_modeling_lock(connection: psycopg.Connection) -> None:
+    try:
+        connection.execute(
+            "SELECT pg_advisory_unlock(hashtextextended(%s, 0))", (MODELING_LOCK_KEY,)
+        )
+    except Exception:  # pragma: no cover - the session is already gone, which releases it anyway
+        LOG.warning("Could not release the modeling advisory lock; the session drop will free it.")
 
 
 def lease_generation(connection: psycopg.Connection, settings: Settings) -> dict | None:
+    """Claim the oldest pending generation. The caller must already hold the modeling lock."""
     with connection.transaction():
         generation = connection.execute(
             """
@@ -335,18 +270,15 @@ def lease_generation(connection: psycopg.Connection, settings: Settings) -> dict
             UPDATE "BuildLabGenerations"
             SET "Status" = 1,
                 "FailureReason" = NULL,
-                "LeaseOwner" = %s,
-                "LeaseAcquiredAtUtc" = NOW(),
-                "LeaseExpiresAtUtc" = NOW() + make_interval(secs => %s),
-                "HeartbeatAtUtc" = NOW()
+                "LeaseOwner" = %s
             WHERE "Id" = %s AND "Status" = 0
             """,
-            (settings.lease_owner, settings.lease_seconds, generation["Id"]),
+            (settings.lease_owner, generation["Id"]),
         )
         if claimed.rowcount == 0:
             # The row moved between the lock and the claim, so it belongs to whoever moved it.
             LOG.warning(
-                "Generation %s was no longer pending when the lease was claimed.",
+                "Generation %s was no longer pending when it was claimed.",
                 generation["Id"],
             )
             return None
@@ -357,7 +289,6 @@ def model_generation(
     connection: psycopg.Connection,
     generation: dict,
     settings: Settings,
-    heartbeat: "GenerationHeartbeat | None" = None,
 ) -> None:
     generation_id = UUID(str(generation["Id"]))
     included_patches = json_value(generation["IncludedPatchesJson"])
@@ -369,8 +300,6 @@ def model_generation(
     # them rather than left to the timer thread, which cannot be scheduled while they run.
     def loaded(label: str, frame):
         LOG.info("Loaded %s for %s.", label, generation_id)
-        if heartbeat is not None:
-            heartbeat.touch()
         return frame
 
     rank_offset = resolve_rank_offset_column(connection)
@@ -445,9 +374,6 @@ def model_generation(
     # Checked before the two most expensive stretches of the run: writing the dataset and, below,
     # publishing. A lost lease makes both pure waste, and the second check keeps the orphan window
     # around the terminal write as small as the transaction itself.
-    if heartbeat is not None:
-        heartbeat.raise_if_lease_lost()
-
     prune_stale_artifacts(connection, settings, generation_id)
     artifact_path = settings.artifact_dir / str(generation_id)
     artifact_path.mkdir(parents=True, exist_ok=True)
@@ -490,9 +416,6 @@ def model_generation(
     )
     checksum = hashlib.sha256(manifest_bytes).hexdigest()
     artifact_uri = upload_artifacts(settings, artifact_path, generation_id)
-
-    if heartbeat is not None:
-        heartbeat.raise_if_lease_lost()
 
     with connection.transaction():
         insert_estimates(connection, estimates)

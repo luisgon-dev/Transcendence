@@ -25,6 +25,9 @@ public sealed class BuildLabGenerationCoordinator(
     ILogger<BuildLabGenerationCoordinator> logger) : IBuildLabGenerationCoordinator
 {
     // Serialises every active-pointer flip against the unique active index, whichever process runs it.
+    /// <summary>Must match MODELING_LOCK_KEY in the modeler; both hash it with hashtextextended.</summary>
+    private const string ModelingLockKey = "build-lab-generation-modeling";
+
     private const string PromotionLockSql =
         "SELECT pg_advisory_xact_lock(hashtextextended('build-lab-generation-promotion', 0))";
     // Grading rewrites the candidate's whole estimate set and the pointer flip publishes it, so both run
@@ -55,7 +58,7 @@ public sealed class BuildLabGenerationCoordinator(
         if (!options.Enabled)
             return null;
 
-        await ReapExpiredModelingLeasesAsync(ct);
+        await ReapAbandonedModelingRunsAsync(ct);
 
         var patch = await context.Patches
             .AsNoTracking()
@@ -131,7 +134,7 @@ public sealed class BuildLabGenerationCoordinator(
         if (!options.Enabled)
             return 0;
 
-        await ReapExpiredModelingLeasesAsync(ct);
+        await ReapAbandonedModelingRunsAsync(ct);
 
         var candidates = await context.BuildLabGenerations
             .AsNoTracking()
@@ -238,7 +241,6 @@ public sealed class BuildLabGenerationCoordinator(
             generation.RetiredAtUtc = null;
             generation.CompletedAtUtc ??= now;
             generation.LeaseOwner = null;
-            generation.LeaseExpiresAtUtc = null;
             generation.PromotionHistoryJson =
                 AppendHistory(generation.PromotionHistoryJson, "promote", actor, null);
             await context.SaveChangesAsync(ct);
@@ -334,8 +336,6 @@ public sealed class BuildLabGenerationCoordinator(
                 generation.ValidationMetricsJson,
                 generation.FailureReason,
                 generation.LeaseOwner,
-                generation.LeaseExpiresAtUtc,
-                generation.HeartbeatAtUtc,
                 generation.PromotionHistoryJson,
                 generation.CreatedAtUtc,
                 generation.CompletedAtUtc,
@@ -418,19 +418,18 @@ public sealed class BuildLabGenerationCoordinator(
                 {
                     generation.Status,
                     generation.CreatedAtUtc,
-                    generation.CompletedAtUtc,
-                    generation.LeaseAcquiredAtUtc,
-                    generation.HeartbeatAtUtc
+                    generation.CompletedAtUtc
                 })
                 .ToListAsync(ct);
             telemetry.RecordInFlightStatusAges(
                 inFlight
                     .Where(row => row.Status == BuildLabGenerationStatus.PendingDataset)
                     .Min(row => (DateTime?)row.CreatedAtUtc),
-                // Same clock the reaper uses, so the wedge gauge and the lease timeout agree.
+                // How long the run has been going, which is all the wedge gauge can mean now that
+                // liveness is the advisory lock rather than a timestamp.
                 inFlight
                     .Where(row => row.Status == BuildLabGenerationStatus.Modeling)
-                    .Min(row => (DateTime?)(row.HeartbeatAtUtc ?? row.LeaseAcquiredAtUtc ?? row.CreatedAtUtc)),
+                    .Min(row => (DateTime?)row.CreatedAtUtc),
                 inFlight
                     .Where(row => row.Status == BuildLabGenerationStatus.Candidate)
                     .Min(row => (DateTime?)(row.CompletedAtUtc ?? row.CreatedAtUtc)));
@@ -566,36 +565,59 @@ public sealed class BuildLabGenerationCoordinator(
     // enforced here, whichever fires first: a claimer that declared a short expiry and stopped is reaped
     // at that expiry, one that declared a distant expiry and stopped is still reaped at the outer bound,
     // and one that crashed before ever writing an expiry is reaped from its acquisition time.
-    private async Task ReapExpiredModelingLeasesAsync(CancellationToken ct)
+    /// <summary>
+    /// Fails any generation stuck in <c>Modeling</c> with no modeler actually holding the lock.
+    /// </summary>
+    /// <remarks>
+    /// Liveness is decided by PostgreSQL, not by a timeout. The modeler holds a session advisory lock
+    /// for the whole run, so acquiring that same lock here is proof no modeler is alive: a crashed,
+    /// OOM-killed, or `docker kill`ed process drops its TCP session and the lock with it.
+    ///
+    /// The previous implementation compared a heartbeat column against
+    /// <c>LeaseTimeoutMinutes</c> and reaped six consecutive *healthy* generations, because the
+    /// modeler's renewal thread could not win the GIL against a multi-minute pandas load. A lock
+    /// probe has no such failure mode — there is no deadline to renew and nothing to schedule — and
+    /// it matches how every other long exclusive job here already works.
+    /// </remarks>
+    private async Task ReapAbandonedModelingRunsAsync(CancellationToken ct)
     {
-        var timeoutMinutes = Math.Max(1, options.LeaseTimeoutMinutes);
-        var now = DateTime.UtcNow;
-        var staleBefore = now.AddMinutes(-timeoutMinutes);
-        var expired = await context.BuildLabGenerations
-            .Where(generation => generation.Status == BuildLabGenerationStatus.Modeling &&
-                                 ((generation.LeaseExpiresAtUtc != null && generation.LeaseExpiresAtUtc < now) ||
-                                  (generation.HeartbeatAtUtc ??
-                                   generation.LeaseAcquiredAtUtc ??
-                                   generation.CreatedAtUtc) < staleBefore))
+        var stuck = await context.BuildLabGenerations
+            .Where(generation => generation.Status == BuildLabGenerationStatus.Modeling)
             .ToListAsync(ct);
-        if (expired.Count == 0)
+        if (stuck.Count == 0)
             return;
 
-        foreach (var generation in expired)
-        {
-            // A lost lease is a lost training run: only the modeler can move a generation out of
-            // Modeling, so reaping one is the fault signal the training-failure alert counts.
-            telemetry.RecordTrainingFailed();
-            var owner = generation.LeaseOwner ?? "an unknown owner";
-            var reason = generation.LeaseExpiresAtUtc is { } expiresAtUtc && expiresAtUtc < now
-                ? $"The modeling lease held by {owner} passed the expiry it declared at {expiresAtUtc:u}."
-                : $"The modeling lease held by {owner} went {timeoutMinutes} minutes without a heartbeat.";
-            await FailAsync(generation, reason, "system", ct);
-        }
+        // Taken on this connection and released immediately: the answer, not the lock, is what matters.
+        var probe = await context.Database
+            .SqlQuery<bool>($"SELECT pg_try_advisory_lock(hashtextextended({ModelingLockKey}, 0)) AS \"Value\"")
+            .SingleAsync(ct);
+        if (!probe)
+            return;
 
-        logger.LogWarning(
-            "Abandoned {GenerationCount} Build Lab generation(s) whose modeling lease expired.",
-            expired.Count);
+        try
+        {
+            foreach (var generation in stuck)
+            {
+                // Only the modeler moves a generation out of Modeling, so reaching here means a
+                // training run died — the fault signal the training-failure alert counts.
+                telemetry.RecordTrainingFailed();
+                await FailAsync(
+                    generation,
+                    $"The modeling run held by {generation.LeaseOwner ?? "an unknown owner"} exited without " +
+                    "finishing; no modeler holds the modeling lock.",
+                    "system",
+                    ct);
+            }
+
+            logger.LogWarning(
+                "Abandoned {GenerationCount} Build Lab generation(s) with no live modeler.",
+                stuck.Count);
+        }
+        finally
+        {
+            await context.Database.ExecuteSqlAsync(
+                $"SELECT pg_advisory_unlock(hashtextextended({ModelingLockKey}, 0))", ct);
+        }
     }
 
     // A gate refusal during promotion, as distinct from a lost training run or a fault: the candidate
@@ -621,7 +643,6 @@ public sealed class BuildLabGenerationCoordinator(
         generation.FailureReason = clamped;
         generation.CompletedAtUtc ??= DateTime.UtcNow;
         generation.LeaseOwner = null;
-        generation.LeaseExpiresAtUtc = null;
         generation.PromotionHistoryJson =
             AppendHistory(generation.PromotionHistoryJson, "fail", actor, clamped);
         await context.SaveChangesAsync(ct);

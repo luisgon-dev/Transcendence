@@ -18,13 +18,15 @@ from build_lab_modeler.pipeline import (
     TIMED_FAMILIES,
     UNKNOWN_ARCHETYPE,
     UNVERIFIED_BORROW_WEIGHT,
-    GenerationHeartbeat,
+    MODELING_LOCK_KEY,
     LeaseLost,
     PatchChangeSet,
     Settings,
     apply_partial_pooling,
     apply_row_weights,
     commensurability_weights,
+    release_modeling_lock,
+    try_acquire_modeling_lock,
     average_timing,
     build_action_estimates,
     build_item_decisions,
@@ -908,7 +910,7 @@ def test_settings_fail_closed_without_a_secret_deidentification_salt(monkeypatch
 
     monkeypatch.setenv("BUILD_LAB_DEIDENTIFICATION_SALT", "s" * 32)
     settings = Settings.from_env()
-    assert settings.heartbeat_seconds <= settings.lease_seconds // 4
+    assert settings.lease_owner
 
 
 def test_execute_guarded_treats_a_zero_rowcount_as_a_lost_lease():
@@ -923,7 +925,7 @@ def test_execute_guarded_treats_a_zero_rowcount_as_a_lost_lease():
 
 
 def test_every_guarded_status_write_checks_its_rowcount():
-    for function in (pipeline.lease_generation, mark_failed, GenerationHeartbeat._renew):
+    for function in (pipeline.lease_generation, mark_failed):
         assert ".rowcount" in inspect.getsource(function), function.__name__
     # The terminal write delegates its rowcount check, so the check lives in one place.
     assert "execute_guarded(" in inspect.getsource(model_generation)
@@ -1030,64 +1032,20 @@ def test_a_held_lease_publishes_the_estimates_with_the_terminal_write(tmp_path, 
     )
 
 
-class LostLeaseHeartbeat:
-    """A heartbeat that has already proved the lease is gone."""
-
-    lease_lost = True
-
-    def raise_if_lease_lost(self) -> None:
-        raise LeaseLost("the modeling lease was reclaimed")
-
-    def touch(self) -> None:
-        """A lost lease is never renewed, inline or otherwise."""
-
-
-def test_a_lease_lost_before_publishing_writes_no_artifacts_and_no_estimates(tmp_path, monkeypatch):
+def test_a_reclaimed_generation_publishes_no_artifacts_and_no_estimates(tmp_path, monkeypatch):
+    # The terminal status write is guarded on the status it expects, so a row the coordinator moved
+    # out from under this run aborts before anything is published.
     settings, generation = publishing_generation(monkeypatch, tmp_path)
-    connection = FakeConnection()
+    # The coordinator reclaimed the row, so the guarded terminal write matches nothing.
+    connection = FakeConnection(rowcounts={'SET "Status" = 2': 0})
 
     with pytest.raises(LeaseLost):
-        model_generation(connection, generation, settings, LostLeaseHeartbeat())
+        model_generation(connection, generation, settings)
 
-    assert not (tmp_path / str(generation["Id"])).exists()
-    assert [row for row in connection.statements if "AdjustedActionEstimates" in row[0]] == []
-
-
-def test_the_claimer_owns_the_lease_deadline_and_a_reclaimed_lease_stops_the_heartbeat(monkeypatch):
-    settings = modeler_settings(monkeypatch)
-    heartbeat = GenerationHeartbeat(settings, uuid4())
-    renewed = FakeConnection([FakeCursor(1)])
-    monkeypatch.setattr(pipeline.psycopg, "connect", lambda *_, **__: renewed)
-
-    assert heartbeat._renew() is True
-    heartbeat.raise_if_lease_lost()
-    statement, parameters = renewed.statements[-1]
-    # The claimer, not the reaper, owns LeaseExpiresAtUtc: every renewal moves the deadline forward,
-    # so the reaper's LeaseTimeoutMinutes only governs a lease that never wrote one.
-    assert '"LeaseExpiresAtUtc" = NOW() + make_interval(secs => %s)' in statement
-    assert '"Status" = 1' in statement and '"LeaseOwner" = %s' in statement
-    assert parameters[0] == settings.lease_seconds
-    assert 'NOW() + make_interval(secs => %s)' in inspect.getsource(pipeline.lease_generation)
-
-    reclaimed = FakeConnection([FakeCursor(0)])
-    monkeypatch.setattr(pipeline.psycopg, "connect", lambda *_, **__: reclaimed)
-    assert heartbeat._renew() is False
-    assert heartbeat.lease_lost is True
-    with pytest.raises(LeaseLost):
-        heartbeat.raise_if_lease_lost()
-
-
-def test_a_transport_error_is_never_read_as_a_lost_lease(monkeypatch):
-    settings = modeler_settings(monkeypatch)
-    heartbeat = GenerationHeartbeat(settings, uuid4())
-
-    def unreachable(*_, **__):
-        raise OSError("the database is unreachable")
-
-    monkeypatch.setattr(pipeline.psycopg, "connect", unreachable)
-
-    assert heartbeat._renew() is True
-    assert heartbeat.lease_lost is False
+    # Estimates may be staged, but the guarded terminal write aborts the transaction, so nothing
+    # a reclaimed run produced is ever committed.
+    assert [row for row in connection.committed if "AdjustedActionEstimates" in row[0]] == []
+    assert connection.rollbacks > 0
 
 
 def test_mark_failed_only_fails_a_generation_this_worker_still_owns(caplog):
@@ -1525,57 +1483,46 @@ def test_unknown_archetype_degrades_to_role_level_pooling():
     for pooled, expected in zip(records, reference, strict=True):
         assert pooled["estimate"] == pytest.approx(expected["estimate"], rel=1e-6)
 
+def test_the_modeling_lock_is_a_session_advisory_lock_not_a_renewed_lease():
+    acquired = FakeConnection(rows={"pg_try_advisory_lock": [{"ok": True}]})
 
-def test_touch_renews_inline_so_a_gil_bound_load_cannot_lose_the_lease(monkeypatch):
-    # The timer thread cannot be scheduled while a loader assembles millions of rows through a raw
-    # DBAPI cursor, which is what reaped five consecutive healthy generations. touch() renews on the
-    # thread doing the work, so progress itself keeps the lease alive.
-    settings = modeler_settings(monkeypatch)
-    heartbeat = GenerationHeartbeat(settings, uuid4())
-    renewed = FakeConnection([FakeCursor(1), FakeCursor(1)])
-    monkeypatch.setattr(pipeline.psycopg, "connect", lambda *_, **__: renewed)
+    assert try_acquire_modeling_lock(acquired) is True
+    statement, parameters = acquired.statements[-1]
+    assert "pg_try_advisory_lock" in statement
+    assert parameters == (MODELING_LOCK_KEY,)
 
-    heartbeat.touch()
-
-    statement, parameters = renewed.statements[-1]
-    assert '"LeaseExpiresAtUtc" = NOW() + make_interval(secs => %s)' in statement
-    assert parameters[0] == settings.lease_seconds
+    # Liveness is the session, so nothing writes or renews a deadline column.
+    source = inspect.getsource(pipeline.process_next) + inspect.getsource(pipeline.lease_generation)
+    for abandoned in ("LeaseExpiresAtUtc", "HeartbeatAtUtc", "LeaseAcquiredAtUtc"):
+        assert abandoned not in source, abandoned
 
 
-def test_touch_is_a_no_op_once_the_lease_is_provably_gone(monkeypatch):
-    settings = modeler_settings(monkeypatch)
-    heartbeat = GenerationHeartbeat(settings, uuid4())
-    reclaimed = FakeConnection([FakeCursor(0)])
-    monkeypatch.setattr(pipeline.psycopg, "connect", lambda *_, **__: reclaimed)
-    assert heartbeat._renew() is False
+def test_a_second_modeler_backs_off_instead_of_claiming_the_same_generation():
+    held = FakeConnection(rows={"pg_try_advisory_lock": [{"ok": False}]})
 
-    before = len(reclaimed.statements)
-    heartbeat.touch()
-
-    # A reclaimed lease must not be silently taken back by a later inline renewal.
-    assert len(reclaimed.statements) == before
+    assert try_acquire_modeling_lock(held) is False
+    # It must not go on to claim anything while another modeler is mid-run.
+    assert not any("BuildLabGenerations" in statement for statement, _ in held.statements)
 
 
-def test_every_loader_phase_renews_the_lease_between_stages():
-    source = inspect.getsource(pipeline.model_generation)
-    # Each loader is minutes of GIL-holding work; the deadline has to advance between them.
-    assert "heartbeat.touch()" in source
-    for loader in (
-        "load_item_events",
-        "load_timeline_state_events",
-        "load_participant_teams",
-        "load_rune_decisions",
-        "load_spell_decisions",
-    ):
-        assert f"loaded(" in source and loader in source, loader
+def test_the_lock_is_released_even_when_the_run_raises():
+    connection = FakeConnection(rows={"pg_try_advisory_lock": [{"ok": True}]})
+    release_modeling_lock(connection)
+
+    statement, parameters = connection.statements[-1]
+    assert "pg_advisory_unlock" in statement
+    assert parameters == (MODELING_LOCK_KEY,)
+    # process_next releases in a finally, so a raising run cannot strand the lock for the session.
+    assert "finally:" in inspect.getsource(pipeline.process_next)
+    assert "release_modeling_lock" in inspect.getsource(pipeline.process_next)
 
 
-def test_the_default_lease_clears_the_longest_observed_load_phase(monkeypatch):
-    monkeypatch.delenv("BUILD_LAB_LEASE_SECONDS", raising=False)
-    settings = modeler_settings(monkeypatch)
-
-    # Five consecutive generations were reaped 25-30 minutes in at the old 900s default.
-    assert settings.lease_seconds >= 1800
-    # The reaper's own backstop must still be the outer bound.
-    assert settings.lease_seconds < 120 * 60
-    assert settings.heartbeat_seconds <= settings.lease_seconds // 4
+def test_the_coordinator_and_the_modeler_agree_on_the_lock_key():
+    coordinator = Path(__file__).resolve().parents[3] / (
+        "Transcendence.Service.Core/Services/Analytics/Implementations/"
+        "BuildLabGenerationCoordinator.cs"
+    )
+    if not coordinator.is_file():
+        pytest.skip("the .NET coordinator is not present in this checkout")
+    # Both hash the same string with hashtextextended; a drift here silently disables the reaper.
+    assert f'"{MODELING_LOCK_KEY}"' in coordinator.read_text(encoding="utf-8")

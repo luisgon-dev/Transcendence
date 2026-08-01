@@ -238,8 +238,9 @@ services:
       BUILD_LAB_POLL_SECONDS: ${BUILD_LAB_POLL_SECONDS:-300}
       BUILD_LAB_RUN_ONCE: ${BUILD_LAB_RUN_ONCE:-false}
       # Keep BUILD_LAB_LEASE_SECONDS below the worker's Analytics:BuildLab:LeaseTimeoutMinutes so the
-      # heartbeat renews before the .NET reaper reclaims a healthy run.
-      BUILD_LAB_LEASE_SECONDS: ${BUILD_LAB_LEASE_SECONDS:-900}
+      # heartbeat renews before the .NET reaper reclaims a healthy run. It must also clear the longest
+      # single load phase: at 900s the reaper killed five consecutive healthy generations 25-30 minutes in.
+      BUILD_LAB_LEASE_SECONDS: ${BUILD_LAB_LEASE_SECONDS:-3600}
       BUILD_LAB_HEARTBEAT_SECONDS: ${BUILD_LAB_HEARTBEAT_SECONDS:-60}
       BUILD_LAB_MAX_TRAINING_ROWS: ${BUILD_LAB_MAX_TRAINING_ROWS:-250000}
       # BUILD_LAB_LEASE_OWNER is intentionally NOT set: the modeler derives `hostname:pid`, so two

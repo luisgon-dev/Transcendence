@@ -145,7 +145,10 @@ class Settings:
                 "BUILD_LAB_DEIDENTIFICATION_SALT is required and must be at least 32 characters. "
                 "It must never be derivable from anything published beside the export."
             )
-        lease_seconds = max(120, int(os.getenv("BUILD_LAB_LEASE_SECONDS", "900")))
+        # A reaper exists to catch a *dead* worker, not a slow one. At 900s it caught five healthy
+        # runs in a row: each loader phase alone can exceed fifteen minutes on this corpus, so the
+        # deadline has to clear the longest single phase even with inline renewals in place.
+        lease_seconds = max(120, int(os.getenv("BUILD_LAB_LEASE_SECONDS", "3600")))
         return cls(
             database_url=database_url,
             artifact_dir=Path(os.getenv("BUILD_LAB_ARTIFACT_DIR", "/artifacts")),
@@ -260,6 +263,21 @@ class GenerationHeartbeat:
                 "the modeling lease was reclaimed while the generation was still being modeled"
             )
 
+    def touch(self) -> None:
+        """
+        Renew from the *calling* thread, at a point where the run has demonstrably progressed.
+
+        The background thread is not sufficient on its own. Loading the frozen dataset assembles
+        millions of rows through a raw DBAPI cursor, which is pure-Python work that holds the GIL for
+        minutes at a time, so the timer thread simply does not get scheduled. Observed directly: five
+        consecutive generations were reaped 25-30 minutes in, with heartbeat staleness climbing from
+        12s to 193s and beyond while the loader ran. Renewing inline is immune to that because it runs
+        on the thread doing the work.
+        """
+        if self._lease_lost.is_set():
+            return
+        self._renew()
+
     def _loop(self) -> None:
         while not self._stop.wait(self._settings.heartbeat_seconds):
             if not self._renew():
@@ -347,12 +365,30 @@ def model_generation(
     cutoff = generation["SourceCutoffUtc"]
     LOG.info("Loading frozen decision data for %s.", generation_id)
 
+    # Each loader is minutes of GIL-holding row assembly, so the lease is renewed inline between
+    # them rather than left to the timer thread, which cannot be scheduled while they run.
+    def loaded(label: str, frame):
+        LOG.info("Loaded %s for %s.", label, generation_id)
+        if heartbeat is not None:
+            heartbeat.touch()
+        return frame
+
     rank_offset = resolve_rank_offset_column(connection)
-    item_events = load_item_events(connection, included_patches, cutoff, rank_offset)
-    timeline_state_events = load_timeline_state_events(connection, included_patches, cutoff)
-    participant_teams = load_participant_teams(connection, included_patches, cutoff)
-    rune_events = load_rune_decisions(connection, included_patches, cutoff, rank_offset)
-    spell_events = load_spell_decisions(connection, included_patches, cutoff, rank_offset)
+    item_events = loaded(
+        "item events", load_item_events(connection, included_patches, cutoff, rank_offset)
+    )
+    timeline_state_events = loaded(
+        "timeline state events", load_timeline_state_events(connection, included_patches, cutoff)
+    )
+    participant_teams = loaded(
+        "participant teams", load_participant_teams(connection, included_patches, cutoff)
+    )
+    rune_events = loaded(
+        "rune decisions", load_rune_decisions(connection, included_patches, cutoff, rank_offset)
+    )
+    spell_events = loaded(
+        "spell decisions", load_spell_decisions(connection, included_patches, cutoff, rank_offset)
+    )
     if item_events.empty:
         raise RuntimeError("No eligible item decisions were available for this generation.")
 

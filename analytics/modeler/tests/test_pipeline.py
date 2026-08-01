@@ -1038,6 +1038,9 @@ class LostLeaseHeartbeat:
     def raise_if_lease_lost(self) -> None:
         raise LeaseLost("the modeling lease was reclaimed")
 
+    def touch(self) -> None:
+        """A lost lease is never renewed, inline or otherwise."""
+
 
 def test_a_lease_lost_before_publishing_writes_no_artifacts_and_no_estimates(tmp_path, monkeypatch):
     settings, generation = publishing_generation(monkeypatch, tmp_path)
@@ -1521,3 +1524,58 @@ def test_unknown_archetype_degrades_to_role_level_pooling():
 
     for pooled, expected in zip(records, reference, strict=True):
         assert pooled["estimate"] == pytest.approx(expected["estimate"], rel=1e-6)
+
+
+def test_touch_renews_inline_so_a_gil_bound_load_cannot_lose_the_lease(monkeypatch):
+    # The timer thread cannot be scheduled while a loader assembles millions of rows through a raw
+    # DBAPI cursor, which is what reaped five consecutive healthy generations. touch() renews on the
+    # thread doing the work, so progress itself keeps the lease alive.
+    settings = modeler_settings(monkeypatch)
+    heartbeat = GenerationHeartbeat(settings, uuid4())
+    renewed = FakeConnection([FakeCursor(1), FakeCursor(1)])
+    monkeypatch.setattr(pipeline.psycopg, "connect", lambda *_, **__: renewed)
+
+    heartbeat.touch()
+
+    statement, parameters = renewed.statements[-1]
+    assert '"LeaseExpiresAtUtc" = NOW() + make_interval(secs => %s)' in statement
+    assert parameters[0] == settings.lease_seconds
+
+
+def test_touch_is_a_no_op_once_the_lease_is_provably_gone(monkeypatch):
+    settings = modeler_settings(monkeypatch)
+    heartbeat = GenerationHeartbeat(settings, uuid4())
+    reclaimed = FakeConnection([FakeCursor(0)])
+    monkeypatch.setattr(pipeline.psycopg, "connect", lambda *_, **__: reclaimed)
+    assert heartbeat._renew() is False
+
+    before = len(reclaimed.statements)
+    heartbeat.touch()
+
+    # A reclaimed lease must not be silently taken back by a later inline renewal.
+    assert len(reclaimed.statements) == before
+
+
+def test_every_loader_phase_renews_the_lease_between_stages():
+    source = inspect.getsource(pipeline.model_generation)
+    # Each loader is minutes of GIL-holding work; the deadline has to advance between them.
+    assert "heartbeat.touch()" in source
+    for loader in (
+        "load_item_events",
+        "load_timeline_state_events",
+        "load_participant_teams",
+        "load_rune_decisions",
+        "load_spell_decisions",
+    ):
+        assert f"loaded(" in source and loader in source, loader
+
+
+def test_the_default_lease_clears_the_longest_observed_load_phase(monkeypatch):
+    monkeypatch.delenv("BUILD_LAB_LEASE_SECONDS", raising=False)
+    settings = modeler_settings(monkeypatch)
+
+    # Five consecutive generations were reaped 25-30 minutes in at the old 900s default.
+    assert settings.lease_seconds >= 1800
+    # The reaper's own backstop must still be the outer bound.
+    assert settings.lease_seconds < 120 * 60
+    assert settings.heartbeat_seconds <= settings.lease_seconds // 4

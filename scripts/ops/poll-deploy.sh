@@ -60,11 +60,14 @@ export COMPOSE_PROFILES="${COMPOSE_PROFILES:+${COMPOSE_PROFILES},}analytics-mode
 # "optional" = the service ships no container healthcheck, may not be deployed on this host
 # (compose profile), and must never gate an app rollout. Optional entries therefore go LAST: the loop
 # in main() aborts on the first failure, so anything before them could block their siblings.
+# analytics-modeler is deliberately absent. It is a run-to-completion oneshot owned by
+# transcendence-modeler.timer, which pulls its own image before each invocation, so there is no
+# long-lived container to recreate. Managing it here is what made every modeler deploy kill an
+# in-flight generation: a run takes hours and the poller recreated the container mid-run.
 SERVICES=(
   "service:transcendence-service:transcendence-service"
   "webapi:transcendence-webapi:transcendence-webapi"
   "web:transcendence-web:transcendence-web"
-  "analytics-modeler:transcendence-analytics-modeler:transcendence-analytics-modeler:optional"
 )
 
 # Set per-service by deploy_one: 1 when the image declares no healthcheck, so a running container —

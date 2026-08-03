@@ -1,0 +1,41 @@
+[Unit]
+# Runs the Build Lab modeler to completion, once per invocation.
+#
+# Why a oneshot and not the long-lived container it replaced: a modeling run takes hours, and while
+# the modeler was a daemon every image update recreated it mid-run and threw the generation away. A
+# process that exits on its own is deployed *between* runs instead of through one. It also means the
+# exit code is the completion signal, so there is no heartbeat or lease to maintain — liveness for the
+# duration of a run is a PostgreSQL session advisory lock the process holds.
+#
+# Install:
+#   cp scripts/ops/transcendence-modeler.{service,timer} /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now transcendence-modeler.timer
+Description=Transcendence Build Lab modeler (run to completion)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/var/lib/docker/volumes/portainer_data/_data/compose/2
+
+# Pulled here rather than by poll-deploy: the image can only change between invocations, never
+# underneath a run. This is the whole point of the oneshot.
+ExecStartPre=-/usr/bin/docker compose -p transcendence \
+  --env-file /var/lib/docker/volumes/portainer_data/_data/compose/2/stack.env \
+  -f /var/lib/docker/volumes/portainer_data/_data/compose/2/docker-compose.yml \
+  --profile analytics-modeling pull --quiet analytics-modeler
+
+# --rm: a fresh container per run, so nothing is left for a deploy poller to find or recreate.
+# -T: no TTY exists under systemd, and `run` would otherwise try to allocate one.
+# Exit 0 = a generation completed or there was nothing to do; non-zero = the generation failed.
+ExecStart=/usr/bin/docker compose -p transcendence \
+  --env-file /var/lib/docker/volumes/portainer_data/_data/compose/2/stack.env \
+  -f /var/lib/docker/volumes/portainer_data/_data/compose/2/docker-compose.yml \
+  --profile analytics-modeling run --rm -T --no-deps analytics-modeler
+
+# A run is hours long by design; systemd must not kill it. Overlap is prevented by the advisory lock,
+# not by a timeout, so there is nothing to tune here.
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

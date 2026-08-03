@@ -356,14 +356,18 @@ release.
 
 **`analytics-modeler` is a fourth published image** (`transcendence-analytics-modeler`, path-filtered
 on `analytics/modeler/**`) with the same tags, labels, provenance, SBOM, and cosign signature as the
-app images. It sits behind the `analytics-modeling` Compose profile, so unless that profile is enabled
-on the host the container does not exist. **The poller does not deploy it yet** — `SERVICES` in
-`scripts/ops/poll-deploy.sh` still lists only `service`/`webapi`/`web`, and registering the modeler
-there needs two behaviours the script does not have: an *optional* service whose missing container is a
-skip rather than a resolution failure that aborts the poll cycle, and a health gate that tolerates a
-batch container with no healthcheck (`wait_for_healthy` currently fails any `no-healthcheck:*` state).
-Until that lands the modeler is released by hand; see `scripts/ops/README.md` →
-*`analytics-modeler` release*.
+app images — but it is **not a service the poller deploys**, and deliberately so.
+
+It is a **run-to-completion oneshot** owned by `transcendence-modeler.timer`, which pulls the image in
+`ExecStartPre` and then runs `docker compose run --rm`. A modeling run takes hours; while the modeler
+was a long-lived container, every image update recreated it mid-run and discarded the generation. A
+process that exits on its own is deployed *between* runs instead of through one, its exit code is the
+completion signal, and `--rm` leaves nothing for a poller to recreate. `SERVICES` in
+`scripts/ops/poll-deploy.sh` therefore lists only `service`/`webapi`/`web`.
+
+Overlap needs no scheduler-side guard: the timer fires every 10 minutes against runs that last hours,
+and a second invocation cannot take the modeling advisory lock, so it exits idle. See
+`scripts/ops/README.md` → *`analytics-modeler` — run-to-completion oneshot*.
 
 Hot-table index migrations remain the exception and must be applied out-of-band before deployment
 (see DEVELOPMENT.md); the CI `migration-apply` job additionally applies the full chain to ephemeral

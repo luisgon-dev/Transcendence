@@ -477,12 +477,19 @@ corpus" below first: the flip costs a multi-day, rate-gated re-ingestion of the 
 
 The offline modeler is built and published like every other app service
 (`ghcr.io/luisgon-dev/transcendence-analytics-modeler`, path-filtered on `analytics/modeler/**`) and
-runs under an optional Compose profile so it never starts with the default stack:
+runs as a **run-to-completion oneshot** behind an optional Compose profile, so it never starts with
+the default stack and is never left running between generations:
 
 ```bash
-docker compose --profile analytics-modeling up -d analytics-modeler          # published :main image
-docker compose --profile analytics-modeling up --build analytics-modeler     # local iteration
+# one generation, then exit (what the systemd timer invokes on prod)
+docker compose --profile analytics-modeling run --rm analytics-modeler
+docker compose --profile analytics-modeling run --rm --build analytics-modeler   # local iteration
 ```
+
+On prod the schedule is `scripts/ops/transcendence-modeler.timer`, not the deploy poller: a run lasts
+hours, and a poller that recreated the container mid-run destroyed the generation every time it
+deployed. Exit code `0` means a generation completed or there was nothing pending; non-zero means the
+generation failed.
 
 Environment variables Compose actually supplies, and the code that reads each one:
 
@@ -646,11 +653,12 @@ against a low-rate Riot key. Do it in this order:
    so **every `Success` timeline in the retained corpus becomes stale and is re-fetched once**, at the
    job's normal rate-gated pace: a multi-day background sweep competing with new-match ingestion for the
    same Riot budget. Nothing else is required to start it — there is no `const` to bump.
-4. Start the modeler profile (`docker compose --profile analytics-modeling up -d analytics-modeler`).
-   Do not defer this: the same flag enables the daily create job, and once the first matches reach v2 a
-   `PendingDataset` generation appears that only the modeler can claim —
-   `trn-buildlab-unclaimed-generation` pages six hours later if it is not running. Early generations
-   will fail their evidence gates while coverage is thin, which is the intended behaviour.
+4. Install and enable the modeler timer (`cp scripts/ops/transcendence-modeler.{service,timer}
+   /etc/systemd/system/ && systemctl enable --now transcendence-modeler.timer`). Do not defer this: the
+   same flag enables the create job, and once the first matches reach v2 a `PendingDataset` generation
+   appears that only the modeler can claim — `trn-buildlab-unclaimed-generation` pages six hours later
+   if nothing is running. Early generations will fail their evidence gates while coverage is thin,
+   which is the intended behaviour.
 5. Leave `TRN_FEATURE_BUILD_LAB` (and the two sibling web flags) `false` until a generation has actually
    promoted. Backend enablement and public exposure are separate switches on purpose.
 

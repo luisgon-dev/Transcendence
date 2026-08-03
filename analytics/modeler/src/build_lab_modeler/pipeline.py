@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import enum
 import hashlib
 import hmac
 import json
@@ -113,6 +114,20 @@ class ShutdownRequested(RuntimeError):
     """Raised from the SIGTERM/SIGINT handler so an in-flight generation is marked failed."""
 
 
+class RunOutcome(enum.Enum):
+    """
+    What one invocation actually did, so a run-to-completion process can exit meaningfully.
+
+    A oneshot is scheduled and observed by systemd, which only sees the exit code: a generation that
+    failed its gates must not look the same as a tick with nothing to do, or a broken pipeline reports
+    success forever.
+    """
+
+    IDLE = "idle"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class LeaseLost(RuntimeError):
     """Raised when a guarded write matches no row, so this process no longer owns the generation."""
 
@@ -162,22 +177,22 @@ class Settings:
         )
 
 
-def run() -> None:
+def run() -> RunOutcome:
     settings = Settings.from_env()
     settings.artifact_dir.mkdir(parents=True, exist_ok=True)
     install_shutdown_handlers()
     while True:
         try:
-            processed = process_next(settings)
+            outcome = process_next(settings)
             if settings.run_once:
-                return
-            if not processed:
+                return outcome
+            if outcome is RunOutcome.IDLE:
                 # The signal handler raises here too, so a container stop during the idle poll exits
                 # cleanly instead of unwinding as an unhandled error.
                 time.sleep(settings.poll_seconds)
         except ShutdownRequested:
             LOG.info("Shutdown requested; the modeler is stopping.")
-            return
+            return RunOutcome.IDLE
         except psycopg.OperationalError as exc:
             # The database is unreachable or restarting. Any lease taken before the drop is left for
             # the .NET reaper to expire, so retry on the normal cadence rather than letting the
@@ -196,16 +211,16 @@ def install_shutdown_handlers() -> None:
         signal.signal(received, handle)
 
 
-def process_next(settings: Settings) -> bool:
+def process_next(settings: Settings) -> RunOutcome:
     with psycopg.connect(settings.database_url, row_factory=dict_row) as connection:
         # Exclusivity for the whole run, released by the session itself if this process dies.
         if not try_acquire_modeling_lock(connection):
             LOG.info("Another modeler holds the modeling lock; nothing to do this tick.")
-            return False
+            return RunOutcome.IDLE
         try:
             generation = lease_generation(connection, settings)
             if generation is None:
-                return False
+                return RunOutcome.IDLE
             try:
                 model_generation(connection, generation, settings)
             except ShutdownRequested as exc:
@@ -214,7 +229,8 @@ def process_next(settings: Settings) -> bool:
             except Exception as exc:
                 LOG.exception("Build Lab generation %s failed.", generation["Id"])
                 mark_failed_safely(connection, generation["Id"], str(exc), settings.lease_owner)
-            return True
+                return RunOutcome.FAILED
+            return RunOutcome.COMPLETED
         finally:
             release_modeling_lock(connection)
 

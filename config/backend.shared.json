@@ -70,7 +70,6 @@
       "MaximumOverallEce": 0.015,
       "MaximumTimeBandEce": 0.025,
       "RetainedGenerations": 4,
-      "LeaseTimeoutMinutes": 120,
       "RetiredGenerationGraceMinutes": 30
     },
     "SavedBuilds": {

@@ -721,15 +721,13 @@ groups:
             - alertname
             - grafana_folder
 
-      # The wedge detector, for the case the reaper cannot resolve. A generation in Modeling is owned by
-      # the modeler, which renews HeartbeatAtUtc/LeaseExpiresAtUtc every BUILD_LAB_HEARTBEAT_SECONDS
-      # (default 60), and this gauge is the age of that heartbeat. So a healthy run reports ~60s. When
-      # heartbeats stop, the lease expires BUILD_LAB_LEASE_SECONDS (default 900) after the last one and
-      # the next promote tick (`*/10 * * * *`) reaps the row: bounded at 900 + 600 = 1500s. Threshold
-      # 2700s allows two missed promote ticks on top of that, so the only way to sustain it is a reaper
-      # that is not running (promote job disabled, worker dead) or a Modeling row with no lease deadline
-      # at all, which waits out the far slower LeaseTimeoutMinutes (default 120) backstop. The old 3h
-      # threshold was unreachable: the reaper always won first.
+      # Duration, not liveness. A generation in Modeling is owned by the modeler, which holds a
+      # PostgreSQL session advisory lock for the whole run, so a dead modeler drops the lock with its
+      # session and the next promote tick (`*/10 * * * *`) reaps the row within ~10 minutes. This gauge
+      # is therefore how long a LIVE run has been going. Threshold 2700s says "far longer than a normal
+      # generation": the only ways to sustain it are a genuinely slow run or a promote job that is not
+      # running. It replaced a heartbeat-age reading whose renewal thread could be GIL-starved for
+      # minutes, which reaped six consecutive healthy runs.
       - uid: trn-buildlab-modeling-wedged
         title: Build Lab generation wedged in Modeling
         condition: B
@@ -770,8 +768,8 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: A Build Lab generation has been Modeling without a heartbeat for 45 minutes
-          description: The modeler leased a generation and stopped heartbeating, and the lease reaper has not reclaimed it. Confirm the promote-build-lab-generation recurring job is enabled and running, then check transcendence-analytics-modeler logs and the row's lease/heartbeat columns; a wedged generation also blocks creation of the next one for that patch.
+          summary: A Build Lab generation has been Modeling for over 45 minutes
+          description: A run has been Modeling far longer than a normal generation takes. This is duration, not a liveness failure - a dead modeler drops its Postgres session advisory lock and the reaper fails the row on the next promote tick. So a firing alert means the modeler is still alive and slow, or the promote job is not running. Check transcendence-analytics-modeler logs first, then that promote-build-lab-generation is enabled; a run stuck here also blocks creation of the next generation for that patch.
         notification_settings:
           receiver: transcendence-discord
           group_by:

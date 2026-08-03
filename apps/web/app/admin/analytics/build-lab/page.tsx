@@ -12,7 +12,7 @@ import type {
 } from "@/lib/adminTypes";
 
 const ABANDONABLE_STATUSES = ["PendingDataset", "Modeling", "Candidate"];
-const STALE_HEARTBEAT_MINUTES = 15;
+const LONG_RUN_MINUTES = 90;
 
 type MetricTone = "success" | "danger" | "warning" | undefined;
 type MetricRow = { label: string; value: string; tone?: MetricTone };
@@ -236,13 +236,11 @@ export default async function AdminBuildLabAnalyticsPage(props: {
             generation.actionEstimateCount - generation.publishableActionCount
           );
           const inFlight = ABANDONABLE_STATUSES.includes(generation.status);
-          const leaseExpiresInMinutes = generation.leaseExpiresAtUtc
-            ? -(minutesSince(generation.leaseExpiresAtUtc, nowMs) ?? 0)
-            : null;
-          const leaseExpired = leaseExpiresInMinutes != null && leaseExpiresInMinutes <= 0;
-          const heartbeatMinutes = minutesSince(generation.heartbeatAtUtc, nowMs);
-          const heartbeatStale = heartbeatMinutes != null && heartbeatMinutes >= STALE_HEARTBEAT_MINUTES;
-          const stalled = inFlight && (leaseExpired || heartbeatStale);
+          // There is no heartbeat to go stale: a dead modeler drops its advisory lock and the worker
+          // reaps the row on the next tick. A long run is only worth flagging as *long*, not as stuck.
+          const runningMinutes = minutesSince(generation.createdAtUtc, nowMs);
+          const longRunning =
+            inFlight && runningMinutes != null && runningMinutes >= LONG_RUN_MINUTES;
           const history = promotionHistory(generation);
 
           return (
@@ -254,9 +252,9 @@ export default async function AdminBuildLabAnalyticsPage(props: {
                     <span className={`rounded-full border px-2.5 py-1 text-xs uppercase tracking-wide ${statusTone(generation.status, generation.isActive)}`}>
                       {generation.isActive ? "Active" : generation.status}
                     </span>
-                    {stalled ? (
-                      <span className="ops-chip text-xs" data-tone="danger">
-                        Stalled lease
+                    {longRunning ? (
+                      <span className="ops-chip text-xs" data-tone="warning">
+                        Long run
                       </span>
                     ) : null}
                   </div>
@@ -350,35 +348,26 @@ export default async function AdminBuildLabAnalyticsPage(props: {
                     </div>
                   </dl>
 
-                  {generation.leaseOwner || generation.leaseExpiresAtUtc || generation.heartbeatAtUtc ? (
+                  {generation.leaseOwner || inFlight ? (
                     <div className="mt-5 rounded-card border border-border/45 bg-surface-2/30 p-3">
-                      <p className="type-kicker text-fg/45">Worker lease</p>
+                      <p className="type-kicker text-fg/45">Modeler</p>
                       <dl className="mt-2 grid gap-2 text-sm">
                         <div className="flex justify-between gap-3">
                           <dt className="text-fg/50">Owner</dt>
                           <dd className="truncate font-mono text-xs">{generation.leaseOwner || "unleased"}</dd>
                         </div>
                         <div className="flex justify-between gap-3 border-t border-border/25 pt-2">
-                          <dt className="text-fg/50">Expires</dt>
-                          <dd className={leaseExpired ? "text-danger" : ""}>
-                            {generation.leaseExpiresAtUtc
-                              ? leaseExpired
-                                ? `Expired ${ageLabel(-(leaseExpiresInMinutes ?? 0))}`
-                                : `in ${leaseExpiresInMinutes} min`
-                              : "—"}
-                          </dd>
-                        </div>
-                        <div className="flex justify-between gap-3 border-t border-border/25 pt-2">
-                          <dt className="text-fg/50">Heartbeat</dt>
-                          <dd className={heartbeatStale ? "text-warning" : ""}>
-                            {heartbeatMinutes == null ? "never" : ageLabel(heartbeatMinutes)}
+                          <dt className="text-fg/50">Running for</dt>
+                          <dd className={longRunning ? "text-warning" : ""}>
+                            {runningMinutes == null ? "—" : ageLabel(runningMinutes)}
                           </dd>
                         </div>
                       </dl>
-                      {stalled ? (
-                        <p className="mt-2 text-xs text-danger">
-                          No progress for at least {STALE_HEARTBEAT_MINUTES} minutes, or the lease has
-                          expired. Abandon it to let the next run take the patch.
+                      {longRunning ? (
+                        <p className="mt-2 text-xs text-warning">
+                          Running for over {LONG_RUN_MINUTES} minutes. That is not proof it is stuck —
+                          a dead modeler releases its lock and is reaped automatically — but it is
+                          worth checking the container logs.
                         </p>
                       ) : null}
                     </div>

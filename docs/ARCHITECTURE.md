@@ -680,21 +680,20 @@ Build Lab deliberately separates collection, offline modeling, promotion, and se
    generation id, context, ranking mode, and ordered prefix, preventing mixed-generation responses.
    Rollback is one transactional pointer change plus analytics-tag invalidation.
 
-**Lease, heartbeat, and reaper.** `Modeling` is the one state only the Python side can leave, so it is
-the state that can wedge. The modeler claims a `PendingDataset` row with `FOR UPDATE SKIP LOCKED`,
-stamps `LeaseOwner`/`LeaseAcquiredAtUtc`/`LeaseExpiresAtUtc`, and renews `HeartbeatAtUtc` +
-`LeaseExpiresAtUtc` from a background thread every `BUILD_LAB_HEARTBEAT_SECONDS`. Both the create and
-promote jobs call the coordinator's reaper first. **The lease deadline the modeler writes is the
-primary clock**: a `Modeling` row with `LeaseExpiresAtUtc` in the past is moved to `Failed` with the
-owner named in `FailureReason`, so a dead modeler is reclaimed one `BUILD_LAB_LEASE_SECONDS` after its
-last heartbeat, at the next promote tick. `Analytics:BuildLab:LeaseTimeoutMinutes` is the *backstop for
-a `Modeling` row that carries no deadline at all* (`LeaseExpiresAtUtc IS NULL`) — which the modeler
-never produces, so it only covers a row moved into `Modeling` outside the normal path; it is measured
-from `HeartbeatAtUtc ?? LeaseAcquiredAtUtc ?? CreatedAtUtc`. Reaping unblocks generation creation for
-the patch, which otherwise refuses to create a second in-flight generation. An operator can force the
-same transition for any `PendingDataset`/`Modeling`/`Candidate` row through the admin fail endpoint.
-A `PendingDataset` row is *not* reaped: nothing has claimed it, so a modeler that never starts leaves
-it waiting indefinitely, which is why that state has its own alert.
+**Modeling exclusivity and the abandoned-run reaper.** `Modeling` is the one state only the Python
+side can leave, so it is the state that can wedge. The modeler claims a `PendingDataset` row with
+`FOR UPDATE SKIP LOCKED` and holds a **PostgreSQL session advisory lock** (`build-lab-generation-modeling`)
+for the whole run. Both the create and promote jobs call the coordinator's reaper first, and the reaper
+decides liveness by *trying to take that same lock*: acquiring it proves no modeler session is alive, so
+every `Modeling` row is moved to `Failed` with the owner named in `FailureReason`.
+
+There is deliberately no heartbeat, no expiry column, and no timeout to tune. PostgreSQL ties the lock
+to the TCP session, so a crashed, OOM-killed, or `docker kill`ed modeler releases it immediately. This
+replaced an application-level lease with a renewal thread, which reaped **six consecutive healthy
+generations**: loading the frozen dataset assembles millions of rows through a raw DBAPI cursor, which
+holds the GIL for minutes, so the renewal thread could not be scheduled and its deadline lapsed while
+the run was making progress. The lock is also the convention every other long exclusive job here
+already uses (`RefreshBuildResourceAnalyticsJob`, `MatchTimelineIngestionJob`).
 
 **Promotion provenance is append-only.** `PromotionHistoryJson` accumulates one
 `{action, atUtc, actor, reason}` entry per `promote`/`rollback`/`fail`, so a generation carries its own

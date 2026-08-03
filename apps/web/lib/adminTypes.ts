@@ -79,9 +79,8 @@ export type AdminBuildLabGeneration = {
   artifactUri: string | null;
   validationMetricsJson: string;
   failureReason: string | null;
+  /** Which modeler process claimed the run. Diagnostic only: liveness is a Postgres advisory lock. */
   leaseOwner: string | null;
-  leaseExpiresAtUtc: string | null;
-  heartbeatAtUtc: string | null;
   promotionHistoryJson: string;
   createdAtUtc: string;
   completedAtUtc: string | null;

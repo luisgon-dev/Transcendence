@@ -5735,10 +5735,6 @@ export interface components {
             validationMetricsJson: string;
             failureReason?: string | null;
             leaseOwner?: string | null;
-            /** Format: date-time */
-            leaseExpiresAtUtc?: string | null;
-            /** Format: date-time */
-            heartbeatAtUtc?: string | null;
             promotionHistoryJson: string;
             /** Format: date-time */
             createdAtUtc: string;

@@ -192,9 +192,6 @@ services:
       ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Application Name=transcendence-worker;Maximum Pool Size=${SERVICE_DB_POOL_MAX:-35};Minimum Pool Size=0
       Analytics__BuildLab__Enabled: ${BUILD_LAB_ENABLED:-false}
       Analytics__BuildLab__CodeRevision: ${BUILD_LAB_CODE_REVISION:-local}
-      # Must stay comfortably above BUILD_LAB_LEASE_SECONDS: this is the window after which the
-      # coordinator reaps a heartbeat-less `Modeling` generation as abandoned.
-      Analytics__BuildLab__LeaseTimeoutMinutes: ${BUILD_LAB_LEASE_TIMEOUT_MINUTES:-120}
       Jobs__Schedule__EnableCreateBuildLabGeneration: ${BUILD_LAB_ENABLED:-false}
       Jobs__Schedule__EnablePromoteBuildLabGeneration: ${BUILD_LAB_ENABLED:-false}
       <<: *app-env
@@ -237,10 +234,6 @@ services:
       BUILD_LAB_ARTIFACT_DIR: /artifacts
       BUILD_LAB_POLL_SECONDS: ${BUILD_LAB_POLL_SECONDS:-300}
       BUILD_LAB_RUN_ONCE: ${BUILD_LAB_RUN_ONCE:-false}
-      # Keep BUILD_LAB_LEASE_SECONDS below the worker's Analytics:BuildLab:LeaseTimeoutMinutes so the
-      # heartbeat renews before the .NET reaper reclaims a healthy run.
-      BUILD_LAB_LEASE_SECONDS: ${BUILD_LAB_LEASE_SECONDS:-900}
-      BUILD_LAB_HEARTBEAT_SECONDS: ${BUILD_LAB_HEARTBEAT_SECONDS:-60}
       BUILD_LAB_MAX_TRAINING_ROWS: ${BUILD_LAB_MAX_TRAINING_ROWS:-250000}
       # BUILD_LAB_LEASE_OWNER is intentionally NOT set: the modeler derives `hostname:pid`, so two
       # instances can never claim the same lease identity.

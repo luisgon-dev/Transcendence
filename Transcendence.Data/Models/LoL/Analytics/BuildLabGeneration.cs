@@ -35,11 +35,17 @@ public class BuildLabGeneration
     public string ValidationMetricsJson { get; set; } = "{}";
     public string? FailureReason { get; set; }
 
-    /// <summary>Identity of the modeler process currently holding the generation, when Modeling.</summary>
+    /// <summary>
+    /// Identity of the modeler process that claimed the generation, for diagnostics only.
+    /// </summary>
+    /// <remarks>
+    /// Liveness is not tracked here. The modeler holds a PostgreSQL session advisory lock for the
+    /// whole run, so a dead process releases it when its session drops and the coordinator decides
+    /// abandonment by probing that lock. An expiry/heartbeat pair used to live alongside this and
+    /// reaped six consecutive healthy runs, because the renewal thread could not win the GIL against
+    /// a multi-minute load.
+    /// </remarks>
     public string? LeaseOwner { get; set; }
-    public DateTime? LeaseAcquiredAtUtc { get; set; }
-    public DateTime? LeaseExpiresAtUtc { get; set; }
-    public DateTime? HeartbeatAtUtc { get; set; }
 
     /// <summary>Append-only [{action, atUtc, actor, reason}] audit of promote/rollback/fail.</summary>
     public string PromotionHistoryJson { get; set; } = "[]";

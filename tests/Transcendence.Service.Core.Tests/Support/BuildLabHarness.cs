@@ -142,7 +142,13 @@ internal sealed class BuildLabHarness : IAsyncDisposable
     /// transaction issues. The shim only lets the statement execute; cross-process serialisation is
     /// not modelled and remains a PostgreSQL-only concern.
     /// </param>
-    public static async Task<BuildLabHarness> CreateAsync(bool withPromotionLockShim = true)
+    /// <param name="modelerHoldsLock">
+    /// Whether a live modeler is holding the modeling advisory lock. The coordinator decides an
+    /// abandoned run by whether it can take that lock, so this is what a SQLite harness has to fake.
+    /// </param>
+    public static async Task<BuildLabHarness> CreateAsync(
+        bool withPromotionLockShim = true,
+        bool modelerHoldsLock = false)
     {
         var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -152,6 +158,9 @@ internal sealed class BuildLabHarness : IAsyncDisposable
                 "hashtextextended",
                 (text, seed) => (text ?? string.Empty).GetHashCode(StringComparison.Ordinal) + seed);
             connection.CreateFunction<long, long>("pg_advisory_xact_lock", key => key);
+            // Acquired only when no modeler holds it, which is exactly the reaper's liveness question.
+            connection.CreateFunction<long, bool>("pg_try_advisory_lock", _ => !modelerHoldsLock);
+            connection.CreateFunction<long, bool>("pg_advisory_unlock", _ => true);
         }
 
         var sql = new RecordingCommandInterceptor();

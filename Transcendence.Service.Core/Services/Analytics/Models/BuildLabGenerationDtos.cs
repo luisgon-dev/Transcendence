@@ -17,8 +17,6 @@ public record BuildLabGenerationDto(
     string ValidationMetricsJson,
     string? FailureReason,
     string? LeaseOwner,
-    DateTime? LeaseExpiresAtUtc,
-    DateTime? HeartbeatAtUtc,
     string PromotionHistoryJson,
     DateTime CreatedAtUtc,
     DateTime? CompletedAtUtc,

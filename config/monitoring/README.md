@@ -118,7 +118,7 @@ disabled feature never pages.
 
 | Metric | Type | Labels | Meaning |
 | --- | --- | --- | --- |
-| `transcendence_buildlab_generation_status_age_seconds` | gauge | `status` | Seconds since the oldest generation in that status last transitioned. `status="PendingDataset"` is the dead-modeler detector (nothing claimed the row); `status="Modeling"` is the heartbeat age, i.e. the wedge detector |
+| `transcendence_buildlab_generation_status_age_seconds` | gauge | `status` | Seconds since the oldest generation in that status last transitioned. `status="PendingDataset"` is the dead-modeler detector (nothing claimed the row); `status="Modeling"` is how long the current run has been going (duration, not liveness) |
 | `transcendence_buildlab_active_generation_age_seconds` | gauge | — | Seconds since the active generation was promoted |
 | `transcendence_buildlab_dataset_lag_seconds` | gauge | — | `now - SourceCutoffUtc` of the active generation |
 | `transcendence_buildlab_published_estimates` | gauge | `kind` (`action`/`path`) | Publishable rows in the active generation |
@@ -137,10 +137,9 @@ annotations and add no suffix). `status` values are the `BuildLabGenerationStatu
 
 **Thresholds are derived from the pipeline's cadences, not chosen.** `CreateBuildLabGenerationCron`
 runs daily (`15 2 * * *`) and `PromoteBuildLabGenerationCron` every 10 minutes; the promote tick is
-also what reaps expired modeling leases and refreshes the gauges. The modeler polls every
-`BUILD_LAB_POLL_SECONDS` (300), leases for `BUILD_LAB_LEASE_SECONDS` (900) and heartbeats every
-`BUILD_LAB_HEARTBEAT_SECONDS` (60). So: a claim is healthy within ~5 min (unclaimed rule fires at 6h);
-a stopped modeler is reaped within 900 + 600 = 1500s, making the Modeling heartbeat age reachable only
-when the reaper itself is not running (wedge rule fires at 2700s); and at most one training run exists
-per day, so a single lost run over 24h is the whole signal (the previous "twice in six hours" could
-never happen).
+also what reaps abandoned modeling runs and refreshes the gauges. The modeler polls every
+`BUILD_LAB_POLL_SECONDS` (300) and holds a Postgres session advisory lock for the run. So: a claim is
+healthy within ~5 min (unclaimed rule fires at 6h); a dead modeler drops its lock instantly and is
+reaped on the next promote tick, within ~10 min, so a sustained Modeling age means a slow run or a
+reaper that is not running (rule fires at 2700s); and at most one training run exists per day, so a
+single lost run over 24h is the whole signal.

@@ -1526,3 +1526,15 @@ def test_the_coordinator_and_the_modeler_agree_on_the_lock_key():
         pytest.skip("the .NET coordinator is not present in this checkout")
     # Both hash the same string with hashtextextended; a drift here silently disables the reaper.
     assert f'"{MODELING_LOCK_KEY}"' in coordinator.read_text(encoding="utf-8")
+
+
+def test_the_claim_is_committed_before_the_long_run_starts():
+    # psycopg opens a transaction on the lock SELECT. Without an explicit commit the claim becomes a
+    # savepoint and `Modeling` stays invisible to every other session for the whole run, so the admin
+    # surface shows PendingDataset and the reaper cannot see the row at all.
+    connection = FakeConnection(rows={"pg_try_advisory_lock": [{"ok": True}]})
+
+    try_acquire_modeling_lock(connection)
+
+    assert connection.commits >= 1, "the lock SELECT's transaction must be closed"
+    assert "connection.commit()" in inspect.getsource(pipeline.lease_generation)

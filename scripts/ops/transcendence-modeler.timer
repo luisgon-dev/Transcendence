@@ -1,0 +1,17 @@
+[Unit]
+Description=Poll for a pending Build Lab generation and model it to completion
+
+[Timer]
+# Cadence only decides how soon a *pending* generation is picked up, not how often work happens:
+# generations are created by the worker's own recurring job, and an invocation with nothing pending
+# exits idle in well under a second. 10 minutes keeps pickup latency low at negligible cost.
+OnUnitActiveSec=10min
+OnBootSec=5min
+# The run is far longer than the interval, so overlap is the normal case. Refusing to start a second
+# unit while the first is active is the cheap guard; the advisory lock is the correct one, and it
+# holds even across a reboot or a manual `systemctl start`.
+AccuracySec=30s
+Unit=transcendence-modeler.service
+
+[Install]
+WantedBy=timers.target

@@ -68,42 +68,47 @@ pin a service to an immutable `:sha-<short>` tag in the compose file and `compos
 > this poller is the app release source of truth and two independent recreators can race each other.
 > wud may continue watching public Docker Hub sidecars (portainer/dozzle/grafana/prometheus).
 
-### `analytics-modeler` release (manual, not polled)
+### `analytics-modeler` — run-to-completion oneshot
 
 `transcendence-analytics-modeler` is built, tagged, labelled, SBOM'd, and cosign-signed by the same
-`Docker Images` workflow as the three app images (path-filtered on `analytics/modeler/**`), but
-`SERVICES` in `poll-deploy.sh` still lists only `service`/`webapi`/`web`. Two properties of the script
-have to change before the modeler can be added, and both are real, not cosmetic:
+`Docker Images` workflow as the three app images (path-filtered on `analytics/modeler/**`), but it is
+deliberately **not** in `SERVICES` in `poll-deploy.sh`.
 
-- **Optional service.** The modeler lives behind the `analytics-modeling` Compose profile, so on a host
-  where the profile is off the container does not exist. `local_digest`/`local_revision` would return
-  empty, `record_resolution_failure` would fire, `deploy_one` would return non-zero, and `main` would
-  `break` — aborting the whole poll cycle and alerting every 60s. It needs an explicit optional flag
-  whose missing container is a silent skip (and it must be polled **last** so it can never gate the app
-  services).
-- **No healthcheck.** The modeler is a batch poller with no server to probe, so
-  `container_health_status` reports `no-healthcheck:running` and `wait_for_healthy` returns failure on
-  the `no-healthcheck:*` branch — every modeler deploy would "fail" and roll back. It needs a
-  running-after-grace verification path for services declared as healthcheck-less. Do **not** paper over
-  this by adding a trivially-passing healthcheck to Compose; a healthcheck that cannot fail is worse
-  than none.
-
-Until that lands, release it by hand on prod:
+It is not a daemon. A modeling run takes hours, and while the modeler was a long-lived container every
+image update recreated it mid-run and threw the generation away — that is exactly how generation #59
+died. It now runs to completion under systemd:
 
 ```bash
-cd "$COMPOSE_DIR"   # /var/lib/docker/volumes/portainer_data/_data/compose/2
-docker compose -p transcendence --env-file stack.env -f docker-compose.yml \
-  --profile analytics-modeling pull analytics-modeler
-docker compose -p transcendence --env-file stack.env -f docker-compose.yml \
-  --profile analytics-modeling up -d --no-deps analytics-modeler
-docker inspect transcendence-analytics-modeler \
-  --format '{{ index .Config.Labels "org.opencontainers.image.revision"}}'   # verify the build
-docker logs -f transcendence-analytics-modeler
+cp scripts/ops/transcendence-modeler.{service,timer} /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now transcendence-modeler.timer
+```
+
+The unit pulls its own image in `ExecStartPre` and runs `docker compose run --rm`, so:
+
+- the image can only change **between** invocations, never underneath a run;
+- `--rm` leaves no container for a deploy poller to find or recreate;
+- the exit code is the completion signal — `0` for a completed generation *or* nothing to do, non-zero
+  for a generation that failed, so `systemctl status` and `journalctl -u transcendence-modeler` are the
+  first place to look;
+- overlap is safe. The timer fires every 10 minutes and a run lasts hours; a second invocation cannot
+  take the modeling advisory lock and exits idle. That guard holds across reboots and manual
+  `systemctl start` too, which a systemd-only guard would not.
+
+Inspect a run:
+
+```bash
+systemctl list-timers transcendence-modeler.timer
+journalctl -u transcendence-modeler.service -f
+systemctl status transcendence-modeler.service      # last exit code
 ```
 
 Rollback is the same `MODELER_IMAGE=ghcr.io/luisgon-dev/transcendence-analytics-modeler:sha-<short>`
-pin used for the app images. Stopping the modeler mid-generation is safe: it marks the in-flight
-generation `Failed` on SIGTERM, and the worker's lease reaper would have done so anyway.
+pin used for the app images; set it in `stack.env` and the next invocation picks it up.
+
+Interrupting a run is safe. The process holds a PostgreSQL session advisory lock for its duration, so
+killing it drops the lock with the session and the worker's reaper fails the row on its next tick — no
+heartbeat, no timeout, nothing to wait out. To stop the schedule entirely,
+`systemctl disable --now transcendence-modeler.timer`.
 
 ## `install-matchup-performance-db.sql` — online matchup source preparation
 

@@ -19,6 +19,7 @@ from build_lab_modeler.pipeline import (
     UNKNOWN_ARCHETYPE,
     UNVERIFIED_BORROW_WEIGHT,
     MODELING_LOCK_KEY,
+    RunOutcome,
     LeaseLost,
     PatchChangeSet,
     Settings,
@@ -1538,3 +1539,69 @@ def test_the_claim_is_committed_before_the_long_run_starts():
 
     assert connection.commits >= 1, "the lock SELECT's transaction must be closed"
     assert "connection.commit()" in inspect.getsource(pipeline.lease_generation)
+
+
+def test_process_next_reports_a_failed_generation_as_failed_not_success():
+    # A oneshot is observed by its exit code. A generation that blew up must not look like a healthy
+    # tick, or a permanently broken pipeline reports success forever.
+    assert RunOutcome.FAILED is not RunOutcome.COMPLETED
+    source = inspect.getsource(pipeline.process_next)
+    assert "return RunOutcome.FAILED" in source
+    assert "return RunOutcome.COMPLETED" in source
+    # Nothing pending, or another modeler already running, is a successful no-op.
+    assert source.count("return RunOutcome.IDLE") == 2
+
+
+def test_run_once_returns_the_outcome_for_the_exit_code():
+    source = inspect.getsource(pipeline.run)
+    assert "return outcome" in source, "run_once must hand the outcome to the caller"
+
+    from build_lab_modeler.__main__ import EXIT_CODES
+
+    assert EXIT_CODES[RunOutcome.IDLE] == 0
+    assert EXIT_CODES[RunOutcome.COMPLETED] == 0
+    assert EXIT_CODES[RunOutcome.FAILED] != 0
+    # Every outcome must map, or a new one would KeyError at the worst possible moment.
+    assert set(EXIT_CODES) == set(RunOutcome)
+
+
+def test_the_daemon_loop_only_sleeps_when_idle():
+    # COMPLETED and FAILED both mean work happened, so the loop should come straight back for the next
+    # pending generation rather than sitting out a poll interval.
+    source = inspect.getsource(pipeline.run)
+    assert "if outcome is RunOutcome.IDLE:" in source
+
+
+def test_the_oneshot_is_scheduled_by_systemd_and_not_by_the_deploy_poller():
+    ops = Path(__file__).resolve().parents[3] / "scripts/ops"
+    if not ops.is_dir():
+        pytest.skip("ops scripts are not present in this checkout")
+
+    unit = (ops / "transcendence-modeler.service").read_text(encoding="utf-8")
+    assert "Type=oneshot" in unit
+    assert "run --rm" in unit, "a fresh container per run leaves nothing to recreate"
+    assert " -T " in unit, "no TTY exists under systemd"
+    assert "pull" in unit, "the image must change between runs, never underneath one"
+    assert "TimeoutStartSec=0" in unit, "an hours-long run must not be killed by systemd"
+
+    timer = (ops / "transcendence-modeler.timer").read_text(encoding="utf-8")
+    assert "transcendence-modeler.service" in timer
+
+    # The regression this design exists to prevent: the poller recreating the modeler mid-generation.
+    poller = (ops / "poll-deploy.sh").read_text(encoding="utf-8")
+    assert "analytics-modeler:transcendence-analytics-modeler" not in poller
+
+
+def test_the_compose_service_is_a_oneshot_not_a_daemon():
+    compose = Path(__file__).resolve().parents[3] / "compose.yml"
+    if not compose.is_file():
+        pytest.skip("compose.yml is not present in this checkout")
+    text = compose.read_text(encoding="utf-8")
+    modeler = text[text.index("  analytics-modeler:"):]
+    modeler = modeler[: modeler.index("\n  pgadmin:")] if "\n  pgadmin:" in modeler else modeler
+
+    assert 'restart: "no"' in modeler, "a restart policy would relaunch a finished run"
+    assert "container_name: transcendence-analytics-modeler" not in modeler, (
+        "run --rm supplies its own container; a fixed name collides across invocations"
+    )
+    assert "BUILD_LAB_RUN_ONCE:-true" in modeler

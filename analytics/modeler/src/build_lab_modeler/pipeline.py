@@ -238,7 +238,13 @@ def try_acquire_modeling_lock(connection: psycopg.Connection) -> bool:
     acquired = connection.execute(
         "SELECT pg_try_advisory_lock(hashtextextended(%s, 0))", (MODELING_LOCK_KEY,)
     ).fetchone()
-    return bool(next(iter(acquired.values()))) if acquired else False
+    held = bool(next(iter(acquired.values()))) if acquired else False
+    # psycopg opens a transaction on that SELECT, which would make the subsequent claim a savepoint
+    # and hide `Modeling` from every other session until the whole run committed. A session advisory
+    # lock is not transaction-scoped, so committing here keeps the lock and lets the claim be its own
+    # durable, immediately-visible transaction.
+    connection.commit()
+    return held
 
 
 def release_modeling_lock(connection: psycopg.Connection) -> None:
@@ -282,6 +288,9 @@ def lease_generation(connection: psycopg.Connection, settings: Settings) -> dict
                 generation["Id"],
             )
             return None
+    # Publish the claim before the long run starts, so the admin surface and the reaper both see
+    # `Modeling` rather than a row that still looks unclaimed for hours.
+    connection.commit()
     return generation
 
 

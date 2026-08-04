@@ -145,6 +145,7 @@ class Settings:
     deidentification_salt: str
     lease_owner: str
     max_training_rows: int
+    training_sample_matches: int
     retained_generations: int
 
     @classmethod
@@ -171,6 +172,13 @@ class Settings:
             lease_owner=os.getenv("BUILD_LAB_LEASE_OWNER")
             or f"{socket.gethostname()}:{os.getpid()}",
             max_training_rows=max(20_000, int(os.getenv("BUILD_LAB_MAX_TRAINING_ROWS", "250000"))),
+            # How many whole matches the structural fit draws. Sized so the sample yields well over
+            # max_training_rows of decisions while its raw item events stay a small fraction of the
+            # corpus, which is what keeps peak memory independent of how long the cohort has been
+            # accumulating.
+            training_sample_matches=max(
+                2_000, int(os.getenv("BUILD_LAB_TRAINING_SAMPLE_MATCHES", "12000"))
+            ),
             # Mirrors BuildLabModelingOptions.RetainedGenerations and the Math.Max(2, ...) floor the
             # coordinator applies, so artifact retention and row retention keep the same set.
             retained_generations=max(2, int(os.getenv("BUILD_LAB_RETAINED_GENERATIONS", "4"))),
@@ -319,41 +327,10 @@ def model_generation(
     included_patches = json_value(generation["IncludedPatchesJson"])
     regions = json_value(generation["IncludedRegionsJson"])
     cutoff = generation["SourceCutoffUtc"]
-    LOG.info("Loading frozen decision data for %s.", generation_id)
-
-    # Each loader is minutes of GIL-holding row assembly, so the lease is renewed inline between
-    # them rather than left to the timer thread, which cannot be scheduled while they run.
-    def loaded(label: str, frame):
-        LOG.info("Loaded %s for %s.", label, generation_id)
-        return frame
-
+    current_patch = generation["Patch"]
     rank_offset = resolve_rank_offset_column(connection)
-    item_events = loaded(
-        "item events", load_item_events(connection, included_patches, cutoff, rank_offset)
-    )
-    timeline_state_events = loaded(
-        "timeline state events", load_timeline_state_events(connection, included_patches, cutoff)
-    )
-    participant_teams = loaded(
-        "participant teams", load_participant_teams(connection, included_patches, cutoff)
-    )
-    rune_events = loaded(
-        "rune decisions", load_rune_decisions(connection, included_patches, cutoff, rank_offset)
-    )
-    spell_events = loaded(
-        "spell decisions", load_spell_decisions(connection, included_patches, cutoff, rank_offset)
-    )
-    if item_events.empty:
-        raise RuntimeError("No eligible item decisions were available for this generation.")
-
-    item_decisions = build_item_decisions(item_events)
-    item_decisions = enrich_with_predecision_event_state(
-        item_decisions,
-        timeline_state_events,
-        participant_teams,
-    )
     changes = load_patch_change_set(connection, included_patches)
-    archetypes = load_champion_archetypes(connection, generation["Patch"])
+    archetypes = load_champion_archetypes(connection, current_patch)
     LOG.info(
         "Patch change set across %s: %d items, %d runes, %d champions; %d champions carry an archetype.",
         ", ".join(included_patches),
@@ -362,33 +339,140 @@ def model_generation(
         len(changes.champions),
         len(archetypes),
     )
-    item_decisions = exclude_incompatible_prior_item_rows(
-        item_decisions,
-        generation["Patch"],
-        set(changes.items),
+    changed_items = set(changes.items)
+
+    def prepare(frame: pd.DataFrame, *, exclude_drift: bool = True) -> pd.DataFrame:
+        return prepare_decisions(
+            frame,
+            current_patch,
+            included_patches,
+            rank_offset,
+            changes,
+            archetypes,
+            exclude_drift=exclude_drift,
+        )
+
+    prune_stale_artifacts(connection, settings, generation_id)
+    artifact_path = settings.artifact_dir / str(generation_id)
+    artifact_path.mkdir(parents=True, exist_ok=True)
+
+    # Phase 1 - the structural model, fit on a deterministic sample of whole matches.
+    #
+    # This model was always fit on at most `max_training_rows`; the previous shape of this function
+    # reached that by loading every decision row in the cohort and then discarding over 99% of them,
+    # which is what made peak memory scale with the corpus. Sampling matches in the query keeps the
+    # same row budget for the fit. Whole matches, not rows, so the chronological train/calibration/
+    # test split still partitions by match and `evaluate_leakage` still sees disjoint splits.
+    match_count = load_cohort_match_count(connection, included_patches, cutoff)
+    modulus = training_sample_modulus(match_count, settings.training_sample_matches)
+    slice_modulus = modulus * TRAINING_SAMPLE_SLICES
+    slice_rows = max(1, settings.max_training_rows // TRAINING_SAMPLE_SLICES)
+    LOG.info(
+        "Fitting the structural model on ~1/%d of %d cohort matches, drawn in %d slices.",
+        modulus,
+        match_count,
+        TRAINING_SAMPLE_SLICES,
     )
-    decisions = pd.concat(
-        [
-            item_decisions,
-            build_rune_decisions(rune_events),
-            build_spell_decisions(spell_events),
-        ],
-        ignore_index=True,
-    )
-    decisions = decisions.assign(
-        archetype=decisions["champion_id"].astype(int).map(archetypes).fillna(UNKNOWN_ARCHETYPE)
-    )
-    decisions = apply_row_weights(
-        decisions,
-        generation["Patch"],
-        included_patches,
-        rank_offset,
-        changes,
-    )
-    decisions = exclude_drifted_prior_actions(decisions, generation["Patch"])
-    if decisions.empty or decisions["won"].nunique() < 2:
+    slices = []
+    for residue in range(TRAINING_SAMPLE_SLICES):
+        drawn = prepare(
+            load_decision_frame(
+                connection,
+                included_patches,
+                cutoff,
+                rank_offset,
+                current_patch,
+                changed_items,
+                match_sample_modulus=slice_modulus,
+                match_sample_residue=residue,
+            ),
+            # `exclude_drifted_prior_actions` fires on cells with at least 100 observations in both
+            # the current and a prior patch. Those counts are divided by the sampling rate here, so
+            # applying it would drop an arbitrary subset of cells rather than a conservative one. It
+            # guards *borrowing into a per-cell estimate*, which is not what this model does: the
+            # model is P(win | pre-decision state) and is held to the calibration and held-out-patch
+            # gates below.
+            exclude_drift=False,
+        )
+        # Thinned here rather than after the concat so the whole draw is never resident at once. Each
+        # slice spans the full cohort time range, so the union stays a chronological systematic sample.
+        slices.append(thin_chronologically(drawn, slice_rows))
+        LOG.info(
+            "Training slice %d/%d: %d rows drawn, %d kept.",
+            residue + 1,
+            TRAINING_SAMPLE_SLICES,
+            len(drawn),
+            len(slices[-1]),
+        )
+        del drawn
+    training = pd.concat(slices, ignore_index=True)
+    del slices
+    if training.empty:
+        raise RuntimeError("No eligible item decisions were available for this generation.")
+    if training["won"].nunique() < 2:
         raise RuntimeError("The frozen dataset does not contain both match outcomes.")
-    event_state_coverage = float(decisions["has_event_state"].mean())
+    structural_model, metrics = train_structural_model(training, settings.max_training_rows)
+    del training
+    joblib.dump(structural_model, artifact_path / "win_probability.joblib")
+
+    # Phase 2 - estimates, one champion at a time.
+    #
+    # Every grouping key in `action_records`/`path_records` starts with champion_id, and the borrowing
+    # weights and drift exclusion are keyed on (champion, role, family, stage, action), so a champion
+    # sweep produces the same records as the whole-cohort pass while only one champion's rows are ever
+    # resident. `expand_scopes` quadruples its input, which is why the cohort-wide version could not
+    # fit regardless of how the loads were shaped.
+    champions = load_cohort_champions(connection, included_patches, cutoff)
+    LOG.info("Sweeping %d champions in the frozen cohort.", len(champions))
+    action_pool: list[dict] = []
+    path_pool: list[dict] = []
+    decision_rows = 0
+    event_state_rows = 0.0
+    for position, champion_id in enumerate(champions, start=1):
+        frame = prepare(
+            load_decision_frame(
+                connection,
+                included_patches,
+                cutoff,
+                rank_offset,
+                current_patch,
+                changed_items,
+                champion_id=champion_id,
+            )
+        )
+        if frame.empty:
+            LOG.info("Champion %d/%d (%d) has no eligible rows.", position, len(champions), champion_id)
+            continue
+        # Every published number is anchored on the calibrated model, so the calibration gates in the
+        # .NET promoter actually govern what is served.
+        frame["baseline_win_probability"] = structural_win_probability(structural_model, frame)
+        champion_actions = action_records(frame)
+        champion_paths = path_records(frame)
+        action_pool.extend(champion_actions)
+        path_pool.extend(champion_paths)
+        decision_rows += len(frame)
+        event_state_rows += float(frame["has_event_state"].sum())
+        # champion_id leads the partitioning so each champion writes into its own directory and the
+        # appends cannot collide on a file name.
+        deidentified_export(frame, settings.deidentification_salt).to_parquet(
+            artifact_path / "dataset",
+            index=False,
+            partition_cols=["champion_id", "patch", "region"],
+        )
+        LOG.info(
+            "Champion %d/%d (%d): %d rows, %d action records, %d path records.",
+            position,
+            len(champions),
+            champion_id,
+            len(frame),
+            len(champion_actions),
+            len(champion_paths),
+        )
+        del frame, champion_actions, champion_paths
+
+    if not action_pool:
+        raise RuntimeError("No adjusted action estimates could be produced.")
+    event_state_coverage = event_state_rows / decision_rows if decision_rows else 0.0
     if event_state_coverage <= 0:
         LOG.warning(
             "No match in the frozen cohort carries timeline event payloads. The rows are schema v2 "
@@ -396,29 +480,12 @@ def model_generation(
             "absent rather than even."
         )
 
-    # Checked before the two most expensive stretches of the run: writing the dataset and, below,
-    # publishing. A lost lease makes both pure waste, and the second check keeps the orphan window
-    # around the terminal write as small as the transaction itself.
-    prune_stale_artifacts(connection, settings, generation_id)
-    artifact_path = settings.artifact_dir / str(generation_id)
-    artifact_path.mkdir(parents=True, exist_ok=True)
-    export = deidentified_export(decisions, settings.deidentification_salt)
-    export.to_parquet(
-        artifact_path / "dataset",
-        index=False,
-        partition_cols=["patch", "region"],
-    )
-
-    structural_model, metrics = train_structural_model(decisions, settings.max_training_rows)
-    joblib.dump(structural_model, artifact_path / "win_probability.joblib")
-    # Every published number is anchored on the calibrated model, so the calibration gates in the
-    # .NET promoter actually govern what is served.
-    decisions["baseline_win_probability"] = structural_win_probability(structural_model, decisions)
-
-    estimates = build_action_estimates(decisions, generation_id, generation["Patch"])
-    path_estimates = build_path_estimates(decisions, generation_id, generation["Patch"])
-    if not estimates:
-        raise RuntimeError("No adjusted action estimates could be produced.")
+    # Pooling is the one genuinely cross-champion step, and it borrows strength between champions
+    # through the small per-cell records rather than the rows behind them.
+    apply_partial_pooling(action_pool, ACTION_POOLING_LEVELS)
+    apply_partial_pooling(path_pool, PATH_POOLING_LEVELS)
+    estimates = action_tuples(action_pool, generation_id, current_patch)
+    path_estimates = path_tuples(path_pool, generation_id, current_patch)
 
     manifest = {
         "generationId": str(generation_id),
@@ -427,7 +494,7 @@ def model_generation(
         "patches": included_patches,
         "regions": regions,
         "sourceCutoffUtc": cutoff.isoformat(),
-        "rows": len(decisions),
+        "rows": decision_rows,
         "actionEstimates": len(estimates),
         "pathEstimates": len(path_estimates),
         "eventStateCoverage": event_state_coverage,
@@ -481,6 +548,101 @@ def model_generation(
     # a durable state rather than one still pending at connection close.
     connection.commit()
     LOG.info("Generation %s is ready for .NET promotion.", generation_id)
+
+
+def load_decision_frame(
+    connection: psycopg.Connection,
+    included_patches: list[str],
+    cutoff,
+    rank_offset: str | None,
+    current_patch: str,
+    changed_items: set[int],
+    *,
+    champion_id: int | None = None,
+    match_sample_modulus: int | None = None,
+    match_sample_residue: int = 0,
+) -> pd.DataFrame:
+    """Load one scope of the frozen cohort and turn it into unweighted decision rows.
+
+    The scope is either a champion (the estimate sweep) or a deterministic sample of matches (the
+    structural fit). Item events are participant-scoped, while team composition and kill state are
+    match-scoped, because a kill diff is a fact about the match rather than about one participant.
+    """
+    scope = {
+        "champion_id": champion_id,
+        "match_sample_modulus": match_sample_modulus,
+        "match_sample_residue": match_sample_residue,
+    }
+    item_events = load_item_events(
+        connection, included_patches, cutoff, rank_offset, **scope
+    )
+    if item_events.empty:
+        return pd.DataFrame()
+    item_decisions = build_item_decisions(item_events)
+    del item_events
+    item_decisions = enrich_with_predecision_event_state(
+        item_decisions,
+        load_timeline_state_events(connection, included_patches, cutoff, **scope),
+        load_participant_teams(connection, included_patches, cutoff, **scope),
+    )
+    item_decisions = exclude_incompatible_prior_item_rows(
+        item_decisions,
+        current_patch,
+        changed_items,
+    )
+    return pd.concat(
+        [
+            item_decisions,
+            build_rune_decisions(
+                load_rune_decisions(connection, included_patches, cutoff, rank_offset, **scope)
+            ),
+            build_spell_decisions(
+                load_spell_decisions(connection, included_patches, cutoff, rank_offset, **scope)
+            ),
+        ],
+        ignore_index=True,
+    )
+
+
+def thin_chronologically(frame: pd.DataFrame, max_rows: int) -> pd.DataFrame:
+    """Systematic chronological subsample, matching how `train_structural_model` bounds its own fit.
+
+    Deduplicated on the frame identity first so `max_rows` is measured in the same unit the fit uses.
+    """
+    if frame.empty:
+        return frame
+    ordered = frame.sort_values(["match_date", "match_id"]).drop_duplicates(
+        ["match_id", "participant_id", "minute"]
+    )
+    if len(ordered) <= max_rows:
+        return ordered
+    return ordered.iloc[:: math.ceil(len(ordered) / max_rows)]
+
+
+def prepare_decisions(
+    frame: pd.DataFrame,
+    current_patch: str,
+    included_patches: list[str],
+    rank_offset: str | None,
+    changes: "PatchChangeSet",
+    archetypes: dict[int, str],
+    *,
+    exclude_drift: bool,
+) -> pd.DataFrame:
+    """Attach archetypes and borrowing weights, and drop rows no estimate may use.
+
+    Every step here is keyed on the champion or on the row itself, so this is safe to apply to one
+    champion's rows in isolation.
+    """
+    if frame.empty:
+        return frame
+    frame = frame.assign(
+        archetype=frame["champion_id"].astype(int).map(archetypes).fillna(UNKNOWN_ARCHETYPE)
+    )
+    frame = apply_row_weights(frame, current_patch, included_patches, rank_offset, changes)
+    if exclude_drift:
+        frame = exclude_drifted_prior_actions(frame, current_patch)
+    return frame
 
 
 def execute_guarded(
@@ -680,19 +842,147 @@ def rank_context_lateral(rank_offset_column: str | None) -> str:
     """
 
 
+
+# A generation's raw event volume is the thing that made the modeler unrunnable: 28.8M item-event rows
+# at 62k matches, materialised as one pandas row each. Cells never span champions, so the sweep loads
+# one champion at a time and keeps only the small per-cell records. These predicates are what scope
+# each loader to a champion without changing which rows the union produces.
+CHAMPION_EVENT_FILTER = '          AND p."ChampionId" = %(champion_id)s\n'
+# Team composition and kill state span the whole match, so every loader also restricts to the matches
+# the champion appears in rather than to its own participant rows.
+CHAMPION_MATCH_FILTER = (
+    '          AND m."Id" IN (SELECT "MatchId" FROM champion_matches)\n'
+)
+# The champion's cohort matches, computed once and up front.
+#
+# Without MATERIALIZED the planner inlines the predicate, drives the whole query off a sequential scan
+# of the timeline fetch states, and re-filters `ChampionId` per match — so every champion in the sweep
+# re-reads the entire cohort. Measured on prod, that shape did not finish a single champion in six
+# minutes; forcing the small match set to be built first from the ChampionId index brings one champion
+# to under six seconds. GROUP BY rather than DISTINCT because the planner costs the HashAggregate more
+# accurately here.
+CHAMPION_MATCH_CTE = """champion_matches AS MATERIALIZED (
+    SELECT cp."MatchId" AS "MatchId"
+    FROM "MatchParticipants" cp
+    JOIN "Matches" cm ON cm."Id" = cp."MatchId"
+    WHERE cp."ChampionId" = %(champion_id)s
+      AND cm."Patch" = ANY(%(patches)s)
+      AND cm."Status" = 1
+      AND cm."FetchedAt" <= %(cutoff)s
+      AND cm."QueueId" = 420
+      AND cm."Duration" >= 300
+    GROUP BY cp."MatchId"
+)"""
+
+
+def champion_match_cte(champion_id: int | None, *, leading: bool) -> str:
+    """The champion_matches CTE, or nothing when the load is not champion-scoped.
+
+    `leading=True` is for a query that already opens its own WITH, so this only contributes the
+    definition and a comma; `leading=False` supplies the WITH keyword itself.
+    """
+    if champion_id is None:
+        return ""
+    if leading:
+        return CHAMPION_MATCH_CTE + ",\n"
+    return "WITH " + CHAMPION_MATCH_CTE + "\n"
+# The structural model was always fit on at most `max_training_rows`; the old code reached that by
+# loading every row and discarding >99% of them. Sampling whole matches in the query instead keeps
+# the same row budget while bounding the load, and hashing the id makes the draw deterministic, so a
+# re-run of the same generation trains on the same matches.
+MATCH_SAMPLE_FILTER = (
+    '          AND mod(abs(hashtextextended(m."Id"::text, 11)), %(match_sample_modulus)s)\n'
+    '              = %(match_sample_residue)s\n'
+)
+# The draw is taken in slices so the structural fit's peak is bounded like the champion sweep's is.
+# Residues 0..slices-1 of (modulus * slices) select the same fraction of matches as residue 0 of
+# modulus, so slicing changes the peak without changing the size of the sample.
+TRAINING_SAMPLE_SLICES = 8
+
+
+def scope_predicates(
+    champion_id: int | None,
+    match_sample_modulus: int | None,
+    *,
+    match_scoped: bool,
+) -> str:
+    """Extra WHERE clauses shared by every cohort loader, so all of them scope identically.
+
+    Champion scoping always restricts to the champion's matches, because that is what makes the plan
+    drive off the small `champion_matches` set. A participant-scoped loader additionally keeps only the
+    champion's own rows; a match-scoped one must keep all ten participants, since a kill or objective
+    diff is a fact about the match.
+    """
+    clauses = ""
+    if champion_id is not None:
+        clauses += CHAMPION_MATCH_FILTER
+        if not match_scoped:
+            clauses += CHAMPION_EVENT_FILTER
+    if match_sample_modulus is not None and match_sample_modulus > 1:
+        clauses += MATCH_SAMPLE_FILTER
+    return clauses
+
+
+def load_cohort_match_count(connection: psycopg.Connection, patches: list[str], cutoff) -> int:
+    row = connection.execute(
+        """
+        SELECT count(*) AS matches
+        FROM "Matches" m
+        WHERE m."Patch" = ANY(%(patches)s)
+          AND m."Status" = 1
+          AND m."FetchedAt" <= %(cutoff)s
+          AND m."QueueId" = 420
+          AND m."Duration" >= 300
+        """,
+        {"patches": patches, "cutoff": cutoff},
+    ).fetchone()
+    return int(row["matches"]) if row else 0
+
+
+def training_sample_modulus(match_count: int, target_matches: int) -> int:
+    """Keep roughly `target_matches` of the cohort. 1 means "take everything"."""
+    if match_count <= target_matches or target_matches <= 0:
+        return 1
+    return max(1, match_count // target_matches)
+
+
+def load_cohort_champions(connection: psycopg.Connection, patches: list[str], cutoff) -> list[int]:
+    """Champions present in the frozen cohort, in a stable order so a resumed run is reproducible."""
+    rows = connection.execute(
+        """
+        SELECT DISTINCT p."ChampionId" AS champion_id
+        FROM "MatchParticipants" p
+        JOIN "Matches" m ON m."Id" = p."MatchId"
+        WHERE m."Patch" = ANY(%(patches)s)
+          AND m."Status" = 1
+          AND m."FetchedAt" <= %(cutoff)s
+          AND m."QueueId" = 420
+          AND m."Duration" >= 300
+        ORDER BY 1
+        """,
+        {"patches": patches, "cutoff": cutoff},
+    ).fetchall()
+    return [int(row["champion_id"]) for row in rows]
+
+
 def load_item_events(
     connection: psycopg.Connection,
     patches: list[str],
     cutoff,
     rank_offset_column: str | None,
+    champion_id: int | None = None,
+    match_sample_modulus: int | None = None,
+    match_sample_residue: int = 0,
 ) -> pd.DataFrame:
     rank_join = rank_context_lateral(rank_offset_column) % {
         "match_id_column": 'm."Id"',
         "participant_id_column": 'p."ParticipantId"',
     }
+    champion_scope = scope_predicates(champion_id, match_sample_modulus, match_scoped=False)
+    champion_cte = champion_match_cte(champion_id, leading=True)
     return pd.read_sql_query(
         f"""
-        WITH eligible AS (
+        WITH {champion_cte}eligible AS (
             SELECT
                 m."Id" AS match_id,
                 m."MatchDate" AS match_date,
@@ -720,7 +1010,7 @@ def load_item_events(
               AND m."QueueId" = 420
               AND m."Duration" >= 300
               AND COALESCE(p."GameEndedInEarlySurrender", FALSE) = FALSE
-        )
+{champion_scope}        )
         SELECT
             e.*,
             item_event."EventIndex" AS event_index,
@@ -801,6 +1091,9 @@ def load_item_events(
             "cutoff": cutoff,
             "tiers": list(EMERALD_PLUS),
             "schema_version": TIMELINE_SCHEMA_VERSION,
+            "champion_id": champion_id,
+            "match_sample_modulus": match_sample_modulus,
+            "match_sample_residue": match_sample_residue,
         },
     )
 
@@ -922,9 +1215,17 @@ def load_champion_archetypes(connection: psycopg.Connection, patch: str) -> dict
     return archetypes
 
 
-def load_timeline_state_events(connection, patches: list[str], cutoff) -> pd.DataFrame:
+def load_timeline_state_events(
+    connection,
+    patches: list[str],
+    cutoff,
+    champion_id: int | None = None,
+    match_sample_modulus: int | None = None,
+    match_sample_residue: int = 0,
+) -> pd.DataFrame:
     return pd.read_sql_query(
-        """
+        champion_match_cte(champion_id, leading=False)
+        + """
         SELECT
             payload."MatchId" AS match_id,
             payload."EventIndex" AS event_index,
@@ -943,6 +1244,9 @@ def load_timeline_state_events(connection, patches: list[str], cutoff) -> pd.Dat
           AND m."QueueId" = 420
           AND m."Duration" >= 300
           AND payload."EventType" IN ('CHAMPION_KILL', 'BUILDING_KILL', 'ELITE_MONSTER_KILL')
+"""
+        + scope_predicates(champion_id, match_sample_modulus, match_scoped=True)
+        + """
         ORDER BY payload."MatchId", payload."TimestampMs", payload."EventIndex"
         """,
         connection,
@@ -950,27 +1254,47 @@ def load_timeline_state_events(connection, patches: list[str], cutoff) -> pd.Dat
             "patches": patches,
             "cutoff": cutoff,
             "schema_version": TIMELINE_SCHEMA_VERSION,
+            "champion_id": champion_id,
+            "match_sample_modulus": match_sample_modulus,
+            "match_sample_residue": match_sample_residue,
         },
     )
 
 
-def load_participant_teams(connection, patches: list[str], cutoff) -> pd.DataFrame:
+def load_participant_teams(
+    connection,
+    patches: list[str],
+    cutoff,
+    champion_id: int | None = None,
+    match_sample_modulus: int | None = None,
+    match_sample_residue: int = 0,
+) -> pd.DataFrame:
     return pd.read_sql_query(
-        """
+        champion_match_cte(champion_id, leading=False)
+        + """
         SELECT
             p."MatchId" AS match_id,
             p."ParticipantId" AS participant_id,
             p."TeamId" AS team_id
         FROM "MatchParticipants" p
         JOIN "Matches" m ON m."Id" = p."MatchId"
-        WHERE m."Patch" = ANY(%s)
+        WHERE m."Patch" = ANY(%(patches)s)
           AND m."Status" = 1
-          AND m."FetchedAt" <= %s
+          AND m."FetchedAt" <= %(cutoff)s
           AND m."QueueId" = 420
           AND m."Duration" >= 300
+"""
+        + scope_predicates(champion_id, match_sample_modulus, match_scoped=True)
+        + """
         """,
         connection,
-        params=(patches, cutoff),
+        params={
+            "patches": patches,
+            "cutoff": cutoff,
+            "champion_id": champion_id,
+            "match_sample_modulus": match_sample_modulus,
+            "match_sample_residue": match_sample_residue,
+        },
     )
 
 
@@ -1092,14 +1416,19 @@ def load_rune_decisions(
     patches: list[str],
     cutoff,
     rank_offset_column: str | None,
+    champion_id: int | None = None,
+    match_sample_modulus: int | None = None,
+    match_sample_residue: int = 0,
 ) -> pd.DataFrame:
     rank_join = rank_context_lateral(rank_offset_column) % {
         "match_id_column": 'm."Id"',
         "participant_id_column": 'p."ParticipantId"',
     }
+    champion_scope = scope_predicates(champion_id, match_sample_modulus, match_scoped=False)
+    champion_cte = champion_match_cte(champion_id, leading=False)
     return pd.read_sql_query(
         f"""
-        SELECT
+        {champion_cte}SELECT
             m."Id" AS match_id,
             m."MatchDate" AS match_date,
             m."Patch" AS patch,
@@ -1149,13 +1478,16 @@ def load_rune_decisions(
           AND m."Duration" >= 300
           AND UPPER(COALESCE(p."TeamPosition", '')) IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY')
           AND COALESCE(p."GameEndedInEarlySurrender", FALSE) = FALSE
-        ORDER BY m."MatchDate", m."Id", p."ParticipantId", rune."SelectionTree", rune."SelectionIndex"
+{champion_scope}        ORDER BY m."MatchDate", m."Id", p."ParticipantId", rune."SelectionTree", rune."SelectionIndex"
         """,
         connection,
         params={
             "patches": patches,
             "cutoff": cutoff,
             "tiers": list(EMERALD_PLUS),
+            "champion_id": champion_id,
+            "match_sample_modulus": match_sample_modulus,
+            "match_sample_residue": match_sample_residue,
             "schema_version": TIMELINE_SCHEMA_VERSION,
         },
     )
@@ -1166,14 +1498,19 @@ def load_spell_decisions(
     patches: list[str],
     cutoff,
     rank_offset_column: str | None,
+    champion_id: int | None = None,
+    match_sample_modulus: int | None = None,
+    match_sample_residue: int = 0,
 ) -> pd.DataFrame:
     rank_join = rank_context_lateral(rank_offset_column) % {
         "match_id_column": 'm."Id"',
         "participant_id_column": 'p."ParticipantId"',
     }
+    champion_scope = scope_predicates(champion_id, match_sample_modulus, match_scoped=False)
+    champion_cte = champion_match_cte(champion_id, leading=False)
     return pd.read_sql_query(
         f"""
-        SELECT
+        {champion_cte}SELECT
             m."Id" AS match_id,
             m."MatchDate" AS match_date,
             m."Patch" AS patch,
@@ -1221,12 +1558,15 @@ def load_spell_decisions(
           AND m."Duration" >= 300
           AND UPPER(COALESCE(p."TeamPosition", '')) IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY')
           AND COALESCE(p."GameEndedInEarlySurrender", FALSE) = FALSE
-        """,
+{champion_scope}        """,
         connection,
         params={
             "patches": patches,
             "cutoff": cutoff,
             "tiers": list(EMERALD_PLUS),
+            "champion_id": champion_id,
+            "match_sample_modulus": match_sample_modulus,
+            "match_sample_residue": match_sample_residue,
             "schema_version": TIMELINE_SCHEMA_VERSION,
         },
     )
@@ -1635,11 +1975,37 @@ def structural_win_probability(
     return np.clip(values, 1e-4, 1 - 1e-4)
 
 
+ACTION_POOLING_LEVELS = [
+    ["family", "stage", "action_key"],
+    ["family", "stage", "action_key", "role"],
+    # Archetype sits between role and champion: an item's effect on a burst mage says far more about
+    # the same item on another burst mage than the role average does, so a sparse champion shrinks
+    # toward champions that play like it. `between_group_variance` is method-of-moments, so if
+    # archetype explains no variance this level contributes almost nothing rather than flattening
+    # genuine champion-specific effects.
+    ["family", "stage", "action_key", "role", "archetype"],
+]
+
+PATH_POOLING_LEVELS = [["path_hash"], ["path_hash", "role"]]
+
+
 def build_action_estimates(
     decisions: pd.DataFrame,
     generation_id: UUID,
     patch: str,
 ) -> list[tuple]:
+    """Whole-cohort convenience wrapper. `model_generation` drives the two halves separately so that
+    only one champion's rows are ever resident; pooling is global either way."""
+    records = action_records(decisions)
+    apply_partial_pooling(records, ACTION_POOLING_LEVELS)
+    return action_tuples(records, generation_id, patch)
+
+
+def action_records(decisions: pd.DataFrame) -> list[dict]:
+    """Per-cell doubly-robust records. Every grouping key starts with champion_id, so running this
+    per champion and concatenating yields the same records as running it over the whole cohort."""
+    if decisions.empty:
+        return []
     expanded = expand_scopes(decisions)
     grouping = [
         "champion_id",
@@ -1699,19 +2065,10 @@ def build_action_estimates(
                     ),
                 }
             )
-    apply_partial_pooling(
-        records,
-        [
-            ["family", "stage", "action_key"],
-            ["family", "stage", "action_key", "role"],
-            # Archetype sits between role and champion: an item's effect on a burst mage says far
-            # more about the same item on another burst mage than the role average does, so a sparse
-            # champion shrinks toward champions that play like it. `between_group_variance` is
-            # method-of-moments, so if archetype explains no variance this level contributes almost
-            # nothing rather than flattening genuine champion-specific effects.
-            ["family", "stage", "action_key", "role", "archetype"],
-        ],
-    )
+    return records
+
+
+def action_tuples(records: list[dict], generation_id: UUID, patch: str) -> list[tuple]:
     return [
         (
             uuid4(),
@@ -1778,6 +2135,15 @@ def build_path_estimates(
     generation_id: UUID,
     patch: str,
 ) -> list[tuple]:
+    """Whole-cohort convenience wrapper; see `build_action_estimates`."""
+    records = path_records(decisions)
+    apply_partial_pooling(records, PATH_POOLING_LEVELS)
+    return path_tuples(records, generation_id, patch)
+
+
+def path_records(decisions: pd.DataFrame) -> list[dict]:
+    if decisions.empty:
+        return []
     item_rows = decisions[decisions["family"].isin(["STARTER", "BOOTS", "ITEM"])].copy()
     if item_rows.empty:
         return []
@@ -1825,7 +2191,10 @@ def build_path_estimates(
                     "path_ids": path_keys[1],
                 }
             )
-    apply_partial_pooling(records, [["path_hash"], ["path_hash", "role"]])
+    return records
+
+
+def path_tuples(records: list[dict], generation_id: UUID, patch: str) -> list[tuple]:
     return [
         (
             uuid4(),

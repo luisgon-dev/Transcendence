@@ -227,7 +227,9 @@ services:
     restart: "no"
     profiles: ["analytics-modeling"]
     cpus: "${BUILD_LAB_MODELER_CPUS:-4.0}"
-    mem_limit: "${BUILD_LAB_MODELER_MEMORY_LIMIT:-8g}"
+    # Peak is set by the largest single champion's rows plus one training slice, not by the size of
+    # the cohort, so this no longer has to be raised as the corpus grows.
+    mem_limit: "${BUILD_LAB_MODELER_MEMORY_LIMIT:-6g}"
     pids_limit: 512
     environment:
       BUILD_LAB_DATABASE_URL: host=postgres port=5432 dbname=${POSTGRES_DB} user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} application_name=transcendence-modeler
@@ -243,6 +245,10 @@ services:
       # One generation per invocation, then exit. The scheduler decides cadence.
       BUILD_LAB_RUN_ONCE: ${BUILD_LAB_RUN_ONCE:-true}
       BUILD_LAB_MAX_TRAINING_ROWS: ${BUILD_LAB_MAX_TRAINING_ROWS:-250000}
+      # How many whole matches the structural fit draws. The fit was always capped at
+      # MAX_TRAINING_ROWS; this bounds the load that feeds it so the cap stops costing a full-corpus
+      # read. Raise it for more match diversity in the fit, at a proportional memory cost.
+      BUILD_LAB_TRAINING_SAMPLE_MATCHES: ${BUILD_LAB_TRAINING_SAMPLE_MATCHES:-12000}
       # BUILD_LAB_LEASE_OWNER is intentionally NOT set: the modeler derives `hostname:pid`, so two
       # instances can never claim the same lease identity.
       LOG_LEVEL: ${BUILD_LAB_LOG_LEVEL:-INFO}

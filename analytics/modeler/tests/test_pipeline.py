@@ -23,6 +23,10 @@ from build_lab_modeler.pipeline import (
     LeaseLost,
     PatchChangeSet,
     Settings,
+    ACTION_POOLING_LEVELS,
+    PATH_POOLING_LEVELS,
+    action_records,
+    action_tuples,
     apply_partial_pooling,
     apply_row_weights,
     commensurability_weights,
@@ -47,7 +51,11 @@ from build_lab_modeler.pipeline import (
     expected_calibration_error,
     hash_path,
     insert_estimates,
+    load_cohort_champions,
+    load_cohort_match_count,
+    load_decision_frame,
     load_item_events,
+    load_participant_teams,
     load_rune_decisions,
     load_spell_decisions,
     load_timeline_state_events,
@@ -56,9 +64,15 @@ from build_lab_modeler.pipeline import (
     model_generation,
     participant_level_comparator,
     patch_recency_weights,
+    path_records,
+    path_tuples,
+    prepare_decisions,
     prune_stale_artifacts,
     rank_context_lateral,
     retained_generation_ids,
+    champion_match_cte,
+    scope_predicates,
+    training_sample_modulus,
     structural_win_probability,
     train_structural_model,
     undone_purchase_indexes,
@@ -962,11 +976,13 @@ def publishing_generation(monkeypatch, tmp_path) -> tuple[Settings, dict]:
     )
     empty = pd.DataFrame()
     monkeypatch.setattr(pipeline, "resolve_rank_offset_column", lambda *_: None)
-    monkeypatch.setattr(pipeline, "load_item_events", lambda *_: item_events)
-    monkeypatch.setattr(pipeline, "load_timeline_state_events", lambda *_: empty)
-    monkeypatch.setattr(pipeline, "load_participant_teams", lambda *_: empty)
-    monkeypatch.setattr(pipeline, "load_rune_decisions", lambda *_: empty)
-    monkeypatch.setattr(pipeline, "load_spell_decisions", lambda *_: empty)
+    monkeypatch.setattr(pipeline, "load_item_events", lambda *_, **__: item_events)
+    monkeypatch.setattr(pipeline, "load_timeline_state_events", lambda *_, **__: empty)
+    monkeypatch.setattr(pipeline, "load_participant_teams", lambda *_, **__: empty)
+    monkeypatch.setattr(pipeline, "load_rune_decisions", lambda *_, **__: empty)
+    monkeypatch.setattr(pipeline, "load_spell_decisions", lambda *_, **__: empty)
+    monkeypatch.setattr(pipeline, "load_cohort_match_count", lambda *_: 40_000)
+    monkeypatch.setattr(pipeline, "load_cohort_champions", lambda *_: [22])
     monkeypatch.setattr(
         pipeline,
         "train_structural_model",
@@ -975,8 +991,13 @@ def publishing_generation(monkeypatch, tmp_path) -> tuple[Settings, dict]:
     monkeypatch.setattr(
         pipeline, "structural_win_probability", lambda bundle, frame: np.full(len(frame), 0.5)
     )
-    monkeypatch.setattr(pipeline, "build_action_estimates", lambda *_: [(uuid4(), "estimate")])
-    monkeypatch.setattr(pipeline, "build_path_estimates", lambda *_: [])
+    # Pooling has its own tests; here it would only stand between the stubbed records and the publish
+    # path this fixture exists to drive.
+    monkeypatch.setattr(pipeline, "apply_partial_pooling", lambda *_: None)
+    monkeypatch.setattr(pipeline, "action_records", lambda *_: [{"champion_id": 22}])
+    monkeypatch.setattr(pipeline, "path_records", lambda *_: [])
+    monkeypatch.setattr(pipeline, "action_tuples", lambda *_: [(uuid4(), "estimate")])
+    monkeypatch.setattr(pipeline, "path_tuples", lambda *_: [])
     generation = {
         "Id": uuid4(),
         "Patch": "26.14",
@@ -1605,3 +1626,230 @@ def test_the_compose_service_is_a_oneshot_not_a_daemon():
         "run --rm supplies its own container; a fixed name collides across invocations"
     )
     assert "BUILD_LAB_RUN_ONCE:-true" in modeler
+
+
+def multi_champion_decisions(champions: tuple[int, ...] = (22, 51, 103)) -> pd.DataFrame:
+    """A cohort spanning several champions, two patches and two archetypes."""
+    frames = []
+    for offset, champion_id in enumerate(champions):
+        frame = synthetic_decisions(participants=300, seed=31 + offset)
+        frames.append(
+            frame.assign(
+                champion_id=champion_id,
+                match_id=frame["match_id"] + f"-{champion_id}",
+                archetype="marksman" if champion_id == 22 else "mage",
+            )
+        )
+    decisions = pd.concat(frames, ignore_index=True)
+    # A deterministic stand-in for the calibrated model, so what these tests compare is the
+    # partitioning rather than the fit.
+    decisions["baseline_win_probability"] = 0.35 + 0.3 * ((decisions.index % 7) / 6.0)
+    return decisions
+
+
+def action_record_key(record: dict) -> tuple:
+    return (
+        record["champion_id"],
+        record["role"],
+        record["opponent_id"],
+        record["region"],
+        record["family"],
+        record["stage"],
+        record["prefix_hash"],
+        record["action_key"],
+    )
+
+
+def test_a_champion_sweep_produces_the_same_action_records_as_the_whole_cohort():
+    # The reason the modeler can hold one champion at a time: every grouping key in action_records
+    # starts with champion_id, so partitioning on it cannot move a row between cells. If this ever
+    # diverges, the sweep is quietly estimating something different from what it claims to.
+    decisions = multi_champion_decisions()
+    cohort = action_records(decisions)
+    swept = [
+        record
+        for champion_id in sorted(decisions["champion_id"].unique())
+        for record in action_records(decisions[decisions["champion_id"] == champion_id])
+    ]
+    assert cohort, "the fixture must produce cells that clear the minimum-support gate"
+    assert sorted(map(action_record_key, swept)) == sorted(map(action_record_key, cohort))
+    cohort_by_key = {action_record_key(record): record for record in cohort}
+    for record in swept:
+        reference = cohort_by_key[action_record_key(record)]
+        assert record["estimate"] == pytest.approx(reference["estimate"])
+        assert record["observed_count"] == reference["observed_count"]
+        assert record["effective_sample_size"] == pytest.approx(
+            reference["effective_sample_size"]
+        )
+
+
+def test_a_champion_sweep_produces_the_same_path_records_as_the_whole_cohort():
+    decisions = multi_champion_decisions()
+    cohort = path_records(decisions)
+    swept = [
+        record
+        for champion_id in sorted(decisions["champion_id"].unique())
+        for record in path_records(decisions[decisions["champion_id"] == champion_id])
+    ]
+    assert cohort
+    key = lambda record: (  # noqa: E731 - a local projection, not a policy
+        record["champion_id"],
+        record["role"],
+        record["opponent_id"],
+        record["region"],
+        record["path_hash"],
+    )
+    assert sorted(map(key, swept)) == sorted(map(key, cohort))
+    cohort_by_key = {key(record): record for record in cohort}
+    for record in swept:
+        assert record["estimate"] == pytest.approx(cohort_by_key[key(record)]["estimate"])
+
+
+def test_borrowing_weights_and_drift_exclusion_are_champion_local():
+    # apply_row_weights and exclude_drifted_prior_actions both compare current against prior patch
+    # within a cell keyed on champion, so the sweep must reproduce the cohort-wide weights exactly.
+    decisions = multi_champion_decisions()
+    changes = PatchChangeSet(items=frozenset({3031}), runes=frozenset(), champions=frozenset())
+    archetypes = {22: "marksman", 51: "mage", 103: "mage"}
+    arguments = ("26.14", ["26.14", "26.13"], None, changes, archetypes)
+    cohort = prepare_decisions(decisions, *arguments, exclude_drift=True)
+    swept = pd.concat(
+        [
+            prepare_decisions(
+                decisions[decisions["champion_id"] == champion_id],
+                *arguments,
+                exclude_drift=True,
+            )
+            for champion_id in sorted(decisions["champion_id"].unique())
+        ],
+        ignore_index=True,
+    )
+    assert not cohort.empty
+    key_columns = ["champion_id", "match_id", "family", "stage", "action_key"]
+    assert len(swept) == len(cohort)
+    left = cohort.set_index(key_columns).sort_index()
+    right = swept.set_index(key_columns).sort_index()
+    assert left.index.equals(right.index)
+    assert left["patch_weight"].to_numpy() == pytest.approx(right["patch_weight"].to_numpy())
+    assert (left["archetype"] == right["archetype"]).all()
+
+
+def test_pooling_still_borrows_strength_across_the_swept_champions():
+    # Pooling is the one genuinely cross-champion stage. It runs on the accumulated records, so a
+    # sparse champion must still shrink toward the champions swept before and after it.
+    decisions = multi_champion_decisions()
+    records = [
+        record
+        for champion_id in sorted(decisions["champion_id"].unique())
+        for record in action_records(decisions[decisions["champion_id"] == champion_id])
+    ]
+    before = [record["estimate"] for record in records]
+    apply_partial_pooling(records, ACTION_POOLING_LEVELS)
+    after = [record["estimate"] for record in records]
+    assert any(
+        pooled != pytest.approx(raw) for pooled, raw in zip(before, after, strict=True)
+    ), "pooling over the swept records changed nothing, so no strength was borrowed"
+
+
+def test_every_cohort_loader_scopes_on_the_same_predicates():
+    # The sweep is only correct if all five loaders agree on which rows belong to the scope. Item,
+    # rune and spell rows are per participant; team composition and kill state are per match.
+    participant_scoped = (load_item_events, load_rune_decisions, load_spell_decisions)
+    match_scoped = (load_timeline_state_events, load_participant_teams)
+    for loader in participant_scoped + match_scoped:
+        source = inspect.getsource(loader)
+        assert "scope_predicates(" in source, loader.__name__
+        assert "match_sample_modulus" in source, loader.__name__
+    for loader in participant_scoped:
+        assert "match_scoped=False" in inspect.getsource(loader), loader.__name__
+    for loader in match_scoped:
+        assert "match_scoped=True" in inspect.getsource(loader), loader.__name__
+
+
+def test_scope_predicates_pick_the_filter_that_matches_the_grain():
+    # Both grains restrict to the champion's matches: that predicate is what lets the plan drive off
+    # the small champion_matches set instead of re-reading the cohort once per champion.
+    participant = scope_predicates(22, None, match_scoped=False)
+    match = scope_predicates(22, None, match_scoped=True)
+    for clause in (participant, match):
+        assert 'm."Id" IN (SELECT "MatchId" FROM champion_matches)' in clause
+    # Only the participant grain narrows to the champion's own rows. A kill or objective diff is a fact
+    # about the match, so a match-scoped load must keep all ten participants.
+    assert 'p."ChampionId" = %(champion_id)s' in participant
+    assert 'p."ChampionId" = %(champion_id)s' not in match
+    # An unscoped load must add nothing, and a modulus of 1 selects the whole cohort already.
+    assert scope_predicates(None, None, match_scoped=False) == ""
+    assert scope_predicates(None, 1, match_scoped=True) == ""
+    assert "hashtextextended" in scope_predicates(None, 8, match_scoped=False)
+
+
+def test_the_champion_match_set_is_materialized_and_cohort_scoped():
+    # Measured on prod: without MATERIALIZED the planner inlines this and re-reads the whole cohort per
+    # champion (100s for one champion's item events); with it, the same load takes under six seconds.
+    # The cohort predicates belong inside the CTE so it stays the small side of the join.
+    leading = champion_match_cte(22, leading=True)
+    assert leading.startswith("champion_matches AS MATERIALIZED (")
+    assert leading.endswith(",\n"), "a leading CTE must chain onto the query's own WITH"
+    standalone = champion_match_cte(22, leading=False)
+    assert standalone.startswith("WITH champion_matches AS MATERIALIZED (")
+    for clause in ('cm."Patch" = ANY(%(patches)s)', 'cm."Duration" >= 300', 'cm."QueueId" = 420'):
+        assert clause in standalone
+    # An unscoped load must not emit a CTE that nothing references.
+    assert champion_match_cte(None, leading=True) == ""
+    assert champion_match_cte(None, leading=False) == ""
+
+
+def test_every_champion_scoped_loader_defines_the_match_set_it_references():
+    # A loader that filters on champion_matches without defining it is a runtime SQL error that only
+    # shows up on the scoped path, which is every load the estimate sweep makes.
+    for loader in (
+        load_item_events,
+        load_rune_decisions,
+        load_spell_decisions,
+        load_timeline_state_events,
+        load_participant_teams,
+    ):
+        source = inspect.getsource(loader)
+        assert "champion_match_cte(" in source, loader.__name__
+
+
+def test_the_training_sample_keeps_the_row_budget_without_loading_the_corpus():
+    # The structural fit was always capped at max_training_rows; sampling matches in the query is how
+    # that cap stops costing a full corpus load.
+    assert training_sample_modulus(40_000, 12_000) == 3
+    # A cohort smaller than the target is taken whole rather than thinned.
+    assert training_sample_modulus(5_000, 12_000) == 1
+    assert training_sample_modulus(0, 12_000) == 1
+
+
+def test_the_estimate_sweep_scopes_every_load_to_one_champion(monkeypatch, tmp_path):
+    settings, generation = publishing_generation(monkeypatch, tmp_path)
+    champions = [22, 51, 103]
+    monkeypatch.setattr(pipeline, "load_cohort_champions", lambda *_: champions)
+    scopes: list[dict] = []
+    real_loader = pipeline.load_decision_frame
+
+    def recording(*args, **kwargs):
+        scopes.append(kwargs)
+        return real_loader(*args, **kwargs)
+
+    monkeypatch.setattr(pipeline, "load_decision_frame", recording)
+    model_generation(FakeConnection(), generation, settings)
+
+    # The sliced training draw first, then exactly one scoped load per champion. An unscoped estimate
+    # load is the shape that could not fit in memory.
+    training = scopes[:pipeline.TRAINING_SAMPLE_SLICES]
+    sweep = scopes[pipeline.TRAINING_SAMPLE_SLICES:]
+    assert [scope.get("champion_id") for scope in sweep] == champions
+    assert all(scope.get("match_sample_modulus") is None for scope in sweep)
+    # Every slice draws a disjoint residue of the same modulus, so the union is the intended sample
+    # rather than the same matches fetched eight times.
+    assert all(scope.get("champion_id") is None for scope in training)
+    expected_modulus = (
+        training_sample_modulus(40_000, settings.training_sample_matches)
+        * pipeline.TRAINING_SAMPLE_SLICES
+    )
+    assert {scope["match_sample_modulus"] for scope in training} == {expected_modulus}
+    assert sorted(scope["match_sample_residue"] for scope in training) == list(
+        range(pipeline.TRAINING_SAMPLE_SLICES)
+    )

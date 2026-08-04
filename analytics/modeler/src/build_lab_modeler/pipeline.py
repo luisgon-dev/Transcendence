@@ -24,7 +24,7 @@ import numpy as np
 from scipy.special import erfc
 import pandas as pd
 import psycopg
-from psycopg.rows import dict_row
+from psycopg.rows import dict_row, tuple_row
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import brier_score_loss, log_loss
@@ -527,8 +527,7 @@ def model_generation(
                 "ValidationMetricsJson" = %s::jsonb,
                 "CompletedAtUtc" = NOW(),
                 "FailureReason" = NULL,
-                "LeaseOwner" = NULL,
-                "LeaseExpiresAtUtc" = NULL
+                "LeaseOwner" = NULL
             WHERE "Id" = %s AND "Status" = 1 AND "LeaseOwner" = %s
             """,
             (
@@ -875,6 +874,23 @@ CHAMPION_MATCH_CTE = """champion_matches AS MATERIALIZED (
 )"""
 
 
+def read_sql_frame(connection, sql: str, params: dict) -> pd.DataFrame:
+    """Run a query and build a DataFrame from it, with an explicitly tuple-shaped cursor.
+
+    `pd.read_sql_query` must not be used on this connection. The run's connection is opened with
+    `row_factory=dict_row` because the generation row is read by column name, and pandas' DBAPI2
+    fallback feeds whatever `fetchall()` returns straight into `DataFrame.from_records`. Handed dicts
+    it iterates each one -- which yields its KEYS -- so every cell in the frame comes back equal to its
+    own column name. That is silent: the row count is right, the dtypes are just `object`, and the
+    corruption only surfaces much later as `int('event_type')`. Naming the row factory here removes the
+    coupling to the connection's, and skips pandas' "not tested" DBAPI2 path entirely.
+    """
+    with connection.cursor(row_factory=tuple_row) as cursor:
+        cursor.execute(sql, params)
+        columns = [column.name for column in cursor.description or []]
+        return pd.DataFrame.from_records(cursor.fetchall(), columns=columns)
+
+
 def champion_match_cte(champion_id: int | None, *, leading: bool) -> str:
     """The champion_matches CTE, or nothing when the load is not champion-scoped.
 
@@ -980,7 +996,8 @@ def load_item_events(
     }
     champion_scope = scope_predicates(champion_id, match_sample_modulus, match_scoped=False)
     champion_cte = champion_match_cte(champion_id, leading=True)
-    return pd.read_sql_query(
+    return read_sql_frame(
+        connection,
         f"""
         WITH {champion_cte}eligible AS (
             SELECT
@@ -1085,7 +1102,6 @@ def load_item_events(
         WHERE e.role IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY')
         ORDER BY e.match_date, e.match_id, e.participant_id, item_event."TimestampMs", item_event."EventIndex"
         """,
-        connection,
         params={
             "patches": patches,
             "cutoff": cutoff,
@@ -1223,7 +1239,8 @@ def load_timeline_state_events(
     match_sample_modulus: int | None = None,
     match_sample_residue: int = 0,
 ) -> pd.DataFrame:
-    return pd.read_sql_query(
+    return read_sql_frame(
+        connection,
         champion_match_cte(champion_id, leading=False)
         + """
         SELECT
@@ -1249,7 +1266,6 @@ def load_timeline_state_events(
         + """
         ORDER BY payload."MatchId", payload."TimestampMs", payload."EventIndex"
         """,
-        connection,
         params={
             "patches": patches,
             "cutoff": cutoff,
@@ -1269,7 +1285,8 @@ def load_participant_teams(
     match_sample_modulus: int | None = None,
     match_sample_residue: int = 0,
 ) -> pd.DataFrame:
-    return pd.read_sql_query(
+    return read_sql_frame(
+        connection,
         champion_match_cte(champion_id, leading=False)
         + """
         SELECT
@@ -1287,7 +1304,6 @@ def load_participant_teams(
         + scope_predicates(champion_id, match_sample_modulus, match_scoped=True)
         + """
         """,
-        connection,
         params={
             "patches": patches,
             "cutoff": cutoff,
@@ -1426,7 +1442,8 @@ def load_rune_decisions(
     }
     champion_scope = scope_predicates(champion_id, match_sample_modulus, match_scoped=False)
     champion_cte = champion_match_cte(champion_id, leading=False)
-    return pd.read_sql_query(
+    return read_sql_frame(
+        connection,
         f"""
         {champion_cte}SELECT
             m."Id" AS match_id,
@@ -1480,7 +1497,6 @@ def load_rune_decisions(
           AND COALESCE(p."GameEndedInEarlySurrender", FALSE) = FALSE
 {champion_scope}        ORDER BY m."MatchDate", m."Id", p."ParticipantId", rune."SelectionTree", rune."SelectionIndex"
         """,
-        connection,
         params={
             "patches": patches,
             "cutoff": cutoff,
@@ -1508,7 +1524,8 @@ def load_spell_decisions(
     }
     champion_scope = scope_predicates(champion_id, match_sample_modulus, match_scoped=False)
     champion_cte = champion_match_cte(champion_id, leading=False)
-    return pd.read_sql_query(
+    return read_sql_frame(
+        connection,
         f"""
         {champion_cte}SELECT
             m."Id" AS match_id,
@@ -1559,7 +1576,6 @@ def load_spell_decisions(
           AND UPPER(COALESCE(p."TeamPosition", '')) IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY')
           AND COALESCE(p."GameEndedInEarlySurrender", FALSE) = FALSE
 {champion_scope}        """,
-        connection,
         params={
             "patches": patches,
             "cutoff": cutoff,
@@ -2840,8 +2856,7 @@ def mark_failed(connection, generation_id, message: str, lease_owner: str) -> No
         SET "Status" = 4,
             "FailureReason" = %s,
             "CompletedAtUtc" = NOW(),
-            "LeaseOwner" = NULL,
-            "LeaseExpiresAtUtc" = NULL
+            "LeaseOwner" = NULL
         WHERE "Id" = %s
           AND "Status" = 1
           AND "LeaseOwner" = %s

@@ -1853,3 +1853,100 @@ def test_the_estimate_sweep_scopes_every_load_to_one_champion(monkeypatch, tmp_p
     assert sorted(scope["match_sample_residue"] for scope in training) == list(
         range(pipeline.TRAINING_SAMPLE_SLICES)
     )
+
+
+class DictRowCursor:
+    """A cursor shaped like psycopg's, whose row factory decides the row type.
+
+    Mirrors the property that broke prod: a connection opened with `row_factory=dict_row` hands
+    `fetchall()` dicts unless a cursor names a different factory.
+    """
+
+    class Column:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+    def __init__(self, columns: list[str], rows: list[tuple], row_factory) -> None:
+        self._columns = columns
+        self._rows = rows
+        self._row_factory = row_factory
+        self.executed: list[tuple[str, dict | None]] = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        return False
+
+    def execute(self, sql, params=None):
+        self.executed.append((sql, params))
+        return self
+
+    @property
+    def description(self):
+        return [self.Column(name) for name in self._columns]
+
+    def fetchall(self):
+        if self._row_factory is pipeline.dict_row:
+            return [dict(zip(self._columns, row, strict=True)) for row in self._rows]
+        return list(self._rows)
+
+
+class DictRowConnection:
+    def __init__(self, columns: list[str], rows: list[tuple]) -> None:
+        self._columns = columns
+        self._rows = rows
+        self.cursors: list[DictRowCursor] = []
+
+    def cursor(self, row_factory=None):
+        # Default to the connection's factory, exactly as psycopg does.
+        cursor = DictRowCursor(self._columns, self._rows, row_factory or pipeline.dict_row)
+        self.cursors.append(cursor)
+        return cursor
+
+
+def test_the_frame_reader_returns_values_not_column_names_on_a_dict_row_connection():
+    # The bug this pins cost a production run: pandas' DBAPI2 fallback iterates each dict row, which
+    # yields its KEYS, so every cell came back equal to its own column name. The row count and shape
+    # were right, dtypes were merely object, and it only surfaced later as int('event_type').
+    columns = ["match_id", "event_index", "event_type", "action_id"]
+    rows = [("match-a", 0, 0, 6672), ("match-a", 1, 2, 3031)]
+    connection = DictRowConnection(columns, rows)
+
+    frame = pipeline.read_sql_frame(connection, "SELECT ...", {"patches": ["16.15"]})
+
+    assert list(frame.columns) == columns
+    assert frame["event_type"].tolist() == [0, 2]
+    assert frame["match_id"].tolist() == ["match-a", "match-a"]
+    # The corruption signature: a cell equal to its own column name.
+    for column in columns:
+        assert not (frame[column].astype(str) == column).any(), column
+    # Numeric columns must stay numeric, or every downstream int() cast is a coin flip.
+    assert int(frame["event_type"].iloc[0]) == 0
+    # It must ask for tuples rather than inherit the connection's dict factory.
+    assert connection.cursors[-1]._row_factory is pipeline.tuple_row
+
+
+def test_no_loader_uses_the_pandas_dbapi_fallback():
+    # pd.read_sql_query on the run's dict_row connection is silently wrong, so no loader may reach for
+    # it. Keeping this a source assertion catches a reintroduction that no fake connection would.
+    source = inspect.getsource(pipeline)
+    assert "pd.read_sql_query" not in source.replace("`pd.read_sql_query` must not", "")
+    for loader in (
+        load_item_events,
+        load_rune_decisions,
+        load_spell_decisions,
+        load_timeline_state_events,
+        load_participant_teams,
+    ):
+        assert "read_sql_frame(" in inspect.getsource(loader), loader.__name__
+
+
+def test_no_status_write_references_a_dropped_lease_column():
+    # 20260801025434_DropModelingLeaseColumns removed LeaseExpiresAtUtc and HeartbeatAtUtc when the
+    # lease became a session advisory lock. A stale reference in the TERMINAL write is invisible until
+    # a run actually succeeds, and then it fails the publish it was supposed to record.
+    for function in (model_generation, mark_failed):
+        source = inspect.getsource(function)
+        for dropped in ("LeaseExpiresAtUtc", "HeartbeatAtUtc"):
+            assert dropped not in source, f"{function.__name__} still writes {dropped}"

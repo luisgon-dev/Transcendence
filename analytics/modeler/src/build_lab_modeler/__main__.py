@@ -180,7 +180,10 @@ def command_train(settings: Settings, arguments) -> int:
     if frame.empty:
         print("no rows drawn")
         return 1
-    bundle, metrics = pipeline.train_structural_model(frame, settings.max_training_rows)
+    bundle, metrics = pipeline.train_structural_model(
+        frame, settings.max_training_rows, arguments.bands or settings.calibration_bands
+    )
+    print(f"calibration bands requested: {arguments.bands or settings.calibration_bands}")
     print(json.dumps({k: v for k, v in metrics.items() if k != "leakageDetail"}, indent=2))
     passed = report_gates(metrics)
     # Scoring must route through the calibrator the gates were measured on, so exercise it here too.
@@ -197,7 +200,9 @@ def command_champion(settings: Settings, arguments) -> int:
         if frame.empty:
             print("no rows drawn")
             return 1
-        bundle, _ = pipeline.train_structural_model(frame, settings.max_training_rows)
+        bundle, _ = pipeline.train_structural_model(
+            frame, settings.max_training_rows, settings.calibration_bands
+        )
         del frame
         champions = (
             [int(value) for value in arguments.champions.split(",")]
@@ -255,7 +260,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     subcommands.add_parser("run", help="Production path: lease a pending generation and model it.")
     add_cohort_arguments(subcommands.add_parser("dataset", help="Build and cache the training draw."))
-    add_cohort_arguments(subcommands.add_parser("train", help="Fit from the draw and report the promotion gates."))
+    train = subcommands.add_parser("train", help="Fit from the draw and report the promotion gates.")
+    add_cohort_arguments(train)
+    train.add_argument("--bands", type=int, help="Calibration bands to condition on game phase.")
     champion = subcommands.add_parser("champion", help="Produce estimate records for a few champions.")
     add_cohort_arguments(champion)
     champion.add_argument("--champions", help="Comma-separated champion ids. Default: the first --limit in the cohort.")

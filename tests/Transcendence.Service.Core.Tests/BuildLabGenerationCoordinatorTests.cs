@@ -84,6 +84,102 @@ public sealed class BuildLabGenerationCoordinatorTests
     }
 
     [Fact]
+    public async Task PromoteCandidateAsync_PromotesWhenEveryPhaseSitsInsideItsNoiseFloor()
+    {
+        // ECE is positively biased, so a raw limit rejects a flawless model on thin data. Measured on the
+        // live cohort, a perfectly calibrated model's worst phase had a 95th percentile of 0.0284 against
+        // a 0.025 limit. When the modeler reports the floor, the raw figure no longer decides.
+        await using var harness = await BuildLabHarness.CreateAsync();
+        var candidate = Candidate();
+        candidate.ValidationMetricsJson = JsonSerializer.Serialize(PassingMetrics() with
+        {
+            MaxTimeBandEce = 0.040,
+            CalibrationExceedsNoiseFloor = false,
+            MaxTimeBandEceExcess = 0.008
+        });
+        harness.Db.BuildLabGenerations.Add(candidate);
+        harness.Db.AdjustedActionEstimates.Add(PassingEstimate(candidate.Id));
+        await harness.Db.SaveChangesAsync();
+        using var telemetry = new BuildLabTelemetry();
+
+        var promoted = await Coordinator(harness, telemetry)
+            .PromoteCandidateAsync(candidate.Id, actor: "operator");
+
+        promoted.Should().BeTrue();
+        (await Reload(harness, candidate.Id)).Status.Should().Be(BuildLabGenerationStatus.Ready);
+    }
+
+    [Fact]
+    public async Task PromoteCandidateAsync_RejectsAPhaseWorseThanItsNoiseFloor()
+    {
+        // The statistical half: a deviation the sample CAN resolve must still fail, even when the raw
+        // figure is inside the old limit.
+        await using var harness = await BuildLabHarness.CreateAsync();
+        var candidate = Candidate();
+        candidate.ValidationMetricsJson = JsonSerializer.Serialize(PassingMetrics() with
+        {
+            MaxTimeBandEce = 0.018,
+            CalibrationExceedsNoiseFloor = true,
+            MaxTimeBandEceExcess = 0.006
+        });
+        harness.Db.BuildLabGenerations.Add(candidate);
+        harness.Db.AdjustedActionEstimates.Add(PassingEstimate(candidate.Id));
+        await harness.Db.SaveChangesAsync();
+        using var telemetry = new BuildLabTelemetry();
+
+        var promoted = await Coordinator(harness, telemetry)
+            .PromoteCandidateAsync(candidate.Id, actor: "operator");
+
+        promoted.Should().BeFalse();
+        (await Reload(harness, candidate.Id)).Status.Should().Be(BuildLabGenerationStatus.Failed);
+    }
+
+    [Fact]
+    public async Task PromoteCandidateAsync_RejectsAnExcessTooLargeToPublishEvenWhenUndetectable()
+    {
+        // The practical half: a sample too thin to call a deviation significant must not license a
+        // deviation large enough to matter.
+        await using var harness = await BuildLabHarness.CreateAsync();
+        var candidate = Candidate();
+        candidate.ValidationMetricsJson = JsonSerializer.Serialize(PassingMetrics() with
+        {
+            CalibrationExceedsNoiseFloor = false,
+            MaxTimeBandEceExcess = 0.09
+        });
+        harness.Db.BuildLabGenerations.Add(candidate);
+        harness.Db.AdjustedActionEstimates.Add(PassingEstimate(candidate.Id));
+        await harness.Db.SaveChangesAsync();
+        using var telemetry = new BuildLabTelemetry();
+
+        var promoted = await Coordinator(harness, telemetry)
+            .PromoteCandidateAsync(candidate.Id, actor: "operator");
+
+        promoted.Should().BeFalse();
+        (await Reload(harness, candidate.Id)).Status.Should().Be(BuildLabGenerationStatus.Failed);
+    }
+
+    [Fact]
+    public async Task PromoteCandidateAsync_FallsBackToTheRawLimitWhenNoFloorWasMeasured()
+    {
+        // An older modeler reports no floor. The raw limit must keep deciding rather than a missing
+        // measurement waiving the gate.
+        await using var harness = await BuildLabHarness.CreateAsync();
+        var candidate = Candidate();
+        candidate.ValidationMetricsJson = JsonSerializer.Serialize(
+            PassingMetrics() with { MaxTimeBandEce = 0.040 });
+        harness.Db.BuildLabGenerations.Add(candidate);
+        harness.Db.AdjustedActionEstimates.Add(PassingEstimate(candidate.Id));
+        await harness.Db.SaveChangesAsync();
+        using var telemetry = new BuildLabTelemetry();
+
+        var promoted = await Coordinator(harness, telemetry)
+            .PromoteCandidateAsync(candidate.Id, actor: "operator");
+
+        promoted.Should().BeFalse();
+        (await Reload(harness, candidate.Id)).Status.Should().Be(BuildLabGenerationStatus.Failed);
+    }
+
+    [Fact]
     public async Task PromoteCandidateAsync_PromotesWhenThePatchHoldoutWasNotTestable()
     {
         // A cohort covering one patch cannot be split across a patch boundary, so HeldOutPatchPassed is

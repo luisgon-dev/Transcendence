@@ -673,6 +673,9 @@ def synthetic_decisions(
                 {
                     "match_id": f"match-{index}",
                     "participant_id": 1,
+                    # A team in a match is the independent unit the calibration null resamples: every
+                    # row of one team shares its single outcome.
+                    "team_id": 100 if index % 2 == 0 else 200,
                     "match_date": index,
                     "patch": patch,
                     "region": "NA1",
@@ -2020,12 +2023,13 @@ def test_a_calibration_split_too_small_to_band_falls_back_instead_of_memorising(
     assert np.allclose(values, calibrator["fallback"].predict(raw))
 
 
-def test_a_skewed_minute_column_produces_no_degenerate_single_band():
-    # Almost every row at one minute: the quantile edges all collapse onto that value, and an edge
-    # there splits nothing off. Keeping it would create a "band" holding the entire dataset.
+def test_a_skewed_minute_column_no_longer_collapses_the_banding():
+    # The whole reason phase edges are fixed: quantiles of a distribution with a point mass collapsed
+    # onto that mass and lost bands, so the band count depended on the shape of the draw. Fixed edges
+    # are unaffected by skew.
     minutes = np.concatenate([np.full(2000, 5.0), np.full(10, 40.0)])
-    edges = pipeline.calibration_band_edges(minutes, 5)
-    assert len(edges) == 0, edges
+    edges = pipeline.calibration_band_edges(minutes)
+    assert edges.tolist() == [0.5, 8.0, 14.0, 20.0], edges
 
 
 def test_a_single_outcome_band_gets_no_calibrator_of_its_own():
@@ -2042,15 +2046,36 @@ def test_a_single_outcome_band_gets_no_calibrator_of_its_own():
     assert late_band not in calibrator["bands"]
 
 
-def test_band_edges_are_interior_quantiles_and_survive_degenerate_input():
-    minutes = np.asarray([0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
-    edges = pipeline.calibration_band_edges(minutes, 5)
-    assert len(edges) == 4, edges
-    assert (np.diff(edges) > 0).all(), "edges must be strictly increasing after dedup"
-    assert edges.min() > minutes.min() and edges.max() < minutes.max(), "interior only"
-    # A constant column collapses to no usable edges rather than raising.
-    assert len(pipeline.calibration_band_edges(np.full(100, 12.0), 5)) == 0
-    assert len(pipeline.calibration_band_edges(np.asarray([]), 5)) == 0
+def test_phase_edges_are_fixed_and_dropped_only_when_they_split_nothing():
+    # Boundaries are game-meaningful, not data-derived: plating at 14:00, Herald-to-Baron at 20:00, and
+    # pregame separated from minute one because those rows carry no in-game state at all.
+    assert pipeline.PHASE_BAND_EDGES == (0.5, 8.0, 14.0, 20.0)
+
+    # Every cohort gets every edge, whatever it contains. Filtering to the observed range would
+    # renumber the bands above a dropped edge, so a cohort of only mid-game rows would report them
+    # under the "pregame" label. An edge that splits nothing just yields an empty band.
+    for minutes in (
+        np.asarray([0.0, 1.0, 5.0, 9.0]),        # short games only
+        np.asarray([0.0, 3.0, 11.0, 26.0, 44.0]),
+        np.full(50, 12.0),                        # every row in one phase
+        np.asarray([]),
+    ):
+        assert pipeline.calibration_band_edges(minutes).tolist() == [0.5, 8.0, 14.0, 20.0]
+
+    # Which means a single-phase cohort is labelled by its actual phase, not by band zero.
+    assignment = np.digitize(np.full(5, 12.0), pipeline.calibration_band_edges(np.full(5, 12.0)))
+    assert [pipeline.phase_band_label(int(b)) for b in np.unique(assignment)] == ["late-laning"]
+
+
+def test_pregame_decisions_land_in_their_own_phase_band():
+    # Rune pages and summoners are chosen with no game state, so they must not share a calibration map
+    # with early item purchases. They all sit at minute 0, which the 0.5 edge separates.
+    minutes = np.asarray([0.0, 0.0, 1.0, 7.9, 8.1, 13.9, 14.1, 19.9, 20.1, 35.0])
+    assignment = np.digitize(minutes, np.asarray(pipeline.PHASE_BAND_EDGES, dtype=float))
+    assert assignment.tolist() == [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
+    assert [pipeline.phase_band_label(b) for b in (0, 1, 2, 3, 4)] == [
+        "pregame", "early-laning", "late-laning", "mid-game", "late-game",
+    ]
 
 
 def test_scoring_routes_each_row_through_the_band_it_belongs_to():
@@ -2238,3 +2263,117 @@ def test_the_surrogate_export_is_unchanged_by_uuid_normalisation():
 
     assert left["match_surrogate"].tolist() == right["match_surrogate"].tolist()
     assert left["participant_surrogate"].tolist() == right["participant_surrogate"].tolist()
+
+
+def test_adaptive_ece_bins_still_catch_systematic_bias():
+    # The whole safety argument for coarsening bins: a real shift persists inside any bin, so it is
+    # still measured, while noise averages out. If this ever fails, the gate has been blinded.
+    rng = np.random.default_rng(101)
+    for n in (2_256, 5_500, 20_000):
+        predicted = np.clip(rng.beta(2.0, 2.0, n), 1e-4, 1 - 1e-4)
+        for bias in (0.05, 0.10, 0.25):
+            actual = rng.binomial(1, np.clip(predicted + bias, 0.01, 0.99))
+            measured = expected_calibration_error(actual, predicted)
+            # A shift of `bias` must register as roughly that much error, not be smoothed away.
+            assert measured > bias * 0.6, f"n={n} bias={bias} measured={measured}"
+
+
+def test_adaptive_ece_bins_lower_the_noise_floor_on_a_calibrated_sample():
+    # A perfectly calibrated model must not be failed for being observed on a thin band. At 10 fixed
+    # bins the live cohort's thinnest band (n=2,256) had a noise floor above the promoter's 0.025.
+    rng = np.random.default_rng(202)
+    fixed, adaptive = [], []
+    for _ in range(200):
+        predicted = np.clip(rng.beta(2.0, 2.0, 2_256), 1e-4, 1 - 1e-4)
+        actual = rng.binomial(1, predicted)
+        fixed.append(expected_calibration_error(actual, predicted, bins=10))
+        adaptive.append(expected_calibration_error(actual, predicted))
+
+    assert float(np.median(fixed)) > 0.018, "fixture must reproduce the biased-at-small-n behaviour"
+    assert float(np.median(adaptive)) < float(np.median(fixed)) * 0.75
+    # And the corrected floor must sit clear of the limit the promoter actually applies.
+    assert float(np.quantile(adaptive, 0.95)) < 0.025
+
+
+def test_ece_bin_count_scales_with_the_sample_and_stays_bounded():
+    assert pipeline.ece_bin_count(0) == 2, "never fewer than two bins"
+    assert pipeline.ece_bin_count(999) == 2
+    assert pipeline.ece_bin_count(2_256) == 4
+    assert pipeline.ece_bin_count(5_500) == 10
+    # Capped, so a large sample keeps the resolution the metric was designed around.
+    assert pipeline.ece_bin_count(10_000_000) == 10
+
+
+def clustered_probabilities(clusters: int, rows_per_cluster: int, seed: int = 5):
+    rng = np.random.default_rng(seed)
+    predicted = np.clip(rng.beta(2.0, 2.0, clusters * rows_per_cluster), 1e-4, 1 - 1e-4)
+    labels = np.repeat(np.arange(clusters), rows_per_cluster).astype(str)
+    return predicted, labels
+
+
+def test_the_clustered_null_is_higher_than_a_row_level_one():
+    # The correction that matters: rows are not independent observations. A team in a match shares one
+    # outcome across all its rows, so treating rows as units understates how much error noise alone
+    # produces -- measured at 20-50% on the live cohort.
+    predicted, clusters = clustered_probabilities(400, 6)
+    rows = np.arange(predicted.size).astype(str)  # every row its own cluster == row-level bootstrap
+
+    row_median, _ = pipeline.clustered_ece_null(predicted, rows, 0.99, resamples=150)
+    clustered_median, _ = pipeline.clustered_ece_null(predicted, clusters, 0.99, resamples=150)
+
+    assert clustered_median > row_median * 1.15, f"row={row_median} clustered={clustered_median}"
+
+
+def test_the_null_threshold_sits_above_its_own_median_and_is_reproducible():
+    predicted, clusters = clustered_probabilities(300, 5)
+    median, threshold = pipeline.clustered_ece_null(predicted, clusters, 0.99, resamples=200)
+    assert threshold > median > 0
+    # A gate decision has to be reproducible: the same input must reach the same verdict on a re-run.
+    again = pipeline.clustered_ece_null(predicted, clusters, 0.99, resamples=200)
+    assert (median, threshold) == again
+    # An empty band must not raise; it simply has no floor.
+    assert pipeline.clustered_ece_null(np.asarray([]), np.asarray([]), 0.99) == (0.0, 0.0)
+
+
+def test_a_well_calibrated_model_sits_inside_its_own_noise_floor():
+    # The property the gate depends on. If this fails, well-calibrated models are being rejected.
+    predicted, clusters = clustered_probabilities(500, 6, seed=9)
+    rng = np.random.default_rng(9)
+    shared = np.repeat(rng.random(500), 6)
+    actual = (predicted > shared).astype(int)
+
+    observed = expected_calibration_error(actual, predicted)
+    _, threshold = pipeline.clustered_ece_null(predicted, clusters, 0.99, resamples=300)
+
+    assert observed <= threshold, f"observed={observed} threshold={threshold}"
+
+
+def test_a_materially_miscalibrated_model_breaks_out_of_its_noise_floor():
+    # And the other half: the gate must still catch real miscalibration, or it is decoration.
+    predicted, clusters = clustered_probabilities(500, 6, seed=11)
+    rng = np.random.default_rng(11)
+    shared = np.repeat(rng.random(500), 6)
+    biased = np.clip(predicted + 0.12, 0.01, 0.99)
+    actual = (biased > shared).astype(int)
+
+    observed = expected_calibration_error(actual, predicted)
+    _, threshold = pipeline.clustered_ece_null(predicted, clusters, 0.99, resamples=300)
+
+    assert observed > threshold, f"observed={observed} threshold={threshold}"
+
+
+def test_the_metrics_report_both_halves_of_the_calibration_gate():
+    decisions = synthetic_decisions()
+    _, metrics = train_structural_model(decisions, max_training_rows=100_000)
+
+    assert "calibrationExceedsNoiseFloor" in metrics
+    assert isinstance(metrics["calibrationExceedsNoiseFloor"], bool)
+    assert metrics["maxTimeBandEceExcess"] >= 0.0
+    # Bonferroni across the phases present, so five phases are not each tested at the family-wise rate.
+    assert 0.9 < metrics["calibrationBandQuantile"] < 1.0
+    for phase, detail in metrics["timeBandDetail"].items():
+        assert detail["rows"] > 0, phase
+        assert detail["independentUnits"] <= detail["rows"], phase
+        assert detail["noiseFloorThreshold"] >= detail["noiseFloorMedian"], phase
+        assert detail["eceExcess"] >= 0.0, phase
+        assert isinstance(detail["withinNoiseFloor"], bool), phase

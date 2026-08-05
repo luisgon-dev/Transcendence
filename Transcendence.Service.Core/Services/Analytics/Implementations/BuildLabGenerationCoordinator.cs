@@ -783,8 +783,20 @@ public sealed class BuildLabGenerationCoordinator(
         // comparisons below are measured on it.
         var patchHoldoutSatisfied =
             metrics.HeldOutPatchPassed.Value || metrics.HeldOutPatchApplicable == false;
+        // The per-phase calibration gate is measured against what perfect looks like here, when the
+        // modeler reports it. `MaximumTimeBandEce` keeps its number and its meaning -- percentage points
+        // of calibration error tolerated -- but applies to the EXCESS over each phase's noise floor
+        // rather than to the raw figure, so the same limit neither rejects a flawless model on thin data
+        // nor waves through a sloppy one on plentiful data. A manifest without these fields is judged by
+        // the raw limit exactly as before.
+        var calibrationByNoiseFloor = metrics.CalibrationExceedsNoiseFloor.HasValue
+                                      && metrics.MaxTimeBandEceExcess.HasValue;
+        var timeBandFailed = calibrationByNoiseFloor
+            ? metrics.CalibrationExceedsNoiseFloor!.Value
+              || metrics.MaxTimeBandEceExcess!.Value > options.MaximumTimeBandEce
+            : metrics.MaxTimeBandEce.Value > options.MaximumTimeBandEce;
         if (metrics.OverallEce.Value > options.MaximumOverallEce ||
-            metrics.MaxTimeBandEce.Value > options.MaximumTimeBandEce ||
+            timeBandFailed ||
             metrics.BrierScore.Value >= metrics.BaselineBrierScore.Value ||
             metrics.LogLoss.Value >= metrics.BaselineLogLoss.Value ||
             !patchHoldoutSatisfied ||

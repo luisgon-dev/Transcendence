@@ -32,4 +32,14 @@ public sealed record BuildLabValidationMetrics(
     // across a patch boundary, so HeldOutPatchPassed is false there for want of a test rather than
     // because a test failed. Null means the modeler predates the field, which is read as "applicable"
     // so an old manifest still has to clear the gate.
-    bool? HeldOutPatchApplicable = null);
+    bool? HeldOutPatchApplicable = null,
+    // Whether any game phase is worse calibrated than a perfectly calibrated model would look at this
+    // sample size and dependence structure. ECE is positively biased, so a fixed limit is unpassable on
+    // thin data and toothless on plentiful data; the modeler measures the floor by resampling whole
+    // teams and reports whether the deviation is DETECTABLE. Null means an older modeler that did not
+    // measure it, in which case the raw limit still applies on its own.
+    bool? CalibrationExceedsNoiseFloor = null,
+    // How far the worst phase sits ABOVE its own noise floor. The practical half of the gate: a
+    // deviation too small to matter should not block a publish even when it is detectable, and one
+    // large enough to matter should block even when the sample is too thin to call it significant.
+    double? MaxTimeBandEceExcess = null);

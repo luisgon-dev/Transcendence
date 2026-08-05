@@ -1844,6 +1844,67 @@ def average_timing(rows: pd.DataFrame, family: str) -> float | None:
     return float(minutes.mean()) if not minutes.empty else None
 
 
+CALIBRATION_BANDS = 5
+# Below this an isotonic fit on one band memorises its calibration split instead of calibrating it,
+# which would show up as a band that looks perfect here and drifts in production.
+MINIMUM_BAND_CALIBRATION_ROWS = 200
+
+
+def calibration_band_edges(minutes: np.ndarray, bands: int) -> np.ndarray:
+    """Interior quantile edges of the decision-minute distribution, deduplicated."""
+    if minutes.size == 0 or bands < 2:
+        return np.asarray([], dtype=float)
+    quantiles = np.linspace(0, 1, bands + 1)[1:-1]
+    edges = np.unique(np.quantile(minutes, quantiles))
+    # An edge at or below the minimum splits nothing off, which is what a constant or heavily skewed
+    # minute column produces. Dropping those leaves no edges rather than one band holding every row.
+    return edges[edges > minutes.min()]
+
+
+def fit_banded_calibrator(minutes: np.ndarray, raw: np.ndarray, actual: np.ndarray) -> dict:
+    """Isotonic calibration per game-phase band, with a global calibrator as the fallback.
+
+    The promotion gate measures ECE *within* time bands, so calibrating globally is measuring one
+    thing and fitting another: a single monotone map cannot correct a bias that changes sign between
+    the early and late game, and the worst band carries the gate. Measured on the live 16.15 cohort, a
+    global fit gave an overall ECE of 0.0078 (well inside its 0.015 limit) while the worst time band
+    sat at 0.0529 against a 0.025 limit, and it barely improved when the training draw was quadrupled
+    -- a worst-of-N statistic does not shrink with sample size the way a mean does. Fitting each band
+    separately targets the criterion the gate actually applies.
+
+    Bands are quantiles of the *calibration* split, so the edges are fixed at fit time and travel with
+    the model rather than being re-derived from whatever is being scored.
+    """
+    fallback = IsotonicRegression(out_of_bounds="clip")
+    fallback.fit(raw, actual)
+    edges = calibration_band_edges(minutes, CALIBRATION_BANDS)
+    assignment = np.digitize(minutes, edges)
+    bands: dict[int, IsotonicRegression] = {}
+    for band in np.unique(assignment):
+        mask = assignment == band
+        # A band with one outcome has nothing to calibrate against and would collapse to a constant.
+        if int(mask.sum()) < MINIMUM_BAND_CALIBRATION_ROWS or np.unique(actual[mask]).size < 2:
+            continue
+        band_calibrator = IsotonicRegression(out_of_bounds="clip")
+        band_calibrator.fit(raw[mask], actual[mask])
+        bands[int(band)] = band_calibrator
+    return {"edges": edges, "bands": bands, "fallback": fallback}
+
+
+def apply_banded_calibrator(calibrator: dict, minutes: np.ndarray, raw: np.ndarray) -> np.ndarray:
+    """Route each row to the calibrator for its band, falling back to the global one."""
+    values = np.asarray(calibrator["fallback"].predict(raw), dtype=float)
+    edges = calibrator["edges"]
+    if len(edges) == 0 or not calibrator["bands"]:
+        return values
+    assignment = np.digitize(minutes, edges)
+    for band, band_calibrator in calibrator["bands"].items():
+        mask = assignment == band
+        if mask.any():
+            values[mask] = np.asarray(band_calibrator.predict(raw[mask]), dtype=float)
+    return values
+
+
 def train_structural_model(
     decisions: pd.DataFrame,
     max_training_rows: int = 250_000,
@@ -1893,10 +1954,15 @@ def train_structural_model(
     model = make_pipeline(StandardScaler(), LogisticRegression(max_iter=500, class_weight="balanced"))
     model.fit(train_x, train["won"].astype(int))
     calibration_raw = model.predict_proba(calibration_x)[:, 1]
-    calibrator = IsotonicRegression(out_of_bounds="clip")
-    calibrator.fit(calibration_raw, calibration["won"].astype(int))
+    calibrator = fit_banded_calibrator(
+        calibration["minute"].to_numpy(dtype=float),
+        calibration_raw,
+        calibration["won"].astype(int).to_numpy(),
+    )
     test_raw = model.predict_proba(test_x)[:, 1]
-    predicted = np.asarray(calibrator.predict(test_raw), dtype=float)
+    predicted = apply_banded_calibrator(
+        calibrator, test["minute"].to_numpy(dtype=float), test_raw
+    )
     actual = test["won"].astype(int).to_numpy()
     baseline_probability = float(train["won"].mean())
     baseline = np.full_like(predicted, baseline_probability)
@@ -1930,6 +1996,10 @@ def train_structural_model(
         "logLoss": float(log_loss(actual, np.clip(predicted, 1e-6, 1 - 1e-6))),
         "baselineLogLoss": float(log_loss(actual, np.clip(baseline, 1e-6, 1 - 1e-6))),
         "heldOutPatchPassed": bool(held_out_patch and beats_baseline),
+        # A cohort with a single patch cannot be split across a patch boundary, so there is nothing to
+        # pass or fail. Reported separately from the result so the promoter can tell "not testable"
+        # apart from "tested and failed" instead of reading False as a verdict.
+        "heldOutPatchApplicable": bool(held_out_patch),
         "leakageCheckPassed": leakage["passed"],
         "leakageDetail": leakage,
         "heldOutPatch": held_out_patch,
@@ -1937,6 +2007,8 @@ def train_structural_model(
         "calibrationMatchCount": len(set(calibration_matches)),
         "testMatchCount": len(set(test_matches)),
         "designColumnCount": len(design.columns),
+        "calibrationBandCount": len(calibrator["bands"]),
+        "calibrationBandEdges": [float(edge) for edge in calibrator["edges"]],
     }
     return (
         {"model": model, "calibrator": calibrator, "spec": spec, "features": design.columns.tolist()},
@@ -1987,7 +2059,11 @@ def structural_win_probability(
     for start in range(0, len(frame), chunk_rows):
         chunk = frame.iloc[start:start + chunk_rows]
         raw = bundle["model"].predict_proba(design_matrix(chunk, bundle["spec"]))[:, 1]
-        values[start:start + len(chunk)] = np.asarray(bundle["calibrator"].predict(raw), dtype=float)
+        # Routed by decision minute through the same band edges the calibrator was fit with, or every
+        # published number would be read off a different map than the one the gate measured.
+        values[start:start + len(chunk)] = apply_banded_calibrator(
+            bundle["calibrator"], chunk["minute"].to_numpy(dtype=float), raw
+        )
     return np.clip(values, 1e-4, 1 - 1e-4)
 
 

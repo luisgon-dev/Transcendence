@@ -27,4 +27,9 @@ public sealed record BuildLabValidationMetrics(
     double? LogLoss,
     double? BaselineLogLoss,
     bool? HeldOutPatchPassed,
-    bool? LeakageCheckPassed);
+    bool? LeakageCheckPassed,
+    // Whether a held-out-patch test was possible at all. A cohort covering one patch cannot be split
+    // across a patch boundary, so HeldOutPatchPassed is false there for want of a test rather than
+    // because a test failed. Null means the modeler predates the field, which is read as "applicable"
+    // so an old manifest still has to clear the gate.
+    bool? HeldOutPatchApplicable = null);

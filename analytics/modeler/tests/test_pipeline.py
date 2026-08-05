@@ -1950,3 +1950,136 @@ def test_no_status_write_references_a_dropped_lease_column():
         source = inspect.getsource(function)
         for dropped in ("LeaseExpiresAtUtc", "HeartbeatAtUtc"):
             assert dropped not in source, f"{function.__name__} still writes {dropped}"
+
+
+def phase_flipped_calibration_data(seed: int = 7):
+    """Raw scores whose bias flips sign between early and late game.
+
+    A single monotone map cannot correct both halves: for any given raw score the two bands disagree
+    about the outcome rate in opposite directions, so a global isotonic fit averages them and leaves
+    each band wrong. This is the shape the promotion gate's per-band ECE is designed to catch.
+    """
+    rng = np.random.default_rng(seed)
+    raw, minutes, actual = [], [], []
+    for minute, shift in ((5.0, -0.25), (25.0, +0.25)):
+        scores = rng.uniform(0.15, 0.85, 4000)
+        raw.extend(scores)
+        minutes.extend([minute + rng.uniform(0, 4.0) for _ in scores])
+        actual.extend(rng.binomial(1, np.clip(scores + shift, 0.01, 0.99)))
+    return (
+        np.asarray(minutes, dtype=float),
+        np.asarray(raw, dtype=float),
+        np.asarray(actual, dtype=int),
+    )
+
+
+def worst_band_ece(minutes, actual, predicted) -> float:
+    early = minutes < 15
+    return max(
+        expected_calibration_error(actual[early], predicted[early]),
+        expected_calibration_error(actual[~early], predicted[~early]),
+    )
+
+
+def test_banded_calibration_beats_a_global_map_on_a_phase_dependent_bias():
+    minutes, raw, actual = phase_flipped_calibration_data()
+
+    from sklearn.isotonic import IsotonicRegression
+
+    global_only = IsotonicRegression(out_of_bounds="clip")
+    global_only.fit(raw, actual)
+    global_worst = worst_band_ece(minutes, actual, np.asarray(global_only.predict(raw), dtype=float))
+
+    banded = pipeline.fit_banded_calibrator(minutes, raw, actual)
+    banded_worst = worst_band_ece(
+        minutes, actual, pipeline.apply_banded_calibrator(banded, minutes, raw)
+    )
+
+    # The global map is what produced a 0.053 worst band against a 0.025 limit on the live cohort.
+    assert global_worst > 0.05, f"fixture must exhibit the bias it claims: {global_worst}"
+    assert banded_worst < global_worst / 2, f"global={global_worst} banded={banded_worst}"
+
+
+def test_a_calibration_split_too_small_to_band_falls_back_instead_of_memorising():
+    # Bands are quantiles, so they always hold roughly equal counts -- the minimum-rows guard fires on
+    # a SMALL calibration split, not on one lopsided band. A sparse cohort must therefore degrade to a
+    # single global map rather than fit five isotonic curves on a few dozen rows each.
+    rng = np.random.default_rng(3)
+    raw = rng.uniform(0.1, 0.9, 300)
+    minutes = rng.uniform(0.0, 40.0, 300)
+    actual = rng.binomial(1, raw)
+
+    calibrator = pipeline.fit_banded_calibrator(minutes, raw, actual)
+
+    assert calibrator["bands"] == {}, "300 rows over 5 bands must not be fit per band"
+    assert calibrator["fallback"] is not None
+    values = pipeline.apply_banded_calibrator(calibrator, minutes, raw)
+    assert np.isfinite(values).all() and values.shape == raw.shape
+    # With no per-band fit, routing must be a no-op rather than silently dropping rows.
+    assert np.allclose(values, calibrator["fallback"].predict(raw))
+
+
+def test_a_skewed_minute_column_produces_no_degenerate_single_band():
+    # Almost every row at one minute: the quantile edges all collapse onto that value, and an edge
+    # there splits nothing off. Keeping it would create a "band" holding the entire dataset.
+    minutes = np.concatenate([np.full(2000, 5.0), np.full(10, 40.0)])
+    edges = pipeline.calibration_band_edges(minutes, 5)
+    assert len(edges) == 0, edges
+
+
+def test_a_single_outcome_band_gets_no_calibrator_of_its_own():
+    rng = np.random.default_rng(11)
+    raw = rng.uniform(0.1, 0.9, 2000)
+    minutes = np.concatenate([np.full(1000, 5.0), np.full(1000, 30.0)])
+    # The late band won every game, so an isotonic fit there would collapse to the constant 1.0.
+    actual = np.concatenate([rng.binomial(1, raw[:1000]), np.ones(1000, dtype=int)])
+
+    calibrator = pipeline.fit_banded_calibrator(minutes, raw, actual)
+    assignment = np.digitize(minutes, calibrator["edges"])
+    late_band = int(assignment[-1])
+
+    assert late_band not in calibrator["bands"]
+
+
+def test_band_edges_are_interior_quantiles_and_survive_degenerate_input():
+    minutes = np.asarray([0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
+    edges = pipeline.calibration_band_edges(minutes, 5)
+    assert len(edges) == 4, edges
+    assert (np.diff(edges) > 0).all(), "edges must be strictly increasing after dedup"
+    assert edges.min() > minutes.min() and edges.max() < minutes.max(), "interior only"
+    # A constant column collapses to no usable edges rather than raising.
+    assert len(pipeline.calibration_band_edges(np.full(100, 12.0), 5)) == 0
+    assert len(pipeline.calibration_band_edges(np.asarray([]), 5)) == 0
+
+
+def test_scoring_routes_each_row_through_the_band_it_belongs_to():
+    # Published numbers must come off the same map the gate measured, so identical rows that differ
+    # only in decision minute must be able to calibrate differently.
+    minutes, raw, actual = phase_flipped_calibration_data()
+    calibrator = pipeline.fit_banded_calibrator(minutes, raw, actual)
+    probe = np.full(4, 0.5)
+    early = pipeline.apply_banded_calibrator(calibrator, np.full(4, 5.0), probe)
+    late = pipeline.apply_banded_calibrator(calibrator, np.full(4, 27.0), probe)
+    assert not np.allclose(early, late), "minute had no effect, so routing is not happening"
+    # And the direction matches the injected bias: late games were under-predicted.
+    assert late.mean() > early.mean()
+
+
+def test_the_manifest_separates_an_untestable_patch_holdout_from_a_failed_one():
+    # A single-patch cohort cannot be split across a patch boundary. Reporting only `False` makes
+    # "not testable" indistinguishable from "tested and failed", which is what blocked promotion.
+    decisions = synthetic_decisions()
+    single = decisions[decisions["patch"] == "26.14"]
+    _, metrics = train_structural_model(single, max_training_rows=100_000)
+    assert metrics["heldOutPatch"] is None
+    assert metrics["heldOutPatchApplicable"] is False
+    assert metrics["heldOutPatchPassed"] is False
+    # Two patches: the holdout is testable, so applicability is true whatever the verdict.
+    _, both = train_structural_model(decisions, max_training_rows=100_000)
+    assert both["heldOutPatch"] is not None
+    assert both["heldOutPatchApplicable"] is True
+    # Calibration provenance travels with the metrics, since the ECE gate is measured against it.
+    assert isinstance(both["calibrationBandEdges"], list)
+    # The fixture's calibration split is far too small to band, so zero per-band fits is the correct
+    # outcome here; what must hold is that the provenance is reported either way.
+    assert both["calibrationBandCount"] == 0

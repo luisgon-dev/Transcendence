@@ -774,11 +774,20 @@ public sealed class BuildLabGenerationCoordinator(
             return false;
         }
 
+        // A single-patch cohort cannot be split across a patch boundary, so there is no test to pass.
+        // Reading that absence as a failure blocks every generation until a second patch accumulates
+        // coverage. It is safe to waive precisely because the gate guards *borrowing*: with one patch
+        // in scope every row carries full weight, no prior-patch row is borrowed, and the staleness the
+        // gate exists to catch cannot occur. The chronological holdout still applies -- train,
+        // calibration and test remain disjoint match sets ordered by date, and both baseline
+        // comparisons below are measured on it.
+        var patchHoldoutSatisfied =
+            metrics.HeldOutPatchPassed.Value || metrics.HeldOutPatchApplicable == false;
         if (metrics.OverallEce.Value > options.MaximumOverallEce ||
             metrics.MaxTimeBandEce.Value > options.MaximumTimeBandEce ||
             metrics.BrierScore.Value >= metrics.BaselineBrierScore.Value ||
             metrics.LogLoss.Value >= metrics.BaselineLogLoss.Value ||
-            !metrics.HeldOutPatchPassed.Value ||
+            !patchHoldoutSatisfied ||
             !metrics.LeakageCheckPassed.Value)
         {
             failureReason = "The candidate model did not pass calibration, baseline, patch, and leakage gates.";

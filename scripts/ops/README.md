@@ -110,6 +110,42 @@ killing it drops the lock with the session and the worker's reaper fails the row
 heartbeat, no timeout, nothing to wait out. To stop the schedule entirely,
 `systemctl disable --now transcendence-modeler.timer`.
 
+#### Asking the modeler a question without a full run
+
+`run` is the production path and a bad way to answer a question: it needs a pending generation, redraws
+the cohort from Postgres before any modelling starts, sweeps every champion, and publishes. The other
+subcommands need **no** generation, write **nothing** to the database, and share the training-draw cache
+with `run`. All of them accept `--patches`/`--cutoff`, or default to the newest generation's cohort.
+
+```bash
+cd /var/lib/docker/volumes/portainer_data/_data/compose/2
+modeler() { docker compose -p transcendence --env-file stack.env -f docker-compose.yml \
+  --profile analytics-modeling run --rm -T --no-deps --entrypoint python analytics-modeler -u \
+  -m build_lab_modeler "$@"; }
+
+modeler dataset                       # draw the cohort and cache it, per slice
+modeler train                         # fit and print every promotion gate's verdict
+modeler champion --champions 22,51    # estimate records for named champions
+modeler train --refresh               # discard the cached draw and redraw it
+```
+
+`train` ends in `WOULD PROMOTE` or `WOULD BE REJECTED`, evaluated against the same limits as
+`BuildLabModelingOptions` (asserted equal in the test suite), so a local answer predicts the deployed
+one. Exit codes: `0` promotable, `1` no rows drawn, `2` a gate failed.
+
+The draw is cached under `_cache/training-draw/<cohort-key>/` on the artifacts volume, keyed by the
+patches, cutoff, slice modulus and row cap — everything that decides which rows are drawn. A cohort is
+frozen by its `SourceCutoffUtc`, so a cached draw is the draw that cohort produces, not a stale
+approximation. Slices are written individually, so an interrupted draw resumes from where it stopped
+rather than starting over. Set `BUILD_LAB_CACHE_TRAINING_DRAW=false` to disable, or pass `--no-cache`.
+
+Redirect to a file and tail it rather than watching the pipe — `docker compose run` over SSH buffers,
+so a dropped connection loses output that the container already produced:
+
+```bash
+(nohup setsid modeler train > /tmp/train.log 2>&1 &) ; tail -f /tmp/train.log
+```
+
 ## `install-matchup-performance-db.sql` — online matchup source preparation
 
 Run once before deploying the resumable matchup migration:

@@ -25,6 +25,8 @@ from scipy.special import erfc
 import pandas as pd
 import psycopg
 from psycopg.rows import dict_row, tuple_row
+
+from .cache import TrainingCache
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import brier_score_loss, log_loss
@@ -146,6 +148,8 @@ class Settings:
     lease_owner: str
     max_training_rows: int
     training_sample_matches: int
+    cache_training_draw: bool
+    calibration_bands: int
     retained_generations: int
 
     @classmethod
@@ -181,6 +185,15 @@ class Settings:
             ),
             # Mirrors BuildLabModelingOptions.RetainedGenerations and the Math.Max(2, ...) floor the
             # coordinator applies, so artifact retention and row retention keep the same set.
+            # On by default: a generation's cohort is frozen by its cutoff, so a cached draw is
+            # always the draw that cohort would produce, and a retry after a mid-run failure no longer
+            # repays tens of minutes of query time before modelling starts.
+            cache_training_draw=os.getenv("BUILD_LAB_CACHE_TRAINING_DRAW", "true").lower() == "true",
+            # How finely calibration is conditioned on game phase. The promotion gate scores ECE
+            # within time bands, so this is the dial that moves the gate that is hardest to pass.
+            calibration_bands=max(
+                1, int(os.getenv("BUILD_LAB_CALIBRATION_BANDS", str(CALIBRATION_BANDS)))
+            ),
             retained_generations=max(2, int(os.getenv("BUILD_LAB_RETAINED_GENERATIONS", "4"))),
         )
 
@@ -318,6 +331,96 @@ def lease_generation(connection: psycopg.Connection, settings: Settings) -> dict
     return generation
 
 
+
+def training_draw_shape(
+    connection: psycopg.Connection,
+    included_patches: list[str],
+    cutoff,
+    settings: "Settings",
+) -> tuple[int, int]:
+    """(slice_modulus, slice_rows) for this cohort -- the two numbers that decide the draw."""
+    match_count = load_cohort_match_count(connection, included_patches, cutoff)
+    modulus = training_sample_modulus(match_count, settings.training_sample_matches)
+    return modulus * TRAINING_SAMPLE_SLICES, max(1, settings.max_training_rows // TRAINING_SAMPLE_SLICES)
+
+
+def build_training_frame(
+    connection: psycopg.Connection,
+    included_patches: list[str],
+    cutoff,
+    rank_offset: str | None,
+    current_patch: str,
+    changed_items: set[int],
+    settings: "Settings",
+    prepare,
+    *,
+    cache: "TrainingCache | None" = None,
+) -> pd.DataFrame:
+    """The draw the structural fit is trained on, one hash-disjoint slice at a time.
+
+    This model was always fit on at most `max_training_rows`; the shape this replaced reached that by
+    loading every decision row in the cohort and then discarding over 99% of them, which is what made
+    peak memory scale with the corpus. Sampling whole matches in the query keeps the same row budget --
+    whole matches, not rows, so the chronological train/calibration/test split still partitions by
+    match and `evaluate_leakage` still sees disjoint splits.
+
+    Each slice is thinned before the next is drawn, so the whole draw is never resident at once, and
+    cached on the way past, so a retry or a model-only iteration does not pay for the queries again.
+    """
+    slice_modulus, slice_rows = training_draw_shape(connection, included_patches, cutoff, settings)
+    LOG.info(
+        "Training draw: %d slices of 1/%d of the cohort, up to %d rows each%s.",
+        TRAINING_SAMPLE_SLICES,
+        slice_modulus,
+        slice_rows,
+        f" (cache {cache.key})" if cache and cache.enabled else " (uncached)",
+    )
+    slices = []
+    for residue in range(TRAINING_SAMPLE_SLICES):
+        cached = cache.read_slice(residue) if cache else None
+        if cached is not None:
+            LOG.info(
+                "Training slice %d/%d: %d rows from cache.",
+                residue + 1,
+                TRAINING_SAMPLE_SLICES,
+                len(cached),
+            )
+            slices.append(cached)
+            continue
+        drawn = prepare(
+            load_decision_frame(
+                connection,
+                included_patches,
+                cutoff,
+                rank_offset,
+                current_patch,
+                changed_items,
+                match_sample_modulus=slice_modulus,
+                match_sample_residue=residue,
+            ),
+            # `exclude_drifted_prior_actions` fires on cells with at least 100 observations in both
+            # the current and a prior patch. Those counts are divided by the sampling rate here, so
+            # applying it would drop an arbitrary subset of cells rather than a conservative one. It
+            # guards *borrowing into a per-cell estimate*, which is not what this model does: the
+            # model is P(win | pre-decision state) and is held to the calibration and held-out-patch
+            # gates instead.
+            exclude_drift=False,
+        )
+        kept = thin_chronologically(drawn, slice_rows)
+        LOG.info(
+            "Training slice %d/%d: %d rows drawn, %d kept.",
+            residue + 1,
+            TRAINING_SAMPLE_SLICES,
+            len(drawn),
+            len(kept),
+        )
+        del drawn
+        if cache:
+            cache.write_slice(residue, kept)
+        slices.append(kept)
+    return pd.concat(slices, ignore_index=True) if slices else pd.DataFrame()
+
+
 def model_generation(
     connection: psycopg.Connection,
     generation: dict,
@@ -357,61 +460,30 @@ def model_generation(
     artifact_path.mkdir(parents=True, exist_ok=True)
 
     # Phase 1 - the structural model, fit on a deterministic sample of whole matches.
-    #
-    # This model was always fit on at most `max_training_rows`; the previous shape of this function
-    # reached that by loading every decision row in the cohort and then discarding over 99% of them,
-    # which is what made peak memory scale with the corpus. Sampling matches in the query keeps the
-    # same row budget for the fit. Whole matches, not rows, so the chronological train/calibration/
-    # test split still partitions by match and `evaluate_leakage` still sees disjoint splits.
-    match_count = load_cohort_match_count(connection, included_patches, cutoff)
-    modulus = training_sample_modulus(match_count, settings.training_sample_matches)
-    slice_modulus = modulus * TRAINING_SAMPLE_SLICES
-    slice_rows = max(1, settings.max_training_rows // TRAINING_SAMPLE_SLICES)
-    LOG.info(
-        "Fitting the structural model on ~1/%d of %d cohort matches, drawn in %d slices.",
-        modulus,
-        match_count,
-        TRAINING_SAMPLE_SLICES,
+    training = build_training_frame(
+        connection,
+        included_patches,
+        cutoff,
+        rank_offset,
+        current_patch,
+        changed_items,
+        settings,
+        prepare,
+        cache=TrainingCache.for_cohort(
+            settings.artifact_dir / "_cache",
+            included_patches,
+            cutoff,
+            *training_draw_shape(connection, included_patches, cutoff, settings),
+            enabled=settings.cache_training_draw,
+        ),
     )
-    slices = []
-    for residue in range(TRAINING_SAMPLE_SLICES):
-        drawn = prepare(
-            load_decision_frame(
-                connection,
-                included_patches,
-                cutoff,
-                rank_offset,
-                current_patch,
-                changed_items,
-                match_sample_modulus=slice_modulus,
-                match_sample_residue=residue,
-            ),
-            # `exclude_drifted_prior_actions` fires on cells with at least 100 observations in both
-            # the current and a prior patch. Those counts are divided by the sampling rate here, so
-            # applying it would drop an arbitrary subset of cells rather than a conservative one. It
-            # guards *borrowing into a per-cell estimate*, which is not what this model does: the
-            # model is P(win | pre-decision state) and is held to the calibration and held-out-patch
-            # gates below.
-            exclude_drift=False,
-        )
-        # Thinned here rather than after the concat so the whole draw is never resident at once. Each
-        # slice spans the full cohort time range, so the union stays a chronological systematic sample.
-        slices.append(thin_chronologically(drawn, slice_rows))
-        LOG.info(
-            "Training slice %d/%d: %d rows drawn, %d kept.",
-            residue + 1,
-            TRAINING_SAMPLE_SLICES,
-            len(drawn),
-            len(slices[-1]),
-        )
-        del drawn
-    training = pd.concat(slices, ignore_index=True)
-    del slices
     if training.empty:
         raise RuntimeError("No eligible item decisions were available for this generation.")
     if training["won"].nunique() < 2:
         raise RuntimeError("The frozen dataset does not contain both match outcomes.")
-    structural_model, metrics = train_structural_model(training, settings.max_training_rows)
+    structural_model, metrics = train_structural_model(
+        training, settings.max_training_rows, settings.calibration_bands
+    )
     del training
     joblib.dump(structural_model, artifact_path / "win_probability.joblib")
 
@@ -888,7 +960,28 @@ def read_sql_frame(connection, sql: str, params: dict) -> pd.DataFrame:
     with connection.cursor(row_factory=tuple_row) as cursor:
         cursor.execute(sql, params)
         columns = [column.name for column in cursor.description or []]
-        return pd.DataFrame.from_records(cursor.fetchall(), columns=columns)
+        return normalise_uuid_columns(pd.DataFrame.from_records(cursor.fetchall(), columns=columns))
+
+
+def normalise_uuid_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    """Render uuid columns as their canonical strings at the loader boundary.
+
+    psycopg returns `uuid` as `uuid.UUID`, and Arrow cannot infer a type for it, so any frame still
+    carrying a match id fails to serialise -- which is every frame the training cache stores. Coercing
+    at the boundary keeps one type in play everywhere instead: a cached slice and a freshly drawn one
+    must not disagree, or concatenating them yields a column mixing UUID with str whose sort raises.
+
+    This does not change any published value. `surrogate_ids` interpolates the id into a string, and
+    `str(UUID)` is the canonical hyphenated form, so the deidentified surrogates hash identically.
+    """
+    for column in frame.columns:
+        if frame[column].dtype != object:
+            continue
+        present = frame[column].dropna()
+        if present.empty or not isinstance(present.iloc[0], UUID):
+            continue
+        frame[column] = frame[column].map(lambda value: None if value is None else str(value))
+    return frame
 
 
 def champion_match_cte(champion_id: int | None, *, leading: bool) -> str:
@@ -1844,9 +1937,161 @@ def average_timing(rows: pd.DataFrame, family: str) -> float | None:
     return float(minutes.mean()) if not minutes.empty else None
 
 
+# Game-phase boundaries in minutes, not quantiles of whatever this run happened to draw.
+#
+# Quantile bands moved between generations, so two runs were never judged on the same definition, and
+# on this data they produced (1,10], (10,15], (15,22], (22,51] -- boundaries with no meaning in League
+# and a starved 2,256-row band caused by the point mass of pregame rows at minute 0. Fixed boundaries
+# are stable across runs, and each one is a phase a reader can act on:
+#
+#   0          pregame: rune pages and summoners, chosen with NO in-game state at all
+#   (0, 8]     early laning
+#   (8, 14]    late laning -- turret plating falls at 14:00
+#   (14, 20]   mid game -- Herald gives way to Baron at 20:00
+#   (20, +)    late game
+#
+# Removing the band count also removes the tunable: a sweep over it produced passes at 8, 16 and 32 and
+# failures at 12 and 24, and picking the value that passed would have been choosing a lucky number.
+PHASE_BAND_EDGES = (0.5, 8.0, 14.0, 20.0)
+
+# Resamples behind each phase's null distribution. The gate reads a high quantile of it, so this has to
+# be large enough for that quantile to be stable; 1,000 is a few seconds against an hour-long run.
+CALIBRATION_BOOTSTRAP_RESAMPLES = 1_000
+# Fixed, because a gate decision has to be reproducible: the same generation must reach the same verdict
+# on a re-run, and a bootstrap seeded from the clock would not.
+CALIBRATION_BOOTSTRAP_SEED = 20260805
+# Family-wise error across the phase bands. Testing five phases at 5% each would fail a well-calibrated
+# model about 23% of the time, so the per-phase quantile is tightened to keep the overall rate at 5%.
+CALIBRATION_FAMILY_WISE_ERROR = 0.05
+
+CALIBRATION_BANDS = 5
+# Below this an isotonic fit on one band memorises its calibration split instead of calibrating it,
+# which would show up as a band that looks perfect here and drifts in production.
+MINIMUM_BAND_CALIBRATION_ROWS = 200
+
+
+
+def clustered_ece_null(
+    predicted: np.ndarray,
+    clusters: np.ndarray,
+    quantile: float,
+    *,
+    resamples: int = CALIBRATION_BOOTSTRAP_RESAMPLES,
+    seed: int = CALIBRATION_BOOTSTRAP_SEED,
+) -> tuple[float, float]:
+    """What ECE a PERFECTLY calibrated model scores here anyway, from sampling noise alone.
+
+    Returns (median, quantile) of that null distribution.
+
+    ECE is positively biased, so "is 0.02 bad?" has no answer without knowing what perfect looks like
+    at this sample size and dependence structure. The comparison is what makes the gate sample-size
+    aware: a fixed constant silently becomes unpassable on thin data and toothless on plentiful data.
+
+    Resampling is by CLUSTER, not by row, and that is the whole point. Rows are not independent
+    observations: one team in one match shares a single outcome across all of its participants' rows,
+    and those participants also share the team gold, kill and objective features by construction. A
+    row-level bootstrap treats ~5,000 rows as 5,000 observations when they are closer to 1,700
+    independent units, and understates the floor by 20-50% -- measured on the live cohort.
+
+    Known simplification: the two teams within a match are perfectly anti-correlated (one wins, one
+    loses) and this treats their clusters as independent. That slightly overstates variance, so the
+    floor is a little generous; it is the conservative direction for a false REJECTION, and the
+    practical excess bound below is what guards the other side.
+    """
+    if predicted.size == 0:
+        return 0.0, 0.0
+    order = np.argsort(clusters, kind="stable")
+    ordered_clusters = clusters[order]
+    ordered_predicted = predicted[order]
+    starts = np.flatnonzero(np.r_[True, ordered_clusters[1:] != ordered_clusters[:-1]])
+    lengths = np.diff(np.r_[starts, ordered_clusters.size])
+    rng = np.random.default_rng(seed)
+    scores = np.empty(resamples, dtype=float)
+    for index in range(resamples):
+        picked = rng.integers(0, starts.size, starts.size)
+        rows = np.concatenate(
+            [np.arange(starts[cluster], starts[cluster] + lengths[cluster]) for cluster in picked]
+        )
+        probabilities = ordered_predicted[rows]
+        # One outcome draw per resampled cluster, shared by every row in it. This is what injects the
+        # dependence: a team either won or lost, and all its rows agree.
+        shared = np.repeat(rng.random(starts.size), lengths[picked])
+        scores[index] = expected_calibration_error(
+            (probabilities > shared).astype(int), probabilities
+        )
+    return float(np.median(scores)), float(np.quantile(scores, quantile))
+
+
+def phase_band_label(band: int) -> str:
+    """Human-readable name for a phase band index, for the manifest and the failure reason."""
+    labels = ("pregame", "early-laning", "late-laning", "mid-game", "late-game")
+    return labels[band] if 0 <= band < len(labels) else f"band-{band}"
+
+
+def calibration_band_edges(minutes: np.ndarray, bands: int | None = None) -> np.ndarray:
+    """The fixed game-phase edges, always all of them.
+
+    Deliberately not filtered to the observed range. Dropping an edge renumbers every band above it, so
+    a cohort of only mid-game rows would report them under the `pregame` label. An edge that splits
+    nothing simply yields a band with no rows, and empty bands are skipped where bands are consumed --
+    which costs nothing and keeps band index and phase meaning the same thing in every cohort.
+    """
+    return np.asarray(PHASE_BAND_EDGES, dtype=float)
+
+
+def fit_banded_calibrator(
+    minutes: np.ndarray,
+    raw: np.ndarray,
+    actual: np.ndarray,
+    bands: int = CALIBRATION_BANDS,
+) -> dict:
+    """Isotonic calibration per game-phase band, with a global calibrator as the fallback.
+
+    The promotion gate measures ECE *within* time bands, so calibrating globally is measuring one
+    thing and fitting another: a single monotone map cannot correct a bias that changes sign between
+    the early and late game, and the worst band carries the gate. Measured on the live 16.15 cohort, a
+    global fit gave an overall ECE of 0.0078 (well inside its 0.015 limit) while the worst time band
+    sat at 0.0529 against a 0.025 limit, and it barely improved when the training draw was quadrupled
+    -- a worst-of-N statistic does not shrink with sample size the way a mean does. Fitting each band
+    separately targets the criterion the gate actually applies.
+
+    Bands are quantiles of the *calibration* split, so the edges are fixed at fit time and travel with
+    the model rather than being re-derived from whatever is being scored.
+    """
+    fallback = IsotonicRegression(out_of_bounds="clip")
+    fallback.fit(raw, actual)
+    edges = calibration_band_edges(minutes, bands)
+    assignment = np.digitize(minutes, edges)
+    bands: dict[int, IsotonicRegression] = {}
+    for band in np.unique(assignment):
+        mask = assignment == band
+        # A band with one outcome has nothing to calibrate against and would collapse to a constant.
+        if int(mask.sum()) < MINIMUM_BAND_CALIBRATION_ROWS or np.unique(actual[mask]).size < 2:
+            continue
+        band_calibrator = IsotonicRegression(out_of_bounds="clip")
+        band_calibrator.fit(raw[mask], actual[mask])
+        bands[int(band)] = band_calibrator
+    return {"edges": edges, "bands": bands, "fallback": fallback}
+
+
+def apply_banded_calibrator(calibrator: dict, minutes: np.ndarray, raw: np.ndarray) -> np.ndarray:
+    """Route each row to the calibrator for its band, falling back to the global one."""
+    values = np.asarray(calibrator["fallback"].predict(raw), dtype=float)
+    edges = calibrator["edges"]
+    if len(edges) == 0 or not calibrator["bands"]:
+        return values
+    assignment = np.digitize(minutes, edges)
+    for band, band_calibrator in calibrator["bands"].items():
+        mask = assignment == band
+        if mask.any():
+            values[mask] = np.asarray(band_calibrator.predict(raw[mask]), dtype=float)
+    return values
+
+
 def train_structural_model(
     decisions: pd.DataFrame,
     max_training_rows: int = 250_000,
+    calibration_bands: int = CALIBRATION_BANDS,
 ) -> tuple[dict, dict]:
     ordered = decisions.sort_values(["match_date", "match_id"]).drop_duplicates(
         ["match_id", "participant_id", "minute"]
@@ -1893,22 +2138,57 @@ def train_structural_model(
     model = make_pipeline(StandardScaler(), LogisticRegression(max_iter=500, class_weight="balanced"))
     model.fit(train_x, train["won"].astype(int))
     calibration_raw = model.predict_proba(calibration_x)[:, 1]
-    calibrator = IsotonicRegression(out_of_bounds="clip")
-    calibrator.fit(calibration_raw, calibration["won"].astype(int))
+    calibrator = fit_banded_calibrator(
+        calibration["minute"].to_numpy(dtype=float),
+        calibration_raw,
+        calibration["won"].astype(int).to_numpy(),
+        calibration_bands,
+    )
     test_raw = model.predict_proba(test_x)[:, 1]
-    predicted = np.asarray(calibrator.predict(test_raw), dtype=float)
+    predicted = apply_banded_calibrator(
+        calibrator, test["minute"].to_numpy(dtype=float), test_raw
+    )
     actual = test["won"].astype(int).to_numpy()
     baseline_probability = float(train["won"].mean())
     baseline = np.full_like(predicted, baseline_probability)
     overall_ece = expected_calibration_error(actual, predicted)
-    time_bands = pd.qcut(test["minute"], q=min(5, test["minute"].nunique()), duplicates="drop")
-    band_eces = [
-        expected_calibration_error(
-            actual[np.asarray(time_bands == band)],
-            predicted[np.asarray(time_bands == band)],
+    # Evaluated on the SAME fixed phase edges the calibrator was fit with. Quantiles of the test set
+    # moved the goalposts between runs and starved one band; a phase is a phase.
+    test_minutes = test["minute"].to_numpy(dtype=float)
+    band_assignment = np.digitize(test_minutes, np.asarray(PHASE_BAND_EDGES, dtype=float))
+    present_bands = np.unique(band_assignment)
+    # Bonferroni across the phases actually present, so the family-wise false-rejection rate is the
+    # configured one rather than that rate times the number of phases.
+    band_quantile = 1.0 - (CALIBRATION_FAMILY_WISE_ERROR / max(1, len(present_bands)))
+    # A team in a match is the independent unit: all of its rows share one outcome.
+    clusters = (
+        test["match_id"].astype(str) + ":" + test["team_id"].astype(str)
+    ).to_numpy()
+    band_eces = []
+    band_excesses = []
+    exceeds_noise_floor = False
+    band_detail = {}
+    for band in present_bands:
+        mask = band_assignment == band
+        band_ece = expected_calibration_error(actual[mask], predicted[mask])
+        floor_median, floor_threshold = clustered_ece_null(
+            predicted[mask], clusters[mask], band_quantile
         )
-        for band in time_bands.dropna().unique()
-    ]
+        excess = max(0.0, band_ece - floor_median)
+        within = band_ece <= floor_threshold
+        exceeds_noise_floor = exceeds_noise_floor or not within
+        band_eces.append(band_ece)
+        band_excesses.append(excess)
+        band_detail[phase_band_label(int(band))] = {
+            "rows": int(mask.sum()),
+            "independentUnits": int(np.unique(clusters[mask]).size),
+            "ece": band_ece,
+            "eceBins": ece_bin_count(int(mask.sum())),
+            "noiseFloorMedian": floor_median,
+            "noiseFloorThreshold": floor_threshold,
+            "eceExcess": excess,
+            "withinNoiseFloor": bool(within),
+        }
     beats_baseline = bool(
         brier_score_loss(actual, predicted) < brier_score_loss(actual, baseline)
         and log_loss(actual, np.clip(predicted, 1e-6, 1 - 1e-6))
@@ -1930,6 +2210,10 @@ def train_structural_model(
         "logLoss": float(log_loss(actual, np.clip(predicted, 1e-6, 1 - 1e-6))),
         "baselineLogLoss": float(log_loss(actual, np.clip(baseline, 1e-6, 1 - 1e-6))),
         "heldOutPatchPassed": bool(held_out_patch and beats_baseline),
+        # A cohort with a single patch cannot be split across a patch boundary, so there is nothing to
+        # pass or fail. Reported separately from the result so the promoter can tell "not testable"
+        # apart from "tested and failed" instead of reading False as a verdict.
+        "heldOutPatchApplicable": bool(held_out_patch),
         "leakageCheckPassed": leakage["passed"],
         "leakageDetail": leakage,
         "heldOutPatch": held_out_patch,
@@ -1937,6 +2221,19 @@ def train_structural_model(
         "calibrationMatchCount": len(set(calibration_matches)),
         "testMatchCount": len(set(test_matches)),
         "designColumnCount": len(design.columns),
+        "calibrationBandCount": len(calibrator["bands"]),
+        # Per-phase detail, so a rejection says WHICH phase is miscalibrated and on how many rows
+        # rather than only that some anonymous band failed.
+        "timeBandDetail": band_detail,
+        # True when some phase is worse than a perfectly calibrated model would look here. This is the
+        # statistical half of the calibration gate: it asks whether the deviation is DETECTABLE.
+        "calibrationExceedsNoiseFloor": exceeds_noise_floor,
+        # And this is the practical half: how far the worst phase sits above its own noise floor, so a
+        # deviation that is detectable but tiny does not block a publish, and one that is large does
+        # even if the sample is too thin to call it significant.
+        "maxTimeBandEceExcess": max(band_excesses, default=0.0),
+        "calibrationBandQuantile": band_quantile,
+        "calibrationBandEdges": [float(edge) for edge in calibrator["edges"]],
     }
     return (
         {"model": model, "calibrator": calibrator, "spec": spec, "features": design.columns.tolist()},
@@ -1987,7 +2284,11 @@ def structural_win_probability(
     for start in range(0, len(frame), chunk_rows):
         chunk = frame.iloc[start:start + chunk_rows]
         raw = bundle["model"].predict_proba(design_matrix(chunk, bundle["spec"]))[:, 1]
-        values[start:start + len(chunk)] = np.asarray(bundle["calibrator"].predict(raw), dtype=float)
+        # Routed by decision minute through the same band edges the calibrator was fit with, or every
+        # published number would be read off a different map than the one the gate measured.
+        values[start:start + len(chunk)] = apply_banded_calibrator(
+            bundle["calibrator"], chunk["minute"].to_numpy(dtype=float), raw
+        )
     return np.clip(values, 1e-4, 1 - 1e-4)
 
 
@@ -2688,13 +2989,38 @@ def multi_hot_tokens(frame: pd.DataFrame, column: str, vocabulary: tuple[int, ..
     return matrix
 
 
+# Rows per probability bin below which a bin's observed rate is mostly sampling noise. Measured on
+# the live cohort: at 10 fixed bins a PERFECTLY calibrated model scores a median ECE of 0.0217 and a
+# 95th percentile of 0.0316 on the gate's thinnest time band (n=2,256) -- above the 0.025 limit the
+# promoter applies, so the gate was rejecting noise. At ~500 rows per bin the same band's noise floor
+# falls to 0.0140 / 0.0233.
+MINIMUM_ECE_BIN_ROWS = 500
+MAXIMUM_ECE_BINS = 10
+
+
+def ece_bin_count(sample_size: int) -> int:
+    """Bins that keep enough rows each for a bin mean to estimate anything."""
+    return max(2, min(MAXIMUM_ECE_BINS, sample_size // MINIMUM_ECE_BIN_ROWS))
+
+
 def expected_calibration_error(
     actual: np.ndarray,
     predicted: np.ndarray,
-    bins: int = 10,
+    bins: int | None = None,
 ) -> float:
+    """Binned calibration error, with the bin count scaled to the sample by default.
+
+    ECE sums |observed - predicted| per bin, so it is positively biased: sampling noise inflates every
+    term and never cancels. With a fixed bin count that bias grows as the sample shrinks, which makes a
+    *max over bands* mostly a report on whichever band is thinnest rather than on calibration.
+
+    Coarsening the bins trades away only the ability to see miscalibration that oscillates *within* a
+    bin. Systematic bias -- the thing the gate exists to catch -- survives any binning, because a shift
+    does not average out inside a bin the way noise does.
+    """
     if len(actual) == 0:
         return 1.0
+    bins = ece_bin_count(len(actual)) if bins is None else bins
     boundaries = np.linspace(0, 1, bins + 1)
     indices = np.clip(np.digitize(predicted, boundaries, right=True) - 1, 0, bins - 1)
     error = 0.0

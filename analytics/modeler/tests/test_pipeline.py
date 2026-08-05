@@ -1,4 +1,5 @@
 import inspect
+import pathlib
 import json
 import logging
 import re
@@ -672,6 +673,9 @@ def synthetic_decisions(
                 {
                     "match_id": f"match-{index}",
                     "participant_id": 1,
+                    # A team in a match is the independent unit the calibration null resamples: every
+                    # row of one team shares its single outcome.
+                    "team_id": 100 if index % 2 == 0 else 200,
                     "match_date": index,
                     "patch": patch,
                     "region": "NA1",
@@ -1950,3 +1954,426 @@ def test_no_status_write_references_a_dropped_lease_column():
         source = inspect.getsource(function)
         for dropped in ("LeaseExpiresAtUtc", "HeartbeatAtUtc"):
             assert dropped not in source, f"{function.__name__} still writes {dropped}"
+
+
+def phase_flipped_calibration_data(seed: int = 7):
+    """Raw scores whose bias flips sign between early and late game.
+
+    A single monotone map cannot correct both halves: for any given raw score the two bands disagree
+    about the outcome rate in opposite directions, so a global isotonic fit averages them and leaves
+    each band wrong. This is the shape the promotion gate's per-band ECE is designed to catch.
+    """
+    rng = np.random.default_rng(seed)
+    raw, minutes, actual = [], [], []
+    for minute, shift in ((5.0, -0.25), (25.0, +0.25)):
+        scores = rng.uniform(0.15, 0.85, 4000)
+        raw.extend(scores)
+        minutes.extend([minute + rng.uniform(0, 4.0) for _ in scores])
+        actual.extend(rng.binomial(1, np.clip(scores + shift, 0.01, 0.99)))
+    return (
+        np.asarray(minutes, dtype=float),
+        np.asarray(raw, dtype=float),
+        np.asarray(actual, dtype=int),
+    )
+
+
+def worst_band_ece(minutes, actual, predicted) -> float:
+    early = minutes < 15
+    return max(
+        expected_calibration_error(actual[early], predicted[early]),
+        expected_calibration_error(actual[~early], predicted[~early]),
+    )
+
+
+def test_banded_calibration_beats_a_global_map_on_a_phase_dependent_bias():
+    minutes, raw, actual = phase_flipped_calibration_data()
+
+    from sklearn.isotonic import IsotonicRegression
+
+    global_only = IsotonicRegression(out_of_bounds="clip")
+    global_only.fit(raw, actual)
+    global_worst = worst_band_ece(minutes, actual, np.asarray(global_only.predict(raw), dtype=float))
+
+    banded = pipeline.fit_banded_calibrator(minutes, raw, actual)
+    banded_worst = worst_band_ece(
+        minutes, actual, pipeline.apply_banded_calibrator(banded, minutes, raw)
+    )
+
+    # The global map is what produced a 0.053 worst band against a 0.025 limit on the live cohort.
+    assert global_worst > 0.05, f"fixture must exhibit the bias it claims: {global_worst}"
+    assert banded_worst < global_worst / 2, f"global={global_worst} banded={banded_worst}"
+
+
+def test_a_calibration_split_too_small_to_band_falls_back_instead_of_memorising():
+    # Bands are quantiles, so they always hold roughly equal counts -- the minimum-rows guard fires on
+    # a SMALL calibration split, not on one lopsided band. A sparse cohort must therefore degrade to a
+    # single global map rather than fit five isotonic curves on a few dozen rows each.
+    rng = np.random.default_rng(3)
+    raw = rng.uniform(0.1, 0.9, 300)
+    minutes = rng.uniform(0.0, 40.0, 300)
+    actual = rng.binomial(1, raw)
+
+    calibrator = pipeline.fit_banded_calibrator(minutes, raw, actual)
+
+    assert calibrator["bands"] == {}, "300 rows over 5 bands must not be fit per band"
+    assert calibrator["fallback"] is not None
+    values = pipeline.apply_banded_calibrator(calibrator, minutes, raw)
+    assert np.isfinite(values).all() and values.shape == raw.shape
+    # With no per-band fit, routing must be a no-op rather than silently dropping rows.
+    assert np.allclose(values, calibrator["fallback"].predict(raw))
+
+
+def test_a_skewed_minute_column_no_longer_collapses_the_banding():
+    # The whole reason phase edges are fixed: quantiles of a distribution with a point mass collapsed
+    # onto that mass and lost bands, so the band count depended on the shape of the draw. Fixed edges
+    # are unaffected by skew.
+    minutes = np.concatenate([np.full(2000, 5.0), np.full(10, 40.0)])
+    edges = pipeline.calibration_band_edges(minutes)
+    assert edges.tolist() == [0.5, 8.0, 14.0, 20.0], edges
+
+
+def test_a_single_outcome_band_gets_no_calibrator_of_its_own():
+    rng = np.random.default_rng(11)
+    raw = rng.uniform(0.1, 0.9, 2000)
+    minutes = np.concatenate([np.full(1000, 5.0), np.full(1000, 30.0)])
+    # The late band won every game, so an isotonic fit there would collapse to the constant 1.0.
+    actual = np.concatenate([rng.binomial(1, raw[:1000]), np.ones(1000, dtype=int)])
+
+    calibrator = pipeline.fit_banded_calibrator(minutes, raw, actual)
+    assignment = np.digitize(minutes, calibrator["edges"])
+    late_band = int(assignment[-1])
+
+    assert late_band not in calibrator["bands"]
+
+
+def test_phase_edges_are_fixed_and_dropped_only_when_they_split_nothing():
+    # Boundaries are game-meaningful, not data-derived: plating at 14:00, Herald-to-Baron at 20:00, and
+    # pregame separated from minute one because those rows carry no in-game state at all.
+    assert pipeline.PHASE_BAND_EDGES == (0.5, 8.0, 14.0, 20.0)
+
+    # Every cohort gets every edge, whatever it contains. Filtering to the observed range would
+    # renumber the bands above a dropped edge, so a cohort of only mid-game rows would report them
+    # under the "pregame" label. An edge that splits nothing just yields an empty band.
+    for minutes in (
+        np.asarray([0.0, 1.0, 5.0, 9.0]),        # short games only
+        np.asarray([0.0, 3.0, 11.0, 26.0, 44.0]),
+        np.full(50, 12.0),                        # every row in one phase
+        np.asarray([]),
+    ):
+        assert pipeline.calibration_band_edges(minutes).tolist() == [0.5, 8.0, 14.0, 20.0]
+
+    # Which means a single-phase cohort is labelled by its actual phase, not by band zero.
+    assignment = np.digitize(np.full(5, 12.0), pipeline.calibration_band_edges(np.full(5, 12.0)))
+    assert [pipeline.phase_band_label(int(b)) for b in np.unique(assignment)] == ["late-laning"]
+
+
+def test_pregame_decisions_land_in_their_own_phase_band():
+    # Rune pages and summoners are chosen with no game state, so they must not share a calibration map
+    # with early item purchases. They all sit at minute 0, which the 0.5 edge separates.
+    minutes = np.asarray([0.0, 0.0, 1.0, 7.9, 8.1, 13.9, 14.1, 19.9, 20.1, 35.0])
+    assignment = np.digitize(minutes, np.asarray(pipeline.PHASE_BAND_EDGES, dtype=float))
+    assert assignment.tolist() == [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
+    assert [pipeline.phase_band_label(b) for b in (0, 1, 2, 3, 4)] == [
+        "pregame", "early-laning", "late-laning", "mid-game", "late-game",
+    ]
+
+
+def test_scoring_routes_each_row_through_the_band_it_belongs_to():
+    # Published numbers must come off the same map the gate measured, so identical rows that differ
+    # only in decision minute must be able to calibrate differently.
+    minutes, raw, actual = phase_flipped_calibration_data()
+    calibrator = pipeline.fit_banded_calibrator(minutes, raw, actual)
+    probe = np.full(4, 0.5)
+    early = pipeline.apply_banded_calibrator(calibrator, np.full(4, 5.0), probe)
+    late = pipeline.apply_banded_calibrator(calibrator, np.full(4, 27.0), probe)
+    assert not np.allclose(early, late), "minute had no effect, so routing is not happening"
+    # And the direction matches the injected bias: late games were under-predicted.
+    assert late.mean() > early.mean()
+
+
+def test_the_manifest_separates_an_untestable_patch_holdout_from_a_failed_one():
+    # A single-patch cohort cannot be split across a patch boundary. Reporting only `False` makes
+    # "not testable" indistinguishable from "tested and failed", which is what blocked promotion.
+    decisions = synthetic_decisions()
+    single = decisions[decisions["patch"] == "26.14"]
+    _, metrics = train_structural_model(single, max_training_rows=100_000)
+    assert metrics["heldOutPatch"] is None
+    assert metrics["heldOutPatchApplicable"] is False
+    assert metrics["heldOutPatchPassed"] is False
+    # Two patches: the holdout is testable, so applicability is true whatever the verdict.
+    _, both = train_structural_model(decisions, max_training_rows=100_000)
+    assert both["heldOutPatch"] is not None
+    assert both["heldOutPatchApplicable"] is True
+    # Calibration provenance travels with the metrics, since the ECE gate is measured against it.
+    assert isinstance(both["calibrationBandEdges"], list)
+    # The fixture's calibration split is far too small to band, so zero per-band fits is the correct
+    # outcome here; what must hold is that the provenance is reported either way.
+    assert both["calibrationBandCount"] == 0
+
+
+def test_the_cli_still_maps_run_outcomes_onto_exit_codes():
+    from build_lab_modeler import __main__ as entrypoint
+
+    # A scheduler sees only the exit code, so a failed generation must not look like a quiet tick.
+    assert entrypoint.EXIT_CODES[RunOutcome.IDLE] == 0
+    assert entrypoint.EXIT_CODES[RunOutcome.COMPLETED] == 0
+    assert entrypoint.EXIT_CODES[RunOutcome.FAILED] == 1
+
+
+def test_the_cli_gate_limits_match_the_committed_dotnet_options():
+    # The CLI reports the promoter's verdict locally. If these drift from BuildLabModelingOptions the
+    # local answer stops predicting the deployed one, which is the whole reason the subcommand exists.
+    from build_lab_modeler import __main__ as entrypoint
+
+    options = pathlib.Path(__file__).resolve().parents[3] / (
+        "Transcendence.Service.Core/Services/Analytics/Models/BuildLabModelingOptions.cs"
+    )
+    source = options.read_text(encoding="utf-8")
+    for field, limit in (
+        ("MaximumOverallEce", entrypoint.GATE_LIMITS["maximumOverallEce"]),
+        ("MaximumTimeBandEce", entrypoint.GATE_LIMITS["maximumTimeBandEce"]),
+    ):
+        assert f"public double {field} {{ get; set; }} = {limit};" in source, field
+
+
+def test_every_subcommand_is_on_demand_and_needs_no_pending_generation():
+    from build_lab_modeler import __main__ as entrypoint
+
+    parser = entrypoint.build_parser()
+    # An empty argv must keep meaning "production run", or the scheduler's invocation changes meaning.
+    assert parser.parse_args([]).command is None
+    for command in ("dataset", "train", "champion"):
+        parsed = parser.parse_args([command])
+        assert parsed.command == command
+        # Each must accept an explicit cohort so it can run with no generation row at all.
+        assert hasattr(parsed, "patches") and hasattr(parsed, "cutoff")
+        assert hasattr(parsed, "no_cache") and hasattr(parsed, "refresh")
+
+
+def test_the_training_cache_key_tracks_what_decides_which_rows_are_drawn():
+    from build_lab_modeler.cache import cohort_key
+
+    base = cohort_key(["16.15"], "2026-08-04T05:15:03Z", 40, 31_250)
+    # Patch order must not matter; the same cohort is the same cohort.
+    assert base == cohort_key(["16.15"], "2026-08-04T05:15:03Z", 40, 31_250)
+    # Everything that changes the drawn rows must change the key, or a stale frame gets reused.
+    assert base != cohort_key(["16.15", "16.14"], "2026-08-04T05:15:03Z", 40, 31_250)
+    assert base != cohort_key(["16.15"], "2026-08-05T05:15:03Z", 40, 31_250)
+    assert base != cohort_key(["16.15"], "2026-08-04T05:15:03Z", 24, 31_250)
+    assert base != cohort_key(["16.15"], "2026-08-04T05:15:03Z", 40, 10_000)
+
+
+def test_a_cached_slice_round_trips_and_a_truncated_one_is_ignored(tmp_path):
+    from build_lab_modeler.cache import TrainingCache
+
+    cache = TrainingCache.for_cohort(tmp_path, ["16.15"], "2026-08-04T05:15:03Z", 40, 31_250)
+    assert cache.read_slice(0) is None, "a cold cache must miss rather than raise"
+    frame = pd.DataFrame({"won": [True, False], "minute": [4.0, 21.0]})
+    cache.write_slice(0, frame)
+    restored = cache.read_slice(0)
+    assert restored is not None and len(restored) == 2
+    assert restored["won"].tolist() == [True, False]
+    # A crash mid-write must not leave something the next run reads as a complete slice.
+    cache.slice_path(0).write_bytes(b"not parquet")
+    assert cache.read_slice(0) is None
+    # Disabling the cache must neither read nor write.
+    disabled = TrainingCache(directory=cache.directory, key=cache.key, enabled=False)
+    disabled.write_slice(1, frame)
+    assert not disabled.slice_path(1).exists()
+    assert disabled.read_slice(0) is None
+
+
+def test_the_draw_reuses_cached_slices_instead_of_querying_again(tmp_path, monkeypatch):
+    from build_lab_modeler.cache import TrainingCache
+
+    settings = modeler_settings(monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path))
+    cache = TrainingCache.for_cohort(tmp_path, ["16.15"], "cutoff", 40, 500)
+    for residue in range(pipeline.TRAINING_SAMPLE_SLICES):
+        cache.write_slice(residue, pd.DataFrame({"won": [True, False], "minute": [4.0, 21.0]}))
+    queried = []
+    monkeypatch.setattr(
+        pipeline,
+        "load_decision_frame",
+        lambda *args, **kwargs: queried.append(kwargs) or pd.DataFrame(),
+    )
+    monkeypatch.setattr(pipeline, "training_draw_shape", lambda *_: (40, 500))
+
+    frame = pipeline.build_training_frame(
+        FakeConnection(), ["16.15"], "cutoff", None, "16.15", set(), settings,
+        lambda frame, exclude_drift=True: frame, cache=cache,
+    )
+
+    assert queried == [], "a fully cached draw must not touch the database"
+    assert len(frame) == 2 * pipeline.TRAINING_SAMPLE_SLICES
+
+
+def test_uuid_columns_are_rendered_as_strings_at_the_loader_boundary():
+    # psycopg returns `uuid` as uuid.UUID and Arrow cannot infer a type for it, so any frame still
+    # holding a match id fails to serialise -- which is every frame the training cache stores.
+    from uuid import UUID as Uuid
+
+    match_id = Uuid("019fb1f9-ff6e-77e6-bc6f-298c57097e61")
+    columns = ["match_id", "participant_id", "event_type"]
+    rows = [(match_id, 1, 0), (match_id, 2, 1)]
+    connection = DictRowConnection(columns, rows)
+
+    frame = pipeline.read_sql_frame(connection, "SELECT ...", {})
+
+    assert frame["match_id"].tolist() == ["019fb1f9-ff6e-77e6-bc6f-298c57097e61"] * 2
+    assert not any(isinstance(value, Uuid) for value in frame["match_id"])
+    # Non-uuid object columns must be left alone.
+    assert frame["participant_id"].tolist() == [1, 2]
+
+
+def test_a_normalised_frame_survives_the_parquet_round_trip(tmp_path):
+    # The regression that broke the cache: this write raised ArrowInvalid on a uuid column.
+    from uuid import UUID as Uuid
+    from build_lab_modeler.cache import TrainingCache
+
+    frame = pipeline.normalise_uuid_columns(
+        pd.DataFrame(
+            {
+                "match_id": [Uuid("019fb1f9-ff6e-77e6-bc6f-298c57097e61"), None],
+                "won": [True, False],
+                "minute": [4.0, 21.0],
+            }
+        )
+    )
+    cache = TrainingCache.for_cohort(tmp_path, ["16.15"], "cutoff", 40, 500)
+    cache.write_slice(0, frame)
+
+    restored = cache.read_slice(0)
+    assert restored is not None, "the slice must actually be written, not swallowed as a warning"
+    assert restored["match_id"].iloc[0] == "019fb1f9-ff6e-77e6-bc6f-298c57097e61"
+
+
+def test_the_surrogate_export_is_unchanged_by_uuid_normalisation():
+    # Normalisation must not move any published number. surrogate_ids interpolates the id into a
+    # string and str(UUID) is the canonical hyphenated form, so both spellings must hash the same.
+    from uuid import UUID as Uuid
+
+    match_id = Uuid("019fb1f9-ff6e-77e6-bc6f-298c57097e61")
+    base = pd.DataFrame({"participant_id": [1, 2], "champion_id": [22, 51]})
+    as_uuid = base.assign(match_id=[match_id, match_id])
+    as_text = base.assign(match_id=[str(match_id), str(match_id)])
+
+    salt = "s" * 32
+    left = deidentified_export(as_uuid, salt)
+    right = deidentified_export(as_text, salt)
+
+    assert left["match_surrogate"].tolist() == right["match_surrogate"].tolist()
+    assert left["participant_surrogate"].tolist() == right["participant_surrogate"].tolist()
+
+
+def test_adaptive_ece_bins_still_catch_systematic_bias():
+    # The whole safety argument for coarsening bins: a real shift persists inside any bin, so it is
+    # still measured, while noise averages out. If this ever fails, the gate has been blinded.
+    rng = np.random.default_rng(101)
+    for n in (2_256, 5_500, 20_000):
+        predicted = np.clip(rng.beta(2.0, 2.0, n), 1e-4, 1 - 1e-4)
+        for bias in (0.05, 0.10, 0.25):
+            actual = rng.binomial(1, np.clip(predicted + bias, 0.01, 0.99))
+            measured = expected_calibration_error(actual, predicted)
+            # A shift of `bias` must register as roughly that much error, not be smoothed away.
+            assert measured > bias * 0.6, f"n={n} bias={bias} measured={measured}"
+
+
+def test_adaptive_ece_bins_lower_the_noise_floor_on_a_calibrated_sample():
+    # A perfectly calibrated model must not be failed for being observed on a thin band. At 10 fixed
+    # bins the live cohort's thinnest band (n=2,256) had a noise floor above the promoter's 0.025.
+    rng = np.random.default_rng(202)
+    fixed, adaptive = [], []
+    for _ in range(200):
+        predicted = np.clip(rng.beta(2.0, 2.0, 2_256), 1e-4, 1 - 1e-4)
+        actual = rng.binomial(1, predicted)
+        fixed.append(expected_calibration_error(actual, predicted, bins=10))
+        adaptive.append(expected_calibration_error(actual, predicted))
+
+    assert float(np.median(fixed)) > 0.018, "fixture must reproduce the biased-at-small-n behaviour"
+    assert float(np.median(adaptive)) < float(np.median(fixed)) * 0.75
+    # And the corrected floor must sit clear of the limit the promoter actually applies.
+    assert float(np.quantile(adaptive, 0.95)) < 0.025
+
+
+def test_ece_bin_count_scales_with_the_sample_and_stays_bounded():
+    assert pipeline.ece_bin_count(0) == 2, "never fewer than two bins"
+    assert pipeline.ece_bin_count(999) == 2
+    assert pipeline.ece_bin_count(2_256) == 4
+    assert pipeline.ece_bin_count(5_500) == 10
+    # Capped, so a large sample keeps the resolution the metric was designed around.
+    assert pipeline.ece_bin_count(10_000_000) == 10
+
+
+def clustered_probabilities(clusters: int, rows_per_cluster: int, seed: int = 5):
+    rng = np.random.default_rng(seed)
+    predicted = np.clip(rng.beta(2.0, 2.0, clusters * rows_per_cluster), 1e-4, 1 - 1e-4)
+    labels = np.repeat(np.arange(clusters), rows_per_cluster).astype(str)
+    return predicted, labels
+
+
+def test_the_clustered_null_is_higher_than_a_row_level_one():
+    # The correction that matters: rows are not independent observations. A team in a match shares one
+    # outcome across all its rows, so treating rows as units understates how much error noise alone
+    # produces -- measured at 20-50% on the live cohort.
+    predicted, clusters = clustered_probabilities(400, 6)
+    rows = np.arange(predicted.size).astype(str)  # every row its own cluster == row-level bootstrap
+
+    row_median, _ = pipeline.clustered_ece_null(predicted, rows, 0.99, resamples=150)
+    clustered_median, _ = pipeline.clustered_ece_null(predicted, clusters, 0.99, resamples=150)
+
+    assert clustered_median > row_median * 1.15, f"row={row_median} clustered={clustered_median}"
+
+
+def test_the_null_threshold_sits_above_its_own_median_and_is_reproducible():
+    predicted, clusters = clustered_probabilities(300, 5)
+    median, threshold = pipeline.clustered_ece_null(predicted, clusters, 0.99, resamples=200)
+    assert threshold > median > 0
+    # A gate decision has to be reproducible: the same input must reach the same verdict on a re-run.
+    again = pipeline.clustered_ece_null(predicted, clusters, 0.99, resamples=200)
+    assert (median, threshold) == again
+    # An empty band must not raise; it simply has no floor.
+    assert pipeline.clustered_ece_null(np.asarray([]), np.asarray([]), 0.99) == (0.0, 0.0)
+
+
+def test_a_well_calibrated_model_sits_inside_its_own_noise_floor():
+    # The property the gate depends on. If this fails, well-calibrated models are being rejected.
+    predicted, clusters = clustered_probabilities(500, 6, seed=9)
+    rng = np.random.default_rng(9)
+    shared = np.repeat(rng.random(500), 6)
+    actual = (predicted > shared).astype(int)
+
+    observed = expected_calibration_error(actual, predicted)
+    _, threshold = pipeline.clustered_ece_null(predicted, clusters, 0.99, resamples=300)
+
+    assert observed <= threshold, f"observed={observed} threshold={threshold}"
+
+
+def test_a_materially_miscalibrated_model_breaks_out_of_its_noise_floor():
+    # And the other half: the gate must still catch real miscalibration, or it is decoration.
+    predicted, clusters = clustered_probabilities(500, 6, seed=11)
+    rng = np.random.default_rng(11)
+    shared = np.repeat(rng.random(500), 6)
+    biased = np.clip(predicted + 0.12, 0.01, 0.99)
+    actual = (biased > shared).astype(int)
+
+    observed = expected_calibration_error(actual, predicted)
+    _, threshold = pipeline.clustered_ece_null(predicted, clusters, 0.99, resamples=300)
+
+    assert observed > threshold, f"observed={observed} threshold={threshold}"
+
+
+def test_the_metrics_report_both_halves_of_the_calibration_gate():
+    decisions = synthetic_decisions()
+    _, metrics = train_structural_model(decisions, max_training_rows=100_000)
+
+    assert "calibrationExceedsNoiseFloor" in metrics
+    assert isinstance(metrics["calibrationExceedsNoiseFloor"], bool)
+    assert metrics["maxTimeBandEceExcess"] >= 0.0
+    # Bonferroni across the phases present, so five phases are not each tested at the family-wise rate.
+    assert 0.9 < metrics["calibrationBandQuantile"] < 1.0
+    for phase, detail in metrics["timeBandDetail"].items():
+        assert detail["rows"] > 0, phase
+        assert detail["independentUnits"] <= detail["rows"], phase
+        assert detail["noiseFloorThreshold"] >= detail["noiseFloorMedian"], phase
+        assert detail["eceExcess"] >= 0.0, phase
+        assert isinstance(detail["withinNoiseFloor"], bool), phase

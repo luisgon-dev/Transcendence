@@ -952,7 +952,28 @@ def read_sql_frame(connection, sql: str, params: dict) -> pd.DataFrame:
     with connection.cursor(row_factory=tuple_row) as cursor:
         cursor.execute(sql, params)
         columns = [column.name for column in cursor.description or []]
-        return pd.DataFrame.from_records(cursor.fetchall(), columns=columns)
+        return normalise_uuid_columns(pd.DataFrame.from_records(cursor.fetchall(), columns=columns))
+
+
+def normalise_uuid_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    """Render uuid columns as their canonical strings at the loader boundary.
+
+    psycopg returns `uuid` as `uuid.UUID`, and Arrow cannot infer a type for it, so any frame still
+    carrying a match id fails to serialise -- which is every frame the training cache stores. Coercing
+    at the boundary keeps one type in play everywhere instead: a cached slice and a freshly drawn one
+    must not disagree, or concatenating them yields a column mixing UUID with str whose sort raises.
+
+    This does not change any published value. `surrogate_ids` interpolates the id into a string, and
+    `str(UUID)` is the canonical hyphenated form, so the deidentified surrogates hash identically.
+    """
+    for column in frame.columns:
+        if frame[column].dtype != object:
+            continue
+        present = frame[column].dropna()
+        if present.empty or not isinstance(present.iloc[0], UUID):
+            continue
+        frame[column] = frame[column].map(lambda value: None if value is None else str(value))
+    return frame
 
 
 def champion_match_cte(champion_id: int | None, *, leading: bool) -> str:

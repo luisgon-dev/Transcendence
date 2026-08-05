@@ -2180,3 +2180,61 @@ def test_the_draw_reuses_cached_slices_instead_of_querying_again(tmp_path, monke
 
     assert queried == [], "a fully cached draw must not touch the database"
     assert len(frame) == 2 * pipeline.TRAINING_SAMPLE_SLICES
+
+
+def test_uuid_columns_are_rendered_as_strings_at_the_loader_boundary():
+    # psycopg returns `uuid` as uuid.UUID and Arrow cannot infer a type for it, so any frame still
+    # holding a match id fails to serialise -- which is every frame the training cache stores.
+    from uuid import UUID as Uuid
+
+    match_id = Uuid("019fb1f9-ff6e-77e6-bc6f-298c57097e61")
+    columns = ["match_id", "participant_id", "event_type"]
+    rows = [(match_id, 1, 0), (match_id, 2, 1)]
+    connection = DictRowConnection(columns, rows)
+
+    frame = pipeline.read_sql_frame(connection, "SELECT ...", {})
+
+    assert frame["match_id"].tolist() == ["019fb1f9-ff6e-77e6-bc6f-298c57097e61"] * 2
+    assert not any(isinstance(value, Uuid) for value in frame["match_id"])
+    # Non-uuid object columns must be left alone.
+    assert frame["participant_id"].tolist() == [1, 2]
+
+
+def test_a_normalised_frame_survives_the_parquet_round_trip(tmp_path):
+    # The regression that broke the cache: this write raised ArrowInvalid on a uuid column.
+    from uuid import UUID as Uuid
+    from build_lab_modeler.cache import TrainingCache
+
+    frame = pipeline.normalise_uuid_columns(
+        pd.DataFrame(
+            {
+                "match_id": [Uuid("019fb1f9-ff6e-77e6-bc6f-298c57097e61"), None],
+                "won": [True, False],
+                "minute": [4.0, 21.0],
+            }
+        )
+    )
+    cache = TrainingCache.for_cohort(tmp_path, ["16.15"], "cutoff", 40, 500)
+    cache.write_slice(0, frame)
+
+    restored = cache.read_slice(0)
+    assert restored is not None, "the slice must actually be written, not swallowed as a warning"
+    assert restored["match_id"].iloc[0] == "019fb1f9-ff6e-77e6-bc6f-298c57097e61"
+
+
+def test_the_surrogate_export_is_unchanged_by_uuid_normalisation():
+    # Normalisation must not move any published number. surrogate_ids interpolates the id into a
+    # string and str(UUID) is the canonical hyphenated form, so both spellings must hash the same.
+    from uuid import UUID as Uuid
+
+    match_id = Uuid("019fb1f9-ff6e-77e6-bc6f-298c57097e61")
+    base = pd.DataFrame({"participant_id": [1, 2], "champion_id": [22, 51]})
+    as_uuid = base.assign(match_id=[match_id, match_id])
+    as_text = base.assign(match_id=[str(match_id), str(match_id)])
+
+    salt = "s" * 32
+    left = deidentified_export(as_uuid, salt)
+    right = deidentified_export(as_text, salt)
+
+    assert left["match_surrogate"].tolist() == right["match_surrogate"].tolist()
+    assert left["participant_surrogate"].tolist() == right["participant_surrogate"].tolist()

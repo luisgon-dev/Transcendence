@@ -107,7 +107,12 @@ class TrainingCache:
             frame.to_parquet(staging, index=False)
             staging.replace(path)
         except Exception as exc:
-            LOG.warning("Could not cache slice %s: %s", path, exc)
+            # Deliberately loud. A cache that silently never populates looks like a working cache and
+            # quietly costs the draw on every run -- which is exactly what an unserialisable uuid
+            # column did before `normalise_uuid_columns` existed.
+            LOG.error(
+                "Could not cache slice %s, so this draw will be repaid on the next run: %s", path, exc
+            )
             staging.unlink(missing_ok=True)
 
     def clear(self) -> int:

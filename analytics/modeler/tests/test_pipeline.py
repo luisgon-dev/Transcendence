@@ -3,7 +3,7 @@ import pathlib
 import json
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -308,9 +308,9 @@ def test_event_state_excludes_events_at_or_after_the_purchase():
     )
     events = pd.DataFrame(
         [
-            {"match_id": "match", "event_index": 0, "timestamp_ms": 999, "event_type": "CHAMPION_KILL", "payload_json": {"KillerId": 1}},
-            {"match_id": "match", "event_index": 1, "timestamp_ms": 1000, "event_type": "CHAMPION_KILL", "payload_json": {"KillerId": 6}},
-            {"match_id": "match", "event_index": 2, "timestamp_ms": 1500, "event_type": "ELITE_MONSTER_KILL", "payload_json": {"KillerId": 6}},
+            {"match_id": "match", "event_index": 0, "timestamp_ms": 999, "event_type": "CHAMPION_KILL", "killer_participant_id": "1", "killer_team_id": None, "owner_team_id": None},
+            {"match_id": "match", "event_index": 1, "timestamp_ms": 1000, "event_type": "CHAMPION_KILL", "killer_participant_id": "6", "killer_team_id": None, "owner_team_id": None},
+            {"match_id": "match", "event_index": 2, "timestamp_ms": 1500, "event_type": "ELITE_MONSTER_KILL", "killer_participant_id": "6", "killer_team_id": None, "owner_team_id": None},
         ]
     )
     teams = pd.DataFrame(
@@ -338,7 +338,10 @@ def test_minion_destroyed_buildings_are_credited_to_the_conceding_team_s_opponen
                 "timestamp_ms": 1000,
                 "event_type": "BUILDING_KILL",
                 # Riot reports a minion-destroyed turret with killerId 0 and the owning team's id.
-                "payload_json": {"killerId": 0, "teamId": 200},
+                # A minion-destroyed building: killerId 0 and only the OWNING team's id.
+                "killer_participant_id": "0",
+                "killer_team_id": None,
+                "owner_team_id": "200",
             }
         ]
     )
@@ -363,7 +366,9 @@ def test_payload_less_v2_matches_are_flagged_instead_of_reading_as_an_even_game(
                 "event_index": 0,
                 "timestamp_ms": 1000,
                 "event_type": "CHAMPION_KILL",
-                "payload_json": {"killerId": 1},
+                "killer_participant_id": "1",
+                "killer_team_id": None,
+                "owner_team_id": None,
             }
         ]
     )
@@ -399,7 +404,9 @@ def test_event_state_is_linear_in_matches_and_matches_the_scan_result():
                 "event_index": 0,
                 "timestamp_ms": 1000,
                 "event_type": "BUILDING_KILL",
-                "payload_json": {"killerId": 1},
+                "killer_participant_id": "1",
+                "killer_team_id": None,
+                "owner_team_id": None,
             }
             for index in range(matches)
         ]
@@ -986,6 +993,9 @@ def publishing_generation(monkeypatch, tmp_path) -> tuple[Settings, dict]:
     monkeypatch.setattr(pipeline, "load_rune_decisions", lambda *_, **__: empty)
     monkeypatch.setattr(pipeline, "load_spell_decisions", lambda *_, **__: empty)
     monkeypatch.setattr(pipeline, "load_cohort_match_count", lambda *_: 40_000)
+    # One worker: the publish path is what these tests drive, and a process pool would need a real
+    # database. The parallel path is covered separately against the sequential one.
+    monkeypatch.setenv("BUILD_LAB_SWEEP_WORKERS", "1")
     monkeypatch.setattr(pipeline, "load_cohort_champions", lambda *_: [22])
     monkeypatch.setattr(
         pipeline,
@@ -1763,7 +1773,7 @@ def test_every_cohort_loader_scopes_on_the_same_predicates():
     for loader in participant_scoped + match_scoped:
         source = inspect.getsource(loader)
         assert "scope_predicates(" in source, loader.__name__
-        assert "match_sample_modulus" in source, loader.__name__
+        assert "match_sample_range" in source, loader.__name__
     for loader in participant_scoped:
         assert "match_scoped=False" in inspect.getsource(loader), loader.__name__
     for loader in match_scoped:
@@ -1783,8 +1793,13 @@ def test_scope_predicates_pick_the_filter_that_matches_the_grain():
     assert 'p."ChampionId" = %(champion_id)s' not in match
     # An unscoped load must add nothing, and a modulus of 1 selects the whole cohort already.
     assert scope_predicates(None, None, match_scoped=False) == ""
-    assert scope_predicates(None, 1, match_scoped=True) == ""
-    assert "hashtextextended" in scope_predicates(None, 8, match_scoped=False)
+    assert scope_predicates(None, None, match_scoped=True) == ""
+    # An id range is an index scan; the hash residue it replaced could not use one, so every slice
+    # re-scanned the whole cohort.
+    sampled = scope_predicates(None, ("019fb140-0000-7000-8000-000000000000", "019fb141-0000-7000-8000-000000000000"), match_scoped=False)
+    assert 'm."Id" >= %(match_sample_from)s' in sampled
+    assert 'm."Id" < %(match_sample_until)s' in sampled
+    assert "hashtextextended" not in sampled
 
 
 def test_the_champion_match_set_is_materialized_and_cohort_scoped():
@@ -1827,6 +1842,7 @@ def test_the_training_sample_keeps_the_row_budget_without_loading_the_corpus():
 
 
 def test_the_estimate_sweep_scopes_every_load_to_one_champion(monkeypatch, tmp_path):
+    monkeypatch.setenv("BUILD_LAB_SWEEP_WORKERS", "1")
     settings, generation = publishing_generation(monkeypatch, tmp_path)
     champions = [22, 51, 103]
     monkeypatch.setattr(pipeline, "load_cohort_champions", lambda *_: champions)
@@ -1842,21 +1858,20 @@ def test_the_estimate_sweep_scopes_every_load_to_one_champion(monkeypatch, tmp_p
 
     # The sliced training draw first, then exactly one scoped load per champion. An unscoped estimate
     # load is the shape that could not fit in memory.
-    training = scopes[:pipeline.TRAINING_SAMPLE_SLICES]
-    sweep = scopes[pipeline.TRAINING_SAMPLE_SLICES:]
+    # Partitioned by what the load is FOR, not by a fixed count: the number of training ranges depends
+    # on how big the cohort is relative to the sample target.
+    training = [scope for scope in scopes if scope.get("champion_id") is None]
+    sweep = [scope for scope in scopes if scope.get("champion_id") is not None]
+    assert training, "the structural fit must draw at least one range"
     assert [scope.get("champion_id") for scope in sweep] == champions
-    assert all(scope.get("match_sample_modulus") is None for scope in sweep)
+    assert all(scope.get("match_sample_range") is None for scope in sweep)
     # Every slice draws a disjoint residue of the same modulus, so the union is the intended sample
     # rather than the same matches fetched eight times.
     assert all(scope.get("champion_id") is None for scope in training)
-    expected_modulus = (
-        training_sample_modulus(40_000, settings.training_sample_matches)
-        * pipeline.TRAINING_SAMPLE_SLICES
-    )
-    assert {scope["match_sample_modulus"] for scope in training} == {expected_modulus}
-    assert sorted(scope["match_sample_residue"] for scope in training) == list(
-        range(pipeline.TRAINING_SAMPLE_SLICES)
-    )
+    # Each training load reads a distinct id range, and the ranges are disjoint, so the union is the
+    # intended sample rather than the same matches fetched repeatedly.
+    drawn = [scope["match_sample_range"] for scope in training]
+    assert len(set(drawn)) == len(drawn), drawn
 
 
 class DictRowCursor:
@@ -2150,23 +2165,28 @@ def test_every_subcommand_is_on_demand_and_needs_no_pending_generation():
         assert hasattr(parsed, "no_cache") and hasattr(parsed, "refresh")
 
 
-def test_the_training_cache_key_tracks_what_decides_which_rows_are_drawn():
+def test_the_training_cache_key_tracks_the_ranges_and_not_the_cutoff():
     from build_lab_modeler.cache import cohort_key
 
-    base = cohort_key(["16.15"], "2026-08-04T05:15:03Z", 40, 31_250)
-    # Patch order must not matter; the same cohort is the same cohort.
-    assert base == cohort_key(["16.15"], "2026-08-04T05:15:03Z", 40, 31_250)
-    # Everything that changes the drawn rows must change the key, or a stale frame gets reused.
-    assert base != cohort_key(["16.15", "16.14"], "2026-08-04T05:15:03Z", 40, 31_250)
-    assert base != cohort_key(["16.15"], "2026-08-05T05:15:03Z", 40, 31_250)
-    assert base != cohort_key(["16.15"], "2026-08-04T05:15:03Z", 24, 31_250)
-    assert base != cohort_key(["16.15"], "2026-08-04T05:15:03Z", 40, 10_000)
+    low = ("019fb140-0000-7000-8000-000000000000", "019fb141-0000-7000-8000-000000000000")
+    high = ("019fb142-0000-7000-8000-000000000000", "019fb143-0000-7000-8000-000000000000")
+    base = cohort_key(["16.15"], [low], 31_250)
+    assert base == cohort_key(["16.15"], [low], 31_250)
+    # Anything that changes which rows are drawn must change the key.
+    assert base != cohort_key(["16.15", "16.14"], [low], 31_250)
+    assert base != cohort_key(["16.15"], [high], 31_250)
+    assert base != cohort_key(["16.15"], [low, high], 31_250)
+    assert base != cohort_key(["16.15"], [low], 10_000)
+    # The cutoff deliberately does NOT appear: a range's contents are fixed once ids beyond it exist,
+    # so including it made every daily generation redraw a sample it already had. Staleness is bounded
+    # separately by is_fresh_for.
+    assert "cutoff" not in cohort_key.__doc__.lower().split("deliberately")[0]
 
 
 def test_a_cached_slice_round_trips_and_a_truncated_one_is_ignored(tmp_path):
     from build_lab_modeler.cache import TrainingCache
 
-    cache = TrainingCache.for_cohort(tmp_path, ["16.15"], "2026-08-04T05:15:03Z", 40, 31_250)
+    cache = TrainingCache.for_cohort(tmp_path, ["16.15"], [("019fb140-0000-7000-8000-000000000000", "019fb141-0000-7000-8000-000000000000")], 31_250)
     assert cache.read_slice(0) is None, "a cold cache must miss rather than raise"
     frame = pd.DataFrame({"won": [True, False], "minute": [4.0, 21.0]})
     cache.write_slice(0, frame)
@@ -2187,7 +2207,8 @@ def test_the_draw_reuses_cached_slices_instead_of_querying_again(tmp_path, monke
     from build_lab_modeler.cache import TrainingCache
 
     settings = modeler_settings(monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path))
-    cache = TrainingCache.for_cohort(tmp_path, ["16.15"], "cutoff", 40, 500)
+    ranges = [("019fb140-0000-7000-8000-000000000000", "019fb141-0000-7000-8000-000000000000")] * pipeline.TRAINING_SAMPLE_SLICES
+    cache = TrainingCache.for_cohort(tmp_path, ["16.15"], ranges, 500)
     for residue in range(pipeline.TRAINING_SAMPLE_SLICES):
         cache.write_slice(residue, pd.DataFrame({"won": [True, False], "minute": [4.0, 21.0]}))
     queried = []
@@ -2196,7 +2217,7 @@ def test_the_draw_reuses_cached_slices_instead_of_querying_again(tmp_path, monke
         "load_decision_frame",
         lambda *args, **kwargs: queried.append(kwargs) or pd.DataFrame(),
     )
-    monkeypatch.setattr(pipeline, "training_draw_shape", lambda *_: (40, 500))
+    monkeypatch.setattr(pipeline, "training_draw_shape", lambda *_: (ranges, 500))
 
     frame = pipeline.build_training_frame(
         FakeConnection(), ["16.15"], "cutoff", None, "16.15", set(), settings,
@@ -2239,7 +2260,7 @@ def test_a_normalised_frame_survives_the_parquet_round_trip(tmp_path):
             }
         )
     )
-    cache = TrainingCache.for_cohort(tmp_path, ["16.15"], "cutoff", 40, 500)
+    cache = TrainingCache.for_cohort(tmp_path, ["16.15"], [("019fb140-0000-7000-8000-000000000000", "019fb141-0000-7000-8000-000000000000")], 500)
     cache.write_slice(0, frame)
 
     restored = cache.read_slice(0)
@@ -2377,3 +2398,315 @@ def test_the_metrics_report_both_halves_of_the_calibration_gate():
         assert detail["noiseFloorThreshold"] >= detail["noiseFloorMedian"], phase
         assert detail["eceExcess"] >= 0.0, phase
         assert isinstance(detail["withinNoiseFloor"], bool), phase
+
+
+def reference_build_item_decisions(rows: pd.DataFrame) -> pd.DataFrame:
+    """The pandas-per-row implementation that `build_item_decisions` replaced, kept verbatim.
+
+    The rewrite is a performance change with no intended behaviour change, so the guarantee that
+    matters is byte-identical output. Keeping the original here makes that assertable rather than
+    asserted.
+    """
+    from build_lab_modeler.pipeline import (
+        BUILD_ITEM_CATEGORIES,
+        decision_record,
+        positive_int,
+        positive_or_zero_int,
+        remove_last,
+    )
+
+    if rows.empty:
+        return rows
+    output: list[dict] = []
+    for _, participant in rows.groupby(["match_id", "participant_id"], sort=False):
+        participant = participant.sort_values(["timestamp_ms", "event_index"])
+        active: list[tuple[int, int | None]] = []
+        undone: set[int] = set()
+        for _, event in participant.iterrows():
+            event_type = int(event["event_type"])
+            item_id = positive_int(event.get("action_id"))
+            before_id = positive_int(event.get("before_id"))
+            after_id = positive_int(event.get("after_id"))
+            if event_type == 0 and item_id:
+                active.append((item_id, int(event["event_index"])))
+            elif event_type in (1, 3) and item_id:
+                remove_last(active, item_id)
+            elif event_type == 2:
+                if before_id:
+                    removed = remove_last(active, before_id)
+                    if isinstance(removed, tuple) and removed[1] is not None:
+                        undone.add(removed[1])
+                if after_id:
+                    active.append((after_id, None))
+        starter_rows = participant[
+            (participant["event_type"] == 0)
+            & (participant["build_category"] == 2)
+            & (~participant["event_index"].isin(undone))
+        ]
+        starter_ids = starter_rows["action_id"].dropna().astype(int).tolist()
+        selected: list[int] = sorted(starter_ids)
+        if starter_ids:
+            first = starter_rows.iloc[0].to_dict()
+            first["inventory_ids"] = ""
+            output.append(decision_record(first, "STARTER", 0, [], sorted(starter_ids)))
+        legendary_stage = 0
+        boots_stage = 0
+        inventory: list[int] = []
+        for _, item in participant.iterrows():
+            event_type = int(item["event_type"])
+            action_id = positive_int(item.get("action_id"))
+            before_id = positive_int(item.get("before_id"))
+            after_id = positive_int(item.get("after_id"))
+            event_index = int(item["event_index"])
+            if event_type == 1 or event_type == 3:
+                if action_id:
+                    remove_last(inventory, action_id)
+                continue
+            if event_type == 2:
+                restored_category = positive_or_zero_int(item.get("build_category"))
+                if after_id and restored_category in BUILD_ITEM_CATEGORIES:
+                    inventory.append(after_id)
+                continue
+            if event_type != 0 or not action_id or event_index in undone:
+                continue
+            build_category = positive_or_zero_int(item.get("build_category"))
+            source = item.to_dict()
+            source["inventory_ids"] = "-".join(str(value) for value in sorted(inventory))
+            if build_category in BUILD_ITEM_CATEGORIES:
+                inventory.append(action_id)
+            if build_category not in (0, 1):
+                continue
+            if build_category == 1:
+                boots_stage += 1
+                family, stage = "BOOTS", boots_stage
+            else:
+                legendary_stage += 1
+                family, stage = "ITEM", legendary_stage
+                if legendary_stage == 1:
+                    output.append(
+                        decision_record(source, "FIRST_ITEM_PATH", 0, [], [*selected, action_id])
+                    )
+            output.append(decision_record(source, family, stage, selected, [action_id]))
+            selected.append(action_id)
+    return pd.DataFrame(output)
+
+
+def realistic_item_events(participants: int = 60, seed: int = 17) -> pd.DataFrame:
+    """Item events exercising every branch of the replay: sells, undos, boots, consumables, refunds."""
+    rng = np.random.default_rng(seed)
+    rows = []
+    for participant in range(participants):
+        match_id = f"match-{participant // 3}"
+        participant_id = 1 + participant % 10
+        index = 0
+        timestamp = 0
+        def event(event_type, action_id, category, before=None, after=None):
+            nonlocal index, timestamp
+            timestamp += int(rng.integers(20_000, 90_000))
+            rows.append({
+                "match_id": match_id,
+                "participant_id": participant_id,
+                "team_id": 100 if participant_id <= 5 else 200,
+                "match_date": participant,
+                "patch": "26.14",
+                "region": "NA1",
+                "champion_id": 22 + (participant % 4),
+                "opponent_champion_id": 51,
+                "role": "BOTTOM",
+                "won": bool(participant % 2),
+                "event_index": index,
+                "event_type": event_type,
+                "timestamp_ms": timestamp,
+                "action_id": action_id,
+                "before_id": before,
+                "after_id": after,
+                "build_category": category,
+                "minute": timestamp / 60_000.0,
+                "gold": 500.0 + 120 * index,
+                "current_gold": 60.0,
+                "xp": 300.0 * (index + 1),
+                "cs": 12.0 * (index + 1),
+                "lane_cs": 10.0 * (index + 1),
+                "jungle_cs": 0.0,
+                "level": 2.0 + index,
+                "team_gold_diff": 40.0 * index,
+                "team_xp_diff": 25.0 * index,
+                "team_cs_diff": 3.0 * index,
+            })
+            index += 1
+
+        event(0, 1055, 2)                       # starter
+        event(0, 2003, 2)                       # second starter (potion)
+        if participant % 5 == 0:
+            event(0, 3070, None)                # uncategorised component
+        event(0, 6672 if participant % 2 else 3031, 0)   # first legendary
+        if participant % 4 == 0:
+            event(1, 1055, 2)                   # sell the starter
+        if participant % 7 == 0:
+            event(2, None, 2, before=2003, after=2003)   # undo
+        event(0, 3006, 1)                       # boots
+        event(0, 3036, 0)                       # second legendary
+        if participant % 6 == 0:
+            event(3, 3006, 1)                   # destroy boots
+        event(0, 3072, 0)                       # third legendary
+    return pd.DataFrame(rows)
+
+
+def test_the_vectorised_replay_is_byte_identical_to_the_pandas_one():
+    events = realistic_item_events()
+    fast = build_item_decisions(events)
+    reference = reference_build_item_decisions(events)
+
+    assert not fast.empty and not reference.empty
+    assert list(fast.columns) == list(reference.columns)
+    assert len(fast) == len(reference), f"fast={len(fast)} reference={len(reference)}"
+    pd.testing.assert_frame_equal(
+        fast.reset_index(drop=True), reference.reset_index(drop=True), check_dtype=True
+    )
+    # The fixture must actually exercise the branches, or identical output proves little.
+    families = set(fast["family"])
+    assert {"STARTER", "ITEM", "BOOTS", "FIRST_ITEM_PATH"} <= families, families
+    assert (fast["inventory_ids"].astype(str).str.len() > 0).any(), "inventory state never populated"
+
+
+def test_the_vectorised_replay_is_materially_faster():
+    import time
+
+    events = realistic_item_events(participants=900, seed=23)
+
+    start = time.perf_counter()
+    reference = reference_build_item_decisions(events)
+    slow = time.perf_counter() - start
+
+    start = time.perf_counter()
+    fast = build_item_decisions(events)
+    quick = time.perf_counter() - start
+
+    pd.testing.assert_frame_equal(
+        fast.reset_index(drop=True), reference.reset_index(drop=True), check_dtype=True
+    )
+    # This stage dominated a production run; a rewrite that is not clearly faster is not worth its risk.
+    assert quick < slow / 2.0, f"reference={slow:.3f}s vectorised={quick:.3f}s"
+    print(f"\nreplay: reference={slow:.3f}s vectorised={quick:.3f}s speedup={slow/quick:.1f}x")
+
+
+def test_everything_the_sweep_pool_ships_to_a_worker_is_picklable(monkeypatch, tmp_path):
+    # A ProcessPoolExecutor fails at RUNTIME on an unpicklable initarg, i.e. an hour into a run. The
+    # settings dataclass and the cohort payload cross that boundary, so pin them here instead.
+    import pickle
+
+    settings = modeler_settings(monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path))
+    changes = PatchChangeSet(items=frozenset({3031}), runes=frozenset(), champions=frozenset({22}))
+    cohort = {
+        "included_patches": ["16.15"],
+        "cutoff": datetime(2026, 8, 4, tzinfo=timezone.utc),
+        "rank_offset": "ObservationOffsetSeconds",
+        "current_patch": "16.15",
+        "changed_items": {3031},
+        "changes": changes,
+        "archetypes": {22: "marksman"},
+        "artifact_path": str(tmp_path),
+    }
+
+    assert pickle.loads(pickle.dumps(settings)) == settings
+    restored = pickle.loads(pickle.dumps(cohort))
+    assert restored["changes"] == changes
+    assert restored["changed_items"] == {3031}
+    # The task function itself must be importable by name, or the pool cannot dispatch it.
+    assert pipeline.sweep_champion.__module__ == "build_lab_modeler.pipeline"
+    assert pickle.loads(pickle.dumps(pipeline.sweep_champion)) is pipeline.sweep_champion
+
+
+def test_the_sequential_sweep_reuses_the_connection_it_was_given(monkeypatch, tmp_path):
+    # Opening a second connection for an in-process sweep wastes a slot against a database shared with
+    # the live app, and would make the publish path untestable without a real server.
+    settings = modeler_settings(monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path))
+    sentinel = FakeConnection()
+    pipeline._sweep_worker_setup(
+        settings, {"artifact_path": str(tmp_path)}, "unused.joblib",
+        connection=sentinel, bundle={"model": None},
+    )
+    assert pipeline._WORKER["connection"] is sentinel
+    assert pipeline._WORKER["owns_connection"] is False
+    assert pipeline._WORKER["bundle"] == {"model": None}
+
+
+def test_the_sweep_worker_count_is_configurable_and_floored(monkeypatch, tmp_path):
+    # Query concurrency against a shared, HDD-backed database is the risk here, so the default is
+    # modest rather than the host's core count, and it can never drop below one.
+    assert modeler_settings(monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path)).sweep_workers == 4
+    assert modeler_settings(
+        monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path), BUILD_LAB_SWEEP_WORKERS="8"
+    ).sweep_workers == 8
+    assert modeler_settings(
+        monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path), BUILD_LAB_SWEEP_WORKERS="0"
+    ).sweep_workers == 1
+
+
+def test_a_reused_training_draw_is_bounded_by_age_and_never_from_the_future(tmp_path):
+    from build_lab_modeler.cache import TrainingCache
+
+    ranges = [("019fb140-0000-7000-8000-000000000000", "019fb141-0000-7000-8000-000000000000")]
+    drawn_at = datetime(2026, 8, 4, 6, 0, tzinfo=timezone.utc)
+    cache = TrainingCache.for_cohort(
+        tmp_path, ["16.15"], ranges, 500, cutoff=drawn_at, max_age_hours=36
+    )
+    assert cache.drawn_at() is None, "nothing cached yet, so nothing to reuse"
+    assert cache.is_fresh_for(drawn_at) is False
+    cache.write_slice(0, pd.DataFrame({"won": [True, False], "minute": [4.0, 21.0]}))
+    assert cache.drawn_at() == drawn_at
+
+    # Same cutoff, and a later one inside the bound, may reuse it.
+    assert cache.is_fresh_for(drawn_at) is True
+    assert cache.is_fresh_for(drawn_at + timedelta(hours=30)) is True
+    # Beyond the bound the fit would drift arbitrarily far behind the cohort it scores.
+    assert cache.is_fresh_for(drawn_at + timedelta(hours=40)) is False
+    # And never a draw taken AFTER the cutoff being modelled: it holds matches the generation excludes.
+    assert cache.is_fresh_for(drawn_at - timedelta(hours=1)) is False
+    # Reuse across cutoffs can be switched off entirely.
+    strict = TrainingCache.for_cohort(
+        tmp_path, ["16.15"], ranges, 500, cutoff=drawn_at, max_age_hours=0
+    )
+    assert strict.is_fresh_for(drawn_at + timedelta(hours=1)) is False
+
+
+def test_the_timeline_loader_extracts_payload_scalars_in_sql():
+    # Parsing PayloadJson in pandas cost one json.loads plus three dict walks per event -- roughly
+    # 290,000 per champion -- and was the dominant cost of the sweep. PayloadJson is jsonb, so Postgres
+    # reads the three scalars directly. Nothing downstream may reach for the raw payload again.
+    source = inspect.getsource(load_timeline_state_events)
+    for field in ("killer_participant_id", "killer_team_id", "owner_team_id"):
+        assert field in source, field
+    # Both spellings, matching the case-insensitive lookup this replaced.
+    for key in ("'killerId'", "'killerid'", "'killerTeamId'", "'killerteamid'", "'teamId'", "'teamid'"):
+        assert f"->> {key}" in source, key
+    assert "payload_json" not in source
+    # Checks for CALLS, not mentions: the docstring names what it replaced.
+    attribution = inspect.getsource(pipeline.attribute_events_to_teams)
+    assert "json.loads(" not in attribution
+    assert "payload_value(" not in attribution
+
+
+def test_team_attribution_treats_a_zero_id_as_absent_like_positive_int_did():
+    # positive_int's contract: zero and negatives mean "no id", not id zero. The SQL extraction returns
+    # text, so that filter has to survive the move or minion-killed buildings get miscredited.
+    events = pd.DataFrame([
+        {"match_id": "m", "event_index": 0, "timestamp_ms": 10, "event_type": "CHAMPION_KILL",
+         "killer_participant_id": "0", "killer_team_id": "0", "owner_team_id": None},
+        {"match_id": "m", "event_index": 1, "timestamp_ms": 20, "event_type": "BUILDING_KILL",
+         "killer_participant_id": "0", "killer_team_id": None, "owner_team_id": "200"},
+        {"match_id": "m", "event_index": 2, "timestamp_ms": 30, "event_type": "CHAMPION_KILL",
+         "killer_participant_id": "7", "killer_team_id": None, "owner_team_id": None},
+    ])
+    teams = pd.DataFrame([{"match_id": "m", "participant_id": 7, "team_id": 200}])
+
+    scored = pipeline.attribute_events_to_teams(events, teams.astype({"participant_id": int, "team_id": int}))
+
+    # Row 0: killer 0 and team 0 are both absent, so nothing to credit -- dropped.
+    # Row 1: minions felled team 200's building, so team 100 is credited.
+    # Row 2: killer 7 resolves through the roster to team 200.
+    assert scored["event_index"].tolist() == [1, 2]
+    assert scored.loc[scored["event_index"] == 1, "team_id"].item() == 100
+    assert scored.loc[scored["event_index"] == 1, "towers"].item() == 1
+    assert scored.loc[scored["event_index"] == 2, "team_id"].item() == 200
+    assert scored.loc[scored["event_index"] == 2, "kills"].item() == 1

@@ -14,6 +14,7 @@ import socket
 import threading
 import time
 from dataclasses import dataclass
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Iterable, Sequence
 from uuid import UUID, uuid4
@@ -149,6 +150,8 @@ class Settings:
     max_training_rows: int
     training_sample_matches: int
     cache_training_draw: bool
+    training_draw_max_age_hours: float
+    sweep_workers: int
     calibration_bands: int
     retained_generations: int
 
@@ -189,6 +192,17 @@ class Settings:
             # always the draw that cohort would produce, and a retry after a mid-run failure no longer
             # repays tens of minutes of query time before modelling starts.
             cache_training_draw=os.getenv("BUILD_LAB_CACHE_TRAINING_DRAW", "true").lower() == "true",
+            # How stale a reused training draw may be. Cohorts are nested, so yesterday's draw is a
+            # valid sample of today's cohort minus the newest matches -- acceptable for the structural
+            # nuisance model, and the cutoff actually used is recorded in the manifest. 0 disables reuse
+            # across cutoffs entirely.
+            training_draw_max_age_hours=max(
+                0.0, float(os.getenv("BUILD_LAB_TRAINING_DRAW_MAX_AGE_HOURS", "36"))
+            ),
+            # Champions are independent, so the sweep fans out. Each worker holds its own connection, so
+            # this also sets query concurrency against a database that is shared with the live app --
+            # which is why the default is modest rather than the core count.
+            sweep_workers=max(1, int(os.getenv("BUILD_LAB_SWEEP_WORKERS", "4"))),
             # How finely calibration is conditioned on game phase. The promotion gate scores ECE
             # within time bands, so this is the dial that moves the gate that is hardest to pass.
             calibration_bands=max(
@@ -337,11 +351,18 @@ def training_draw_shape(
     included_patches: list[str],
     cutoff,
     settings: "Settings",
-) -> tuple[int, int]:
-    """(slice_modulus, slice_rows) for this cohort -- the two numbers that decide the draw."""
+) -> tuple[list[tuple], int]:
+    """The id ranges the draw reads and the row cap each one is thinned to."""
     match_count = load_cohort_match_count(connection, included_patches, cutoff)
-    modulus = training_sample_modulus(match_count, settings.training_sample_matches)
-    return modulus * TRAINING_SAMPLE_SLICES, max(1, settings.max_training_rows // TRAINING_SAMPLE_SLICES)
+    ranges = load_training_sample_ranges(
+        connection,
+        included_patches,
+        cutoff,
+        match_count,
+        settings.training_sample_matches,
+        TRAINING_SAMPLE_SLICES,
+    )
+    return ranges, max(1, settings.max_training_rows // TRAINING_SAMPLE_SLICES)
 
 
 def build_training_frame(
@@ -367,22 +388,25 @@ def build_training_frame(
     Each slice is thinned before the next is drawn, so the whole draw is never resident at once, and
     cached on the way past, so a retry or a model-only iteration does not pay for the queries again.
     """
-    slice_modulus, slice_rows = training_draw_shape(connection, included_patches, cutoff, settings)
+    sample_ranges, slice_rows = training_draw_shape(connection, included_patches, cutoff, settings)
+    drawn_at = cache.drawn_at() if cache else None
+    if drawn_at is not None and cache is not None and cache.is_fresh_for(cutoff):
+        LOG.info("Reusing the training draw taken for cutoff %s.", drawn_at)
     LOG.info(
-        "Training draw: %d slices of 1/%d of the cohort, up to %d rows each%s.",
-        TRAINING_SAMPLE_SLICES,
-        slice_modulus,
+        "Training draw: %d id ranges, up to %d rows each%s.",
+        len(sample_ranges),
         slice_rows,
         f" (cache {cache.key})" if cache and cache.enabled else " (uncached)",
     )
     slices = []
-    for residue in range(TRAINING_SAMPLE_SLICES):
-        cached = cache.read_slice(residue) if cache else None
+    for residue, sample_range in enumerate(sample_ranges):
+        reusable = cache is not None and (cache.is_fresh_for(cutoff) or cache.drawn_at() is None)
+        cached = cache.read_slice(residue) if reusable else None
         if cached is not None:
             LOG.info(
                 "Training slice %d/%d: %d rows from cache.",
                 residue + 1,
-                TRAINING_SAMPLE_SLICES,
+                len(sample_ranges),
                 len(cached),
             )
             slices.append(cached)
@@ -395,8 +419,7 @@ def build_training_frame(
                 rank_offset,
                 current_patch,
                 changed_items,
-                match_sample_modulus=slice_modulus,
-                match_sample_residue=residue,
+                match_sample_range=sample_range,
             ),
             # `exclude_drifted_prior_actions` fires on cells with at least 100 observations in both
             # the current and a prior patch. Those counts are divided by the sampling rate here, so
@@ -410,7 +433,7 @@ def build_training_frame(
         LOG.info(
             "Training slice %d/%d: %d rows drawn, %d kept.",
             residue + 1,
-            TRAINING_SAMPLE_SLICES,
+            len(sample_ranges),
             len(drawn),
             len(kept),
         )
@@ -419,6 +442,86 @@ def build_training_frame(
             cache.write_slice(residue, kept)
         slices.append(kept)
     return pd.concat(slices, ignore_index=True) if slices else pd.DataFrame()
+
+
+
+# One connection and one model bundle per worker process, built on first use. Rebuilding them per
+# champion would cost a connect and an unpickle 173 times over.
+_WORKER: dict = {}
+
+
+def _sweep_worker_setup(
+    settings: "Settings",
+    cohort: dict,
+    bundle_path: str,
+    connection=None,
+    bundle=None,
+) -> None:
+    """Per-process state for the sweep.
+
+    In a worker process there is no connection or model to inherit, so both are built here -- once per
+    process rather than once per champion. Run in-process, the parent hands over what it already holds,
+    which avoids a redundant connection and a redundant unpickle of the model.
+    """
+    _WORKER.clear()
+    _WORKER["settings"] = settings
+    _WORKER["cohort"] = cohort
+    _WORKER["owns_connection"] = connection is None
+    _WORKER["connection"] = (
+        connection
+        if connection is not None
+        else psycopg.connect(settings.database_url, row_factory=dict_row)
+    )
+    _WORKER["bundle"] = bundle if bundle is not None else joblib.load(bundle_path)
+
+
+def sweep_champion(champion_id: int) -> dict:
+    """Produce one champion's estimate records. Runs in a worker process.
+
+    Returns records rather than writing estimates: pooling is cross-champion and has to happen once,
+    in the parent, after every champion is in.
+    """
+    settings = _WORKER["settings"]
+    cohort = _WORKER["cohort"]
+    connection = _WORKER["connection"]
+    frame = prepare_decisions(
+        load_decision_frame(
+            connection,
+            cohort["included_patches"],
+            cohort["cutoff"],
+            cohort["rank_offset"],
+            cohort["current_patch"],
+            cohort["changed_items"],
+            champion_id=champion_id,
+        ),
+        cohort["current_patch"],
+        cohort["included_patches"],
+        cohort["rank_offset"],
+        cohort["changes"],
+        cohort["archetypes"],
+        exclude_drift=True,
+    )
+    if frame.empty:
+        return {"champion_id": champion_id, "rows": 0, "actions": [], "paths": [], "event_state": 0.0}
+    # Every published number is anchored on the calibrated model, so the calibration gates in the .NET
+    # promoter actually govern what is served.
+    frame["baseline_win_probability"] = structural_win_probability(_WORKER["bundle"], frame)
+    actions = action_records(frame)
+    paths = path_records(frame)
+    # champion_id leads the partitioning so each champion writes into its own directory: workers cannot
+    # collide on a file name even though they write concurrently.
+    deidentified_export(frame, settings.deidentification_salt).to_parquet(
+        Path(cohort["artifact_path"]) / "dataset",
+        index=False,
+        partition_cols=["champion_id", "patch", "region"],
+    )
+    return {
+        "champion_id": champion_id,
+        "rows": len(frame),
+        "actions": actions,
+        "paths": paths,
+        "event_state": float(frame["has_event_state"].sum()),
+    }
 
 
 def model_generation(
@@ -472,9 +575,10 @@ def model_generation(
         cache=TrainingCache.for_cohort(
             settings.artifact_dir / "_cache",
             included_patches,
-            cutoff,
             *training_draw_shape(connection, included_patches, cutoff, settings),
             enabled=settings.cache_training_draw,
+            cutoff=cutoff,
+            max_age_hours=settings.training_draw_max_age_hours,
         ),
     )
     if training.empty:
@@ -495,52 +599,63 @@ def model_generation(
     # resident. `expand_scopes` quadruples its input, which is why the cohort-wide version could not
     # fit regardless of how the loads were shaped.
     champions = load_cohort_champions(connection, included_patches, cutoff)
-    LOG.info("Sweeping %d champions in the frozen cohort.", len(champions))
+    workers = max(1, min(settings.sweep_workers, len(champions) or 1))
+    LOG.info("Sweeping %d champions across %d worker processes.", len(champions), workers)
     action_pool: list[dict] = []
     path_pool: list[dict] = []
     decision_rows = 0
     event_state_rows = 0.0
-    for position, champion_id in enumerate(champions, start=1):
-        frame = prepare(
-            load_decision_frame(
-                connection,
-                included_patches,
-                cutoff,
-                rank_offset,
-                current_patch,
-                changed_items,
-                champion_id=champion_id,
+    cohort = {
+        "included_patches": included_patches,
+        "cutoff": cutoff,
+        "rank_offset": rank_offset,
+        "current_patch": current_patch,
+        "changed_items": changed_items,
+        "changes": changes,
+        "archetypes": archetypes,
+        "artifact_path": str(artifact_path),
+    }
+
+    def absorb(result: dict, position: int) -> None:
+        nonlocal decision_rows, event_state_rows
+        if result["rows"] == 0:
+            LOG.info(
+                "Champion %d/%d (%d) has no eligible rows.",
+                position, len(champions), result["champion_id"],
             )
-        )
-        if frame.empty:
-            LOG.info("Champion %d/%d (%d) has no eligible rows.", position, len(champions), champion_id)
-            continue
-        # Every published number is anchored on the calibrated model, so the calibration gates in the
-        # .NET promoter actually govern what is served.
-        frame["baseline_win_probability"] = structural_win_probability(structural_model, frame)
-        champion_actions = action_records(frame)
-        champion_paths = path_records(frame)
-        action_pool.extend(champion_actions)
-        path_pool.extend(champion_paths)
-        decision_rows += len(frame)
-        event_state_rows += float(frame["has_event_state"].sum())
-        # champion_id leads the partitioning so each champion writes into its own directory and the
-        # appends cannot collide on a file name.
-        deidentified_export(frame, settings.deidentification_salt).to_parquet(
-            artifact_path / "dataset",
-            index=False,
-            partition_cols=["champion_id", "patch", "region"],
-        )
+            return
+        action_pool.extend(result["actions"])
+        path_pool.extend(result["paths"])
+        decision_rows += result["rows"]
+        event_state_rows += result["event_state"]
         LOG.info(
             "Champion %d/%d (%d): %d rows, %d action records, %d path records.",
-            position,
-            len(champions),
-            champion_id,
-            len(frame),
-            len(champion_actions),
-            len(champion_paths),
+            position, len(champions), result["champion_id"],
+            result["rows"], len(result["actions"]), len(result["paths"]),
         )
-        del frame, champion_actions, champion_paths
+
+    if workers == 1:
+        # Kept as a real path, not a fallback nobody runs: it is what a constrained host uses, and it
+        # is the reference the parallel path is checked against.
+        _sweep_worker_setup(
+            settings,
+            cohort,
+            str(artifact_path / "win_probability.joblib"),
+            connection=connection,
+            bundle=structural_model,
+        )
+        for position, champion_id in enumerate(champions, start=1):
+            absorb(sweep_champion(champion_id), position)
+    else:
+        # A champion that raises must fail the generation rather than silently drop out: a missing
+        # champion is a quietly incomplete estimate set, which is worse than no estimate set.
+        with ProcessPoolExecutor(
+            max_workers=workers,
+            initializer=_sweep_worker_setup,
+            initargs=(settings, cohort, str(artifact_path / "win_probability.joblib")),
+        ) as pool:
+            for position, result in enumerate(pool.map(sweep_champion, champions), start=1):
+                absorb(result, position)
 
     if not action_pool:
         raise RuntimeError("No adjusted action estimates could be produced.")
@@ -630,8 +745,7 @@ def load_decision_frame(
     changed_items: set[int],
     *,
     champion_id: int | None = None,
-    match_sample_modulus: int | None = None,
-    match_sample_residue: int = 0,
+    match_sample_range: tuple | None = None,
 ) -> pd.DataFrame:
     """Load one scope of the frozen cohort and turn it into unweighted decision rows.
 
@@ -639,11 +753,7 @@ def load_decision_frame(
     structural fit). Item events are participant-scoped, while team composition and kill state are
     match-scoped, because a kill diff is a fact about the match rather than about one participant.
     """
-    scope = {
-        "champion_id": champion_id,
-        "match_sample_modulus": match_sample_modulus,
-        "match_sample_residue": match_sample_residue,
-    }
+    scope = {"champion_id": champion_id, "match_sample_range": match_sample_range}
     item_events = load_item_events(
         connection, included_patches, cutoff, rank_offset, **scope
     )
@@ -999,9 +1109,16 @@ def champion_match_cte(champion_id: int | None, *, leading: bool) -> str:
 # loading every row and discarding >99% of them. Sampling whole matches in the query instead keeps
 # the same row budget while bounding the load, and hashing the id makes the draw deterministic, so a
 # re-run of the same generation trains on the same matches.
+# A half-open id range, not a hash residue.
+#
+# `mod(abs(hashtextextended(m."Id"::text, 11)), n) = k` cannot use an index, so every slice re-scanned
+# the whole cohort join -- eight scans for eight slices. Match ids are UUIDv7, so they sort by insertion
+# time, and IX_Matches_AnalyticsEligible is (Patch, Id): a range predicate is an index scan instead.
+# Ranges are picked spread across the id space, so the union is still a systematic sample over the
+# cohort's whole time span rather than one contiguous block of it.
 MATCH_SAMPLE_FILTER = (
-    '          AND mod(abs(hashtextextended(m."Id"::text, 11)), %(match_sample_modulus)s)\n'
-    '              = %(match_sample_residue)s\n'
+    '          AND m."Id" >= %(match_sample_from)s\n'
+    '          AND m."Id" < %(match_sample_until)s\n'
 )
 # The draw is taken in slices so the structural fit's peak is bounded like the champion sweep's is.
 # Residues 0..slices-1 of (modulus * slices) select the same fraction of matches as residue 0 of
@@ -1011,7 +1128,7 @@ TRAINING_SAMPLE_SLICES = 8
 
 def scope_predicates(
     champion_id: int | None,
-    match_sample_modulus: int | None,
+    match_sample_range: tuple | None,
     *,
     match_scoped: bool,
 ) -> str:
@@ -1027,7 +1144,7 @@ def scope_predicates(
         clauses += CHAMPION_MATCH_FILTER
         if not match_scoped:
             clauses += CHAMPION_EVENT_FILTER
-    if match_sample_modulus is not None and match_sample_modulus > 1:
+    if match_sample_range is not None:
         clauses += MATCH_SAMPLE_FILTER
     return clauses
 
@@ -1046,6 +1163,62 @@ def load_cohort_match_count(connection: psycopg.Connection, patches: list[str], 
         {"patches": patches, "cutoff": cutoff},
     ).fetchone()
     return int(row["matches"]) if row else 0
+
+
+def load_training_sample_ranges(
+    connection: psycopg.Connection,
+    patches: list[str],
+    cutoff,
+    match_count: int,
+    target_matches: int,
+    slices: int,
+) -> list[tuple]:
+    """Half-open id ranges whose union is roughly `target_matches` of the cohort.
+
+    The id space is cut into `match_count / target_matches * slices` equal-count blocks and every
+    (count/target)'th one is taken, so the chosen blocks are spread across the whole span rather than
+    bunched at one end. Match ids are UUIDv7, so equal-count id blocks are equal-count time blocks and
+    the union keeps the chronological spread the train/calibration/test split depends on.
+
+    Boundaries come from percentile_disc over the cohort's ids -- one sort of a few tens of thousands of
+    values, against eight full-cohort scans, which is what the hash residue predicate cost.
+    """
+    if slices < 1:
+        return []
+    stride = max(1, match_count // target_matches) if target_matches > 0 else 1
+    if stride == 1:
+        # The whole cohort is wanted, so one unbounded range beats slicing it.
+        return [(None, None)]
+    blocks = stride * slices
+    # Fractions 0 and 1 give the lowest and highest id, so no separate aggregate is needed -- Postgres
+    # has no min(uuid)/max(uuid) anyway.
+    fractions = [index / blocks for index in range(blocks + 1)]
+    row = connection.execute(
+        """
+        SELECT percentile_disc(%(fractions)s::double precision[])
+                 WITHIN GROUP (ORDER BY m."Id") AS edges
+        FROM "Matches" m
+        WHERE m."Patch" = ANY(%(patches)s)
+          AND m."Status" = 1
+          AND m."FetchedAt" <= %(cutoff)s
+          AND m."QueueId" = 420
+          AND m."Duration" >= 300
+        """,
+        {"fractions": fractions, "patches": patches, "cutoff": cutoff},
+    ).fetchone()
+    edges = list(row["edges"]) if row and row["edges"] else []
+    if len(edges) < blocks + 1 or edges[0] is None:
+        return [(None, None)]
+    # `< upper` is exclusive, so the last block's bound has to sit strictly above the largest id or the
+    # newest match in the cohort would be silently dropped.
+    edges[-1] = _successor_uuid(edges[-1])
+    return [(edges[index * stride], edges[index * stride + 1]) for index in range(slices)]
+
+
+def _successor_uuid(value) -> str:
+    """The smallest id strictly greater than `value`, so a half-open range can include it."""
+    digits = str(value).replace("-", "")
+    return str(UUID(int=int(digits, 16) + 1))
 
 
 def training_sample_modulus(match_count: int, target_matches: int) -> int:
@@ -1080,14 +1253,13 @@ def load_item_events(
     cutoff,
     rank_offset_column: str | None,
     champion_id: int | None = None,
-    match_sample_modulus: int | None = None,
-    match_sample_residue: int = 0,
+    match_sample_range: tuple | None = None,
 ) -> pd.DataFrame:
     rank_join = rank_context_lateral(rank_offset_column) % {
         "match_id_column": 'm."Id"',
         "participant_id_column": 'p."ParticipantId"',
     }
-    champion_scope = scope_predicates(champion_id, match_sample_modulus, match_scoped=False)
+    champion_scope = scope_predicates(champion_id, match_sample_range, match_scoped=False)
     champion_cte = champion_match_cte(champion_id, leading=True)
     return read_sql_frame(
         connection,
@@ -1201,8 +1373,8 @@ def load_item_events(
             "tiers": list(EMERALD_PLUS),
             "schema_version": TIMELINE_SCHEMA_VERSION,
             "champion_id": champion_id,
-            "match_sample_modulus": match_sample_modulus,
-            "match_sample_residue": match_sample_residue,
+            "match_sample_from": match_sample_range[0] if match_sample_range else None,
+            "match_sample_until": match_sample_range[1] if match_sample_range else None,
         },
     )
 
@@ -1329,8 +1501,7 @@ def load_timeline_state_events(
     patches: list[str],
     cutoff,
     champion_id: int | None = None,
-    match_sample_modulus: int | None = None,
-    match_sample_residue: int = 0,
+    match_sample_range: tuple | None = None,
 ) -> pd.DataFrame:
     return read_sql_frame(
         connection,
@@ -1341,7 +1512,25 @@ def load_timeline_state_events(
             payload."EventIndex" AS event_index,
             payload."TimestampMs" AS timestamp_ms,
             payload."EventType" AS event_type,
-            payload."PayloadJson" AS payload_json
+            -- Extracted here rather than in pandas. PayloadJson is jsonb, and parsing it in Python cost
+            -- one json.loads plus three dict walks for EVERY event -- around 290,000 per champion, which
+            -- made this the dominant cost of the champion sweep. Postgres reads the three scalars it
+            -- actually needs straight out of the stored jsonb.
+            --
+            -- COALESCE covers the camelCase Riot sends and an all-lowercase variant, matching what the
+            -- case-insensitive lookup this replaces would have found.
+            COALESCE(
+                payload."PayloadJson" ->> 'killerId',
+                payload."PayloadJson" ->> 'killerid'
+            ) AS killer_participant_id,
+            COALESCE(
+                payload."PayloadJson" ->> 'killerTeamId',
+                payload."PayloadJson" ->> 'killerteamid'
+            ) AS killer_team_id,
+            COALESCE(
+                payload."PayloadJson" ->> 'teamId',
+                payload."PayloadJson" ->> 'teamid'
+            ) AS owner_team_id
         FROM "MatchTimelineEventPayloads" payload
         JOIN "Matches" m ON m."Id" = payload."MatchId"
         JOIN "MatchTimelineFetchStates" timeline
@@ -1355,7 +1544,7 @@ def load_timeline_state_events(
           AND m."Duration" >= 300
           AND payload."EventType" IN ('CHAMPION_KILL', 'BUILDING_KILL', 'ELITE_MONSTER_KILL')
 """
-        + scope_predicates(champion_id, match_sample_modulus, match_scoped=True)
+        + scope_predicates(champion_id, match_sample_range, match_scoped=True)
         + """
         ORDER BY payload."MatchId", payload."TimestampMs", payload."EventIndex"
         """,
@@ -1364,8 +1553,8 @@ def load_timeline_state_events(
             "cutoff": cutoff,
             "schema_version": TIMELINE_SCHEMA_VERSION,
             "champion_id": champion_id,
-            "match_sample_modulus": match_sample_modulus,
-            "match_sample_residue": match_sample_residue,
+            "match_sample_from": match_sample_range[0] if match_sample_range else None,
+            "match_sample_until": match_sample_range[1] if match_sample_range else None,
         },
     )
 
@@ -1375,8 +1564,7 @@ def load_participant_teams(
     patches: list[str],
     cutoff,
     champion_id: int | None = None,
-    match_sample_modulus: int | None = None,
-    match_sample_residue: int = 0,
+    match_sample_range: tuple | None = None,
 ) -> pd.DataFrame:
     return read_sql_frame(
         connection,
@@ -1394,15 +1582,15 @@ def load_participant_teams(
           AND m."QueueId" = 420
           AND m."Duration" >= 300
 """
-        + scope_predicates(champion_id, match_sample_modulus, match_scoped=True)
+        + scope_predicates(champion_id, match_sample_range, match_scoped=True)
         + """
         """,
         params={
             "patches": patches,
             "cutoff": cutoff,
             "champion_id": champion_id,
-            "match_sample_modulus": match_sample_modulus,
-            "match_sample_residue": match_sample_residue,
+            "match_sample_from": match_sample_range[0] if match_sample_range else None,
+            "match_sample_until": match_sample_range[1] if match_sample_range else None,
         },
     )
 
@@ -1470,24 +1658,30 @@ def enrich_with_predecision_event_state(
 
 
 def attribute_events_to_teams(events: pd.DataFrame, teams: pd.DataFrame) -> pd.DataFrame:
-    payloads = events["payload_json"].map(
-        lambda value: value if isinstance(value, dict) else json.loads(value)
-    )
-    killers = payloads.map(lambda payload: positive_int(payload_value(payload, "killerId")))
-    declared = payloads.map(lambda payload: positive_int(payload_value(payload, "killerTeamId")))
-    owners = payloads.map(lambda payload: positive_int(payload_value(payload, "teamId")))
+    """Credit each kill, tower and objective to a team.
+
+    The three payload scalars arrive already extracted by `load_timeline_state_events`, so nothing here
+    parses json. That is the whole point: the previous shape ran `json.loads` and three dict walks per
+    event, and the sweep touches hundreds of thousands of events per champion.
+    """
     scored = events[["match_id", "event_index", "timestamp_ms", "event_type"]].copy()
-    scored["participant_id"] = pd.array(killers.to_numpy(), dtype="Int64")
+    killers = pd.to_numeric(events["killer_participant_id"], errors="coerce")
+    # positive_int's contract: zero and negatives are absent, not real ids.
+    scored["participant_id"] = pd.array(
+        killers.where(killers > 0).to_numpy(), dtype="Int64"
+    )
     resolved = scored.merge(
         teams.astype({"participant_id": "Int64"}),
         on=["match_id", "participant_id"],
         how="left",
     )
-    fallback = pd.to_numeric(pd.Series(declared.to_numpy()), errors="coerce")
-    resolved["team_id"] = resolved["team_id"].fillna(fallback.set_axis(resolved.index))
+    declared = pd.to_numeric(events["killer_team_id"], errors="coerce")
+    declared = declared.where(declared > 0).set_axis(resolved.index)
+    resolved["team_id"] = resolved["team_id"].fillna(declared)
     # A building destroyed by minions carries killerId 0 and only the OWNING team's id, so the credit
     # belongs to the other team. Dropping those rows would understate the tower diff systematically.
-    owning = pd.to_numeric(pd.Series(owners.to_numpy()), errors="coerce").set_axis(resolved.index)
+    owning = pd.to_numeric(events["owner_team_id"], errors="coerce")
+    owning = owning.where(owning > 0).set_axis(resolved.index)
     conceded = owning.where(resolved["event_type"] == "BUILDING_KILL").map(
         {100.0: 200.0, 200.0: 100.0}
     )
@@ -1526,14 +1720,13 @@ def load_rune_decisions(
     cutoff,
     rank_offset_column: str | None,
     champion_id: int | None = None,
-    match_sample_modulus: int | None = None,
-    match_sample_residue: int = 0,
+    match_sample_range: tuple | None = None,
 ) -> pd.DataFrame:
     rank_join = rank_context_lateral(rank_offset_column) % {
         "match_id_column": 'm."Id"',
         "participant_id_column": 'p."ParticipantId"',
     }
-    champion_scope = scope_predicates(champion_id, match_sample_modulus, match_scoped=False)
+    champion_scope = scope_predicates(champion_id, match_sample_range, match_scoped=False)
     champion_cte = champion_match_cte(champion_id, leading=False)
     return read_sql_frame(
         connection,
@@ -1595,8 +1788,8 @@ def load_rune_decisions(
             "cutoff": cutoff,
             "tiers": list(EMERALD_PLUS),
             "champion_id": champion_id,
-            "match_sample_modulus": match_sample_modulus,
-            "match_sample_residue": match_sample_residue,
+            "match_sample_from": match_sample_range[0] if match_sample_range else None,
+            "match_sample_until": match_sample_range[1] if match_sample_range else None,
             "schema_version": TIMELINE_SCHEMA_VERSION,
         },
     )
@@ -1608,14 +1801,13 @@ def load_spell_decisions(
     cutoff,
     rank_offset_column: str | None,
     champion_id: int | None = None,
-    match_sample_modulus: int | None = None,
-    match_sample_residue: int = 0,
+    match_sample_range: tuple | None = None,
 ) -> pd.DataFrame:
     rank_join = rank_context_lateral(rank_offset_column) % {
         "match_id_column": 'm."Id"',
         "participant_id_column": 'p."ParticipantId"',
     }
-    champion_scope = scope_predicates(champion_id, match_sample_modulus, match_scoped=False)
+    champion_scope = scope_predicates(champion_id, match_sample_range, match_scoped=False)
     champion_cte = champion_match_cte(champion_id, leading=False)
     return read_sql_frame(
         connection,
@@ -1674,40 +1866,140 @@ def load_spell_decisions(
             "cutoff": cutoff,
             "tiers": list(EMERALD_PLUS),
             "champion_id": champion_id,
-            "match_sample_modulus": match_sample_modulus,
-            "match_sample_residue": match_sample_residue,
+            "match_sample_from": match_sample_range[0] if match_sample_range else None,
+            "match_sample_until": match_sample_range[1] if match_sample_range else None,
             "schema_version": TIMELINE_SCHEMA_VERSION,
         },
     )
 
 
+ITEM_REPLAY_COLUMNS = (
+    "event_type",
+    "event_index",
+    "timestamp_ms",
+    "action_id",
+    "before_id",
+    "after_id",
+    "build_category",
+)
+
+
+def replay_columns(rows: pd.DataFrame) -> dict[str, np.ndarray]:
+    """The columns the purchase replay reads, as numpy arrays.
+
+    A missing column becomes an all-None array so the replay reads it as absent, matching what
+    `dict.get` returned when this walked pandas rows.
+    """
+    return {
+        name: (
+            rows[name].to_numpy()
+            if name in rows.columns
+            else np.full(len(rows), None, dtype=object)
+        )
+        for name in ITEM_REPLAY_COLUMNS
+    }
+
+
+def undone_purchase_indexes(participant: pd.DataFrame) -> set[int]:
+    """Identify purchases reversed by ITEM_UNDO while replaying the exact lifecycle."""
+    columns = replay_columns(participant)
+    return undone_from_arrays(columns, np.arange(len(participant)))
+
+
+def undone_from_arrays(columns: dict[str, np.ndarray], positions: np.ndarray) -> set[int]:
+    """Same lifecycle replay, over positions into pre-extracted arrays."""
+    event_types = columns["event_type"]
+    event_indexes = columns["event_index"]
+    action_ids = columns["action_id"]
+    before_ids = columns["before_id"]
+    after_ids = columns["after_id"]
+    active: list[tuple[int, int | None]] = []
+    undone: set[int] = set()
+    for position in positions:
+        event_type = int(event_types[position])
+        item_id = positive_int(action_ids[position])
+        before_id = positive_int(before_ids[position])
+        after_id = positive_int(after_ids[position])
+        if event_type == 0 and item_id:
+            active.append((item_id, int(event_indexes[position])))
+        elif event_type in (1, 3) and item_id:
+            remove_last(active, item_id)
+        elif event_type == 2:
+            if before_id:
+                removed = remove_last(active, before_id)
+                if isinstance(removed, tuple) and removed[1] is not None:
+                    undone.add(removed[1])
+            if after_id:
+                active.append((after_id, None))
+    return undone
+
+
 def build_item_decisions(rows: pd.DataFrame) -> pd.DataFrame:
+    """Collapse ordered purchase events into the decisions an estimate is measured on.
+
+    The replay is sequential by nature -- inventory state at a purchase depends on every event before
+    it -- so this is a loop, not a vectorised expression. What it avoids is pandas' per-row cost: the
+    old shape called `groupby`, `sort_values` and `iterrows` per participant and `Series.to_dict` per
+    emitted row, which built a pandas object for every one of hundreds of thousands of rows and made
+    this the single slowest stage of a run.
+
+    Two passes instead. The first walks numpy arrays and records only *which* row emits *what*; the
+    second converts just those rows to dicts in one call. Emitted rows are roughly a third of the
+    input, so the dictionaries built drop by the same factor and none are built for rows that only
+    move inventory state.
+    """
     if rows.empty:
         return rows
-    output: list[dict] = []
-    for _, participant in rows.groupby(["match_id", "participant_id"], sort=False):
-        participant = participant.sort_values(["timestamp_ms", "event_index"])
-        undone = undone_purchase_indexes(participant)
-        starter_rows = participant[
-            (participant["event_type"] == 0)
-            & (participant["build_category"] == 2)
-            & (~participant["event_index"].isin(undone))
+
+    columns = replay_columns(rows)
+    event_types = columns["event_type"]
+    event_indexes = columns["event_index"]
+    action_ids = columns["action_id"]
+    before_ids = columns["before_id"]
+    after_ids = columns["after_id"]
+    build_categories = columns["build_category"]
+
+    # One sort for everything: participants grouped in first-appearance order (factorize codes are
+    # assigned by appearance), each group internally ordered by (timestamp_ms, event_index) exactly as
+    # the per-group sort_values did. lexsort's last key is the primary one.
+    group_codes = pd.factorize(
+        pd.MultiIndex.from_frame(rows[["match_id", "participant_id"]]), sort=False
+    )[0]
+    order = np.lexsort((event_indexes, columns["timestamp_ms"], group_codes))
+    ordered_codes = group_codes[order]
+    boundaries = np.flatnonzero(np.r_[True, ordered_codes[1:] != ordered_codes[:-1]])
+    group_slices = np.r_[boundaries, ordered_codes.size]
+
+    # (row position, family, stage, prefix, action ids, inventory string) per emitted decision.
+    emitted: list[tuple[int, str, int, list[int], list[int], str]] = []
+    for index in range(boundaries.size):
+        positions = order[group_slices[index]:group_slices[index + 1]]
+        undone = undone_from_arrays(columns, positions)
+
+        starter_positions = [
+            position
+            for position in positions
+            if int(event_types[position]) == 0
+            and positive_or_zero_int(build_categories[position]) == 2
+            and int(event_indexes[position]) not in undone
         ]
-        starter_ids = starter_rows["action_id"].dropna().astype(int).tolist()
+        starter_ids = [
+            value
+            for value in (positive_int(action_ids[position]) for position in starter_positions)
+            if value is not None
+        ]
         selected: list[int] = sorted(starter_ids)
         if starter_ids:
-            first = starter_rows.iloc[0].to_dict()
-            first["inventory_ids"] = ""
-            output.append(decision_record(first, "STARTER", 0, [], sorted(starter_ids)))
+            emitted.append((starter_positions[0], "STARTER", 0, [], sorted(starter_ids), ""))
+
         legendary_stage = 0
         boots_stage = 0
         inventory: list[int] = []
-        for _, item in participant.iterrows():
-            event_type = int(item["event_type"])
-            action_id = positive_int(item.get("action_id"))
-            before_id = positive_int(item.get("before_id"))
-            after_id = positive_int(item.get("after_id"))
-            event_index = int(item["event_index"])
+        for position in positions:
+            event_type = int(event_types[position])
+            action_id = positive_int(action_ids[position])
+            before_id = positive_int(before_ids[position])
+            after_id = positive_int(after_ids[position])
             if event_type == 1 or event_type == 3:
                 if action_id:
                     remove_last(inventory, action_id)
@@ -1715,16 +2007,15 @@ def build_item_decisions(rows: pd.DataFrame) -> pd.DataFrame:
             if event_type == 2:
                 # An undo of a sale restores the sold item. Ingestion classifies the undo row from
                 # its after/before id, so a restored consumable stays out of the inventory state.
-                restored_category = positive_or_zero_int(item.get("build_category"))
+                restored_category = positive_or_zero_int(build_categories[position])
                 if after_id and restored_category in BUILD_ITEM_CATEGORIES:
                     inventory.append(after_id)
                 continue
-            if event_type != 0 or not action_id or event_index in undone:
+            if event_type != 0 or not action_id or int(event_indexes[position]) in undone:
                 continue
 
-            build_category = positive_or_zero_int(item.get("build_category"))
-            source = item.to_dict()
-            source["inventory_ids"] = "-".join(str(value) for value in sorted(inventory))
+            build_category = positive_or_zero_int(build_categories[position])
+            inventory_ids = "-".join(str(value) for value in sorted(inventory))
             # Only build-relevant acquisitions belong in the inventory state. Consumables, wards,
             # trinkets and mid-game components carry no category and must not enter it.
             if build_category in BUILD_ITEM_CATEGORIES:
@@ -1738,17 +2029,23 @@ def build_item_decisions(rows: pd.DataFrame) -> pd.DataFrame:
                 legendary_stage += 1
                 family, stage = "ITEM", legendary_stage
                 if legendary_stage == 1:
-                    output.append(
-                        decision_record(
-                            source,
-                            "FIRST_ITEM_PATH",
-                            0,
-                            [],
-                            [*selected, action_id],
-                        )
+                    emitted.append(
+                        (position, "FIRST_ITEM_PATH", 0, [], [*selected, action_id], inventory_ids)
                     )
-            output.append(decision_record(source, family, stage, selected, [action_id]))
+            emitted.append((position, family, stage, list(selected), [action_id], inventory_ids))
             selected.append(action_id)
+
+    if not emitted:
+        return pd.DataFrame()
+    # One bulk conversion for the emitted rows only. A position appearing twice (a first legendary
+    # emits both FIRST_ITEM_PATH and ITEM) yields two independent dicts, as it must.
+    sources = rows.iloc[[entry[0] for entry in emitted]].to_dict("records")
+    output = []
+    for (_, family, stage, prefix, action_ids_value, inventory_ids), source in zip(
+        emitted, sources, strict=True
+    ):
+        source["inventory_ids"] = inventory_ids
+        output.append(decision_record(source, family, stage, prefix, action_ids_value))
     return pd.DataFrame(output)
 
 
@@ -1772,29 +2069,6 @@ def remove_last(values: list, target) -> tuple | int | None:
         if item_id == target:
             return values.pop(index)
     return None
-
-
-def undone_purchase_indexes(participant: pd.DataFrame) -> set[int]:
-    """Identify purchases reversed by ITEM_UNDO while replaying the exact lifecycle."""
-    active: list[tuple[int, int | None]] = []
-    undone: set[int] = set()
-    for _, event in participant.iterrows():
-        event_type = int(event["event_type"])
-        item_id = positive_int(event.get("action_id"))
-        before_id = positive_int(event.get("before_id"))
-        after_id = positive_int(event.get("after_id"))
-        if event_type == 0 and item_id:
-            active.append((item_id, int(event["event_index"])))
-        elif event_type in (1, 3) and item_id:
-            remove_last(active, item_id)
-        elif event_type == 2:
-            if before_id:
-                removed = remove_last(active, before_id)
-                if isinstance(removed, tuple) and removed[1] is not None:
-                    undone.add(removed[1])
-            if after_id:
-                active.append((after_id, None))
-    return undone
 
 
 def build_rune_decisions(rows: pd.DataFrame) -> pd.DataFrame:

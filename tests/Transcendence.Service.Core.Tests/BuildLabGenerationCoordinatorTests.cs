@@ -83,6 +83,77 @@ public sealed class BuildLabGenerationCoordinatorTests
         retired.RetiredAtUtc.Should().NotBeNull();
     }
 
+    [Fact]
+    public async Task PromoteCandidateAsync_PromotesWhenThePatchHoldoutWasNotTestable()
+    {
+        // A cohort covering one patch cannot be split across a patch boundary, so HeldOutPatchPassed is
+        // false for want of a test. Treating that as a failure blocked every generation on prod, where
+        // only one patch had timeline and Emerald+ coverage. It is safe to waive because the gate
+        // guards borrowing: with one patch in scope no prior-patch row is borrowed at all.
+        await using var harness = await BuildLabHarness.CreateAsync();
+        var candidate = Candidate();
+        candidate.ValidationMetricsJson = JsonSerializer.Serialize(
+            PassingMetrics() with { HeldOutPatchPassed = false, HeldOutPatchApplicable = false });
+        harness.Db.BuildLabGenerations.Add(candidate);
+        harness.Db.AdjustedActionEstimates.Add(PassingEstimate(candidate.Id));
+        await harness.Db.SaveChangesAsync();
+        using var telemetry = new BuildLabTelemetry();
+        var coordinator = Coordinator(harness, telemetry);
+
+        var promoted = await coordinator.PromoteCandidateAsync(candidate.Id, actor: "operator");
+
+        promoted.Should().BeTrue();
+        var reloaded = await Reload(harness, candidate.Id);
+        reloaded.Status.Should().Be(BuildLabGenerationStatus.Ready);
+        reloaded.IsActive.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task PromoteCandidateAsync_StillRejectsAPatchHoldoutThatWasTestedAndFailed()
+    {
+        // The waiver must be narrow: a cohort that COULD be split across patches and then failed the
+        // comparison is a real failure, not a missing test.
+        await using var harness = await BuildLabHarness.CreateAsync();
+        var candidate = Candidate();
+        candidate.ValidationMetricsJson = JsonSerializer.Serialize(
+            PassingMetrics() with { HeldOutPatchPassed = false, HeldOutPatchApplicable = true });
+        harness.Db.BuildLabGenerations.Add(candidate);
+        harness.Db.AdjustedActionEstimates.Add(PassingEstimate(candidate.Id));
+        await harness.Db.SaveChangesAsync();
+        using var telemetry = new BuildLabTelemetry();
+        var coordinator = Coordinator(harness, telemetry);
+
+        var promoted = await coordinator.PromoteCandidateAsync(candidate.Id, actor: "operator");
+
+        promoted.Should().BeFalse();
+        var reloaded = await Reload(harness, candidate.Id);
+        reloaded.Status.Should().Be(BuildLabGenerationStatus.Failed);
+    }
+
+    [Fact]
+    public async Task PromoteCandidateAsync_RejectsAFailedPatchHoldoutWhenApplicabilityIsUnreported()
+    {
+        // An older modeler does not emit the applicability field. Absent it, a false result must keep
+        // its old meaning and fail the gate, rather than being waived by a missing value.
+        await using var harness = await BuildLabHarness.CreateAsync();
+        var document = JsonSerializer.SerializeToNode(
+            PassingMetrics() with { HeldOutPatchPassed = false })!.AsObject();
+        document.Remove("HeldOutPatchApplicable");
+        var candidate = Candidate();
+        candidate.ValidationMetricsJson = document.ToJsonString();
+        harness.Db.BuildLabGenerations.Add(candidate);
+        harness.Db.AdjustedActionEstimates.Add(PassingEstimate(candidate.Id));
+        await harness.Db.SaveChangesAsync();
+        using var telemetry = new BuildLabTelemetry();
+        var coordinator = Coordinator(harness, telemetry);
+
+        var promoted = await coordinator.PromoteCandidateAsync(candidate.Id, actor: "operator");
+
+        promoted.Should().BeFalse();
+        var reloaded = await Reload(harness, candidate.Id);
+        reloaded.Status.Should().Be(BuildLabGenerationStatus.Failed);
+    }
+
     [Theory]
     [InlineData("overall-ece")]
     [InlineData("time-band-ece")]
@@ -99,7 +170,10 @@ public sealed class BuildLabGenerationCoordinatorTests
             "time-band-ece" => PassingMetrics() with { MaxTimeBandEce = 0.9 },
             "brier" => PassingMetrics() with { BrierScore = 0.24, BaselineBrierScore = 0.24 },
             "log-loss" => PassingMetrics() with { LogLoss = 0.66, BaselineLogLoss = 0.66 },
-            "held-out-patch" => PassingMetrics() with { HeldOutPatchPassed = false },
+            "held-out-patch" => PassingMetrics() with
+            {
+                HeldOutPatchPassed = false, HeldOutPatchApplicable = true
+            },
             "leakage" => PassingMetrics() with { LeakageCheckPassed = false },
             _ => throw new ArgumentOutOfRangeException(nameof(failingGate))
         };

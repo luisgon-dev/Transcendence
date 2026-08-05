@@ -1,4 +1,5 @@
 import inspect
+import pathlib
 import json
 import logging
 import re
@@ -2083,3 +2084,99 @@ def test_the_manifest_separates_an_untestable_patch_holdout_from_a_failed_one():
     # The fixture's calibration split is far too small to band, so zero per-band fits is the correct
     # outcome here; what must hold is that the provenance is reported either way.
     assert both["calibrationBandCount"] == 0
+
+
+def test_the_cli_still_maps_run_outcomes_onto_exit_codes():
+    from build_lab_modeler import __main__ as entrypoint
+
+    # A scheduler sees only the exit code, so a failed generation must not look like a quiet tick.
+    assert entrypoint.EXIT_CODES[RunOutcome.IDLE] == 0
+    assert entrypoint.EXIT_CODES[RunOutcome.COMPLETED] == 0
+    assert entrypoint.EXIT_CODES[RunOutcome.FAILED] == 1
+
+
+def test_the_cli_gate_limits_match_the_committed_dotnet_options():
+    # The CLI reports the promoter's verdict locally. If these drift from BuildLabModelingOptions the
+    # local answer stops predicting the deployed one, which is the whole reason the subcommand exists.
+    from build_lab_modeler import __main__ as entrypoint
+
+    options = pathlib.Path(__file__).resolve().parents[3] / (
+        "Transcendence.Service.Core/Services/Analytics/Models/BuildLabModelingOptions.cs"
+    )
+    source = options.read_text(encoding="utf-8")
+    for field, limit in (
+        ("MaximumOverallEce", entrypoint.GATE_LIMITS["maximumOverallEce"]),
+        ("MaximumTimeBandEce", entrypoint.GATE_LIMITS["maximumTimeBandEce"]),
+    ):
+        assert f"public double {field} {{ get; set; }} = {limit};" in source, field
+
+
+def test_every_subcommand_is_on_demand_and_needs_no_pending_generation():
+    from build_lab_modeler import __main__ as entrypoint
+
+    parser = entrypoint.build_parser()
+    # An empty argv must keep meaning "production run", or the scheduler's invocation changes meaning.
+    assert parser.parse_args([]).command is None
+    for command in ("dataset", "train", "champion"):
+        parsed = parser.parse_args([command])
+        assert parsed.command == command
+        # Each must accept an explicit cohort so it can run with no generation row at all.
+        assert hasattr(parsed, "patches") and hasattr(parsed, "cutoff")
+        assert hasattr(parsed, "no_cache") and hasattr(parsed, "refresh")
+
+
+def test_the_training_cache_key_tracks_what_decides_which_rows_are_drawn():
+    from build_lab_modeler.cache import cohort_key
+
+    base = cohort_key(["16.15"], "2026-08-04T05:15:03Z", 40, 31_250)
+    # Patch order must not matter; the same cohort is the same cohort.
+    assert base == cohort_key(["16.15"], "2026-08-04T05:15:03Z", 40, 31_250)
+    # Everything that changes the drawn rows must change the key, or a stale frame gets reused.
+    assert base != cohort_key(["16.15", "16.14"], "2026-08-04T05:15:03Z", 40, 31_250)
+    assert base != cohort_key(["16.15"], "2026-08-05T05:15:03Z", 40, 31_250)
+    assert base != cohort_key(["16.15"], "2026-08-04T05:15:03Z", 24, 31_250)
+    assert base != cohort_key(["16.15"], "2026-08-04T05:15:03Z", 40, 10_000)
+
+
+def test_a_cached_slice_round_trips_and_a_truncated_one_is_ignored(tmp_path):
+    from build_lab_modeler.cache import TrainingCache
+
+    cache = TrainingCache.for_cohort(tmp_path, ["16.15"], "2026-08-04T05:15:03Z", 40, 31_250)
+    assert cache.read_slice(0) is None, "a cold cache must miss rather than raise"
+    frame = pd.DataFrame({"won": [True, False], "minute": [4.0, 21.0]})
+    cache.write_slice(0, frame)
+    restored = cache.read_slice(0)
+    assert restored is not None and len(restored) == 2
+    assert restored["won"].tolist() == [True, False]
+    # A crash mid-write must not leave something the next run reads as a complete slice.
+    cache.slice_path(0).write_bytes(b"not parquet")
+    assert cache.read_slice(0) is None
+    # Disabling the cache must neither read nor write.
+    disabled = TrainingCache(directory=cache.directory, key=cache.key, enabled=False)
+    disabled.write_slice(1, frame)
+    assert not disabled.slice_path(1).exists()
+    assert disabled.read_slice(0) is None
+
+
+def test_the_draw_reuses_cached_slices_instead_of_querying_again(tmp_path, monkeypatch):
+    from build_lab_modeler.cache import TrainingCache
+
+    settings = modeler_settings(monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path))
+    cache = TrainingCache.for_cohort(tmp_path, ["16.15"], "cutoff", 40, 500)
+    for residue in range(pipeline.TRAINING_SAMPLE_SLICES):
+        cache.write_slice(residue, pd.DataFrame({"won": [True, False], "minute": [4.0, 21.0]}))
+    queried = []
+    monkeypatch.setattr(
+        pipeline,
+        "load_decision_frame",
+        lambda *args, **kwargs: queried.append(kwargs) or pd.DataFrame(),
+    )
+    monkeypatch.setattr(pipeline, "training_draw_shape", lambda *_: (40, 500))
+
+    frame = pipeline.build_training_frame(
+        FakeConnection(), ["16.15"], "cutoff", None, "16.15", set(), settings,
+        lambda frame, exclude_drift=True: frame, cache=cache,
+    )
+
+    assert queried == [], "a fully cached draw must not touch the database"
+    assert len(frame) == 2 * pipeline.TRAINING_SAMPLE_SLICES

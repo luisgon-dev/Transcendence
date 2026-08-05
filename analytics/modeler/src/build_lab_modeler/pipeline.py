@@ -25,6 +25,8 @@ from scipy.special import erfc
 import pandas as pd
 import psycopg
 from psycopg.rows import dict_row, tuple_row
+
+from .cache import TrainingCache
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import brier_score_loss, log_loss
@@ -146,6 +148,7 @@ class Settings:
     lease_owner: str
     max_training_rows: int
     training_sample_matches: int
+    cache_training_draw: bool
     retained_generations: int
 
     @classmethod
@@ -181,6 +184,10 @@ class Settings:
             ),
             # Mirrors BuildLabModelingOptions.RetainedGenerations and the Math.Max(2, ...) floor the
             # coordinator applies, so artifact retention and row retention keep the same set.
+            # On by default: a generation's cohort is frozen by its cutoff, so a cached draw is
+            # always the draw that cohort would produce, and a retry after a mid-run failure no longer
+            # repays tens of minutes of query time before modelling starts.
+            cache_training_draw=os.getenv("BUILD_LAB_CACHE_TRAINING_DRAW", "true").lower() == "true",
             retained_generations=max(2, int(os.getenv("BUILD_LAB_RETAINED_GENERATIONS", "4"))),
         )
 
@@ -318,6 +325,96 @@ def lease_generation(connection: psycopg.Connection, settings: Settings) -> dict
     return generation
 
 
+
+def training_draw_shape(
+    connection: psycopg.Connection,
+    included_patches: list[str],
+    cutoff,
+    settings: "Settings",
+) -> tuple[int, int]:
+    """(slice_modulus, slice_rows) for this cohort -- the two numbers that decide the draw."""
+    match_count = load_cohort_match_count(connection, included_patches, cutoff)
+    modulus = training_sample_modulus(match_count, settings.training_sample_matches)
+    return modulus * TRAINING_SAMPLE_SLICES, max(1, settings.max_training_rows // TRAINING_SAMPLE_SLICES)
+
+
+def build_training_frame(
+    connection: psycopg.Connection,
+    included_patches: list[str],
+    cutoff,
+    rank_offset: str | None,
+    current_patch: str,
+    changed_items: set[int],
+    settings: "Settings",
+    prepare,
+    *,
+    cache: "TrainingCache | None" = None,
+) -> pd.DataFrame:
+    """The draw the structural fit is trained on, one hash-disjoint slice at a time.
+
+    This model was always fit on at most `max_training_rows`; the shape this replaced reached that by
+    loading every decision row in the cohort and then discarding over 99% of them, which is what made
+    peak memory scale with the corpus. Sampling whole matches in the query keeps the same row budget --
+    whole matches, not rows, so the chronological train/calibration/test split still partitions by
+    match and `evaluate_leakage` still sees disjoint splits.
+
+    Each slice is thinned before the next is drawn, so the whole draw is never resident at once, and
+    cached on the way past, so a retry or a model-only iteration does not pay for the queries again.
+    """
+    slice_modulus, slice_rows = training_draw_shape(connection, included_patches, cutoff, settings)
+    LOG.info(
+        "Training draw: %d slices of 1/%d of the cohort, up to %d rows each%s.",
+        TRAINING_SAMPLE_SLICES,
+        slice_modulus,
+        slice_rows,
+        f" (cache {cache.key})" if cache and cache.enabled else " (uncached)",
+    )
+    slices = []
+    for residue in range(TRAINING_SAMPLE_SLICES):
+        cached = cache.read_slice(residue) if cache else None
+        if cached is not None:
+            LOG.info(
+                "Training slice %d/%d: %d rows from cache.",
+                residue + 1,
+                TRAINING_SAMPLE_SLICES,
+                len(cached),
+            )
+            slices.append(cached)
+            continue
+        drawn = prepare(
+            load_decision_frame(
+                connection,
+                included_patches,
+                cutoff,
+                rank_offset,
+                current_patch,
+                changed_items,
+                match_sample_modulus=slice_modulus,
+                match_sample_residue=residue,
+            ),
+            # `exclude_drifted_prior_actions` fires on cells with at least 100 observations in both
+            # the current and a prior patch. Those counts are divided by the sampling rate here, so
+            # applying it would drop an arbitrary subset of cells rather than a conservative one. It
+            # guards *borrowing into a per-cell estimate*, which is not what this model does: the
+            # model is P(win | pre-decision state) and is held to the calibration and held-out-patch
+            # gates instead.
+            exclude_drift=False,
+        )
+        kept = thin_chronologically(drawn, slice_rows)
+        LOG.info(
+            "Training slice %d/%d: %d rows drawn, %d kept.",
+            residue + 1,
+            TRAINING_SAMPLE_SLICES,
+            len(drawn),
+            len(kept),
+        )
+        del drawn
+        if cache:
+            cache.write_slice(residue, kept)
+        slices.append(kept)
+    return pd.concat(slices, ignore_index=True) if slices else pd.DataFrame()
+
+
 def model_generation(
     connection: psycopg.Connection,
     generation: dict,
@@ -357,56 +454,23 @@ def model_generation(
     artifact_path.mkdir(parents=True, exist_ok=True)
 
     # Phase 1 - the structural model, fit on a deterministic sample of whole matches.
-    #
-    # This model was always fit on at most `max_training_rows`; the previous shape of this function
-    # reached that by loading every decision row in the cohort and then discarding over 99% of them,
-    # which is what made peak memory scale with the corpus. Sampling matches in the query keeps the
-    # same row budget for the fit. Whole matches, not rows, so the chronological train/calibration/
-    # test split still partitions by match and `evaluate_leakage` still sees disjoint splits.
-    match_count = load_cohort_match_count(connection, included_patches, cutoff)
-    modulus = training_sample_modulus(match_count, settings.training_sample_matches)
-    slice_modulus = modulus * TRAINING_SAMPLE_SLICES
-    slice_rows = max(1, settings.max_training_rows // TRAINING_SAMPLE_SLICES)
-    LOG.info(
-        "Fitting the structural model on ~1/%d of %d cohort matches, drawn in %d slices.",
-        modulus,
-        match_count,
-        TRAINING_SAMPLE_SLICES,
+    training = build_training_frame(
+        connection,
+        included_patches,
+        cutoff,
+        rank_offset,
+        current_patch,
+        changed_items,
+        settings,
+        prepare,
+        cache=TrainingCache.for_cohort(
+            settings.artifact_dir / "_cache",
+            included_patches,
+            cutoff,
+            *training_draw_shape(connection, included_patches, cutoff, settings),
+            enabled=settings.cache_training_draw,
+        ),
     )
-    slices = []
-    for residue in range(TRAINING_SAMPLE_SLICES):
-        drawn = prepare(
-            load_decision_frame(
-                connection,
-                included_patches,
-                cutoff,
-                rank_offset,
-                current_patch,
-                changed_items,
-                match_sample_modulus=slice_modulus,
-                match_sample_residue=residue,
-            ),
-            # `exclude_drifted_prior_actions` fires on cells with at least 100 observations in both
-            # the current and a prior patch. Those counts are divided by the sampling rate here, so
-            # applying it would drop an arbitrary subset of cells rather than a conservative one. It
-            # guards *borrowing into a per-cell estimate*, which is not what this model does: the
-            # model is P(win | pre-decision state) and is held to the calibration and held-out-patch
-            # gates below.
-            exclude_drift=False,
-        )
-        # Thinned here rather than after the concat so the whole draw is never resident at once. Each
-        # slice spans the full cohort time range, so the union stays a chronological systematic sample.
-        slices.append(thin_chronologically(drawn, slice_rows))
-        LOG.info(
-            "Training slice %d/%d: %d rows drawn, %d kept.",
-            residue + 1,
-            TRAINING_SAMPLE_SLICES,
-            len(drawn),
-            len(slices[-1]),
-        )
-        del drawn
-    training = pd.concat(slices, ignore_index=True)
-    del slices
     if training.empty:
         raise RuntimeError("No eligible item decisions were available for this generation.")
     if training["won"].nunique() < 2:

@@ -1,4 +1,5 @@
 import inspect
+import multiprocessing
 import pathlib
 import json
 import logging
@@ -2632,9 +2633,10 @@ def test_the_sequential_sweep_reuses_the_connection_it_was_given(monkeypatch, tm
 
 
 def test_the_sweep_worker_count_is_configurable_and_floored(monkeypatch, tmp_path):
-    # Query concurrency against a shared, HDD-backed database is the risk here, so the default is
-    # modest rather than the host's core count, and it can never drop below one.
-    assert modeler_settings(monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path)).sweep_workers == 4
+    # Sequential by default, from measurement: the sweep is ~90% Postgres wait and prod's disk is
+    # spinning, so three workers took 1349s over three champions where one took 432s. Fanning out is
+    # opt-in, not the default, and it can never drop below one.
+    assert modeler_settings(monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path)).sweep_workers == 1
     assert modeler_settings(
         monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path), BUILD_LAB_SWEEP_WORKERS="8"
     ).sweep_workers == 8
@@ -2710,3 +2712,62 @@ def test_team_attribution_treats_a_zero_id_as_absent_like_positive_int_did():
     assert scored.loc[scored["event_index"] == 1, "towers"].item() == 1
     assert scored.loc[scored["event_index"] == 2, "team_id"].item() == 200
     assert scored.loc[scored["event_index"] == 2, "kills"].item() == 1
+
+
+def _fitted_blas_threads() -> int:
+    """Do real BLAS work so the process has live worker threads, as the structural fit leaves it."""
+    import numpy as _np
+
+    matrix = _np.random.default_rng(0).random((600, 600))
+    _np.linalg.svd(matrix, full_matrices=False)
+    return 1
+
+
+def _pool_probe(value: int) -> int:
+    import numpy as _np
+
+    return int(_np.asarray([value]).sum())
+
+
+def test_the_sweep_pool_does_not_inherit_a_forked_lock_and_deadlock():
+    """A pool started after BLAS work must still run.
+
+    The sweep forks straight after the structural fit, which leaves BLAS/OpenMP threads behind. fork()
+    inherits mutex STATE, so a lock held by one of those threads arrives already-locked in the child and
+    is never released -- on prod that deadlocked all four workers for 45 minutes without a single
+    champion completing, and no single-worker test could have seen it. This starts a real pool the same
+    way the sweep does and requires it to finish.
+    """
+    from concurrent.futures import ProcessPoolExecutor
+
+    _fitted_blas_threads()
+
+    with ProcessPoolExecutor(
+        max_workers=2, mp_context=multiprocessing.get_context("spawn")
+    ) as pool:
+        results = list(pool.map(_pool_probe, [1, 2, 3, 4]))
+
+    assert results == [1, 2, 3, 4]
+
+
+def test_the_sweep_pool_is_configured_for_spawn():
+    # Belt and braces around the deadlock above: the source must name the start method, because the
+    # platform default on Linux is fork and the failure is silent -- a hang, not an error.
+    source = inspect.getsource(pipeline.model_generation)
+    assert 'mp_context=multiprocessing.get_context("spawn")' in source
+    assert "ProcessPoolExecutor(" in source
+
+
+def test_the_sweep_caps_worker_thread_pools_before_spawning():
+    # nproc inside a container reports the HOST's cores regardless of the cpu quota, so each spawned
+    # interpreter would size an OpenBLAS pool at ~46 threads. Four of those against a 3-cpu quota killed
+    # the pool outright with std::system_error: Resource temporarily unavailable. Children read these at
+    # numpy import, so they must be set before the pool starts, not inside the worker.
+    source = inspect.getsource(pipeline.model_generation)
+    for variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+        assert variable in source, variable
+    capped = source.index("OMP_NUM_THREADS")
+    spawned = source.index("ProcessPoolExecutor(")
+    assert capped < spawned, "thread caps must be set before the pool is created"
+    # setdefault, so an operator can still override it per deployment.
+    assert "os.environ.setdefault(" in source

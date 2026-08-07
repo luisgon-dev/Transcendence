@@ -14,6 +14,7 @@ import socket
 import threading
 import time
 from dataclasses import dataclass
+import multiprocessing
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -199,10 +200,15 @@ class Settings:
             training_draw_max_age_hours=max(
                 0.0, float(os.getenv("BUILD_LAB_TRAINING_DRAW_MAX_AGE_HOURS", "36"))
             ),
-            # Champions are independent, so the sweep fans out. Each worker holds its own connection, so
-            # this also sets query concurrency against a database that is shared with the live app --
-            # which is why the default is modest rather than the core count.
-            sweep_workers=max(1, int(os.getenv("BUILD_LAB_SWEEP_WORKERS", "4"))),
+            # Defaults to sequential, on measurement rather than principle.
+            #
+            # Champions are independent and the host has 43 idle cores, so fanning out looks obvious.
+            # It is not: the sweep is ~90% waiting on Postgres, and prod's database is HDD-backed, so
+            # concurrent scans thrash the disk instead of overlapping. Measured on the live cohort, the
+            # same three champions took 432s sequentially and 1349s across three workers -- parallelism
+            # was 3x SLOWER. The pool is kept because it is correct and the arithmetic changes on SSD or
+            # once the timeline amplification is removed, but it must be opted into.
+            sweep_workers=max(1, int(os.getenv("BUILD_LAB_SWEEP_WORKERS", "1"))),
             # How finely calibration is conditioned on game phase. The promotion gate scores ECE
             # within time bands, so this is the dial that moves the gate that is hardest to pass.
             calibration_bands=max(
@@ -649,8 +655,36 @@ def model_generation(
     else:
         # A champion that raises must fail the generation rather than silently drop out: a missing
         # champion is a quietly incomplete estimate set, which is worse than no estimate set.
+        # Workers get one BLAS thread each.
+        #
+        # `nproc` inside the container reports the HOST's cores -- a cpu quota does not change it -- so
+        # OpenBLAS sizes its pool at ~46 threads per process. Four interpreters doing that against a
+        # 3-cpu quota is not just oversubscription: it exhausted thread resources outright and the pool
+        # died with `std::system_error: Resource temporarily unavailable`. Workers only score with an
+        # already-fitted model, which is light linear algebra, so one thread each is right on the merits
+        # as well. Set before the pool starts so spawned children inherit it ahead of importing numpy,
+        # which is the only point at which OpenBLAS reads it. The structural fit above has already run,
+        # so its own threading is unaffected.
+        for variable in (
+            "OMP_NUM_THREADS",
+            "OPENBLAS_NUM_THREADS",
+            "MKL_NUM_THREADS",
+            "NUMEXPR_NUM_THREADS",
+        ):
+            os.environ.setdefault(variable, "1")
+
+        # "spawn", never the Linux default of "fork".
+        #
+        # The structural fit immediately above runs BLAS/OpenMP threads. fork() copies only the calling
+        # thread but inherits every mutex in whatever state it was in, so a lock held by a BLAS thread at
+        # fork time is inherited already-locked and never released -- the child then deadlocks the first
+        # time it touches that runtime. Observed exactly that on prod: four workers connected, opened a
+        # transaction each, and sat idle-in-transaction for 45 minutes without completing one champion.
+        # spawn starts a fresh interpreter with no inherited lock state. It costs a re-import per worker,
+        # once, against a sweep measured in tens of minutes.
         with ProcessPoolExecutor(
             max_workers=workers,
+            mp_context=multiprocessing.get_context("spawn"),
             initializer=_sweep_worker_setup,
             initargs=(settings, cohort, str(artifact_path / "win_probability.joblib")),
         ) as pool:

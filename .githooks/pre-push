@@ -1,0 +1,76 @@
+#!/usr/bin/env sh
+# Refuse pushes that cannot land, at the moment they are attempted.
+#
+# `main` squash-merges and deletes the source branch. Two consequences bite repeatedly, and both are
+# silent -- the push succeeds and the work simply never reaches main:
+#
+#   1. A branch started from another feature branch (or from a stale `origin/main`) carries commits
+#      that become duplicates once the parent squash-merges. GitHub reports the PR as DIRTY and, more
+#      confusingly, runs NO checks at all -- which reads like a broken workflow trigger rather than a
+#      branching mistake.
+#   2. A branch whose PR has already merged is dead. Further commits pushed to it go nowhere; the PR
+#      does not reopen, and the change is absent from main while looking committed and pushed locally.
+#
+# Both are caught here by asking two questions the answer to which is always known: is this branch a
+# descendant of the current origin/main, and is its PR already merged?
+#
+# Enable (once per clone):  git config core.hooksPath .githooks
+# Bypass for a deliberate case:  TRANSCENDENCE_ALLOW_PUSH=1 git push ...
+
+set -eu
+
+[ "${TRANSCENDENCE_ALLOW_PUSH:-}" = "1" ] && exit 0
+
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+case "$branch" in
+  main|HEAD|"") exit 0 ;;
+esac
+
+# The whole point is to compare against what origin/main IS, not the last time this clone looked.
+git fetch --quiet origin main 2>/dev/null || {
+  echo "pre-push: could not reach origin to check branch state; allowing." >&2
+  exit 0
+}
+
+if ! git merge-base --is-ancestor origin/main HEAD 2>/dev/null; then
+  cat >&2 <<'REASON'
+
+pre-push: BLOCKED - this branch is not a descendant of origin/main.
+
+  It was almost certainly started from another branch, or from a stale origin/main. Because main
+  squash-merges, the inherited commits become duplicates: the PR will report DIRTY and GitHub will
+  run no checks at all.
+
+  Rebuild it cleanly (your commits apply fine, the parent's content is already in main):
+
+    git fetch origin main
+    git checkout -B <clean-branch> origin/main
+    git cherry-pick <your commits>
+    git merge-base --is-ancestor origin/main HEAD   # must succeed
+    git diff --stat origin/main..HEAD               # must show ONLY your work
+
+REASON
+  exit 1
+fi
+
+# A merged PR means the branch is dead; pushing to it is a silent no-op for main.
+if command -v gh >/dev/null 2>&1; then
+  state=$(gh pr view "$branch" --json state --jq .state 2>/dev/null || echo "")
+  if [ "$state" = "MERGED" ]; then
+    cat >&2 <<REASON
+
+pre-push: BLOCKED - the PR for '$branch' is already MERGED.
+
+  Commits pushed here will not reach main and the PR will not reopen. Start a new branch from the
+  current main and move the work onto it:
+
+    git fetch origin main
+    git checkout -B <new-branch> origin/main
+    git cherry-pick <your commits>
+
+REASON
+    exit 1
+  fi
+fi
+
+exit 0

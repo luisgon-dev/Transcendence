@@ -272,3 +272,16 @@ Contributions are welcome. The fast path:
 ## 📄 License
 
 [GNU General Public License v3](LICENSE) — Copyright © 2026 luisgon-dev.
+
+## Git hooks
+
+Enable once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+`pre-commit` runs the staged-diff and OpenAPI checks. `pre-push` refuses a branch that is not a
+descendant of the current `origin/main`, or whose PR has already merged — both push cleanly but never
+reach `main`, because the repo squash-merges and deletes the source branch. Bypass a deliberate case
+with `TRANSCENDENCE_ALLOW_PUSH=1`.

@@ -10,6 +10,8 @@ import { ProfileHeroCard } from "@/components/lol-profile/ProfileHeroCard";
 import { ProfileSidebar } from "@/components/lol-profile/ProfileSidebar";
 import { StaticDataProvider } from "@/components/lol-profile/StaticDataContext";
 import {
+  MATCH_PLACEHOLDER_ROWS,
+  RECENT_FORM_SLOTS,
   type ApiErrorResponse,
   type ChampionStatic,
   type ItemStatic,
@@ -49,12 +51,16 @@ const MatchHistorySection = dynamic(
       (module) => module.MatchHistorySection
     ),
   {
+    // Mirrors the route-level skeleton (app/lol/summoners/[region]/[riotId]/loading.tsx)
+    // and the section's own first-load state. All three render in sequence on a cold
+    // load, so any difference in reserved height is a layout shift at each handoff.
     loading: () => (
-      <Card className="profile-section-card p-5">
-        <div className="grid gap-3">
-          <Skeleton className="h-11 w-full" />
-          <Skeleton className="h-40 w-full" />
-          <Skeleton className="h-40 w-full" />
+      <Card className="profile-section-card rounded-panel p-5 md:p-6">
+        <Skeleton className="h-6 w-40" />
+        <div className="mt-5 flex flex-col gap-4">
+          {Array.from({ length: MATCH_PLACEHOLDER_ROWS }).map((_, i) => (
+            <Skeleton key={i} className="h-28 w-full rounded-panel" />
+          ))}
         </div>
       </Card>
     )
@@ -157,7 +163,7 @@ export function SummonerProfileClient({
   ]);
 
   const recentForm = useMemo(
-    () => (matches.history?.items ?? []).slice(0, 10).map((match) => match.win),
+    () => (matches.history?.items ?? []).slice(0, RECENT_FORM_SLOTS).map((match) => match.win),
     [matches.history?.items]
   );
   const rankedEntries = useMemo(() => {

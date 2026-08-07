@@ -282,6 +282,24 @@ export type QueueOption = {
 
 export type MatchSortOption = "DATE_DESC" | "KDA_DESC" | "DMG_DESC";
 
+/**
+ * How many recent-form pips the profile hero shows, and therefore how many
+ * placeholders it reserves while match history is still in flight.
+ *
+ * Shared so the data window and the reserved geometry cannot drift apart: the hero
+ * row sits above every other element on the page, so a mismatch between them
+ * reflows the entire document.
+ */
+export const RECENT_FORM_SLOTS = 10;
+
+/**
+ * Match rows reserved by every pre-data state of the match list — the route-level
+ * skeleton, the dynamic-import fallback, and the section's own first-load state.
+ * All three render in sequence on a cold load, so they must reserve the same height
+ * or each handoff is its own layout shift.
+ */
+export const MATCH_PLACEHOLDER_ROWS = 4;
+
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
 }

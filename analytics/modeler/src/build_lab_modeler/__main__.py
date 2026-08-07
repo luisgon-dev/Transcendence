@@ -110,9 +110,10 @@ def training_cache(connection, settings: Settings, context, arguments) -> Traini
     cache = TrainingCache.for_cohort(
         settings.artifact_dir / "_cache",
         context["included_patches"],
-        context["cutoff"],
         *shape,
         enabled=not arguments.no_cache,
+        cutoff=context["cutoff"],
+        max_age_hours=settings.training_draw_max_age_hours,
     )
     if getattr(arguments, "refresh", False):
         removed = cache.clear()

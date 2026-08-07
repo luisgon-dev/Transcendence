@@ -22,6 +22,7 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -30,22 +31,26 @@ LOG = logging.getLogger("build_lab_modeler.cache")
 
 # Bumped when the stored frame's meaning changes -- new columns, a different preparation step, or a
 # change to how a slice is thinned. An old cache is then ignored rather than silently reused.
-CACHE_SCHEMA_VERSION = 1
+CACHE_SCHEMA_VERSION = 2
 
 
 def cohort_key(
     patches: list[str],
-    cutoff,
-    slice_modulus: int,
+    sample_ranges: list,
     slice_rows: int,
 ) -> str:
-    """Short stable digest of everything that decides which rows a slice contains."""
+    """Short stable digest of everything that decides which rows a slice contains.
+
+    Deliberately excludes the cutoff. The ranges themselves pin the rows: match ids are UUIDv7, so a
+    range's contents cannot change once ids beyond it exist, and a later cutoff only appends higher
+    ids. Keying on the cutoff instead meant every daily generation redrew a sample it already had.
+    See `TrainingCache.is_fresh_for` for the staleness bound that keeps that reuse honest.
+    """
     payload = json.dumps(
         {
             "schema": CACHE_SCHEMA_VERSION,
             "patches": sorted(str(patch) for patch in patches),
-            "cutoff": str(cutoff),
-            "sliceModulus": int(slice_modulus),
+            "ranges": [[str(edge) for edge in bounds] for bounds in sample_ranges],
             "sliceRows": int(slice_rows),
         },
         sort_keys=True,
@@ -65,20 +70,63 @@ class TrainingCache:
     directory: Path
     key: str
     enabled: bool = True
+    cutoff: object = None
+    max_age_hours: float = 0.0
 
     @classmethod
     def for_cohort(
         cls,
         root: Path,
         patches: list[str],
-        cutoff,
-        slice_modulus: int,
+        sample_ranges: list,
         slice_rows: int,
         *,
         enabled: bool = True,
+        cutoff: object = None,
+        max_age_hours: float = 0.0,
     ) -> "TrainingCache":
-        key = cohort_key(patches, cutoff, slice_modulus, slice_rows)
-        return cls(directory=root / "training-draw" / key, key=key, enabled=enabled)
+        key = cohort_key(patches, sample_ranges, slice_rows)
+        return cls(
+            directory=root / "training-draw" / key,
+            key=key,
+            enabled=enabled,
+            cutoff=cutoff,
+            max_age_hours=max_age_hours,
+        )
+
+    @property
+    def _meta_path(self) -> Path:
+        return self.directory / "meta.json"
+
+    def drawn_at(self):
+        """The cutoff the cached slices were drawn for, or None if nothing is cached."""
+        try:
+            return datetime.fromisoformat(json.loads(self._meta_path.read_text())["cutoff"])
+        except Exception:
+            return None
+
+    def is_fresh_for(self, cutoff) -> bool:
+        """Whether a cached draw may stand in for one taken at `cutoff`.
+
+        A cached range holds exactly the matches it held when drawn -- ids are UUIDv7 and a later cutoff
+        only appends higher ones -- so reuse is exact for the range, but the draw as a whole misses
+        matches ingested since. That is acceptable for the STRUCTURAL model, which is a nuisance model
+        of P(win | pre-decision state) rather than a published number, and the estimates themselves are
+        always read fresh per champion. It is bounded anyway, so the fit cannot drift arbitrarily far
+        behind the cohort it is scoring, and the cutoff actually used is recorded in the manifest.
+        """
+        if not self.enabled or self.max_age_hours <= 0 or cutoff is None:
+            return False
+        drawn = self.drawn_at()
+        if drawn is None:
+            return False
+        try:
+            age = (cutoff - drawn).total_seconds() / 3600.0
+        except TypeError:
+            return False
+        # Never reuse a draw taken AFTER the cutoff being modelled: it would contain matches the
+        # generation's own provenance excludes.
+        return 0.0 <= age <= self.max_age_hours
 
     def slice_path(self, residue: int) -> Path:
         return self.directory / f"slice-{residue:03d}.parquet"
@@ -106,6 +154,8 @@ class TrainingCache:
         try:
             frame.to_parquet(staging, index=False)
             staging.replace(path)
+            if self.cutoff is not None:
+                self._meta_path.write_text(json.dumps({"cutoff": str(self.cutoff)}))
         except Exception as exc:
             # Deliberately loud. A cache that silently never populates looks like a working cache and
             # quietly costs the draw on every run -- which is exactly what an unserialisable uuid

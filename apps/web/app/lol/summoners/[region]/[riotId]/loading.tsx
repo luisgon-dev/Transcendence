@@ -1,3 +1,7 @@
+import {
+  MATCH_PLACEHOLDER_ROWS,
+  RECENT_FORM_SLOTS
+} from "@/components/lol-profile/shared";
 import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 
@@ -24,7 +28,7 @@ export default function Loading() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
-          {Array.from({ length: 10 }).map((_, i) => (
+          {Array.from({ length: RECENT_FORM_SLOTS }).map((_, i) => (
             <Skeleton key={i} className="h-2.5 w-7 rounded-full" />
           ))}
         </div>
@@ -54,7 +58,7 @@ export default function Loading() {
           <Card className="profile-section-card rounded-panel p-5 md:p-6">
             <Skeleton className="h-6 w-40" />
             <div className="mt-5 flex flex-col gap-4">
-              {Array.from({ length: 4 }).map((_, i) => (
+              {Array.from({ length: MATCH_PLACEHOLDER_ROWS }).map((_, i) => (
                 <Skeleton key={i} className="h-28 w-full rounded-panel" />
               ))}
             </div>

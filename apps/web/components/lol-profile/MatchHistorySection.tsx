@@ -32,6 +32,7 @@ import {
 } from "@/lib/staticData";
 
 import {
+  MATCH_PLACEHOLDER_ROWS,
   matchKdaRatio,
   normalizeInitialSort,
   sortRuneSelections,
@@ -439,9 +440,18 @@ export function MatchHistorySection({
         </div>
 
         {historyError ? <p className="mt-4 text-sm text-danger">{historyError}</p> : null}
-        {historyBusy && !history ? <Skeleton className="mt-4 h-16 w-full" /> : null}
 
         <div className="mt-5 flex flex-col gap-4">
+          {/* First load only (`!history`). Reserves the same rows as the dynamic-import
+              fallback and the route skeleton, so each handoff between them is a repaint
+              rather than a reflow. A refetch (paging, filters) keeps the previous page
+              on screen and needs no placeholder. */}
+          {historyBusy && !history
+            ? Array.from({ length: MATCH_PLACEHOLDER_ROWS }).map((_, i) => (
+                <Skeleton key={i} className="h-28 w-full rounded-panel" />
+              ))
+            : null}
+
           {visibleMatches.map((match) => (
             <MatchHistoryCard
               key={match.matchId}

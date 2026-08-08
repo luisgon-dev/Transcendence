@@ -2,6 +2,7 @@ import Image from "next/image";
 
 import { FavoriteButton } from "@/components/FavoriteButton";
 import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Toolbar } from "@/components/ui/Toolbar";
 import { formatPercent } from "@/lib/format";
 import { profileIconUrl } from "@/lib/staticData";
@@ -9,6 +10,7 @@ import { profileIconUrl } from "@/lib/staticData";
 import {
   friendlyAcceptedMessage,
   rankColorClass,
+  RECENT_FORM_SLOTS,
   type AcceptedResponse,
   type ApiErrorResponse,
   type ChampionStatic,
@@ -106,34 +108,55 @@ export function ProfileHeroCard({
           </>
         }
         filters={
-          recentForm.length > 0 ? (
+          // Gated on the profile, not on recentForm: form is derived from match history,
+          // which is fetched on the client and is empty on the first paint. Keying the row
+          // off the data made the Toolbar drop it (border, padding, and the parent's gap)
+          // and re-insert it on arrival — a ~45px insertion above every other element on
+          // the page, which is what drove this route's CLS to p75 0.77. The row now exists
+          // for the whole lifetime of a profile and only its contents swap.
+          profile ? (
             <>
               <span className="type-overline text-muted">Recent form</span>
               {/* Wins render solid, losses render outlined: a fill/shape cue that
                   survives red/green color blindness, with color as a redundant
                   signal. The whole strip is one labelled image for screen readers;
                   the individual pips are decorative (aria-hidden). */}
-              <div
-                className="flex flex-wrap items-center gap-1"
-                role="img"
-                aria-label={`Recent form, latest first: ${recentForm
-                  .map((win) => (win ? "Win" : "Loss"))
-                  .join(", ")}`}
-              >
-                {recentForm.map((win, idx) => (
-                  <span
-                    key={`${win ? "w" : "l"}-${idx}`}
-                    aria-hidden="true"
-                    className={`h-2.5 w-7 rounded-full ${
-                      win ? "bg-win/80" : "border border-loss/70 bg-loss/25"
-                    }`}
-                    title={win ? "Win" : "Loss"}
-                  />
-                ))}
-              </div>
+              {recentForm.length > 0 ? (
+                <div
+                  className="flex flex-wrap items-center gap-1"
+                  role="img"
+                  aria-label={`Recent form, latest first: ${recentForm
+                    .map((win) => (win ? "Win" : "Loss"))
+                    .join(", ")}`}
+                >
+                  {recentForm.map((win, idx) => (
+                    <span
+                      key={`${win ? "w" : "l"}-${idx}`}
+                      aria-hidden="true"
+                      className={`h-2.5 w-7 rounded-full ${
+                        win ? "bg-win/80" : "border border-loss/70 bg-loss/25"
+                      }`}
+                      title={win ? "Win" : "Loss"}
+                    />
+                  ))}
+                </div>
+              ) : (
+                // Same pip geometry as the loaded strip, so the swap is a repaint and not
+                // a reflow — and the same primitive the route skeleton uses, so the
+                // handoff from loading.tsx into this component is invisible. Decorative
+                // while empty: there is no form to announce yet.
+                <div className="flex flex-wrap items-center gap-1" aria-hidden="true">
+                  {Array.from({ length: RECENT_FORM_SLOTS }).map((_, idx) => (
+                    <Skeleton key={idx} className="h-2.5 w-7 rounded-full" />
+                  ))}
+                </div>
+              )}
+              {/* Same element and typography in both states so the line box — which sets
+                  the row's height — is identical. Right-aligned, so its width can vary. */}
               <span className="type-caption ml-auto text-muted">
-                Last {recentForm.length}
-                {recentWr ? ` · ${recentWr} WR` : ""} · {dataAge}
+                {recentForm.length > 0
+                  ? `Last ${recentForm.length}${recentWr ? ` · ${recentWr} WR` : ""} · ${dataAge}`
+                  : dataAge}
               </span>
             </>
           ) : undefined

@@ -479,6 +479,19 @@ def _sweep_worker_setup(
         else psycopg.connect(settings.database_url, row_factory=dict_row)
     )
     _WORKER["bundle"] = bundle if bundle is not None else joblib.load(bundle_path)
+    # Drawn once per process rather than once per champion -- see compact_timeline_events for why this
+    # is the sweep's dominant cost. In the pool each worker draws its own copy, which is one read per
+    # worker against 173 before; sharing one frame across spawned interpreters would mean pickling it
+    # through initargs, and the pool is opt-in and already the slower path on this hardware.
+    _WORKER["timeline_events"] = compact_timeline_events(
+        load_timeline_state_events(
+            _WORKER["connection"], cohort["included_patches"], cohort["cutoff"]
+        )
+    )
+    LOG.info(
+        "Preloaded %d cohort timeline events; the sweep slices these instead of re-reading per champion.",
+        len(_WORKER["timeline_events"]),
+    )
 
 
 def sweep_champion(champion_id: int) -> dict:
@@ -499,6 +512,7 @@ def sweep_champion(champion_id: int) -> dict:
             cohort["current_patch"],
             cohort["changed_items"],
             champion_id=champion_id,
+            timeline_events=_WORKER["timeline_events"],
         ),
         cohort["current_patch"],
         cohort["included_patches"],
@@ -780,12 +794,17 @@ def load_decision_frame(
     *,
     champion_id: int | None = None,
     match_sample_range: tuple | None = None,
+    timeline_events: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Load one scope of the frozen cohort and turn it into unweighted decision rows.
 
     The scope is either a champion (the estimate sweep) or a deterministic sample of matches (the
     structural fit). Item events are participant-scoped, while team composition and kill state are
     match-scoped, because a kill diff is a fact about the match rather than about one participant.
+
+    `timeline_events` is the sweep's preloaded cohort-wide event frame. Supplying it replaces this
+    scope's timeline query with a pandas slice; omitting it queries per scope as before, which is what
+    the structural fit does since its match sample is drawn once rather than 173 times.
     """
     scope = {"champion_id": champion_id, "match_sample_range": match_sample_range}
     item_events = load_item_events(
@@ -797,7 +816,11 @@ def load_decision_frame(
     del item_events
     item_decisions = enrich_with_predecision_event_state(
         item_decisions,
-        load_timeline_state_events(connection, included_patches, cutoff, **scope),
+        (
+            champion_timeline_events(timeline_events, item_decisions["match_id"])
+            if timeline_events is not None
+            else load_timeline_state_events(connection, included_patches, cutoff, **scope)
+        ),
         load_participant_teams(connection, included_patches, cutoff, **scope),
     )
     item_decisions = exclude_incompatible_prior_item_rows(
@@ -1591,6 +1614,53 @@ def load_timeline_state_events(
             "match_sample_until": match_sample_range[1] if match_sample_range else None,
         },
     )
+
+
+# The sweep's dominant cost, and the reason a 173-champion run projected to 17 days on prod rather
+# than the ~7 hours its per-champion measurement implied.
+#
+# `load_timeline_state_events` is match-scoped: it returns every kill event in every match the champion
+# played, because a kill diff is a fact about the match. A match has ten participants, so each match's
+# events were re-read once per champion in it -- ~56M event rows read where the cohort holds 5.6M, each
+# read a fresh index scan plus jsonb extraction against an HDD-backed database. Nothing about the events
+# depends on the champion, so they are drawn once per process here and sliced in pandas instead.
+#
+# Slicing is sound because a superset is inert, not because the slice is exact:
+# `enrich_with_predecision_event_state` derives `has_event_state` from the decisions' own match ids, and
+# `merge_cumulative_state` merges asof `by=["match_id", "team_id"]`, so an event belonging to a match the
+# champion never played cannot reach a published column. The slice exists to stop
+# `attribute_events_to_teams` re-scoring all 5.6M rows once per champion, which would simply move the
+# amplification from Postgres into pandas.
+def compact_timeline_events(events: pd.DataFrame) -> pd.DataFrame:
+    """Hold the cohort's events at a fraction of the memory the loader's dtypes would cost.
+
+    Only `match_id` and `event_type` repeat enough to be worth encoding, and `match_id` dominates:
+    `normalise_uuid_columns` gives every one of the 5.6M rows its own 36-character `str`, roughly 475MB
+    as objects against ~30MB as categories over ~110k distinct ids. That difference is what decides
+    whether the cohort-wide frame fits beside the champion's own working set.
+    """
+    if events.empty:
+        return events
+    compacted = events.copy()
+    for column in ("match_id", "event_type"):
+        compacted[column] = compacted[column].astype("category")
+    return compacted
+
+
+def champion_timeline_events(events: pd.DataFrame, match_ids) -> pd.DataFrame:
+    """One champion's slice of the preloaded cohort events, in the dtypes the query would have returned.
+
+    Casting the categories back is not cosmetic. `attribute_events_to_teams` compares `event_type` to
+    string literals and merges `match_id` against frames carrying plain strings, and a categorical key
+    still carrying every unobserved category does not merge like the object column it replaced. Handing
+    back the loader's own dtypes keeps this a caching change and nothing else.
+    """
+    if events.empty:
+        return events
+    sliced = events[events["match_id"].isin(set(match_ids))].copy()
+    for column in ("match_id", "event_type"):
+        sliced[column] = sliced[column].astype(object)
+    return sliced
 
 
 def load_participant_teams(

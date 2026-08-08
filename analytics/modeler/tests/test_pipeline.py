@@ -41,7 +41,9 @@ from build_lab_modeler.pipeline import (
     build_path_estimates,
     build_rune_decisions,
     build_spell_decisions,
+    champion_timeline_events,
     clustered_standard_error,
+    compact_timeline_events,
     deidentified_export,
     design_matrix,
     direction_is_stable,
@@ -1875,6 +1877,117 @@ def test_the_estimate_sweep_scopes_every_load_to_one_champion(monkeypatch, tmp_p
     assert len(set(drawn)) == len(drawn), drawn
 
 
+def cohort_timeline_fixture() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Two matches' worth of events, of which one champion played only the first.
+
+    Shaped like the loader's output, including the payload scalars arriving as text.
+    """
+    events = pd.DataFrame(
+        [
+            {"match_id": "mine", "event_index": 0, "timestamp_ms": 500, "event_type": "CHAMPION_KILL", "killer_participant_id": "1", "killer_team_id": None, "owner_team_id": None},
+            {"match_id": "mine", "event_index": 1, "timestamp_ms": 900, "event_type": "BUILDING_KILL", "killer_participant_id": "0", "killer_team_id": None, "owner_team_id": "200"},
+            {"match_id": "theirs", "event_index": 0, "timestamp_ms": 400, "event_type": "CHAMPION_KILL", "killer_participant_id": "6", "killer_team_id": None, "owner_team_id": None},
+            {"match_id": "theirs", "event_index": 1, "timestamp_ms": 700, "event_type": "ELITE_MONSTER_KILL", "killer_participant_id": "6", "killer_team_id": None, "owner_team_id": None},
+        ]
+    )
+    decisions = pd.DataFrame(
+        [{"match_id": "mine", "participant_id": 1, "timestamp_ms": 2000}]
+    )
+    teams = pd.DataFrame(
+        [
+            {"match_id": "mine", "participant_id": 1, "team_id": 100},
+            {"match_id": "mine", "participant_id": 6, "team_id": 200},
+        ]
+    )
+    return events, decisions, teams
+
+
+def test_slicing_the_preloaded_events_matches_what_a_champion_scoped_query_returned():
+    # The whole safety argument for reading the cohort's timeline once instead of once per champion.
+    # If these ever diverge, the sweep is publishing different numbers than the per-champion loads did.
+    cohort_events, decisions, teams = cohort_timeline_fixture()
+    scoped = cohort_events[cohort_events["match_id"] == "mine"].reset_index(drop=True)
+
+    from_query = enrich_with_predecision_event_state(decisions, scoped, teams)
+    from_slice = enrich_with_predecision_event_state(
+        decisions,
+        champion_timeline_events(compact_timeline_events(cohort_events), decisions["match_id"]),
+        teams,
+    )
+
+    pd.testing.assert_frame_equal(from_query, from_slice)
+    # Not a vacuous comparison: the fixture has to actually exercise the diff columns.
+    assert from_query["team_kill_diff"].tolist() == [1.0]
+    assert from_query["team_tower_diff"].tolist() == [1.0]
+    assert from_query["has_event_state"].tolist() == [1.0]
+
+
+def test_an_unrelated_match_s_events_cannot_reach_a_published_column():
+    # Why the slice is an optimisation rather than a correctness requirement: `merge_asof` carries
+    # match_id in `by`, so a superset is inert. Asserting it directly means a future change to the
+    # merge keys fails here rather than silently mixing matches together.
+    cohort_events, decisions, teams = cohort_timeline_fixture()
+    scoped = cohort_events[cohort_events["match_id"] == "mine"].reset_index(drop=True)
+
+    pd.testing.assert_frame_equal(
+        enrich_with_predecision_event_state(decisions, scoped, teams),
+        enrich_with_predecision_event_state(decisions, cohort_events, teams),
+    )
+
+
+def test_a_preloaded_slice_hands_back_the_loader_s_own_dtypes():
+    # Compaction is storage-only. `attribute_events_to_teams` compares event_type to string literals
+    # and merges match_id against frames of plain strings, so a categorical leaking through would
+    # change merge behaviour rather than fail loudly.
+    cohort_events, _, _ = cohort_timeline_fixture()
+    compacted = compact_timeline_events(cohort_events)
+    assert isinstance(compacted["match_id"].dtype, pd.CategoricalDtype)
+
+    sliced = champion_timeline_events(compacted, ["mine"])
+    assert sliced["match_id"].dtype == object
+    assert sliced["event_type"].dtype == object
+    assert sliced["match_id"].tolist() == ["mine", "mine"]
+    # A category that survived the slice would otherwise reappear in groupby/merge results.
+    assert set(sliced["event_type"]) == {"CHAMPION_KILL", "BUILDING_KILL"}
+
+
+def test_an_empty_cohort_timeline_survives_compaction_and_slicing():
+    empty = pd.DataFrame(
+        columns=["match_id", "event_index", "timestamp_ms", "event_type", "killer_participant_id", "killer_team_id", "owner_team_id"]
+    )
+    assert compact_timeline_events(empty).empty
+    assert champion_timeline_events(empty, ["mine"]).empty
+
+
+def test_the_sweep_never_reads_the_timeline_once_per_champion(monkeypatch, tmp_path):
+    # The regression this guards: `load_timeline_state_events` is match-scoped, so a champion-scoped
+    # call re-read every match that champion played -- ten times over the cohort across the sweep, which
+    # is what projected a 173-champion run to 17 days on prod. One unscoped preload replaces all of them.
+    monkeypatch.setenv("BUILD_LAB_SWEEP_WORKERS", "1")
+    settings, generation = publishing_generation(monkeypatch, tmp_path)
+    champions = [22, 51, 103]
+    monkeypatch.setattr(pipeline, "load_cohort_champions", lambda *_: champions)
+    calls: list[dict] = []
+    real_loader = pipeline.load_timeline_state_events
+
+    def recording(connection, patches, cutoff, champion_id=None, match_sample_range=None):
+        calls.append({"champion_id": champion_id, "match_sample_range": match_sample_range})
+        return real_loader(connection, patches, cutoff, champion_id, match_sample_range)
+
+    monkeypatch.setattr(pipeline, "load_timeline_state_events", recording)
+    model_generation(FakeConnection(), generation, settings)
+
+    assert calls, "the sweep must still read the timeline at all"
+    # Not "once in total": the structural fit draws per match-sample range, and those are unamplified.
+    assert all(call["champion_id"] is None for call in calls), calls
+    preloads = [
+        call
+        for call in calls
+        if call["champion_id"] is None and call["match_sample_range"] is None
+    ]
+    assert len(preloads) == 1, preloads
+
+
 class DictRowCursor:
     """A cursor shaped like psycopg's, whose row factory decides the row type.
 
@@ -2623,13 +2736,27 @@ def test_the_sequential_sweep_reuses_the_connection_it_was_given(monkeypatch, tm
     # the live app, and would make the publish path untestable without a real server.
     settings = modeler_settings(monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path))
     sentinel = FakeConnection()
+    # What the preload draws is another test's business; this one is about the wiring, so it is stubbed
+    # rather than serviced by a fake cursor.
+    monkeypatch.setattr(
+        pipeline, "load_timeline_state_events", lambda *_, **__: pd.DataFrame()
+    )
+    # The cohort carries the patches and cutoff because setup also draws the sweep's one timeline
+    # preload here, on this same connection -- which is the point of reusing it.
     pipeline._sweep_worker_setup(
-        settings, {"artifact_path": str(tmp_path)}, "unused.joblib",
+        settings,
+        {
+            "artifact_path": str(tmp_path),
+            "included_patches": ["16.15"],
+            "cutoff": datetime(2026, 8, 8, 2, 15, tzinfo=timezone.utc),
+        },
+        "unused.joblib",
         connection=sentinel, bundle={"model": None},
     )
     assert pipeline._WORKER["connection"] is sentinel
     assert pipeline._WORKER["owns_connection"] is False
     assert pipeline._WORKER["bundle"] == {"model": None}
+    assert "timeline_events" in pipeline._WORKER
 
 
 def test_the_sweep_worker_count_is_configurable_and_floored(monkeypatch, tmp_path):

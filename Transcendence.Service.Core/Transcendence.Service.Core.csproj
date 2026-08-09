@@ -37,6 +37,9 @@
 
     <ItemGroup>
         <InternalsVisibleTo Include="Transcendence.Service.Core.Tests" />
+        <!-- Transcendence.Service.Core.Tests runs on SQLite, so provider-specific work (the matchup
+             rank snapshot's ON CONFLICT insert) can only be exercised by the Testcontainers suite. -->
+        <InternalsVisibleTo Include="Transcendence.IntegrationTests" />
     </ItemGroup>
 
 </Project>

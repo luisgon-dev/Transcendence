@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -520,7 +521,9 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
             stopwatch.ElapsedMilliseconds);
     }
 
-    private async Task EnsureRankSnapshotAsync(ChampionMatchupSnapshot snapshot, CancellationToken ct)
+    // internal rather than private so the Testcontainers suite can drive the real insert: the
+    // SQLite-backed unit tests cannot execute this method's provider-specific SQL.
+    internal async Task EnsureRankSnapshotAsync(ChampionMatchupSnapshot snapshot, CancellationToken ct)
     {
         var summonerIds = await _context.ChampionMatchupFacts
             .AsNoTracking()
@@ -533,8 +536,25 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
             .Where(row => row.SnapshotId == snapshot.Id)
             .Select(row => row.SummonerId)
             .ToListAsync(ct);
+        // The read above is an optimisation, not the correctness guarantee: it keeps a resumed
+        // generation from re-sending rows it already wrote. Two runs can still compute overlapping
+        // "missing" sets, because nothing serialises them -- a slow database times out the job's
+        // reads, Hangfire retries it, and the retry overlaps the original. Both then read the same
+        // `existing` set before either inserts, and the second SaveChanges died on
+        // PK_ChampionMatchupRankSnapshots (23505), failing the whole generation. Observed on prod at
+        // roughly one error an hour, and for six hours straight while the Build Lab modeler was
+        // saturating the same database.
         var existing = existingSummonerIds.ToHashSet();
-        var missingSummonerIds = summonerIds.Where(summonerId => !existing.Contains(summonerId)).ToList();
+        // Ordered so concurrent writers agree on it. ON CONFLICT DO NOTHING still takes a row lock per
+        // key and waits on an in-flight speculative insert of the same key, so two runs inserting the
+        // same overlapping set in opposite orders can deadlock -- trading a duplicate-key failure for a
+        // deadlock failure. The source query is a DISTINCT with no ORDER BY, whose order is not stable
+        // across connections, so the ordering has to be imposed here. Any total order works provided
+        // every writer uses the same one.
+        var missingSummonerIds = summonerIds
+            .Where(summonerId => !existing.Contains(summonerId))
+            .OrderBy(summonerId => summonerId)
+            .ToList();
         if (missingSummonerIds.Count == 0)
             return;
 
@@ -547,16 +567,41 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
                     summonerBatch.Contains(rank.SummonerId))
                 .Select(rank => new { rank.SummonerId, rank.Tier })
                 .ToDictionaryAsync(rank => rank.SummonerId, rank => rank.Tier, ct);
-            var rows = summonerBatch.Select(summonerId => new ChampionMatchupRankSnapshot
+            // Positional: paired with the batch by index when the VALUES rows are built below, so it
+            // must stay aligned with the batch it was projected from.
+            var rankTierValues = summonerBatch
+                .Select(summonerId => ranks.GetValueOrDefault(summonerId, RankTierCatalog.Unranked))
+                .ToArray();
+
+            // ON CONFLICT DO NOTHING rather than EF's AddRange: a concurrent writer racing this batch
+            // is then absorbed by the database instead of aborting the batch. The row is identical
+            // whichever run writes it -- rank attribution is frozen at the snapshot's cutoff -- so
+            // discarding the loser is the correct resolution, not merely the convenient one.
+            //
+            // A row-per-VALUES list rather than Postgres' unnest, which would express this in three
+            // parameters: the matchup equivalence tests run on SQLite, and a provider branch here
+            // would mean they stop covering the statement prod actually issues -- which is the gap
+            // that let this defect ship. Both providers parse this form. It costs two parameters per
+            // row, so a full 2,000-row chunk sends 4,001 against limits of 65,535 (Npgsql) and 32,766
+            // (SQLite); chunks that large only ever occur on Postgres.
+            var values = new StringBuilder();
+            var parameters = new List<object> { snapshot.Id };
+            for (var index = 0; index < summonerBatch.Length; index++)
             {
-                SnapshotId = snapshot.Id,
-                SummonerId = summonerId,
-                RankTier = ranks.GetValueOrDefault(summonerId, RankTierCatalog.Unranked)
-            }).ToList();
-            _context.ChampionMatchupRankSnapshots.AddRange(rows);
-            await _context.SaveChangesAsync(ct);
-            foreach (var row in rows)
-                _context.Entry(row).State = EntityState.Detached;
+                if (index > 0)
+                    values.Append(',');
+                values.Append("({0},{").Append(parameters.Count).Append("},{")
+                    .Append(parameters.Count + 1).Append("})");
+                parameters.Add(summonerBatch[index]);
+                parameters.Add(rankTierValues[index]);
+            }
+
+            await _context.Database.ExecuteSqlRawAsync(
+                $"""
+                 INSERT INTO "ChampionMatchupRankSnapshots" ("SnapshotId", "SummonerId", "RankTier")
+                 VALUES {values}
+                 ON CONFLICT ("SnapshotId", "SummonerId") DO NOTHING
+                 """, parameters, ct);
         }
     }
 

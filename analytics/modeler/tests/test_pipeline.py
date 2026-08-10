@@ -41,9 +41,10 @@ from build_lab_modeler.pipeline import (
     build_path_estimates,
     build_rune_decisions,
     build_spell_decisions,
-    champion_timeline_events,
+    apply_event_state,
+    event_state_from_events,
+    stream_cohort_event_state,
     clustered_standard_error,
-    compact_timeline_events,
     deidentified_export,
     design_matrix,
     direction_is_stable,
@@ -63,6 +64,7 @@ from build_lab_modeler.pipeline import (
     load_rune_decisions,
     load_spell_decisions,
     load_timeline_state_events,
+    timeline_state_events_query,
     mark_failed,
     maximum_weighted_smd,
     model_generation,
@@ -119,6 +121,24 @@ class FakeTransaction:
         return False
 
 
+class EmptyServerCursor:
+    """psycopg's server-side cursor shape, holding no rows."""
+
+    description: list = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        return False
+
+    def execute(self, sql, params=None):
+        return self
+
+    def fetchmany(self, size):
+        return []
+
+
 class FakeConnection:
     """Records every statement so the guarded status writes can be asserted without a database."""
 
@@ -133,6 +153,7 @@ class FakeConnection:
         self._rowcounts = dict(rowcounts or {})
         self._rows = dict(rows or {})
         self._fail_on = fail_on
+        self.server_cursors: list = []
         self.statements: list[tuple[str, tuple | list | None]] = []
         # Statements that survived their transaction block, as opposed to every statement attempted.
         self.staged: list[tuple[str, tuple | list | None]] = []
@@ -152,6 +173,17 @@ class FakeConnection:
         self.statements.append((statement, rows))
         self._stage(statement, rows)
         return FakeCursor(len(rows))
+
+    def cursor(self, name=None, row_factory=None):
+        """A server-side cursor over nothing.
+
+        The sweep streams the cohort's event state through one of these. A generation driven against
+        this fake has no timeline rows, so an empty stream is the honest answer -- and keeping the real
+        `stream_cohort_event_state` in the path means these tests still exercise it rather than
+        stubbing the step that broke prod.
+        """
+        self.server_cursors.append(name)
+        return EmptyServerCursor()
 
     def transaction(self) -> FakeTransaction:
         return FakeTransaction(self)
@@ -810,7 +842,7 @@ def test_rank_lateral_prefers_the_nearest_pre_match_observation():
 def test_every_timeline_dependent_loader_filters_the_schema_version():
     for loader in (
         load_item_events,
-        load_timeline_state_events,
+        timeline_state_events_query,
         load_rune_decisions,
         load_spell_decisions,
     ):
@@ -1772,7 +1804,7 @@ def test_every_cohort_loader_scopes_on_the_same_predicates():
     # The sweep is only correct if all five loaders agree on which rows belong to the scope. Item,
     # rune and spell rows are per participant; team composition and kill state are per match.
     participant_scoped = (load_item_events, load_rune_decisions, load_spell_decisions)
-    match_scoped = (load_timeline_state_events, load_participant_teams)
+    match_scoped = (timeline_state_events_query, load_participant_teams)
     for loader in participant_scoped + match_scoped:
         source = inspect.getsource(loader)
         assert "scope_predicates(" in source, loader.__name__
@@ -1828,7 +1860,7 @@ def test_every_champion_scoped_loader_defines_the_match_set_it_references():
         load_item_events,
         load_rune_decisions,
         load_spell_decisions,
-        load_timeline_state_events,
+        timeline_state_events_query,
         load_participant_teams,
     ):
         source = inspect.getsource(loader)
@@ -1877,8 +1909,8 @@ def test_the_estimate_sweep_scopes_every_load_to_one_champion(monkeypatch, tmp_p
     assert len(set(drawn)) == len(drawn), drawn
 
 
-def cohort_timeline_fixture() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Two matches' worth of events, of which one champion played only the first.
+def cohort_timeline_fixture():
+    """Two matches of events, of which the champion under test played only the first.
 
     Shaped like the loader's output, including the payload scalars arriving as text.
     """
@@ -1886,88 +1918,184 @@ def cohort_timeline_fixture() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
         [
             {"match_id": "mine", "event_index": 0, "timestamp_ms": 500, "event_type": "CHAMPION_KILL", "killer_participant_id": "1", "killer_team_id": None, "owner_team_id": None},
             {"match_id": "mine", "event_index": 1, "timestamp_ms": 900, "event_type": "BUILDING_KILL", "killer_participant_id": "0", "killer_team_id": None, "owner_team_id": "200"},
+            {"match_id": "mine", "event_index": 2, "timestamp_ms": 1400, "event_type": "CHAMPION_KILL", "killer_participant_id": "6", "killer_team_id": None, "owner_team_id": None},
             {"match_id": "theirs", "event_index": 0, "timestamp_ms": 400, "event_type": "CHAMPION_KILL", "killer_participant_id": "6", "killer_team_id": None, "owner_team_id": None},
             {"match_id": "theirs", "event_index": 1, "timestamp_ms": 700, "event_type": "ELITE_MONSTER_KILL", "killer_participant_id": "6", "killer_team_id": None, "owner_team_id": None},
         ]
     )
     decisions = pd.DataFrame(
-        [{"match_id": "mine", "participant_id": 1, "timestamp_ms": 2000}]
+        [
+            {"match_id": "mine", "participant_id": 1, "timestamp_ms": 1000},
+            {"match_id": "mine", "participant_id": 1, "timestamp_ms": 2000},
+        ]
     )
     teams = pd.DataFrame(
         [
             {"match_id": "mine", "participant_id": 1, "team_id": 100},
             {"match_id": "mine", "participant_id": 6, "team_id": 200},
+            {"match_id": "theirs", "participant_id": 6, "team_id": 200},
         ]
     )
     return events, decisions, teams
 
 
-def test_slicing_the_preloaded_events_matches_what_a_champion_scoped_query_returned():
-    # The whole safety argument for reading the cohort's timeline once instead of once per champion.
-    # If these ever diverge, the sweep is publishing different numbers than the per-champion loads did.
-    cohort_events, decisions, teams = cohort_timeline_fixture()
-    scoped = cohort_events[cohort_events["match_id"] == "mine"].reset_index(drop=True)
+class ChunkedTimelineConnection:
+    """A connection whose server-side cursor hands the fixture back in chunks.
 
-    from_query = enrich_with_predecision_event_state(decisions, scoped, teams)
-    from_slice = enrich_with_predecision_event_state(
-        decisions,
-        champion_timeline_events(compact_timeline_events(cohort_events), decisions["match_id"]),
-        teams,
+    Mirrors psycopg closely enough to drive `stream_cohort_event_state`: a named cursor, a
+    `description` naming the columns, and `fetchmany` yielding tuples. A deliberately tiny chunk size
+    splits a match across chunk boundaries, which is the case the cumulative sums have to survive.
+    """
+
+    class Column:
+        def __init__(self, name):
+            self.name = name
+
+    class Cursor:
+        def __init__(self, frame, chunk):
+            self._frame = frame
+            self._chunk = chunk
+            self._offset = 0
+            self.description = [ChunkedTimelineConnection.Column(c) for c in frame.columns]
+            self.executed = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def execute(self, sql, params=None):
+            self.executed.append((sql, params))
+            return self
+
+        def fetchmany(self, size):
+            window = self._frame.iloc[self._offset:self._offset + size]
+            self._offset += len(window)
+            return list(window.itertuples(index=False, name=None))
+
+    def __init__(self, frame, chunk=2):
+        self._frame = frame
+        self._chunk = chunk
+        self.cursors = []
+
+    def cursor(self, name=None, row_factory=None):
+        cursor = ChunkedTimelineConnection.Cursor(self._frame, self._chunk)
+        cursor.name = name
+        self.cursors.append(cursor)
+        return cursor
+
+
+def streamed_state(events, teams, chunk=2):
+    connection = ChunkedTimelineConnection(events, chunk=chunk)
+    state = stream_cohort_event_state(
+        connection, ["16.15"], datetime(2026, 8, 10, tzinfo=timezone.utc), teams, chunk_rows=chunk
+    )
+    return state, connection
+
+
+def test_streamed_cohort_state_matches_the_buffered_per_scope_path():
+    # The whole safety argument for reducing the cohort once instead of querying per champion. If these
+    # diverge, the sweep publishes different numbers than the per-scope loads produced.
+    events, decisions, teams = cohort_timeline_fixture()
+    scoped = events[events["match_id"] == "mine"].reset_index(drop=True)
+
+    buffered = enrich_with_predecision_event_state(decisions, scoped, teams)
+    state, _ = streamed_state(events, teams)
+    streamed = apply_event_state(decisions, state, teams)
+
+    pd.testing.assert_frame_equal(buffered, streamed)
+    # Not a vacuous comparison: the fixture has to actually move the diff columns.
+    assert buffered["team_kill_diff"].tolist() == [1.0, 0.0]
+    assert buffered["team_tower_diff"].tolist() == [1.0, 1.0]
+    assert buffered["has_event_state"].tolist() == [1.0, 1.0]
+
+
+def test_a_chunk_boundary_inside_a_match_does_not_restart_its_counters():
+    # Cumulative sums are deferred to the end for exactly this reason: chunking is a transport detail
+    # and must not be observable in the result.
+    events, decisions, teams = cohort_timeline_fixture()
+    whole, _ = streamed_state(events, teams, chunk=len(events))
+    split, connection = streamed_state(events, teams, chunk=1)
+
+    assert len(connection.cursors[0].executed) == 1, "the statement is issued once, then streamed"
+    pd.testing.assert_frame_equal(
+        apply_event_state(decisions, whole, teams),
+        apply_event_state(decisions, split, teams),
     )
 
-    pd.testing.assert_frame_equal(from_query, from_slice)
-    # Not a vacuous comparison: the fixture has to actually exercise the diff columns.
-    assert from_query["team_kill_diff"].tolist() == [1.0]
-    assert from_query["team_tower_diff"].tolist() == [1.0]
-    assert from_query["has_event_state"].tolist() == [1.0]
 
-
-def test_an_unrelated_match_s_events_cannot_reach_a_published_column():
-    # Why the slice is an optimisation rather than a correctness requirement: `merge_asof` carries
-    # match_id in `by`, so a superset is inert. Asserting it directly means a future change to the
+def test_an_unrelated_match_cannot_reach_a_published_column():
+    # Why cohort-wide state is safe to share across every champion: merge_asof carries the match in
+    # `by`, so a match the champion never played is inert. Asserted directly so a future change to the
     # merge keys fails here rather than silently mixing matches together.
-    cohort_events, decisions, teams = cohort_timeline_fixture()
-    scoped = cohort_events[cohort_events["match_id"] == "mine"].reset_index(drop=True)
+    events, decisions, teams = cohort_timeline_fixture()
+    scoped = events[events["match_id"] == "mine"].reset_index(drop=True)
 
     pd.testing.assert_frame_equal(
-        enrich_with_predecision_event_state(decisions, scoped, teams),
-        enrich_with_predecision_event_state(decisions, cohort_events, teams),
+        apply_event_state(decisions, event_state_from_events(scoped, teams), teams),
+        apply_event_state(decisions, event_state_from_events(events, teams), teams),
     )
 
 
-def test_a_preloaded_slice_hands_back_the_loader_s_own_dtypes():
-    # Compaction is storage-only. `attribute_events_to_teams` compares event_type to string literals
-    # and merges match_id against frames of plain strings, so a categorical leaking through would
-    # change merge behaviour rather than fail loudly.
-    cohort_events, _, _ = cohort_timeline_fixture()
-    compacted = compact_timeline_events(cohort_events)
-    assert isinstance(compacted["match_id"].dtype, pd.CategoricalDtype)
+def test_event_state_is_held_in_a_narrow_numeric_width():
+    # The regression that took the modeler down: holding the cohort's raw events cost ~340 bytes a row
+    # and blew the 6g container. The reduced form has to stay numeric and must not carry the match id
+    # as a string, which is what dominated that footprint.
+    events, _, teams = cohort_timeline_fixture()
+    state, _ = streamed_state(events, teams)
 
-    sliced = champion_timeline_events(compacted, ["mine"])
-    assert sliced["match_id"].dtype == object
-    assert sliced["event_type"].dtype == object
-    assert sliced["match_id"].tolist() == ["mine", "mine"]
-    # A category that survived the slice would otherwise reappear in groupby/merge results.
-    assert set(sliced["event_type"]) == {"CHAMPION_KILL", "BUILDING_KILL"}
+    assert list(state.cumulative.columns) == [
+        "match_code", "team_id", "timestamp_ms", "kills", "towers", "objectives"
+    ]
+    assert all(str(dtype).startswith("int") for dtype in state.cumulative.dtypes), state.cumulative.dtypes
+    per_row = state.cumulative.memory_usage(deep=True).sum() / max(len(state.cumulative), 1)
+    assert per_row < 64, per_row
 
 
-def test_an_empty_cohort_timeline_survives_compaction_and_slicing():
-    empty = pd.DataFrame(
-        columns=["match_id", "event_index", "timestamp_ms", "event_type", "killer_participant_id", "killer_team_id", "owner_team_id"]
+def test_coverage_separates_a_payloadless_match_from_an_unattributable_one():
+    # has_event_state rides on covered_matches rather than on the cumulative frame, because a match
+    # whose events attribute to no team is still a match that HAD payload rows.
+    events = pd.DataFrame(
+        [{"match_id": "covered", "event_index": 0, "timestamp_ms": 500, "event_type": "CHAMPION_KILL",
+          "killer_participant_id": "0", "killer_team_id": None, "owner_team_id": None}]
     )
-    assert compact_timeline_events(empty).empty
-    assert champion_timeline_events(empty, ["mine"]).empty
+    decisions = pd.DataFrame(
+        [
+            {"match_id": "covered", "participant_id": 1, "timestamp_ms": 2000},
+            {"match_id": "payloadless", "participant_id": 1, "timestamp_ms": 2000},
+        ]
+    )
+    teams = pd.DataFrame(
+        [
+            {"match_id": "covered", "participant_id": 1, "team_id": 100},
+            {"match_id": "payloadless", "participant_id": 1, "team_id": 100},
+        ]
+    )
+    state, _ = streamed_state(events, teams)
+
+    enriched = apply_event_state(decisions, state, teams)
+    assert state.cumulative.empty, "killerId 0 with no owning team attributes to nobody"
+    assert enriched["has_event_state"].tolist() == [1.0, 0.0]
+
+
+def test_an_empty_cohort_streams_to_empty_state():
+    events, decisions, teams = cohort_timeline_fixture()
+    state, _ = streamed_state(events.iloc[:0], teams)
+    assert state.cumulative.empty
+    assert state.covered_matches == frozenset()
+    assert apply_event_state(decisions, state, teams)["has_event_state"].tolist() == [0.0, 0.0]
 
 
 def test_the_sweep_never_reads_the_timeline_once_per_champion(monkeypatch, tmp_path):
-    # The regression this guards: `load_timeline_state_events` is match-scoped, so a champion-scoped
-    # call re-read every match that champion played -- ten times over the cohort across the sweep, which
-    # is what projected a 173-champion run to 17 days on prod. One unscoped preload replaces all of them.
+    # The amplification this removed: `load_timeline_state_events` is match-scoped, so a champion-scoped
+    # call re-read every match that champion played -- ten times over the cohort across a sweep, which
+    # is what projected a 173-champion run to 17 days on prod.
     monkeypatch.setenv("BUILD_LAB_SWEEP_WORKERS", "1")
     settings, generation = publishing_generation(monkeypatch, tmp_path)
     champions = [22, 51, 103]
     monkeypatch.setattr(pipeline, "load_cohort_champions", lambda *_: champions)
-    calls: list[dict] = []
+    calls: list = []
     real_loader = pipeline.load_timeline_state_events
 
     def recording(connection, patches, cutoff, champion_id=None, match_sample_range=None):
@@ -1975,17 +2103,32 @@ def test_the_sweep_never_reads_the_timeline_once_per_champion(monkeypatch, tmp_p
         return real_loader(connection, patches, cutoff, champion_id, match_sample_range)
 
     monkeypatch.setattr(pipeline, "load_timeline_state_events", recording)
+    monkeypatch.setattr(
+        pipeline,
+        "stream_cohort_event_state",
+        lambda *a, **k: pipeline.CohortEventState(pipeline.empty_event_state_rows(), {}, frozenset()),
+    )
     model_generation(FakeConnection(), generation, settings)
 
-    assert calls, "the sweep must still read the timeline at all"
-    # Not "once in total": the structural fit draws per match-sample range, and those are unamplified.
     assert all(call["champion_id"] is None for call in calls), calls
-    preloads = [
-        call
-        for call in calls
-        if call["champion_id"] is None and call["match_sample_range"] is None
-    ]
-    assert len(preloads) == 1, preloads
+
+
+def test_the_sweep_streams_the_cohort_rather_than_buffering_it(monkeypatch, tmp_path):
+    # This failure mode is silent: a buffered cohort read works on a small corpus and only dies once
+    # the cohort outgrows the container, which is exactly how it reached prod.
+    monkeypatch.setenv("BUILD_LAB_SWEEP_WORKERS", "1")
+    settings, generation = publishing_generation(monkeypatch, tmp_path)
+    monkeypatch.setattr(pipeline, "load_cohort_champions", lambda *_: [22])
+    streamed: list = []
+
+    def recording_stream(connection, patches, cutoff, teams, **kwargs):
+        streamed.append(patches)
+        return pipeline.CohortEventState(pipeline.empty_event_state_rows(), {}, frozenset())
+
+    monkeypatch.setattr(pipeline, "stream_cohort_event_state", recording_stream)
+    model_generation(FakeConnection(), generation, settings)
+
+    assert len(streamed) == 1, "the cohort's event state is streamed exactly once per process"
 
 
 class DictRowCursor:
@@ -2736,13 +2879,18 @@ def test_the_sequential_sweep_reuses_the_connection_it_was_given(monkeypatch, tm
     # the live app, and would make the publish path untestable without a real server.
     settings = modeler_settings(monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path))
     sentinel = FakeConnection()
-    # What the preload draws is another test's business; this one is about the wiring, so it is stubbed
+    # What the stream draws is another test's business; this one is about the wiring, so it is stubbed
     # rather than serviced by a fake cursor.
     monkeypatch.setattr(
-        pipeline, "load_timeline_state_events", lambda *_, **__: pd.DataFrame()
+        pipeline, "load_participant_teams", lambda *_, **__: pd.DataFrame()
     )
-    # The cohort carries the patches and cutoff because setup also draws the sweep's one timeline
-    # preload here, on this same connection -- which is the point of reusing it.
+    monkeypatch.setattr(
+        pipeline,
+        "stream_cohort_event_state",
+        lambda *a, **k: pipeline.CohortEventState(pipeline.empty_event_state_rows(), {}, frozenset()),
+    )
+    # The cohort carries the patches and cutoff because setup also streams the sweep's one pass over
+    # the cohort's event state here, on this same connection -- which is the point of reusing it.
     pipeline._sweep_worker_setup(
         settings,
         {
@@ -2756,7 +2904,7 @@ def test_the_sequential_sweep_reuses_the_connection_it_was_given(monkeypatch, tm
     assert pipeline._WORKER["connection"] is sentinel
     assert pipeline._WORKER["owns_connection"] is False
     assert pipeline._WORKER["bundle"] == {"model": None}
-    assert "timeline_events" in pipeline._WORKER
+    assert "event_state" in pipeline._WORKER
 
 
 def test_the_sweep_worker_count_is_configurable_and_floored(monkeypatch, tmp_path):
@@ -2803,7 +2951,7 @@ def test_the_timeline_loader_extracts_payload_scalars_in_sql():
     # Parsing PayloadJson in pandas cost one json.loads plus three dict walks per event -- roughly
     # 290,000 per champion -- and was the dominant cost of the sweep. PayloadJson is jsonb, so Postgres
     # reads the three scalars directly. Nothing downstream may reach for the raw payload again.
-    source = inspect.getsource(load_timeline_state_events)
+    source = inspect.getsource(timeline_state_events_query)
     for field in ("killer_participant_id", "killer_team_id", "owner_team_id"):
         assert field in source, field
     # Both spellings, matching the case-insensitive lookup this replaced.

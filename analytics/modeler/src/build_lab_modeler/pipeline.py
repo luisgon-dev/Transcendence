@@ -479,18 +479,18 @@ def _sweep_worker_setup(
         else psycopg.connect(settings.database_url, row_factory=dict_row)
     )
     _WORKER["bundle"] = bundle if bundle is not None else joblib.load(bundle_path)
-    # Drawn once per process rather than once per champion -- see compact_timeline_events for why this
-    # is the sweep's dominant cost. In the pool each worker draws its own copy, which is one read per
-    # worker against 173 before; sharing one frame across spawned interpreters would mean pickling it
-    # through initargs, and the pool is opt-in and already the slower path on this hardware.
-    _WORKER["timeline_events"] = compact_timeline_events(
-        load_timeline_state_events(
+    # Drawn once per process rather than once per champion -- see stream_cohort_event_state for why the
+    # sweep's dominant cost is this read, and why it is reduced rather than held. In the pool each
+    # worker streams its own copy, which is one read per worker against 173 before; sharing one frame
+    # across spawned interpreters would mean pickling it through initargs, and the pool is opt-in and
+    # already the slower path on this hardware.
+    _WORKER["event_state"] = stream_cohort_event_state(
+        _WORKER["connection"],
+        cohort["included_patches"],
+        cohort["cutoff"],
+        load_participant_teams(
             _WORKER["connection"], cohort["included_patches"], cohort["cutoff"]
-        )
-    )
-    LOG.info(
-        "Preloaded %d cohort timeline events; the sweep slices these instead of re-reading per champion.",
-        len(_WORKER["timeline_events"]),
+        ),
     )
 
 
@@ -512,7 +512,7 @@ def sweep_champion(champion_id: int) -> dict:
             cohort["current_patch"],
             cohort["changed_items"],
             champion_id=champion_id,
-            timeline_events=_WORKER["timeline_events"],
+            event_state=_WORKER["event_state"],
         ),
         cohort["current_patch"],
         cohort["included_patches"],
@@ -794,7 +794,7 @@ def load_decision_frame(
     *,
     champion_id: int | None = None,
     match_sample_range: tuple | None = None,
-    timeline_events: pd.DataFrame | None = None,
+    event_state: "CohortEventState | None" = None,
 ) -> pd.DataFrame:
     """Load one scope of the frozen cohort and turn it into unweighted decision rows.
 
@@ -802,9 +802,10 @@ def load_decision_frame(
     structural fit). Item events are participant-scoped, while team composition and kill state are
     match-scoped, because a kill diff is a fact about the match rather than about one participant.
 
-    `timeline_events` is the sweep's preloaded cohort-wide event frame. Supplying it replaces this
-    scope's timeline query with a pandas slice; omitting it queries per scope as before, which is what
-    the structural fit does since its match sample is drawn once rather than 173 times.
+    `event_state` is the sweep's cohort-wide event state, streamed and reduced once per process.
+    Supplying it replaces this scope's timeline query with a join against counters already computed;
+    omitting it queries and reduces per scope, which is what the structural fit does since its match
+    sample is drawn once rather than 173 times.
     """
     scope = {"champion_id": champion_id, "match_sample_range": match_sample_range}
     item_events = load_item_events(
@@ -814,14 +815,15 @@ def load_decision_frame(
         return pd.DataFrame()
     item_decisions = build_item_decisions(item_events)
     del item_events
-    item_decisions = enrich_with_predecision_event_state(
-        item_decisions,
-        (
-            champion_timeline_events(timeline_events, item_decisions["match_id"])
-            if timeline_events is not None
-            else load_timeline_state_events(connection, included_patches, cutoff, **scope)
-        ),
-        load_participant_teams(connection, included_patches, cutoff, **scope),
+    teams = load_participant_teams(connection, included_patches, cutoff, **scope)
+    item_decisions = (
+        apply_event_state(item_decisions, event_state, teams)
+        if event_state is not None
+        else enrich_with_predecision_event_state(
+            item_decisions,
+            load_timeline_state_events(connection, included_patches, cutoff, **scope),
+            teams,
+        )
     )
     item_decisions = exclude_incompatible_prior_item_rows(
         item_decisions,
@@ -1553,15 +1555,18 @@ def load_champion_archetypes(connection: psycopg.Connection, patch: str) -> dict
     return archetypes
 
 
-def load_timeline_state_events(
-    connection,
+def timeline_state_events_query(
     patches: list[str],
     cutoff,
     champion_id: int | None = None,
     match_sample_range: tuple | None = None,
-) -> pd.DataFrame:
-    return read_sql_frame(
-        connection,
+) -> tuple[str, dict]:
+    """The timeline-event statement and its parameters.
+
+    Shared verbatim by the buffered loader below and the streaming reducer, so the two cannot drift
+    into reading different rows -- which is the only way their results could disagree.
+    """
+    sql = (
         champion_match_cte(champion_id, leading=False)
         + """
         SELECT
@@ -1604,63 +1609,194 @@ def load_timeline_state_events(
         + scope_predicates(champion_id, match_sample_range, match_scoped=True)
         + """
         ORDER BY payload."MatchId", payload."TimestampMs", payload."EventIndex"
-        """,
-        params={
-            "patches": patches,
-            "cutoff": cutoff,
-            "schema_version": TIMELINE_SCHEMA_VERSION,
-            "champion_id": champion_id,
-            "match_sample_from": match_sample_range[0] if match_sample_range else None,
-            "match_sample_until": match_sample_range[1] if match_sample_range else None,
-        },
+        """
+    )
+    return sql, {
+        "patches": patches,
+        "cutoff": cutoff,
+        "schema_version": TIMELINE_SCHEMA_VERSION,
+        "champion_id": champion_id,
+        "match_sample_from": match_sample_range[0] if match_sample_range else None,
+        "match_sample_until": match_sample_range[1] if match_sample_range else None,
+    }
+
+
+def load_timeline_state_events(
+    connection,
+    patches: list[str],
+    cutoff,
+    champion_id: int | None = None,
+    match_sample_range: tuple | None = None,
+) -> pd.DataFrame:
+    """Buffered load of one scope's events. Used by the structural fit, whose scope is a match sample.
+
+    The champion sweep must not use this: see `stream_cohort_event_state` for why a cohort-wide scope
+    cannot be materialised.
+    """
+    sql, params = timeline_state_events_query(patches, cutoff, champion_id, match_sample_range)
+    return read_sql_frame(connection, sql, params)
+
+
+# Reading the cohort's timeline once instead of once per champion is right: `load_timeline_state_events`
+# is match-scoped, because a kill diff is a fact about the match, so ten participants per match meant the
+# sweep re-read the same events ten times over -- ~13.6 hours of index scans and jsonb extraction on
+# prod's HDD-backed database, which is what projected a 173-champion run to 17 days.
+#
+# Materialising that single read is NOT right, and the first attempt at this did exactly that. The
+# compose unit pins the contract it broke:
+#
+#     mem_limit 6g -- "peak is set by the largest single champion's rows plus one training slice, not
+#     by the size of the cohort, so this no longer has to be raised as the corpus grows"
+#
+# Measured on the live 16.15 cohort: the buffered read costs ~340 bytes per row in accumulated tuples
+# BEFORE any DataFrame exists, so its 7.14M events reach ~2.7GB, `DataFrame.from_records` then builds
+# object arrays beside them, and `normalise_uuid_columns` mints 7.14M fresh strings while the UUIDs are
+# still referenced. Runs died on SIGKILL 23 minutes in, before the preload logged a single line.
+#
+# The resolution is that the sweep does not actually need the events. It needs the running per-(match,
+# team) kill/tower/objective counts that `merge_cumulative_state` reads as-of each purchase, and those
+# are derivable chunk by chunk and storable in a numeric width -- int32 match codes, teams and counters
+# -- of ~32 bytes a row against the ~340 the raw form costs. So rows are reduced as they arrive and the
+# raw form is never accumulated: one database read, and a resident footprint that stays proportional to
+# the cohort's *event state* rather than its event text.
+COHORT_EVENT_CHUNK_ROWS = 250_000
+
+EVENT_STATE_COLUMNS = ["match_code", "team_id", "timestamp_ms", "kills", "towers", "objectives"]
+
+
+@dataclass
+class CohortEventState:
+    """Cohort-wide pre-decision event state, reduced to a width the per-champion contract can hold.
+
+    `cumulative` carries one row per attributed event with the running counts for its (match, team),
+    keyed by an int32 `match_code` rather than the match id -- 4 bytes against the ~85 a distinct
+    36-character `str` costs, which is the whole reason this fits.
+
+    `covered_matches` is tracked separately on purpose. `has_event_state` must distinguish a match that
+    produced no payload rows at all from one whose payload rows produced no attributable team, and the
+    cumulative frame alone cannot tell those apart -- both are simply absent from it.
+    """
+
+    cumulative: pd.DataFrame
+    match_codes: dict
+    covered_matches: frozenset
+
+
+def empty_event_state_rows() -> pd.DataFrame:
+    """The reduced shape, as `CohortEventState.cumulative` carries it."""
+    return pd.DataFrame({column: pd.Series(dtype="int64") for column in EVENT_STATE_COLUMNS})
+
+
+def empty_scored_rows() -> pd.DataFrame:
+    """A scored chunk that credited nothing.
+
+    Carries `event_index` even though the final state does not: chunks are concatenated and sorted on
+    it before the cumulative sums run, so an empty chunk missing the column raises rather than
+    contributing nothing -- which is what a match whose events attribute to no team produces.
+    """
+    return pd.DataFrame(
+        {column: pd.Series(dtype="int64") for column in [*EVENT_STATE_COLUMNS, "event_index"]}
     )
 
 
-# The sweep's dominant cost, and the reason a 173-champion run projected to 17 days on prod rather
-# than the ~7 hours its per-champion measurement implied.
-#
-# `load_timeline_state_events` is match-scoped: it returns every kill event in every match the champion
-# played, because a kill diff is a fact about the match. A match has ten participants, so each match's
-# events were re-read once per champion in it -- ~56M event rows read where the cohort holds 5.6M, each
-# read a fresh index scan plus jsonb extraction against an HDD-backed database. Nothing about the events
-# depends on the champion, so they are drawn once per process here and sliced in pandas instead.
-#
-# Slicing is sound because a superset is inert, not because the slice is exact:
-# `enrich_with_predecision_event_state` derives `has_event_state` from the decisions' own match ids, and
-# `merge_cumulative_state` merges asof `by=["match_id", "team_id"]`, so an event belonging to a match the
-# champion never played cannot reach a published column. The slice exists to stop
-# `attribute_events_to_teams` re-scoring all 5.6M rows once per champion, which would simply move the
-# amplification from Postgres into pandas.
-def compact_timeline_events(events: pd.DataFrame) -> pd.DataFrame:
-    """Hold the cohort's events at a fraction of the memory the loader's dtypes would cost.
+def score_event_chunk(chunk: pd.DataFrame, teams: pd.DataFrame, codes: dict) -> pd.DataFrame:
+    """Reduce one chunk of raw events to narrow per-event team credits.
 
-    Only `match_id` and `event_type` repeat enough to be worth encoding, and `match_id` dominates:
-    `normalise_uuid_columns` gives every one of the 5.6M rows its own 36-character `str`, roughly 475MB
-    as objects against ~30MB as categories over ~110k distinct ids. That difference is what decides
-    whether the cohort-wide frame fits beside the champion's own working set.
+    Attribution stays in `attribute_events_to_teams` rather than being reimplemented in SQL: the
+    killer/declared-team/conceded-building precedence is subtle, it is covered by tests, and a second
+    implementation could only ever diverge from it.
     """
-    if events.empty:
-        return events
-    compacted = events.copy()
-    for column in ("match_id", "event_type"):
-        compacted[column] = compacted[column].astype("category")
-    return compacted
+    scored = attribute_events_to_teams(chunk, teams)
+    if scored.empty:
+        return empty_scored_rows()
+    for match_id in scored["match_id"].unique().tolist():
+        if match_id not in codes:
+            codes[match_id] = len(codes)
+    return pd.DataFrame(
+        {
+            "match_code": scored["match_id"].map(codes).astype("int32"),
+            "team_id": scored["team_id"].astype("int32"),
+            "timestamp_ms": scored["timestamp_ms"].astype("int64"),
+            "event_index": scored["event_index"].astype("int32"),
+            "kills": scored["kills"].astype("int32"),
+            "towers": scored["towers"].astype("int32"),
+            "objectives": scored["objectives"].astype("int32"),
+        }
+    )
 
 
-def champion_timeline_events(events: pd.DataFrame, match_ids) -> pd.DataFrame:
-    """One champion's slice of the preloaded cohort events, in the dtypes the query would have returned.
+def accumulate_event_state(parts: list, codes: dict, covered: frozenset) -> CohortEventState:
+    """Run the cumulative sums once over every scored chunk.
 
-    Casting the categories back is not cosmetic. `attribute_events_to_teams` compares `event_type` to
-    string literals and merges `match_id` against frames carrying plain strings, and a categorical key
-    still carrying every unobserved category does not merge like the object column it replaced. Handing
-    back the loader's own dtypes keeps this a caching change and nothing else.
+    Deliberately deferred to the end rather than done per chunk: the sort is global and a chunk
+    boundary can fall inside a match, so summing per chunk would restart a match's counters partway
+    through. Sorting the assembled narrow frame reproduces the buffered path's ordering exactly.
     """
+    if not parts:
+        return CohortEventState(empty_event_state_rows(), dict(codes), covered)
+    cumulative = pd.concat(parts, ignore_index=True)
+    parts.clear()
+    cumulative = cumulative.sort_values(["timestamp_ms", "event_index"], kind="stable")
+    for column in ("kills", "towers", "objectives"):
+        cumulative[column] = cumulative.groupby(["match_code", "team_id"], sort=False)[column].cumsum()
+    return CohortEventState(
+        cumulative[EVENT_STATE_COLUMNS].sort_values("timestamp_ms", kind="stable"),
+        dict(codes),
+        covered,
+    )
+
+
+def event_state_from_events(events: pd.DataFrame, teams: pd.DataFrame) -> CohortEventState:
+    """The buffered equivalent of the stream, for scopes small enough to hold (the structural fit)."""
     if events.empty:
-        return events
-    sliced = events[events["match_id"].isin(set(match_ids))].copy()
-    for column in ("match_id", "event_type"):
-        sliced[column] = sliced[column].astype(object)
-    return sliced
+        return CohortEventState(empty_event_state_rows(), {}, frozenset())
+    codes: dict = {}
+    return accumulate_event_state(
+        [score_event_chunk(events, teams, codes)], codes, frozenset(events["match_id"])
+    )
+
+
+def stream_cohort_event_state(
+    connection,
+    patches: list[str],
+    cutoff,
+    teams: pd.DataFrame,
+    *,
+    chunk_rows: int = COHORT_EVENT_CHUNK_ROWS,
+) -> CohortEventState:
+    """Draw the cohort's events once and reduce them as they arrive, never holding the raw set.
+
+    A server-side cursor is the point: `read_sql_frame` calls `fetchall`, which is precisely the
+    behaviour that cannot fit. The statement is the same one `load_timeline_state_events` issues, taken
+    from the shared builder so the two cannot read different rows.
+    """
+    sql, params = timeline_state_events_query(patches, cutoff)
+    codes: dict = {}
+    covered: set = set()
+    parts: list[pd.DataFrame] = []
+    rows = 0
+    with connection.cursor(name="cohort_event_state", row_factory=tuple_row) as cursor:
+        cursor.execute(sql, params)
+        columns = [column.name for column in cursor.description or []]
+        while True:
+            batch = cursor.fetchmany(chunk_rows)
+            if not batch:
+                break
+            rows += len(batch)
+            chunk = normalise_uuid_columns(pd.DataFrame.from_records(batch, columns=columns))
+            del batch
+            covered.update(chunk["match_id"].unique().tolist())
+            parts.append(score_event_chunk(chunk, teams, codes))
+            del chunk
+    state = accumulate_event_state(parts, codes, frozenset(covered))
+    LOG.info(
+        "Cohort event state: %d events over %d matches reduced to %d rows (%.0f MB resident).",
+        rows,
+        len(covered),
+        len(state.cumulative),
+        state.cumulative.memory_usage(deep=True).sum() / 1e6,
+    )
+    return state
 
 
 def load_participant_teams(
@@ -1713,31 +1849,39 @@ def enrich_with_predecision_event_state(
     events: pd.DataFrame,
     participant_teams: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Attach only cumulative facts whose event timestamp precedes the purchase."""
+    """Attach only cumulative facts whose event timestamp precedes the purchase.
+
+    The buffered entry point: reduces `events` and applies the result in one step. The champion sweep
+    calls `apply_event_state` directly instead, against state streamed once for the whole cohort.
+    """
+    if decisions.empty or events.empty or participant_teams.empty:
+        return apply_event_state(
+            decisions, CohortEventState(empty_event_state_rows(), {}, frozenset()), participant_teams
+        )
+    teams = participant_teams.astype({"participant_id": int, "team_id": int})
+    return apply_event_state(decisions, event_state_from_events(events, teams), teams)
+
+
+def apply_event_state(
+    decisions: pd.DataFrame,
+    state: CohortEventState,
+    participant_teams: pd.DataFrame,
+) -> pd.DataFrame:
+    """Join one scope's decisions to already-reduced cohort event state."""
     enriched = decisions.copy()
     for column in ("team_kill_diff", "team_tower_diff", "team_objective_diff"):
         enriched[column] = 0.0
     enriched["has_event_state"] = 0.0
-    if enriched.empty or events.empty or participant_teams.empty:
+    if enriched.empty or participant_teams.empty or not state.covered_matches:
         return enriched
     # Coverage is per match: a match ingested while Build Lab was off carries no payload rows, so its
-    # zeroed diffs are missing data rather than an even game.
-    enriched["has_event_state"] = (
-        enriched["match_id"].isin(set(events["match_id"])).astype(float)
-    )
-
-    teams = participant_teams.astype({"participant_id": int, "team_id": int})
-    scored = attribute_events_to_teams(events, teams)
-    if scored.empty:
+    # zeroed diffs are missing data rather than an even game. Tracked on the state rather than derived
+    # from `cumulative`, which cannot distinguish "no payload rows" from "no attributable team".
+    enriched["has_event_state"] = enriched["match_id"].isin(state.covered_matches).astype(float)
+    if state.cumulative.empty:
         return enriched
 
-    cumulative = scored.sort_values(["timestamp_ms", "event_index"], kind="stable")
-    for column in ("kills", "towers", "objectives"):
-        cumulative[column] = cumulative.groupby(["match_id", "team_id"], sort=False)[column].cumsum()
-    cumulative = cumulative[
-        ["match_id", "team_id", "timestamp_ms", "kills", "towers", "objectives"]
-    ].sort_values("timestamp_ms", kind="stable")
-
+    teams = participant_teams.astype({"participant_id": int, "team_id": int})
     positioned = (
         enriched.reset_index(names="_row")[["_row", "match_id", "participant_id", "timestamp_ms"]]
         .astype({"participant_id": int})
@@ -1746,12 +1890,23 @@ def enrich_with_predecision_event_state(
     )
     if positioned.empty:
         return enriched
-    positioned["team_id"] = positioned["team_id"].astype(int)
-    positioned["opponent_team_id"] = np.where(positioned["team_id"] == 100, 200, 100)
+    # Onto the state's own key space. A decision whose match contributed no attributed event has no
+    # code, and drops out here rather than merging against an unrelated match's counters.
+    positioned["match_code"] = positioned["match_id"].map(state.match_codes)
+    positioned = positioned.dropna(subset=["match_code"])
+    if positioned.empty:
+        return enriched
+    positioned["match_code"] = positioned["match_code"].astype("int32")
+    positioned["team_id"] = positioned["team_id"].astype("int32")
+    positioned["opponent_team_id"] = np.where(
+        positioned["team_id"] == 100, 200, 100
+    ).astype("int32")
+    # merge_asof compares the `on` column directly, so both sides must carry the same width.
+    positioned["timestamp_ms"] = positioned["timestamp_ms"].astype("int64")
     positioned = positioned.sort_values("timestamp_ms", kind="stable")
 
-    own = merge_cumulative_state(positioned, cumulative, "team_id")
-    opponent = merge_cumulative_state(positioned, cumulative, "opponent_team_id")
+    own = merge_cumulative_state(positioned, state.cumulative, "team_id")
+    opponent = merge_cumulative_state(positioned, state.cumulative, "opponent_team_id")
     rows = positioned["_row"].to_numpy()
     enriched.loc[rows, "team_kill_diff"] = own["kills"].to_numpy() - opponent["kills"].to_numpy()
     enriched.loc[rows, "team_tower_diff"] = own["towers"].to_numpy() - opponent["towers"].to_numpy()
@@ -1805,14 +1960,16 @@ def merge_cumulative_state(
     cumulative: pd.DataFrame,
     team_column: str,
 ) -> pd.DataFrame:
-    left = positioned[["match_id", team_column, "timestamp_ms"]].rename(
+    left = positioned[["match_code", team_column, "timestamp_ms"]].rename(
         columns={team_column: "team_id"}
     )
+    # `by` carries the match, so counters from a match the decision does not belong to can never be
+    # picked up -- which is what makes cohort-wide state safe to share across the whole sweep.
     merged = pd.merge_asof(
         left,
         cumulative,
         on="timestamp_ms",
-        by=["match_id", "team_id"],
+        by=["match_code", "team_id"],
         allow_exact_matches=False,
     )
     return merged[["kills", "towers", "objectives"]].fillna(0.0)

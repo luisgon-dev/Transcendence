@@ -10,7 +10,8 @@ dependencies = [
   "pandas>=2.2,<3",
   "psycopg[binary]>=3.2,<4",
   "pyarrow>=18,<21",
-  "scikit-learn>=1.6,<2"
+  "scikit-learn>=1.6,<2",
+  "threadpoolctl>=3.5,<4"
 ]
 
 [project.optional-dependencies]

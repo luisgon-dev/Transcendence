@@ -2131,6 +2131,69 @@ def test_the_sweep_streams_the_cohort_rather_than_buffering_it(monkeypatch, tmp_
     assert len(streamed) == 1, "the cohort's event state is streamed exactly once per process"
 
 
+def test_the_sequential_sweep_caps_blas_threads_like_the_pool_does(monkeypatch, tmp_path):
+    # #162 capped BLAS threads for spawned workers and made sequential the default in the same change,
+    # so the cap landed on the branch the default never takes. `nproc` reports the host's cores inside
+    # the container because a cpu quota does not change it, so OpenBLAS sized its pools for 46 cores
+    # against a 3-cpu quota: prod ran 92 threads, spent ~300% cpu with almost no I/O, and did not finish
+    # one champion in 80 minutes, with every stack sample inside a logistic fit.
+    #
+    # Asserted against the wrapper rather than live threadpool_info(), which reports an empty list when
+    # no accelerated backend happens to be loaded and would make this pass vacuously.
+    monkeypatch.setenv("BUILD_LAB_SWEEP_WORKERS", "1")
+    monkeypatch.setenv("BUILD_LAB_SWEEP_BLAS_THREADS", "1")
+    settings, generation = publishing_generation(monkeypatch, tmp_path)
+    monkeypatch.setattr(pipeline, "load_cohort_champions", lambda *_: [22, 51])
+    monkeypatch.setattr(
+        pipeline,
+        "stream_cohort_event_state",
+        lambda *a, **k: pipeline.CohortEventState(pipeline.empty_event_state_rows(), {}, frozenset()),
+    )
+
+    events: list = []
+
+    class RecordingLimits:
+        def __init__(self, limits=None):
+            self.limits = limits
+
+        def __enter__(self):
+            events.append(("enter", self.limits))
+            return self
+
+        def __exit__(self, *_):
+            events.append(("exit", self.limits))
+            return False
+
+    real_sweep = pipeline.sweep_champion
+
+    def recording_sweep(champion_id):
+        events.append(("champion", champion_id))
+        return real_sweep(champion_id)
+
+    monkeypatch.setattr(pipeline, "threadpool_limits", RecordingLimits)
+    monkeypatch.setattr(pipeline, "sweep_champion", recording_sweep)
+    model_generation(FakeConnection(), generation, settings)
+
+    assert ("enter", 1) in events, events
+    champions_seen = [name for name, _ in events].count("champion")
+    assert champions_seen == 2, events
+    # Every champion has to run INSIDE the limit, not merely after it was set up once.
+    opened = events.index(("enter", 1))
+    closed = events.index(("exit", 1))
+    swept = [i for i, (name, _) in enumerate(events) if name == "champion"]
+    assert all(opened < i < closed for i in swept), events
+
+
+def test_the_blas_thread_cap_is_configurable_and_floored(monkeypatch, tmp_path):
+    assert modeler_settings(monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path)).sweep_blas_threads == 1
+    assert modeler_settings(
+        monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path), BUILD_LAB_SWEEP_BLAS_THREADS="3"
+    ).sweep_blas_threads == 3
+    assert modeler_settings(
+        monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path), BUILD_LAB_SWEEP_BLAS_THREADS="0"
+    ).sweep_blas_threads == 1
+
+
 class DictRowCursor:
     """A cursor shaped like psycopg's, whose row factory decides the row type.
 

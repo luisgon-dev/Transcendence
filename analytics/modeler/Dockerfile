@@ -26,7 +26,7 @@ WORKDIR /app
 # "failed to Lchown ...: no such file or directory".
 RUN pip install --no-compile "numpy>=2.1,<3"
 RUN pip install --no-compile "pandas>=2.2,<3"
-RUN pip install --no-compile "scikit-learn>=1.6,<2" "joblib>=1.4,<2"
+RUN pip install --no-compile "scikit-learn>=1.6,<2" "joblib>=1.4,<2" "threadpoolctl>=3.5,<4"
 RUN pip install --no-compile "pyarrow>=18,<21"
 RUN pip install --no-compile "boto3>=1.35,<2" "psycopg[binary]>=3.2,<4"
 

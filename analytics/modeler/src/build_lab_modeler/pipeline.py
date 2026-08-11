@@ -27,6 +27,7 @@ from scipy.special import erfc
 import pandas as pd
 import psycopg
 from psycopg.rows import dict_row, tuple_row
+from threadpoolctl import threadpool_limits
 
 from .cache import TrainingCache
 from sklearn.isotonic import IsotonicRegression
@@ -153,6 +154,7 @@ class Settings:
     cache_training_draw: bool
     training_draw_max_age_hours: float
     sweep_workers: int
+    sweep_blas_threads: int
     calibration_bands: int
     retained_generations: int
 
@@ -209,6 +211,23 @@ class Settings:
             # was 3x SLOWER. The pool is kept because it is correct and the arithmetic changes on SSD or
             # once the timeline amplification is removed, but it must be opted into.
             sweep_workers=max(1, int(os.getenv("BUILD_LAB_SWEEP_WORKERS", "1"))),
+            # BLAS threads during the estimate sweep, and the single biggest lever on its runtime.
+            #
+            # Measured on the sweep's real fit shape -- 600 rows by DESIGN_MATRIX_MAX_COLUMNS (1,044)
+            # wide, 15 fits per (scope, path), under a 3-cpu quota:
+            #
+            #     cap=1   6 ms/fit      cap=4    65 ms/fit
+            #     cap=2   2 ms/fit      cap=8   112 ms/fit
+            #     cap=3   3 ms/fit      uncapped (24 threads)  2,744 ms/fit
+            #
+            # Threading helps up to the quota and collapses past it, and uncapped is 400x worse than
+            # any capped setting. Width is what makes it so violent: the same benchmark at 40 columns
+            # shows no difference at all, which is how this stayed invisible.
+            #
+            # Defaults to 1 rather than the measured-best 2 because `nproc` cannot be trusted to
+            # describe the quota -- it reports the host's cores -- so 1 is the only value that cannot
+            # oversubscribe whatever the container is actually given.
+            sweep_blas_threads=max(1, int(os.getenv("BUILD_LAB_SWEEP_BLAS_THREADS", "1"))),
             # How finely calibration is conditioned on game phase. The promotion gate scores ECE
             # within time bands, so this is the dial that moves the gate that is hardest to pass.
             calibration_bands=max(
@@ -654,56 +673,73 @@ def model_generation(
             result["rows"], len(result["actions"]), len(result["paths"]),
         )
 
-    if workers == 1:
-        # Kept as a real path, not a fallback nobody runs: it is what a constrained host uses, and it
-        # is the reference the parallel path is checked against.
-        _sweep_worker_setup(
-            settings,
-            cohort,
-            str(artifact_path / "win_probability.joblib"),
-            connection=connection,
-            bundle=structural_model,
+    # Applies to BOTH paths, which is the bug this closes. #162 capped BLAS threads for spawned
+    # workers and made sequential the default in the same change, so the cap landed on the branch the
+    # default never takes. Left uncapped, `nproc` reports the host's 46 cores (a cpu quota does not
+    # change it) and OpenBLAS sizes its pools to match: prod ran 92 threads against a 3-cpu quota,
+    # burning the quota on scheduling instead of arithmetic. Observed as ~300% cpu with almost no I/O,
+    # one champion incomplete after 80 minutes, and every stack sample inside a logistic fit.
+    #
+    # threadpoolctl rather than the environment, because the environment cannot fix this process:
+    # OpenBLAS reads those variables when it loads, and numpy is imported long before the sweep. This
+    # retunes pools that are already running. The environment is still set for the pool, whose
+    # children read it at import. Scoped to the sweep so the structural fit above keeps its threads --
+    # that one is a single large fit, which does thread well.
+    with threadpool_limits(limits=settings.sweep_blas_threads):
+        LOG.info(
+            "Sweep BLAS threads limited to %d (container quota is the binding constraint, not nproc).",
+            settings.sweep_blas_threads,
         )
-        for position, champion_id in enumerate(champions, start=1):
-            absorb(sweep_champion(champion_id), position)
-    else:
-        # A champion that raises must fail the generation rather than silently drop out: a missing
-        # champion is a quietly incomplete estimate set, which is worse than no estimate set.
-        # Workers get one BLAS thread each.
-        #
-        # `nproc` inside the container reports the HOST's cores -- a cpu quota does not change it -- so
-        # OpenBLAS sizes its pool at ~46 threads per process. Four interpreters doing that against a
-        # 3-cpu quota is not just oversubscription: it exhausted thread resources outright and the pool
-        # died with `std::system_error: Resource temporarily unavailable`. Workers only score with an
-        # already-fitted model, which is light linear algebra, so one thread each is right on the merits
-        # as well. Set before the pool starts so spawned children inherit it ahead of importing numpy,
-        # which is the only point at which OpenBLAS reads it. The structural fit above has already run,
-        # so its own threading is unaffected.
-        for variable in (
-            "OMP_NUM_THREADS",
-            "OPENBLAS_NUM_THREADS",
-            "MKL_NUM_THREADS",
-            "NUMEXPR_NUM_THREADS",
-        ):
-            os.environ.setdefault(variable, "1")
+        if workers == 1:
+            # Kept as a real path, not a fallback nobody runs: it is what a constrained host uses, and it
+            # is the reference the parallel path is checked against.
+            _sweep_worker_setup(
+                settings,
+                cohort,
+                str(artifact_path / "win_probability.joblib"),
+                connection=connection,
+                bundle=structural_model,
+            )
+            for position, champion_id in enumerate(champions, start=1):
+                absorb(sweep_champion(champion_id), position)
+        else:
+            # A champion that raises must fail the generation rather than silently drop out: a missing
+            # champion is a quietly incomplete estimate set, which is worse than no estimate set.
+            # Workers get one BLAS thread each.
+            #
+            # `nproc` inside the container reports the HOST's cores -- a cpu quota does not change it -- so
+            # OpenBLAS sizes its pool at ~46 threads per process. Four interpreters doing that against a
+            # 3-cpu quota is not just oversubscription: it exhausted thread resources outright and the pool
+            # died with `std::system_error: Resource temporarily unavailable`. Workers only score with an
+            # already-fitted model, which is light linear algebra, so one thread each is right on the merits
+            # as well. Set before the pool starts so spawned children inherit it ahead of importing numpy,
+            # which is the only point at which OpenBLAS reads it. The structural fit above has already run,
+            # so its own threading is unaffected.
+            for variable in (
+                "OMP_NUM_THREADS",
+                "OPENBLAS_NUM_THREADS",
+                "MKL_NUM_THREADS",
+                "NUMEXPR_NUM_THREADS",
+            ):
+                os.environ.setdefault(variable, "1")
 
-        # "spawn", never the Linux default of "fork".
-        #
-        # The structural fit immediately above runs BLAS/OpenMP threads. fork() copies only the calling
-        # thread but inherits every mutex in whatever state it was in, so a lock held by a BLAS thread at
-        # fork time is inherited already-locked and never released -- the child then deadlocks the first
-        # time it touches that runtime. Observed exactly that on prod: four workers connected, opened a
-        # transaction each, and sat idle-in-transaction for 45 minutes without completing one champion.
-        # spawn starts a fresh interpreter with no inherited lock state. It costs a re-import per worker,
-        # once, against a sweep measured in tens of minutes.
-        with ProcessPoolExecutor(
-            max_workers=workers,
-            mp_context=multiprocessing.get_context("spawn"),
-            initializer=_sweep_worker_setup,
-            initargs=(settings, cohort, str(artifact_path / "win_probability.joblib")),
-        ) as pool:
-            for position, result in enumerate(pool.map(sweep_champion, champions), start=1):
-                absorb(result, position)
+            # "spawn", never the Linux default of "fork".
+            #
+            # The structural fit immediately above runs BLAS/OpenMP threads. fork() copies only the calling
+            # thread but inherits every mutex in whatever state it was in, so a lock held by a BLAS thread at
+            # fork time is inherited already-locked and never released -- the child then deadlocks the first
+            # time it touches that runtime. Observed exactly that on prod: four workers connected, opened a
+            # transaction each, and sat idle-in-transaction for 45 minutes without completing one champion.
+            # spawn starts a fresh interpreter with no inherited lock state. It costs a re-import per worker,
+            # once, against a sweep measured in tens of minutes.
+            with ProcessPoolExecutor(
+                max_workers=workers,
+                mp_context=multiprocessing.get_context("spawn"),
+                initializer=_sweep_worker_setup,
+                initargs=(settings, cohort, str(artifact_path / "win_probability.joblib")),
+            ) as pool:
+                for position, result in enumerate(pool.map(sweep_champion, champions), start=1):
+                    absorb(result, position)
 
     if not action_pool:
         raise RuntimeError("No adjusted action estimates could be produced.")

@@ -37,10 +37,14 @@ set -uo pipefail
 
 REGISTRY_HOST="ghcr.io"
 OWNER="luisgon-dev"
-COMPOSE_DIR="/var/lib/docker/volumes/portainer_data/_data/compose/2"
+# The stack is a git checkout of this repo plus an untracked .env, not a Portainer-managed copy.
+# Portainer held the only authoritative compose file and it drifted from the repo -- which is how
+# prod came to run stock Postgres parallelism defaults on a 46-core host, and how TRN_PUBLIC_ORIGIN
+# came to exist in one file and not the other.
+COMPOSE_DIR="${POLL_DEPLOY_COMPOSE_DIR:-/root/transcendence}"
 COMPOSE_PROJECT="transcendence"
-ENV_FILE="${COMPOSE_DIR}/stack.env"
-COMPOSE_FILE="${COMPOSE_DIR}/docker-compose.yml"
+ENV_FILE="${COMPOSE_DIR}/.env"
+COMPOSE_FILE="${COMPOSE_DIR}/compose.yml"
 LOCK_FILE="/run/transcendence-deploy.lock"
 STATE_DIR="${POLL_DEPLOY_STATE_DIR:-/var/lib/transcendence-deploy}"
 RESOLUTION_ALERT_THRESHOLD="${POLL_DEPLOY_RESOLUTION_ALERT_THRESHOLD:-3}"

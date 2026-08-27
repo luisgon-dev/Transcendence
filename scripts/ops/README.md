@@ -118,7 +118,7 @@ subcommands need **no** generation, write **nothing** to the database, and share
 with `run`. All of them accept `--patches`/`--cutoff`, or default to the newest generation's cohort.
 
 ```bash
-cd /var/lib/docker/volumes/portainer_data/_data/compose/2
+cd /root/transcendence
 modeler() { docker compose -p transcendence --env-file stack.env -f docker-compose.yml \
   --profile analytics-modeling run --rm -T --no-deps --entrypoint python analytics-modeler -u \
   -m build_lab_modeler "$@"; }
@@ -277,7 +277,7 @@ docker exec transcendence-postgres psql -U postgres -c 'SHOW shared_buffers; SHO
 To recreate postgres deliberately (a restart drops connections, ~seconds of downtime):
 
 ```bash
-COMPOSE_DIR=/var/lib/docker/volumes/portainer_data/_data/compose/2   # poll-deploy.sh COMPOSE_DIR
+COMPOSE_DIR=/root/transcendence                                      # poll-deploy.sh COMPOSE_DIR
 docker compose -p transcendence --env-file "$COMPOSE_DIR/stack.env" \
   -f "$COMPOSE_DIR/docker-compose.yml" up -d postgres
 ```

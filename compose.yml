@@ -349,7 +349,10 @@ services:
     image: getwud/wud@sha256:2df7cafa0fc84cdd66ad976163abc5390fa5995e0b5788a90e6a5303706bc21a
     container_name: wud
     restart: unless-stopped
-    profiles: ["ops-tools"]
+    # Its own profile, not ops-tools. It is carried for completeness but has never actually been
+    # created on prod, and poll-deploy replaced its original job, so bringing up ops-tools (which
+    # is how dozzle starts) must not silently introduce it.
+    profiles: ["wud"]
     environment:
       WUD_TRIGGER_DOCKER_EXAMPLE_PRUNE: "true"
       WUD_WATCHER_LOCAL_CRON: "* * * * *"

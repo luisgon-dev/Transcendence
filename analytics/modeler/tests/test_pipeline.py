@@ -139,6 +139,24 @@ class EmptyServerCursor:
         return []
 
 
+class FakeCursorHandle(EmptyServerCursor):
+    """What `connection.cursor()` hands back.
+
+    psycopg puts `executemany` on the cursor and never on the connection. Modelling that faithfully
+    is the point: a fake that answers `connection.executemany` lets `insert_estimates` pass every
+    test and then fail on the last statement of a two-day production run, which is exactly what
+    happened to generation d693a582 after all 173 champions had been swept.
+    """
+
+    def __init__(self, connection: "FakeConnection") -> None:
+        self._connection = connection
+
+    def executemany(self, statement: str, rows: list) -> "FakeCursor":
+        self._connection.statements.append((statement, rows))
+        self._connection._stage(statement, rows)
+        return FakeCursor(len(rows))
+
+
 class FakeConnection:
     """Records every statement so the guarded status writes can be asserted without a database."""
 
@@ -169,11 +187,6 @@ class FakeConnection:
         self._stage(statement, parameters)
         return self._cursor_for(statement)
 
-    def executemany(self, statement: str, rows: list) -> FakeCursor:
-        self.statements.append((statement, rows))
-        self._stage(statement, rows)
-        return FakeCursor(len(rows))
-
     def cursor(self, name=None, row_factory=None):
         """A server-side cursor over nothing.
 
@@ -183,7 +196,7 @@ class FakeConnection:
         stubbing the step that broke prod.
         """
         self.server_cursors.append(name)
-        return EmptyServerCursor()
+        return FakeCursorHandle(self)
 
     def transaction(self) -> FakeTransaction:
         return FakeTransaction(self)
@@ -647,13 +660,46 @@ def test_scope_expansion_emits_a_regional_row_without_an_opponent():
         [{"opponent_champion_id": 51, "region": "na1", "won": True}]
     )
 
-    expanded = expand_scopes(frame)
+    # The floor is off here so this stays a test of the expansion shape; the prune has its own.
+    expanded = expand_scopes(frame, fine_scope_min_rows=0)
     scopes = set(zip(expanded["scope_opponent_id"], expanded["scope_region"]))
 
     assert (0, "GLOBAL") in scopes
     assert (51, "GLOBAL") in scopes
     assert (0, "NA1") in scopes
     assert (51, "NA1") in scopes
+
+
+def test_the_fine_scope_floor_drops_only_scopes_that_could_never_publish():
+    """A cell is a subset of its scope, so pruning a scope under the publication floor cannot
+    remove a cell that would have cleared it -- and the global scope is never pruned."""
+    big = pd.DataFrame(
+        [
+            {"champion_id": 1, "role": "MIDDLE", "match_id": f"m{n}",
+             "opponent_champion_id": 51, "region": "na1", "won": n % 2 == 0}
+            for n in range(120)
+        ]
+    )
+    thin = pd.DataFrame(
+        [
+            {"champion_id": 1, "role": "MIDDLE", "match_id": f"t{n}",
+             "opponent_champion_id": 99, "region": "kr", "won": True}
+            for n in range(5)
+        ]
+    )
+    frame = pd.concat([big, thin], ignore_index=True)
+
+    expanded = expand_scopes(frame, fine_scope_min_rows=100)
+    scopes = set(zip(expanded["scope_opponent_id"], expanded["scope_region"]))
+
+    # The global scope survives regardless of how thin any matchup inside it is.
+    assert (0, "GLOBAL") in scopes
+    # 120 rows against opponent 51 clears the floor; 5 rows against opponent 99 cannot.
+    assert (51, "GLOBAL") in scopes
+    assert (99, "GLOBAL") not in scopes
+    assert (99, "KR") not in scopes
+    # Every row is still represented at the global scope -- pruning drops scopes, never rows.
+    assert int((expanded["scope_opponent_id"] == 0).sum()) >= len(frame)
 
 
 def test_leakage_check_reports_a_measured_failure():
@@ -2970,17 +3016,204 @@ def test_the_sequential_sweep_reuses_the_connection_it_was_given(monkeypatch, tm
     assert "event_state" in pipeline._WORKER
 
 
+def test_the_modeler_tunes_only_its_own_session(monkeypatch, tmp_path):
+    """These are SET, never ALTER SYSTEM: the server's own settings are sized for the web app and
+    must stay that way. A session-scoped budget lets the sweep have a bigger one without every
+    other client inheriting it."""
+    settings = modeler_settings(
+        monkeypatch,
+        BUILD_LAB_ARTIFACT_DIR=str(tmp_path),
+        BUILD_LAB_SESSION_WORK_MEM="64MB",
+        BUILD_LAB_SESSION_PARALLEL_WORKERS="3",
+    )
+    connection = FakeConnection()
+
+    pipeline.tune_session(connection, settings)
+
+    issued = [statement for statement, _ in connection.statements]
+    assert "SET work_mem = '64MB'" in issued
+    assert "SET max_parallel_workers_per_gather = 3" in issued
+    assert not any("ALTER SYSTEM" in statement for statement in issued)
+
+
+def _read_state_in_child(path: str) -> tuple:
+    """Module-level so `spawn` can import it; a closure would not pickle."""
+    from build_lab_modeler.pipeline import read_cohort_event_state
+    state = read_cohort_event_state(Path(path))
+    return len(state.cumulative), dict(state.match_codes), set(state.covered_matches)
+
+
+def test_the_shared_state_survives_a_spawned_process(tmp_path):
+    """The pool uses `spawn`, so the worker is a fresh interpreter that inherits nothing.
+
+    Everything it needs must therefore either pickle through initargs or be reachable on disk. This
+    exercises the real mechanism -- a genuinely separate process reading the file the parent wrote --
+    rather than trusting that an in-process call proves it.
+    """
+    import multiprocessing
+    from concurrent.futures import ProcessPoolExecutor
+
+    state = pipeline.CohortEventState(
+        pd.DataFrame(
+            {
+                "match_code": pd.Series([1, 2], dtype="int32"),
+                "team_id": pd.Series([100, 200], dtype="int32"),
+                "timestamp_ms": pd.Series([10, 20], dtype="int64"),
+                "kills": pd.Series([1, 2], dtype="int32"),
+                "towers": pd.Series([0, 1], dtype="int32"),
+                "objectives": pd.Series([1, 0], dtype="int32"),
+            }
+        ),
+        {"m1": 1, "m2": 2},
+        frozenset({"m1", "m2"}),
+    )
+    path = pipeline.write_cohort_event_state(state, tmp_path / "state")
+
+    with ProcessPoolExecutor(
+        max_workers=1, mp_context=multiprocessing.get_context("spawn")
+    ) as pool:
+        rows, codes, covered = pool.submit(_read_state_in_child, str(path)).result(timeout=120)
+
+    assert rows == 2
+    assert codes == {"m1": 1, "m2": 2}
+    assert covered == {"m1", "m2"}
+
+
+def test_the_pool_initargs_are_picklable(monkeypatch, tmp_path):
+    """spawn pickles initargs; a Settings field that cannot pickle fails only in production, and
+    only after the structural fit has already been paid for."""
+    import pickle
+
+    settings = modeler_settings(monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path))
+    cohort = {
+        "included_patches": ["16.15", "16.16"],
+        "cutoff": datetime(2026, 8, 14, 2, 15, tzinfo=timezone.utc),
+        "rank_offset": None,
+        "current_patch": "16.16",
+        "changed_items": set(),
+        "changes": {},
+        "archetypes": {},
+        "artifact_path": str(tmp_path),
+    }
+    restored_settings, restored_cohort = pickle.loads(pickle.dumps((settings, cohort)))
+    assert restored_settings.sweep_workers == settings.sweep_workers
+    assert restored_settings.session_work_mem == settings.session_work_mem
+    assert restored_cohort["included_patches"] == ["16.15", "16.16"]
+
+
+def test_the_cohort_event_state_round_trips_through_the_shared_file(tmp_path):
+    """The pool and the sequential reference must sweep against identical state.
+
+    Workers no longer derive this themselves -- the parent reduces it once and hands over a
+    directory -- so anything lost in the round trip is a silent divergence between the two paths
+    rather than a crash.
+    """
+    cumulative = pd.DataFrame(
+        {
+            "match_code": pd.Series([1, 1, 2], dtype="int32"),
+            "team_id": pd.Series([100, 200, 100], dtype="int32"),
+            "timestamp_ms": pd.Series([1000, 2000, 3000], dtype="int64"),
+            "kills": pd.Series([1, 0, 2], dtype="int32"),
+            "towers": pd.Series([0, 1, 0], dtype="int32"),
+            "objectives": pd.Series([0, 0, 1], dtype="int32"),
+        }
+    )
+    state = pipeline.CohortEventState(
+        cumulative,
+        {"aaaaaaaa-0000-4000-8000-000000000001": 1, "aaaaaaaa-0000-4000-8000-000000000002": 2},
+        frozenset({"aaaaaaaa-0000-4000-8000-000000000001"}),
+    )
+
+    restored = pipeline.read_cohort_event_state(
+        pipeline.write_cohort_event_state(state, tmp_path / "state")
+    )
+
+    pd.testing.assert_frame_equal(restored.cumulative, state.cumulative)
+    assert restored.match_codes == state.match_codes
+    assert restored.covered_matches == state.covered_matches
+    # Codes are looked up by string id and compared as ints; parquet must not hand back numpy types
+    # that break either.
+    assert all(isinstance(key, str) for key in restored.match_codes)
+    assert all(isinstance(value, int) for value in restored.match_codes.values())
+
+
+def test_an_empty_cohort_event_state_round_trips_too(tmp_path):
+    state = pipeline.CohortEventState(pipeline.empty_event_state_rows(), {}, frozenset())
+    restored = pipeline.read_cohort_event_state(
+        pipeline.write_cohort_event_state(state, tmp_path / "state")
+    )
+    assert restored.cumulative.empty
+    assert restored.match_codes == {}
+    assert restored.covered_matches == frozenset()
+
+
+def test_a_worker_given_a_state_path_reads_it_instead_of_scanning(monkeypatch, tmp_path):
+    """A spawned worker must never re-derive the cohort state: that is one 16M-row scan per worker,
+    which is what made the pool slower than sequential."""
+    scanned = []
+    monkeypatch.setattr(
+        pipeline, "stream_cohort_event_state",
+        lambda *a, **k: scanned.append(1) or pipeline.CohortEventState(
+            pipeline.empty_event_state_rows(), {}, frozenset()
+        ),
+    )
+    monkeypatch.setattr(pipeline, "load_participant_teams", lambda *a, **k: pd.DataFrame())
+    state = pipeline.CohortEventState(
+        pd.DataFrame({column: pd.Series([1], dtype="int64") for column in pipeline.EVENT_STATE_COLUMNS}),
+        {"m1": 1},
+        frozenset({"m1"}),
+    )
+    path = pipeline.write_cohort_event_state(state, tmp_path / "state")
+
+    pipeline._sweep_worker_setup(
+        modeler_settings(monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path)),
+        {"artifact_path": str(tmp_path), "included_patches": ["16.15"],
+         "cutoff": datetime(2026, 8, 8, 2, 15, tzinfo=timezone.utc)},
+        "unused.joblib",
+        connection=object(), bundle={"model": None},
+        event_state_path=str(path),
+    )
+
+    assert scanned == [], "the worker scanned the cohort instead of reading the shared file"
+    assert pipeline._WORKER["event_state"].match_codes == {"m1": 1}
+
+
 def test_the_sweep_worker_count_is_configurable_and_floored(monkeypatch, tmp_path):
-    # Sequential by default, from measurement: the sweep is ~90% Postgres wait and prod's disk is
-    # spinning, so three workers took 1349s over three champions where one took 432s. Fanning out is
-    # opt-in, not the default, and it can never drop below one.
-    assert modeler_settings(monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path)).sweep_workers == 1
+    # Defaults to the container's cpu quota, not to 1 and not to nproc.
+    #
+    # Sequential used to be the default on measurement -- three workers took 1349s against 432s
+    # sequential -- but that was because every worker streamed its own copy of the cohort event
+    # state, so N workers meant N concurrent 16M-row scans of a spinning disk. The parent now
+    # reduces that state once and shares it as a file, which is the condition the original comment
+    # named for revisiting this. It still can never drop below one.
+    assert (
+        modeler_settings(monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path)).sweep_workers
+        == pipeline.container_cpu_quota()
+    )
     assert modeler_settings(
         monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path), BUILD_LAB_SWEEP_WORKERS="8"
     ).sweep_workers == 8
     assert modeler_settings(
         monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path), BUILD_LAB_SWEEP_WORKERS="0"
     ).sweep_workers == 1
+
+
+def test_the_cpu_quota_is_read_from_the_cgroup_not_from_nproc(monkeypatch, tmp_path):
+    """nproc reports the HOST's cores inside a container, which is what oversubscribed OpenBLAS in
+    #167 and killed the worker pool before that. The quota is the only number that describes what
+    this process may actually use."""
+    quota_file = tmp_path / "cpu.max"
+    quota_file.write_text("300000 100000")  # 3 cpus
+    monkeypatch.setattr(pipeline.pathlib, "Path", lambda _: quota_file)
+    assert pipeline.container_cpu_quota() == 3
+
+    quota_file.write_text("1600000 100000")  # 16 cpus
+    assert pipeline.container_cpu_quota() == 16
+
+    # An unlimited cgroup falls back rather than raising.
+    quota_file.write_text("max 100000")
+    monkeypatch.undo()
+    assert pipeline.container_cpu_quota() >= 1
 
 
 def test_a_reused_training_draw_is_bounded_by_age_and_never_from_the_future(tmp_path):

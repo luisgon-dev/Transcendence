@@ -16,6 +16,7 @@ import time
 from dataclasses import dataclass
 import multiprocessing
 from concurrent.futures import ProcessPoolExecutor
+import pathlib
 from pathlib import Path
 from typing import Iterable, Sequence
 from uuid import UUID, uuid4
@@ -82,6 +83,50 @@ MAX_ITEM_VOCABULARY = 192
 MAX_ROLE_VOCABULARY = 8
 MAX_PATCH_VOCABULARY = 4
 MAX_REGION_VOCABULARY = 24
+def container_cpu_quota() -> int:
+    """CPUs this container may actually use, which is never what `nproc` reports.
+
+    `nproc`, `os.cpu_count()` and OpenBLAS all read the HOST's core count -- a cgroup cpu quota does
+    not change it. That single fact has cost this pipeline two separate incidents: OpenBLAS sizing a
+    46-thread pool against a 3-cpu quota (#167), and a worker pool sized the same way exhausting
+    thread resources outright. Reading the quota is the only honest answer, so every default that
+    scales with "how many cores do I have" derives from here.
+    """
+    try:
+        quota, period = pathlib.Path("/sys/fs/cgroup/cpu.max").read_text().split()
+        if quota != "max":
+            return max(1, int(int(quota) / int(period)))
+    except (OSError, ValueError):
+        pass
+    try:  # cgroup v1
+        quota = int(pathlib.Path("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read_text())
+        period = int(pathlib.Path("/sys/fs/cgroup/cpu/cpu.cfs_period_us").read_text())
+        if quota > 0:
+            return max(1, quota // period)
+    except (OSError, ValueError):
+        pass
+    return max(1, os.cpu_count() or 1)
+
+
+def tune_session(connection, settings: "Settings") -> None:
+    """Per-session planner budget for the modeler's own connections.
+
+    The server is tuned for the web app -- 24MB work_mem and two parallel workers per gather, which
+    are sane for many small OLTP queries and badly wrong for a handful of 200k-row analytical joins.
+    Setting them on this connection leaves every other client untouched. `max_parallel_workers_per_
+    gather` is still capped by the server-wide `max_parallel_workers` pool, so raising it here only
+    helps once that pool is raised too.
+    """
+    connection.execute(f"SET work_mem = '{settings.session_work_mem}'")
+    connection.execute(
+        f"SET max_parallel_workers_per_gather = {settings.session_parallel_workers}"
+    )
+
+
+# Opponent- and region-scoped cells below this many rows cannot reach BuildLabEvidenceGate's
+# MinimumObservedActions (1000), so they are never expanded. 0 restores the pre-prune behaviour.
+FINE_SCOPE_MIN_ROWS = max(0, int(os.getenv("BUILD_LAB_FINE_SCOPE_MIN_ROWS", "1000")))
+
 DESIGN_MATRIX_MAX_COLUMNS = (
     len(FEATURE_COLUMNS)
     + 4 * MAX_CHAMPION_VOCABULARY
@@ -155,6 +200,8 @@ class Settings:
     training_draw_max_age_hours: float
     sweep_workers: int
     sweep_blas_threads: int
+    session_work_mem: str
+    session_parallel_workers: int
     calibration_bands: int
     retained_generations: int
 
@@ -210,7 +257,22 @@ class Settings:
             # same three champions took 432s sequentially and 1349s across three workers -- parallelism
             # was 3x SLOWER. The pool is kept because it is correct and the arithmetic changes on SSD or
             # once the timeline amplification is removed, but it must be opted into.
-            sweep_workers=max(1, int(os.getenv("BUILD_LAB_SWEEP_WORKERS", "1"))),
+            # Defaults to the container's cpu quota, no longer to 1.
+            #
+            # The old default was sequential on measurement: three workers took 1349s against 432s
+            # sequential. That measurement was correct and is now obsolete, because its cause has
+            # been removed. Each worker streamed its OWN copy of the cohort event state -- N
+            # concurrent 16M-row scans of an HDD-backed database, which thrashes rather than
+            # overlaps. The parent now reduces that state once and hands workers a file, so the
+            # per-worker cost of joining the sweep is a local read of a few hundred MB instead of a
+            # 74-minute scan, and the arithmetic the old comment anticipated ("changes ... once the
+            # timeline amplification is removed") has changed.
+            #
+            # Sized from the cgroup quota rather than nproc: the container is given far fewer cpus
+            # than the host has, and every previous attempt to scale with nproc oversubscribed.
+            sweep_workers=max(
+                1, int(os.getenv("BUILD_LAB_SWEEP_WORKERS", str(container_cpu_quota())))
+            ),
             # BLAS threads during the estimate sweep, and the single biggest lever on its runtime.
             #
             # Measured on the sweep's real fit shape -- 600 rows by DESIGN_MATRIX_MAX_COLUMNS (1,044)
@@ -232,6 +294,19 @@ class Settings:
             # within time bands, so this is the dial that moves the gate that is hardest to pass.
             calibration_bands=max(
                 1, int(os.getenv("BUILD_LAB_CALIBRATION_BANDS", str(CALIBRATION_BANDS)))
+            ),
+            # The server's 24MB work_mem is sized for the web app's many small queries; the sweep
+            # runs a few large joins per champion and sorts inside them.
+            #
+            # Deliberately modest, because this number multiplies harder than it looks: work_mem is
+            # per sort/hash NODE, every parallel worker inside a query gets its own, and the sweep
+            # runs one such query per sweep worker. Worst case is roughly
+            #   work_mem x nodes x (1 + session_parallel_workers) x sweep_workers
+            # so 128MB across 4 sweep workers with 2 parallel workers each is already several GB.
+            # Raise it against measured plans and the box's free RAM, not on principle.
+            session_work_mem=os.getenv("BUILD_LAB_SESSION_WORK_MEM", "128MB"),
+            session_parallel_workers=max(
+                0, int(os.getenv("BUILD_LAB_SESSION_PARALLEL_WORKERS", "2"))
             ),
             retained_generations=max(2, int(os.getenv("BUILD_LAB_RETAINED_GENERATIONS", "4"))),
         )
@@ -273,6 +348,7 @@ def install_shutdown_handlers() -> None:
 
 def process_next(settings: Settings) -> RunOutcome:
     with psycopg.connect(settings.database_url, row_factory=dict_row) as connection:
+        tune_session(connection, settings)
         # Exclusivity for the whole run, released by the session itself if this process dies.
         if not try_acquire_modeling_lock(connection):
             LOG.info("Another modeler holds the modeling lock; nothing to do this tick.")
@@ -481,6 +557,8 @@ def _sweep_worker_setup(
     bundle_path: str,
     connection=None,
     bundle=None,
+    event_state_path: str | None = None,
+    event_state: "CohortEventState | None" = None,
 ) -> None:
     """Per-process state for the sweep.
 
@@ -497,20 +575,38 @@ def _sweep_worker_setup(
         if connection is not None
         else psycopg.connect(settings.database_url, row_factory=dict_row)
     )
+    if connection is None:  # a connection handed down by the parent is already tuned
+        tune_session(_WORKER["connection"], settings)
     _WORKER["bundle"] = bundle if bundle is not None else joblib.load(bundle_path)
-    # Drawn once per process rather than once per champion -- see stream_cohort_event_state for why the
-    # sweep's dominant cost is this read, and why it is reduced rather than held. In the pool each
-    # worker streams its own copy, which is one read per worker against 173 before; sharing one frame
-    # across spawned interpreters would mean pickling it through initargs, and the pool is opt-in and
-    # already the slower path on this hardware.
-    _WORKER["event_state"] = stream_cohort_event_state(
-        _WORKER["connection"],
-        cohort["included_patches"],
-        cohort["cutoff"],
-        load_participant_teams(
-            _WORKER["connection"], cohort["included_patches"], cohort["cutoff"]
-        ),
-    )
+    # Reduced once by the parent and shared, never re-derived per worker.
+    #
+    # This read is the sweep's single largest fixed cost -- a 16M-row scan of the payload table, 74
+    # minutes on prod. Deriving it per worker is what made the pool slower than sequential: N
+    # workers meant N concurrent scans of the same rows on a spinning disk. The parent now reduces
+    # it once and passes either the object (in-process) or a parquet directory (spawned workers),
+    # so both paths sweep against a byte-identical state and a worker costs a local read to start.
+    if event_state is not None:
+        _WORKER["event_state"] = event_state
+    elif event_state_path is not None:
+        _WORKER["event_state"] = read_cohort_event_state(Path(event_state_path))
+    else:
+        _WORKER["event_state"] = stream_cohort_event_state(
+            _WORKER["connection"],
+            cohort["included_patches"],
+            cohort["cutoff"],
+            load_participant_teams(
+                _WORKER["connection"], cohort["included_patches"], cohort["cutoff"]
+            ),
+        )
+
+
+def _sweep_pool_setup(
+    settings: "Settings", cohort: dict, bundle_path: str, event_state_path: str
+) -> None:
+    """Pool initializer. `initargs` is a positional tuple with no keyword support, so a wrapper that
+    names exactly what a spawned worker needs is safer than padding the general signature with
+    placeholder Nones that silently shift if it ever gains an argument."""
+    _sweep_worker_setup(settings, cohort, bundle_path, event_state_path=event_state_path)
 
 
 def sweep_champion(champion_id: int) -> dict:
@@ -690,6 +786,14 @@ def model_generation(
             "Sweep BLAS threads limited to %d (container quota is the binding constraint, not nproc).",
             settings.sweep_blas_threads,
         )
+        # Reduced once, here, for both paths -- so the pool sweeps against the same state the
+        # sequential reference does rather than N independently-derived copies of it.
+        cohort_state = stream_cohort_event_state(
+            connection,
+            included_patches,
+            cutoff,
+            load_participant_teams(connection, included_patches, cutoff),
+        )
         if workers == 1:
             # Kept as a real path, not a fallback nobody runs: it is what a constrained host uses, and it
             # is the reference the parallel path is checked against.
@@ -699,6 +803,7 @@ def model_generation(
                 str(artifact_path / "win_probability.joblib"),
                 connection=connection,
                 bundle=structural_model,
+                event_state=cohort_state,
             )
             for position, champion_id in enumerate(champions, start=1):
                 absorb(sweep_champion(champion_id), position)
@@ -732,11 +837,23 @@ def model_generation(
             # transaction each, and sat idle-in-transaction for 45 minutes without completing one champion.
             # spawn starts a fresh interpreter with no inherited lock state. It costs a re-import per worker,
             # once, against a sweep measured in tens of minutes.
+            state_path = write_cohort_event_state(
+                cohort_state, artifact_path / "cohort_event_state"
+            )
+            LOG.info(
+                "Cohort event state shared with %d workers from %s (%d rows).",
+                workers, state_path, len(cohort_state.cumulative),
+            )
             with ProcessPoolExecutor(
                 max_workers=workers,
                 mp_context=multiprocessing.get_context("spawn"),
-                initializer=_sweep_worker_setup,
-                initargs=(settings, cohort, str(artifact_path / "win_probability.joblib")),
+                initializer=_sweep_pool_setup,
+                initargs=(
+                    settings,
+                    cohort,
+                    str(artifact_path / "win_probability.joblib"),
+                    str(state_path),
+                ),
             ) as pool:
                 for position, result in enumerate(pool.map(sweep_champion, champions), start=1):
                     absorb(result, position)
@@ -1644,7 +1761,14 @@ def timeline_state_events_query(
 """
         + scope_predicates(champion_id, match_sample_range, match_scoped=True)
         + """
-        ORDER BY payload."MatchId", payload."TimestampMs", payload."EventIndex"
+        -- Ordered by the primary key (MatchId, EventIndex) rather than by (MatchId, TimestampMs,
+        -- EventIndex), which matches no index and therefore sorts ~16M rows on every generation.
+        -- The two orders are identical, not merely similar: ingestion assigns EventIndex as the
+        -- position AFTER sorting that match's events by Timestamp (MatchTimelineIngestionJob's
+        -- StageTimelineEventPayloadsAsync -- .OrderBy(Timestamp).Select((e, index) => ...)), and
+        -- LINQ's OrderBy is stable, so equal timestamps keep a deterministic order. That job is the
+        -- only writer of this table, so the invariant holds for every row.
+        ORDER BY payload."MatchId", payload."EventIndex"
         """
     )
     return sql, {
@@ -1716,6 +1840,46 @@ class CohortEventState:
     cumulative: pd.DataFrame
     match_codes: dict
     covered_matches: frozenset
+
+
+def write_cohort_event_state(state: CohortEventState, directory: Path) -> Path:
+    """Persist the reduced cohort state so every sweep worker can read it instead of deriving it.
+
+    This is what makes the worker pool viable. Deriving this state costs one 16M-row scan of the
+    payload table -- 74 minutes on prod -- and each worker used to pay it, so N workers meant N
+    concurrent scans of a spinning disk competing with each other. Written once and read back, a
+    worker joins the sweep for the price of a local parquet read.
+
+    Three files rather than one pickle: the frame is all-integer columnar data that parquet stores
+    densely, and a pickle of a 578 MB frame would have to be re-read in full by every worker with no
+    chance for the page cache to share it.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    state.cumulative.to_parquet(directory / "cumulative.parquet", index=False)
+    pd.DataFrame(
+        {
+            "match_id": list(state.match_codes.keys()),
+            "match_code": [int(code) for code in state.match_codes.values()],
+        }
+    ).to_parquet(directory / "match_codes.parquet", index=False)
+    pd.DataFrame({"match_id": sorted(state.covered_matches)}).to_parquet(
+        directory / "covered_matches.parquet", index=False
+    )
+    return directory
+
+
+def read_cohort_event_state(directory: Path) -> CohortEventState:
+    """Rebuild what `write_cohort_event_state` stored, exactly."""
+    codes = pd.read_parquet(directory / "match_codes.parquet")
+    covered = pd.read_parquet(directory / "covered_matches.parquet")
+    return CohortEventState(
+        pd.read_parquet(directory / "cumulative.parquet"),
+        {
+            str(match_id): int(code)
+            for match_id, code in zip(codes["match_id"], codes["match_code"])
+        },
+        frozenset(str(match_id) for match_id in covered["match_id"]),
+    )
 
 
 def empty_event_state_rows() -> pd.DataFrame:
@@ -3123,9 +3287,28 @@ def participant_level_comparator(scope: pd.DataFrame, target: str) -> pd.DataFra
     return comparator
 
 
-def expand_scopes(frame: pd.DataFrame) -> pd.DataFrame:
+def expand_scopes(
+    frame: pd.DataFrame,
+    fine_scope_min_rows: int = FINE_SCOPE_MIN_ROWS,
+) -> pd.DataFrame:
+    """Quadruple the frame into the four scope granularities the serving layer can answer at.
+
+    `fine_scope_min_rows` drops opponent- and region-scoped rows whose whole scope is too small to
+    reach the publication floor (`MinimumObservedActions`, 1000). This is a pure cost cut, not a
+    change of published values: a cell is always a subset of its scope, so a scope carrying fewer
+    rows than the floor cannot contain a cell that clears it. Measured on one role of one patch, 90%
+    of the cells that survive the 40-row attempt floor sit in these three variants and none of them
+    can publish -- they were fitted (a 1,044-column design, 5 folds x 3 nuisance models each) and
+    then discarded by the promoter.
+
+    What it does give up is the direction-only Bucketed tier at matchup and region granularity,
+    which needs BucketConfidence rather than 1000 observations. Those cells now fall back to
+    GLOBAL_FALLBACK, which the serving layer already resolves. The global (champion x role) scope
+    keeps the original 40-row floor and is untouched.
+    """
     opponents = frame["opponent_champion_id"].fillna(0).astype(int)
     regions = frame["region"].fillna("GLOBAL").astype(str).str.upper()
+    scope_keys = ["champion_id", "role", "scope_opponent_id", "scope_region"]
     scopes = []
     for opponent, region in (
         (0, None),
@@ -3136,7 +3319,18 @@ def expand_scopes(frame: pd.DataFrame) -> pd.DataFrame:
         scope = frame.copy()
         scope["scope_opponent_id"] = opponent
         scope["scope_region"] = "GLOBAL" if region is None else region
-        scopes.append(scope)
+        is_global = isinstance(opponent, int) and region is None
+        if not is_global and fine_scope_min_rows > 0 and not scope.empty:
+            # champion_id and role are always present on the production frames; narrowing to the
+            # columns actually there keeps this usable on the smaller frames the tests build.
+            keys = [key for key in scope_keys if key in scope.columns]
+            scope = scope.assign(_scope_rows=1)
+            sizes = scope.groupby(keys, sort=False, dropna=False)["_scope_rows"].transform("size")
+            scope = scope[sizes >= fine_scope_min_rows].drop(columns="_scope_rows")
+        if not scope.empty:
+            scopes.append(scope)
+    if not scopes:
+        return frame.iloc[0:0].assign(scope_opponent_id=0, scope_region="GLOBAL")
     return pd.concat(scopes, ignore_index=True).drop_duplicates()
 
 
@@ -3607,44 +3801,50 @@ def hash_path(path: Iterable[int]) -> str:
 
 
 def insert_estimates(connection, rows: list[tuple]) -> None:
-    connection.executemany(
-        """
-        INSERT INTO "AdjustedActionEstimates" (
-            "Id", "GenerationId", "ChampionId", "Role", "OpponentChampionId", "Patch",
-            "RegionScope", "DecisionFamily", "Stage", "PathPrefixHash", "PathPrefixJson",
-            "ActionKey", "ActionIdsJson", "AdjustedWpa", "ConfidenceLow", "ConfidenceHigh",
-            "RawWinRate", "PickRate", "ObservedCount", "EffectiveSampleSize",
-            "AverageTimingMinutes", "PropensityOverlap", "CovariateBalance",
-            "StableAcrossFolds", "IsPublishable", "EvidenceQuality", "FallbackScope",
-            "BaselineDefinition", "EvidenceBucket", "BucketConfidence",
-            "UnavailableReason", "ComputedAtUtc"
-        ) VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s::jsonb,
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
+    # psycopg exposes `executemany` on the cursor only -- `Connection` carries `execute` as a
+    # convenience but never this. Going through an explicit cursor is the whole API, not a style
+    # choice: the connection-level call raises AttributeError, and because it is the terminal write
+    # it does so only after the full 173-champion sweep has already been paid for.
+    with connection.cursor() as cursor:
+        cursor.executemany(
+            """
+            INSERT INTO "AdjustedActionEstimates" (
+                "Id", "GenerationId", "ChampionId", "Role", "OpponentChampionId", "Patch",
+                "RegionScope", "DecisionFamily", "Stage", "PathPrefixHash", "PathPrefixJson",
+                "ActionKey", "ActionIdsJson", "AdjustedWpa", "ConfidenceLow", "ConfidenceHigh",
+                "RawWinRate", "PickRate", "ObservedCount", "EffectiveSampleSize",
+                "AverageTimingMinutes", "PropensityOverlap", "CovariateBalance",
+                "StableAcrossFolds", "IsPublishable", "EvidenceQuality", "FallbackScope",
+                "BaselineDefinition", "EvidenceBucket", "BucketConfidence",
+                "UnavailableReason", "ComputedAtUtc"
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s::jsonb,
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
+            )
+            ON CONFLICT DO NOTHING
+            """,
+            rows,
         )
-        ON CONFLICT DO NOTHING
-        """,
-        rows,
-    )
 
 
 def insert_path_estimates(connection, rows: list[tuple]) -> None:
     if not rows:
         return
-    connection.executemany(
-        """
-        INSERT INTO "AdjustedPathEstimates" (
-            "Id", "GenerationId", "ChampionId", "Role", "OpponentChampionId", "Patch",
-            "RegionScope", "PathHash", "ItemPathJson", "EstimatedWinProbability",
-            "AdjustedLift", "ConfidenceLow", "ConfidenceHigh", "ObservedCount",
-            "EffectiveSampleSize", "IsPublishable", "UnavailableReason"
-        ) VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s
+    with connection.cursor() as cursor:
+        cursor.executemany(
+            """
+            INSERT INTO "AdjustedPathEstimates" (
+                "Id", "GenerationId", "ChampionId", "Role", "OpponentChampionId", "Patch",
+                "RegionScope", "PathHash", "ItemPathJson", "EstimatedWinProbability",
+                "AdjustedLift", "ConfidenceLow", "ConfidenceHigh", "ObservedCount",
+                "EffectiveSampleSize", "IsPublishable", "UnavailableReason"
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s
+            )
+            ON CONFLICT DO NOTHING
+            """,
+            rows,
         )
-        ON CONFLICT DO NOTHING
-        """,
-        rows,
-    )
 
 
 def upload_artifacts(settings: Settings, artifact_path: Path, generation_id: UUID) -> str:

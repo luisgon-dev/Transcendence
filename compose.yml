@@ -3,6 +3,10 @@ name: transcendence
 x-app-env: &app-env
   ConnectionStrings__Redis: ${REDIS_CONNECTION}
   RiotApi__League__ApiKey: ${RIOT_API_KEY_LOL}
+  # Carried from the pre-Compose prod stack. Nothing binds RiotApi:Tft:ApiKey today -- the schema in
+  # config/backend.shared.json declares only League -- but the TFT module's tables and migrations
+  # exist, so this is kept rather than dropped during a migration whose rule is to change nothing.
+  RiotApi__Tft__ApiKey: ${RIOT_API_KEY_TFT:-}
 
 services:
   postgres:
@@ -14,6 +18,8 @@ services:
     # (`docker compose down -v`, or `docker volume rm transcendence_postgres_data`) for a clean PG18 init.
     image: pgautoupgrade/pgautoupgrade:18.3-alpine
     container_name: transcendence-postgres
+    labels:
+      wud.watch: "false"
     restart: unless-stopped
     # Memory tuning is declarative (passed as `postgres -c`) so it survives a postgres_data volume
     # rebuild and is version-controlled, rather than living only in ALTER SYSTEM / postgresql.auto.conf
@@ -39,6 +45,18 @@ services:
       - "track_io_timing=${POSTGRES_TRACK_IO_TIMING:-on}"
       - "-c"
       - "log_temp_files=${POSTGRES_LOG_TEMP_FILES_KB:-65536}"
+      # Parallel query. The defaults (8/8/2) are sized for a small server and were what prod ran on
+      # a 46-core host: any one query got at most two helper workers, which is why a single backend
+      # saturated while the machine idled. max_worker_processes needs a restart to change, so it is
+      # set here rather than by ALTER SYSTEM. Keep max_parallel_workers <= max_worker_processes.
+      - "-c"
+      - "max_worker_processes=${POSTGRES_MAX_WORKER_PROCESSES:-8}"
+      - "-c"
+      - "max_parallel_workers=${POSTGRES_MAX_PARALLEL_WORKERS:-8}"
+      - "-c"
+      - "max_parallel_workers_per_gather=${POSTGRES_MAX_PARALLEL_WORKERS_PER_GATHER:-2}"
+      - "-c"
+      - "max_parallel_maintenance_workers=${POSTGRES_MAX_PARALLEL_MAINTENANCE_WORKERS:-2}"
     shm_size: "${POSTGRES_SHM_SIZE:-64mb}"
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
@@ -59,6 +77,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: transcendence-redis
+    labels:
+      wud.watch: "false"
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -86,6 +106,9 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
+      # The canonical public origin. apps/web/lib/env.ts falls back to a build-time constant when
+      # this is unset, so an omission is silent rather than fatal -- it must not be lost.
+      TRN_PUBLIC_ORIGIN: ${TRN_PUBLIC_ORIGIN:-}
       TRN_BACKEND_BASE_URL: http://webapi:8080
       TRN_BACKEND_API_KEY: ${WEB_TRN_BACKEND_API_KEY}
       TRN_FEATURE_BUILD_LAB: ${TRN_FEATURE_BUILD_LAB:-false}
@@ -193,6 +216,12 @@ services:
       Analytics__BuildLab__Enabled: ${BUILD_LAB_ENABLED:-false}
       Analytics__BuildLab__CodeRevision: ${BUILD_LAB_CODE_REVISION:-local}
       Jobs__Schedule__EnableCreateBuildLabGeneration: ${BUILD_LAB_ENABLED:-false}
+      # Cadence of the create job. A generation now takes hours rather than days, but a daily cron
+      # can still queue them faster than they are consumed -- patch-aligned matches reality.
+      Jobs__Schedule__CreateBuildLabGenerationCron: ${BUILD_LAB_CREATE_CRON:-15 2 * * *}
+      # Worker-stall and job-failure alerts. Program.cs logs instead of posting when unset, so a
+      # dropped value degrades silently to no alerting at all.
+      Alerts__Webhook__Url: ${ALERTS_WEBHOOK_URL:-}
       Jobs__Schedule__EnablePromoteBuildLabGeneration: ${BUILD_LAB_ENABLED:-false}
       <<: *app-env
     depends_on:
@@ -226,10 +255,13 @@ services:
     # and a restart policy on a oneshot would relaunch a finished run.
     restart: "no"
     profiles: ["analytics-modeling"]
-    cpus: "${BUILD_LAB_MODELER_CPUS:-4.0}"
-    # Peak is set by the largest single champion's rows plus one training slice, not by the size of
-    # the cohort, so this no longer has to be raised as the corpus grows.
-    mem_limit: "${BUILD_LAB_MODELER_MEMORY_LIMIT:-6g}"
+    cpus: "${BUILD_LAB_MODELER_CPUS:-8.0}"
+    # Peak is roughly (largest champion's frames x sweep workers) + one training slice + one shared
+    # read of the cohort event state. It does track corpus growth, contrary to what this comment
+    # used to claim: measured on prod, a single-worker sweep peaked at 3.46 GiB against an 88k-match
+    # cohort in August and 5.32 GiB against 193k -- 89% of the old 6g cap, on the run that swept all
+    # 173 champions. Size this against the cpu quota above, and re-check it when the cohort doubles.
+    mem_limit: "${BUILD_LAB_MODELER_MEMORY_LIMIT:-12g}"
     pids_limit: 512
     environment:
       BUILD_LAB_DATABASE_URL: host=postgres port=5432 dbname=${POSTGRES_DB} user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} application_name=transcendence-modeler
@@ -245,6 +277,14 @@ services:
       # One generation per invocation, then exit. The scheduler decides cadence.
       BUILD_LAB_RUN_ONCE: ${BUILD_LAB_RUN_ONCE:-true}
       BUILD_LAB_MAX_TRAINING_ROWS: ${BUILD_LAB_MAX_TRAINING_ROWS:-250000}
+      # Unset tracks the cpu quota above. The sweep reads the cgroup rather than nproc, so this
+      # container gets exactly the cpus it is given and never sizes pools against the host's 46.
+      BUILD_LAB_SWEEP_WORKERS: ${BUILD_LAB_SWEEP_WORKERS:-}
+      BUILD_LAB_SWEEP_BLAS_THREADS: ${BUILD_LAB_SWEEP_BLAS_THREADS:-1}
+      # Session-scoped planner budget; the server's own settings stay sized for the web app.
+      BUILD_LAB_SESSION_WORK_MEM: ${BUILD_LAB_SESSION_WORK_MEM:-128MB}
+      BUILD_LAB_SESSION_PARALLEL_WORKERS: ${BUILD_LAB_SESSION_PARALLEL_WORKERS:-2}
+      BUILD_LAB_FINE_SCOPE_MIN_ROWS: ${BUILD_LAB_FINE_SCOPE_MIN_ROWS:-1000}
       # How many whole matches the structural fit draws. The fit was always capped at
       # MAX_TRAINING_ROWS; this bounds the load that feeds it so the cap stops costing a full-corpus
       # read. Raise it for more match diversity in the fit, at a proportional memory cost.
@@ -284,7 +324,7 @@ services:
       - transcendence-net
 
   dozzle:
-    image: amir20/dozzle:latest
+    image: ${DOZZLE_IMAGE:-amir20/dozzle:latest}
     container_name: transcendence-dozzle
     restart: unless-stopped
     profiles: ["ops-tools"]
@@ -297,6 +337,26 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - transcendence-net
+
+  # Carried over from the pre-Compose prod stack, deliberately unchanged.
+  #
+  # wud was the original auto-deployer and no longer is: wud 8.2.2 silently fails to resolve the
+  # ghcr manifest digest for these packages (reports updateAvailable=false even when the digest
+  # moved), which is why scripts/ops/poll-deploy.sh exists. Every app service is therefore labelled
+  # `wud.watch=false` so the two can never race the same container (#143). What it still does is
+  # report available updates for the third-party images nothing else watches, so it is kept.
+  whatsupdocker:
+    image: getwud/wud@sha256:2df7cafa0fc84cdd66ad976163abc5390fa5995e0b5788a90e6a5303706bc21a
+    container_name: wud
+    restart: unless-stopped
+    profiles: ["ops-tools"]
+    environment:
+      WUD_TRIGGER_DOCKER_EXAMPLE_PRUNE: "true"
+      WUD_WATCHER_LOCAL_CRON: "* * * * *"
+    ports:
+      - "${WUD_PORT:-3001}:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
   # Prometheus + Grafana now live in their own stack — the single source of truth for both local
   # dev and prod — at config/monitoring/ (compose.yml + compose.prod.yml). They share this app

@@ -49,9 +49,13 @@ services:
       # a 46-core host: any one query got at most two helper workers, which is why a single backend
       # saturated while the machine idled. max_worker_processes needs a restart to change, so it is
       # set here rather than by ALTER SYSTEM. Keep max_parallel_workers <= max_worker_processes.
+      - "-c"
       - "max_worker_processes=${POSTGRES_MAX_WORKER_PROCESSES:-8}"
+      - "-c"
       - "max_parallel_workers=${POSTGRES_MAX_PARALLEL_WORKERS:-8}"
+      - "-c"
       - "max_parallel_workers_per_gather=${POSTGRES_MAX_PARALLEL_WORKERS_PER_GATHER:-2}"
+      - "-c"
       - "max_parallel_maintenance_workers=${POSTGRES_MAX_PARALLEL_MAINTENANCE_WORKERS:-2}"
     shm_size: "${POSTGRES_SHM_SIZE:-64mb}"
     environment:
@@ -320,7 +324,7 @@ services:
       - transcendence-net
 
   dozzle:
-    image: amir20/dozzle:latest
+    image: ${DOZZLE_IMAGE:-amir20/dozzle:latest}
     container_name: transcendence-dozzle
     restart: unless-stopped
     profiles: ["ops-tools"]

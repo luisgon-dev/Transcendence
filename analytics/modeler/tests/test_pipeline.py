@@ -3198,6 +3198,27 @@ def test_the_sweep_worker_count_is_configurable_and_floored(monkeypatch, tmp_pat
     ).sweep_workers == 1
 
 
+def test_an_empty_env_var_falls_back_to_the_default(monkeypatch, tmp_path):
+    """Compose renders `${VAR:-}` as an empty string, not as an unset variable.
+
+    `os.getenv(name, default)` therefore returns "" and the default never applies, so every
+    int()/float() around it raises. This is how `BUILD_LAB_SWEEP_WORKERS: ${BUILD_LAB_SWEEP_WORKERS:-}`
+    -- the intended way to spell "use the computed default" -- crashed the modeler at startup.
+    """
+    monkeypatch.setenv("BUILD_LAB_SWEEP_WORKERS", "")
+    monkeypatch.setenv("BUILD_LAB_SESSION_WORK_MEM", "")
+    monkeypatch.setenv("BUILD_LAB_TRAINING_DRAW_MAX_AGE_HOURS", "   ")
+
+    settings = modeler_settings(monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path))
+
+    assert settings.sweep_workers == pipeline.container_cpu_quota()
+    assert settings.session_work_mem == "128MB"
+    assert settings.training_draw_max_age_hours == 36.0
+    # An explicit value still wins over the default.
+    monkeypatch.setenv("BUILD_LAB_SWEEP_WORKERS", "6")
+    assert modeler_settings(monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path)).sweep_workers == 6
+
+
 def test_the_cpu_quota_is_read_from_the_cgroup_not_from_nproc(monkeypatch, tmp_path):
     """nproc reports the HOST's cores inside a container, which is what oversubscribed OpenBLAS in
     #167 and killed the worker pool before that. The quota is the only number that describes what

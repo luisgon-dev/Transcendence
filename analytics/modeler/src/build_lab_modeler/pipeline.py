@@ -123,9 +123,30 @@ def tune_session(connection, settings: "Settings") -> None:
     )
 
 
+def env_text(name: str, default: str) -> str:
+    """An env var's value, treating empty as absent.
+
+    Compose renders `${VAR:-}` as an empty string, not as an unset variable, so `os.getenv(name,
+    default)` returns "" rather than the default and every int()/float() around it raises. That is
+    not hypothetical: `BUILD_LAB_SWEEP_WORKERS: ${BUILD_LAB_SWEEP_WORKERS:-}` -- the intended way to
+    say "use the computed default" -- crashed the modeler at startup with
+    `ValueError: invalid literal for int() with base 10: ''`.
+    """
+    raw = os.getenv(name)
+    return raw.strip() if raw and raw.strip() else default
+
+
+def env_int(name: str, default: int) -> int:
+    return int(env_text(name, str(default)))
+
+
+def env_float(name: str, default: float) -> float:
+    return float(env_text(name, str(default)))
+
+
 # Opponent- and region-scoped cells below this many rows cannot reach BuildLabEvidenceGate's
 # MinimumObservedActions (1000), so they are never expanded. 0 restores the pre-prune behaviour.
-FINE_SCOPE_MIN_ROWS = max(0, int(os.getenv("BUILD_LAB_FINE_SCOPE_MIN_ROWS", "1000")))
+FINE_SCOPE_MIN_ROWS = max(0, env_int("BUILD_LAB_FINE_SCOPE_MIN_ROWS", 1000))
 
 DESIGN_MATRIX_MAX_COLUMNS = (
     len(FEATURE_COLUMNS)
@@ -219,7 +240,7 @@ class Settings:
         return cls(
             database_url=database_url,
             artifact_dir=Path(os.getenv("BUILD_LAB_ARTIFACT_DIR", "/artifacts")),
-            poll_seconds=max(30, int(os.getenv("BUILD_LAB_POLL_SECONDS", "300"))),
+            poll_seconds=max(30, env_int("BUILD_LAB_POLL_SECONDS", 300)),
             run_once=os.getenv("BUILD_LAB_RUN_ONCE", "false").lower() == "true",
             s3_endpoint=os.getenv("BUILD_LAB_S3_ENDPOINT") or None,
             s3_bucket=os.getenv("BUILD_LAB_S3_BUCKET") or None,
@@ -228,13 +249,13 @@ class Settings:
             deidentification_salt=salt,
             lease_owner=os.getenv("BUILD_LAB_LEASE_OWNER")
             or f"{socket.gethostname()}:{os.getpid()}",
-            max_training_rows=max(20_000, int(os.getenv("BUILD_LAB_MAX_TRAINING_ROWS", "250000"))),
+            max_training_rows=max(20_000, env_int("BUILD_LAB_MAX_TRAINING_ROWS", 250000)),
             # How many whole matches the structural fit draws. Sized so the sample yields well over
             # max_training_rows of decisions while its raw item events stay a small fraction of the
             # corpus, which is what keeps peak memory independent of how long the cohort has been
             # accumulating.
             training_sample_matches=max(
-                2_000, int(os.getenv("BUILD_LAB_TRAINING_SAMPLE_MATCHES", "12000"))
+                2_000, env_int("BUILD_LAB_TRAINING_SAMPLE_MATCHES", 12000)
             ),
             # Mirrors BuildLabModelingOptions.RetainedGenerations and the Math.Max(2, ...) floor the
             # coordinator applies, so artifact retention and row retention keep the same set.
@@ -247,7 +268,7 @@ class Settings:
             # nuisance model, and the cutoff actually used is recorded in the manifest. 0 disables reuse
             # across cutoffs entirely.
             training_draw_max_age_hours=max(
-                0.0, float(os.getenv("BUILD_LAB_TRAINING_DRAW_MAX_AGE_HOURS", "36"))
+                0.0, env_float("BUILD_LAB_TRAINING_DRAW_MAX_AGE_HOURS", 36)
             ),
             # Defaults to sequential, on measurement rather than principle.
             #
@@ -271,7 +292,7 @@ class Settings:
             # Sized from the cgroup quota rather than nproc: the container is given far fewer cpus
             # than the host has, and every previous attempt to scale with nproc oversubscribed.
             sweep_workers=max(
-                1, int(os.getenv("BUILD_LAB_SWEEP_WORKERS", str(container_cpu_quota())))
+                1, env_int("BUILD_LAB_SWEEP_WORKERS", container_cpu_quota())
             ),
             # BLAS threads during the estimate sweep, and the single biggest lever on its runtime.
             #
@@ -289,11 +310,11 @@ class Settings:
             # Defaults to 1 rather than the measured-best 2 because `nproc` cannot be trusted to
             # describe the quota -- it reports the host's cores -- so 1 is the only value that cannot
             # oversubscribe whatever the container is actually given.
-            sweep_blas_threads=max(1, int(os.getenv("BUILD_LAB_SWEEP_BLAS_THREADS", "1"))),
+            sweep_blas_threads=max(1, env_int("BUILD_LAB_SWEEP_BLAS_THREADS", 1)),
             # How finely calibration is conditioned on game phase. The promotion gate scores ECE
             # within time bands, so this is the dial that moves the gate that is hardest to pass.
             calibration_bands=max(
-                1, int(os.getenv("BUILD_LAB_CALIBRATION_BANDS", str(CALIBRATION_BANDS)))
+                1, env_int("BUILD_LAB_CALIBRATION_BANDS", CALIBRATION_BANDS)
             ),
             # The server's 24MB work_mem is sized for the web app's many small queries; the sweep
             # runs a few large joins per champion and sorts inside them.
@@ -304,11 +325,11 @@ class Settings:
             #   work_mem x nodes x (1 + session_parallel_workers) x sweep_workers
             # so 128MB across 4 sweep workers with 2 parallel workers each is already several GB.
             # Raise it against measured plans and the box's free RAM, not on principle.
-            session_work_mem=os.getenv("BUILD_LAB_SESSION_WORK_MEM", "128MB"),
+            session_work_mem=env_text("BUILD_LAB_SESSION_WORK_MEM", "128MB"),
             session_parallel_workers=max(
-                0, int(os.getenv("BUILD_LAB_SESSION_PARALLEL_WORKERS", "2"))
+                0, env_int("BUILD_LAB_SESSION_PARALLEL_WORKERS", 2)
             ),
-            retained_generations=max(2, int(os.getenv("BUILD_LAB_RETAINED_GENERATIONS", "4"))),
+            retained_generations=max(2, env_int("BUILD_LAB_RETAINED_GENERATIONS", 4)),
         )
 
 

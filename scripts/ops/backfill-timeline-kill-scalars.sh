@@ -16,20 +16,27 @@
 #   off; after it, Index Only Scan with Heap Fetches: 0 and buffers 21,439 -> 4,457. Skip the vacuum
 #   and this backfill buys nothing at all.
 #
+# WHY ctid PAGE RANGES, NOT MatchId RANGES
+#   The obvious batching -- pages of match ids -- produced an Index Scan over ~177k rows per batch,
+#   which on this host means 177k RANDOM heap fetches on a spinning disk: measured at ~8 minutes a
+#   batch, so ~30 hours for the table. Batching by physical page range instead gives a Tid Range
+#   Scan, i.e. the same 65 GB read SEQUENTIALLY, which the same disk does two orders of magnitude
+#   faster. The work is identical; only the access pattern changes.
+#
 # RESUMABILITY
-#   Progress is a MatchId watermark, not "WHERE KillerId IS NULL". Null is a legitimate value --
-#   BUILDING_KILL carries no killerId -- so a null-based resume would reprocess those rows forever
-#   and could never terminate.
+#   Progress is the last completed page number. Deliberately not "WHERE KillerId IS NULL": null is a
+#   legitimate value -- BUILDING_KILL carries no killerId -- so a null-based resume would reprocess
+#   those rows forever and never terminate.
 #
 # Env: PG_CONTAINER(transcendence-postgres) PG_USER(postgres) PG_DB(transcendence)
-#      BATCH_MATCHES(2000) STATE(/var/lib/transcendence-deploy/kill-scalar-backfill.watermark)
+#      PAGES_PER_BATCH(200000) STATE(/var/lib/transcendence-deploy/kill-scalar-backfill.watermark)
 #      SKIP_VACUUM(0)
 set -uo pipefail
 
 PG_CONTAINER="${PG_CONTAINER:-transcendence-postgres}"
 PG_USER="${PG_USER:-postgres}"
 PG_DB="${PG_DB:-transcendence}"
-BATCH_MATCHES="${BATCH_MATCHES:-2000}"
+PAGES_PER_BATCH="${PAGES_PER_BATCH:-200000}"
 STATE="${STATE:-/var/lib/transcendence-deploy/kill-scalar-backfill.watermark}"
 KILLS="'CHAMPION_KILL','BUILDING_KILL','ELITE_MONSTER_KILL'"
 
@@ -37,39 +44,30 @@ psql() { docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -v ON_ERR
 q()    { psql -tAc "$1"; }
 
 mkdir -p "$(dirname "$STATE")"
-watermark="$(cat "$STATE" 2>/dev/null || echo '00000000-0000-0000-0000-000000000000')"
-echo "$(date -u +%H:%M:%S) resuming from MatchId > $watermark (batch=$BATCH_MATCHES matches)"
+page="$(cat "$STATE" 2>/dev/null || echo 0)"
+# relpages is an estimate, so overshoot the end: a range past the last page is simply empty.
+pages="$(q "SELECT (relpages * 1.1)::bigint FROM pg_class WHERE relname = 'MatchTimelineEventPayloads';")"
+echo "$(date -u +%H:%M:%S) resuming at page $page of ~$pages ($PAGES_PER_BATCH pages/batch)"
 
 total=0
-while :; do
-  # One batch = the next N match ids in PK order. Driving off Matches keeps each UPDATE bounded by
-  # the payload rows of a known, small set rather than by a scan of the payload table.
-  # ORDER BY ... DESC LIMIT 1, not max(): Postgres has no max(uuid) aggregate, and the version that
-  # used one failed per batch, reported "backfilled 0 rows" and still exited 0 -- a silent no-op
-  # that looked exactly like success.
-  upper="$(q "SELECT id FROM (SELECT \"Id\" AS id FROM \"Matches\" WHERE \"Id\" > '$watermark' ORDER BY \"Id\" LIMIT $BATCH_MATCHES) s ORDER BY id DESC LIMIT 1;")"
-  if [ -z "$upper" ]; then
-    remaining="$(q "SELECT count(*) FROM \"Matches\" WHERE \"Id\" > '$watermark';")"
-    if [ "${remaining:-0}" != "0" ]; then
-      echo "ABORT: $remaining matches remain past the watermark but the batch query returned nothing."
-      exit 1
-    fi
-    echo "$(date -u +%H:%M:%S) no matches left"
-    break
-  fi
-
+while [ "$page" -lt "$pages" ]; do
+  upper=$(( page + PAGES_PER_BATCH ))
   updated="$(q "WITH b AS (
       UPDATE \"MatchTimelineEventPayloads\" p
       SET \"KillerId\"     = NULLIF(COALESCE(p.\"PayloadJson\"->>'killerId',     p.\"PayloadJson\"->>'killerid'), '')::int,
           \"KillerTeamId\" = NULLIF(COALESCE(p.\"PayloadJson\"->>'killerTeamId', p.\"PayloadJson\"->>'killerteamid'), '')::int,
           \"TeamId\"       = NULLIF(COALESCE(p.\"PayloadJson\"->>'teamId',       p.\"PayloadJson\"->>'teamid'), '')::int
-      WHERE p.\"MatchId\" > '$watermark' AND p.\"MatchId\" <= '$upper'
+      WHERE p.ctid >= '($page,0)'::tid AND p.ctid < '($upper,0)'::tid
         AND p.\"EventType\" IN ($KILLS)
       RETURNING 1) SELECT count(*) FROM b;")"
-  total=$(( total + ${updated:-0} ))
-  watermark="$upper"
-  printf '%s\n' "$watermark" > "$STATE"
-  echo "$(date -u +%H:%M:%S) +${updated:-0} rows (total $total), watermark $watermark"
+  if [ -z "$updated" ]; then
+    echo "ABORT: batch at page $page returned nothing at all (query error, not an empty range)."
+    exit 1
+  fi
+  total=$(( total + updated ))
+  page="$upper"
+  printf '%s\n' "$page" > "$STATE"
+  echo "$(date -u +%H:%M:%S) pages $page/$pages  +$updated rows (total $total)"
 done
 
 echo "$(date -u +%H:%M:%S) backfilled $total rows"

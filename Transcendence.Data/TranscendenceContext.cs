@@ -632,6 +632,27 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             // EventType before TimestampMs: the modeler filters MatchId + EventType IN (...) and only
             // then orders by time, so a timestamp-first index cannot serve the predicate.
             entity.HasIndex(x => new { x.MatchId, x.EventType, x.TimestampMs });
+            // The modeler's cohort scan, served without touching the heap.
+            //
+            // That query reads one shape only: the three kill/objective types, ordered by
+            // (MatchId, EventIndex), wanting timestamp, type and the three lifted scalars. Filtered
+            // to ~16% of rows and covering every column it selects, this is an index-only scan of
+            // ~2 GB where the previous plan was a 77 GB sequential scan plus a 9.9M-row sort -- on a
+            // spinning disk that difference was the single largest cost in a generation.
+            // Partial covering index for the modeler's cohort scan, which reads exactly one shape:
+            // the three kill/objective types, ordered by (MatchId, EventIndex), selecting timestamp,
+            // type and the three lifted scalars. Filtered to ~16% of rows and covering every column
+            // it selects, that query becomes a ~2 GB index-only scan where it was a 77 GB sequential
+            // scan plus a 9.9M-row sort -- on this host's spinning disk, the single largest cost in
+            // a generation (prod EXPLAIN: Parallel Seq Scan, cost 9,493,593).
+            //
+            // The bare shape is declared here and the INCLUDE + WHERE live in the raw-SQL migration,
+            // matching IX_MatchParticipants_*_Covering above: INCLUDE and partial filters are
+            // Npgsql-specific and this project references only EF.Relational. Built CONCURRENTLY --
+            // this table is 165M rows and the ingestion worker writes it continuously. See
+            // docs/DEVELOPMENT.md, "Applying index migrations to hot tables".
+            entity.HasIndex(x => new { x.MatchId, x.EventIndex },
+                "IX_MatchTimelineEventPayloads_KillEvents");
             entity.HasOne(x => x.Match)
                 .WithMany()
                 .HasForeignKey(x => x.MatchId)

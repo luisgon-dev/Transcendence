@@ -3359,21 +3359,52 @@ def test_a_reused_training_draw_is_bounded_by_age_and_never_from_the_future(tmp_
     assert strict.is_fresh_for(drawn_at + timedelta(hours=1)) is False
 
 
-def test_the_timeline_loader_extracts_payload_scalars_in_sql():
-    # Parsing PayloadJson in pandas cost one json.loads plus three dict walks per event -- roughly
-    # 290,000 per champion -- and was the dominant cost of the sweep. PayloadJson is jsonb, so Postgres
-    # reads the three scalars directly. Nothing downstream may reach for the raw payload again.
+def test_the_timeline_loader_reads_the_scalars_as_columns_not_from_jsonb():
+    """The cohort scan must not touch PayloadJson at all.
+
+    Parsing it in pandas was the original sin, and extracting it in SQL only moved the cost: Postgres
+    cannot satisfy a jsonb expression from an index, so `->>` forced a Parallel Seq Scan of the whole
+    165M-row table to keep the ~16% that are kill events. Reading real columns is what lets
+    IX_MatchTimelineEventPayloads_KillEvents serve this as an Index Only Scan, so a `->>` creeping
+    back here silently costs 77 GB of reads per generation.
+    """
     source = inspect.getsource(timeline_state_events_query)
     for field in ("killer_participant_id", "killer_team_id", "owner_team_id"):
         assert field in source, field
-    # Both spellings, matching the case-insensitive lookup this replaced.
-    for key in ("'killerId'", "'killerid'", "'killerTeamId'", "'killerteamid'", "'teamId'", "'teamid'"):
-        assert f"->> {key}" in source, key
+    for column in ('payload."KillerId"', 'payload."KillerTeamId"', 'payload."TeamId"'):
+        assert column in source, column
+    assert "->>" not in source, "jsonb extraction is back; the index can no longer cover this query"
     assert "payload_json" not in source
     # Checks for CALLS, not mentions: the docstring names what it replaced.
     attribution = inspect.getsource(pipeline.attribute_events_to_teams)
     assert "json.loads(" not in attribution
     assert "payload_value(" not in attribution
+
+
+def test_team_attribution_survives_the_text_to_int_column_change():
+    """The scalars arrive as int now, not text.
+
+    `->>` returned text, so every fixture in this file spells them "0"/"100". The columns are
+    integer, and psycopg hands back int -- a coercion that only bites on real data if attribution
+    assumes str. Same rows as the text case, typed the way production now delivers them.
+    """
+    events = pd.DataFrame([
+        {"match_id": "m", "event_index": 0, "timestamp_ms": 10, "event_type": "CHAMPION_KILL",
+         "killer_participant_id": 3, "killer_team_id": 100, "owner_team_id": None},
+        {"match_id": "m", "event_index": 1, "timestamp_ms": 20, "event_type": "BUILDING_KILL",
+         "killer_participant_id": 0, "killer_team_id": None, "owner_team_id": 200},
+    ])
+    teams = pd.DataFrame([
+        {"match_id": "m", "participant_id": 3, "team_id": 100},
+        {"match_id": "m", "participant_id": 4, "team_id": 200},
+    ])
+
+    scored = pipeline.attribute_events_to_teams(events, teams)
+
+    # The kill is credited to the killer's team; the minion-killed building (killer id 0) is credited
+    # to the OPPONENT of the owning team, exactly as the text path did.
+    assert int(scored.loc[scored["event_type"] == "CHAMPION_KILL", "team_id"].iloc[0]) == 100
+    assert int(scored.loc[scored["event_type"] == "BUILDING_KILL", "team_id"].iloc[0]) == 100
 
 
 def test_team_attribution_treats_a_zero_id_as_absent_like_positive_int_did():

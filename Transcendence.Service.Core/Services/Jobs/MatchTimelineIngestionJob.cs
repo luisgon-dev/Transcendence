@@ -603,6 +603,18 @@ public class MatchTimelineIngestionJob(
                 EventIndex = index,
                 TimestampMs = (int)timelineEvent.Timestamp,
                 EventType = timelineEvent.Type ?? "UNKNOWN",
+                // Lifted out of the JSON as well as kept in it. The modeler's cohort scan reads only
+                // these three, and reading them back out of jsonb forced a full sequential scan of
+                // the whole table -- see MatchTimelineEventPayload for the measurement. Written here
+                // so a row is complete the moment it lands; the backfill exists only for rows that
+                // predate this.
+                KillerId = timelineEvent.KillerId,
+                // Camille types these as the Team enum; its underlying values are the 100/200 Riot
+                // sends, which is what the serialized JSON has always carried and what the modeler
+                // compares against. The cast keeps the column and the JSON byte-identical in meaning,
+                // which the backfill then verifies against real rows rather than assuming.
+                KillerTeamId = (int?)timelineEvent.KillerTeamId,
+                TeamId = (int?)timelineEvent.TeamId,
                 PayloadJson = JsonSerializer.Serialize(timelineEvent, PayloadSerializerOptions)
             })
             .ToList();

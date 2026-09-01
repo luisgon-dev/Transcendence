@@ -1755,25 +1755,22 @@ def timeline_state_events_query(
             payload."EventIndex" AS event_index,
             payload."TimestampMs" AS timestamp_ms,
             payload."EventType" AS event_type,
-            -- Extracted here rather than in pandas. PayloadJson is jsonb, and parsing it in Python cost
-            -- one json.loads plus three dict walks for EVERY event -- around 290,000 per champion, which
-            -- made this the dominant cost of the champion sweep. Postgres reads the three scalars it
-            -- actually needs straight out of the stored jsonb.
+            -- Read as columns, not out of jsonb.
             --
-            -- COALESCE covers the camelCase Riot sends and an all-lowercase variant, matching what the
-            -- case-insensitive lookup this replaces would have found.
-            COALESCE(
-                payload."PayloadJson" ->> 'killerId',
-                payload."PayloadJson" ->> 'killerid'
-            ) AS killer_participant_id,
-            COALESCE(
-                payload."PayloadJson" ->> 'killerTeamId',
-                payload."PayloadJson" ->> 'killerteamid'
-            ) AS killer_team_id,
-            COALESCE(
-                payload."PayloadJson" ->> 'teamId',
-                payload."PayloadJson" ->> 'teamid'
-            ) AS owner_team_id
+            -- These three used to be extracted from the PayloadJson column. Postgres cannot satisfy
+            -- a jsonb expression from an index, so that shape forced a Parallel Seq Scan of the entire
+            -- 165M-row / 77 GB table to keep the ~16% that are kill events, then an external merge
+            -- sort of the survivors. Ingestion now writes them as real columns and
+            -- IX_MatchTimelineEventPayloads_KillEvents covers them, which makes this an Index Only
+            -- Scan with Heap Fetches: 0 -- and supplies (MatchId, EventIndex) order, so the sort
+            -- disappears too. Measured on a 1M-row fixture: 21,439 buffers -> 4,457, no temp spill.
+            --
+            -- The columns are only trustworthy because the backfill populated every pre-existing
+            -- kill row AND the table was vacuumed afterwards; without the vacuum the visibility map
+            -- is unset and the planner falls back to a bitmap heap scan.
+            payload."KillerId" AS killer_participant_id,
+            payload."KillerTeamId" AS killer_team_id,
+            payload."TeamId" AS owner_team_id
         FROM "MatchTimelineEventPayloads" payload
         JOIN "Matches" m ON m."Id" = payload."MatchId"
         JOIN "MatchTimelineFetchStates" timeline

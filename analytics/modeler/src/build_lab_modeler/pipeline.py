@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import enum
+import gc
 import hashlib
 import hmac
 import json
@@ -865,6 +866,12 @@ def model_generation(
                 "Cohort event state shared with %d workers from %s (%d rows).",
                 workers, state_path, len(cohort_state.cumulative),
             )
+            # The parent has no further use for its copy once the file exists, and holding it costs
+            # a full extra replica for the whole sweep -- the pool is exactly where memory is
+            # tightest. Dropped explicitly rather than left to fall out of scope, because this
+            # function does not return until every champion is done.
+            del cohort_state
+            gc.collect()
             with ProcessPoolExecutor(
                 max_workers=workers,
                 mp_context=multiprocessing.get_context("spawn"),
@@ -1903,9 +1910,35 @@ def read_cohort_event_state(directory: Path) -> CohortEventState:
     )
 
 
+# Narrow dtypes for the reduced state, because this frame is replicated: the parent holds one and
+# every sweep worker reads its own, so its width is multiplied by the worker count. At int64
+# throughout, a 32.4M-row cohort cost 1,166 MB per copy -- parent plus four workers was ~5.8 GiB
+# before a single champion was swept, which OOM-killed a worker and broke the pool three nights
+# running. Every column here is bounded far below its width: team_id is 100 or 200, the counters are
+# per-match cumulative kills/towers/objectives, and timestamp_ms is milliseconds into one game.
+EVENT_STATE_DTYPES = {
+    "match_code": "int32",
+    "team_id": "int16",
+    "timestamp_ms": "int32",
+    "kills": "int16",
+    "towers": "int16",
+    "objectives": "int16",
+}
+
+
+def narrow_event_state(frame: pd.DataFrame) -> pd.DataFrame:
+    """Cast the reduced state to EVENT_STATE_DTYPES. Values are bounded well inside every target."""
+    for column, dtype in EVENT_STATE_DTYPES.items():
+        if column in frame.columns:
+            frame[column] = frame[column].astype(dtype)
+    return frame
+
+
 def empty_event_state_rows() -> pd.DataFrame:
     """The reduced shape, as `CohortEventState.cumulative` carries it."""
-    return pd.DataFrame({column: pd.Series(dtype="int64") for column in EVENT_STATE_COLUMNS})
+    return pd.DataFrame(
+        {column: pd.Series(dtype=EVENT_STATE_DTYPES[column]) for column in EVENT_STATE_COLUMNS}
+    )
 
 
 def empty_scored_rows() -> pd.DataFrame:
@@ -1961,7 +1994,7 @@ def accumulate_event_state(parts: list, codes: dict, covered: frozenset) -> Coho
     for column in ("kills", "towers", "objectives"):
         cumulative[column] = cumulative.groupby(["match_code", "team_id"], sort=False)[column].cumsum()
     return CohortEventState(
-        cumulative[EVENT_STATE_COLUMNS].sort_values("timestamp_ms", kind="stable"),
+        narrow_event_state(cumulative[EVENT_STATE_COLUMNS].sort_values("timestamp_ms", kind="stable")),
         dict(codes),
         covered,
     )
@@ -2117,13 +2150,17 @@ def apply_event_state(
     positioned = positioned.dropna(subset=["match_code"])
     if positioned.empty:
         return enriched
-    positioned["match_code"] = positioned["match_code"].astype("int32")
-    positioned["team_id"] = positioned["team_id"].astype("int32")
+    # Both sides of the merge take their widths from EVENT_STATE_DTYPES. merge_asof compares the
+    # `on` column directly and raises MergeError on a width mismatch in `on` or `by`, so this is the
+    # invariant that keeps the state narrow enough to replicate per worker without the join failing.
+    positioned["match_code"] = positioned["match_code"].astype(EVENT_STATE_DTYPES["match_code"])
+    positioned["team_id"] = positioned["team_id"].astype(EVENT_STATE_DTYPES["team_id"])
     positioned["opponent_team_id"] = np.where(
         positioned["team_id"] == 100, 200, 100
-    ).astype("int32")
-    # merge_asof compares the `on` column directly, so both sides must carry the same width.
-    positioned["timestamp_ms"] = positioned["timestamp_ms"].astype("int64")
+    ).astype(EVENT_STATE_DTYPES["team_id"])
+    positioned["timestamp_ms"] = positioned["timestamp_ms"].astype(
+        EVENT_STATE_DTYPES["timestamp_ms"]
+    )
     positioned = positioned.sort_values("timestamp_ms", kind="stable")
 
     own = merge_cumulative_state(positioned, state.cumulative, "team_id")

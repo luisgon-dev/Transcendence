@@ -3101,6 +3101,34 @@ def test_the_pool_initargs_are_picklable(monkeypatch, tmp_path):
     assert restored_cohort["included_patches"] == ["16.15", "16.16"]
 
 
+def test_the_reduced_state_stays_narrow_enough_to_replicate(tmp_path):
+    """The reduced state is held by the parent and read again by every sweep worker, so its width
+    is multiplied by the worker count. At int64 throughout a 32.4M-row cohort cost 1,166 MB per
+    copy, and parent-plus-four-workers OOM-killed a worker three nights running."""
+    assert pipeline.EVENT_STATE_DTYPES["match_code"] == "int32"
+    assert pipeline.EVENT_STATE_DTYPES["timestamp_ms"] == "int32"
+    for counter in ("kills", "towers", "objectives"):
+        assert pipeline.EVENT_STATE_DTYPES[counter] == "int16"
+    width = sum(
+        int(dtype.removeprefix("int")) // 8 for dtype in pipeline.EVENT_STATE_DTYPES.values()
+    )
+    assert width <= 16, f"the reduced state widened to {width} bytes/row; it is replicated per worker"
+    # The declared shape actually uses them.
+    assert dict(pipeline.empty_event_state_rows().dtypes.astype(str)) == pipeline.EVENT_STATE_DTYPES
+
+
+def test_both_sides_of_the_event_state_merge_share_one_width(tmp_path):
+    """merge_asof raises MergeError when `on` or `by` differ in width between the two frames, so
+    narrowing the state alone silently breaks the join -- which is exactly what happened when this
+    was first narrowed. Both sides must derive from EVENT_STATE_DTYPES."""
+    source = inspect.getsource(pipeline.apply_event_state)
+    for key in ("match_code", "team_id", "timestamp_ms"):
+        assert f'EVENT_STATE_DTYPES["{key}"]' in source, (
+            f"apply_event_state casts {key} to a literal width instead of the shared declaration"
+        )
+    assert '.astype("int64")' not in source, "a hardcoded width crept back into the merge"
+
+
 def test_the_cohort_event_state_round_trips_through_the_shared_file(tmp_path):
     """The pool and the sequential reference must sweep against identical state.
 

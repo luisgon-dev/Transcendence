@@ -382,11 +382,11 @@ def process_next(settings: Settings) -> RunOutcome:
             try:
                 model_generation(connection, generation, settings)
             except ShutdownRequested as exc:
-                mark_failed_safely(connection, generation["Id"], str(exc), settings.lease_owner)
+                mark_failed_safely(connection, generation["Id"], str(exc), settings.lease_owner, settings)
                 raise
             except Exception as exc:
                 LOG.exception("Build Lab generation %s failed.", generation["Id"])
-                mark_failed_safely(connection, generation["Id"], str(exc), settings.lease_owner)
+                mark_failed_safely(connection, generation["Id"], str(exc), settings.lease_owner, settings)
                 return RunOutcome.FAILED
             return RunOutcome.COMPLETED
         finally:
@@ -3986,14 +3986,53 @@ def canonical_generation_id(value) -> str | None:
         return None
 
 
-def mark_failed_safely(connection, generation_id, message: str, lease_owner: str) -> None:
-    """A database error leaves the connection in a failed transaction; roll back before writing."""
+def mark_failed_safely(
+    connection,
+    generation_id,
+    message: str,
+    lease_owner: str,
+    settings: "Settings | None" = None,
+) -> None:
+    """Record WHY a generation failed, even when the run's own connection cannot carry the write.
+
+    Two different broken states have to be survived here, and only one of them is a transaction:
+
+    * A database error leaves an aborted transaction, which `rollback()` clears.
+    * A failure arriving while the connection is mid-command -- a server-side cursor still streaming
+      the cohort, or an execute interrupted by a signal -- leaves an UNCONSUMED RESULT, and psycopg
+      then refuses every further statement on it with "another command is already in progress".
+      `rollback()` does not clear that, so the write is simply lost. Observed in prod: a stopped run
+      logged `could not be marked failed and may need manual recovery`.
+
+    The reaper does eventually fail such a generation, but it stamps a generic "exited without
+    finishing" over the real reason -- which is the single most useful thing a failed run leaves
+    behind. So a connection that cannot carry the write is replaced rather than given up on.
+    """
     try:
         connection.rollback()
     except Exception:
         LOG.warning("Rollback before the failure write did not succeed.", exc_info=True)
     try:
         mark_failed(connection, generation_id, message, lease_owner)
+        return
+    except Exception:
+        LOG.warning(
+            "The run's own connection could not carry the failure write for generation %s; "
+            "retrying on a fresh one.",
+            generation_id,
+            exc_info=True,
+        )
+    if settings is None:
+        LOG.error(
+            "Generation %s could not be marked failed and may need manual recovery.", generation_id
+        )
+        return
+    # A second connection needs no advisory lock: mark_failed is guarded on
+    # (Status = Modeling AND LeaseOwner = this run AND NOT IsActive), so it can only ever close out
+    # the generation this process was actually holding.
+    try:
+        with psycopg.connect(settings.database_url, row_factory=dict_row) as fresh:
+            mark_failed(fresh, generation_id, message, lease_owner)
     except Exception:
         LOG.exception(
             "Generation %s could not be marked failed and may need manual recovery.",

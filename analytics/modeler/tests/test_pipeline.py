@@ -1312,10 +1312,18 @@ def test_dockerfile_layers_cover_every_declared_dependency():
         line for line in dockerfile.splitlines()
         if line.startswith("RUN pip install") and "--no-deps" not in line
     ]
-    assert len(dependency_layers) >= 4, dependency_layers
-    for package in ("numpy", "pandas", "scikit-learn", "pyarrow"):
+    assert len(dependency_layers) >= 6, dependency_layers
+    for package in ("numpy", "pandas", "scikit-learn", "pyarrow", "scipy", "psycopg", "boto3"):
         owning = [line for line in dependency_layers if package in line]
         assert len(owning) == 1, f"{package} must be installed in exactly one layer: {owning}"
+
+    # scipy earns its own layer twice over: it is a direct import rather than merely
+    # scikit-learn's transitive dependency, and it was the bulk of what made that layer ~153 MB.
+    assert "from scipy" in (root / "src" / "build_lab_modeler" / "pipeline.py").read_text(
+        encoding="utf-8"
+    ), "scipy is declared and layered on the premise that it is imported directly"
+    scipy_layer = next(line for line in dependency_layers if "scipy" in line)
+    assert "scikit-learn" not in scipy_layer, "scipy must not share scikit-learn's layer again"
 
 
 def test_the_image_prepares_the_artifact_volume_for_the_runtime_uid(monkeypatch):
@@ -3224,6 +3232,65 @@ def test_the_sweep_worker_count_is_configurable_and_floored(monkeypatch, tmp_pat
     assert modeler_settings(
         monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path), BUILD_LAB_SWEEP_WORKERS="0"
     ).sweep_workers == 1
+
+
+class BusyConnection(FakeConnection):
+    """psycopg's shape when a result is still unconsumed.
+
+    A server-side cursor mid-stream, or an execute interrupted by a signal, leaves the connection
+    refusing every further statement -- and `rollback()` does not clear it, because the problem is
+    an unconsumed result rather than an aborted transaction.
+    """
+
+    def rollback(self) -> None:
+        raise psycopg.OperationalError("another command is already in progress")
+
+    def execute(self, statement: str, parameters=None):
+        raise psycopg.OperationalError("another command is already in progress")
+
+
+def test_the_failure_reason_survives_a_connection_that_is_mid_command(monkeypatch, tmp_path):
+    """The reaper would otherwise stamp a generic 'exited without finishing' over the real reason,
+    which is the one thing worth keeping from a failed run."""
+    settings = modeler_settings(monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path))
+    fresh = FakeConnection()
+    opened = []
+
+    class _Ctx:
+        def __enter__(self): return fresh
+        def __exit__(self, *_): return False
+
+    monkeypatch.setattr(
+        pipeline.psycopg, "connect", lambda *a, **k: opened.append(1) or _Ctx()
+    )
+
+    pipeline.mark_failed_safely(
+        BusyConnection(), "11111111-2222-3333-4444-555555555555",
+        "the real reason", "host:1", settings,
+    )
+
+    assert opened == [1], "a busy connection must be replaced, not given up on"
+    written = [(sql, params) for sql, params in fresh.statements if "BuildLabGenerations" in sql]
+    assert written, "the failure was never recorded on the fresh connection"
+    sql, params = written[0]
+    assert "the real reason" in params
+    # The lease guard must survive the retry: a second connection holds no advisory lock, so the
+    # WHERE clause is the only thing stopping it closing out someone else's generation.
+    assert '"Status" = 1' in sql and '"LeaseOwner" = %s' in sql and 'NOT "IsActive"' in sql
+
+
+def test_a_healthy_connection_writes_the_failure_without_opening_another(monkeypatch, tmp_path):
+    settings = modeler_settings(monkeypatch, BUILD_LAB_ARTIFACT_DIR=str(tmp_path))
+    opened = []
+    monkeypatch.setattr(pipeline.psycopg, "connect", lambda *a, **k: opened.append(1))
+    connection = FakeConnection()
+
+    pipeline.mark_failed_safely(
+        connection, "11111111-2222-3333-4444-555555555555", "boom", "host:1", settings
+    )
+
+    assert opened == [], "a working connection must not be replaced"
+    assert any("BuildLabGenerations" in sql for sql, _ in connection.statements)
 
 
 def test_an_empty_env_var_falls_back_to_the_default(monkeypatch, tmp_path):

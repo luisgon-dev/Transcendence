@@ -20,10 +20,7 @@ WorkingDirectory=/root/transcendence
 
 # Pulled here rather than by poll-deploy: the image can only change between invocations, never
 # underneath a run. This is the whole point of the oneshot.
-ExecStartPre=-/usr/bin/docker compose -p transcendence \
-  --env-file /root/transcendence/.env \
-  -f /root/transcendence/compose.yml \
-  --profile analytics-modeling pull --quiet analytics-modeler
+ExecStartPre=-/root/deploy/pull-modeler-image.sh
 
 # --rm: a fresh container per run, so nothing is left for a deploy poller to find or recreate.
 # -T: no TTY exists under systemd, and `run` would otherwise try to allocate one.

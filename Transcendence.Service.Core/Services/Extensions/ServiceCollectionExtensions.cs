@@ -84,6 +84,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IBuildLabGenerationCoordinator, BuildLabGenerationCoordinator>();
         services.AddScoped<IChampionSynergyService, ChampionSynergyService>();
         services.AddScoped<IPrecomputedAnalyticsRefresher, PrecomputedAnalyticsRefresher>();
+        // Read-side display metadata for the static-content endpoints. Registered
+        // HERE and not in AddTranscendenceLeagueRiot: that method is worker-only
+        // (the WebAPI never calls it, because Riot-backed services are worker-side),
+        // so registering there compiled, passed every unit test, and 500'd on the
+        // first real request with "Unable to resolve service".
+        services.AddScoped<IStaticContentService, StaticContentService>();
 
         return services;
     }
@@ -181,9 +187,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IChampionMasteryService, ChampionMasteryService>();
         services.AddScoped<IMatchService, MatchService>();
         services.AddScoped<IStaticDataService, StaticDataService>();
-        // Read-side display metadata. Distinct from IStaticDataService, which
-        // ingests static data into the analytics tables.
-        services.AddScoped<IStaticContentService, StaticContentService>();
         services.AddScoped<IRiotMatchIdsClient, RiotMatchIdsClient>();
 
         services.AddScoped<UpdateStaticDataJob>();

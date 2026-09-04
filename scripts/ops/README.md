@@ -103,12 +103,55 @@ systemctl status transcendence-modeler.service      # last exit code
 ```
 
 Rollback is the same `MODELER_IMAGE=ghcr.io/luisgon-dev/transcendence-analytics-modeler:sha-<short>`
-pin used for the app images; set it in `stack.env` and the next invocation picks it up.
+pin used for the app images; set it in `/root/transcendence/.env` and the next invocation picks it up.
 
 Interrupting a run is safe. The process holds a PostgreSQL session advisory lock for its duration, so
 killing it drops the lock with the session and the worker's reaper fails the row on its next tick — no
 heartbeat, no timeout, nothing to wait out. To stop the schedule entirely,
 `systemctl disable --now transcendence-modeler.timer`.
+
+#### When the modeler runs but exits in seconds
+
+`run` needs a generation in `PendingDataset` to lease. With none, it connects, finds nothing and exits
+in ~11s — and it logs nothing on that path, so a healthy idle timer and a broken one look identical in
+the journal. Check the queue before assuming the modeler is at fault:
+
+```sql
+SELECT "Status", "Patch", "CreatedAtUtc", "CompletedAtUtc" FROM "BuildLabGenerations"
+ORDER BY "CreatedAtUtc" DESC LIMIT 5;   -- 0=Pending 1=Modeling 2=Candidate 3=Ready 4=Failed 5=Retired
+```
+
+The worker creates one daily (`Jobs:Schedule:CreateBuildLabGenerationCron`, 02:15 UTC) but **only when
+no generation for the active patch is still `PendingDataset`, `Modeling` or `Candidate`**. A run that
+occupies the patch therefore suppresses creation for as many days as it lasts, and the create job
+records that as a *success* — it returns "nothing to do" and logs it at `Debug`, below the configured
+level. `transcendence_buildlab_generation_events_total{phase="create",result="skipped"}` is the signal
+that this is happening; it is the only externally visible difference between a skipped tick and a dead
+job, which is exactly what it exists for.
+
+So after a long run finally fails, the queue is empty but the next generation is up to 24h away.
+
+##### Forcing the daily job to run now
+
+There is no dashboard and no admin endpoint for this — the create path is the recurring job only. It
+can be triggered by hand, but **not** by setting `NextExecution`: Hangfire recomputes the next
+occurrence from `LastExecution` and the cron, so an edited `NextExecution` is overwritten on the next
+poll without firing. Backdate `LastExecution` past one whole cron occurrence instead, so the missed
+occurrence is in the past. Hangfire fires it once, then rewrites both fields itself — nothing to
+revert.
+
+```bash
+docker exec transcendence-postgres psql -U postgres -d transcendence <<'SQL'
+UPDATE hangfire.hash SET value = ((extract(epoch from now()) - 86400) * 1000)::bigint::text
+ WHERE key = 'recurring-job:create-build-lab-generation' AND field = 'LastExecution';
+UPDATE hangfire.set SET score = extract(epoch from now())
+ WHERE key = 'recurring-jobs' AND value = 'create-build-lab-generation';
+SQL
+```
+
+Creation runs several minutes of heavy counting queries over the cohort before the row appears, so
+watch for the row rather than expecting it immediately. Stop `transcendence-modeler.timer` first if
+anything (a `REINDEX`, a backfill) should finish before a multi-hour run starts on top of it.
 
 #### Asking the modeler a question without a full run
 
@@ -119,7 +162,7 @@ with `run`. All of them accept `--patches`/`--cutoff`, or default to the newest 
 
 ```bash
 cd /root/transcendence
-modeler() { docker compose -p transcendence --env-file stack.env -f docker-compose.yml \
+modeler() { docker compose -p transcendence --env-file .env -f compose.yml \
   --profile analytics-modeling run --rm -T --no-deps --entrypoint python analytics-modeler -u \
   -m build_lab_modeler "$@"; }
 
@@ -233,14 +276,14 @@ is rebuilt, and is not version-controlled (#71).
 
 The repo `compose.yml` passes these as `postgres -c` flags sourced from env vars that default
 to Postgres's out-of-box values (local dev is unaffected — do **not** raise them on a small
-Docker VM). The values live in the compose file / stack env, which sit outside the
+Docker VM). The values live in the compose file / `.env`, which sit outside the
 `postgres_data` volume, so the tuning survives a DB volume rebuild.
 
 **Current prod state (verified 2026-07-24).** The **Portainer** compose's `postgres` service hardcodes
 the memory values plus query/I/O instrumentation in its command:
 
 ```yaml
-# in <COMPOSE_DIR>/docker-compose.yml, postgres service
+# in <COMPOSE_DIR>/compose.yml, postgres service
 command:
   - postgres
   - -c
@@ -278,8 +321,8 @@ To recreate postgres deliberately (a restart drops connections, ~seconds of down
 
 ```bash
 COMPOSE_DIR=/root/transcendence                                      # poll-deploy.sh COMPOSE_DIR
-docker compose -p transcendence --env-file "$COMPOSE_DIR/stack.env" \
-  -f "$COMPOSE_DIR/docker-compose.yml" up -d postgres
+docker compose -p transcendence --env-file "$COMPOSE_DIR/.env" \
+  -f "$COMPOSE_DIR/compose.yml" up -d postgres
 ```
 
 `poll-deploy.sh` only redeploys the app containers, so it never touches PostgreSQL. **Note:** prod

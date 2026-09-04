@@ -302,3 +302,20 @@ jobs:
           VALUES (gen_random_uuid(), 'ci-seed:smoke', now(), now() + interval '1 minute', gen_random_uuid());
           SELECT count(*) AS refresh_locks_seeded FROM "RefreshLocks";
           SQL
+
+      # The modeler is Python and its queries never go through EF, so nothing above touches them --
+      # yet they run against exactly this schema in prod. Two generations died on SQL that every
+      # unit test passed (`Connection.executemany`, and `incomplete placeholder: '%'` from a comment
+      # reading "~16%"), because a test double accepts what psycopg rejects. Reusing this job's
+      # migrated database rather than standing up a fixture is the point: a fixture is a copy of the
+      # schema that drifts from it, which is the same class of bug one level up.
+      - name: Run modeler queries against the migrated schema
+        working-directory: analytics/modeler
+        env:
+          MODELER_TEST_DSN: "postgresql://postgres:postgres@localhost:5432/transcendence_ci"
+          # Turns a missing/unreachable DSN into a hard failure instead of a quiet skip.
+          MODELER_REQUIRE_DB: "1"
+        run: |
+          python3 -m venv .venv
+          .venv/bin/python -m pip install --disable-pip-version-check -e '.[test]'
+          .venv/bin/python -m pytest tests/test_real_schema.py -q

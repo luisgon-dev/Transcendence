@@ -121,6 +121,47 @@ class FakeTransaction:
         return False
 
 
+def assert_placeholders_parse(statement: str, parameters) -> None:
+    """Reject SQL psycopg would refuse, the way psycopg refuses it.
+
+    psycopg parses placeholders CLIENT-side before sending, so a lone percent sign is a hard error
+    ("incomplete placeholder") and never reaches Postgres. A fake that just records the string
+    accepts it happily -- which is how a comment reading "the ~16 pct that are kill events" passed
+    every test and then killed a production generation right after the training draw.
+
+    This is the same failure as FakeConnection once answering `executemany`: a double implementing a
+    broader contract than the driver. Modelling the refusal here means every test that pushes SQL
+    through the fakes now covers this, for every query builder, without a database.
+
+    Like psycopg, this only applies when parameters are supplied: `execute(sql)` with none is sent
+    verbatim and a bare percent sign is legal there.
+    """
+    if parameters is None:
+        return
+    i = 0
+    while True:
+        i = statement.find("%", i)
+        if i < 0:
+            return
+        rest = statement[i + 1:]
+        if rest.startswith("%"):          # escaped literal
+            i += 2
+        elif rest[:1] in ("s", "b", "t"):  # positional
+            i += 2
+        elif rest.startswith("("):         # named: %(name)s
+            close = rest.find(")")
+            if close < 0 or rest[close + 1:close + 2] not in ("s", "b", "t"):
+                raise ValueError(
+                    f"incomplete placeholder: {statement[i:i + 40]!r} -- psycopg would reject this"
+                )
+            i += close + 3
+        else:
+            raise ValueError(
+                f"incomplete placeholder: '%'; if you want to use '%' as an operator you can "
+                f"double it up, i.e. use '%%' -- near {statement[max(0, i - 40):i + 40]!r}"
+            )
+
+
 class EmptyServerCursor:
     """psycopg's server-side cursor shape, holding no rows."""
 
@@ -133,6 +174,7 @@ class EmptyServerCursor:
         return False
 
     def execute(self, sql, params=None):
+        assert_placeholders_parse(sql, params)
         return self
 
     def fetchmany(self, size):
@@ -152,6 +194,7 @@ class FakeCursorHandle(EmptyServerCursor):
         self._connection = connection
 
     def executemany(self, statement: str, rows: list) -> "FakeCursor":
+        assert_placeholders_parse(statement, rows)
         self._connection.statements.append((statement, rows))
         self._connection._stage(statement, rows)
         return FakeCursor(len(rows))
@@ -181,6 +224,7 @@ class FakeConnection:
         self.rollbacks = 0
 
     def execute(self, statement: str, parameters=None) -> FakeCursor:
+        assert_placeholders_parse(statement, parameters)
         self.statements.append((statement, parameters))
         if self._fail_on and self._fail_on in statement:
             raise RuntimeError("the statement failed")
@@ -3357,6 +3401,55 @@ def test_a_reused_training_draw_is_bounded_by_age_and_never_from_the_future(tmp_
         tmp_path, ["16.15"], ranges, 500, cutoff=drawn_at, max_age_hours=0
     )
     assert strict.is_fresh_for(drawn_at + timedelta(hours=1)) is False
+
+
+def sql_literals_in_pipeline() -> list[tuple[int, str]]:
+    """Every string in the module that is a SQL statement, with its line number.
+
+    Detection anchors on the statement START rather than on a keyword appearing anywhere, because
+    prose and log formats are full of SQL words -- a docstring saying "scale with the corpus" and
+    LOG.info("... shared with %d workers ...") both match a naive keyword scan and neither is SQL.
+    """
+    import ast
+
+    source = pathlib.Path(pipeline.__file__).read_text()
+    literals: list[tuple[int, str]] = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            text = node.value
+        elif isinstance(node, ast.JoinedStr):
+            # f-string: only the literal halves can carry a placeholder we control.
+            text = "".join(
+                v.value for v in node.values
+                if isinstance(v, ast.Constant) and isinstance(v.value, str)
+            )
+        else:
+            continue
+        body = re.sub(r"\A(?:\s|--[^\n]*\n)+", "", text)
+        if re.match(r"(?is)\A(SELECT|INSERT\s+INTO|UPDATE\s|DELETE\s+FROM|WITH\s|CREATE\s)", body):
+            literals.append((node.lineno, text))
+    return literals
+
+
+def test_no_query_in_the_module_carries_a_bare_percent_sign():
+    """psycopg reads % in SQL as a parameter marker, so a stray one is a runtime error.
+
+    This is not hypothetical: a comment reading "~16% are kill events" -- added to document an
+    optimisation -- made every generation die on `incomplete placeholder: '%'` after the training
+    draw, hours in. The first version of this test checked the two builders that bug touched, which
+    is only ever a check that yesterday's bug is still fixed. This one sweeps every SQL literal in
+    the module, so a query nobody thought to list is covered on the day it is written.
+    """
+    literals = sql_literals_in_pipeline()
+    # A guard that silently matches nothing always passes; assert it is actually finding the queries.
+    assert len(literals) > 20, f"SQL detection found only {len(literals)} literals -- it has drifted"
+    offenders = []
+    for line, text in literals:
+        try:
+            assert_placeholders_parse(text, ())
+        except ValueError as exc:
+            offenders.append(f"pipeline.py:{line}: {exc}")
+    assert not offenders, "SQL psycopg will reject:\n" + "\n".join(offenders)
 
 
 def test_the_timeline_loader_reads_the_scalars_as_columns_not_from_jsonb():

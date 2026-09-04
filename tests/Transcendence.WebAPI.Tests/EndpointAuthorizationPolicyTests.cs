@@ -40,6 +40,16 @@ public sealed class EndpointAuthorizationPolicyTests
         "GET api/lol/analytics/items/{itemId:int}",
         "GET api/lol/analytics/runes",
         "GET api/lol/analytics/runes/{runeId:int}",
+        // Static content: display metadata for champions, items, runes and summoner
+        // spells. Public by nature — it is Riot's own reference data, carries no user
+        // or account information, and exists precisely so unauthenticated clients stop
+        // fetching Riot's CDN directly. Same tier as the analytics reference reads
+        // above; requiring credentials here would make champion names a paid feature.
+        "GET api/lol/static/versions",
+        "GET api/lol/static/{version}/champions",
+        "GET api/lol/static/{version}/items",
+        "GET api/lol/static/{version}/runes",
+        "GET api/lol/static/{version}/spells",
         // Champion analytics reads.
         "GET api/lol/analytics/champions/{championId}/profile",
         "GET api/lol/analytics/champions/{championId}/synergies",

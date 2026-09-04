@@ -27,6 +27,8 @@ using Transcendence.Service.Core.Services.ProSummoners.Implementations;
 using Transcendence.Service.Core.Services.ProSummoners.Interfaces;
 using Transcendence.Service.Core.Services.Refresh.Implementations;
 using Transcendence.Service.Core.Services.Refresh.Interfaces;
+using Transcendence.Service.Core.Services.StaticContent.Implementations;
+using Transcendence.Service.Core.Services.StaticContent.Interfaces;
 using Transcendence.Service.Core.Services.StaticData.Implementations;
 using Transcendence.Service.Core.Services.StaticData.Interfaces;
 using Transcendence.Service.Core.Services.Summoners.Implementations;
@@ -179,6 +181,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IChampionMasteryService, ChampionMasteryService>();
         services.AddScoped<IMatchService, MatchService>();
         services.AddScoped<IStaticDataService, StaticDataService>();
+        // Read-side display metadata. Distinct from IStaticDataService, which
+        // ingests static data into the analytics tables.
+        services.AddScoped<IStaticContentService, StaticContentService>();
         services.AddScoped<IRiotMatchIdsClient, RiotMatchIdsClient>();
 
         services.AddScoped<UpdateStaticDataJob>();

@@ -185,6 +185,49 @@ Example (`SummonerAcceptedResponse`):
 Analytics cache invalidation is intentionally exposed only through the audited
 `POST /api/admin/cache/invalidate` operation.
 
+### LoL Static Content
+
+Display metadata for champions, items, runes and summoner spells, so clients do
+not fetch Riot's CDN themselves.
+
+- `GET /api/lol/static/versions`
+- `GET /api/lol/static/{version}/champions`
+- `GET /api/lol/static/{version}/items`
+- `GET /api/lol/static/{version}/runes`
+- `GET /api/lol/static/{version}/spells`
+
+`{version}` is a Data Dragon version (`16.17.1`) or the literal `latest`. Anything
+that is not version-shaped is a `400` — the value reaches an upstream URL, so it is
+validated rather than trusted.
+
+**Every response carries an absolute `iconUrl`.** Clients must not construct CDN
+paths. That is the whole point of these endpoints: the URLs happen to point at Data
+Dragon today, and moving the bytes behind this API later becomes a server-side
+change with no client release. Champion responses also carry `splashUrl`.
+
+Three details these endpoints exist to stop every client re-learning:
+
+- Champion `id` is the NUMERIC id that match data carries; `alias` is Data Dragon's
+  string handle and is what icon filenames use. They differ for some champions
+  (`Wukong` is `MonkeyKing`).
+- Summoner spell `id` is likewise the numeric id, not the handle — Data Dragon's own
+  payload inverts these.
+- `runes` returns individual runes, the top-level STYLES (a rune page's
+  `primaryStyleId`/`subStyleId` point at those), and stat shards. Riot does not
+  publish shards in `runesReforged.json` at all, so a client without them renders
+  three of every rune page's nine slots as bare numbers.
+
+Responses are cached server-side, so the CDN is hit roughly once per patch for the
+whole user base. The version LIST has a short TTL because it is how a new patch is
+discovered; per-patch content is cached for 24h since a shipped patch never changes.
+A `503` means Data Dragon is unreachable, as distinct from a `400` for a bad
+request — the desktop client classifies those differently to decide whether to show
+an outage screen.
+
+These are read-only and served from the CDN rather than the `ChampionVersion` /
+`ItemVersion` / `RuneVersion` tables. Those tables exist for analytics (balance
+hashes, role pooling) and carry neither summoner spells nor rune icon paths.
+
 ### LoL Leaderboards
 
 - `GET /api/lol/leaderboards`

@@ -3359,6 +3359,32 @@ def test_a_reused_training_draw_is_bounded_by_age_and_never_from_the_future(tmp_
     assert strict.is_fresh_for(drawn_at + timedelta(hours=1)) is False
 
 
+def test_no_query_carries_a_bare_percent_sign():
+    """psycopg reads % in SQL as a parameter marker, so a stray one is a runtime error.
+
+    This is not hypothetical and not caught by asserting on SQL text: a comment reading "~16% are
+    kill events" -- added to EXPLAIN an optimisation -- made every generation die on
+    `incomplete placeholder: '%'` after the training draw. Only %(name)s, %s and an escaped %% are
+    legal; anything else must be reworded or doubled.
+    """
+    import re
+
+    builders = [
+        lambda: pipeline.timeline_state_events_query(["16.17"], datetime(2026, 9, 1, tzinfo=timezone.utc)),
+        lambda: pipeline.timeline_state_events_query(
+            ["16.17"], datetime(2026, 9, 1, tzinfo=timezone.utc), champion_id=1
+        ),
+    ]
+    for build in builders:
+        sql = build()[0]
+        # Strip the legal forms, then anything left starting with % is a bug.
+        stripped = re.sub(r"%\((?:[A-Za-z_]+)\)s|%s|%%", "", sql)
+        offenders = [
+            line.strip() for line in stripped.splitlines() if "%" in line
+        ]
+        assert not offenders, f"bare % in SQL psycopg will choke on: {offenders}"
+
+
 def test_the_timeline_loader_reads_the_scalars_as_columns_not_from_jsonb():
     """The cohort scan must not touch PayloadJson at all.
 

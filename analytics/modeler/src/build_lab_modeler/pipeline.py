@@ -1759,7 +1759,9 @@ def timeline_state_events_query(
             --
             -- These three used to be extracted from the PayloadJson column. Postgres cannot satisfy
             -- a jsonb expression from an index, so that shape forced a Parallel Seq Scan of the entire
-            -- 165M-row / 77 GB table to keep the ~16% that are kill events, then an external merge
+            -- 165M-row / 77 GB table to keep the roughly one-sixth that are kill events, then a merge
+            -- (no percent signs anywhere in this SQL: psycopg reads a lone one as a parameter marker,
+            -- and a comment saying "16 pct are kill events" is what killed a whole generation once)
             -- sort of the survivors. Ingestion now writes them as real columns and
             -- IX_MatchTimelineEventPayloads_KillEvents covers them, which makes this an Index Only
             -- Scan with Heap Fetches: 0 -- and supplies (MatchId, EventIndex) order, so the sort

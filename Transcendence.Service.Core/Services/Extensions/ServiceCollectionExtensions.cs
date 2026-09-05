@@ -27,6 +27,8 @@ using Transcendence.Service.Core.Services.ProSummoners.Implementations;
 using Transcendence.Service.Core.Services.ProSummoners.Interfaces;
 using Transcendence.Service.Core.Services.Refresh.Implementations;
 using Transcendence.Service.Core.Services.Refresh.Interfaces;
+using Transcendence.Service.Core.Services.StaticContent.Implementations;
+using Transcendence.Service.Core.Services.StaticContent.Interfaces;
 using Transcendence.Service.Core.Services.StaticData.Implementations;
 using Transcendence.Service.Core.Services.StaticData.Interfaces;
 using Transcendence.Service.Core.Services.Summoners.Implementations;
@@ -82,6 +84,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IBuildLabGenerationCoordinator, BuildLabGenerationCoordinator>();
         services.AddScoped<IChampionSynergyService, ChampionSynergyService>();
         services.AddScoped<IPrecomputedAnalyticsRefresher, PrecomputedAnalyticsRefresher>();
+        // Read-side display metadata for the static-content endpoints. Registered
+        // HERE and not in AddTranscendenceLeagueRiot: that method is worker-only
+        // (the WebAPI never calls it, because Riot-backed services are worker-side),
+        // so registering there compiled, passed every unit test, and 500'd on the
+        // first real request with "Unable to resolve service".
+        services.AddScoped<IStaticContentService, StaticContentService>();
 
         return services;
     }

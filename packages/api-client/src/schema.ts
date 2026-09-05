@@ -4114,6 +4114,315 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/lol/static/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["StaticVersionsResponse"];
+                        "application/json": components["schemas"]["StaticVersionsResponse"];
+                        "text/json": components["schemas"]["StaticVersionsResponse"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lol/static/{version}/champions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    version: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["StaticChampionDto"][];
+                        "application/json": components["schemas"]["StaticChampionDto"][];
+                        "text/json": components["schemas"]["StaticChampionDto"][];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lol/static/{version}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    version: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["StaticItemDto"][];
+                        "application/json": components["schemas"]["StaticItemDto"][];
+                        "text/json": components["schemas"]["StaticItemDto"][];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lol/static/{version}/runes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    version: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["StaticRuneDto"][];
+                        "application/json": components["schemas"]["StaticRuneDto"][];
+                        "text/json": components["schemas"]["StaticRuneDto"][];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lol/static/{version}/spells": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    version: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["StaticSpellDto"][];
+                        "application/json": components["schemas"]["StaticSpellDto"][];
+                        "text/json": components["schemas"]["StaticSpellDto"][];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/lol/summoners/search": {
         parameters: {
             query?: never;
@@ -6921,6 +7230,53 @@ export interface components {
             winRate: number;
             /** Format: double */
             pickRate: number;
+        };
+        StaticChampionDto: {
+            /** Format: int32 */
+            id: number;
+            alias: string;
+            name: string;
+            title: string;
+            tags: string[];
+            iconUrl: string;
+            splashUrl: string;
+        };
+        StaticItemDto: {
+            /** Format: int32 */
+            id: number;
+            name: string;
+            description: string;
+            tags: string[];
+            /** Format: int32 */
+            goldTotal: number;
+            purchasableInStore: boolean;
+            iconUrl: string;
+        };
+        StaticRuneDto: {
+            /** Format: int32 */
+            id: number;
+            key: string;
+            name: string;
+            description: string;
+            /** Format: int32 */
+            styleId: number;
+            styleName: string;
+            /** Format: int32 */
+            slot: number;
+            isStyle: boolean;
+            iconUrl: string;
+        };
+        StaticSpellDto: {
+            /** Format: int32 */
+            id: number;
+            alias: string;
+            name: string;
+            description: string;
+            iconUrl: string;
+        };
+        StaticVersionsResponse: {
+            latest: string;
+            versions: string[];
         };
         SummonerAcceptedResponse: {
             /** @description Refresh state message. "Refresh queued" when accepted now, "Refresh in process" when contention is detected. */

@@ -44,6 +44,19 @@ updates:
     groups:
       nuget-minor-patch:
         update-types: ["minor", "patch"]
+    # Microsoft.OpenApi is referenced directly only to float Swashbuckle's transitive
+    # dependency -- nothing in this repo calls it except two IOperationFilter implementations.
+    # Swashbuckle.AspNetCore 10.2.3 (the latest release) is compiled against Microsoft.OpenApi
+    # 2.7.5, and 3.x retyped the media-type collections (IDictionary<string, OpenApiMediaType>
+    # -> IDictionary<string, IOpenApiMediaType>). A 3.x bump therefore throws
+    # MissingMethodException on IOpenApiRequestBody.get_Content() inside Swashbuckle's own
+    # generator, before any of our filters run: /swagger/v1/swagger.json 500s and
+    # scripts/openapi/export.sh fails, so the TS client cannot be regenerated. Fixing our code
+    # cannot help. Drop this ignore once Swashbuckle ships a build against Microsoft.OpenApi 3.x.
+    # See PR #186.
+    ignore:
+      - dependency-name: "Microsoft.OpenApi"
+        update-types: ["version-update:semver-major"]
 
   # ---------------------------------------------------------------- Python (analytics modeler)
   - package-ecosystem: "pip"

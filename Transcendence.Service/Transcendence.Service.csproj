@@ -33,7 +33,7 @@
         <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.18.0" />
         <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.18.0" />
         <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.18.0" />
-        <PackageReference Include="StackExchange.Redis" Version="2.13.17" />
+        <PackageReference Include="StackExchange.Redis" Version="3.2.1" />
     </ItemGroup>
 
     <ItemGroup>

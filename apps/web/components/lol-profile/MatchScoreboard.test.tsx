@@ -104,8 +104,8 @@ describe("MatchScoreboard", () => {
       </TooltipProvider>
     );
 
-    expect(screen.getByRole("group", { name: "Match detail view" })).toBeTruthy();
-    expect(screen.queryByRole("group", { name: "Scoreboard density" })).toBeNull();
+    expect(screen.getByRole("radiogroup", { name: "Match detail view" })).toBeTruthy();
+    expect(screen.queryByRole("radiogroup", { name: "Scoreboard density" })).toBeNull();
     expect(screen.queryByText("Compact")).toBeNull();
     expect(screen.queryByText("Detailed")).toBeNull();
     expect(screen.getAllByRole("columnheader", { name: "Vision" })).toHaveLength(2);

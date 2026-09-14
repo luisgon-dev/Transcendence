@@ -1272,7 +1272,7 @@ groups:
             model:
               refId: B
               type: math
-              expression: "$A < 0.6"
+              expression: "$A < 0.4"
               intervalMs: 1000
               maxDataPoints: 43200
               datasource:
@@ -1281,8 +1281,8 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "A production route scores below 0.6 on Lighthouse performance"
-          description: "The nightly sweep measured a route well under the 0.8 the CI gate enforces, so production is materially slower than the seeded CI build for that page. Data volume is a more common cause than shipped code. Open the Web Performance dashboard and compare the lab series against the field p75 for the same route."
+          summary: "A production route scores below 0.4 on Lighthouse performance"
+          description: "A deliberately low floor, not a quality target. Lighthouse calibrates its simulated throttling to the measuring host's CPU, so scores from the prod box are not comparable to the CI gate's or to a developer laptop's - the same route measured 0.61 on the box and 0.98 from a laptop on the same commit. Absolute cross-host comparison is meaningless; this rule only catches a route falling off a cliff. Use trn-web-lab-lcp-regression for drift, and the Web Performance dashboard to compare the lab series against the field p75."
         notification_settings:
           receiver: transcendence-discord
           group_by:

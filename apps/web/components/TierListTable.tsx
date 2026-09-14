@@ -2,25 +2,24 @@
 
 import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import Image from "next/image";
 import Link from "next/link";
 
 import { TierBadge } from "@/components/TierBadge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { ChampionIcon } from "@/components/ui/ChampionIcon";
 import { ConfidenceBadge } from "@/components/ui/Confidence";
 import { DataBar } from "@/components/ui/DataBar";
 import { SearchIcon } from "@/components/ui/icons";
 import { Input } from "@/components/ui/Input";
 import { LaneIcon } from "@/components/ui/LaneIcon";
 import { TierSpine } from "@/components/ui/TierSpine";
-import { Tooltip } from "@/components/ui/Tooltip";
+import { TooltipZone } from "@/components/ui/TooltipZone";
 import { cn } from "@/lib/cn";
 import { formatEbStory } from "@/lib/confidence";
 import { formatGames, formatPercent } from "@/lib/format";
 import { championDisplayName } from "@/lib/gameDisplay";
 import { roleDisplayLabel } from "@/lib/roles";
-import { championIconUrl } from "@/lib/staticData";
 import {
   filterTierListEntries,
   formatStrengthDelta,
@@ -360,11 +359,11 @@ export function TierListTable({
               prefetch={false}
               className="group flex min-w-0 items-center gap-2.5"
             >
-              <Image
-                src={championIconUrl(version, championSlug)}
+              <ChampionIcon
+                version={version}
+                championSlug={championSlug}
                 alt={championName}
-                width={30}
-                height={30}
+                size={30}
                 className="rounded-md ring-1 ring-border/60"
               />
               <span className="min-w-0">
@@ -398,27 +397,24 @@ export function TierListTable({
           <DataBar value={entry.winRate} games={entry.games} decimals={2} className="justify-end" />
         </td>
         <td className="hidden px-3 py-2.5 text-right md:table-cell">
-          <Tooltip
-            content={formatEbStory({
+          <span
+            data-tooltip={formatEbStory({
               winRate: entry.winRate,
               roleBaseline: entry.roleBaseline ?? 0,
               strengthScore: entry.strengthScore,
               games: entry.games
             })}
+            className={cn(
+              "type-tabular cursor-help tabular-nums text-xs font-medium",
+              entry.strengthScore > 0.0001
+                ? "text-wr-high"
+                : entry.strengthScore < -0.0001
+                  ? "text-wr-low"
+                  : "text-muted"
+            )}
           >
-            <span
-              className={cn(
-                "type-tabular cursor-help tabular-nums text-xs font-medium",
-                entry.strengthScore > 0.0001
-                  ? "text-wr-high"
-                  : entry.strengthScore < -0.0001
-                    ? "text-wr-low"
-                    : "text-muted"
-              )}
-            >
-              {formatStrengthDelta(entry.strengthScore)}
-            </span>
-          </Tooltip>
+            {formatStrengthDelta(entry.strengthScore)}
+          </span>
         </td>
         <td className="hidden px-3 py-2.5 text-right text-fg/70 lg:table-cell">
           {formatPercent(entry.pickRate, { decimals: 1 })}
@@ -468,7 +464,9 @@ export function TierListTable({
   );
 
   return (
-    <div className="grid gap-3">
+    // One delegated tooltip for the whole board: the per-row Strength hovers
+    // are `data-tooltip` attributes, not 170 Radix roots. See TooltipZone.
+    <TooltipZone className="grid gap-3">
       <div className="px-1">
         <div className="relative w-full sm:max-w-xs">
           <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
@@ -631,6 +629,6 @@ export function TierListTable({
           </Card>
         </div>
       )}
-    </div>
+    </TooltipZone>
   );
 }

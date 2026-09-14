@@ -18,22 +18,22 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Hangfire.Core" Version="1.8.22" />
-        <PackageReference Include="Hangfire.NetCore" Version="1.8.22" />
-        <PackageReference Include="Hangfire.PostgreSql" Version="1.20.13" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
+        <PackageReference Include="Hangfire.Core" Version="1.8.25" />
+        <PackageReference Include="Hangfire.NetCore" Version="1.8.25" />
+        <PackageReference Include="Hangfire.PostgreSql" Version="1.21.1" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
-        <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.2.0" />
-        <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.10" />
-        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
-        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+        <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.10.0" />
+        <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.12" />
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
+        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
         <PackageReference Include="OpenTelemetry.Exporter.Prometheus.HttpListener" Version="1.16.0-beta.1" />
-        <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.16.0" />
-        <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.15.1" />
-        <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.15.1" />
-        <PackageReference Include="StackExchange.Redis" Version="2.10.1" />
+        <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.18.0" />
+        <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.18.0" />
+        <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.18.0" />
+        <PackageReference Include="StackExchange.Redis" Version="2.13.17" />
     </ItemGroup>
 
     <ItemGroup>

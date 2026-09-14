@@ -15,20 +15,20 @@
 
     <ItemGroup>
         <PackageReference Include="Camille.RiotGames" Version="3.0.0-nightly-2025-06-24-d2b94715b7" />
-        <PackageReference Include="Hangfire.Core" Version="1.8.22" />
-        <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.2.0" />
-        <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.10" />
-        <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.10" />
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
-        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.10" />
-        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.10" />
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
-        <PackageReference Include="Npgsql" Version="10.0.0" />
-        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
-        <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-        <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.14.0" />
-        <PackageReference Include="StackExchange.Redis" Version="2.10.1" />
+        <PackageReference Include="Hangfire.Core" Version="1.8.25" />
+        <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.10.0" />
+        <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.12" />
+        <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.12" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.12" />
+        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
+        <PackageReference Include="Npgsql" Version="10.0.3" />
+        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+        <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+        <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.22.0" />
+        <PackageReference Include="StackExchange.Redis" Version="2.13.17" />
     </ItemGroup>
 
     <ItemGroup>

@@ -17,7 +17,8 @@ TimeoutStartSec=30min
 ProtectSystem=strict
 # ProtectSystem=strict makes the whole filesystem read-only; the sweep must still publish its
 # exposition file where node-exporter reads it.
-ReadWritePaths=/var/lib/transcendence-perf/textfile
+# Covers both the textfile output and the staging directory the container writes into.
+ReadWritePaths=/var/lib/transcendence-perf
 StateDirectory=transcendence-perf
 StateDirectoryMode=0755
 PrivateTmp=true

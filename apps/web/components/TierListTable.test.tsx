@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import type { UITierListEntry } from "@/lib/tierlist";
-import { TooltipProvider } from "@/components/ui/Tooltip";
 
 import { TierListTable } from "./TierListTable";
 
@@ -62,16 +61,14 @@ describe("TierListTable", () => {
   it("filters by champion and renders a useful empty state", async () => {
     const user = userEvent.setup();
     render(
-      <TooltipProvider>
-        <TierListTable
-          entries={entries}
-          champions={champions}
-          version="16.14.1"
-          rankTierValue="EMERALD_PLUS"
-          activeRegion="ALL"
-          minGames={500}
-        />
-      </TooltipProvider>
+      <TierListTable
+        entries={entries}
+        champions={champions}
+        version="16.14.1"
+        rankTierValue="EMERALD_PLUS"
+        activeRegion="ALL"
+        minGames={500}
+      />
     );
 
     expect(screen.getByText("Ahri")).toBeTruthy();
@@ -89,16 +86,14 @@ describe("TierListTable", () => {
   it("reveals low-sample rows and exposes the active sort direction", async () => {
     const user = userEvent.setup();
     render(
-      <TooltipProvider>
-        <TierListTable
-          entries={entries}
-          champions={champions}
-          version="16.14.1"
-          rankTierValue="EMERALD_PLUS"
-          activeRegion="ALL"
-          minGames={500}
-        />
-      </TooltipProvider>
+      <TierListTable
+        entries={entries}
+        champions={champions}
+        version="16.14.1"
+        rankTierValue="EMERALD_PLUS"
+        activeRegion="ALL"
+        minGames={500}
+      />
     );
 
     await user.click(screen.getByRole("button", { name: "Show low-sample (1)" }));
@@ -113,5 +108,57 @@ describe("TierListTable", () => {
     expect(table).not.toBeNull();
     expect(within(table!).getByRole("columnheader", { name: /Win Rate/ }).getAttribute("aria-sort"))
       .toBe("descending");
+  });
+
+  // The board's per-row cost is the whole point of the hydration work: a row
+  // carries its hover story as an attribute and its icon as a plain <img>, so
+  // 170 rows cost no per-row React component beyond the links.
+  it("carries the trust story as a delegated tooltip attribute, not a component per row", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <TierListTable
+        entries={entries.map((entry) => ({ ...entry, roleBaseline: 0.505 }))}
+        champions={champions}
+        version="16.14.1"
+        rankTierValue="EMERALD_PLUS"
+        activeRegion="ALL"
+        minGames={500}
+      />
+    );
+
+    const strength = container.querySelectorAll("[data-tooltip]");
+    expect(strength).toHaveLength(2);
+    expect(strength[0].getAttribute("data-tooltip")).toBe(
+      "Observed 54.0% over 1,200 games · role avg 50.5% · graded 54.5% (+4.0% vs role avg)"
+    );
+
+    // And the zone turns that attribute into the one real tooltip on hover.
+    await user.hover(strength[0]);
+    await waitFor(() =>
+      expect(screen.getByRole("tooltip").textContent).toContain("Observed 54.0% over 1,200 games")
+    );
+  });
+
+  it("renders champion squares through the image optimizer without next/image", () => {
+    const { container } = render(
+      <TierListTable
+        entries={entries}
+        champions={champions}
+        version="16.14.1"
+        rankTierValue="EMERALD_PLUS"
+        activeRegion="ALL"
+        minGames={500}
+      />
+    );
+
+    const icon = container.querySelector<HTMLImageElement>('img[alt="Ahri"]');
+    expect(icon).not.toBeNull();
+    expect(icon!.getAttribute("src")).toContain("/_next/image?url=");
+    expect(icon!.getAttribute("src")).toContain("Ahri.png");
+    expect(icon!.getAttribute("srcset")).toContain("1x");
+    expect(icon!.getAttribute("srcset")).toContain("2x");
+    expect(icon!.getAttribute("loading")).toBe("lazy");
+    expect(icon!.getAttribute("width")).toBe("30");
+    expect(icon!.getAttribute("height")).toBe("30");
   });
 });

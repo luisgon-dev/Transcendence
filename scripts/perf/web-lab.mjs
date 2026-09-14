@@ -10,8 +10,13 @@
  * route sit on one Grafana panel.
  *
  * Two modes, both from one run:
- *   --budgets <file>   assert per-route thresholds, exit non-zero on breach   (CI gate)
- *   --prom-out <file>  write a Prometheus textfile exposition                 (prod trend)
+ *   --budgets <file>    assert per-route thresholds, exit non-zero on breach  (CI gate)
+ *   --prom-out <file>   write a Prometheus textfile exposition                (prod trend)
+ *   --report-dir <dir>  keep the full Lighthouse report per route             (diagnosis)
+ *
+ * The aggregate numbers say *which* route regressed; only the full report says why. Reach for
+ * --report-dir when a route is slow and you need the main-thread breakdown, long tasks or
+ * bootup cost by script. Reports are one file per route and are not written by default.
  *
  * Usage:
  *   node scripts/perf/web-lab.mjs --base-url http://127.0.0.1:3000 \
@@ -77,7 +82,8 @@ function parseArgs(argv) {
     samples: 3,
     budgets: null,
     jsonOut: null,
-    promOut: null
+    promOut: null,
+    reportDir: null
   };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
@@ -94,6 +100,7 @@ function parseArgs(argv) {
       case "--budgets": args.budgets = next(); break;
       case "--json-out": args.jsonOut = next(); break;
       case "--prom-out": args.promOut = next(); break;
+      case "--report-dir": args.reportDir = next(); break;
       default: throw new Error(`Unknown flag: ${flag}`);
     }
   }
@@ -256,7 +263,13 @@ async function main() {
       const samples = [];
       for (let i = 0; i < args.samples; i += 1) {
         try {
-          samples.push(extractSample(await runOnce(url, chrome.port)));
+          const lhr = await runOnce(url, chrome.port);
+          samples.push(extractSample(lhr));
+          // One report per route is enough to diagnose with; the rest only differ by noise.
+          if (args.reportDir && i === 0) {
+            const slug = route.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "root";
+            writeAtomic(`${args.reportDir}/${slug}.json`, JSON.stringify(lhr));
+          }
         } catch (error) {
           console.error(`  ! ${url} sample ${i + 1}/${args.samples}: ${error.message}`);
         }

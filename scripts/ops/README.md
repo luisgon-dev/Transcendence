@@ -428,3 +428,43 @@ route (`/lol/champions/[championId]` and friends) requires picking an ID from th
 probing URLs — under partial prerendering a missing entity still returns HTTP 200 with a
 near-identical shell and echoes the identifier back into the page, so a bad ID would be measured
 as a fast page and silently pass.
+
+### `docker pull` cannot fetch this image on this host
+
+Known and worked around, but worth understanding before you debug it again. `docker pull` of
+`transcendence-perf` downloads every layer and then dies unpacking the browser layer:
+
+```
+failed to extract layer ... mount callback failed on /var/lib/containerd/tmpmounts/containerd-mount...:
+  mkdir  .../usr/share/pipewire: no such file or directory      # Alpine base
+  lchown .../usr/share/menu: no such file or directory          # Debian base
+```
+
+followed by cascading `NotFound: lease does not exist` from the half-finished extraction. The image
+is not at fault — it pulls and runs on a developer machine, there is nothing unusual at either path,
+and both an Alpine and a Debian build fail identically. Every smaller image in this fleet
+(`transcendence-web` and friends, ~400MB) pulls here without trouble, so this is Docker 29.2.1's
+pull path struggling with a ~1GB layer.
+
+**containerd's own unpacker handles it fine.** Because Docker 29 uses the containerd image store,
+anything pulled into the `moby` namespace is immediately visible to `docker`:
+
+```bash
+ctr -n moby images pull --platform linux/amd64 ghcr.io/luisgon-dev/transcendence-perf:main
+docker image inspect ghcr.io/luisgon-dev/transcendence-perf:main    # now present
+```
+
+`web-perf-sweep.sh` does this automatically: it tries `docker pull`, falls back to `ctr`, and only
+then falls back to a cached copy. A healthy run logs `pulled with ctr` after a `WARN`. If both
+fail, `docker save | ssh | docker load` from a machine that can pull is the manual escape hatch.
+
+Revisit if the host's Docker is upgraded — this is a daemon bug, not something the image can fix.
+
+### Lab scores are host-specific
+
+Lighthouse calibrates its simulated throttling to the CPU it runs on, so the numbers from this
+sweep are **only comparable to other runs of this sweep**. `/lol/tierlist` measured 0.61 here and
+0.98 from a developer laptop on the same commit against the same URL, with the box idle. Do not
+compare these against CI gate numbers or treat them as an absolute quality score. The regression
+alert, which compares each route against its own 7-day baseline on this host, is the instrument
+that actually works.

@@ -4,7 +4,9 @@ WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN corepack enable
+# Node 26 no longer bundles Corepack, so it is installed explicitly rather than pinning a pnpm
+# version here — `packageManager` in the root package.json stays the single source of truth.
+RUN npm install -g corepack@latest && corepack enable
 
 # Copy only what we need for workspace install first (better layer caching).
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -45,7 +47,7 @@ USER node
 
 EXPOSE 3000
 
-# Detect a hung Next.js process (the other two services already have healthchecks). Node 22 ships a
+# Detect a hung Next.js process (the other two services already have healthchecks). Node ships a
 # global fetch, so no curl is needed in the slim runtime image.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"

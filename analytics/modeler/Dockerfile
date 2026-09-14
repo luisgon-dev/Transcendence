@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -43,7 +43,7 @@ RUN pip install --no-compile "scikit-learn>=1.6,<2" "joblib>=1.4,<2" "threadpool
 # layers, which this host cannot extract (see the whiteout note above). It is therefore the layer
 # most likely to lose the containerd lease race on a cold pull, and the reason
 # scripts/ops/pull-modeler-image.sh retries rather than trusting one attempt.
-RUN pip install --no-compile "pyarrow>=18,<21"
+RUN pip install --no-compile "pyarrow>=18,<26"
 RUN pip install --no-compile "psycopg[binary]>=3.2,<4"
 RUN pip install --no-compile "boto3>=1.35,<2"
 

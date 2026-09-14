@@ -1,10 +1,12 @@
-FROM node:22-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3 AS builder
+FROM node:26-bookworm-slim@sha256:cd9f682fa2885cd1056e830424764158570061c59736a1da836bc3d73df095ae AS builder
 
 WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN corepack enable
+# Node 26 no longer bundles Corepack, so it is installed explicitly rather than pinning a pnpm
+# version here — `packageManager` in the root package.json stays the single source of truth.
+RUN npm install -g corepack@latest && corepack enable
 
 # Copy only what we need for workspace install first (better layer caching).
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -28,7 +30,7 @@ RUN pnpm --filter @transcendence/api-client build
 
 RUN pnpm --filter web build
 
-FROM node:22-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3 AS runner
+FROM node:26-bookworm-slim@sha256:cd9f682fa2885cd1056e830424764158570061c59736a1da836bc3d73df095ae AS runner
 
 WORKDIR /app
 
@@ -45,7 +47,7 @@ USER node
 
 EXPOSE 3000
 
-# Detect a hung Next.js process (the other two services already have healthchecks). Node 22 ships a
+# Detect a hung Next.js process (the other two services already have healthchecks). Node ships a
 # global fetch, so no curl is needed in the slim runtime image.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"

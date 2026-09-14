@@ -159,7 +159,7 @@ describe("SavedBuildList", () => {
     expect(await within(panel).findByText("Trinity Force")).toBeTruthy();
 
     // Nothing is chosen for the user: neither outcome is pre-selected and applying is refused.
-    const choice = within(panel).getByRole("group", {
+    const choice = within(panel).getByRole("radiogroup", {
       name: "Repair choice for Trinity Force"
     });
     for (const option of within(choice).getAllByRole("radio")) {

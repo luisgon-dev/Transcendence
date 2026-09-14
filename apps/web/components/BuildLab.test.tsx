@@ -388,7 +388,7 @@ describe("BuildLab", () => {
     const user = userEvent.setup();
     renderLab();
 
-    const stageControl = screen.getByRole("group", { name: "Decision stage" });
+    const stageControl = screen.getByRole("radiogroup", { name: "Decision stage" });
     const stageOptions = within(stageControl).getAllByRole("radio");
     expect(stageOptions.map((option) => option.textContent)).toEqual([
       "First legendary",

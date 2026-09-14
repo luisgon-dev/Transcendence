@@ -34,7 +34,7 @@
     "e2e:stack": "bash scripts/e2e/run-compose-stack.sh"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.2",
+    "@playwright/test": "^1.63.0",
     "@transcendence/web-routes": "workspace:*",
     "chrome-launcher": "^1.2.1",
     "lighthouse": "^13.4.1"

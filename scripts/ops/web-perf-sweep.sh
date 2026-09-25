@@ -23,30 +23,7 @@ log "sweep starting: image=${IMAGE} base=${BASE_URL} samples=${SAMPLES}"
 
 install -d -m 0755 "${TEXTFILE_DIR}"
 
-# `docker pull` cannot extract this image on this host. Layers download fine and then the
-# daemon's unpacker dies in its tmpmount — "mount callback failed ... mkdir /usr/share/pipewire"
-# on an Alpine base, "lchown /usr/share/menu" on a Debian one — and leaves "lease does not
-# exist" behind it. The image is not at fault: it pulls and runs elsewhere, and every smaller
-# image in this fleet pulls here. It is Docker 29.2.1's pull path on a large layer.
-#
-# containerd's own unpacker handles the same image without complaint, and because Docker 29 uses
-# the containerd image store, anything ctr pulls into the `moby` namespace is immediately visible
-# to docker. So: try docker, fall back to ctr, and only then give up on a cached copy.
-pull_image() {
-  if docker pull --quiet "${IMAGE}" >/dev/null 2>&1; then
-    log "pulled with docker"
-    return 0
-  fi
-  log "WARN: docker pull failed; retrying via containerd (see scripts/ops/README.md)"
-  if command -v ctr >/dev/null 2>&1 \
-     && ctr -n moby images pull --platform linux/amd64 "${IMAGE}" >/dev/null 2>&1; then
-    log "pulled with ctr"
-    return 0
-  fi
-  return 1
-}
-
-if ! pull_image; then
+if ! docker pull --quiet "${IMAGE}" >/dev/null; then
   log "WARN: could not refresh the image; falling back to the locally cached copy"
   if ! docker image inspect "${IMAGE}" >/dev/null 2>&1; then
     log "ERROR: no local image either, nothing to run"

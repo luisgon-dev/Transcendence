@@ -401,6 +401,7 @@ deploy_one() {
   local rev
   rev="$(docker inspect "$container" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' 2>/dev/null)"
   log "DEPLOYED ${svc} -> rev ${rev:0:12}"
+  DEPLOYED_ANY=1
   notify "✅ deployed ${svc} @ ${rev:0:12}"
 }
 
@@ -411,6 +412,7 @@ main() {
 
   [ -f "$COMPOSE_FILE" ] || { log "FATAL compose file not found: $COMPOSE_FILE"; exit 1; }
   local rc=0
+  DEPLOYED_ANY=0
   for entry in "${SERVICES[@]}"; do
     IFS=':' read -r svc container repo optional <<<"$entry"
     if ! deploy_one "$svc" "$container" "$repo" "$optional"; then
@@ -423,7 +425,13 @@ main() {
       break
     fi
   done
-  docker image prune -f >/dev/null 2>&1 || true
+  # Only after a deploy actually replaced an image, never on an idle poll. With the containerd image
+  # store a prune deletes the content of any pull still in flight, so pruning every ~60s made every
+  # pull longer than one poll interval fail with "lease does not exist" -- the modeler and perf
+  # images, whose failures were long blamed on the host's Docker.
+  if [ "$DEPLOYED_ANY" = "1" ]; then
+    docker image prune -f >/dev/null 2>&1 || true
+  fi
   exit $rc
 }
 

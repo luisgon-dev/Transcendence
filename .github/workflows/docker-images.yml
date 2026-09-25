@@ -37,10 +37,6 @@ jobs:
             image_suffix: web
             dockerfile: ./apps/web/Dockerfile
             filter_key: web
-          - component: analytics-modeler
-            image_suffix: analytics-modeler
-            dockerfile: ./analytics/modeler/Dockerfile
-            filter_key: modeler
           - component: perf
             image_suffix: perf
             dockerfile: ./scripts/perf/Dockerfile
@@ -83,9 +79,6 @@ jobs:
               - '.nvmrc'
               - 'apps/web/Dockerfile'
               - '.github/workflows/docker-images.yml'
-            modeler:
-              - 'analytics/modeler/**'
-              - '.github/workflows/docker-images.yml'
             perf:
               - 'scripts/perf/**'
               - 'packages/web-routes/**'
@@ -98,7 +91,6 @@ jobs:
           WEBAPI_CHANGED: ${{ steps.changes.outputs.webapi }}
           SERVICE_CHANGED: ${{ steps.changes.outputs.service }}
           WEB_CHANGED: ${{ steps.changes.outputs.web }}
-          MODELER_CHANGED: ${{ steps.changes.outputs.modeler }}
           PERF_CHANGED: ${{ steps.changes.outputs.perf }}
         run: |
           if [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
@@ -116,9 +108,6 @@ jobs:
               ;;
             web)
               run="${WEB_CHANGED:-false}"
-              ;;
-            modeler)
-              run="${MODELER_CHANGED:-false}"
               ;;
             perf)
               run="${PERF_CHANGED:-false}"

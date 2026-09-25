@@ -533,132 +533,54 @@ pro-build analytics before approval.
   `isLive` convenience flag. `isLive` is true only for an `in_game` observation no more than ten
   minutes old, so a stale worker snapshot cannot present a player as currently live.
 
-### Build Lab and Adjusted WPA
+### Build Lab
 
-`GET /api/lol/analytics/build-lab/{championId}` is the public, rate-limited decision-analytics
-surface. `role` is required. Optional context includes `opponentChampionId`, `patch`, and `region`;
-`section=items|runes|spells` and `mode=supported|impact|common` control the decision family and
-ranking. Ordered `itemPath`, `runeSelections`, and `spellPair` query values condition the next
-supported stage and make the complete state permalinkable.
+`GET /api/lol/analytics/build-lab/{championId}` is the public decision-analytics surface (anonymous,
+`expensive-read` limiter). `role` is required. Optional context is `opponentChampionId`, `patch`, and
+`region` (`ALL`/`GLOBAL` or omitted means every region); `section=items|runes|spells` picks the
+decision family and `mode=supported|impact|common` the ranking. Repeated `itemPath` values lock
+completed legendaries in order (max 5) and a single `runeSelections` value locks a keystone, so the
+whole state is permalinkable. Invalid context answers `400` ProblemDetails.
 
-The response distinguishes requested from effective context and includes promoted generation,
-dataset, static-data, model, cutoff, patch, and region provenance. Unsupported selected prefixes
-remain selected and return an explicit unavailable reason; the API never silently broadens or discards
-a path.
+The numbers are plain win/game counts per build decision, maintained by the worker (see
+`docs/ARCHITECTURE.md` → *Build Lab*), so there is nothing to promote: the response grows as matches
+are counted.
 
-**A gate-failing cell withholds its numbers, not its evidence.** When `isPublishable` is false the
-response nulls `adjustedWpa`, `confidenceLow`, `confidenceHigh`, **and the descriptive `rawWinRate` /
-`pickRate`** — a gated candidate must not render a headline win rate one click behind its own
-"insufficient evidence" label. `observedCount` and `effectiveSampleSize` are *always* populated, so a
-client can show how thin a cell is and `evidenceQuality` / `unavailableReason` say why it was withheld.
-The same rule applies to `pathEstimate`: `estimatedWinProbability`, `adjustedLift`, and both bounds are
-null when the path failed its gates, while its counts remain visible.
+- `coverage` says what was counted: `includedPatches` with their `patchWeights`, `countedMatches`,
+  `lastCountedAtUtc`, `includedRegions`, and `rankScope` (`ALL_TRACKED` — every tracked rank, not a
+  rank floor). Without `patch` the active patch and the two before it are pooled at weights
+  1.0/0.6/0.35; an explicit `patch` answers from that patch alone, or `available: false` when it was
+  never counted.
+- `stages[]` carries `family` (`STARTER`, `ITEM`, `BOOTS`, `RUNE_PAGE`, `RUNE`, `SPELLS`), `stage`,
+  `label`, the decision's (patch-weighted) `games` and `winRate`, and its `options[]`. `section=items`
+  returns Starter and Boots (unconditioned) plus the item stage after the locked path; `section=runes`
+  returns the complete page plus the keystone stage, or the later slots conditioned on a locked
+  keystone; `section=spells` returns the order-independent pair.
+- Each option has `actionKey`/`actionIds`, `games`, `pickRate`, the raw `winRate`,
+  `adjustedWinRate`, `lift`, a 95% `confidenceLow`/`confidenceHigh`, `averageTimingMinutes` (items and
+  boots only), and `isLowSample`.
+- `adjustedWinRate` standardizes over team gold difference at the decision minute: `lift` is the mean,
+  over the option's games, of (won − the decision's win rate in that game's gold bucket), and
+  `adjustedWinRate` is the decision's win rate plus `lift`. An item mostly bought while ahead is judged
+  against other ahead games instead of being credited for the lead. Pregame choices land in one bucket,
+  so their adjusted rate equals the raw one.
+- `scope` is `MATCHUP`, `REGION`, or `ALL`. A matchup or region is used only when that stage has at
+  least 150 weighted games there; otherwise the stage answers from all games with `isFallback: true`.
+  When used, each option's lift is shrunk toward its all-games lift with 100 pseudo-games. Only
+  Starter, the first item, Boots, the rune page, and spells are counted per matchup and per region;
+  a matchup or regional request for any later stage always falls back to `ALL`, and opponent-by-region
+  is never counted (a request with an opponent ignores `region`).
+- Options under 5 games are hidden; under 100 games they are returned with `isLowSample: true` and
+  always ranked last. `supported` orders by `confidenceLow`, `impact` by `lift`, `common` by
+  `pickRate`, at most 15 options per stage.
+- `unavailableReason` explains an empty answer (feature disabled, nothing counted yet, or no counted
+  game followed the exact locked path). Responses are cached for 10 minutes under the
+  `analytics:build-lab` HybridCache tag.
 
-**`evidenceTier` decides how much of a cell may be shown.** Publication is not all-or-nothing.
-Patches ship fortnightly, and a cell needs far more evidence to pin a ≤3pp interval than to say which
-side of "typical" it falls on, so gating everything on the interval would leave the lab empty for most
-of a patch.
-
-| `evidenceTier` | Meaning | Client renders |
-| --- | --- | --- |
-| `NUMERIC` | Every v1 gate passed | `adjustedWpa` and its interval |
-| `BUCKETED` | Sample gates passed; only the interval-width gate failed, and the posterior still concentrates in one bucket | `evidenceBucket` (`ABOVE_AVERAGE` / `TYPICAL` / `BELOW_AVERAGE`); no number |
-| `DESCRIPTIVE` | Not enough evidence for either | pick rate and timing only |
-
-`evidenceBucket` is non-null only at the `BUCKETED` tier — a numeric cell shows its number and a
-descriptive one has not earned a direction. Bucketing never relaxes the sample, overlap, balance, or
-stability gates; it trades away *only* the interval width, and only when the modeler measured at least
-80% posterior mass on one side. `available` is true once any candidate is numeric **or** bucketed.
-
-Ranking is deliberately independent of the tier: `mode=supported` orders by the interval's lower bound
-where one exists and by the point estimate otherwise, so a bucketed candidate is ranked on the evidence
-it has rather than sinking below cells with no evidence at all.
-
-**Regional fallback is decided per cell, not per response.** For a regional request each individual
-estimate keeps its regional number only when that cell is publishable *and* differs meaningfully
-from the pooled global baseline after multiple-comparison correction; otherwise that one cell serves
-the global estimate. A single response therefore mixes regional and global rows, and each row states
-which it is (`fallbackScope`) — there is no whole-response switch to `GLOBAL`, and a region with a
-few thin cells does not lose its regional numbers everywhere. `context.effectiveRegion` reports the
-requested region as soon as *any* row in the response is regional, so it summarizes the mix rather
-than promising every row is regional.
-
-**Patch resolution.** Omitting `patch` serves the active generation's own patch. An explicit `patch`
-is servable when it is the active generation's patch **or** appears in that generation's borrowed
-`includedPatches` set (`provenance.includedPatches`); anything else returns `available: false` with an
-explicit "outside the promoted generation's modeled patch set" reason instead of silently answering
-for a different patch. `context.requestedPatch` echoes what the caller asked for and
-`context.effectivePatch` is the generation's patch, so the two differ whenever a borrowed patch was
-requested. Because promotion retires every other generation, a borrowed patch is only ever addressable
-through the active generation.
-
-`GET /api/lol/analytics/champions/{championId}/profile` now includes an optional
-`recommendation` summary for Ranked Solo/Duo. It contains the best-supported first item, rune
-choice, and spell pair from the same promoted generation so the champion page does not need a
-second request.
-
-Saved builds are complete decision/filter states, not frozen estimates:
-
-- `GET /api/users/me/lol/saved-builds?page=&pageSize=` (`UserOnly`)
-- `POST /api/users/me/lol/saved-builds` (`UserOnly`)
-- `PUT|DELETE /api/users/me/lol/saved-builds/{savedBuildId}` (`UserOnly`, owner only)
-- `POST /api/users/me/lol/saved-builds/{savedBuildId}/repair` (`UserOnly`, owner only)
-- `POST|DELETE /api/users/me/lol/saved-builds/{savedBuildId}/share` (`UserOnly`, owner only)
-- `GET /api/lol/saved-builds/{shareId}` (public, unguessable read-only token, rate limited)
-
-The list is a paginated envelope `{ items, page, pageSize, totalCount, hasMore }` ordered by
-`updatedAtUtc` descending. `pageSize` is clamped to the configured maximum and `page` is clamped
-against `totalCount`, so an absurd page number returns an empty page rather than an error. `POST`
-enforces a **per-account cap** and answers `409 Conflict` (ProblemDetails) at the limit — delete a build
-before saving another; the cap is deliberately a conflict, not a 400, because the request itself is
-valid. `DELETE` is idempotent (204 even when the build is already gone). Share revocation takes effect
-on the next read, and the public share route is metered per client IP so the token space cannot be
-brute-forced.
-
-Each build reports its own drift and repairability:
-
-- `compatibilityStatus` is a single most-blocking state, evaluated in this order: `ITEMS_RETIRED` (at
-  least one item is unusable), then `NO_SOURCE_GENERATION` (saved while no generation was active, so
-  there is no baseline to compare against), then `PATCH_CHANGED` (saved on an older patch), else
-  `CURRENT`. Inspect `unavailableItems` and `patch` for the full picture rather than the label alone.
-- `unavailableItems` pairs each blocked item with a reason: `RETIRED` (absent from the active patch's
-  static data) or `REMOVED_FROM_STORE` (still present but no longer purchasable). `unavailableItemIds`
-  is the same set flattened for older clients. Items are reported, never silently replaced.
-- `POST .../repair` takes explicit `{ itemId, action, replacementItemId }` choices where `action` is
-  `DROP` or `REPLACE`; a `REPLACE` must name an item valid on the active patch. Repair is always the
-  user's decision.
-- `analyticsChanged` is a **material** change, not a generation-id difference. It is true only when the
-  saved setup's own outcome moved under the new active generation: its publishability flipped, or its
-  adjusted lift moved further than the configured epsilon. A promotion that leaves this build's numbers
-  effectively where they were reports `false`, so the flag means "your build's answer changed", not
-  "the model was rebuilt".
-
-Admin generation control is `AdminOnly` and rate limited (`admin-write`):
-
-- `GET /api/admin/analytics/build-lab`
-- `POST /api/admin/analytics/build-lab/generations/{generationId}/promote`
-- `POST /api/admin/analytics/build-lab/generations/{generationId}/rollback`
-- `POST /api/admin/analytics/build-lab/generations/{generationId}/fail`
-
-Promotion revalidates the model calibration/baseline/leakage gates and every action/path evidence
-gate inside an atomic active-generation switch, and re-derives the artifact-manifest checksum. That
-checksum covers `artifactManifestJson` only — it proves the manifest is populated and self-consistent
-with the digest the modeler stored, **not** that the Parquet/model bundle at `artifactUri` is intact.
-
-`promote` answers `204` on success and `409` when the generation is not a valid candidate, failed a
-gate, or lost a race for the active pointer. `rollback` answers `204`, `404` when the target is not a
-`Ready`/`Retired` generation, and **`409` when a competing promotion took the active pointer
-concurrently** — retry once it settles. `fail` abandons a `PendingDataset`/`Modeling`/`Candidate`
-generation with an optional `reason` (`204`, or `404` when it is in no failable state); use it to clear a
-generation wedged in `Modeling` because the offline modeler died holding the lease. All three write an
-`AdminAuditLog` entry (`analytics.buildlab.promote|rollback|fail`) with the actor, target generation,
-request id, and success flag, including on the failure paths.
-
-The generation rows returned by `GET` expose `leaseOwner` (diagnostic only — which modeler process
-claimed the run) plus `promotionHistoryJson`, an append-only log of every `promote`/`rollback`/`fail`
-with actor and reason. A `Modeling` row with no live modeler is reaped automatically: the worker
-decides that by probing the modeling advisory lock, not by any timeout. `fail` is the manual
-equivalent.
+`GET /api/lol/analytics/champions/{championId}/profile` includes an optional `recommendation`
+(`ChampionRecommendationSummary { available, coverage, firstItem, runePage, spellPair,
+unavailableReason }`) for Ranked Solo/Duo only: the top non-low-sample `supported` option of the first
+item stage, the rune page, and the spell pair, so the champion page needs no second request.
 
 ## OpenAPI Generation Workflow
 

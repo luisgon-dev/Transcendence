@@ -27,7 +27,7 @@ public class MatchTimelineIngestionJob(
     IBackgroundJobClient backgroundJobClient,
     IRiotRateGate rateGate,
     IOptions<TimelineIngestionOptions> options,
-    IOptions<BuildLabModelingOptions> buildLabOptions,
+    IOptions<BuildLabOptions> buildLabOptions,
     ILogger<MatchTimelineIngestionJob> logger)
 {
     /// <summary>
@@ -603,8 +603,8 @@ public class MatchTimelineIngestionJob(
                 EventIndex = index,
                 TimestampMs = (int)timelineEvent.Timestamp,
                 EventType = timelineEvent.Type ?? "UNKNOWN",
-                // Lifted out of the JSON as well as kept in it. The modeler's cohort scan reads only
-                // these three, and reading them back out of jsonb forced a full sequential scan of
+                // Lifted out of the JSON as well as kept in it. The retired modeler's cohort scan read
+                // only these three, and reading them back out of jsonb forced a full sequential scan of
                 // the whole table -- see MatchTimelineEventPayload for the measurement. Written here
                 // so a row is complete the moment it lands; the backfill exists only for rows that
                 // predate this.

@@ -556,7 +556,6 @@ async function ChampionSections({
   // Only a publishable generation earns the answer-first summary. Without one the page keeps the
   // full descriptive build experience below, unchanged.
   const recommendationLive = showRecommendation && recommendation?.available === true;
-  const recommendationOpponentId = recommendation?.context?.opponentChampionId ?? null;
   const buildLabParams = new URLSearchParams({ role: effectiveRole });
   if (selectedPatch) buildLabParams.set("patch", selectedPatch);
   if (activeRegion !== "ALL") buildLabParams.set("region", activeRegion);
@@ -572,11 +571,6 @@ async function ChampionSections({
           patch={selectedPatch}
           region={activeRegion}
           pageRankTier={normalizedRankTier ?? "ALL"}
-          opponentName={
-            recommendationOpponentId
-              ? championDisplayName(champions[String(recommendationOpponentId)])
-              : null
-          }
           itemVersion={itemVersion}
           items={items}
           runeById={runeById}

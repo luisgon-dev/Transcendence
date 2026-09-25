@@ -3,31 +3,22 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import {
-  buildLabRegionLabel,
   formatCompactCount,
-  formatWpa,
-  humanizeToken,
-  wpaToneClass,
-  type AdjustedActionEstimate,
-  type BuildLabContext,
-  type BuildLabProvenance
+  formatLift,
+  formatPercent,
+  liftToneClass,
+  type BuildLabCoverage,
+  type BuildLabOption
 } from "@/lib/buildLab";
 import { rankTierDisplayLabel } from "@/lib/ranks";
 import { itemIconUrl, runeIconUrl, summonerSpellIconUrl } from "@/lib/staticData";
 
 export type ChampionRecommendationSummary = {
   available: boolean;
-  provenance: BuildLabProvenance;
-  /**
-   * The champion-profile summary carries provenance only — `ChampionRecommendationSummary` in
-   * BuildLabDtos.cs has no context member — so nothing may be read from here without a fallback
-   * that works on the real payload. Kept optional so a backend that starts threading the resolved
-   * context is honored without another pass here.
-   */
-  context?: BuildLabContext | null;
-  firstItem?: AdjustedActionEstimate | null;
-  rune?: AdjustedActionEstimate | null;
-  spellPair?: AdjustedActionEstimate | null;
+  coverage: BuildLabCoverage;
+  firstItem?: BuildLabOption | null;
+  runePage?: BuildLabOption | null;
+  spellPair?: BuildLabOption | null;
   unavailableReason?: string | null;
 };
 
@@ -41,19 +32,19 @@ function Chip({ children }: { children: ReactNode }) {
 
 function RecommendationChoice({
   label,
-  estimate,
-  names,
+  option,
+  name,
   icons
 }: {
   label: string;
-  estimate?: AdjustedActionEstimate | null;
-  names: string[];
+  option?: BuildLabOption | null;
+  name: string;
   icons: string[];
 }) {
   return (
     <div className="min-w-0 border-t border-border/45 py-3 first:border-t-0 sm:border-l sm:border-t-0 sm:px-4 sm:first:border-l-0 sm:first:pl-0">
       <p className="type-kicker text-muted">{label}</p>
-      {estimate ? (
+      {option ? (
         <>
           <div className="mt-2 flex min-w-0 items-center gap-2">
             <span className="flex shrink-0 -space-x-1">
@@ -68,29 +59,21 @@ function RecommendationChoice({
                 />
               ))}
             </span>
-            <span className="truncate text-sm font-semibold text-fg">{names.join(" + ")}</span>
+            <span className="truncate text-sm font-semibold text-fg">{name}</span>
           </div>
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
-            <span className={`font-semibold tabular-nums ${wpaToneClass(estimate.adjustedWpa)}`}>
-              {formatWpa(estimate.adjustedWpa)}
+            <span className="font-semibold tabular-nums text-fg">
+              {formatPercent(option.adjustedWinRate)}
             </span>
-            <span className="tabular-nums">
-              95% {formatWpa(estimate.confidenceLow)} to {formatWpa(estimate.confidenceHigh)}
+            <span className={`font-semibold tabular-nums ${liftToneClass(option.lift)}`}>
+              {formatLift(option.lift)}
             </span>
-            <span className="tabular-nums">
-              {formatCompactCount(estimate.observedCount)} observed
-            </span>
-            {estimate.fallbackScope === "GLOBAL_FALLBACK" ? (
-              <span>{buildLabRegionLabel(estimate.regionScope)} cell</span>
-            ) : null}
+            <span className="tabular-nums">{formatPercent(option.pickRate)} pick</span>
+            <span className="tabular-nums">{formatCompactCount(option.games)} games</span>
           </div>
-          <p className="mt-1.5 text-xs text-muted">
-            Estimated against {estimate.baselineDefinition.replace(/\.$/, "").toLowerCase()} ·{" "}
-            {humanizeToken(estimate.evidenceQuality)} evidence
-          </p>
         </>
       ) : (
-        <p className="mt-2 text-sm text-muted">Insufficient evidence</p>
+        <p className="mt-2 text-sm text-muted">Not enough games yet</p>
       )}
     </div>
   );
@@ -103,7 +86,6 @@ export function ChampionRecommendation({
   patch,
   region,
   pageRankTier,
-  opponentName,
   itemVersion,
   items,
   runeById,
@@ -117,58 +99,38 @@ export function ChampionRecommendation({
   region?: string | null;
   /** The rank filter the surrounding page is showing, so the two scopes cannot be conflated. */
   pageRankTier?: string | null;
-  opponentName?: string | null;
   itemVersion: string;
   items: Record<string, { name: string }>;
   runeById: Record<string, { name: string; icon: string }>;
   spellVersion: string;
   spells: Record<string, { id: string; name: string }>;
 }) {
-  const context = recommendation.context ?? null;
-  // The champion profile never scopes the summary to a lane opponent (the controller passes none),
-  // so this stays null until the endpoint gains one — the chip below states that rather than imply it.
-  const opponentChampionId = context?.opponentChampionId ?? null;
-  // The effective patch has to be disclosed, and provenance is the only place the summary carries
-  // it: the promoted generation always lists its own patch first in includedPatches (see
-  // BuildLabGenerationCoordinator), and BuildLabService resolves every estimate against exactly
-  // that patch — a borrowed prior patch never becomes the effective one.
-  const effectivePatch = recommendation.provenance.includedPatches[0] ?? null;
   const query = new URLSearchParams({ role });
   if (patch) query.set("patch", patch);
   if (region && region !== "ALL") query.set("region", region);
-  if (opponentChampionId) query.set("opponentChampionId", String(opponentChampionId));
-  const item = recommendation.firstItem;
-  const rune = recommendation.rune;
-  const spell = recommendation.spellPair;
-  const itemNames = item?.actionIds.map((id) => items[String(id)]?.name ?? `Item ${id}`) ?? [];
-  const runeNames = rune?.actionIds.map((id) => runeById[String(id)]?.name ?? `Rune ${id}`) ?? [];
-  const spellNames = spell?.actionIds.map((id) => spells[String(id)]?.name ?? `Spell ${id}`) ?? [];
-  const rankScope = recommendation.provenance.rankScope || "EMERALD_PLUS";
-  const rankScopeLabel = rankTierDisplayLabel(rankScope);
-  // The estimates are modeled at one fixed rank scope; the page's rank filter does not move them,
+  const { firstItem: item, runePage, spellPair: spell } = recommendation;
+  const patches = recommendation.coverage.includedPatches;
+  // Build Lab counts every tracked ranked game; a rank filter on the page above does not narrow it,
   // so the difference is stated instead of left to be misread.
-  const rankMismatch =
-    Boolean(pageRankTier) && (pageRankTier ?? "").toUpperCase() !== rankScope.toUpperCase();
+  const rankFiltered = Boolean(pageRankTier) && (pageRankTier ?? "").toUpperCase() !== "ALL";
 
   return (
     <section className="rounded-card border border-border/65 bg-surface">
       <div className="flex flex-col gap-3 border-b border-border/45 px-4 py-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="type-kicker text-primary">Recommended setup</p>
-          <h2 className="type-section mt-1">Best supported decisions</h2>
+          <h2 className="type-section mt-1">Best supported choices</h2>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <Chip>{rankScopeLabel} scope</Chip>
-            {effectivePatch ? <Chip>Patch {effectivePatch}</Chip> : null}
-            {opponentChampionId ? (
-              <Chip>vs {opponentName ?? `champion ${opponentChampionId}`}</Chip>
-            ) : (
-              <Chip>Any lane opponent</Chip>
-            )}
+            <Chip>All tracked ranks</Chip>
+            {patches.length > 0 ? (
+              <Chip>{patches.length > 1 ? `Patches ${patches.join(", ")}` : `Patch ${patches[0]}`}</Chip>
+            ) : null}
+            <Chip>Any lane opponent</Chip>
           </div>
           <p className="mt-2 text-xs text-muted">
-            Context-adjusted estimates comparing realistic alternatives, not raw win rates.
-            {rankMismatch
-              ? ` Always modeled at ${rankScopeLabel} — the ${rankTierDisplayLabel(pageRankTier)} filter above does not change it.`
+            Win rates adjusted for the gold lead each choice was made with.
+            {rankFiltered
+              ? ` Counted across all tracked ranks — the ${rankTierDisplayLabel(pageRankTier)} filter above does not change it.`
               : ""}
           </p>
         </div>
@@ -183,22 +145,28 @@ export function ChampionRecommendation({
         <div className="grid px-4 sm:grid-cols-3">
           <RecommendationChoice
             label="First item"
-            estimate={item}
-            names={itemNames}
+            option={item}
+            name={item ? items[String(item.actionIds[0])]?.name ?? `Item ${item.actionIds[0]}` : ""}
             icons={item?.actionIds.map((id) => itemIconUrl(itemVersion, id)) ?? []}
           />
           <RecommendationChoice
             label="Rune page"
-            estimate={rune}
-            names={runeNames}
+            option={runePage}
+            name={
+              runePage
+                ? runeById[String(runePage.actionIds[0])]?.name ?? `Rune ${runePage.actionIds[0]}`
+                : ""
+            }
             icons={
-              rune?.actionIds.map((id) => runeIconUrl(runeById[String(id)]?.icon ?? "")) ?? []
+              runePage?.actionIds
+                .slice(0, 1)
+                .map((id) => runeIconUrl(runeById[String(id)]?.icon ?? "")) ?? []
             }
           />
           <RecommendationChoice
             label="Spell pair"
-            estimate={spell}
-            names={spellNames}
+            option={spell}
+            name={spell?.actionIds.map((id) => spells[String(id)]?.name ?? `Spell ${id}`).join(" + ") ?? ""}
             icons={
               spell?.actionIds.map((id) =>
                 summonerSpellIconUrl(spellVersion, spells[String(id)]?.id ?? "")
@@ -208,7 +176,7 @@ export function ChampionRecommendation({
         </div>
       ) : (
         <p className="px-4 py-4 text-sm text-muted">
-          {recommendation.unavailableReason ?? "This champion-role is still in shadow validation."}
+          {recommendation.unavailableReason ?? "Not enough games have been counted yet."}
         </p>
       )}
     </section>

@@ -23,9 +23,9 @@
 #   that service (--no-deps, so postgres/redis are never touched), then optionally
 #   post a Discord notification.
 #
-#   Services flagged `optional` in $SERVICES (analytics-modeler) are polled last, are skipped in
-#   silence when their container is absent (Compose profile off on this host), verify as "running"
-#   because they ship no healthcheck, and never set the run's exit status.
+#   Services flagged `optional` in $SERVICES are polled last, are skipped in silence when their
+#   container is absent (Compose profile off on this host), verify as "running" because they ship no
+#   healthcheck, and never set the run's exit status.
 #
 # INSTALL (on prod, as root):
 #   install -D -m 0755 poll-deploy.sh /root/deploy/poll-deploy.sh
@@ -51,11 +51,6 @@ RESOLUTION_ALERT_THRESHOLD="${POLL_DEPLOY_RESOLUTION_ALERT_THRESHOLD:-3}"
 HEALTH_TIMEOUT_SECONDS="${POLL_DEPLOY_HEALTH_TIMEOUT_SECONDS:-420}"
 HEALTH_POLL_SECONDS="${POLL_DEPLOY_HEALTH_POLL_SECONDS:-5}"
 
-# analytics-modeler sits behind a Compose profile; without the profile enabled `pull`/`up -d` cannot
-# resolve it. Every compose invocation below names exactly one service, so enabling the profile here
-# can never start anything extra.
-export COMPOSE_PROFILES="${COMPOSE_PROFILES:+${COMPOSE_PROFILES},}analytics-modeling"
-
 [[ "$RESOLUTION_ALERT_THRESHOLD" =~ ^[1-9][0-9]*$ ]] || RESOLUTION_ALERT_THRESHOLD=3
 [[ "$HEALTH_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]] || HEALTH_TIMEOUT_SECONDS=420
 [[ "$HEALTH_POLL_SECONDS" =~ ^[1-9][0-9]*$ ]] || HEALTH_POLL_SECONDS=5
@@ -64,10 +59,6 @@ export COMPOSE_PROFILES="${COMPOSE_PROFILES:+${COMPOSE_PROFILES},}analytics-mode
 # "optional" = the service ships no container healthcheck, may not be deployed on this host
 # (compose profile), and must never gate an app rollout. Optional entries therefore go LAST: the loop
 # in main() aborts on the first failure, so anything before them could block their siblings.
-# analytics-modeler is deliberately absent. It is a run-to-completion oneshot owned by
-# transcendence-modeler.timer, which pulls its own image before each invocation, so there is no
-# long-lived container to recreate. Managing it here is what made every modeler deploy kill an
-# in-flight generation: a run takes hours and the poller recreated the container mid-run.
 SERVICES=(
   "service:transcendence-service:transcendence-service"
   "webapi:transcendence-webapi:transcendence-webapi"
@@ -141,26 +132,6 @@ local_revision() {
   docker inspect "$container" \
     --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' \
     2>/dev/null
-}
-
-# Analytics:BuildLab:CodeRevision is stamped into every generation manifest, so it has to match the
-# worker image actually being deployed. Compose interpolates it from stack.env and nothing else
-# maintained it, so it pinned whatever revision happened to be current when the stack was last
-# hand-edited — manifests then recorded a revision that never produced them.
-sync_build_lab_revision() {
-  local rev="$1"
-  [ -n "$rev" ] || return 0
-  if [ ! -w "$ENV_FILE" ]; then
-    log "WARN ${ENV_FILE} not writable; BUILD_LAB_CODE_REVISION left at its current value"
-    return 0
-  fi
-  if grep -q '^BUILD_LAB_CODE_REVISION=' "$ENV_FILE"; then
-    grep -qx "BUILD_LAB_CODE_REVISION=${rev}" "$ENV_FILE" && return 0
-    sed -i "s|^BUILD_LAB_CODE_REVISION=.*|BUILD_LAB_CODE_REVISION=${rev}|" "$ENV_FILE"
-  else
-    printf 'BUILD_LAB_CODE_REVISION=%s\n' "$rev" >>"$ENV_FILE"
-  fi
-  log "synced BUILD_LAB_CODE_REVISION -> ${rev:0:12}"
 }
 
 notify() {
@@ -367,10 +338,6 @@ deploy_one() {
     log "DRY_RUN ${svc}: would compose pull, migrate if needed, recreate, and health-check"
     return 0
   fi
-  # Before the recreate, so the container that comes up carries the revision it was built from.
-  if [ "$svc" = "service" ]; then
-    sync_build_lab_revision "$remote_rev"
-  fi
   if ! run_logged "${svc} pull" \
       docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" pull "$svc"; then
     log "ERROR ${svc}: pull failed"; notify "⚠️ deploy: ${svc} pull failed"; return 1
@@ -427,8 +394,8 @@ main() {
   done
   # Only after a deploy actually replaced an image, never on an idle poll. With the containerd image
   # store a prune deletes the content of any pull still in flight, so pruning every ~60s made every
-  # pull longer than one poll interval fail with "lease does not exist" -- the modeler and perf
-  # images, whose failures were long blamed on the host's Docker.
+  # pull longer than one poll interval fail with "lease does not exist" -- the large images, whose
+  # failures were long blamed on the host's Docker.
   if [ "$DEPLOYED_ANY" = "1" ]; then
     docker image prune -f >/dev/null 2>&1 || true
   fi

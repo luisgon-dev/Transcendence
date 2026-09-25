@@ -24,7 +24,6 @@ public sealed class BuildLabAnalyticsController(IBuildLabService service) : Cont
         [FromQuery] string mode = "supported",
         [FromQuery] int[]? itemPath = null,
         [FromQuery] int[]? runeSelections = null,
-        [FromQuery] int[]? spellPair = null,
         CancellationToken ct = default)
     {
         try
@@ -39,8 +38,7 @@ public sealed class BuildLabAnalyticsController(IBuildLabService service) : Cont
                     section,
                     mode,
                     itemPath ?? [],
-                    runeSelections ?? [],
-                    spellPair ?? []),
+                    runeSelections ?? []),
                 ct));
         }
         catch (ArgumentException exception)

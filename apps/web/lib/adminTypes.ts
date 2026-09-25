@@ -63,44 +63,6 @@ export type AdminAnalysisMetricsResponse = {
   regions: AdminAnalysisRegionMetrics[];
 };
 
-export type AdminBuildLabGeneration = {
-  id: string;
-  status: string;
-  isActive: boolean;
-  patch: string;
-  rankScope: string;
-  datasetVersion: string;
-  modelVersion: string;
-  codeRevision: string;
-  sourceCutoffUtc: string;
-  matchCount: number;
-  actionEstimateCount: number;
-  publishableActionCount: number;
-  artifactUri: string | null;
-  validationMetricsJson: string;
-  failureReason: string | null;
-  /** Which modeler process claimed the run. Diagnostic only: liveness is a Postgres advisory lock. */
-  leaseOwner: string | null;
-  promotionHistoryJson: string;
-  createdAtUtc: string;
-  completedAtUtc: string | null;
-  promotedAtUtc: string | null;
-};
-
-/** One entry of AdminBuildLabGeneration.promotionHistoryJson. */
-export type AdminBuildLabPromotionEntry = {
-  action: string;
-  atUtc: string;
-  actor: string | null;
-  reason: string | null;
-};
-
-export type AdminBuildLabGenerationResponse = {
-  generations: AdminBuildLabGeneration[];
-  activeChampionRoleScopes: number;
-  activeMatchupScopes: number;
-};
-
 export type AdminRecurringJob = {
   id: string;
   queue: string;

@@ -17,7 +17,8 @@ public class MatchTimelineEventPayload
     public string PayloadJson { get; set; } = "{}";
 
     /// <summary>
-    /// The three scalars the modeler's cohort scan reads, lifted out of <see cref="PayloadJson"/>.
+    /// The three scalars the (now retired) Build Lab modeler's cohort scan read, lifted out of
+    /// <see cref="PayloadJson"/>.
     ///
     /// They are duplicated from the JSON on purpose. Extracting them at read time made that scan a
     /// full sequential pass over the whole 77 GB table -- Postgres cannot satisfy a jsonb expression

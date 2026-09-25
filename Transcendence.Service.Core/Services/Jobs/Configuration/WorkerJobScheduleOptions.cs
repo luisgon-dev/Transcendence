@@ -21,8 +21,8 @@ public class WorkerJobScheduleOptions
     public string RefreshProAnalyticsCron { get; set; } = "20 * * * *";
     // Independent from the champion precompute job, which may run long or fail on matchup aggregation.
     public string RefreshBuildResourceAnalyticsCron { get; set; } = "40 * * * *";
-    public string CreateBuildLabGenerationCron { get; set; } = "15 2 * * *";
-    public string PromoteBuildLabGenerationCron { get; set; } = "*/10 * * * *";
+    // Each run is bounded by Analytics:BuildLab:MaxMatchesPerRun; the job itself no-ops while Build Lab is off.
+    public string RefreshBuildLabStatsCron { get; set; } = "*/15 * * * *";
     public string ChampionAnalyticsIngestionCron { get; set; } = "*/2 * * * *";
     public string SummonerMaintenanceCron { get; set; } = "*/5 * * * *";
     public string MatchTimelineBackfillCron { get; set; } = "*/10 * * * *";
@@ -38,8 +38,7 @@ public class WorkerJobScheduleOptions
     public bool EnableRefreshChampionBuildSnapshots { get; set; } = true;
     public bool EnableRefreshProAnalytics { get; set; } = true;
     public bool EnableRefreshBuildResourceAnalytics { get; set; } = true;
-    public bool EnableCreateBuildLabGeneration { get; set; }
-    public bool EnablePromoteBuildLabGeneration { get; set; }
+    public bool EnableRefreshBuildLabStats { get; set; } = true;
     public bool EnableChampionAnalyticsIngestion { get; set; } = true;
     public bool EnableSummonerMaintenance { get; set; } = true;
     public bool EnableMatchTimelineBackfill { get; set; } = true;

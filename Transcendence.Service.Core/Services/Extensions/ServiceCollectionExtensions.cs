@@ -66,8 +66,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IIngestionThroughputTelemetry, IngestionThroughputTelemetry>();
         services.AddSingleton<LeaderboardTelemetry>();
         services.AddSingleton<PrecomputedAnalyticsTelemetry>();
-        // Its only consumers are the Build Lab jobs, which ship disabled; the worker host resolves it
-        // at startup so the series exist and read 0 instead of being absent. See Service/Program.cs.
+        // Its only consumer is the Build Lab refresh job; the worker host resolves it at startup so the
+        // series exist and read 0 instead of being absent. See Service/Program.cs.
         services.AddSingleton<BuildLabTelemetry>();
 
         // Analytics services
@@ -80,8 +80,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IBuildResourceAnalyticsService, BuildResourceAnalyticsService>();
         services.AddScoped<IBuildResourceSnapshotRefresher, BuildResourceSnapshotRefresher>();
         services.AddScoped<IBuildLabService, BuildLabService>();
-        services.AddScoped<ISavedBuildService, SavedBuildService>();
-        services.AddScoped<IBuildLabGenerationCoordinator, BuildLabGenerationCoordinator>();
+        services.AddScoped<IBuildLabStatsRefresher, BuildLabStatsRefresher>();
         services.AddScoped<IChampionSynergyService, ChampionSynergyService>();
         services.AddScoped<IPrecomputedAnalyticsRefresher, PrecomputedAnalyticsRefresher>();
         // Read-side display metadata for the static-content endpoints. Registered
@@ -138,8 +137,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<RefreshChampionMatchupsJob>();
         services.AddScoped<RefreshProAnalyticsJob>();
         services.AddScoped<RefreshBuildResourceAnalyticsJob>();
-        services.AddScoped<CreateBuildLabGenerationJob>();
-        services.AddScoped<PromoteBuildLabGenerationJob>();
+        services.AddScoped<RefreshBuildLabStatsJob>();
         services.AddScoped<LiveGamePollingJob>();
         services.AddScoped<ILiveGameProbeJob, LiveGameProbeJob>();
         services.AddScoped<RuneSelectionIntegrityBackfillJob>();

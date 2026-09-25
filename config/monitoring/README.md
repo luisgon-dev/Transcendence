@@ -82,9 +82,8 @@ Grafana-provisioned alert rules live in `grafana/provisioning/alerting/`:
 
 - `rules.yml` — web/WebAPI/worker/PostgreSQL-exporter/Redis-exporter down, PostgreSQL connection use
   above 80%, Redis rejected connections, API 5xx ratio, API p95 latency, sample-gated real-user p75
-  LCP/INP/CLS degradation, matchup-generation failures/freshness, Build Lab generation health
-  (unclaimed/wedged generations, lost training runs, staleness, dataset lag, rollback, empty or
-  collapsed publication, and evidence/calibration gate breaches), and host disk capacity.
+  LCP/INP/CLS degradation, matchup-generation failures/freshness, Build Lab stats-refresh staleness
+  and repeated errors, and host disk capacity.
 - `contactpoints.yml` — a `discord` receiver; URL from `DISCORD_ALERT_WEBHOOK_URL`.
 
 `grafana/dashboards/web-vitals.json` shows route-filtered report volume, rating mix, p75 LCP/INP, and
@@ -94,52 +93,39 @@ state; Prometheus retains previously scraped samples according to its normal ret
 `grafana/dashboards/analytics-refresh.json` shows active matchup-generation age/size, resume attempt,
 lifecycle failures/splits, and incremental source/fact throughput.
 
-`grafana/dashboards/build-lab.json` shows active-generation age, dataset lag, time-in-`Modeling` (the
-wedge detector), published estimate counts, per-status age, lifecycle events, lost training runs,
-published coverage, calibration error, effective sample size, the evidence-grade mix with its
-global-fallback share, and promotion drift, from the `Transcendence.BuildLab` meter described below.
+`grafana/dashboards/build-lab.json` shows time since the last refresh, the backlog (current and over
+time), matches counted in the last 24h, refresh runs by result, and counting throughput, from the
+`Transcendence.BuildLab` meter described below.
 
 See `docs/ARCHITECTURE.md` → *Metrics-based alerting* for the rule semantics and DB/Redis coverage.
 
 ### Build Lab metrics contract
 
-The emitter is `Transcendence.Service.Core/Services/Diagnostics/BuildLabTelemetry.cs`;
-`Transcendence.Service/Program.cs` registers the meter with `AddMeter(BuildLabTelemetry.MeterName)`
-and **resolves the singleton at startup**. That eager resolution is load-bearing: both Build Lab jobs
-ship disabled, so nothing else would construct the meter and the series would be *absent* rather than
-zero — and an absent series looks exactly like a dead worker on a dashboard. The constructor also
-seeds every `(phase, result)` pair on the lifecycle counter with 0, because a counter series does not
-exist until something increments it.
+The emitter is `Transcendence.Service.Core/Services/Diagnostics/BuildLabTelemetry.cs` (meter
+`Transcendence.BuildLab`, worker only); `Transcendence.Service/Program.cs` registers the meter with
+`AddMeter(BuildLabTelemetry.MeterName)` and **resolves the singleton at startup**. That eager
+resolution is load-bearing: the refresh job is the meter's only consumer, so nothing else would
+construct it before the first run and the series would be *absent* rather than zero — and an absent
+series looks exactly like a dead worker on a dashboard. The constructor also seeds every `result` on
+the runs counter, and the matches counter, with 0, because a counter series does not exist until
+something increments it.
 
-Build Lab ships **disabled** (`Analytics:BuildLab:Enabled=false`), and every gauge is published
-regardless and reports **0** when the feature is off or when no generation occupies the state it
-measures. That is what lets all `trn-buildlab-*` rules guard on `> 0` with `noDataState: OK`: a
-disabled feature never pages.
+Build Lab ships **disabled** (`Analytics:BuildLab:Enabled=false`); the job still runs on its schedule
+and records `result="skipped"`, and both gauges read **0** until the first successful refresh. That
+is what lets both `trn-buildlab-*` rules guard on `> 0` with `noDataState: OK`: a disabled feature
+never pages.
 
 | Metric | Type | Labels | Meaning |
 | --- | --- | --- | --- |
-| `transcendence_buildlab_generation_status_age_seconds` | gauge | `status` | Seconds since the oldest generation in that status last transitioned. `status="PendingDataset"` is the dead-modeler detector (nothing claimed the row); `status="Modeling"` is how long the current run has been going (duration, not liveness) |
-| `transcendence_buildlab_active_generation_age_seconds` | gauge | — | Seconds since the active generation was promoted |
-| `transcendence_buildlab_dataset_lag_seconds` | gauge | — | `now - SourceCutoffUtc` of the active generation |
-| `transcendence_buildlab_published_estimates` | gauge | `kind` (`action`/`path`) | Publishable rows in the active generation |
-| `transcendence_buildlab_coverage_scopes` | gauge | `scope` (`champion_role`/`matchup`) | Distinct scopes the active generation publishes at least one estimate for |
-| `transcendence_buildlab_calibration_error` | gauge | `metric` (`overall_ece`/`max_time_band_ece`) | ECE from the active generation's validation metrics; 0 means *not measured* |
-| `transcendence_buildlab_effective_sample_size` | gauge | `stat` (`minimum`/`mean`) | Effective sample size behind the publishable action estimates; the minimum tracks the gate boundary |
-| `transcendence_buildlab_estimate_grades` | gauge | `quality` (`PUBLISHABLE`/`INSUFFICIENT`/`GLOBAL_FALLBACK`) | Action estimates by evidence grade. `GLOBAL_FALLBACK` is the fallback-frequency signal; all three are always emitted so a share can be taken from their sum |
-| `transcendence_buildlab_estimate_drift` | gauge | `stat` (`mean_abs`/`max_abs`) | Absolute Adjusted WPA movement the most recent promotion introduced over keys both generations published; holds until the next promotion |
-| `transcendence_buildlab_generation_events_total` | counter | `phase` (`create`/`training`/`promote`/`rollback`), `result` (`success`/`error`/`rejected`/`skipped`/`abandoned`) | Lifecycle outcomes; `rejected` is a normal gate refusal, `error` is a fault, `abandoned` is an operator fail |
+| `transcendence_buildlab_refresh_runs_total` | counter | `result` (`success`/`error`/`skipped`) | Refresh runs; `skipped` is the feature being off or another refresh holding the lock |
+| `transcendence_buildlab_matches_counted_total` | counter | — | Matches whose decisions were added to the stats |
+| `transcendence_buildlab_last_success_age_seconds` | gauge | — | Seconds since the refresh last completed; 0 before the first run. Keeps growing between runs rather than freezing at the last written value |
+| `transcendence_buildlab_backlog_matches` | gauge | — | Eligible matches still to be counted, as of the last successful run |
 
-The OpenTelemetry instrument names are the dotted forms (`transcendence.buildlab.generation.status_age`
-etc.); the Prometheus exporter produces the `_seconds` / `_total` names above (the `{…}` units are
-annotations and add no suffix). `status` values are the `BuildLabGenerationStatus` enum names
-(`PendingDataset`, `Modeling`, `Candidate`, `Ready`, `Failed`, `Retired`) so the wedge rule's
-`status="Modeling"` selector matches.
-
-**Thresholds are derived from the pipeline's cadences, not chosen.** `CreateBuildLabGenerationCron`
-runs daily (`15 2 * * *`) and `PromoteBuildLabGenerationCron` every 10 minutes; the promote tick is
-also what reaps abandoned modeling runs and refreshes the gauges. The modeler polls every
-`BUILD_LAB_POLL_SECONDS` (300) and holds a Postgres session advisory lock for the run. So: a claim is
-healthy within ~5 min (unclaimed rule fires at 6h); a dead modeler drops its lock instantly and is
-reaped on the next promote tick, within ~10 min, so a sustained Modeling age means a slow run or a
-reaper that is not running (rule fires at 2700s); and at most one training run exists per day, so a
-single lost run over 24h is the whole signal.
+**Thresholds follow from the cadence.** `refresh-build-lab-stats` runs every 15 minutes and each run
+is bounded by `MaxMatchesPerRun`, so a healthy refresh completes several times an hour even
+mid-backfill. `trn-buildlab-refresh-stale` fires when the last success is over two hours old (held
+15m) — the job is failing or no longer scheduled, and the served numbers have silently stopped
+moving. `trn-buildlab-refresh-errors` fires on three or more `result="error"` runs in an hour. Each
+batch commits atomically with its ledger rows, so repeated errors mean no progress, never double
+counting.

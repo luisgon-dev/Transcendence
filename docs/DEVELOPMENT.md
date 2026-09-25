@@ -314,7 +314,7 @@ dependency path.
 
 Three things keep this honest, in the order you should reach for them:
 
-1. `.github/dependabot.yml` — weekly version-update PRs across npm, NuGet, pip, Actions and Docker.
+1. `.github/dependabot.yml` — weekly version-update PRs across npm, NuGet, Actions and Docker.
 2. The `audit` job in `.github/workflows/ci-web-backend.yml` — `pnpm audit --audit-level=high`.
 3. `pnpm.overrides` in the root `package.json` — the **last** resort, for chains that are frozen
    upstream.
@@ -451,16 +451,11 @@ chain, and the auth/authz middleware — things SQLite and the EF InMemory provi
   credentials minted through the app's own `IApiKeyService` / `IJwtService`;
 - analytics raw-vs-precompute equivalence on real Postgres (the SQLite equivalence gate, re-run on
   Npgsql for real GROUP BY / NULL collation / tie-break ordering), plus Build Atlas full/incremental
-  generation promotion and completed-snapshot reads;
+  generation promotion and completed-snapshot reads, and the Build Lab stats upsert/ledger SQL;
 - `List<int>` / `List<string>` ↔ Postgres `integer[]` / `text[]` array round-trips.
 
 It runs in CI via the solution-wide `dotnet test Transcendence.sln` step (GitHub `ubuntu-latest` has Docker
 preinstalled, so Testcontainers works with no extra configuration).
-
-**Python modeler tier (`analytics/modeler/tests`).** The offline Build Lab pipeline is not part of the
-.NET solution, so it has its own `modeler` CI job in `.github/workflows/ci-web-backend.yml`: it creates
-a venv on the runner's interpreter, installs `-e '.[test]'`, and runs `pytest`. Locally that is the
-same two commands from `analytics/modeler` (see "Build Lab modeling and promotion").
 
 Current `web:test` scope:
 - Utility/unit tests in `apps/web/lib/*.test.ts`
@@ -688,148 +683,46 @@ failure reason for diagnosis, but their resource/population payload and processe
 deleted immediately (and swept again after each successful promotion). Cleanup is best-effort after
 promotion so a storage-hygiene failure can never demote a successfully published generation.
 
-### Build Lab modeling and promotion
+### Build Lab stats refresh
 
-Build Lab is shadow-only by default. `Analytics:BuildLab:Enabled`,
-`Jobs:Schedule:EnableCreateBuildLabGeneration`, and
-`Jobs:Schedule:EnablePromoteBuildLabGeneration` all default to `false`. Note that Emerald+ coverage at
-timeline schema v2 cannot accrue *before* enablement — the flag is what makes ingestion capture and
-stamp v2 at all — so the flip is the start of the backfill, not the reward for it. Enable it only with
-object storage configured and disk headroom confirmed, and read "Enabling Build Lab on an existing
-corpus" below first: the flip costs a multi-day, rate-gated re-ingestion of the retained corpus.
+Build Lab is additive win/game counts per build decision, maintained by the worker in SQL (design in
+`docs/ARCHITECTURE.md` → *Build Lab*). It ships **off**: `Analytics:BuildLab:Enabled` defaults to
+`false`. Timeline schema v2 coverage cannot accrue *before* enablement — the flag is what makes
+ingestion capture and stamp v2 at all — so the flip is the start of the backfill, not the reward for
+it. Enable it only with disk headroom confirmed, and read "Enabling Build Lab on an existing corpus"
+below first: the flip costs a multi-day, rate-gated re-ingestion of the retained corpus.
 
-The offline modeler is built and published like every other app service
-(`ghcr.io/luisgon-dev/transcendence-analytics-modeler`, path-filtered on `analytics/modeler/**`) and
-runs as a **run-to-completion oneshot** behind an optional Compose profile, so it never starts with
-the default stack and is never left running between generations:
+`refresh-build-lab-stats` (`RefreshBuildLabStatsJob`, `analytics-warm` lane) counts newly eligible
+matches every 15 minutes (`Jobs:Schedule:RefreshBuildLabStatsCron`, default `*/15 * * * *`;
+`Jobs:Schedule:EnableRefreshBuildLabStats`, default `true`). It is registered regardless of the feature
+flag and no-ops while `Analytics:BuildLab:Enabled` is false. A PostgreSQL session advisory lock
+(`transcendence:build-lab-refresh`) keeps a manual trigger from overlapping the recurring run. Each
+batch commits its counts and its `BuildLabProcessedMatches` ledger rows in one transaction, so a crash
+or redeploy mid-run loses nothing and double counts nothing; the next run resumes where it stopped.
 
-```bash
-# one generation, then exit (what the systemd timer invokes on prod)
-docker compose --profile analytics-modeling run --rm analytics-modeler
-docker compose --profile analytics-modeling run --rm --build analytics-modeler   # local iteration
-```
+`Analytics:BuildLab` (`BuildLabOptions`, defaults in `config/backend.shared.json`):
 
-On prod the schedule is `scripts/ops/transcendence-modeler.timer`, not the deploy poller: a run lasts
-hours, and a poller that recreated the container mid-run destroyed the generation every time it
-deployed. Exit code `0` means a generation completed or there was nothing pending; non-zero means the
-generation failed.
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `Enabled` | `false` | Serving, the refresh, **and** the detailed timeline capture it reads |
+| `MatchBatchSize` | `500` | Matches counted per transaction |
+| `MaxMatchesPerRun` | `20000` | Per-run bound; a fresh patch backfills over several runs (~45 min of IO per patch on the HDD box) |
+| `PriorPatchesToRefresh` | `2` | Patches before the active one still topped up with late matches |
+| `PatchesToRetain` | `4` | Newest patches whose counts are kept; older stats and ledger rows are deleted |
+| `CommandTimeoutSeconds` | `600` | Command timeout for the refresh's queries |
 
-Environment variables Compose actually supplies, and the code that reads each one:
+Environment variables Compose supplies:
 
 | Variable | Consumed by |
 | --- | --- |
-| `BUILD_LAB_ENABLED` | `Analytics__BuildLab__Enabled` on the **worker** (generation/promotion, timeline extras + the effective timeline schema version) *and* the **WebAPI** (serving — without it the API answers "not enabled" even after a promotion), plus both `Jobs__Schedule__Enable{Create,Promote}BuildLabGeneration` keys — one switch, not four |
-| `BUILD_LAB_CODE_REVISION` | worker: `Analytics__BuildLab__CodeRevision` (generation provenance) |
-| `BUILD_LAB_DATABASE_URL` | modeler; Compose supplies the PostgreSQL service URL |
-| `BUILD_LAB_DEIDENTIFICATION_SALT` | modeler — **secret**, no default, must be ≥ 32 chars or the container refuses to start |
-| `BUILD_LAB_ARTIFACT_DIR` | modeler (default `/artifacts`) |
-| `BUILD_LAB_POLL_SECONDS` | modeler (default `300`, floor `30`) |
-| `BUILD_LAB_RUN_ONCE` | modeler; `true` processes one pending generation and exits |
-| `BUILD_LAB_MAX_TRAINING_ROWS` | modeler; chronological sample ceiling for the design matrix (default `250000`, floor `20000`) |
-| `BUILD_LAB_LOG_LEVEL` | modeler `LOG_LEVEL` (default `INFO`) |
-| `BUILD_LAB_S3_*` (`ENDPOINT`/`BUCKET`/`ACCESS_KEY`/`SECRET_KEY`) | modeler artifact upload |
-| `BUILD_LAB_MODELER_CPUS`, `BUILD_LAB_MODELER_MEMORY_LIMIT` | Compose container guardrails |
-| `MODELER_IMAGE` | Compose image pin for rollback (`:sha-<short>`) |
-| `TRN_FEATURE_BUILD_LAB`, `TRN_FEATURE_CHAMPION_RECOMMENDATIONS`, `TRN_FEATURE_BUILD_REFERENCE_LINKS` | web; independently expose each consumer surface after promotion |
+| `BUILD_LAB_ENABLED` | `Analytics__BuildLab__Enabled` on the **worker** (the refresh, timeline extras + the effective timeline schema version) *and* the **WebAPI** (serving — without it the API answers "not enabled" even while the worker counts) — one switch |
+| `TRN_FEATURE_BUILD_LAB`, `TRN_FEATURE_CHAMPION_RECOMMENDATIONS`, `TRN_FEATURE_BUILD_REFERENCE_LINKS` | web; independently expose each consumer surface once the active patch has been counted |
 
-`BUILD_LAB_LEASE_OWNER` is read by the modeler but deliberately **not** set in Compose: it defaults to
-`hostname:pid`, so two modeler instances can never claim the same lease identity. Set it only for a
-one-off manual run you want to recognise in the generation rows.
+Everything else under `Analytics:BuildLab` is config-file only.
 
-Everything else under `Analytics:BuildLab` (the publication thresholds below, `DatasetVersion`,
-`PriorPatchesToBorrow`, `RetainedGenerations`, `RetiredGenerationGraceMinutes`) is config-file only —
-set it in `config/backend.shared.json`, not through an env var.
-
-#### Adaptive patch borrowing
-
-`PriorPatchesToBorrow` is a **ceiling**, not a schedule. Patches ship fortnightly, so a fixed per-patch
-weight is the wrong instrument: it discards good data from the champions a patch never touched and
-keeps data from the ones it rebalanced. Recency sets the ceiling; each borrowed row then keeps only the
-fraction of it that its cell still deserves:
-
-- **Static change → 0.** A rebalance to the champion, the item, or a rune in the action hard-excludes
-  the borrowed row. Detected by diffing per-patch static data: `ItemVersions` and `RuneVersions` from
-  Community Dragon, and `ChampionVersions.BalanceHash` — a hash of a *numeric-only* Data Dragon
-  projection (base stats plus each spell's cooldown/cost/range/effect). Measured against live data that
-  projection flags 0 of 173 champions across a cosmetic-only patch, where a whole-record diff flags 10
-  on `skins` alone, and 11 of 173 across a real balance patch.
-- **Otherwise, a commensurability discount.** The current-vs-prior disagreement for that exact cell is
-  scored as a z-score and decayed, so an agreeing cell borrows at nearly full strength, a thin cell is
-  not thrown away for noise, and a cell that drifted for reasons static data cannot see (indirect
-  interactions, system changes) decays to zero on its own.
-
-Both halves matter because they are complementary *in time*: the drift test needs current-patch data to
-have power and is weakest in the first days of a patch, which is exactly when static detection is
-instant. Static detection in turn cannot see indirect or systemic changes, which the drift test can.
-
-Known and accepted over-flag: Riot is migrating spells off `effect` onto dataValues, so an effect array
-can drop to zeros with no balance change (Warwick did this in 16.15). That costs one champion's
-borrowing for a patch. Excluding `effect` from the hash would instead miss four real changes in the same
-patch and borrow across them, so the projection keeps it — a false positive costs coverage, a false
-negative biases an estimate.
-
-Champion `Roles` from the same table feed archetype pooling: an item's effect on a burst mage says more
-about the same item on another burst mage than the role average does, so a sparse champion shrinks
-toward champions that play like it. A champion with no published roles pools at the role level exactly
-as before.
-
-`BUILD_LAB_DEIDENTIFICATION_SALT` is a secret and ships as an **empty** placeholder in `.env.example`;
-generate a real one (`openssl rand -hex 32`) into the deployed `.env` before enabling Build Lab and
-never commit it. It keys the HMAC surrogate match/participant ids in the Parquet export, so a guessable
-salt makes the export re-identifiable, and rotating it re-pseudonymizes every future export (old
-exports keep their old surrogates and cannot be joined to new ones). Compose passes it with `:-` rather
-than the required-variable `:?` form on purpose: Compose interpolates the whole file *before* it filters
-by profile, so `:?` would break `docker compose up` for the default stack on any host without a salt.
-The modeler enforces the requirement itself and exits with a clear message.
-
-The S3 settings target any S3-compatible object store. If they are absent, artifacts stay in the
-`build_lab_artifacts` volume and the manifest URI is `file://...`. Training exports contain
-generation-scoped surrogate match/participant identifiers and never contain Riot IDs or PUUIDs.
-
-The modeler holds a **PostgreSQL session advisory lock** (`build-lab-generation-modeling`) for the
-whole run, and both Build Lab jobs run the reaper first. The reaper decides liveness by trying to take
-that same lock: if it succeeds, no modeler session exists, so every `Modeling` row is failed with the
-owner named in `FailureReason`. A dead modeler is therefore reclaimed on the next
-`promote-build-lab-generation` tick — within ~10 minutes at the default cron — with nothing to
-configure.
-
-There is deliberately no heartbeat, expiry column, or timeout. The previous design renewed a deadline
-from a background thread and reaped **six consecutive healthy generations**, because loading the frozen
-dataset assembles millions of rows through a raw DBAPI cursor and holds the GIL for minutes, so the
-renewal thread could not be scheduled. Liveness now belongs to the TCP session, which cannot be starved.
-This is also the pattern `RefreshBuildResourceAnalyticsJob` and `MatchTimelineIngestionJob` already use.
-
-Reaping matters because the coordinator refuses to create a second in-flight generation for a patch, so
-a wedged row blocks the pipeline. `POST /api/admin/analytics/build-lab/generations/{id}/fail` is the
-manual equivalent. A `PendingDataset` row is **not** reaped — nothing holds it — so a modeler that never
-starts leaves it queued forever, silently: watch the `trn-buildlab-unclaimed-generation` alert
-(`config/monitoring/`), not the wedge alert, for that failure.
-
-Run the modeler tests from `analytics/modeler` after installing its test extra (CI runs the same two
-commands in the `modeler` job):
-
-```bash
-python -m pip install -e '.[test]'
-python -m pytest
-```
-
-Publication defaults under `Analytics:BuildLab` are 1,000 observed actions, effective sample size
-500, confidence width at most 0.03, overlap at least 0.90, weighted balance at most 0.10, overall ECE
-at most 0.015, and time-band ECE at most 0.025. These are configuration for stricter operation and
-observability; `build-lab-v1` rejects any lowering. Introduce a new `DatasetVersion` and complete a
-fresh shadow validation to change methodology.
-
-Promotion is the gate that makes those numbers meaningful. `PromoteCandidateAsync` refuses a
-candidate whose structural win model fails overall/time-band ECE, fails to beat the descriptive
-baseline on Brier score and log loss, or fails the held-out-patch or leakage check; the generation is
-marked `Failed` and can never become active. So no served Adjusted WPA figure originates from a
-generation whose win model missed calibration.
-
-`ArtifactSha256` is the SHA-256 of `ArtifactManifestJson`, so the promoter's check proves the stored
-manifest is internally consistent with the checksum the modeler recorded in the same transaction. It
-is **not** a content hash of the Parquet/joblib bundle at `ArtifactUri` and does not detect a
-corrupted or swapped artifact in object storage — verify the bundle out-of-band before trusting a
-re-hydrated artifact.
+Tests: `BuildLabDecisionsTests` and `BuildLabEstimatorTests` (`tests/Transcendence.Service.Core.Tests`)
+cover the pure replay and estimator; `BuildLabRealPostgresTests` (`tests/Transcendence.IntegrationTests`)
+runs the real upsert/ledger SQL end to end on Postgres.
 
 #### Deploying timeline schema v2
 
@@ -848,8 +741,8 @@ bought by the flag flip, not by the deploy — see "Enabling Build Lab on an exi
   `ACCESS EXCLUSIVE` lock, which queues behind any long-running reader — do not deploy during an
   analytics sweep or an `archive-old-patches.sh` run.
 - **Storage sizing.** With `Analytics:BuildLab:Enabled=false` the frame cadence stays at
-  `Jobs:TimelineIngestion:FrameIntervalMinutes` (default 2) and the three modeling-only tables stay
-  empty. **Turning Build Lab on drops the cadence to one minute, which roughly doubles
+  `Jobs:TimelineIngestion:FrameIntervalMinutes` (default 2) and the three Build Lab-only capture
+  tables stay empty. **Turning Build Lab on drops the cadence to one minute, which roughly doubles
   `MatchParticipantTimelineSnapshots`** (~22.5M → ~45M rows for the retained corpus) and starts writing
   `MatchTimelineEventPayloads` — one `jsonb` row per *persisted* event (the item lifecycle plus
   `CHAMPION_KILL`/`BUILDING_KILL`/`ELITE_MONSTER_KILL`, with null union members dropped; every other
@@ -859,31 +752,26 @@ bought by the flag flip, not by the deploy — see "Enabling Build Lab on an exi
 - **The flag gates the payload *and* the stamp, together.** The one-minute cadence, the item lifecycle
   events, the raw event payloads, the rank contexts, **and** the version the ingest stamps are all
   derived from `Analytics:BuildLab:Enabled` on the same run. So a v2 row is proof the extras are
-  present, a v1 row is proof they are not, and the generation cohort filter (which requires
-  `SchemaVersion >= 2` *and* an Emerald+ rank context per participant) can trust the stamp. A flag-off
-  deployment can never manufacture a v2 row that silently lacks the payload.
+  present, a v1 row is proof they are not, and the stats refresh (which counts only timelines at
+  `SchemaVersion >= 2`) can trust the stamp. A flag-off deployment can never manufacture a v2 row that
+  silently lacks the payload.
 
 #### Enabling Build Lab on an existing corpus
 
 Enabling is a **config flip**, and the cost is a one-time re-ingestion of every retained timeline
 against a low-rate Riot key. Do it in this order:
 
-1. Confirm free disk against the doubled snapshot table plus the three modeling tables *before*
+1. Confirm free disk against the doubled snapshot table plus the three capture tables *before*
    flipping (see **Storage sizing** above), and confirm `KEEP_PATCHES` retention is actually running.
    Retention decides how many patches get re-fetched.
-2. Set `BUILD_LAB_DEIDENTIFICATION_SALT` in the deployed `.env` (`openssl rand -hex 32`).
-3. Flip `BUILD_LAB_ENABLED=true` and recreate the worker and WebAPI. The ingestion target rises to v2,
+2. Flip `BUILD_LAB_ENABLED=true` and recreate the worker and WebAPI. The ingestion target rises to v2,
    so **every `Success` timeline in the retained corpus becomes stale and is re-fetched once**, at the
    job's normal rate-gated pace: a multi-day background sweep competing with new-match ingestion for the
-   same Riot budget. Nothing else is required to start it — there is no `const` to bump.
-4. Install and enable the modeler timer (`cp scripts/ops/transcendence-modeler.{service,timer}
-   /etc/systemd/system/ && systemctl enable --now transcendence-modeler.timer`). Do not defer this: the
-   same flag enables the create job, and once the first matches reach v2 a `PendingDataset` generation
-   appears that only the modeler can claim — `trn-buildlab-unclaimed-generation` pages six hours later
-   if nothing is running. Early generations will fail their evidence gates while coverage is thin,
-   which is the intended behaviour.
-5. Leave `TRN_FEATURE_BUILD_LAB` (and the two sibling web flags) `false` until a generation has actually
-   promoted. Backend enablement and public exposure are separate switches on purpose.
+   same Riot budget. Nothing else is required to start it — there is no `const` to bump. The stats
+   refresh starts counting as soon as the first matches reach v2; there is nothing else to install.
+3. Leave `TRN_FEATURE_BUILD_LAB` (and the two sibling web flags) `false` until the refresh has counted
+   the active patch (`transcendence_buildlab_backlog_matches` near 0 and a useful `countedMatches` in
+   the response's `coverage`). Backend enablement and public exposure are separate switches on purpose.
 
 **Turning it back off** stops the payload writes and drops the target to v1 immediately; existing v2
 rows are left alone (they are `>= 1`, so never re-fetched) and stay usable if the flag is flipped on

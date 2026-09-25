@@ -52,8 +52,8 @@ public static class TimelineBuildParser
     public const string BuildingKillType = "BUILDING_KILL";
     public const string EliteMonsterKillType = "ELITE_MONSTER_KILL";
 
-    // The raw jsonb payload table is written for exactly two consumers: the modeler's pre-decision
-    // state query (the three kill/objective types it filters on) and lossless item-lifecycle replay.
+    // The raw jsonb payload table keeps the three kill/objective types (in-game state for a future model
+    // to condition on; the Build Lab modeler that first read them is retired) and the item lifecycle.
     // Every other Match-V5 event type is ~1 KB of jsonb nobody reads, so it is never persisted.
     private static readonly HashSet<string> PersistedPayloadEventTypes =
     [

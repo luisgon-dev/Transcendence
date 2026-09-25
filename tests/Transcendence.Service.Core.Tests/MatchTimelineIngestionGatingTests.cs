@@ -264,7 +264,7 @@ public class MatchTimelineIngestionGatingTests
             Mock.Of<IBackgroundJobClient>(),
             rateGate.Object,
             Options.Create(new TimelineIngestionOptions { MinuteMark = 15, FrameIntervalMinutes = 2 }),
-            Options.Create(new BuildLabModelingOptions { Enabled = buildLabEnabled }),
+            Options.Create(new BuildLabOptions { Enabled = buildLabEnabled }),
             NullLogger<MatchTimelineIngestionJob>.Instance);
     }
 

@@ -6,14 +6,13 @@ import {
   buildLabQuery,
   buildLabRegionOptions,
   buildLabRequestQuery,
-  buildLabSelectionGroups,
   clearBuildLabSelection,
-  itemLockGroups,
+  formatLift,
+  hasBuildLabSelection,
+  liftToneClass,
   normalizeBuildLabState,
-  savedRuneSelections,
-  selectBuildLabCandidate,
+  selectBuildLabOption,
   undoLastBuildLabSelection,
-  wpaToneClass,
   type BuildLabState
 } from "@/lib/buildLab";
 
@@ -22,13 +21,24 @@ const completeState: BuildLabState = {
   opponentChampionId: 64,
   patch: "26.14",
   region: "NA1",
-  section: "runes",
+  section: "items",
   mode: "impact",
-  itemPath: [1101, 2003, 3006, 6672],
-  itemLocks: [2, 1, 1],
-  runeSelections: [8005, 9111, 9104, 8014],
-  runePage: [],
+  itemPath: [6672, 3031],
+  keystone: 8005,
+  starter: [1101, 2003],
+  boots: 3006,
+  runePage: [8005, 9111, 9104],
   spellPair: [4, 11]
+};
+
+const emptyState: BuildLabState = {
+  role: "MIDDLE",
+  section: "items",
+  mode: "supported",
+  itemPath: [],
+  starter: [],
+  runePage: [],
+  spellPair: []
 };
 
 function reparse(query: URLSearchParams) {
@@ -43,258 +53,125 @@ function reparse(query: URLSearchParams) {
 }
 
 describe("Build Lab URL state", () => {
-  it("round-trips the complete shareable context, including composite lock granularity", () => {
-    const state = reparse(buildLabQuery(completeState));
-
-    expect(state).toEqual(completeState);
-    expect(itemLockGroups(state)).toEqual([[1101, 2003], [3006], [6672]]);
+  it("round-trips the complete shareable context", () => {
+    expect(reparse(buildLabQuery(completeState))).toEqual(completeState);
     expect(buildLabPermalink(64, completeState)).toContain("/lol/builds/64?");
   });
 
-  it("round-trips a terminal rune page separately from a staged rune prefix", () => {
-    const state = reparse(
-      buildLabQuery({ ...completeState, runeSelections: [], runePage: [8005, 9111, 9104] })
-    );
+  it("sends only the choices that condition a decision to the backend", () => {
+    const query = buildLabRequestQuery(completeState);
 
-    expect(state.runePage).toEqual([8005, 9111, 9104]);
-    expect(state.runeSelections).toEqual([]);
-    expect(savedRuneSelections(state)).toEqual([8005, 9111, 9104]);
+    expect(query.getAll("itemPath")).toEqual(["6672", "3031"]);
+    expect(query.getAll("runeSelections")).toEqual(["8005"]);
+    for (const terminal of ["starter", "boots", "runePage", "spellPair", "keystone"]) {
+      expect(query.has(terminal)).toBe(false);
+    }
   });
 
-  it("never sends a terminal selection to the backend as a conditioning prefix", () => {
-    const query = buildLabRequestQuery({
-      ...completeState,
-      section: "spells",
-      runeSelections: [],
-      runePage: [8005, 9111],
-      spellPair: [4, 11]
+  it("drops the default region from links", () => {
+    expect(buildLabQuery({ ...emptyState, region: "ALL" }).has("region")).toBe(false);
+  });
+
+  it("refuses an overlong item path from a link and says so", () => {
+    const { state, issues } = normalizeBuildLabState({
+      itemPath: ["1", "2", "3", "4", "5", "6", "7"]
     });
 
-    expect(query.getAll("spellPair")).toEqual([]);
-    expect(query.getAll("runeSelections")).toEqual([]);
-    expect(query.has("runePage")).toBe(false);
-    expect(query.has("itemLocks")).toBe(false);
-    expect(query.getAll("itemPath")).toEqual(["1101", "2003", "3006", "6672"]);
+    expect(state.itemPath).toHaveLength(BUILD_LAB_MAX_ITEM_PATH);
+    expect(issues).toHaveLength(1);
   });
 
-  it("uses safe defaults and drops invalid identifiers", () => {
+  it("degrades hostile tokens to defaults instead of forwarding them", () => {
     const { state } = normalizeBuildLabState({
-      role: "carry",
-      section: "unknown",
-      mode: "causal",
-      opponentChampionId: "-1",
-      itemPath: ["6672", "oops", "0", "3006"],
-      spellPair: "4,not-an-id,12"
+      role: "ADC",
+      section: "skins",
+      mode: "vibes",
+      patch: "16.19; DROP TABLE",
+      region: "x".repeat(40),
+      opponentChampionId: "-3"
     });
 
-    expect(state).toMatchObject({
-      role: "MIDDLE",
-      section: "items",
-      mode: "supported",
-      itemPath: [6672, 3006],
-      spellPair: [4, 12]
-    });
-    expect(state.opponentChampionId).toBeUndefined();
-  });
-
-  it("degrades hostile patch, region, and repeated scalar params instead of forwarding them", () => {
-    const { state } = normalizeBuildLabState({
-      role: ["MIDDLE", "TOP"],
-      patch: "26.14'; DROP TABLE",
-      region: "na1<script>",
-      opponentChampionId: ["7", "8"]
-    });
-
-    expect(state.role).toBe("MIDDLE");
+    expect(state).toMatchObject({ role: "MIDDLE", section: "items", mode: "supported" });
     expect(state.patch).toBeUndefined();
     expect(state.region).toBeUndefined();
     expect(state.opponentChampionId).toBeUndefined();
   });
-
-  it("rejects an over-long patch token the analytics columns could not store", () => {
-    const { state } = normalizeBuildLabState({ role: "TOP", patch: "1".repeat(33) });
-
-    expect(state.patch).toBeUndefined();
-  });
-
-  it("reports, rather than silently trims, a link carrying more selections than the model accepts", () => {
-    const overflowing = Array.from({ length: BUILD_LAB_MAX_ITEM_PATH + 3 }, (_, index) =>
-      String(1000 + index)
-    );
-    const { state, issues } = normalizeBuildLabState({ role: "TOP", itemPath: overflowing });
-
-    expect(state.itemPath).toHaveLength(BUILD_LAB_MAX_ITEM_PATH);
-    expect(issues).toHaveLength(1);
-    expect(issues[0]).toContain(String(BUILD_LAB_MAX_ITEM_PATH));
-  });
-
-  it("falls back to single-id groups when the lock map does not describe the path", () => {
-    const { state } = normalizeBuildLabState({
-      role: "TOP",
-      itemPath: ["1101", "2003", "3006"],
-      itemLocks: ["9"]
-    });
-
-    expect(itemLockGroups(state)).toEqual([[1101], [2003], [3006]]);
-  });
-
-  it("does not encode the pooled global region as an unnecessary override", () => {
-    const query = buildLabQuery({ ...completeState, region: "GLOBAL" });
-
-    expect(query.has("region")).toBe(false);
-  });
-
-  it("round-trips every control through the permalink a user would actually paste", () => {
-    const url = new URL(buildLabPermalink(103, completeState), "https://transcend.kronic.one");
-
-    expect(url.pathname).toBe("/lol/builds/103");
-    expect(url.searchParams.get("role")).toBe("JUNGLE");
-    expect(url.searchParams.get("opponentChampionId")).toBe("64");
-    expect(url.searchParams.get("patch")).toBe("26.14");
-    expect(url.searchParams.get("region")).toBe("NA1");
-    expect(url.searchParams.get("section")).toBe("runes");
-    expect(url.searchParams.get("mode")).toBe("impact");
-    expect(reparse(url.searchParams)).toEqual(completeState);
-  });
-
-  it("preserves item-path order, because the path is a prefix and not a set", () => {
-    const ordered: BuildLabState = { ...completeState, itemPath: [3006, 1101, 3006, 6672] };
-    const query = buildLabQuery(ordered);
-
-    expect(query.getAll("itemPath")).toEqual(["3006", "1101", "3006", "6672"]);
-    // A repeated component and a descending id order both survive: sorting or de-duplicating
-    // would hash to a prefix the modeler never wrote.
-    expect(reparse(query).itemPath).toEqual([3006, 1101, 3006, 6672]);
-  });
-
-  it("reads a comma-packed and a repeated item param into one ordered path", () => {
-    const { state } = normalizeBuildLabState({
-      role: "TOP",
-      itemPath: ["1101,2003", "3006", "6672"]
-    });
-
-    expect(state.itemPath).toEqual([1101, 2003, 3006, 6672]);
-  });
-
-  it("keeps a hostile selection payload from being read as identifiers", () => {
-    const { state } = normalizeBuildLabState({
-      role: "TOP",
-      itemPath: ["3006<script>", "-3006", "0", "NaN", " 6672 ", "3006"],
-      runeSelections: "8005'); DROP TABLE,9111",
-      spellPair: ["../../etc/passwd"]
-    });
-
-    expect(state.itemPath).toEqual([6672, 3006]);
-    expect(state.runeSelections).toEqual([9111]);
-    expect(state.spellPair).toEqual([]);
-  });
-
-  it("survives an absurdly long link without throwing", () => {
-    const { state, issues } = normalizeBuildLabState({
-      role: "TOP",
-      itemPath: Array.from({ length: 5_000 }, (_, index) => String(1000 + index)),
-      runeSelections: Array.from({ length: 5_000 }, () => "8005"),
-      spellPair: Array.from({ length: 5_000 }, () => "4")
-    });
-
-    expect(state.itemPath).toHaveLength(BUILD_LAB_MAX_ITEM_PATH);
-    expect(state.spellPair).toEqual([4, 4]);
-    expect(issues).toHaveLength(3);
-  });
 });
 
 describe("Build Lab selection", () => {
-  const itemsState: BuildLabState = {
-    role: "MIDDLE",
-    section: "items",
-    mode: "supported",
-    itemPath: [],
-    itemLocks: [],
-    runeSelections: [],
-    runePage: [],
-    spellPair: []
-  };
+  it("locks a legendary onto the end of the path", () => {
+    const { state } = selectBuildLabOption({ ...emptyState, itemPath: [6672] }, "ITEM", 2, [3031]);
 
-  it("undoes a whole composite lock so the remaining prefix is one the model hashed", () => {
-    const starter = selectBuildLabCandidate(itemsState, "STARTER", [1055, 2003]);
-    const boots = selectBuildLabCandidate(starter.state, "BOOTS", [3006]);
-
-    expect(boots.state.itemPath).toEqual([1055, 2003, 3006]);
-    expect(undoLastBuildLabSelection(boots.state).itemPath).toEqual([1055, 2003]);
-    // The starter set leaves together: popping one id would strand a prefix with no stored hash.
-    expect(undoLastBuildLabSelection(undoLastBuildLabSelection(boots.state)).itemPath).toEqual([]);
+    expect(state.itemPath).toEqual([6672, 3031]);
   });
 
-  it("refuses a selection that would overflow the item path instead of discarding ids", () => {
-    const full: BuildLabState = {
-      ...itemsState,
-      itemPath: Array.from({ length: BUILD_LAB_MAX_ITEM_PATH - 1 }, (_, index) => 1000 + index)
-    };
-    const result = selectBuildLabCandidate(full, "ITEM", [6672, 3153]);
+  it("refuses a lock past the deepest followed item without discarding anything", () => {
+    const full = { ...emptyState, itemPath: [1, 2, 3, 4, 5] };
+    const result = selectBuildLabOption(full, "ITEM", 6, [6]);
 
-    expect(result.error).toContain(String(BUILD_LAB_MAX_ITEM_PATH));
-    expect(result.state.itemPath).toEqual(full.itemPath);
+    expect(result.error).toBeTruthy();
+    expect(result.state).toBe(full);
   });
 
-  it("accepts a selection that exactly fills the path and refuses the one after it", () => {
-    expect(BUILD_LAB_MAX_ITEM_PATH).toBe(12);
-    const nearlyFull: BuildLabState = {
-      ...itemsState,
-      itemPath: Array.from({ length: BUILD_LAB_MAX_ITEM_PATH - 2 }, (_, index) => 1000 + index)
-    };
+  it("records terminal picks without touching the conditioning path", () => {
+    let state = selectBuildLabOption(emptyState, "STARTER", 0, [1055, 2003]).state;
+    state = selectBuildLabOption(state, "BOOTS", 1, [3006]).state;
+    state = selectBuildLabOption(state, "SPELLS", 0, [4, 14]).state;
 
-    const filled = selectBuildLabCandidate(nearlyFull, "STARTER", [1055, 2003]);
-    expect(filled.error).toBeUndefined();
-    expect(filled.state.itemPath).toHaveLength(BUILD_LAB_MAX_ITEM_PATH);
-
-    const refused = selectBuildLabCandidate(filled.state, "ITEM", [3006]);
-    // Refused whole, not tail-trimmed: the previous selection is returned untouched.
-    expect(refused.state).toBe(filled.state);
-    expect(refused.error).toContain(String(BUILD_LAB_MAX_ITEM_PATH));
+    expect(state).toMatchObject({ starter: [1055, 2003], boots: 3006, spellPair: [4, 14], itemPath: [] });
   });
 
-  it("records a terminal rune page as a complete selection and clears the staged prefix", () => {
-    const staged = selectBuildLabCandidate(
-      { ...itemsState, section: "runes" },
-      "RUNE",
-      [8005]
-    ).state;
-    const page = selectBuildLabCandidate(staged, "RUNE_PAGE", [8005, 9111, 9104]).state;
+  it("conditions runes on the keystone only", () => {
+    const keystone = selectBuildLabOption({ ...emptyState, section: "runes" }, "RUNE", 1, [8112]).state;
+    const laterSlot = selectBuildLabOption(keystone, "RUNE", 3, [8143]).state;
+    const page = selectBuildLabOption(emptyState, "RUNE_PAGE", 0, [8010, 9111, 9104]).state;
 
-    expect(page.runeSelections).toEqual([]);
-    expect(page.runePage).toEqual([8005, 9111, 9104]);
-    expect(buildLabSelectionGroups(page)).toEqual([[8005, 9111, 9104]]);
-    expect(undoLastBuildLabSelection(page).runePage).toEqual([]);
+    expect(keystone.keystone).toBe(8112);
+    expect(laterSlot).toBe(keystone);
+    expect(page).toMatchObject({ runePage: [8010, 9111, 9104], keystone: 8010 });
   });
 
-  it("replaces the spell pair rather than appending to it", () => {
-    const first = selectBuildLabCandidate({ ...itemsState, section: "spells" }, "SPELL", [4, 11]);
-    const second = selectBuildLabCandidate(first.state, "SPELL", [4, 14]);
+  it("undo and clear act on the current section only", () => {
+    const items = { ...completeState, section: "items" as const };
 
-    expect(second.state.spellPair).toEqual([4, 14]);
-    expect(clearBuildLabSelection(second.state).spellPair).toEqual([]);
+    expect(undoLastBuildLabSelection(items).itemPath).toEqual([6672]);
+    expect(clearBuildLabSelection(items)).toMatchObject({
+      itemPath: [],
+      starter: [],
+      boots: undefined,
+      runePage: completeState.runePage,
+      spellPair: completeState.spellPair
+    });
+    expect(clearBuildLabSelection({ ...completeState, section: "runes" })).toMatchObject({
+      keystone: undefined,
+      runePage: [],
+      itemPath: completeState.itemPath
+    });
   });
 
-  it("clears only the section being edited", () => {
-    const cleared = clearBuildLabSelection({ ...completeState, section: "items" });
-
-    expect(cleared.itemPath).toEqual([]);
-    expect(cleared.runeSelections).toEqual(completeState.runeSelections);
-    expect(cleared.spellPair).toEqual(completeState.spellPair);
+  it("knows whether the section has anything to undo", () => {
+    expect(hasBuildLabSelection(emptyState)).toBe(false);
+    expect(hasBuildLabSelection({ ...emptyState, boots: 3006 })).toBe(true);
+    expect(hasBuildLabSelection({ ...emptyState, section: "spells" })).toBe(false);
   });
 });
 
-describe("Build Lab presentation", () => {
-  it("drives region options from the generation's own included regions", () => {
-    const options = buildLabRegionOptions(["NA1", "KR", "GLOBAL"], "EUW1");
-
-    expect(options.map((option) => option.value)).toEqual(["GLOBAL", "NA1", "KR", "EUW1"]);
-    expect(options[0].label).toBe("Global baseline");
+describe("Build Lab formatting", () => {
+  it("offers the counted regions after the all-regions default", () => {
+    expect(buildLabRegionOptions(["NA1", "KR"], "EUW1").map((option) => option.value)).toEqual([
+      "ALL",
+      "NA1",
+      "KR",
+      "EUW1"
+    ]);
   });
 
-  it("maps the sign of an estimate to the matching data semantics", () => {
-    expect(wpaToneClass(0.012)).toBe("text-success");
-    expect(wpaToneClass(-0.012)).toBe("text-danger");
-    expect(wpaToneClass(null)).toBe("text-fg");
+  it("colours lift by sign, except when the sample is too thin to mean it", () => {
+    expect(liftToneClass(0.02)).toBe("text-success");
+    expect(liftToneClass(-0.02)).toBe("text-danger");
+    expect(liftToneClass(0.002)).toBe("text-fg");
+    expect(liftToneClass(0.05, true)).toBe("text-fg");
+    expect(formatLift(0.0123)).toBe("+1.2 pp");
+    expect(formatLift(-0.004)).toBe("-0.4 pp");
   });
 });

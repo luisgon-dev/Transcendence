@@ -155,6 +155,35 @@ public sealed class BuildLabRealPostgresTests(PostgresIntegrationFixture fixture
         malignance.AdjustedWinRate.Should().BeApproximately(0.75, 1e-9);
     }
 
+    [Fact]
+    public async Task Migrations_PinTheSourceTablesMatchCardinality_SoTheBatchReadUsesTheIndex()
+    {
+        // A sampled ANALYZE badly underestimates distinct MatchIds on these clustered tables, which on
+        // prod turned every 500-match batch read into a 21 GB sequential scan. The pin is the fix.
+        await using var db = NewDb();
+        var attributeOptions = await db.Database
+            .SqlQueryRaw<string>(
+                """
+                SELECT c.relname || '.' || array_to_string(a.attoptions, ',') AS "Value"
+                FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid
+                WHERE c.relname IN ('MatchParticipantItemEvents', 'MatchParticipantTimelineSnapshots')
+                  AND a.attname = 'MatchId'
+                """)
+            .ToListAsync();
+        attributeOptions.Should().BeEquivalentTo(
+            "MatchParticipantItemEvents.n_distinct=-0.0023",
+            "MatchParticipantTimelineSnapshots.n_distinct=-0.0037");
+
+        var tableOptions = await db.Database
+            .SqlQueryRaw<string>(
+                """
+                SELECT array_to_string(reloptions, ',') AS "Value" FROM pg_class
+                WHERE relname = 'MatchParticipantItemEvents'
+                """)
+            .SingleAsync();
+        tableOptions.Should().Contain("autovacuum_analyze_scale_factor=0.005");
+    }
+
     private async Task<BuildLabRefreshResult> RefreshAsync()
     {
         await using var db = NewDb();

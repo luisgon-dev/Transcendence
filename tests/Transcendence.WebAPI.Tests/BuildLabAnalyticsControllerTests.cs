@@ -27,14 +27,13 @@ public sealed class BuildLabAnalyticsControllerTests
                     query.Section == "items" &&
                     query.Mode == "supported" &&
                     query.ItemPath.Count == 0 &&
-                    query.RuneSelections.Count == 0 &&
-                    query.SpellPair.Count == 0),
+                    query.RuneSelections.Count == 0),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(response);
         var controller = BuildController(service.Object);
 
         var result = await controller.Get(
-            103, "MIDDLE", 64, "16.14", "KR", "items", "supported", null, null, null, CancellationToken.None);
+            103, "MIDDLE", 64, "16.14", "KR", "items", "supported", null, null, CancellationToken.None);
 
         var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
         ok.Value.Should().BeSameAs(response);
@@ -50,8 +49,7 @@ public sealed class BuildLabAnalyticsControllerTests
         var controller = BuildController(service.Object);
 
         await controller.Get(
-            103, "MIDDLE", null, null, null, "runes", "raw", [3006, 3153], [8010], [4, 14],
-            CancellationToken.None);
+            103, "MIDDLE", null, null, null, "runes", "raw", [3006, 3153], [8010], CancellationToken.None);
 
         service.Verify(
             x => x.GetAsync(
@@ -59,8 +57,7 @@ public sealed class BuildLabAnalyticsControllerTests
                     query.Section == "runes" &&
                     query.Mode == "raw" &&
                     query.ItemPath.SequenceEqual(new[] { 3006, 3153 }) &&
-                    query.RuneSelections.SequenceEqual(new[] { 8010 }) &&
-                    query.SpellPair.SequenceEqual(new[] { 4, 14 })),
+                    query.RuneSelections.SequenceEqual(new[] { 8010 })),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -72,7 +69,7 @@ public sealed class BuildLabAnalyticsControllerTests
             new ArgumentException("Unsupported section 'runez'.", "query")));
 
         var result = await controller.Get(
-            103, "MIDDLE", null, null, null, "runez", "supported", null, null, null, CancellationToken.None);
+            103, "MIDDLE", null, null, null, "runez", "supported", null, null, CancellationToken.None);
 
         var badRequest = result.Result.Should().BeOfType<BadRequestObjectResult>().Subject;
         badRequest.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
@@ -87,7 +84,7 @@ public sealed class BuildLabAnalyticsControllerTests
             new ArgumentException("Unsupported section 'runez'.", "query")));
 
         var result = await controller.Get(
-            103, "MIDDLE", null, null, null, "runez", "supported", null, null, null, CancellationToken.None);
+            103, "MIDDLE", null, null, null, "runez", "supported", null, null, CancellationToken.None);
 
         var problem = ProblemFrom(result);
         problem.Detail.Should().Be("Unsupported section 'runez'.");
@@ -101,7 +98,7 @@ public sealed class BuildLabAnalyticsControllerTests
         var controller = BuildController(ThrowingService(new ArgumentException("Role is required.")));
 
         var result = await controller.Get(
-            103, "", null, null, null, "items", "supported", null, null, null, CancellationToken.None);
+            103, "", null, null, null, "items", "supported", null, null, CancellationToken.None);
 
         ProblemFrom(result).Detail.Should().Be("Role is required.");
     }
@@ -113,7 +110,7 @@ public sealed class BuildLabAnalyticsControllerTests
             new ArgumentOutOfRangeException("query", "Champion id must be positive.")));
 
         var result = await controller.Get(
-            -1, "MIDDLE", null, null, null, "items", "supported", null, null, null, CancellationToken.None);
+            -1, "MIDDLE", null, null, null, "items", "supported", null, null, CancellationToken.None);
 
         var problem = ProblemFrom(result);
         problem.Detail.Should().Be("Champion id must be positive.");
@@ -127,7 +124,7 @@ public sealed class BuildLabAnalyticsControllerTests
             new ArgumentException("Unsupported section 'runez'.", "query")));
 
         var result = await controller.Get(
-            103, "MIDDLE", null, null, null, "runez", "supported", null, null, null, CancellationToken.None);
+            103, "MIDDLE", null, null, null, "runez", "supported", null, null, CancellationToken.None);
         var response = await ActionResultExecution.ExecuteAsync(result.Result!);
 
         response.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
@@ -171,11 +168,9 @@ public sealed class BuildLabAnalyticsControllerTests
     private static BuildLabResponse BuildResponse() =>
         new(
             Available: true,
-            Context: new BuildLabContextDto(103, "MIDDLE", null, "16.14", "16.14", "KR", "KR", "items", "supported"),
-            Provenance: new BuildLabProvenanceDto(
-                Guid.Empty, "dataset-1", "model-1", "static-1", null, null, 0, "EMERALD_PLUS", [], []),
+            Context: new BuildLabContextDto(103, "MIDDLE", null, "16.14", "KR", "items", "supported"),
+            Coverage: new BuildLabCoverageDto(["16.14"], [1.0], 0, null, [], "ALL_TRACKED"),
             SelectedPath: [],
-            PathEstimate: null,
             Stages: [],
             UnavailableReason: null);
 }

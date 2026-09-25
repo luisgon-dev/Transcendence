@@ -6,211 +6,6 @@
     "version": "v1"
   },
   "paths": {
-    "/api/admin/analytics/build-lab": {
-      "get": {
-        "tags": [
-          "AdminBuildLab"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/BuildLabGenerationAdminResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BuildLabGenerationAdminResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BuildLabGenerationAdminResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden"
-          }
-        },
-        "security": [
-          { }
-        ]
-      }
-    },
-    "/api/admin/analytics/build-lab/generations/{generationId}/promote": {
-      "post": {
-        "tags": [
-          "AdminBuildLab"
-        ],
-        "parameters": [
-          {
-            "name": "generationId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "No Content"
-          },
-          "409": {
-            "description": "Conflict",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden"
-          }
-        },
-        "security": [
-          { }
-        ]
-      }
-    },
-    "/api/admin/analytics/build-lab/generations/{generationId}/rollback": {
-      "post": {
-        "tags": [
-          "AdminBuildLab"
-        ],
-        "parameters": [
-          {
-            "name": "generationId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "No Content"
-          },
-          "404": {
-            "description": "Not Found",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflict",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden"
-          }
-        },
-        "security": [
-          { }
-        ]
-      }
-    },
-    "/api/admin/analytics/build-lab/generations/{generationId}/fail": {
-      "post": {
-        "tags": [
-          "AdminBuildLab"
-        ],
-        "parameters": [
-          {
-            "name": "generationId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "allOf": [
-                  {
-                    "$ref": "#/components/schemas/BuildLabFailGenerationRequest"
-                  }
-                ]
-              }
-            },
-            "text/json": {
-              "schema": {
-                "allOf": [
-                  {
-                    "$ref": "#/components/schemas/BuildLabFailGenerationRequest"
-                  }
-                ]
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "allOf": [
-                  {
-                    "$ref": "#/components/schemas/BuildLabFailGenerationRequest"
-                  }
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "204": {
-            "description": "No Content"
-          },
-          "404": {
-            "description": "Not Found",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden"
-          }
-        },
-        "security": [
-          { }
-        ]
-      }
-    },
     "/api/admin/overview": {
       "get": {
         "tags": [
@@ -2397,17 +2192,6 @@
                 "format": "int32"
               }
             }
-          },
-          {
-            "name": "spellPair",
-            "in": "query",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "integer",
-                "format": "int32"
-              }
-            }
           }
         ],
         "responses": {
@@ -4234,587 +4018,6 @@
         ]
       }
     },
-    "/api/lol/saved-builds/{shareId}": {
-      "get": {
-        "tags": [
-          "PublicSavedBuilds"
-        ],
-        "parameters": [
-          {
-            "name": "shareId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "429": {
-            "description": "Too Many Requests",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/PublicSavedBuildDto"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PublicSavedBuildDto"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PublicSavedBuildDto"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not Found",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/users/me/lol/saved-builds": {
-      "get": {
-        "tags": [
-          "SavedBuilds"
-        ],
-        "parameters": [
-          {
-            "name": "page",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "format": "int32"
-            }
-          },
-          {
-            "name": "pageSize",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "format": "int32"
-            }
-          }
-        ],
-        "responses": {
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/SavedBuildListDto"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SavedBuildListDto"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SavedBuildListDto"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden"
-          }
-        },
-        "security": [
-          { }
-        ]
-      },
-      "post": {
-        "tags": [
-          "SavedBuilds"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "allOf": [
-                  {
-                    "$ref": "#/components/schemas/SaveBuildRequest"
-                  }
-                ]
-              }
-            },
-            "text/json": {
-              "schema": {
-                "allOf": [
-                  {
-                    "$ref": "#/components/schemas/SaveBuildRequest"
-                  }
-                ]
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "allOf": [
-                  {
-                    "$ref": "#/components/schemas/SaveBuildRequest"
-                  }
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "201": {
-            "description": "Created",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/SavedBuildDto"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SavedBuildDto"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SavedBuildDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationProblemDetails"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflict",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden"
-          }
-        },
-        "security": [
-          { }
-        ]
-      }
-    },
-    "/api/users/me/lol/saved-builds/{savedBuildId}": {
-      "put": {
-        "tags": [
-          "SavedBuilds"
-        ],
-        "parameters": [
-          {
-            "name": "savedBuildId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "allOf": [
-                  {
-                    "$ref": "#/components/schemas/SaveBuildRequest"
-                  }
-                ]
-              }
-            },
-            "text/json": {
-              "schema": {
-                "allOf": [
-                  {
-                    "$ref": "#/components/schemas/SaveBuildRequest"
-                  }
-                ]
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "allOf": [
-                  {
-                    "$ref": "#/components/schemas/SaveBuildRequest"
-                  }
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/SavedBuildDto"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SavedBuildDto"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SavedBuildDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not Found",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden"
-          }
-        },
-        "security": [
-          { }
-        ]
-      },
-      "delete": {
-        "tags": [
-          "SavedBuilds"
-        ],
-        "parameters": [
-          {
-            "name": "savedBuildId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "204": {
-            "description": "No Content"
-          },
-          "403": {
-            "description": "Forbidden"
-          }
-        },
-        "security": [
-          { }
-        ]
-      }
-    },
-    "/api/users/me/lol/saved-builds/{savedBuildId}/repair": {
-      "post": {
-        "tags": [
-          "SavedBuilds"
-        ],
-        "parameters": [
-          {
-            "name": "savedBuildId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "allOf": [
-                  {
-                    "$ref": "#/components/schemas/SavedBuildRepairRequest"
-                  }
-                ]
-              }
-            },
-            "text/json": {
-              "schema": {
-                "allOf": [
-                  {
-                    "$ref": "#/components/schemas/SavedBuildRepairRequest"
-                  }
-                ]
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "allOf": [
-                  {
-                    "$ref": "#/components/schemas/SavedBuildRepairRequest"
-                  }
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/SavedBuildDto"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SavedBuildDto"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SavedBuildDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not Found",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden"
-          }
-        },
-        "security": [
-          { }
-        ]
-      }
-    },
-    "/api/users/me/lol/saved-builds/{savedBuildId}/share": {
-      "post": {
-        "tags": [
-          "SavedBuilds"
-        ],
-        "parameters": [
-          {
-            "name": "savedBuildId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/SavedBuildShareDto"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SavedBuildShareDto"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SavedBuildShareDto"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not Found",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden"
-          }
-        },
-        "security": [
-          { }
-        ]
-      },
-      "delete": {
-        "tags": [
-          "SavedBuilds"
-        ],
-        "parameters": [
-          {
-            "name": "savedBuildId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "204": {
-            "description": "No Content"
-          },
-          "404": {
-            "description": "Not Found",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden"
-          }
-        },
-        "security": [
-          { }
-        ]
-      }
-    },
     "/api/lol/static/versions": {
       "get": {
         "tags": [
@@ -6494,98 +5697,6 @@
         },
         "additionalProperties": false
       },
-      "AdjustedActionEstimateDto": {
-        "required": [
-          "actionIds",
-          "actionKey",
-          "baselineDefinition",
-          "effectiveSampleSize",
-          "evidenceQuality",
-          "evidenceTier",
-          "fallbackScope",
-          "isPublishable",
-          "observedCount",
-          "regionScope"
-        ],
-        "type": "object",
-        "properties": {
-          "actionKey": {
-            "type": "string"
-          },
-          "actionIds": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "format": "int32"
-            }
-          },
-          "adjustedWpa": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "confidenceLow": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "confidenceHigh": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "rawWinRate": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "pickRate": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "observedCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "effectiveSampleSize": {
-            "type": "number",
-            "format": "double"
-          },
-          "averageTimingMinutes": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "evidenceQuality": {
-            "type": "string"
-          },
-          "fallbackScope": {
-            "type": "string"
-          },
-          "regionScope": {
-            "type": "string"
-          },
-          "baselineDefinition": {
-            "type": "string"
-          },
-          "evidenceTier": {
-            "type": "string"
-          },
-          "evidenceBucket": {
-            "type": "string",
-            "nullable": true
-          },
-          "isPublishable": {
-            "type": "boolean"
-          },
-          "unavailableReason": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
       "AdminAnalysisMetricsResponse": {
         "required": [
           "generatedAtUtc",
@@ -7922,10 +7033,7 @@
       "BuildLabContextDto": {
         "required": [
           "championId",
-          "effectivePatch",
-          "effectiveRegion",
           "mode",
-          "requestedPatch",
           "requestedRegion",
           "role",
           "section"
@@ -7945,15 +7053,10 @@
             "nullable": true
           },
           "requestedPatch": {
-            "type": "string"
-          },
-          "effectivePatch": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "requestedRegion": {
-            "type": "string"
-          },
-          "effectiveRegion": {
             "type": "string"
           },
           "section": {
@@ -7965,245 +7068,110 @@
         },
         "additionalProperties": false
       },
-      "BuildLabFailGenerationRequest": {
-        "type": "object",
-        "properties": {
-          "reason": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
-      "BuildLabGenerationAdminResponse": {
+      "BuildLabCoverageDto": {
         "required": [
-          "activeChampionRoleScopes",
-          "activeMatchupScopes",
-          "generations"
-        ],
-        "type": "object",
-        "properties": {
-          "generations": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/BuildLabGenerationDto"
-            }
-          },
-          "activeChampionRoleScopes": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "activeMatchupScopes": {
-            "type": "integer",
-            "format": "int32"
-          }
-        },
-        "additionalProperties": false
-      },
-      "BuildLabGenerationDto": {
-        "required": [
-          "actionEstimateCount",
-          "codeRevision",
-          "createdAtUtc",
-          "datasetVersion",
-          "id",
-          "isActive",
-          "matchCount",
-          "modelVersion",
-          "patch",
-          "promotionHistoryJson",
-          "publishableActionCount",
-          "rankScope",
-          "sourceCutoffUtc",
-          "status",
-          "validationMetricsJson"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "status": {
-            "type": "string"
-          },
-          "isActive": {
-            "type": "boolean"
-          },
-          "patch": {
-            "type": "string"
-          },
-          "rankScope": {
-            "type": "string"
-          },
-          "datasetVersion": {
-            "type": "string"
-          },
-          "modelVersion": {
-            "type": "string"
-          },
-          "codeRevision": {
-            "type": "string"
-          },
-          "sourceCutoffUtc": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "matchCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "actionEstimateCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "publishableActionCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "artifactUri": {
-            "type": "string",
-            "nullable": true
-          },
-          "validationMetricsJson": {
-            "type": "string"
-          },
-          "failureReason": {
-            "type": "string",
-            "nullable": true
-          },
-          "leaseOwner": {
-            "type": "string",
-            "nullable": true
-          },
-          "promotionHistoryJson": {
-            "type": "string"
-          },
-          "createdAtUtc": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "completedAtUtc": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
-          "promotedAtUtc": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
-      "BuildLabPathEstimateDto": {
-        "required": [
-          "effectiveSampleSize",
-          "isPublishable",
-          "itemPath",
-          "observedCount"
-        ],
-        "type": "object",
-        "properties": {
-          "itemPath": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "format": "int32"
-            }
-          },
-          "estimatedWinProbability": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "adjustedLift": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "confidenceLow": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "confidenceHigh": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "observedCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "effectiveSampleSize": {
-            "type": "number",
-            "format": "double"
-          },
-          "isPublishable": {
-            "type": "boolean"
-          },
-          "unavailableReason": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
-      "BuildLabProvenanceDto": {
-        "required": [
-          "datasetVersion",
+          "countedMatches",
           "includedPatches",
           "includedRegions",
-          "matchCount",
-          "modelVersion",
-          "rankScope",
-          "staticDataVersion"
+          "patchWeights",
+          "rankScope"
         ],
         "type": "object",
         "properties": {
-          "generationId": {
-            "type": "string",
-            "format": "uuid",
-            "nullable": true
-          },
-          "datasetVersion": {
-            "type": "string"
-          },
-          "modelVersion": {
-            "type": "string"
-          },
-          "staticDataVersion": {
-            "type": "string"
-          },
-          "sourceCutoffUtc": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
-          "generatedAtUtc": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
-          "matchCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "rankScope": {
-            "type": "string"
-          },
           "includedPatches": {
             "type": "array",
             "items": {
               "type": "string"
             }
           },
+          "patchWeights": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "countedMatches": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "lastCountedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
           "includedRegions": {
             "type": "array",
             "items": {
               "type": "string"
             }
+          },
+          "rankScope": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "BuildLabOptionDto": {
+        "required": [
+          "actionIds",
+          "actionKey",
+          "adjustedWinRate",
+          "confidenceHigh",
+          "confidenceLow",
+          "games",
+          "isLowSample",
+          "lift",
+          "pickRate",
+          "winRate"
+        ],
+        "type": "object",
+        "properties": {
+          "actionKey": {
+            "type": "string"
+          },
+          "actionIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "games": {
+            "type": "number",
+            "format": "double"
+          },
+          "pickRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "winRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "adjustedWinRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "lift": {
+            "type": "number",
+            "format": "double"
+          },
+          "confidenceLow": {
+            "type": "number",
+            "format": "double"
+          },
+          "confidenceHigh": {
+            "type": "number",
+            "format": "double"
+          },
+          "averageTimingMinutes": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "isLowSample": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -8212,7 +7180,7 @@
         "required": [
           "available",
           "context",
-          "provenance",
+          "coverage",
           "selectedPath",
           "stages"
         ],
@@ -8228,10 +7196,10 @@
               }
             ]
           },
-          "provenance": {
+          "coverage": {
             "allOf": [
               {
-                "$ref": "#/components/schemas/BuildLabProvenanceDto"
+                "$ref": "#/components/schemas/BuildLabCoverageDto"
               }
             ]
           },
@@ -8241,14 +7209,6 @@
               "type": "integer",
               "format": "int32"
             }
-          },
-          "pathEstimate": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/BuildLabPathEstimateDto"
-              }
-            ],
-            "nullable": true
           },
           "stages": {
             "type": "array",
@@ -8265,10 +7225,14 @@
       },
       "BuildLabStageDto": {
         "required": [
-          "candidates",
           "family",
+          "games",
+          "isFallback",
           "label",
-          "stage"
+          "options",
+          "scope",
+          "stage",
+          "winRate"
         ],
         "type": "object",
         "properties": {
@@ -8282,10 +7246,24 @@
           "label": {
             "type": "string"
           },
-          "candidates": {
+          "games": {
+            "type": "number",
+            "format": "double"
+          },
+          "winRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "isFallback": {
+            "type": "boolean"
+          },
+          "options": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AdjustedActionEstimateDto"
+              "$ref": "#/components/schemas/BuildLabOptionDto"
             }
           }
         },
@@ -8964,32 +7942,32 @@
       "ChampionRecommendationSummary": {
         "required": [
           "available",
-          "provenance"
+          "coverage"
         ],
         "type": "object",
         "properties": {
           "available": {
             "type": "boolean"
           },
-          "provenance": {
+          "coverage": {
             "allOf": [
               {
-                "$ref": "#/components/schemas/BuildLabProvenanceDto"
+                "$ref": "#/components/schemas/BuildLabCoverageDto"
               }
             ]
           },
           "firstItem": {
             "allOf": [
               {
-                "$ref": "#/components/schemas/AdjustedActionEstimateDto"
+                "$ref": "#/components/schemas/BuildLabOptionDto"
               }
             ],
             "nullable": true
           },
-          "rune": {
+          "runePage": {
             "allOf": [
               {
-                "$ref": "#/components/schemas/AdjustedActionEstimateDto"
+                "$ref": "#/components/schemas/BuildLabOptionDto"
               }
             ],
             "nullable": true
@@ -8997,7 +7975,7 @@
           "spellPair": {
             "allOf": [
               {
-                "$ref": "#/components/schemas/AdjustedActionEstimateDto"
+                "$ref": "#/components/schemas/BuildLabOptionDto"
               }
             ],
             "nullable": true
@@ -11340,108 +10318,6 @@
         },
         "additionalProperties": false
       },
-      "PublicSavedBuildDto": {
-        "required": [
-          "analyticsChanged",
-          "championId",
-          "compatibilityStatus",
-          "itemPath",
-          "name",
-          "patch",
-          "rankingMode",
-          "region",
-          "role",
-          "runeSelections",
-          "unavailableItemIds",
-          "unavailableItems",
-          "updatedAtUtc"
-        ],
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "championId": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "role": {
-            "type": "string"
-          },
-          "opponentChampionId": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "patch": {
-            "type": "string"
-          },
-          "region": {
-            "type": "string"
-          },
-          "rankingMode": {
-            "type": "string"
-          },
-          "itemPath": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "format": "int32"
-            }
-          },
-          "runeSelections": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "format": "int32"
-            }
-          },
-          "spell1Id": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "spell2Id": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "sourceGenerationId": {
-            "type": "string",
-            "format": "uuid",
-            "nullable": true
-          },
-          "currentGenerationId": {
-            "type": "string",
-            "format": "uuid",
-            "nullable": true
-          },
-          "analyticsChanged": {
-            "type": "boolean"
-          },
-          "compatibilityStatus": {
-            "type": "string"
-          },
-          "unavailableItemIds": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "format": "int32"
-            }
-          },
-          "unavailableItems": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SavedBuildUnavailableItemDto"
-            }
-          },
-          "updatedAtUtc": {
-            "type": "string",
-            "format": "date-time"
-          }
-        },
-        "additionalProperties": false
-      },
       "RankHistoryEntryDto": {
         "required": [
           "dateRecorded",
@@ -11880,286 +10756,6 @@
           "winRate": {
             "type": "number",
             "format": "double"
-          }
-        },
-        "additionalProperties": false
-      },
-      "SaveBuildRequest": {
-        "required": [
-          "championId",
-          "name",
-          "role"
-        ],
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "championId": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "role": {
-            "type": "string"
-          },
-          "opponentChampionId": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "patch": {
-            "type": "string",
-            "nullable": true
-          },
-          "region": {
-            "type": "string",
-            "nullable": true
-          },
-          "rankingMode": {
-            "type": "string",
-            "nullable": true
-          },
-          "itemPath": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "format": "int32"
-            },
-            "nullable": true
-          },
-          "runeSelections": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "format": "int32"
-            },
-            "nullable": true
-          },
-          "spell1Id": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "spell2Id": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
-      "SavedBuildDto": {
-        "required": [
-          "analyticsChanged",
-          "championId",
-          "compatibilityStatus",
-          "createdAtUtc",
-          "id",
-          "itemPath",
-          "name",
-          "patch",
-          "rankingMode",
-          "region",
-          "role",
-          "runeSelections",
-          "unavailableItemIds",
-          "unavailableItems",
-          "updatedAtUtc"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "name": {
-            "type": "string"
-          },
-          "championId": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "role": {
-            "type": "string"
-          },
-          "opponentChampionId": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "patch": {
-            "type": "string"
-          },
-          "region": {
-            "type": "string"
-          },
-          "rankingMode": {
-            "type": "string"
-          },
-          "itemPath": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "format": "int32"
-            }
-          },
-          "runeSelections": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "format": "int32"
-            }
-          },
-          "spell1Id": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "spell2Id": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "sourceGenerationId": {
-            "type": "string",
-            "format": "uuid",
-            "nullable": true
-          },
-          "currentGenerationId": {
-            "type": "string",
-            "format": "uuid",
-            "nullable": true
-          },
-          "analyticsChanged": {
-            "type": "boolean"
-          },
-          "compatibilityStatus": {
-            "type": "string"
-          },
-          "unavailableItemIds": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "format": "int32"
-            }
-          },
-          "unavailableItems": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SavedBuildUnavailableItemDto"
-            }
-          },
-          "shareId": {
-            "type": "string",
-            "format": "uuid",
-            "nullable": true
-          },
-          "createdAtUtc": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAtUtc": {
-            "type": "string",
-            "format": "date-time"
-          }
-        },
-        "additionalProperties": false
-      },
-      "SavedBuildListDto": {
-        "required": [
-          "hasMore",
-          "items",
-          "page",
-          "pageSize",
-          "totalCount"
-        ],
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SavedBuildDto"
-            }
-          },
-          "page": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "pageSize": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "totalCount": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "hasMore": {
-            "type": "boolean"
-          }
-        },
-        "additionalProperties": false
-      },
-      "SavedBuildRepairChoice": {
-        "required": [
-          "action",
-          "itemId"
-        ],
-        "type": "object",
-        "properties": {
-          "itemId": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "action": {
-            "type": "string"
-          },
-          "replacementItemId": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
-      "SavedBuildRepairRequest": {
-        "type": "object",
-        "properties": {
-          "choices": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SavedBuildRepairChoice"
-            },
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
-      "SavedBuildShareDto": {
-        "required": [
-          "shareId"
-        ],
-        "type": "object",
-        "properties": {
-          "shareId": {
-            "type": "string",
-            "format": "uuid"
-          }
-        },
-        "additionalProperties": false
-      },
-      "SavedBuildUnavailableItemDto": {
-        "required": [
-          "itemId",
-          "reason"
-        ],
-        "type": "object",
-        "properties": {
-          "itemId": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "reason": {
-            "type": "string"
           }
         },
         "additionalProperties": false
@@ -13339,9 +11935,6 @@
   },
   "tags": [
     {
-      "name": "AdminBuildLab"
-    },
-    {
       "name": "AdminOperations"
     },
     {
@@ -13373,12 +11966,6 @@
     },
     {
       "name": "ProSummoners"
-    },
-    {
-      "name": "PublicSavedBuilds"
-    },
-    {
-      "name": "SavedBuilds"
     },
     {
       "name": "StaticContent"

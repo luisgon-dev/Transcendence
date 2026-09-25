@@ -62,8 +62,6 @@ public sealed class EndpointAuthorizationPolicyTests
         "GET api/lol/leaderboards",
         // Build Lab read surface: same public tier as the rest of champion analytics.
         "GET api/lol/analytics/build-lab/{championId:int}",
-        // Share-token lookup: the token is the credential, so the route itself is anonymous.
-        "GET api/lol/saved-builds/{shareId:guid}",
         // Public summoner profile reads.
         "GET api/lol/summoners/search",
         "GET api/lol/summoners/{region}/{name}/{tag}",
@@ -139,76 +137,10 @@ public sealed class EndpointAuthorizationPolicyTests
         unmetered.Should().BeEmpty("an uncredentialed route with no limiter is a free amplification target");
     }
 
-    // ---- Build Lab + saved builds: pinned by name ----
-
-    [Theory]
-    [InlineData("GET", "api/users/me/lol/saved-builds")]
-    [InlineData("POST", "api/users/me/lol/saved-builds")]
-    [InlineData("PUT", "api/users/me/lol/saved-builds/{savedBuildId:guid}")]
-    [InlineData("DELETE", "api/users/me/lol/saved-builds/{savedBuildId:guid}")]
-    [InlineData("POST", "api/users/me/lol/saved-builds/{savedBuildId:guid}/repair")]
-    [InlineData("POST", "api/users/me/lol/saved-builds/{savedBuildId:guid}/share")]
-    [InlineData("DELETE", "api/users/me/lol/saved-builds/{savedBuildId:guid}/share")]
-    public void SavedBuildEndpoints_RequireUserOnlyPolicy(string httpMethod, string route)
-    {
-        var endpoint = Endpoint(httpMethod, route);
-
-        endpoint.IsAnonymous.Should().BeFalse();
-        endpoint.Policies.Should().Equal(AuthPolicies.UserOnly);
-    }
-
-    [Fact]
-    public void EverySavedBuildAction_IsCoveredByTheUserOnlyPolicy()
-    {
-        var savedBuildEndpoints = Endpoints
-            .Where(endpoint => endpoint.Controller == nameof(SavedBuildsController))
-            .ToList();
-
-        savedBuildEndpoints.Should().HaveCount(7, "all verbs on the saved-build surface must be pinned");
-        savedBuildEndpoints.Should().OnlyContain(endpoint =>
-            !endpoint.IsAnonymous && endpoint.Policies.Contains(AuthPolicies.UserOnly));
-    }
-
-    [Theory]
-    [InlineData("GET", "api/admin/analytics/build-lab")]
-    [InlineData("POST", "api/admin/analytics/build-lab/generations/{generationId:guid}/promote")]
-    [InlineData("POST", "api/admin/analytics/build-lab/generations/{generationId:guid}/rollback")]
-    [InlineData("POST", "api/admin/analytics/build-lab/generations/{generationId:guid}/fail")]
-    public void AdminBuildLabEndpoints_RequireAdminOnlyPolicy(string httpMethod, string route)
-    {
-        var endpoint = Endpoint(httpMethod, route);
-
-        endpoint.IsAnonymous.Should().BeFalse();
-        endpoint.Policies.Should().Equal(AuthPolicies.AdminOnly);
-    }
-
-    [Fact]
-    public void EveryAdminBuildLabAction_IsCoveredByTheAdminOnlyPolicy()
-    {
-        var adminEndpoints = Endpoints
-            .Where(endpoint => endpoint.Controller == nameof(AdminBuildLabController))
-            .ToList();
-
-        adminEndpoints.Should().HaveCount(4);
-        adminEndpoints.Should().OnlyContain(endpoint =>
-            !endpoint.IsAnonymous && endpoint.Policies.Contains(AuthPolicies.AdminOnly));
-    }
-
-    [Fact]
-    public void AdminBuildLabWrites_AreMeteredByTheAdminWriteLimiter()
-    {
-        var writes = Endpoints
-            .Where(endpoint => endpoint.Controller == nameof(AdminBuildLabController))
-            .Where(endpoint => endpoint.HttpMethod != "GET")
-            .ToList();
-
-        writes.Should().HaveCount(3);
-        writes.Should().OnlyContain(endpoint => endpoint.RateLimitPolicy == "admin-write");
-    }
+    // ---- Build Lab: pinned by name ----
 
     [Theory]
     [InlineData("GET", "api/lol/analytics/build-lab/{championId:int}")]
-    [InlineData("GET", "api/lol/saved-builds/{shareId:guid}")]
     public void PublicBuildLabReads_AreAnonymousAndMetered(string httpMethod, string route)
     {
         var endpoint = Endpoint(httpMethod, route);

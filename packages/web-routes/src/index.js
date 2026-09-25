@@ -8,8 +8,6 @@ const ROUTE_REPLACEMENTS = [
     "/lol/summoners/[region]/[riotId]/matches"
   ],
   [/^\/lol\/summoners\/[^/]+\/[^/]+/, "/lol/summoners/[region]/[riotId]"],
-  // Must precede /lol/builds/[championId]: that pattern also matches a share link's first segment.
-  [/^\/lol\/builds\/shared\/[^/]+/, "/lol/builds/shared/[shareId]"],
   [/^\/lol\/builds\/[^/]+/, "/lol/builds/[championId]"],
   [/^\/lol\/champions\/[^/]+/, "/lol/champions/[championId]"],
   [/^\/lol\/pro-builds\/[^/]+/, "/lol/pro-builds/[championId]"],
@@ -25,9 +23,7 @@ const KNOWN_STATIC_ROUTES = new Set([
   "/account/login",
   "/account/register",
   "/account/reset-password",
-  "/account/saved-builds",
   "/admin",
-  "/admin/analytics/build-lab",
   "/admin/api-keys",
   "/admin/audit",
   "/admin/jobs",

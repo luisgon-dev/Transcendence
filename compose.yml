@@ -179,8 +179,8 @@ services:
       Auth__RiotRso__RedirectUri: ${RIOT_RSO_REDIRECT_URI:-https://transcend.kronic.one/api/session/riot/callback}
       OperationalLogs__DirectoryPath: /var/log/transcendence
       ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Application Name=transcendence-webapi;Maximum Pool Size=${WEBAPI_DB_POOL_MAX:-20};Minimum Pool Size=0
-      # The serving layer reads the same flag: BuildLabService answers "not enabled" without it, so
-      # the API would stay dark even after a generation was promoted by the worker.
+      # The serving layer reads the same flag as the worker: BuildLabService answers "not enabled"
+      # without it, so the API would stay dark even while the worker counts.
       Analytics__BuildLab__Enabled: ${BUILD_LAB_ENABLED:-false}
       <<: *app-env
     ports:
@@ -213,16 +213,12 @@ services:
       DOTNET_ENVIRONMENT: Production
       OperationalLogs__DirectoryPath: /var/log/transcendence
       ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Application Name=transcendence-worker;Maximum Pool Size=${SERVICE_DB_POOL_MAX:-35};Minimum Pool Size=0
+      # One switch for Build Lab: the stats refresh AND the detailed timeline capture it reads (see
+      # BuildLabOptions.Enabled). Turning it off stops that capture as well as the refresh.
       Analytics__BuildLab__Enabled: ${BUILD_LAB_ENABLED:-false}
-      Analytics__BuildLab__CodeRevision: ${BUILD_LAB_CODE_REVISION:-local}
-      Jobs__Schedule__EnableCreateBuildLabGeneration: ${BUILD_LAB_ENABLED:-false}
-      # Cadence of the create job. A generation now takes hours rather than days, but a daily cron
-      # can still queue them faster than they are consumed -- patch-aligned matches reality.
-      Jobs__Schedule__CreateBuildLabGenerationCron: ${BUILD_LAB_CREATE_CRON:-15 2 * * *}
       # Worker-stall and job-failure alerts. Program.cs logs instead of posting when unset, so a
       # dropped value degrades silently to no alerting at all.
       Alerts__Webhook__Url: ${ALERTS_WEBHOOK_URL:-}
-      Jobs__Schedule__EnablePromoteBuildLabGeneration: ${BUILD_LAB_ENABLED:-false}
       <<: *app-env
     depends_on:
       postgres:
@@ -233,74 +229,6 @@ services:
         condition: service_completed_successfully
     volumes:
       - operational_logs:/var/log/transcendence
-    networks:
-      - transcendence-net
-
-  # Run-to-completion, NOT a daemon. Invoked as `docker compose run --rm analytics-modeler` by
-  # scripts/ops/transcendence-modeler.{service,timer}; a modeling run takes hours, and while this was
-  # a long-lived container every image update recreated it mid-run and lost the generation. A process
-  # that exits on its own is deployed *between* runs instead of through one, and the exit code is the
-  # completion signal, so no liveness protocol is needed at all.
-  #
-  # Overlap is safe without extra machinery: a second invocation cannot take the modeling advisory
-  # lock and exits idle.
-  analytics-modeler:
-    image: ${MODELER_IMAGE:-ghcr.io/luisgon-dev/transcendence-analytics-modeler:main}
-    build:
-      context: .
-      dockerfile: analytics/modeler/Dockerfile
-    labels:
-      wud.watch: "false"
-    # No restart policy and no container_name: `run --rm` supplies a fresh container per invocation,
-    # and a restart policy on a oneshot would relaunch a finished run.
-    restart: "no"
-    profiles: ["analytics-modeling"]
-    cpus: "${BUILD_LAB_MODELER_CPUS:-8.0}"
-    # Peak is roughly (largest champion's frames x sweep workers) + one training slice + one shared
-    # read of the cohort event state. It does track corpus growth, contrary to what this comment
-    # used to claim: measured on prod, a single-worker sweep peaked at 3.46 GiB against an 88k-match
-    # cohort in August and 5.32 GiB against 193k -- 89% of the old 6g cap, on the run that swept all
-    # 173 champions. Size this against the cpu quota above, and re-check it when the cohort doubles.
-    mem_limit: "${BUILD_LAB_MODELER_MEMORY_LIMIT:-12g}"
-    pids_limit: 512
-    environment:
-      BUILD_LAB_DATABASE_URL: host=postgres port=5432 dbname=${POSTGRES_DB} user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} application_name=transcendence-modeler
-      # Required, >= 32 chars, and never committed: it keys the surrogate match/participant IDs in
-      # the deidentified export. Rotating it re-pseudonymizes future exports.
-      # Deliberately `:-` and not `:?`: Compose interpolates the whole file before it filters by
-      # profile, so a required-variable form here would break `docker compose up` for the DEFAULT
-      # stack on any host that has no salt. The modeler itself refuses to start without a >=32-char
-      # value (Settings.from_env), so the failure stays scoped to the container that needs the secret.
-      BUILD_LAB_DEIDENTIFICATION_SALT: ${BUILD_LAB_DEIDENTIFICATION_SALT:-}
-      BUILD_LAB_ARTIFACT_DIR: /artifacts
-      BUILD_LAB_POLL_SECONDS: ${BUILD_LAB_POLL_SECONDS:-300}
-      # One generation per invocation, then exit. The scheduler decides cadence.
-      BUILD_LAB_RUN_ONCE: ${BUILD_LAB_RUN_ONCE:-true}
-      BUILD_LAB_MAX_TRAINING_ROWS: ${BUILD_LAB_MAX_TRAINING_ROWS:-250000}
-      # Unset tracks the cpu quota above. The sweep reads the cgroup rather than nproc, so this
-      # container gets exactly the cpus it is given and never sizes pools against the host's 46.
-      BUILD_LAB_SWEEP_WORKERS: ${BUILD_LAB_SWEEP_WORKERS:-}
-      BUILD_LAB_SWEEP_BLAS_THREADS: ${BUILD_LAB_SWEEP_BLAS_THREADS:-1}
-      # Session-scoped planner budget; the server's own settings stay sized for the web app.
-      BUILD_LAB_SESSION_WORK_MEM: ${BUILD_LAB_SESSION_WORK_MEM:-128MB}
-      BUILD_LAB_SESSION_PARALLEL_WORKERS: ${BUILD_LAB_SESSION_PARALLEL_WORKERS:-2}
-      BUILD_LAB_FINE_SCOPE_MIN_ROWS: ${BUILD_LAB_FINE_SCOPE_MIN_ROWS:-1000}
-      # How many whole matches the structural fit draws. The fit was always capped at
-      # MAX_TRAINING_ROWS; this bounds the load that feeds it so the cap stops costing a full-corpus
-      # read. Raise it for more match diversity in the fit, at a proportional memory cost.
-      BUILD_LAB_TRAINING_SAMPLE_MATCHES: ${BUILD_LAB_TRAINING_SAMPLE_MATCHES:-12000}
-      # BUILD_LAB_LEASE_OWNER is intentionally NOT set: the modeler derives `hostname:pid`, so two
-      # instances can never claim the same lease identity.
-      LOG_LEVEL: ${BUILD_LAB_LOG_LEVEL:-INFO}
-      BUILD_LAB_S3_ENDPOINT: ${BUILD_LAB_S3_ENDPOINT:-}
-      BUILD_LAB_S3_BUCKET: ${BUILD_LAB_S3_BUCKET:-}
-      BUILD_LAB_S3_ACCESS_KEY: ${BUILD_LAB_S3_ACCESS_KEY:-}
-      BUILD_LAB_S3_SECRET_KEY: ${BUILD_LAB_S3_SECRET_KEY:-}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    volumes:
-      - build_lab_artifacts:/artifacts
     networks:
       - transcendence-net
 
@@ -370,7 +298,6 @@ volumes:
   redis_data:
   pgadmin_data:
   operational_logs:
-  build_lab_artifacts:
 
 networks:
   transcendence-net:

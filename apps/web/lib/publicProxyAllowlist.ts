@@ -35,14 +35,5 @@ export function isAllowedPublicProxyPath(method: string, path: string[]): boolea
     return true;
   }
 
-  // Public saved builds are read-only and addressed by an unguessable share id.
-  if (
-    path[1] === "saved-builds" &&
-    path.length === 3 &&
-    /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(path[2])
-  ) {
-    return true;
-  }
-
   return false;
 }

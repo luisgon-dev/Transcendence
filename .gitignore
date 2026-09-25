@@ -346,14 +346,6 @@ paket-files/
 __pycache__/
 *.pyc
 
-# Python (analytics/modeler): virtualenvs, editable-install metadata, test caches
-.venv/
-venv/
-*.egg-info/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
 # Cake - Uncomment if you are using it
 # tools/**
 # !tools/packages.config

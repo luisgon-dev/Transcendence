@@ -24,16 +24,6 @@ describe("isAllowedPublicProxyPath", () => {
         isAllowedPublicProxyPath("GET", ["lol", "analytics", "build-lab", "266"])
       ).toBe(true);
     });
-
-    it("allows a token-addressed shared build", () => {
-      expect(
-        isAllowedPublicProxyPath("GET", [
-          "lol",
-          "saved-builds",
-          "6d4c3c55-5cf3-477a-8dab-c9d8ba1ddeea"
-        ])
-      ).toBe(true);
-    });
   });
 
   describe("blocks everything outside the public surface", () => {
@@ -41,7 +31,10 @@ describe("isAllowedPublicProxyPath", () => {
       expect(isAllowedPublicProxyPath("GET", ["lol", "analytics", "tier-list"])).toBe(false);
       expect(isAllowedPublicProxyPath("GET", ["lol", "analytics", "build-lab"])).toBe(false);
       expect(isAllowedPublicProxyPath("GET", ["lol", "analytics", "build-lab", "266", "extra"])).toBe(false);
-      expect(isAllowedPublicProxyPath("GET", ["lol", "saved-builds", "not-a-share-id"])).toBe(false);
+      // Saved builds were retired with the Build Lab rebuild; their share route must stay closed.
+      expect(
+        isAllowedPublicProxyPath("GET", ["lol", "saved-builds", "6d4c3c55-5cf3-477a-8dab-c9d8ba1ddeea"])
+      ).toBe(false);
       expect(isAllowedPublicProxyPath("GET", ["lol", "champions", "Aatrox"])).toBe(false);
     });
 

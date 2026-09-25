@@ -58,17 +58,6 @@ updates:
       - dependency-name: "Microsoft.OpenApi"
         update-types: ["version-update:semver-major"]
 
-  # ---------------------------------------------------------------- Python (analytics modeler)
-  - package-ecosystem: "pip"
-    directory: "/analytics/modeler"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 5
-    groups:
-      pip-minor-patch:
-        update-types: ["minor", "patch"]
-
   # ---------------------------------------------------------------- GitHub Actions
   # Every action in this repo is SHA-pinned with a trailing version comment. Dependabot
   # rewrites both the SHA and the comment, which is far less error-prone than doing it by hand.
@@ -87,7 +76,6 @@ updates:
     directories:
       - "/Transcendence.WebAPI"
       - "/Transcendence.Service"
-      - "/analytics/modeler"
       - "/apps/web"
     schedule:
       interval: "weekly"

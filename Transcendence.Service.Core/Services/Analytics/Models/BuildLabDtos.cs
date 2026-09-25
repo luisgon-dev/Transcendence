@@ -1,82 +1,73 @@
 namespace Transcendence.Service.Core.Services.Analytics.Models;
 
-public record BuildLabProvenanceDto(
-    Guid? GenerationId,
-    string DatasetVersion,
-    string ModelVersion,
-    string StaticDataVersion,
-    DateTime? SourceCutoffUtc,
-    DateTime? GeneratedAtUtc,
-    long MatchCount,
-    string RankScope,
+/// <summary>What the numbers were computed from.</summary>
+public record BuildLabCoverageDto(
+    // Patches pooled into the answer, newest first.
     IReadOnlyList<string> IncludedPatches,
-    IReadOnlyList<string> IncludedRegions);
+    // Weight each included patch carries, in the same order; older patches count for less.
+    IReadOnlyList<double> PatchWeights,
+    // Matches counted across the included patches.
+    long CountedMatches,
+    DateTime? LastCountedAtUtc,
+    // Regions the counted matches come from.
+    IReadOnlyList<string> IncludedRegions,
+    string RankScope);
 
 public record BuildLabContextDto(
     int ChampionId,
     string Role,
     int? OpponentChampionId,
-    string RequestedPatch,
-    string EffectivePatch,
+    string? RequestedPatch,
     string RequestedRegion,
-    string EffectiveRegion,
     string Section,
     string Mode);
 
-public record AdjustedActionEstimateDto(
+public record BuildLabOptionDto(
     string ActionKey,
     IReadOnlyList<int> ActionIds,
-    double? AdjustedWpa,
-    double? ConfidenceLow,
-    double? ConfidenceHigh,
-    double? RawWinRate,
-    double? PickRate,
-    long ObservedCount,
-    double EffectiveSampleSize,
+    // Games in which this option was chosen at this decision (patch-weighted).
+    double Games,
+    // Share of the decision's games that chose this option.
+    double PickRate,
+    double WinRate,
+    // Win rate after standardizing to the decision's own gold-difference mix, so an option usually
+    // bought while ahead is not credited for the lead. Equals WinRate for pregame choices.
+    double AdjustedWinRate,
+    // AdjustedWinRate minus the decision's overall win rate.
+    double Lift,
+    double ConfidenceLow,
+    double ConfidenceHigh,
     double? AverageTimingMinutes,
-    string EvidenceQuality,
-    string FallbackScope,
-    string RegionScope,
-    string BaselineDefinition,
-    /// <summary>NUMERIC / BUCKETED / DESCRIPTIVE — how much of the estimate may be rendered.</summary>
-    string EvidenceTier,
-    /// <summary>ABOVE_AVERAGE / TYPICAL / BELOW_AVERAGE. Only meaningful at the BUCKETED tier.</summary>
-    string? EvidenceBucket,
-    bool IsPublishable,
-    string? UnavailableReason);
+    // Too few games for the interval to mean much; shown, but never ranked first.
+    bool IsLowSample);
 
 public record BuildLabStageDto(
     string Family,
     int Stage,
     string Label,
-    IReadOnlyList<AdjustedActionEstimateDto> Candidates);
-
-public record BuildLabPathEstimateDto(
-    IReadOnlyList<int> ItemPath,
-    double? EstimatedWinProbability,
-    double? AdjustedLift,
-    double? ConfidenceLow,
-    double? ConfidenceHigh,
-    long ObservedCount,
-    double EffectiveSampleSize,
-    bool IsPublishable,
-    string? UnavailableReason);
+    // Games that reached this decision (patch-weighted).
+    double Games,
+    double WinRate,
+    // MATCHUP, REGION or ALL: the population the options were counted in.
+    string Scope,
+    // True when the requested matchup or region was too thin and ALL was used instead.
+    bool IsFallback,
+    IReadOnlyList<BuildLabOptionDto> Options);
 
 public record BuildLabResponse(
     bool Available,
     BuildLabContextDto Context,
-    BuildLabProvenanceDto Provenance,
+    BuildLabCoverageDto Coverage,
     IReadOnlyList<int> SelectedPath,
-    BuildLabPathEstimateDto? PathEstimate,
     IReadOnlyList<BuildLabStageDto> Stages,
     string? UnavailableReason);
 
 public record ChampionRecommendationSummary(
     bool Available,
-    BuildLabProvenanceDto Provenance,
-    AdjustedActionEstimateDto? FirstItem,
-    AdjustedActionEstimateDto? Rune,
-    AdjustedActionEstimateDto? SpellPair,
+    BuildLabCoverageDto Coverage,
+    BuildLabOptionDto? FirstItem,
+    BuildLabOptionDto? RunePage,
+    BuildLabOptionDto? SpellPair,
     string? UnavailableReason);
 
 public record BuildLabQuery(
@@ -88,5 +79,4 @@ public record BuildLabQuery(
     string Section,
     string Mode,
     IReadOnlyList<int> ItemPath,
-    IReadOnlyList<int> RuneSelections,
-    IReadOnlyList<int> SpellPair);
+    IReadOnlyList<int> RuneSelections);

@@ -30,7 +30,7 @@ export async function generateMetadata({
   const champion = champions[championId];
   return {
     title: `${champion?.name ?? "Champion"} Build Lab`,
-    description: `Compare context-adjusted item paths, runes, and spells for ${champion?.name ?? "this champion"}.`
+    description: `Gold-adjusted win rates for every item, rune, and spell choice on ${champion?.name ?? "this champion"}.`
   };
 }
 
@@ -73,31 +73,22 @@ export default async function ChampionBuildLabPage({
       championId,
       role: state.role,
       opponentChampionId: state.opponentChampionId,
-      requestedPatch: state.patch ?? "",
-      effectivePatch: "",
-      requestedRegion: state.region ?? "GLOBAL",
-      effectiveRegion: "GLOBAL",
+      requestedPatch: state.patch ?? null,
+      requestedRegion: state.region ?? "ALL",
       section: state.section.toUpperCase(),
       mode: state.mode.toUpperCase()
     },
-    provenance: {
-      generationId: null,
-      datasetVersion: "",
-      modelVersion: "",
-      staticDataVersion: itemStatic.version,
-      sourceCutoffUtc: null,
-      generatedAtUtc: null,
-      matchCount: 0,
-      rankScope: "Emerald+",
+    coverage: {
       includedPatches: [],
-      includedRegions: []
+      patchWeights: [],
+      countedMatches: 0,
+      lastCountedAtUtc: null,
+      includedRegions: [],
+      rankScope: "ALL_TRACKED"
     },
     selectedPath: [],
-    pathEstimate: null,
     stages: [],
-    unavailableReason: result.ok
-      ? "This context has not passed the publication gates."
-      : "Build Lab is temporarily unavailable."
+    unavailableReason: result.ok ? null : "Build Lab is temporarily unavailable."
   };
   const champions = Object.entries(championStatic.champions)
     .map(([id, entry]) => ({

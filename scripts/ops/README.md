@@ -27,8 +27,8 @@ with a deterministic, **outbound-only** release poll:
    The failed digest is quarantined until `:main` changes, preventing a minute-by-minute rollback loop.
 6. `docker image prune -f`, **only if a service was deployed** in this poll. Never prune on an idle
    poll: under the containerd image store a prune deletes the content of any pull still in flight,
-   so a prune every ~60s made every pull longer than one interval (the modeler and perf images)
-   fail with `lease does not exist`.
+   so a prune every ~60s made every pull longer than one interval (the large images) fail with
+   `lease does not exist`.
 
 No inbound exposure, no CI secret, no self-hosted runner. A `flock` guard prevents
 overlapping runs. Runs every ~60s via the systemd timer (≈ wud's old cadence). Remote and
@@ -72,125 +72,40 @@ pin a service to an immutable `:sha-<short>` tag in the compose file and `compos
 > this poller is the app release source of truth and two independent recreators can race each other.
 > wud may continue watching public Docker Hub sidecars (portainer/dozzle/grafana/prometheus).
 
-### `analytics-modeler` — run-to-completion oneshot
+### Build Lab stats refresh
 
-`transcendence-analytics-modeler` is built, tagged, labelled, SBOM'd, and cosign-signed by the same
-`Docker Images` workflow as the three app images (path-filtered on `analytics/modeler/**`), but it is
-deliberately **not** in `SERVICES` in `poll-deploy.sh`.
+Build Lab has no image, timer or unit of its own. It is the worker's `refresh-build-lab-stats` Hangfire
+job (`*/15 * * * *`), which adds each newly eligible match's build decisions to the additive
+`BuildLabOptionStats` table and records the match in the `BuildLabProcessedMatches` ledger, one
+transaction per 500-match batch. A crash mid-run therefore loses at most the batch in flight and never
+double counts; the next run resumes from the ledger. A run is capped at 20,000 matches
+(`Analytics:BuildLab:MaxMatchesPerRun`), so a fresh patch backfills over several runs — about 45
+minutes of disk IO per patch on this box. The job no-ops unless `BUILD_LAB_ENABLED=true`, the same flag
+that turns on the detailed timeline capture it reads.
 
-It is not a daemon. A modeling run takes hours, and while the modeler was a long-lived container every
-image update recreated it mid-run and threw the generation away — that is exactly how generation #59
-died. It now runs to completion under systemd:
-
-```bash
-cp scripts/ops/transcendence-modeler.{service,timer} /etc/systemd/system/
-systemctl daemon-reload && systemctl enable --now transcendence-modeler.timer
-```
-
-The unit runs `docker compose run --rm --pull always`, so:
-
-- the image can only change **between** invocations, never underneath a run;
-- `--rm` leaves no container for a deploy poller to find or recreate;
-- the exit code is the completion signal — `0` for a completed generation *or* nothing to do, non-zero
-  for a generation that failed, so `systemctl status` and `journalctl -u transcendence-modeler` are the
-  first place to look;
-- overlap is safe. The timer fires every 10 minutes and a run lasts hours; a second invocation cannot
-  take the modeling advisory lock and exits idle. That guard holds across reboots and manual
-  `systemctl start` too, which a systemd-only guard would not.
-
-Inspect a run:
+Is it keeping up?
 
 ```bash
-systemctl list-timers transcendence-modeler.timer
-journalctl -u transcendence-modeler.service -f
-systemctl status transcendence-modeler.service      # last exit code
+docker logs transcendence-service 2>&1 | grep 'Build Lab refresh' | tail -5   # counted / backlog per run
 ```
-
-Rollback is the same `MODELER_IMAGE=ghcr.io/luisgon-dev/transcendence-analytics-modeler:sha-<short>`
-pin used for the app images; set it in `/root/transcendence/.env` and the next invocation picks it up.
-
-Interrupting a run is safe. The process holds a PostgreSQL session advisory lock for its duration, so
-killing it drops the lock with the session and the worker's reaper fails the row on its next tick — no
-heartbeat, no timeout, nothing to wait out. To stop the schedule entirely,
-`systemctl disable --now transcendence-modeler.timer`.
-
-#### When the modeler runs but exits in seconds
-
-`run` needs a generation in `PendingDataset` to lease. With none, it connects, finds nothing and exits
-in ~11s — and it logs nothing on that path, so a healthy idle timer and a broken one look identical in
-the journal. Check the queue before assuming the modeler is at fault:
 
 ```sql
-SELECT "Status", "Patch", "CreatedAtUtc", "CompletedAtUtc" FROM "BuildLabGenerations"
-ORDER BY "CreatedAtUtc" DESC LIMIT 5;   -- 0=Pending 1=Modeling 2=Candidate 3=Ready 4=Failed 5=Retired
+SELECT "Patch", count(*) AS matches, max("ProcessedAtUtc") AS last_counted
+FROM "BuildLabProcessedMatches" GROUP BY 1 ORDER BY 1 DESC;
+SELECT "Patch", count(*) AS stat_rows FROM "BuildLabOptionStats" GROUP BY 1 ORDER BY 1 DESC;
 ```
 
-The worker creates one daily (`Jobs:Schedule:CreateBuildLabGenerationCron`, 02:15 UTC) but **only when
-no generation for the active patch is still `PendingDataset`, `Modeling` or `Candidate`**. A run that
-occupies the patch therefore suppresses creation for as many days as it lasts, and the create job
-records that as a *success* — it returns "nothing to do" and logs it at `Debug`, below the configured
-level. `transcendence_buildlab_generation_events_total{phase="create",result="skipped"}` is the signal
-that this is happening; it is the only externally visible difference between a skipped tick and a dead
-job, which is exactly what it exists for.
+The worker's `transcendence_buildlab_backlog_matches` gauge is the number of eligible matches still to
+count; it should fall every run and sit near zero between patches. `trn-buildlab-refresh-stale` pages
+when no run has completed for two hours.
 
-So after a long run finally fails, the queue is empty but the next generation is up to 24h away.
+Only the four newest patches are kept (`PatchesToRetain`); older patches' rows are deleted by the next
+run. To recount a patch from scratch — after changing how decisions are counted, say — delete its
+ledger and stats rows and let the job refill them:
 
-##### Forcing the daily job to run now
-
-There is no dashboard and no admin endpoint for this — the create path is the recurring job only. It
-can be triggered by hand, but **not** by setting `NextExecution`: Hangfire recomputes the next
-occurrence from `LastExecution` and the cron, so an edited `NextExecution` is overwritten on the next
-poll without firing. Backdate `LastExecution` past one whole cron occurrence instead, so the missed
-occurrence is in the past. Hangfire fires it once, then rewrites both fields itself — nothing to
-revert.
-
-```bash
-docker exec transcendence-postgres psql -U postgres -d transcendence <<'SQL'
-UPDATE hangfire.hash SET value = ((extract(epoch from now()) - 86400) * 1000)::bigint::text
- WHERE key = 'recurring-job:create-build-lab-generation' AND field = 'LastExecution';
-UPDATE hangfire.set SET score = extract(epoch from now())
- WHERE key = 'recurring-jobs' AND value = 'create-build-lab-generation';
-SQL
-```
-
-Creation runs several minutes of heavy counting queries over the cohort before the row appears, so
-watch for the row rather than expecting it immediately. Stop `transcendence-modeler.timer` first if
-anything (a `REINDEX`, a backfill) should finish before a multi-hour run starts on top of it.
-
-#### Asking the modeler a question without a full run
-
-`run` is the production path and a bad way to answer a question: it needs a pending generation, redraws
-the cohort from Postgres before any modelling starts, sweeps every champion, and publishes. The other
-subcommands need **no** generation, write **nothing** to the database, and share the training-draw cache
-with `run`. All of them accept `--patches`/`--cutoff`, or default to the newest generation's cohort.
-
-```bash
-cd /root/transcendence
-modeler() { docker compose -p transcendence --env-file .env -f compose.yml \
-  --profile analytics-modeling run --rm -T --no-deps --entrypoint python analytics-modeler -u \
-  -m build_lab_modeler "$@"; }
-
-modeler dataset                       # draw the cohort and cache it, per slice
-modeler train                         # fit and print every promotion gate's verdict
-modeler champion --champions 22,51    # estimate records for named champions
-modeler train --refresh               # discard the cached draw and redraw it
-```
-
-`train` ends in `WOULD PROMOTE` or `WOULD BE REJECTED`, evaluated against the same limits as
-`BuildLabModelingOptions` (asserted equal in the test suite), so a local answer predicts the deployed
-one. Exit codes: `0` promotable, `1` no rows drawn, `2` a gate failed.
-
-The draw is cached under `_cache/training-draw/<cohort-key>/` on the artifacts volume, keyed by the
-patches, cutoff, slice modulus and row cap — everything that decides which rows are drawn. A cohort is
-frozen by its `SourceCutoffUtc`, so a cached draw is the draw that cohort produces, not a stale
-approximation. Slices are written individually, so an interrupted draw resumes from where it stopped
-rather than starting over. Set `BUILD_LAB_CACHE_TRAINING_DRAW=false` to disable, or pass `--no-cache`.
-
-Redirect to a file and tail it rather than watching the pipe — `docker compose run` over SSH buffers,
-so a dropped connection loses output that the container already produced:
-
-```bash
-(nohup setsid modeler train > /tmp/train.log 2>&1 &) ; tail -f /tmp/train.log
+```sql
+DELETE FROM "BuildLabOptionStats" WHERE "Patch" = '16.19';
+DELETE FROM "BuildLabProcessedMatches" WHERE "Patch" = '16.19';
 ```
 
 ## `install-matchup-performance-db.sql` — online matchup source preparation

@@ -45,8 +45,13 @@ public sealed class WorkerRecurringJobPolicy(
     public const string RefreshChampionBuildSnapshotsJobId = "refresh-champion-build-snapshots";
     public const string RefreshProAnalyticsJobId = "refresh-pro-analytics";
     public const string RefreshBuildResourceAnalyticsJobId = "refresh-build-resource-analytics";
-    public const string CreateBuildLabGenerationJobId = "create-build-lab-generation";
-    public const string PromoteBuildLabGenerationJobId = "promote-build-lab-generation";
+    public const string RefreshBuildLabStatsJobId = "refresh-build-lab-stats";
+
+    // Jobs that no longer exist. They stay in the descriptor list as permanently disabled entries so
+    // startup keeps removing them from Hangfire storage on hosts that registered them before; a
+    // recurring job whose type is gone would otherwise fail to deserialize on every tick.
+    public const string RetiredCreateBuildLabGenerationJobId = "create-build-lab-generation";
+    public const string RetiredPromoteBuildLabGenerationJobId = "promote-build-lab-generation";
 
     private static readonly HashSet<string> MandatoryBaselineJobIds = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -77,8 +82,9 @@ public sealed class WorkerRecurringJobPolicy(
         RefreshChampionBuildSnapshotsJobId,
         RefreshProAnalyticsJobId,
         RefreshBuildResourceAnalyticsJobId,
-        CreateBuildLabGenerationJobId,
-        PromoteBuildLabGenerationJobId
+        RefreshBuildLabStatsJobId,
+        RetiredCreateBuildLabGenerationJobId,
+        RetiredPromoteBuildLabGenerationJobId
     ];
 
     private readonly WorkerSchedulingProfileOptions profileOptions = profileOptionsAccessor.Value;
@@ -161,17 +167,13 @@ public sealed class WorkerRecurringJobPolicy(
                 schedule.EnableRefreshBuildResourceAnalytics,
                 ConfigureRefreshBuildResourceAnalytics),
             CreateDescriptor(
-                CreateBuildLabGenerationJobId,
-                "Jobs:Schedule:CreateBuildLabGenerationCron",
-                schedule.CreateBuildLabGenerationCron,
-                schedule.EnableCreateBuildLabGeneration,
-                ConfigureCreateBuildLabGeneration),
-            CreateDescriptor(
-                PromoteBuildLabGenerationJobId,
-                "Jobs:Schedule:PromoteBuildLabGenerationCron",
-                schedule.PromoteBuildLabGenerationCron,
-                schedule.EnablePromoteBuildLabGeneration,
-                ConfigurePromoteBuildLabGeneration),
+                RefreshBuildLabStatsJobId,
+                "Jobs:Schedule:RefreshBuildLabStatsCron",
+                schedule.RefreshBuildLabStatsCron,
+                schedule.EnableRefreshBuildLabStats,
+                ConfigureRefreshBuildLabStats),
+            RetiredDescriptor(RetiredCreateBuildLabGenerationJobId),
+            RetiredDescriptor(RetiredPromoteBuildLabGenerationJobId),
             CreateDescriptor(
                 ChampionAnalyticsIngestionJobId,
                 "Jobs:Schedule:ChampionAnalyticsIngestionCron",
@@ -359,23 +361,23 @@ public sealed class WorkerRecurringJobPolicy(
             cronExpression,
             new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
 
-    private static void ConfigureCreateBuildLabGeneration(
+    private static void ConfigureRefreshBuildLabStats(
         IRecurringJobManager recurringJobManager,
         string cronExpression) =>
-        recurringJobManager.AddOrUpdate<CreateBuildLabGenerationJob>(
-            CreateBuildLabGenerationJobId,
+        recurringJobManager.AddOrUpdate<RefreshBuildLabStatsJob>(
+            RefreshBuildLabStatsJobId,
             job => job.ExecuteAsync(CancellationToken.None),
             cronExpression,
             new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
 
-    private static void ConfigurePromoteBuildLabGeneration(
-        IRecurringJobManager recurringJobManager,
-        string cronExpression) =>
-        recurringJobManager.AddOrUpdate<PromoteBuildLabGenerationJob>(
-            PromoteBuildLabGenerationJobId,
-            job => job.ExecuteAsync(CancellationToken.None),
-            cronExpression,
-            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+    private static WorkerRecurringJobDescriptor RetiredDescriptor(string jobId) =>
+        new(
+            jobId,
+            Cron.Never(),
+            "retired",
+            IsEnabled: false,
+            IsMandatoryBaseline: false,
+            (_, _) => throw new InvalidOperationException($"Recurring job '{jobId}' is retired."));
 
     private static void ConfigureChampionAnalyticsIngestion(
         IRecurringJobManager recurringJobManager,

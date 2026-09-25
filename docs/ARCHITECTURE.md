@@ -72,13 +72,12 @@ Transcendence is a backend + web monorepo:
   - `/lol/items/*` and `/lol/runes/*` are the Build Atlas: searchable index and detail pages for
     resource pick rate, win rate, sample size, and champion-role fit. The indexes, detail pages,
     header, command palette, landing discovery, and sitemap all expose the new surfaces.
-  - `/lol/builds` (champion picker), `/lol/builds/[championId]` (the Build Lab decision surface), and
-    `/lol/builds/shared/[shareId]` (read-only shared saved build) are the Build Lab consumers, behind
-    `TRN_FEATURE_BUILD_LAB`. `/account/saved-builds` owns a user's saved decision states and
-    `/admin/analytics/build-lab` is the generation promote/rollback/fail console. These five are **not
-    yet** registered in `apps/web/lib/webVitalsRoute.ts`, so RUM currently buckets them into
-    `/_other`; adding them (`shared/[shareId]` before `[championId]`) is the pending follow-up that
-    restores per-surface Web Vitals.
+  - `/lol/builds` (champion picker) and `/lol/builds/[championId]` (`components/BuildLab.tsx`,
+    `lib/buildLab.ts`) are the Build Lab surface, behind `TRN_FEATURE_BUILD_LAB`. It is step-by-step:
+    "Lock" on a legendary extends the item path and "Lock" on a keystone conditions the runes (both
+    refetch), while "Pick" records a terminal choice (starter, boots, rune page, spells) in a "Your
+    build" strip and the permalink without refetching. The champion page's recommendation card reads
+    the profile's embedded `recommendation`, behind `TRN_FEATURE_CHAMPION_RECOMMENDATIONS`.
   - `/lol/live` is the first-class live-game scout. It accepts a Riot ID, renders both teams with
     rank/form/streak/champion-pool and loadout context, and re-checks active games every minute.
     Profile sidebars reuse a compact version of the same card.
@@ -325,8 +324,8 @@ The discovery lane stalls when all workers park on a few long, non-stoppable job
 - **Dedicated hourly default-profile warm** (`WarmDefaultChampionProfilesJob`, cron `Jobs:Schedule:WarmDefaultChampionProfilesCron` = `0 * * * *`, low-priority `refresh-low` queue): keeps **every** champion's default profile page warm and fresh, not just the top-N the adaptive refresh covers. For each champion with ≥ `Jobs:WarmDefaultChampionProfiles:MinimumGamesToWarm` games on the active patch it calls `IChampionAnalyticsService.RefreshDefaultProfileCacheAsync`, which **recomputes** win rates (Emerald+, region=ALL, no role) → resolves the most-played lane exactly as the profile endpoint does → recomputes builds + matchups (and, when `IncludeProBuilds`, the lane-scoped pro-builds) for that lane, then **overwrites** the exact cache keys via `HybridCache.SetAsync`. SetAsync is gap-free refresh-ahead — the old value keeps serving until the fresh one lands, so there is no invalidate-then-cold window. With L2 (Redis) TTL 24h and a 1h refresh, every default profile stays a permanent Redis hit (warm read ≈ tens of ms vs 3–6s cold) with ≤1h-old stats. The job runs on its own DI scope per champion (isolated `DbContext`) with bounded `MaxConcurrency`, so it yields DB to ingestion/API demand. NB: the worker process populates the shared L2 (Redis); the WebAPI process reads its own (cold) L1 then hits that warm Redis entry.
 - **Reserved worker pool.** The "keep analytics warm/fresh" jobs (`WarmDefaultChampionProfilesJob`,
   `RefreshPrecomputedAnalyticsJob`, `RefreshChampionBuildSnapshotsJob`,
-  `RefreshChampionMatchupsJob`, `RefreshProAnalyticsJob`, and
-  `RefreshBuildResourceAnalyticsJob`) run on a dedicated Hangfire queue,
+  `RefreshChampionMatchupsJob`, `RefreshProAnalyticsJob`, `RefreshBuildResourceAnalyticsJob`, and
+  `RefreshBuildLabStatsJob`) run on a dedicated Hangfire queue,
   `HangfireQueues.AnalyticsWarm` (`"analytics-warm"`), served by a **second
   `BackgroundJobServer`** with four workers (`Transcendence.Service/Program.cs`). The main 24-worker
   server pulls queues highest-priority-first and does **not** serve `analytics-warm`, so a saturated
@@ -351,23 +350,7 @@ failure aborts later components in that poll cycle. PostgreSQL and Redis are nev
 
 **wud is retired for the app containers** (wud 8.2.2 silently failed to resolve the GHCR digest for
 these packages); it may still linger in the stack for sidecars, but Compose pins `wud.watch=false`
-on `web`, `webapi`, `service`, and `analytics-modeler` so it cannot race the systemd poller during a
-release.
-
-**`analytics-modeler` is a fourth published image** (`transcendence-analytics-modeler`, path-filtered
-on `analytics/modeler/**`) with the same tags, labels, provenance, SBOM, and cosign signature as the
-app images — but it is **not a service the poller deploys**, and deliberately so.
-
-It is a **run-to-completion oneshot** owned by `transcendence-modeler.timer`, which runs
-`docker compose run --rm --pull always`. A modeling run takes hours; while the modeler
-was a long-lived container, every image update recreated it mid-run and discarded the generation. A
-process that exits on its own is deployed *between* runs instead of through one, its exit code is the
-completion signal, and `--rm` leaves nothing for a poller to recreate. `SERVICES` in
-`scripts/ops/poll-deploy.sh` therefore lists only `service`/`webapi`/`web`.
-
-Overlap needs no scheduler-side guard: the timer fires every 10 minutes against runs that last hours,
-and a second invocation cannot take the modeling advisory lock, so it exits idle. See
-`scripts/ops/README.md` → *`analytics-modeler` — run-to-completion oneshot*.
+on `web`, `webapi`, and `service` so it cannot race the systemd poller during a release.
 
 Hot-table index migrations remain the exception and must be applied out-of-band before deployment
 (see DEVELOPMENT.md); the CI `migration-apply` job additionally applies the full chain to ephemeral
@@ -398,17 +381,13 @@ synced from the repo—not part of the app's Portainer stack or the `poll-deploy
   down; PostgreSQL connection use above 80%; Redis rejected connections; API 5xx ratio high; API p95
   latency high; sample-gated real-user p75 LCP/INP/CLS degradation; host disk space low; repeated
   matchup-generation failures; and a matchup generation that has not promoted for two hours.
-- **Build Lab rules** (`trn-buildlab-*`, same file) cover a `PendingDataset` generation no modeler
-  claimed (the dead-modeler detector), a generation wedged in `Modeling` past what the lease reaper
-  can explain, a lost training run, an active generation older than 48h, dataset lag over 72h, a
-  rollback of the active pointer, an active generation that publishes zero action estimates, a
-  champion-role coverage collapse against the surface's own 7-day peak, and breaches of the
-  effective-sample-size and calibration gates promotion is supposed to enforce. Every rule guards on
-  `> 0` with `noDataState: OK`, so a disabled feature never pages. The `transcendence_buildlab_*`
-  series are emitted by `Services/Diagnostics/BuildLabTelemetry.cs`, whose singleton the worker host
-  resolves at startup so the series exist and read 0 with the feature off — an absent series is
-  indistinguishable from a dead worker. Names, types, labels, and the cadence arithmetic behind each
-  threshold are in `config/monitoring/README.md` → *Build Lab metrics contract*.
+- **Build Lab rules** (same file): `trn-buildlab-refresh-stale` (no completed stats refresh for over
+  two hours, held 15m) and `trn-buildlab-refresh-errors` (three or more failed runs in an hour). Both
+  guard on `> 0` with `noDataState: OK`, so a disabled feature never pages. The
+  `transcendence_buildlab_*` series are emitted by `Services/Diagnostics/BuildLabTelemetry.cs`, whose
+  singleton the worker host resolves at startup so the series exist and read 0 with the feature off —
+  an absent series is indistinguishable from a dead worker. Names, types, and labels are in
+  `config/monitoring/README.md` → *Build Lab metrics contract*.
 - **Scrape targets**: application metrics, node-exporter, pinned `postgres_exporter` and
   `redis_exporter`. PostgreSQL uses a dedicated login granted `pg_monitor`; `pg_stat_statements`,
   `track_io_timing`, and 64 MB temp-file logging make expensive-query and spill analysis durable.
@@ -649,12 +628,13 @@ separates API and worker sessions in `pg_stat_activity`. Container CPU/memory/PI
 individual application process; PostgreSQL remains intentionally uncapped so the database—not an
 arbitrary cgroup limit—owns memory/cache policy.
 
-## Build Lab adjusted-WPA platform
+## Build Lab
 
-Build Lab deliberately separates collection, offline modeling, promotion, and serving:
+Build Lab is additive win/game counts for every build decision, computed in the .NET worker with SQL.
+There is no offline model, no generation, and nothing to promote: readers see the counts grow.
 
-1. The .NET worker remains the only Riot collector and canonical database writer. Timeline schema
-   v2 adds per-frame current-gold/lane-CS/jungle-CS, lossless ordered item lifecycle events
+1. **Capture.** The worker remains the only Riot collector and canonical database writer. Timeline
+   schema v2 adds per-frame current-gold/lane-CS/jungle-CS, lossless ordered item lifecycle events
    (purchase/undo/sale/destruction, including components), selected raw timeline event payloads, and
    nullable match-adjacent rank provenance. **Every one of those is gated on
    `Analytics:BuildLab:Enabled`**, and so is the *effective* schema version:
@@ -663,106 +643,77 @@ Build Lab deliberately separates collection, offline modeling, promotion, and se
    on. That makes the flag the only switch that matters: with it off nothing is stamped v2 and no
    already-ingested timeline is considered stale, and turning it on raises the staleness bar so the
    corpus re-ingests once — no `const` bump, and no way for a v2 stamp to exist without the extras
-   behind it, which is the property the generation cohort filter relies on. The existing profile
+   behind it, which is the property the refresh's eligibility filter relies on. The existing profile
    timeline read filters whatever cadence is present back to the two-minute curve. The one-time
    re-ingestion sweep it triggers is multi-day and rate-gated — see docs/DEVELOPMENT.md, "Enabling
    Build Lab on an existing corpus".
-2. `CreateBuildLabGenerationJob` freezes an immutable Emerald+ Ranked Solo/Duo generation with a
-   source cutoff, patch/region set, static-data version, code revision, and match count.
-3. The isolated `analytics/modeler` Python container leases pending generations. It exports
-   deidentified Parquet partitioned by patch and region, trains an isotonic-calibrated structural
-   win model, and produces cross-fitted doubly robust item, rune, spell-pair, and complete-path
-   estimates. Current-patch observations receive the greatest weight; materially changed or drifted
-   prior actions are excluded and sparse cells receive hierarchical-style empirical-Bayes shrinkage.
-4. The modeler writes candidate-generation rows and an immutable artifact manifest. The .NET
-   promoter re-derives the manifest checksum, re-checks the held-out-patch/calibration/baseline/
-   leakage metrics, re-applies the evidence gates, and corrects regional overrides before atomically
-   changing the active-generation pointer. A candidate that fails any gate is marked `Failed` and can
-   never become active, so a served Adjusted WPA figure always comes from a generation whose win
-   model passed calibration.
-5. The Web API reads only `Ready` active-generation PostgreSQL rows. HybridCache keys include the
-   generation id, context, ranking mode, and ordered prefix, preventing mixed-generation responses.
-   Rollback is one transactional pointer change plus analytics-tag invalidation.
+2. **Replay.** `BuildLabDecisions` (pure, no data access) turns one participant's item events, runes,
+   and spells into decisions, each a `(family, stage, prefix, action)`:
+   - **Starter** — the starter-category purchases in the first 90 seconds, as one set.
+   - **Item** stages 1–6 — the Nth completed legendary; the prefix is the ordered legendaries before
+     it. A bought-back legendary is not a new decision and undone purchases never count.
+   - **Boots** — the first completed boots.
+   - **RunePage** — the whole page as one choice.
+   - **Rune** — slot 1 is the keystone with an empty prefix; slots 2+ are conditioned on the keystone
+     only. Full-prefix conditioning made nearly every page unique (64k keys from 3,000 matches).
+   - **Spells** — the order-independent pair.
 
-**Modeling exclusivity and the abandoned-run reaper.** `Modeling` is the one state only the Python
-side can leave, so it is the state that can wedge. The modeler claims a `PendingDataset` row with
-`FOR UPDATE SKIP LOCKED` and holds a **PostgreSQL session advisory lock** (`build-lab-generation-modeling`)
-for the whole run. Both the create and promote jobs call the coordinator's reaper first, and the reaper
-decides liveness by *trying to take that same lock*: acquiring it proves no modeler session is alive, so
-every `Modeling` row is moved to `Failed` with the owner named in `FailureReason`.
+   `BuildLabPath.Hash` (first 8 bytes of SHA-256 over the comma-joined ids) is the prefix key, shared
+   by writer and reader.
+3. **Count.** `BuildLabStatsRefresher` adds each newly eligible match to `BuildLabOptionStats` (migration
+   `ReplaceBuildLabWithAdditiveStats`, which also drops the retired generation, estimate, and
+   saved-build tables), keyed
+   `(ChampionId, Role, OpponentChampionId, Region, PrefixHash, Family, Stage, Patch, ActionKey,
+   GoldBucket)` with `Games`, `Wins`, `TimingSecondsSum`. Every column is a plain sum, so patches,
+   regions, and opponents add at read time. `OpponentChampionId = 0` and `Region = 'ALL'` are the
+   all-games scope every decision lands in; the lane opponent and the platform region are counted
+   additionally, but **only** for Starter, the first item, Boots, RunePage, and Spells — measured on
+   prod, 75% of matchup keys for items 1–3 were single-game. There is no opponent×region scope.
+   `GoldBucket` is the team gold difference at the decision minute (the frame at
+   `floor(timestamp / 60000)`), bucketed at −2500/−750/750/2500; pregame decisions and missing frames
+   fall in the middle bucket (2).
+4. **Serve.** `BuildLabService` chooses which counts answer a request and `BuildLabEstimator` (pure
+   arithmetic) turns them into rates; the contract is in `docs/API.md` → *Build Lab*.
 
-There is deliberately no heartbeat, no expiry column, and no timeout to tune. PostgreSQL ties the lock
-to the TCP session, so a crashed, OOM-killed, or `docker kill`ed modeler releases it immediately. This
-replaced an application-level lease with a renewal thread, which reaped **six consecutive healthy
-generations**: loading the frozen dataset assembles millions of rows through a raw DBAPI cursor, which
-holds the GIL for minutes, so the renewal thread could not be scheduled and its deadline lapsed while
-the run was making progress. The lock is also the convention every other long exclusive job here
-already uses (`RefreshBuildResourceAnalyticsJob`, `MatchTimelineIngestionJob`).
+**Eligibility.** Ranked Solo/Duo (queue 420), `Match.Status` Success, duration ≥ 300s, and a
+timeline fetched at `SchemaVersion >= 2`. A match with any early-surrender participant is ledgered but
+not counted. Rank scope is **every tracked rank**, not Emerald+: 57% of rank-context rows had no tier,
+and the crawler is already Master-heavy.
 
-**Promotion provenance is append-only.** `PromotionHistoryJson` accumulates one
-`{action, atUtc, actor, reason}` entry per `promote`/`rollback`/`fail`, so a generation carries its own
-audit trail alongside the `AdminAuditLog` rows the admin endpoints write. A malformed history restarts
-from an empty list rather than throwing — provenance must never block a promotion.
+**Exactly-once, resumable counting.** Each batch (`MatchBatchSize`, 500) loads participants, item
+events, snapshot gold, and runes, replays and aggregates in memory, then commits one transaction:
+`INSERT … SELECT FROM unnest(…) ON CONFLICT DO UPDATE SET "Games" = "Games" + EXCLUDED."Games" …` plus
+the batch's rows in the `BuildLabProcessedMatches` ledger (`MatchId` PK, `Patch`, `ProcessedAtUtc`).
+A crash leaves a batch either fully counted or not at all, eligibility excludes ledgered matches, and
+the next run resumes exactly where the last stopped — nothing can be double counted. A run refreshes
+the active patch plus `PriorPatchesToRefresh` (2) older ones for late matches, keeps the
+`PatchesToRetain` (4) newest patches and deletes the stats and ledger of anything older, and stops at
+`MaxMatchesPerRun` (20,000), so a fresh patch backfills over several runs (~45 minutes of IO per patch
+on the HDD box) instead of holding a worker slot for hours.
 
-Four deliberate deviations from the original Build Lab proposal, all ratified:
+**Job.** `RefreshBuildLabStatsJob` (recurring id `refresh-build-lab-stats`, default `*/15 * * * *`) runs
+on the `analytics-warm` lane under the PostgreSQL session advisory lock
+`transcendence:build-lab-refresh`, held on the context's own connection so a dead worker releases it
+with its session. It no-ops while `Analytics:BuildLab:Enabled` is false. The retired
+`create-build-lab-generation` / `promote-build-lab-generation` recurring ids from the old modeled
+pipeline are removed from Hangfire at startup.
 
-- **No physical staging tables.** The modeler writes directly into the generation-scoped serving
-  tables (`AdjustedActionEstimates` / `AdjustedPathEstimates`), and isolation comes from three
-  properties instead: every row carries a `GenerationId`, readers resolve rows only through the
-  single active-generation pointer, and promotion flips that pointer inside one transaction. The
-  property the proposal wanted — *a partially written generation is never visible* — already holds,
-  because a generation that is not `Ready` and active is unreadable no matter how many rows it has.
-  Physical staging would have doubled the schema and the write volume to buy nothing beyond that.
-- **Parquet export is owned by Python, not .NET.** The .NET side freezes the generation *boundary*
-  (source cutoff, patch/region set, match count, static-data and code revision) and the modeler
-  exports the deidentified Parquet from it. The original split had .NET produce the export; moving it
-  keeps one process responsible for the dataset's physical layout and columns, and keeps pandas /
-  pyarrow out of the worker's dependency set. The boundary — the thing that must be immutable and
-  auditable — is still frozen by .NET before the modeler ever reads.
-- **One timeline table serves both modeling and the profile curve.** The proposal wanted a separate
-  high-resolution modeling table beside the existing two-minute profile snapshots.
-  `MatchParticipantTimelineSnapshots` is instead the single source, and the "two-minute profile" is a
-  read-time predicate on `MinuteMark` — no second table, no dual-write, and no way for the two
-  representations to disagree about the same match. Because that makes cadence a storage decision
-  rather than a schema one, ingest cadence is **flag-coupled**: with Build Lab disabled the job honours
-  `Jobs:TimelineIngestion:FrameIntervalMinutes` (default 2), and only with it enabled does it drop to
-  one minute. A feature-off deployment therefore does not double the ~22.5M-row hot table just to keep
-  the option open — and because the stamped schema version is flag-derived too, it also does not
-  re-fetch a single timeline it would gain nothing from.
-- **`MatchTimelineEventPayloads` is selective, not an archive.** The proposal implied persisting the
-  raw timeline. The table stores only the event types the modeler actually consumes — the item
-  lifecycle plus `CHAMPION_KILL`, `BUILDING_KILL`, `ELITE_MONSTER_KILL` — with null union members
-  dropped from the serialized JSON. It is written only when Build Lab is enabled, as are
-  `MatchParticipantItemEvents` and `MatchParticipantRankContexts`: all three modeling-only tables share
-  the one flag. It is a purpose-built modeling input, not a byte-for-byte copy of Riot's response, so a
-  feature-off deployment writes no `jsonb` rows at all and an unused event type costs nothing.
+**Why counts instead of a model.** The adjusted win rate standardizes each option against the
+decision's own win rate in the same gold bucket (observed minus expected), which removes the largest
+confounder — an item bought only while ahead is judged against other ahead games — while every
+figure stays a transparent ratio of summed counts. Matchup and regional answers shrink each option's
+lift toward its all-games lift and fall back to all games below 150 weighted games, so a thin scope
+never serves a noisy number as if it were its own.
 
-`ArtifactSha256` is the SHA-256 of `ArtifactManifestJson`. The promoter re-derives it and compares, so
-it proves the stored manifest is populated and self-consistent with the digest the modeler wrote in the
-same transaction. It is **not** a content hash of the Parquet/joblib bundle at `ArtifactUri`: it cannot
-detect a corrupted, truncated, or replaced object in storage, and it must not be treated as a
-verification step before re-hydrating an artifact.
-
-**What "calibrated" means for a served number.** The structural win model is a logistic fit wrapped in
-an isotonic calibrator fitted on a chronologically separate calibration split and evaluated on a
-held-out patch. Its *calibrated* score is what the pipeline carries forward: every decision row is
-scored with model + calibrator, and that score enters both doubly robust nuisance models (propensity
-and outcome) as a logit-transformed prognostic covariate. So the published `adjustedWpa` and a path's
-`estimatedWinProbability` are anchored on the calibrated score, not on the raw logistic output — which
-is what makes the promoter's ECE / Brier / log-loss / held-out-patch gates load-bearing rather than
-decorative: failing them blocks the generation that produced those numbers. Product copy still says
-"adjusted", never "causal".
-
-The initial methodology is population-level and explicitly non-causal in product language:
-Adjusted WPA estimates the percentage-point change in match win probability from choosing an option
-instead of realistic alternatives in comparable pre-action states. Action estimates are never
-summed; an item path is re-estimated as one conditioned path. V1 thresholds cannot be operationally
-lowered under the `build-lab-v1` dataset version—a looser methodology requires a new version and
-another shadow validation.
-
-The new tables coexist with the existing descriptive champion-build and Build Atlas snapshots for
-at least one patch transition. No public estimate is exposed until a generation is promoted, and
-descriptive champion/resource pages remain available when a champion-role scope is unqualified.
+**One timeline table serves both Build Lab and the profile curve.** `MatchParticipantTimelineSnapshots`
+is the single source, and the "two-minute profile" is a read-time predicate on `MinuteMark` — no second
+table, no dual-write. Because cadence is therefore a storage decision rather than a schema one, it is
+**flag-coupled**: with Build Lab disabled the job honours `Jobs:TimelineIngestion:FrameIntervalMinutes`
+(default 2), and only with it enabled does it drop to one minute. A feature-off deployment does not
+double the ~22.5M-row hot table just to keep the option open. `MatchParticipantItemEvents`,
+`MatchTimelineEventPayloads` (item lifecycle plus `CHAMPION_KILL`, `BUILDING_KILL`,
+`ELITE_MONSTER_KILL`, null union members dropped), and `MatchParticipantRankContexts` are likewise
+written only when Build Lab is enabled.
 
 ## Data Access
 

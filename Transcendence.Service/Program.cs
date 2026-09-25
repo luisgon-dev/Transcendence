@@ -172,10 +172,8 @@ builder.Services.Configure<PrecomputedAnalyticsOptions>(
     builder.Configuration.GetSection("Analytics:Precompute"));
 builder.Services.Configure<BuildResourceSnapshotOptions>(
     builder.Configuration.GetSection("Analytics:BuildAtlas"));
-builder.Services.Configure<BuildLabModelingOptions>(
+builder.Services.Configure<BuildLabOptions>(
     builder.Configuration.GetSection("Analytics:BuildLab"));
-builder.Services.Configure<SavedBuildOptions>(
-    builder.Configuration.GetSection("Analytics:SavedBuilds"));
 builder.Services.AddSingleton<IWorkerRecurringJobPolicy, WorkerRecurringJobPolicy>();
 builder.Services.AddSingleton<WorkerStartupIntegrityState>();
 builder.Services.AddSingleton<IWorkerStartupIntegrityService, WorkerStartupIntegrityService>();
@@ -242,10 +240,9 @@ builder.Services.AddProjectSyndraRepositories();
 
 var host = builder.Build();
 
-// Build Lab's two jobs are the only consumers of BuildLabTelemetry and both ship disabled, so nothing
-// would construct the lazily-resolved singleton and its series would be missing rather than zero — an
-// empty dashboard panel is indistinguishable from a dead worker. Resolving it here creates the meter
-// and every instrument at startup, so a feature-off worker reports a defined 0 for all of them.
+// The Build Lab refresh job is the only consumer of BuildLabTelemetry, so nothing would construct the
+// lazily-resolved singleton before its first run and its series would be missing rather than zero.
+// Resolving it here creates the meter at startup, so a feature-off worker reports a defined 0.
 if (builder.Configuration.GetValue("Telemetry:Enabled", true))
     host.Services.GetRequiredService<Transcendence.Service.Core.Services.Diagnostics.BuildLabTelemetry>();
 

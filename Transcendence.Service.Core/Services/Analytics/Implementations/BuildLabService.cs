@@ -1,6 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Options;
@@ -11,47 +8,57 @@ using Transcendence.Service.Core.Services.Analytics.Models;
 
 namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 
+/// <summary>
+/// Reads the counts <see cref="BuildLabStatsRefresher"/> maintains and turns them into per-option win
+/// rates. All the estimation is <see cref="BuildLabEstimator"/>; this class only chooses which counts
+/// answer a request.
+/// </summary>
 public sealed class BuildLabService(
     TranscendenceContext context,
     HybridCache cache,
-    IOptions<BuildLabModelingOptions> modelingOptions) : IBuildLabService
+    IOptions<BuildLabOptions> options) : IBuildLabService
 {
+    public const string RankScope = "ALL_TRACKED";
+
+    /// <summary>
+    /// A matchup or region needs this many (patch-weighted) games at a decision before its own counts
+    /// are used; below it the stage answers from all games and says so.
+    /// </summary>
+    public const double MinimumScopedStageGames = 150;
+
+    /// <summary>Weight of the active patch and each one before it, when no single patch is requested.</summary>
+    public static readonly double[] PatchRecencyWeights = [1.0, 0.6, 0.35];
+
+    private const int MaximumOptionsPerStage = 15;
+    private const double MinimumOptionGames = 5;
+    private const int MaximumItemPath = BuildLabDecisions.MaximumItemStage - 1;
+    private const string DisabledReason = "Build Lab is not enabled on this deployment.";
+
     private static readonly HashSet<string> Roles =
         new(["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"], StringComparer.Ordinal);
-    private static readonly HashSet<string> Sections =
-        new(["ITEMS", "RUNES", "SPELLS"], StringComparer.Ordinal);
-    private static readonly HashSet<string> Modes =
-        new(["SUPPORTED", "IMPACT", "COMMON"], StringComparer.Ordinal);
-    private static readonly HybridCacheEntryOptions CacheOptions = new()
+    private static readonly HashSet<string> Sections = new(["ITEMS", "RUNES", "SPELLS"], StringComparer.Ordinal);
+    private static readonly HashSet<string> Modes = new(["SUPPORTED", "IMPACT", "COMMON"], StringComparer.Ordinal);
+    private static readonly long EmptyPrefix = BuildLabPath.Hash([]);
+
+    private static readonly HybridCacheEntryOptions ResponseCacheOptions = new()
     {
-        Expiration = TimeSpan.FromMinutes(15),
+        Expiration = TimeSpan.FromMinutes(10),
         LocalCacheExpiration = TimeSpan.FromMinutes(5)
     };
-    // The active pointer moves only on promotion, but every champion profile hits this lookup, so a
-    // short TTL keeps the disabled/no-generation path off the database entirely.
-    private static readonly HybridCacheEntryOptions GenerationCacheOptions = new()
+    private static readonly HybridCacheEntryOptions CoverageCacheOptions = new()
     {
-        Expiration = TimeSpan.FromSeconds(60),
-        LocalCacheExpiration = TimeSpan.FromSeconds(30)
+        Expiration = TimeSpan.FromMinutes(5),
+        LocalCacheExpiration = TimeSpan.FromMinutes(2)
     };
-    private static readonly BuildLabProvenanceDto EmptyProvenance =
-        new(null, string.Empty, string.Empty, string.Empty, null, null, 0, "EMERALD_PLUS", [], []);
-
-    private const string ActiveGenerationCacheKey = "analytics:build-lab:v1:active-generation";
-    private const string DisabledReason = "Adjusted WPA is not enabled on this deployment.";
-    private const string ShadowValidationReason =
-        "Adjusted WPA is still in shadow validation for this patch.";
-    private const string BaselineDefinition =
-        "Realistic alternative choices at the same stage, timing and prior path.";
-    // Starter set plus boots plus six legendary slots, with room for multi-piece starters.
-    private const int MaximumItemPath = 12;
+    private static readonly BuildLabCoverageDto EmptyCoverage = new([], [], 0, null, [], RankScope);
 
     public async Task<BuildLabResponse> GetAsync(BuildLabQuery query, CancellationToken ct = default)
     {
         var normalized = Normalize(query);
-        if (!modelingOptions.Value.Enabled)
-            return Empty(normalized, null, DisabledReason);
-        return await GetAsync(normalized, await ResolveActiveGenerationAsync(ct), ct);
+        if (!options.Value.Enabled)
+            return Empty(normalized, EmptyCoverage, DisabledReason);
+        var coverage = await CoverageAsync(normalized.Patch, ct);
+        return await GetAsync(normalized, coverage, ct);
     }
 
     public async Task<ChampionRecommendationSummary> GetChampionRecommendationAsync(
@@ -62,258 +69,266 @@ public sealed class BuildLabService(
         string? region,
         CancellationToken ct = default)
     {
-        if (!modelingOptions.Value.Enabled)
-            return new ChampionRecommendationSummary(
-                false, EmptyProvenance, null, null, null, DisabledReason);
+        if (!options.Value.Enabled)
+            return new ChampionRecommendationSummary(false, EmptyCoverage, null, null, null, DisabledReason);
 
         BuildLabQuery normalized;
         try
         {
             normalized = Normalize(new BuildLabQuery(
-                championId, role, opponentChampionId, patch, region, "ITEMS", "SUPPORTED", [], [], []));
+                championId, role, opponentChampionId, patch, region, "ITEMS", "SUPPORTED", [], []));
         }
         catch (ArgumentException)
         {
-            // The summary is embedded in the champion profile, so invalid context degrades to an
-            // unavailable block instead of failing the whole profile read.
+            // Embedded in the champion profile: invalid context degrades to an unavailable block
+            // instead of failing the whole profile read.
             return new ChampionRecommendationSummary(
-                false, EmptyProvenance, null, null, null,
-                "The requested Build Lab context is not valid.");
+                false, EmptyCoverage, null, null, null, "The requested Build Lab context is not valid.");
         }
 
-        // One resolve for all three sections: a promotion between reads would otherwise mix
-        // generations behind a single provenance block.
-        var generation = await ResolveActiveGenerationAsync(ct);
-        if (generation == null)
-            return new ChampionRecommendationSummary(
-                false, EmptyProvenance, null, null, null, ShadowValidationReason);
-
-        var items = await GetAsync(normalized, generation, ct);
-        var runes = await GetAsync(normalized with { Section = "RUNES" }, generation, ct);
-        var spells = await GetAsync(normalized with { Section = "SPELLS" }, generation, ct);
-        if (!items.Available && !runes.Available && !spells.Available)
-        {
-            return new ChampionRecommendationSummary(
-                false,
-                generation.Provenance,
-                null,
-                null,
-                null,
-                items.UnavailableReason);
-        }
-
+        var coverage = await CoverageAsync(normalized.Patch, ct);
+        var items = await GetAsync(normalized, coverage, ct);
+        var runes = await GetAsync(normalized with { Section = "RUNES" }, coverage, ct);
+        var spells = await GetAsync(normalized with { Section = "SPELLS" }, coverage, ct);
+        var firstItem = Best(items, BuildLabFamily.Item, stage: 1);
+        var runePage = Best(runes, BuildLabFamily.RunePage, stage: 0);
+        var spellPair = Best(spells, BuildLabFamily.Spells, stage: 0);
+        var available = firstItem != null || runePage != null || spellPair != null;
         return new ChampionRecommendationSummary(
-            true,
-            generation.Provenance,
-            FirstCandidate(items, family: "FIRST_ITEM_PATH"),
-            FirstCandidate(runes, family: "RUNE_PAGE"),
-            FirstCandidate(spells, family: "SPELL"),
-            null);
+            available,
+            coverage,
+            firstItem,
+            runePage,
+            spellPair,
+            available ? null : "Not enough games have been counted for this champion and role yet.");
     }
 
     private async Task<BuildLabResponse> GetAsync(
-        BuildLabQuery normalized,
-        BuildLabActiveGeneration? generation,
+        BuildLabQuery query,
+        BuildLabCoverageDto coverage,
         CancellationToken ct)
     {
-        if (generation == null)
-            return Empty(normalized, null, ShadowValidationReason);
-        if (!PatchIsServable(generation, normalized.Patch))
-            return Empty(
-                normalized,
-                generation,
-                $"Patch {normalized.Patch} is outside the promoted generation's modeled patch set.");
+        if (coverage.IncludedPatches.Count == 0)
+            return Empty(query, coverage, "No games have been counted yet.");
 
-        var selectedPath = SelectedPath(normalized);
-        var pathHash = HashPath(selectedPath);
-        var requestedRegion = NormalizeRegion(normalized.Region);
-        var cacheKey =
-            $"analytics:build-lab:v1:{generation.Id}:{normalized.ChampionId}:{normalized.Role}:{normalized.OpponentChampionId ?? 0}:{normalized.Patch ?? "current"}:{requestedRegion}:{normalized.Section}:{normalized.Mode}:{pathHash}";
-
+        var path = SelectedPath(query);
+        var cacheKey = string.Join(':',
+            "analytics:build-lab:v2",
+            query.ChampionId, query.Role, query.OpponentChampionId ?? 0, query.Region ?? "ALL",
+            string.Join(',', coverage.IncludedPatches), query.Section, query.Mode, string.Join(',', path));
         return await cache.GetOrCreateAsync(
             cacheKey,
-            cancel => ComputeAsync(normalized, generation, requestedRegion, pathHash, cancel),
-            CacheOptions,
-            tags: ["analytics", $"analytics:build-lab:{generation.Id}"],
+            cancel => ComputeAsync(query, coverage, path, cancel),
+            ResponseCacheOptions,
+            tags: ["analytics", "analytics:build-lab"],
             cancellationToken: ct);
     }
 
     private async ValueTask<BuildLabResponse> ComputeAsync(
         BuildLabQuery query,
-        BuildLabActiveGeneration generation,
-        string requestedRegion,
-        string pathHash,
+        BuildLabCoverageDto coverage,
+        IReadOnlyList<int> path,
         CancellationToken ct)
     {
-        var opponentId = query.OpponentChampionId ?? 0;
-        var families = query.Section switch
+        var cells = RequestedCells(query, path);
+        var families = cells.Select(cell => cell.Family).Distinct().ToArray();
+        var prefixes = cells.Select(cell => cell.PrefixHash).Distinct().ToArray();
+        var patches = coverage.IncludedPatches.ToArray();
+        var weights = patches
+            .Select((patch, index) => (patch, weight: coverage.PatchWeights[index]))
+            .ToDictionary(pair => pair.patch, pair => pair.weight);
+        var opponent = query.OpponentChampionId ?? 0;
+        // A request is answered from one narrow scope at most: a matchup if one is given, else a
+        // region. Matchup-by-region is not counted; it would be empty for nearly every champion.
+        var scopedRegion = opponent == 0 && query.Region != null ? query.Region : BuildLabStatsRefresher.AllRegions;
+        var narrow = opponent != 0 || scopedRegion != BuildLabStatsRefresher.AllRegions;
+
+        var rows = await context.BuildLabOptionStats.AsNoTracking()
+            .Where(row =>
+                row.ChampionId == query.ChampionId &&
+                row.Role == query.Role &&
+                (row.OpponentChampionId == 0 || row.OpponentChampionId == opponent) &&
+                (row.Region == BuildLabStatsRefresher.AllRegions || row.Region == scopedRegion) &&
+                prefixes.Contains(row.PrefixHash) &&
+                families.Contains(row.Family) &&
+                patches.Contains(row.Patch))
+            .Select(row => new
+            {
+                row.OpponentChampionId,
+                row.Region,
+                row.PrefixHash,
+                row.Family,
+                row.Stage,
+                row.Patch,
+                row.ActionKey,
+                row.GoldBucket,
+                row.Games,
+                row.Wins,
+                row.TimingSecondsSum
+            })
+            .ToListAsync(ct);
+
+        var stages = new List<BuildLabStageDto>();
+        foreach (var stageRows in rows
+                     .Where(row => cells.Any(cell => cell.Family == row.Family && cell.PrefixHash == row.PrefixHash))
+                     .GroupBy(row => (row.Family, row.Stage))
+                     .OrderBy(group => FamilyOrder(group.Key.Family))
+                     .ThenBy(group => group.Key.Stage))
         {
-            "ITEMS" => new[] { "STARTER", "FIRST_ITEM_PATH", "BOOTS", "ITEM" },
-            "RUNES" => new[] { "RUNE_PAGE", "RUNE" },
-            _ => new[] { "SPELL" }
-        };
+            var (family, stage) = stageRows.Key;
+            var timed = family is BuildLabFamily.Item or BuildLabFamily.Boots;
+            List<BuildLabCount> Counts(bool scoped) => stageRows
+                .Where(row => scoped
+                    ? row.OpponentChampionId == opponent && row.Region == scopedRegion
+                    : row.OpponentChampionId == 0 && row.Region == BuildLabStatsRefresher.AllRegions)
+                .Select(row =>
+                {
+                    var weight = weights[row.Patch];
+                    return new BuildLabCount(
+                        row.ActionKey, row.GoldBucket, row.Games * weight, row.Wins * weight,
+                        row.TimingSecondsSum * weight);
+                })
+                .ToList();
 
-        var baseQuery = context.AdjustedActionEstimates
-            .AsNoTracking()
-            .Where(estimate =>
-                estimate.GenerationId == generation.Id &&
-                estimate.ChampionId == query.ChampionId &&
-                estimate.Role == query.Role &&
-                estimate.OpponentChampionId == opponentId &&
-                families.Contains(estimate.DecisionFamily) &&
-                estimate.PathPrefixHash == pathHash);
+            var all = BuildLabEstimator.Estimate(Counts(scoped: false), parent: null, timed);
+            var estimate = all;
+            var scope = "ALL";
+            var fallback = false;
+            if (narrow)
+            {
+                var scopedCounts = Counts(scoped: true);
+                if (scopedCounts.Sum(count => count.Games) >= MinimumScopedStageGames)
+                {
+                    estimate = BuildLabEstimator.Estimate(scopedCounts, all, timed);
+                    scope = opponent != 0 ? "MATCHUP" : "REGION";
+                }
+                else
+                {
+                    fallback = true;
+                }
+            }
+            if (estimate.Games <= 0)
+                continue;
 
-        var scopedRows = requestedRegion == "GLOBAL"
-            ? await baseQuery.Where(estimate => estimate.RegionScope == "GLOBAL").ToListAsync(ct)
-            : await baseQuery
-                .Where(estimate =>
-                    estimate.RegionScope == requestedRegion || estimate.RegionScope == "GLOBAL")
-                .ToListAsync(ct);
-
-        // Promotion demotes regional cells individually, so substitution has to be per cell as
-        // well: one surviving regional row must not suppress every publishable global twin.
-        var selectedRows = scopedRows
-            .GroupBy(row => new { row.DecisionFamily, row.Stage, row.ActionKey })
-            .Select(group => PreferRegional(
-                group, requestedRegion, row => row.RegionScope, row => row.IsPublishable))
-            .OfType<AdjustedActionEstimate>()
-            .ToList();
-
-        AdjustedPathEstimate? pathRow = null;
-        if (query.Section == "ITEMS" && query.ItemPath.Count > 0)
-        {
-            var pathRows = await context.AdjustedPathEstimates
-                .AsNoTracking()
-                .Where(estimate =>
-                    estimate.GenerationId == generation.Id &&
-                    estimate.ChampionId == query.ChampionId &&
-                    estimate.Role == query.Role &&
-                    estimate.OpponentChampionId == opponentId &&
-                    estimate.PathHash == pathHash &&
-                    (estimate.RegionScope == requestedRegion || estimate.RegionScope == "GLOBAL"))
-                .ToListAsync(ct);
-            pathRow = PreferRegional(
-                pathRows, requestedRegion, row => row.RegionScope, row => row.IsPublishable);
+            stages.Add(new BuildLabStageDto(
+                FamilyName(family),
+                stage,
+                StageLabel(family, stage),
+                estimate.Games,
+                estimate.WinRate,
+                scope,
+                fallback,
+                BuildLabEstimator.Rank(
+                        estimate.Options.Where(option => option.Games >= MinimumOptionGames), query.Mode)
+                    .Take(MaximumOptionsPerStage)
+                    .ToList()));
         }
 
-        var effectiveRegion =
-            selectedRows.Any(row => row.RegionScope == requestedRegion) ||
-            pathRow?.RegionScope == requestedRegion
-                ? requestedRegion
-                : "GLOBAL";
-
-        var stages = selectedRows
-            .GroupBy(row => new { row.DecisionFamily, row.Stage })
-            .OrderBy(group => FamilyOrder(group.Key.DecisionFamily))
-            .ThenBy(group => group.Key.Stage)
-            .Select(group => new BuildLabStageDto(
-                group.Key.DecisionFamily,
-                group.Key.Stage,
-                StageLabel(group.Key.DecisionFamily, group.Key.Stage),
-                Sort(group.Select(row => MapEstimate(row, requestedRegion)), query.Mode).ToList()))
-            .ToList();
-
-        var pathEstimate = pathRow == null
-            ? null
-            : new BuildLabPathEstimateDto(
-                ParseIds(pathRow.ItemPathJson),
-                pathRow.IsPublishable ? pathRow.EstimatedWinProbability : null,
-                pathRow.IsPublishable ? pathRow.AdjustedLift : null,
-                pathRow.IsPublishable ? pathRow.ConfidenceLow : null,
-                pathRow.IsPublishable ? pathRow.ConfidenceHigh : null,
-                pathRow.ObservedCount,
-                pathRow.EffectiveSampleSize,
-                pathRow.IsPublishable,
-                pathRow.UnavailableReason);
-
-        // A section is available once it can say *something*, not only once it can print a number.
-        // A bucketed candidate carries a direction the posterior actually supports, which is the
-        // whole reason the tier exists: a fortnightly patch rarely earns a <=3pp interval in time.
-        var available =
-            stages.Any(stage => stage.Candidates.Any(candidate =>
-                candidate.IsPublishable || candidate.EvidenceTier == "BUCKETED")) ||
-            pathEstimate is { IsPublishable: true };
+        var available = stages.Any(stage => stage.Options.Count > 0);
         return new BuildLabResponse(
             available,
-            new BuildLabContextDto(
-                query.ChampionId,
-                query.Role,
-                query.OpponentChampionId,
-                query.Patch ?? generation.Patch,
-                generation.Patch,
-                requestedRegion,
-                effectiveRegion,
-                query.Section,
-                query.Mode),
-            generation.Provenance,
-            SelectedPath(query),
-            pathEstimate,
+            Context(query),
+            coverage,
+            path,
             stages,
-            available ? null : UnavailableReason(query, stages, pathEstimate));
+            available
+                ? null
+                : path.Count > 0
+                    ? "No counted games followed this exact path."
+                    : "Not enough games have been counted for this champion and role yet.");
     }
 
-    private async ValueTask<BuildLabActiveGeneration?> ResolveActiveGenerationAsync(CancellationToken ct) =>
-        await cache.GetOrCreateAsync<BuildLabActiveGeneration?>(
-            ActiveGenerationCacheKey,
+    /// <summary>The (family, prefix) cells one request reads.</summary>
+    private static List<(BuildLabFamily Family, long PrefixHash)> RequestedCells(
+        BuildLabQuery query,
+        IReadOnlyList<int> path) => query.Section switch
+    {
+        // Starters and boots are unconditioned and shown alongside every item step; the item stage is
+        // the one after the legendaries already locked.
+        "ITEMS" =>
+        [
+            (BuildLabFamily.Starter, EmptyPrefix),
+            (BuildLabFamily.Boots, EmptyPrefix),
+            (BuildLabFamily.Item, BuildLabPath.Hash(path))
+        ],
+        // The page and the keystone are unconditioned; once a keystone is locked, every later slot is
+        // read conditioned on it.
+        "RUNES" => path.Count == 0
+            ? [(BuildLabFamily.RunePage, EmptyPrefix), (BuildLabFamily.Rune, EmptyPrefix)]
+            : [(BuildLabFamily.RunePage, EmptyPrefix), (BuildLabFamily.Rune, BuildLabPath.Hash([path[0]]))],
+        _ => [(BuildLabFamily.Spells, EmptyPrefix)]
+    };
+
+    private async Task<BuildLabCoverageDto> CoverageAsync(string? requestedPatch, CancellationToken ct) =>
+        await cache.GetOrCreateAsync(
+            $"analytics:build-lab:v2:coverage:{requestedPatch ?? "recent"}",
             async cancel =>
             {
-                var generation = await context.BuildLabGenerations
-                    .AsNoTracking()
-                    .Where(row => row.IsActive && row.Status == BuildLabGenerationStatus.Ready)
-                    .OrderByDescending(row => row.PromotedAtUtc)
-                    .FirstOrDefaultAsync(cancel);
-                return generation == null
-                    ? null
-                    : new BuildLabActiveGeneration(
-                        generation.Id,
-                        generation.Patch,
-                        ParseStrings(generation.IncludedPatchesJson),
-                        MapProvenance(generation));
+                var recent = await context.Patches.AsNoTracking()
+                    .OrderByDescending(patch => patch.IsActive)
+                    .ThenByDescending(patch => patch.ReleaseDate)
+                    .Select(patch => patch.Version)
+                    .Take(PatchRecencyWeights.Length)
+                    .ToListAsync(cancel);
+                var counted = await context.BuildLabProcessedMatches.AsNoTracking()
+                    .GroupBy(match => match.Patch)
+                    .Select(group => new
+                    {
+                        Patch = group.Key,
+                        Matches = group.LongCount(),
+                        Last = group.Max(match => match.ProcessedAtUtc)
+                    })
+                    .ToListAsync(cancel);
+
+                List<string> patches;
+                List<double> patchWeights;
+                if (requestedPatch != null)
+                {
+                    patches = counted.Any(row => row.Patch == requestedPatch) ? [requestedPatch] : [];
+                    patchWeights = patches.Select(_ => 1.0).ToList();
+                }
+                else
+                {
+                    var withCounts = recent
+                        .Select((patch, index) => (patch, weight: PatchRecencyWeights[index]))
+                        .Where(pair => counted.Any(row => row.Patch == pair.patch))
+                        .ToList();
+                    patches = withCounts.Select(pair => pair.patch).ToList();
+                    patchWeights = withCounts.Select(pair => pair.weight).ToList();
+                }
+
+                var included = counted.Where(row => patches.Contains(row.Patch)).ToList();
+                var regions = patches.Count == 0
+                    ? []
+                    : await context.BuildLabProcessedMatches.AsNoTracking()
+                        .Where(processed => patches.Contains(processed.Patch))
+                        .Join(context.Matches.IgnoreQueryFilters(),
+                            processed => processed.MatchId,
+                            match => match.Id,
+                            (_, match) => match.PlatformRegion)
+                        .Where(region => region != null && region != "")
+                        .Distinct()
+                        .OrderBy(region => region)
+                        .Select(region => region!)
+                        .ToListAsync(cancel);
+                return new BuildLabCoverageDto(
+                    patches,
+                    patchWeights,
+                    included.Sum(row => row.Matches),
+                    included.Count == 0 ? null : included.Max(row => row.Last),
+                    regions,
+                    RankScope);
             },
-            GenerationCacheOptions,
+            CoverageCacheOptions,
             tags: ["analytics", "analytics:build-lab"],
             cancellationToken: ct);
 
-    // Promotion retires every other generation, so a borrowed prior patch is only ever addressable
-    // through the active generation's included-patch set.
-    private static bool PatchIsServable(BuildLabActiveGeneration generation, string? requestedPatch) =>
-        requestedPatch == null ||
-        string.Equals(requestedPatch, generation.Patch, StringComparison.OrdinalIgnoreCase) ||
-        generation.IncludedPatches.Any(patch =>
-            string.Equals(patch, requestedPatch, StringComparison.OrdinalIgnoreCase));
-
-    private static TRow? PreferRegional<TRow>(
-        IEnumerable<TRow> rows,
-        string requestedRegion,
-        Func<TRow, string> scope,
-        Func<TRow, bool> publishable)
-        where TRow : class
+    private static BuildLabOptionDto? Best(BuildLabResponse response, BuildLabFamily family, int stage)
     {
-        var candidates = rows as IReadOnlyList<TRow> ?? rows.ToList();
-        return candidates.FirstOrDefault(row => scope(row) == requestedRegion && publishable(row))
-               ?? candidates.FirstOrDefault(row => scope(row) == "GLOBAL" && publishable(row))
-               ?? candidates.FirstOrDefault(row => scope(row) == requestedRegion)
-               ?? candidates.FirstOrDefault(row => scope(row) == "GLOBAL");
-    }
-
-    private static string UnavailableReason(
-        BuildLabQuery query,
-        IReadOnlyList<BuildLabStageDto> stages,
-        BuildLabPathEstimateDto? pathEstimate)
-    {
-        if (stages.Count == 0 && pathEstimate == null)
-            return query.OpponentChampionId.HasValue
-                ? "This lane matchup has no modeled decisions for the selected path in the promoted generation."
-                : "This champion-role scope has no modeled decisions for the selected path in the promoted generation.";
-
-        var gated = stages
-            .SelectMany(stage => stage.Candidates)
-            .Select(candidate => candidate.UnavailableReason)
-            .Concat([pathEstimate?.UnavailableReason])
-            .FirstOrDefault(reason => !string.IsNullOrWhiteSpace(reason));
-        return gated ?? (query.OpponentChampionId.HasValue
-            ? "This lane-matchup path has not passed the publication gates."
-            : "This champion-role path has not passed the publication gates.");
+        return response.Stages
+            .FirstOrDefault(candidate => candidate.Family == FamilyName(family) && candidate.Stage == stage)?
+            .Options
+            .FirstOrDefault(option => !option.IsLowSample);
     }
 
     private static BuildLabQuery Normalize(BuildLabQuery query)
@@ -332,31 +347,27 @@ public sealed class BuildLabService(
         if (query.OpponentChampionId is <= 0)
             throw new ArgumentException("Opponent champion id must be positive.", nameof(query));
 
+        var region = NormalizeToken(query.Region, 16, "Region")?.ToUpperInvariant();
         return query with
         {
             Role = role,
             Section = section,
             Mode = mode,
             Patch = NormalizeToken(query.Patch, 32, "Patch"),
-            Region = NormalizeToken(query.Region, 16, "Region"),
+            Region = region is null or "ALL" or "GLOBAL" ? null : region,
             ItemPath = CleanIds(query.ItemPath, MaximumItemPath, "Item path"),
-            RuneSelections = CleanIds(query.RuneSelections, 12, "Rune selections"),
-            SpellPair = CleanIds(query.SpellPair, 2, "Spell pair")
+            RuneSelections = CleanIds(query.RuneSelections, 1, "Rune selections")
         };
     }
 
-    // Both values reach length-constrained analytics columns, so reject overlong input instead of
-    // letting the provider fail mid-query.
     private static string? NormalizeToken(string? value, int maximumLength, string field)
     {
         if (string.IsNullOrWhiteSpace(value))
             return null;
         var trimmed = value.Trim();
         if (trimmed.Length > maximumLength)
-            throw new ArgumentException(
-                $"{field} must be {maximumLength} characters or fewer.", nameof(value));
-        if (!trimmed.All(character =>
-                char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_'))
+            throw new ArgumentException($"{field} must be {maximumLength} characters or fewer.", nameof(value));
+        if (!trimmed.All(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_'))
             throw new ArgumentException(
                 $"{field} may only contain letters, digits, '.', '-', and '_'.", nameof(value));
         return trimmed;
@@ -374,186 +385,51 @@ public sealed class BuildLabService(
     {
         "ITEMS" => query.ItemPath,
         "RUNES" => query.RuneSelections,
-        _ => query.SpellPair
+        _ => []
     };
 
-    private static string NormalizeRegion(string? region) =>
-        string.IsNullOrWhiteSpace(region) ||
-        string.Equals(region, "ALL", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(region, "GLOBAL", StringComparison.OrdinalIgnoreCase)
-            ? "GLOBAL"
-            : region.Trim().ToUpperInvariant();
+    private static BuildLabContextDto Context(BuildLabQuery query) =>
+        new(query.ChampionId, query.Role, query.OpponentChampionId, query.Patch, query.Region ?? "ALL",
+            query.Section, query.Mode);
 
-    public static string HashPath(IReadOnlyList<int> path)
+    private static BuildLabResponse Empty(BuildLabQuery query, BuildLabCoverageDto coverage, string reason) =>
+        new(false, Context(query), coverage, SelectedPath(query), [], reason);
+
+    public static string FamilyName(BuildLabFamily family) => family switch
     {
-        var canonical = string.Join(",", path);
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant();
-    }
+        BuildLabFamily.Starter => "STARTER",
+        BuildLabFamily.Item => "ITEM",
+        BuildLabFamily.Boots => "BOOTS",
+        BuildLabFamily.RunePage => "RUNE_PAGE",
+        BuildLabFamily.Rune => "RUNE",
+        _ => "SPELLS"
+    };
 
-    private static AdjustedActionEstimateDto MapEstimate(
-        AdjustedActionEstimate estimate,
-        string requestedRegion) =>
-        new(
-            estimate.ActionKey,
-            ParseIds(estimate.ActionIdsJson),
-            estimate.IsPublishable ? estimate.AdjustedWpa : null,
-            estimate.IsPublishable ? estimate.ConfidenceLow : null,
-            estimate.IsPublishable ? estimate.ConfidenceHigh : null,
-            // Descriptive rates are gate-conditioned too: a gated cell must not render a headline
-            // win rate one click behind its own "insufficient evidence" label.
-            estimate.IsPublishable ? estimate.RawWinRate : (double?)null,
-            estimate.IsPublishable ? estimate.PickRate : (double?)null,
-            estimate.ObservedCount,
-            estimate.EffectiveSampleSize,
-            estimate.AverageTimingMinutes,
-            estimate.EvidenceQuality,
-            estimate.RegionScope == requestedRegion ? "NONE" : "GLOBAL_FALLBACK",
-            estimate.RegionScope,
-            // The modeler names the comparison set it actually used per family; the const covers rows
-            // written before that column was populated.
-            string.IsNullOrWhiteSpace(estimate.BaselineDefinition)
-                ? BaselineDefinition
-                : estimate.BaselineDefinition,
-            estimate.EvidenceTier.ToString().ToUpperInvariant(),
-            // A bucket is only a claim at the bucketed tier: a numeric cell shows its number, and a
-            // descriptive one has not earned a direction.
-            estimate.EvidenceTier == EvidenceTier.Bucketed ? estimate.EvidenceBucket : null,
-            estimate.IsPublishable,
-            estimate.UnavailableReason);
-
-    private static IEnumerable<AdjustedActionEstimateDto> Sort(
-        IEnumerable<AdjustedActionEstimateDto> estimates,
-        string mode) =>
-        mode switch
-        {
-            "IMPACT" => estimates.OrderByDescending(estimate => estimate.AdjustedWpa ?? double.MinValue)
-                .ThenByDescending(estimate => estimate.ObservedCount),
-            "COMMON" => estimates.OrderByDescending(estimate => estimate.PickRate ?? double.MinValue)
-                .ThenByDescending(estimate => estimate.ObservedCount),
-            // Ranking is deliberately not gated on the display tier. A bucketed candidate has a
-            // posterior mean worth ordering by even though its interval is too wide to print, so
-            // ordering falls back to the point estimate rather than dropping the row to last.
-            _ => estimates
-                .OrderByDescending(estimate =>
-                    estimate.ConfidenceLow ?? estimate.AdjustedWpa ?? double.MinValue)
-                .ThenByDescending(estimate => estimate.EffectiveSampleSize)
-        };
-
-    private static AdjustedActionEstimateDto? FirstCandidate(BuildLabResponse response, string family) =>
-        response.Stages
-            .Where(stage => stage.Family == family)
-            .OrderBy(stage => stage.Stage)
-            .SelectMany(stage => stage.Candidates)
-            .FirstOrDefault(candidate => candidate.IsPublishable);
-
-    private static int FamilyOrder(string family) => family switch
+    private static int FamilyOrder(BuildLabFamily family) => family switch
     {
-        "STARTER" => 0,
-        "FIRST_ITEM_PATH" => 1,
-        "BOOTS" => 2,
-        "ITEM" => 3,
-        "RUNE_PAGE" => 0,
-        "RUNE" => 1,
+        BuildLabFamily.Starter => 0,
+        BuildLabFamily.Item => 1,
+        BuildLabFamily.Boots => 2,
+        BuildLabFamily.RunePage => 0,
+        BuildLabFamily.Rune => 1,
         _ => 0
     };
 
-    private static string StageLabel(string family, int stage) => family switch
+    private static string StageLabel(BuildLabFamily family, int stage) => family switch
     {
-        "STARTER" => "Starting items",
-        "FIRST_ITEM_PATH" => "First-item path",
-        "BOOTS" => "Boots",
-        "ITEM" => stage switch
+        BuildLabFamily.Starter => "Starting items",
+        BuildLabFamily.Boots => "Boots",
+        BuildLabFamily.Item => stage switch
         {
             1 => "First item",
             2 => "Second item",
             3 => "Third item",
             4 => "Fourth item",
             5 => "Fifth item",
-            6 => "Sixth item",
-            _ => $"{Ordinal(stage)} item"
+            _ => "Sixth item"
         },
-        "RUNE_PAGE" => "Complete rune page",
-        "RUNE" => $"Rune choice {stage}",
-        "SPELL" => "Summoner spells",
-        _ => family
+        BuildLabFamily.RunePage => "Complete rune page",
+        BuildLabFamily.Rune => stage == 1 ? "Keystone" : $"Rune slot {stage}",
+        _ => "Summoner spells"
     };
-
-    private static string Ordinal(int value)
-    {
-        var suffix = value % 100 is >= 11 and <= 13
-            ? "th"
-            : (value % 10) switch
-            {
-                1 => "st",
-                2 => "nd",
-                3 => "rd",
-                _ => "th"
-            };
-        return $"{value}{suffix}";
-    }
-
-    private static IReadOnlyList<int> ParseIds(string json)
-    {
-        try
-        {
-            return JsonSerializer.Deserialize<List<int>>(json) ?? [];
-        }
-        catch (JsonException)
-        {
-            return [];
-        }
-    }
-
-    private static IReadOnlyList<string> ParseStrings(string json)
-    {
-        try
-        {
-            return JsonSerializer.Deserialize<List<string>>(json) ?? [];
-        }
-        catch (JsonException)
-        {
-            return [];
-        }
-    }
-
-    private static BuildLabProvenanceDto MapProvenance(BuildLabGeneration generation) =>
-        new(
-            generation.Id,
-            generation.DatasetVersion,
-            generation.ModelVersion,
-            generation.StaticDataVersion,
-            generation.SourceCutoffUtc,
-            generation.CompletedAtUtc,
-            generation.MatchCount,
-            generation.RankScope,
-            ParseStrings(generation.IncludedPatchesJson),
-            ParseStrings(generation.IncludedRegionsJson));
-
-    private static BuildLabResponse Empty(
-        BuildLabQuery query,
-        BuildLabActiveGeneration? generation,
-        string reason) =>
-        new(
-            false,
-            new BuildLabContextDto(
-                query.ChampionId,
-                query.Role,
-                query.OpponentChampionId,
-                query.Patch ?? generation?.Patch ?? string.Empty,
-                generation?.Patch ?? query.Patch ?? string.Empty,
-                NormalizeRegion(query.Region),
-                NormalizeRegion(query.Region),
-                query.Section,
-                query.Mode),
-            generation?.Provenance ?? EmptyProvenance,
-            SelectedPath(query),
-            null,
-            [],
-            reason);
 }
-
-internal sealed record BuildLabActiveGeneration(
-    Guid Id,
-    string Patch,
-    IReadOnlyList<string> IncludedPatches,
-    BuildLabProvenanceDto Provenance);

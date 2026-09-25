@@ -5,11 +5,7 @@
 # Both halves are needed: CI measures fixed data so a change is attributable to a commit, this
 # measures production so the numbers are true.
 #
-# Base is pinned to the same digest as apps/web/Dockerfile. An Alpine base was tried first and
-# the prod host's containerd snapshotter could not extract its chromium layer ("mount callback
-# failed ... mkdir /usr/share/pipewire"), while every Debian-based image in this repo pulls there
-# without trouble. Staying on the base the rest of the fleet already uses is both the fix and the
-# convention.
+# Base is pinned to the same digest as apps/web/Dockerfile, the base the rest of the fleet uses.
 FROM node:22-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3
 
 # Chromium from the distro rather than Puppeteer's downloader: nothing here needs a browser

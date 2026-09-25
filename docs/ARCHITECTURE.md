@@ -358,8 +358,8 @@ release.
 on `analytics/modeler/**`) with the same tags, labels, provenance, SBOM, and cosign signature as the
 app images — but it is **not a service the poller deploys**, and deliberately so.
 
-It is a **run-to-completion oneshot** owned by `transcendence-modeler.timer`, which pulls the image in
-`ExecStartPre` and then runs `docker compose run --rm`. A modeling run takes hours; while the modeler
+It is a **run-to-completion oneshot** owned by `transcendence-modeler.timer`, which runs
+`docker compose run --rm --pull always`. A modeling run takes hours; while the modeler
 was a long-lived container, every image update recreated it mid-run and discarded the generation. A
 process that exits on its own is deployed *between* runs instead of through one, its exit code is the
 completion signal, and `--rm` leaves nothing for a poller to recreate. `SERVICES` in

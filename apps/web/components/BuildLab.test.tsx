@@ -190,7 +190,9 @@ describe("BuildLab", () => {
   });
 
   it("flags a low-sample choice and does not colour its lift as a win", async () => {
+    const user = userEvent.setup();
     renderLab();
+    await user.click(screen.getByRole("button", { name: "Show 1 more · 1 with few games" }));
 
     const rare = row("Malignance");
     expect(within(rare).getByText("Few games")).toBeTruthy();
@@ -326,8 +328,35 @@ describe("BuildLab", () => {
     renderLab({ response: { stages: [stage({ options: many })] } });
 
     expect(screen.getAllByRole("row").length).toBe(1 + 8);
-    await user.click(screen.getByRole("button", { name: "Show all 11" }));
+    await user.click(screen.getByRole("button", { name: "Show 3 more" }));
     expect(screen.getAllByRole("row").length).toBe(1 + 11);
     expect(screen.getByRole("button", { name: "Show fewer" })).toBeTruthy();
+  });
+  it("hides few-games choices behind the expander while trusted ones exist", async () => {
+    renderLab();
+
+    expect(screen.queryByText("Malignance")).toBeNull();
+    expect(screen.getAllByText("Luden's Companion").length).toBeGreaterThan(0);
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+  });
+
+  it("shows few-games choices when they are all a stage has", async () => {
+    renderLab({
+      response: {
+        stages: [
+          stage({
+            options: [
+              option({ actionKey: "6655", actionIds: [6655], games: 40, isLowSample: true }),
+              option({ actionKey: "3118", actionIds: [3118], games: 20, isLowSample: true })
+            ]
+          })
+        ]
+      }
+    });
+
+    expect(screen.getAllByText("Luden's Companion").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Malignance").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /Show \d+ more/ })).toBeNull();
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
   });
 });

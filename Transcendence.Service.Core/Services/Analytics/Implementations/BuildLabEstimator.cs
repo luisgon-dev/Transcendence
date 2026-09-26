@@ -102,6 +102,29 @@ public static class BuildLabEstimator
         return new BuildLabCellEstimate(cellGames, cellWinRate, options);
     }
 
+    /// <summary>A choice needs this share of a decision's games to be recommended on its own.</summary>
+    public const double RecommendationMinimumPickRate = 0.05;
+
+    /// <summary>
+    /// The one choice to recommend: the highest adjusted win rate among choices common enough to be a
+    /// real option (at least <see cref="RecommendationMinimumPickRate"/> of the decision's games) and
+    /// with enough games to trust.
+    ///
+    /// Not the SUPPORTED ranking's top row. That orders by the interval's lower bound, which the most
+    /// played choice nearly always wins on sample size alone -- on prod it recommended a rune page
+    /// running 0.6pp below average over two alternatives running 2pp above it.
+    /// </summary>
+    public static BuildLabOptionDto? Recommend(IEnumerable<BuildLabOptionDto> options)
+    {
+        var trusted = options.Where(option => !option.IsLowSample).ToList();
+        return trusted
+                   .Where(option => option.PickRate >= RecommendationMinimumPickRate)
+                   .OrderByDescending(option => option.AdjustedWinRate)
+                   .ThenByDescending(option => option.Games)
+                   .FirstOrDefault()
+               ?? trusted.OrderByDescending(option => option.ConfidenceLow).FirstOrDefault();
+    }
+
     /// <summary>
     /// SUPPORTED ranks by the interval's lower bound (the option most likely to be genuinely good),
     /// IMPACT by lift, COMMON by pick rate. Low-sample options always sort after the rest.

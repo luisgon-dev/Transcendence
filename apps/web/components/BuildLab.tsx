@@ -78,6 +78,28 @@ function entityIcon(id: number, section: BuildLabSection, lookups: Lookups) {
   return summonerSpellIconUrl(lookups.spellVersion, lookups.spells[String(id)]?.id ?? "");
 }
 
+/** "Doran's Ring + 2× Health Potion": a starter set repeats items, and the repeat is the point. */
+function optionName(ids: number[], section: BuildLabSection, lookups: Lookups) {
+  const counts = new Map<number, number>();
+  for (const id of ids) counts.set(id, (counts.get(id) ?? 0) + 1);
+  return [...counts]
+    .map(([id, count]) => `${count > 1 ? `${count}× ` : ""}${entityName(id, section, lookups)}`)
+    .join(" + ");
+}
+
+/**
+ * What tells a rune page apart. Pages sharing a keystone usually differ only in a rune or two near the
+ * end, which a full listing truncates away, so every page but the most played one lists only the
+ * runes it swaps in relative to it.
+ */
+function runePageDetail(ids: number[], reference: number[], lookups: Lookups) {
+  if (ids === reference) return ids.slice(1).map((id) => entityName(id, "runes", lookups)).join(" · ");
+  const swaps = ids.filter((id) => !reference.includes(id));
+  return swaps.length === 0
+    ? "Same runes, different order"
+    : `Swaps in ${swaps.map((id) => entityName(id, "runes", lookups)).join(" · ")}`;
+}
+
 function Icons({
   ids,
   section,
@@ -91,9 +113,10 @@ function Icons({
 }) {
   return (
     <span className="flex shrink-0 -space-x-1.5">
-      {ids.slice(0, 4).map((id) => (
+      {/* Keyed by position: a starter set repeats ids (two Health Potions). */}
+      {ids.slice(0, 4).map((id, index) => (
         <Image
-          key={id}
+          key={`${id}-${index}`}
           src={entityIcon(id, section, lookups)}
           alt=""
           width={size}
@@ -172,12 +195,27 @@ function StageTable({
     return <p className="px-4 py-8 text-sm text-muted">No choice here has enough games yet.</p>;
   }
   const terminal = isTerminalBuildLabFamily(stage.family);
+  const referencePage = stage.options.reduce((best, option) =>
+    option.games > best.games ? option : best
+  ).actionIds;
   const conditions = stage.family === "ITEM" || (stage.family === "RUNE" && stage.stage === 1);
 
   // One dense table at every breakpoint (it scrolls inside its own container on small screens).
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[48rem] text-left text-sm">
+      {/* Fixed layout and one column set for every family, so the stages stacked on the page line up. */}
+      <table className="w-full min-w-[52rem] table-fixed text-left text-sm">
+        <colgroup>
+          <col />
+          <col className="w-[10.5rem]" />
+          <col className="w-[6.5rem]" />
+          <col className="w-[8.5rem]" />
+          <col className="w-[6.5rem]" />
+          <col className="w-[5.5rem]" />
+          <col className="w-[5.5rem]" />
+          <col className="w-[5rem]" />
+          <col className="w-[5.5rem]" />
+        </colgroup>
         <caption className="sr-only">
           {stage.label}: gold-adjusted win rate, its 95% interval, raw win rate, pick rate and games
           for each choice.
@@ -191,9 +229,7 @@ function StageTable({
             <th scope="col" className="px-3 py-2.5 text-right font-medium">Raw win rate</th>
             <th scope="col" className="px-3 py-2.5 text-right font-medium">Pick rate</th>
             <th scope="col" className="px-3 py-2.5 text-right font-medium">Games</th>
-            {stage.family === "ITEM" || stage.family === "BOOTS" ? (
-              <th scope="col" className="px-3 py-2.5 text-right font-medium">Timing</th>
-            ) : null}
+            <th scope="col" className="px-3 py-2.5 text-right font-medium">Timing</th>
             <th scope="col" className="px-4 py-2.5 text-right font-medium">
               <span className="sr-only">Select</span>
             </th>
@@ -211,20 +247,34 @@ function StageTable({
               <td className="px-4 py-3">
                 <div className="flex items-center gap-3">
                   <Icons ids={option.actionIds} section={section} lookups={lookups} />
-                  <p className="min-w-0 font-semibold text-fg">
-                    {option.actionIds.length <= 3
-                      ? option.actionIds.map((id) => entityName(id, section, lookups)).join(" + ")
-                      : `${entityName(option.actionIds[0], section, lookups)} page`}
-                    {option.isLowSample ? (
-                      <span className="ml-2 rounded-control border border-border/60 px-1.5 py-0.5 text-[0.6875rem] font-medium text-muted">
-                        Few games
-                      </span>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-fg">
+                      {/* A rune page is named for its keystone; the rest of the page is what tells
+                          two pages with the same keystone apart, so it is listed underneath. */}
+                      {stage.family === "RUNE_PAGE"
+                        ? entityName(option.actionIds[0], section, lookups)
+                        : optionName(option.actionIds, section, lookups)}
+                      {option.isLowSample ? (
+                        <span className="ml-2 rounded-control border border-border/60 px-1.5 py-0.5 text-[0.6875rem] font-medium text-muted">
+                          Few games
+                        </span>
+                      ) : null}
+                    </p>
+                    {stage.family === "RUNE_PAGE" && option.actionIds.length > 1 ? (
+                      <p className="mt-0.5 truncate text-xs text-muted">
+                        {runePageDetail(option.actionIds, referencePage, lookups)}
+                      </p>
                     ) : null}
-                  </p>
+                  </div>
                 </div>
               </td>
               <td className="px-3 py-3">
-                <DataBar value={option.adjustedWinRate} />
+                {/* A thin sample's bar would read as confidently as a solid one; muting it keeps the
+                    eye on the rows whose interval actually supports the number. */}
+                <DataBar
+                  value={option.adjustedWinRate}
+                  className={option.isLowSample ? "opacity-45" : undefined}
+                />
               </td>
               <td
                 className={cn(
@@ -246,13 +296,11 @@ function StageTable({
               <td className="px-3 py-3 text-right tabular-nums text-fg/72">
                 {formatCompactCount(option.games)}
               </td>
-              {stage.family === "ITEM" || stage.family === "BOOTS" ? (
-                <td className="px-3 py-3 text-right tabular-nums text-fg/72">
-                  {option.averageTimingMinutes == null
-                    ? "—"
-                    : `${option.averageTimingMinutes.toFixed(1)}m`}
-                </td>
-              ) : null}
+              <td className="px-3 py-3 text-right tabular-nums text-fg/72">
+                {option.averageTimingMinutes == null
+                  ? "—"
+                  : `${option.averageTimingMinutes.toFixed(1)}m`}
+              </td>
               <td className="px-4 py-3 text-right">
                 {terminal || conditions ? (
                   <Button size="sm" variant="outline" onClick={() => onSelect(stage, option)}>
@@ -276,6 +324,21 @@ async function problemDetail(response: Response) {
   } catch {
     return null;
   }
+}
+
+// Rendered on the server and again in the browser, so it must not depend on either one's time zone
+// or locale: a locale-formatted local time differs between the two and breaks hydration.
+const COUNTED_AT_FORMAT = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+  timeZone: "UTC"
+});
+
+function formatCountedAt(value: string) {
+  return `${COUNTED_AT_FORMAT.format(new Date(value))} UTC`;
 }
 
 function stageNote(stage: BuildLabStage, response: BuildLabResponse) {
@@ -551,7 +614,7 @@ export function BuildLab({
           </span>
           {coverage.lastCountedAtUtc ? (
             <span className="text-xs text-muted">
-              Updated {new Date(coverage.lastCountedAtUtc).toLocaleString()}
+              Updated {formatCountedAt(coverage.lastCountedAtUtc)}
             </span>
           ) : null}
         </div>

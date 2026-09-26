@@ -173,5 +173,6 @@ describe("Build Lab formatting", () => {
     expect(liftToneClass(0.05, true)).toBe("text-fg");
     expect(formatLift(0.0123)).toBe("+1.2 pp");
     expect(formatLift(-0.004)).toBe("-0.4 pp");
+    expect(formatLift(-0.0004)).toBe("0.0 pp");
   });
 });

@@ -104,4 +104,29 @@ public sealed class BuildLabEstimatorTests
             BuildLabEstimator.Rank(cell.Options, mode).Last().ActionKey.Should().Be("rare", mode);
         BuildLabEstimator.Rank(cell.Options, "SUPPORTED").First().ActionKey.Should().Be("solid");
     }
+
+    [Fact]
+    public void Recommend_PrefersTheBestCommonChoiceOverTheMostPlayedOne()
+    {
+        // The shape prod produced: one dominant page slightly below average, a common alternative above.
+        var cell = BuildLabEstimator.Estimate(
+        [
+            Count("dominant", 2, 5_000, 2_450), Count("alternative", 2, 900, 480),
+            Count("niche", 2, 200, 130), Count("rare", 2, 20, 20)
+        ], parent: null, timed: false);
+
+        BuildLabEstimator.Recommend(cell.Options)!.ActionKey.Should().Be("alternative",
+            "niche is under the pick-rate floor and rare is low-sample, however well they do");
+    }
+
+    [Fact]
+    public void Recommend_FallsBackToTheBestSupportedChoiceWhenNothingIsCommon()
+    {
+        var cell = BuildLabEstimator.Estimate(
+            [Count("a", 2, 150, 90), Count("b", 2, 140, 70)], parent: null, timed: false);
+        var widened = cell.Options.Select(option => option with { PickRate = 0.01 });
+
+        BuildLabEstimator.Recommend(widened)!.ActionKey.Should().Be("a");
+        BuildLabEstimator.Recommend([]).Should().BeNull();
+    }
 }

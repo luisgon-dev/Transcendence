@@ -325,10 +325,10 @@ public sealed class BuildLabService(
 
     private static BuildLabOptionDto? Best(BuildLabResponse response, BuildLabFamily family, int stage)
     {
-        return response.Stages
+        var options = response.Stages
             .FirstOrDefault(candidate => candidate.Family == FamilyName(family) && candidate.Stage == stage)?
-            .Options
-            .FirstOrDefault(option => !option.IsLowSample);
+            .Options;
+        return options == null ? null : BuildLabEstimator.Recommend(options);
     }
 
     private static BuildLabQuery Normalize(BuildLabQuery query)

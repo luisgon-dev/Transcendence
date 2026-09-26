@@ -268,10 +268,16 @@ function StageList({
               option.isLowSample && "text-fg/70"
             )}
           >
-            <div role="cell" className="flex min-w-0 items-center gap-3">
-              <Icons ids={option.actionIds} section={section} lookups={lookups} />
+            <div role="cell" className="flex min-w-0 items-center gap-3 overflow-hidden">
+              {/* A page is identified by its keystone; the line under the name says what else differs,
+                  so a fan of every rune would only crowd the name out of a narrow row. */}
+              <Icons
+                ids={stage.family === "RUNE_PAGE" ? option.actionIds.slice(0, 1) : option.actionIds}
+                section={section}
+                lookups={lookups}
+              />
               <div className="min-w-0">
-                <p className="text-sm font-semibold leading-snug text-fg">
+                <p className="text-sm font-semibold leading-snug text-fg [overflow-wrap:anywhere]">
                   {/* A rune page is named for its keystone; the rest of the page is what tells two
                       pages with the same keystone apart, so it is listed underneath. */}
                   {stage.family === "RUNE_PAGE"

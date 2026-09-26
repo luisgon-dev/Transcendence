@@ -27,6 +27,19 @@ public readonly record struct BuildLabItemEvent(
     int? AfterId,
     BuildItemCategory? BuildCategory);
 
+public enum OpeningBuyRejection
+{
+    None,
+    /// <summary>Nothing priced was bought in the opening window.</summary>
+    Empty,
+    /// <summary>The set costs more than the starting gold, so it is not what the player started with.</summary>
+    OverBudget,
+    /// <summary>An item has no price on the patch, so the budget cannot be checked.</summary>
+    UnknownPrice
+}
+
+public sealed record OpeningBuyResult(BuildLabDecision? Decision, OpeningBuyRejection Rejection);
+
 /// <summary>The rune fields the replay reads.</summary>
 public readonly record struct BuildLabRune(RuneSelectionTree Tree, int Index, int RuneId);
 
@@ -57,10 +70,17 @@ public static class BuildLabDecisions
     public const int MaximumItemStage = 6;
 
     /// <summary>
-    /// Starter-category purchases after this are refills, not the opening buy: potions and wards are
-    /// starter items too, and a potion bought at 15 minutes is not part of anyone's start.
+    /// Purchases before this are the opening buy. Minions and passive gold arrive at 1:05, so nothing
+    /// bought earlier can be paid for with anything but starting gold; the old 90s window let a
+    /// base-and-return at 1:19 (Cloth Armor from invade gold, a potion after using two) into the start.
     /// </summary>
-    public const int StarterWindowMs = 90_000;
+    public const int OpeningWindowMs = 60_000;
+
+    /// <summary>
+    /// The gold every Summoner's Rift player starts with. An opening buy that costs more is not an
+    /// opening buy -- it is a replay that missed a sell or merged a second shop -- and is never counted.
+    /// </summary>
+    public const int StartingGold = 500;
 
     /// <summary>The gold bucket every pregame decision (and any decision without frames) falls in.</summary>
     public const short NeutralGoldBucket = 2;
@@ -84,20 +104,17 @@ public static class BuildLabDecisions
     }
 
     /// <summary>
-    /// Replays one participant's item lifecycle into the item decisions they made.
+    /// Replays one participant's item lifecycle into the in-game item decisions they made: each
+    /// completed legendary and the first boots. The opening buy is <see cref="OpeningBuy"/>.
     ///
     /// An undo removes the purchase it reverses, so an item bought and immediately refunded never
     /// counts. A legendary acquired a second time (sold, then bought back) is not a new decision.
     /// </summary>
     public static IEnumerable<BuildLabDecision> Items(IEnumerable<BuildLabItemEvent> events)
     {
-        var ordered = events
-            .OrderBy(itemEvent => itemEvent.TimestampMs)
-            .ThenBy(itemEvent => itemEvent.EventIndex)
-            .ToList();
+        var ordered = Order(events);
         var undone = UndonePurchases(ordered);
 
-        var starters = new List<int>();
         var legendaries = new List<int>();
         var bootsSeen = false;
         var decisions = new List<BuildLabDecision>();
@@ -111,9 +128,6 @@ public static class BuildLabDecisions
             var itemId = itemEvent.ItemId.Value;
             switch (itemEvent.BuildCategory)
             {
-                case BuildItemCategory.Starter when itemEvent.TimestampMs <= StarterWindowMs:
-                    starters.Add(itemId);
-                    break;
                 case BuildItemCategory.Boots when !bootsSeen:
                     bootsSeen = true;
                     decisions.Add(new BuildLabDecision(
@@ -131,14 +145,67 @@ public static class BuildLabDecisions
                     break;
             }
         }
-
-        if (starters.Count > 0)
-        {
-            starters.Sort();
-            decisions.Insert(0, new BuildLabDecision(BuildLabFamily.Starter, 0, [], starters, 0));
-        }
         return decisions;
     }
+
+    /// <summary>
+    /// What the participant left the fountain with: every priced item bought before
+    /// <see cref="OpeningWindowMs"/>, net of undos AND sells. Selling refunds an item in full at the
+    /// start, so "buy Amplifying Tome, sell it, buy Doran's Ring" is a Doran's Ring start -- counting
+    /// both is how a 900g "starter" appeared.
+    ///
+    /// Every item counts, not only starter-category ones: a Long Sword start is a start. Free items
+    /// (the trinket) carry no information and are left out.
+    ///
+    /// The result is then checked against the only rule the game enforces, <see cref="StartingGold"/>.
+    /// A set that costs more, or holds an item with no known price on the patch, is rejected rather
+    /// than counted: whatever the replay got wrong, an impossible start can never reach the table.
+    /// </summary>
+    public static OpeningBuyResult OpeningBuy(
+        IEnumerable<BuildLabItemEvent> events,
+        IReadOnlyDictionary<int, int> prices)
+    {
+        var ordered = Order(events);
+        var undone = UndonePurchases(ordered);
+        var held = new List<int>();
+        foreach (var itemEvent in ordered)
+        {
+            if (itemEvent.TimestampMs >= OpeningWindowMs)
+                break;
+            switch (itemEvent.EventType)
+            {
+                case MatchItemEventType.Purchased
+                    when itemEvent.ItemId is > 0 && !undone.Contains(itemEvent.EventIndex):
+                    held.Add(itemEvent.ItemId.Value);
+                    break;
+                case MatchItemEventType.Sold when itemEvent.ItemId is > 0:
+                    held.Remove(itemEvent.ItemId.Value);
+                    break;
+                // Undoing a sale hands the item back.
+                case MatchItemEventType.Undo when itemEvent.AfterId is > 0:
+                    held.Add(itemEvent.AfterId.Value);
+                    break;
+            }
+        }
+
+        if (held.Any(id => !prices.ContainsKey(id)))
+            return new OpeningBuyResult(null, OpeningBuyRejection.UnknownPrice);
+        held.RemoveAll(id => prices[id] <= 0);
+        if (held.Count == 0)
+            return new OpeningBuyResult(null, OpeningBuyRejection.Empty);
+        if (held.Sum(id => prices[id]) > StartingGold)
+            return new OpeningBuyResult(null, OpeningBuyRejection.OverBudget);
+
+        held.Sort();
+        return new OpeningBuyResult(
+            new BuildLabDecision(BuildLabFamily.Starter, 0, [], held, 0), OpeningBuyRejection.None);
+    }
+
+    private static List<BuildLabItemEvent> Order(IEnumerable<BuildLabItemEvent> events) =>
+        events
+            .OrderBy(itemEvent => itemEvent.TimestampMs)
+            .ThenBy(itemEvent => itemEvent.EventIndex)
+            .ToList();
 
     /// <summary>
     /// The complete page as one choice, then each rune slot conditioned on the keystone: slot 1 is the

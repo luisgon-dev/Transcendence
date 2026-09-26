@@ -649,7 +649,9 @@ There is no offline model, no generation, and nothing to promote: readers see th
    Build Lab on an existing corpus".
 2. **Replay.** `BuildLabDecisions` (pure, no data access) turns one participant's item events, runes,
    and spells into decisions, each a `(family, stage, prefix, action)`:
-   - **Starter** — the starter-category purchases in the first 90 seconds, as one set.
+   - **Starter** — the opening buy as one set: every priced item bought before 1:00, net of undos
+     and sells. A set costing more than the 500g starting gold (or holding an item with no price on
+     the patch) is rejected and never counted; the refresh logs how many it drops.
    - **Item** stages 1–6 — the Nth completed legendary; the prefix is the ordered legendaries before
      it. A bought-back legendary is not a new decision and undone purchases never count.
    - **Boots** — the first completed boots.

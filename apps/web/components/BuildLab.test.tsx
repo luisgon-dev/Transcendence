@@ -160,8 +160,8 @@ function renderLab({
 }
 
 function row(name: string) {
-  const cell = screen.getAllByText(name).find((element) => element.closest("tr"));
-  const tableRow = cell?.closest("tr");
+  const cell = screen.getAllByText(name).find((element) => element.closest('[role="row"]'));
+  const tableRow = cell?.closest<HTMLElement>('[role="row"]');
   if (!tableRow) throw new Error(`No table row for ${name}.`);
   return tableRow;
 }
@@ -180,13 +180,11 @@ describe("BuildLab", () => {
   it("shows the adjusted win rate, lift, interval, raw rate, pick rate and games per choice", async () => {
     renderLab();
 
-    const cells = within(row("Luden's Companion")).getAllByRole("cell").map((cell) => cell.textContent);
-    expect(cells).toContain("+1.2 pp");
-    expect(cells).toContain("50.3% – 53.3%");
-    expect(cells).toContain("53.2%");
-    expect(cells).toContain("61.0%");
-    expect(cells).toContain("4,200");
-    expect(cells).toContain("11.8m");
+    // Each cell also carries the label a phone shows above its value, hence "includes".
+    const cells = within(row("Luden's Companion")).getAllByRole("cell").map((cell) => cell.textContent ?? "");
+    for (const value of ["+1.2 pp", "50.3%–53.3%", "53.2%", "61.0%", "4,200", "11.8m"]) {
+      expect(cells.some((cell) => cell.includes(value)), value).toBe(true);
+    }
     expect(screen.getByText(/Patches 16\.19, 16\.18/)).toBeTruthy();
     await waitFor(() => expect(fetch).toHaveBeenCalled());
   });
@@ -196,8 +194,10 @@ describe("BuildLab", () => {
 
     const rare = row("Malignance");
     expect(within(rare).getByText("Few games")).toBeTruthy();
-    expect(within(rare).getByText("+4.4 pp").className).not.toContain("text-success");
-    expect(within(row("Luden's Companion")).getByText("+1.2 pp").className).toContain("text-success");
+    const liftCell = (tableRow: HTMLElement, lift: string) =>
+      within(tableRow).getAllByRole("cell").find((cell) => cell.textContent?.includes(lift))!;
+    expect(liftCell(rare, "+4.4 pp").className).not.toContain("text-success");
+    expect(liftCell(row("Luden's Companion"), "+1.2 pp").className).toContain("text-success");
     await waitFor(() => expect(fetch).toHaveBeenCalled());
   });
 
@@ -317,5 +317,17 @@ describe("BuildLab", () => {
     expect(screen.getAllByText("Swaps in Scorch").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Same runes, different order").length).toBeGreaterThan(0);
     await waitFor(() => expect(fetch).toHaveBeenCalled());
+  });
+  it("shows the top eight choices of a long stage and expands to the rest on request", async () => {
+    const user = userEvent.setup();
+    const many = Array.from({ length: 11 }, (_, index) =>
+      option({ actionKey: `x${index}`, actionIds: [6655], games: 1000 - index })
+    );
+    renderLab({ response: { stages: [stage({ options: many })] } });
+
+    expect(screen.getAllByRole("row").length).toBe(1 + 8);
+    await user.click(screen.getByRole("button", { name: "Show all 11" }));
+    expect(screen.getAllByRole("row").length).toBe(1 + 11);
+    expect(screen.getByRole("button", { name: "Show fewer" })).toBeTruthy();
   });
 });

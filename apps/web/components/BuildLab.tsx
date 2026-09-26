@@ -54,10 +54,11 @@ type Lookups = {
   spellVersion: string;
 };
 
-const MODE_LABELS: Record<BuildLabMode, string> = {
-  supported: "Best supported",
-  impact: "Highest lift",
-  common: "Most common"
+// Full labels from sm up; a phone splits the control three ways and the long ones would wrap.
+const MODE_LABELS: Record<BuildLabMode, { short: string; full: string }> = {
+  supported: { short: "Supported", full: "Best supported" },
+  impact: { short: "Top lift", full: "Highest lift" },
+  common: { short: "Common", full: "Most common" }
 };
 
 const SECTION_LABELS: Record<BuildLabSection, string> = {
@@ -100,34 +101,51 @@ function runePageDetail(ids: number[], reference: number[], lookups: Lookups) {
     : `Swaps in ${swaps.map((id) => entityName(id, "runes", lookups)).join(" · ")}`;
 }
 
+/**
+ * One icon per distinct id, with a count badge for repeats: a starter with two Health Potions shows
+ * the potion once, marked 2×, instead of a fan of overlapping identical icons.
+ */
 function Icons({
   ids,
   section,
   lookups,
-  size = 34
+  size = 32,
+  max = 3
 }: {
   ids: number[];
   section: BuildLabSection;
   lookups: Lookups;
   size?: number;
+  max?: number;
 }) {
+  const counts = new Map<number, number>();
+  for (const id of ids) counts.set(id, (counts.get(id) ?? 0) + 1);
+  const distinct = [...counts];
   return (
-    <span className="flex shrink-0 -space-x-1.5">
-      {/* Keyed by position: a starter set repeats ids (two Health Potions). */}
-      {ids.slice(0, 4).map((id, index) => (
-        <Image
-          key={`${id}-${index}`}
-          src={entityIcon(id, section, lookups)}
-          alt=""
-          width={size}
-          height={size}
-          style={{ width: size, height: size }}
-          className={cn(
-            "rounded-control border-2 border-surface bg-surface-2 object-cover",
-            section === "runes" && "rounded-full p-0.5"
-          )}
-        />
+    <span className="flex shrink-0 items-center gap-1">
+      {distinct.slice(0, max).map(([id, count]) => (
+        <span key={id} className="relative shrink-0">
+          <Image
+            src={entityIcon(id, section, lookups)}
+            alt=""
+            width={size}
+            height={size}
+            style={{ width: size, height: size }}
+            className={cn(
+              "rounded-control border border-border/60 bg-surface-2 object-cover",
+              section === "runes" && "rounded-full p-0.5"
+            )}
+          />
+          {count > 1 ? (
+            <span className="absolute -bottom-1 -right-1 rounded-[0.3rem] border border-border bg-surface px-1 text-[0.625rem] font-semibold leading-4 tabular-nums text-fg">
+              {count}×
+            </span>
+          ) : null}
+        </span>
       ))}
+      {distinct.length > max ? (
+        <span className="text-xs font-medium tabular-nums text-muted">+{distinct.length - max}</span>
+      ) : null}
     </span>
   );
 }
@@ -180,7 +198,22 @@ function BuildSummary({
   );
 }
 
-function StageTable({
+// One column template for every stage, so the stacked stages line up. Raw win rate and timing are
+// the least important columns and are only shown where there is room for them.
+const ROW_GRID =
+  "md:grid-cols-[minmax(0,1fr)_8.75rem_4.75rem_4.25rem_4.5rem_5.25rem] xl:grid-cols-[minmax(0,1fr)_10rem_5.5rem_5.5rem_5rem_5rem_4.5rem_5.5rem]";
+const COLLAPSED_OPTIONS = 8;
+
+function Stat({ label, className, children }: { label: string; className?: string; children: React.ReactNode }) {
+  return (
+    <div role="cell" className={cn("min-w-0 whitespace-nowrap text-sm tabular-nums md:text-right", className)}>
+      <p className="text-[0.6875rem] text-muted md:hidden">{label}</p>
+      {children}
+    </div>
+  );
+}
+
+function StageList({
   stage,
   section,
   lookups,
@@ -191,6 +224,7 @@ function StageTable({
   lookups: Lookups;
   onSelect: (stage: BuildLabStage, option: BuildLabOption) => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   if (stage.options.length === 0) {
     return <p className="px-4 py-8 text-sm text-muted">No choice here has enough games yet.</p>;
   }
@@ -199,119 +233,116 @@ function StageTable({
     option.games > best.games ? option : best
   ).actionIds;
   const conditions = stage.family === "ITEM" || (stage.family === "RUNE" && stage.stage === 1);
+  const timed = stage.family === "ITEM" || stage.family === "BOOTS";
+  const visible = expanded ? stage.options : stage.options.slice(0, COLLAPSED_OPTIONS);
 
-  // One dense table at every breakpoint (it scrolls inside its own container on small screens).
+  // Rows are grids rather than a <table> so a phone gets a card (name and action on one line, the
+  // numbers in a strip beneath) from the same cells a wide screen lays out in columns: the stat group
+  // is `display: contents` from md up, so its cells join the row's own grid.
   return (
-    <div className="overflow-x-auto">
-      {/* Fixed layout and one column set for every family, so the stages stacked on the page line up. */}
-      <table className="w-full min-w-[52rem] table-fixed text-left text-sm">
-        <colgroup>
-          <col />
-          <col className="w-[10.5rem]" />
-          <col className="w-[6.5rem]" />
-          <col className="w-[8.5rem]" />
-          <col className="w-[6.5rem]" />
-          <col className="w-[5.5rem]" />
-          <col className="w-[5.5rem]" />
-          <col className="w-[5rem]" />
-          <col className="w-[5.5rem]" />
-        </colgroup>
-        <caption className="sr-only">
-          {stage.label}: gold-adjusted win rate, its 95% interval, raw win rate, pick rate and games
-          for each choice.
-        </caption>
-        <thead>
-          <tr className="border-b border-border/55 bg-surface-2/45 text-xs text-muted">
-            <th scope="col" className="px-4 py-2.5 font-medium">Choice</th>
-            <th scope="col" className="px-3 py-2.5 font-medium">Adjusted win rate</th>
-            <th scope="col" className="px-3 py-2.5 text-right font-medium">vs. average</th>
-            <th scope="col" className="px-3 py-2.5 text-right font-medium">95% interval</th>
-            <th scope="col" className="px-3 py-2.5 text-right font-medium">Raw win rate</th>
-            <th scope="col" className="px-3 py-2.5 text-right font-medium">Pick rate</th>
-            <th scope="col" className="px-3 py-2.5 text-right font-medium">Games</th>
-            <th scope="col" className="px-3 py-2.5 text-right font-medium">Timing</th>
-            <th scope="col" className="px-4 py-2.5 text-right font-medium">
-              <span className="sr-only">Select</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {stage.options.map((option) => (
-            <tr
-              key={option.actionKey}
-              className={cn(
-                "border-b border-border/30 last:border-0 hover:bg-surface-2/30",
-                option.isLowSample && "text-fg/70"
-              )}
-            >
-              <td className="px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <Icons ids={option.actionIds} section={section} lookups={lookups} />
-                  <div className="min-w-0">
-                    <p className="font-semibold text-fg">
-                      {/* A rune page is named for its keystone; the rest of the page is what tells
-                          two pages with the same keystone apart, so it is listed underneath. */}
-                      {stage.family === "RUNE_PAGE"
-                        ? entityName(option.actionIds[0], section, lookups)
-                        : optionName(option.actionIds, section, lookups)}
-                      {option.isLowSample ? (
-                        <span className="ml-2 rounded-control border border-border/60 px-1.5 py-0.5 text-[0.6875rem] font-medium text-muted">
-                          Few games
-                        </span>
-                      ) : null}
-                    </p>
-                    {stage.family === "RUNE_PAGE" && option.actionIds.length > 1 ? (
-                      <p className="mt-0.5 truncate text-xs text-muted">
-                        {runePageDetail(option.actionIds, referencePage, lookups)}
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-              </td>
-              <td className="px-3 py-3">
+    <div role="table" aria-label={`${stage.label}: gold-adjusted win rate, lift, pick rate and games per choice`}>
+      <div
+        role="row"
+        className={cn(
+          "hidden gap-x-3 border-y border-border/55 bg-surface-2/45 px-4 py-2 text-xs font-medium text-muted md:grid",
+          ROW_GRID
+        )}
+      >
+        <span role="columnheader">Choice</span>
+        <span role="columnheader">Adjusted win rate</span>
+        <span role="columnheader" className="text-right">vs. average</span>
+        <span role="columnheader" className="hidden text-right xl:block">Raw win rate</span>
+        <span role="columnheader" className="text-right">Pick rate</span>
+        <span role="columnheader" className="text-right">Games</span>
+        <span role="columnheader" className="hidden text-right xl:block">Timing</span>
+        <span role="columnheader" className="sr-only">Select</span>
+      </div>
+      <div role="rowgroup" className="divide-y divide-border/30 border-t border-border/30 md:border-t-0">
+        {visible.map((option) => (
+          <div
+            key={option.actionKey}
+            role="row"
+            className={cn(
+              "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5 px-4 py-3 hover:bg-surface-2/30",
+              ROW_GRID,
+              option.isLowSample && "text-fg/70"
+            )}
+          >
+            <div role="cell" className="flex min-w-0 items-center gap-3">
+              <Icons ids={option.actionIds} section={section} lookups={lookups} />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold leading-snug text-fg">
+                  {/* A rune page is named for its keystone; the rest of the page is what tells two
+                      pages with the same keystone apart, so it is listed underneath. */}
+                  {stage.family === "RUNE_PAGE"
+                    ? entityName(option.actionIds[0], section, lookups)
+                    : optionName(option.actionIds, section, lookups)}
+                </p>
+                {stage.family === "RUNE_PAGE" && option.actionIds.length > 1 ? (
+                  <p className="mt-0.5 truncate text-xs text-muted">
+                    {runePageDetail(option.actionIds, referencePage, lookups)}
+                  </p>
+                ) : null}
+                {option.isLowSample ? (
+                  <p className="mt-0.5 text-[0.6875rem] font-medium text-muted">Few games</p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="col-span-2 row-start-2 grid grid-cols-[minmax(0,1.55fr)_minmax(0,1.15fr)_minmax(0,0.9fr)_minmax(0,0.9fr)] gap-x-2.5 md:contents">
+              <div role="cell" className="min-w-0">
+                <p className="text-[0.6875rem] text-muted md:hidden">Adjusted</p>
                 {/* A thin sample's bar would read as confidently as a solid one; muting it keeps the
                     eye on the rows whose interval actually supports the number. */}
                 <DataBar
                   value={option.adjustedWinRate}
                   className={option.isLowSample ? "opacity-45" : undefined}
                 />
-              </td>
-              <td
-                className={cn(
-                  "px-3 py-3 text-right font-semibold tabular-nums",
-                  liftToneClass(option.lift, option.isLowSample)
-                )}
-              >
+                <p className="mt-0.5 text-[0.6875rem] tabular-nums text-muted">
+                  {formatPercent(option.confidenceLow)}–{formatPercent(option.confidenceHigh)}
+                </p>
+              </div>
+              <Stat label="vs. avg" className={cn("font-semibold", liftToneClass(option.lift, option.isLowSample))}>
                 {formatLift(option.lift)}
-              </td>
-              <td className="px-3 py-3 text-right tabular-nums text-fg/72">
-                {formatPercent(option.confidenceLow)} – {formatPercent(option.confidenceHigh)}
-              </td>
-              <td className="px-3 py-3 text-right tabular-nums text-fg/72">
+              </Stat>
+              <Stat label="Raw" className="hidden text-fg/72 xl:block">
                 {formatPercent(option.winRate)}
-              </td>
-              <td className="px-3 py-3 text-right tabular-nums text-fg/72">
+              </Stat>
+              <Stat label="Pick" className="text-fg/72">
                 {formatPercent(option.pickRate)}
-              </td>
-              <td className="px-3 py-3 text-right tabular-nums text-fg/72">
+              </Stat>
+              <Stat label="Games" className="text-fg/72">
                 {formatCompactCount(option.games)}
-              </td>
-              <td className="px-3 py-3 text-right tabular-nums text-fg/72">
-                {option.averageTimingMinutes == null
-                  ? "—"
-                  : `${option.averageTimingMinutes.toFixed(1)}m`}
-              </td>
-              <td className="px-4 py-3 text-right">
-                {terminal || conditions ? (
-                  <Button size="sm" variant="outline" onClick={() => onSelect(stage, option)}>
-                    {conditions ? "Lock" : "Pick"}
-                  </Button>
+                {timed && option.averageTimingMinutes != null ? (
+                  <span className="block text-[0.6875rem] text-muted xl:hidden">
+                    {option.averageTimingMinutes.toFixed(1)}m
+                  </span>
                 ) : null}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+              </Stat>
+              <Stat label="Timing" className="hidden text-fg/72 xl:block">
+                {timed && option.averageTimingMinutes != null
+                  ? `${option.averageTimingMinutes.toFixed(1)}m`
+                  : "—"}
+              </Stat>
+            </div>
+
+            <div role="cell" className="col-start-2 row-start-1 justify-self-end md:col-start-auto md:row-start-auto">
+              {terminal || conditions ? (
+                <Button size="sm" variant="outline" onClick={() => onSelect(stage, option)}>
+                  {conditions ? "Lock" : "Pick"}
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        ))}
+      </div>
+      {stage.options.length > COLLAPSED_OPTIONS ? (
+        <div className="border-t border-border/30 px-4 py-2">
+          <Button size="sm" variant="ghost" onClick={() => setExpanded((value) => !value)}>
+            {expanded ? "Show fewer" : `Show all ${stage.options.length}`}
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -390,7 +421,6 @@ export function BuildLab({
   const [requestError, setRequestError] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const [linkIssues, setLinkIssues] = useState<string[]>(initialIssues);
-  const [activeStage, setActiveStage] = useState(0);
   const lookups: Lookups = { items, runes, spells, itemVersion, spellVersion };
 
   const championOptions = useMemo(
@@ -431,7 +461,6 @@ export function BuildLab({
       })
       .then((body) => {
         setResponse(body);
-        setActiveStage(0);
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
@@ -462,7 +491,6 @@ export function BuildLab({
   }
 
   const stages = response.stages;
-  const activeStageData = stages[Math.min(activeStage, Math.max(stages.length - 1, 0))];
   const coverage = response.coverage;
   const patchOptions = [
     { value: "recent", label: "Recent patches" },
@@ -474,9 +502,10 @@ export function BuildLab({
   const pooled = !state.patch && coverage.includedPatches.length > 1;
 
   return (
-    <div className="grid gap-5">
-      <header className="flex flex-col gap-5 border-b border-border/60 pb-5 lg:flex-row lg:items-end lg:justify-between">
-        <div className="flex min-w-0 items-center gap-4">
+    // min-w-0: a grid item defaults to min-width:auto, which let a wide child widen the whole page.
+    <div className="grid min-w-0 gap-5 [&>*]:min-w-0">
+      <header className="flex items-start justify-between gap-4 border-b border-border/60 pb-5">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           <Image
             src={championIconUrl(version, championSlug)}
             alt=""
@@ -485,24 +514,27 @@ export function BuildLab({
             className="size-14 rounded-card border border-border/60 sm:size-16"
           />
           <div className="min-w-0">
-            <p className="type-kicker text-primary">Build Lab · Ranked Solo/Duo</p>
+            <p className="type-kicker text-primary">
+              Build Lab<span className="hidden sm:inline"> · Ranked Solo/Duo</span>
+            </p>
             <h1 className="type-page-title mt-1 truncate">{championName}</h1>
-            <p className="mt-1 text-sm text-muted">
+            <p className="mt-1 hidden text-sm text-muted sm:block">
               Every build choice, with its win rate adjusted for the gold lead it was made with.
             </p>
           </div>
         </div>
         <Link
           href={`/lol/champions/${championId}?role=${state.role}`}
-          className="text-sm font-medium text-fg/70 hover:text-fg"
+          className="shrink-0 pt-1 text-sm font-medium text-fg/70 hover:text-fg"
         >
-          Champion overview
+          <span className="sm:hidden">Overview</span>
+          <span className="hidden sm:inline">Champion overview</span>
         </Link>
       </header>
 
       <section aria-label="Build Lab context" className="grid gap-3 border-b border-border/50 pb-5">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <label className="grid gap-1.5">
+        <div className="grid grid-cols-2 gap-x-3 gap-y-3 lg:grid-cols-5">
+          <label className="grid min-w-0 gap-1.5">
             <span className="type-kicker text-muted">Champion</span>
             <Select
               value={String(championId)}
@@ -512,7 +544,7 @@ export function BuildLab({
               className="w-full"
             />
           </label>
-          <label className="grid gap-1.5">
+          <label className="grid min-w-0 gap-1.5">
             <span className="type-kicker text-muted">Role</span>
             <Select
               value={state.role}
@@ -536,7 +568,7 @@ export function BuildLab({
               className="w-full"
             />
           </label>
-          <label className="grid gap-1.5">
+          <label className="grid min-w-0 gap-1.5">
             <span className="type-kicker text-muted">Lane opponent</span>
             <Select
               value={state.opponentChampionId ? String(state.opponentChampionId) : "none"}
@@ -551,7 +583,7 @@ export function BuildLab({
               className="w-full"
             />
           </label>
-          <label className="grid gap-1.5">
+          <label className="grid min-w-0 gap-1.5">
             <span className="type-kicker text-muted">Region</span>
             <Select
               value={state.region ?? "ALL"}
@@ -563,7 +595,7 @@ export function BuildLab({
               className="w-full"
             />
           </label>
-          <label className="grid gap-1.5">
+          <label className="col-span-2 grid min-w-0 gap-1.5 lg:col-span-1">
             <span className="type-kicker text-muted">Patch</span>
             <Select
               value={state.patch ?? "recent"}
@@ -576,7 +608,7 @@ export function BuildLab({
             />
           </label>
         </div>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <SegmentedControl
             value={state.section}
             onValueChange={(section) => updateState({ ...state, section })}
@@ -585,14 +617,23 @@ export function BuildLab({
               label: SECTION_LABELS[section]
             }))}
             ariaLabel="Analytics section"
-            className="overflow-x-auto"
+            className="grid w-full grid-cols-3 md:inline-flex md:w-auto"
           />
           <SegmentedControl
             value={state.mode}
             onValueChange={(mode) => updateState({ ...state, mode })}
-            options={BUILD_LAB_MODES.map((mode) => ({ value: mode, label: MODE_LABELS[mode] }))}
+            options={BUILD_LAB_MODES.map((mode) => ({
+              value: mode,
+              "aria-label": MODE_LABELS[mode].full,
+              label: (
+                <>
+                  <span className="sm:hidden">{MODE_LABELS[mode].short}</span>
+                  <span className="hidden sm:inline">{MODE_LABELS[mode].full}</span>
+                </>
+              )
+            }))}
             ariaLabel="Ranking mode"
-            className="overflow-x-auto"
+            className="grid w-full grid-cols-3 md:inline-flex md:w-auto"
           />
         </div>
       </section>
@@ -679,57 +720,41 @@ export function BuildLab({
             className="m-4"
           />
         ) : (
-          <>
-            <div className="border-b border-border/45 px-3 py-2 md:hidden">
-              <SegmentedControl
-                value={String(Math.min(activeStage, Math.max(stages.length - 1, 0)))}
-                onValueChange={(value) => setActiveStage(Number(value))}
-                options={stages.map((stage, index) => ({ value: String(index), label: stage.label }))}
-                ariaLabel="Decision stage"
-                className="max-w-full overflow-x-auto"
-              />
-            </div>
-
-            {[
-              { list: stages, className: "hidden divide-y divide-border/50 md:block" },
-              { list: activeStageData ? [activeStageData] : [], className: "md:hidden" }
-            ].map(({ list, className }) => (
-              <div key={className} className={className}>
-                {list.map((stage) => {
-                  const note = stageNote(stage, response);
-                  return (
-                    <section key={`${stage.family}-${stage.stage}`}>
-                      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-                        <h2 className="type-section">{stage.label}</h2>
-                        <span className="flex flex-wrap items-center gap-2 text-xs text-muted">
-                          {note ? (
-                            <span
-                              className={cn(
-                                "rounded-control border px-1.5 py-0.5",
-                                stage.isFallback
-                                  ? "border-warning/35 bg-warning/10 text-warning"
-                                  : "border-border/60"
-                              )}
-                            >
-                              {note}
-                            </span>
-                          ) : null}
-                          {formatCompactCount(stage.games)} games · {formatPercent(stage.winRate)}{" "}
-                          win rate
+          <div className="divide-y divide-border/50">
+            {stages.map((stage) => {
+              const note = stageNote(stage, response);
+              return (
+                <section key={`${stage.family}-${stage.stage}`} aria-labelledby={`stage-${stage.family}-${stage.stage}`}>
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1.5 px-4 pb-2.5 pt-4">
+                    <h2 id={`stage-${stage.family}-${stage.stage}`} className="type-section">
+                      {stage.label}
+                    </h2>
+                    <span className="flex flex-wrap items-center gap-2 text-xs tabular-nums text-muted">
+                      {note ? (
+                        <span
+                          className={cn(
+                            "rounded-control border px-1.5 py-0.5",
+                            stage.isFallback
+                              ? "border-warning/35 bg-warning/10 text-warning"
+                              : "border-border/60"
+                          )}
+                        >
+                          {note}
                         </span>
-                      </div>
-                      <StageTable
-                        stage={stage}
-                        section={state.section}
-                        lookups={lookups}
-                        onSelect={selectOption}
-                      />
-                    </section>
-                  );
-                })}
-              </div>
-            ))}
-          </>
+                      ) : null}
+                      {formatCompactCount(stage.games)} games · {formatPercent(stage.winRate)} win rate
+                    </span>
+                  </div>
+                  <StageList
+                    stage={stage}
+                    section={state.section}
+                    lookups={lookups}
+                    onSelect={selectOption}
+                  />
+                </section>
+              );
+            })}
+          </div>
         )}
       </section>
 

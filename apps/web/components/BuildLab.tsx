@@ -234,7 +234,14 @@ function StageList({
   ).actionIds;
   const conditions = stage.family === "ITEM" || (stage.family === "RUNE" && stage.stage === 1);
   const timed = stage.family === "ITEM" || stage.family === "BOOTS";
-  const visible = expanded ? stage.options : stage.options.slice(0, COLLAPSED_OPTIONS);
+  // Collapsed, a stage shows only choices with enough games to trust -- unless every choice here is
+  // thin, in which case hiding them would leave nothing. Options arrive ranked with the low-sample
+  // ones last, so expanding keeps the order.
+  const trusted = stage.options.filter((option) => !option.isLowSample);
+  const collapsed = (trusted.length > 0 ? trusted : stage.options).slice(0, COLLAPSED_OPTIONS);
+  const visible = expanded ? stage.options : collapsed;
+  const hidden = stage.options.length - collapsed.length;
+  const hiddenLowSample = trusted.length > 0 ? stage.options.length - trusted.length : 0;
 
   // Rows are grids rather than a <table> so a phone gets a card (name and action on one line, the
   // numbers in a strip beneath) from the same cells a wide screen lays out in columns: the stat group
@@ -342,10 +349,14 @@ function StageList({
           </div>
         ))}
       </div>
-      {stage.options.length > COLLAPSED_OPTIONS ? (
+      {hidden > 0 ? (
         <div className="border-t border-border/30 px-4 py-2">
           <Button size="sm" variant="ghost" onClick={() => setExpanded((value) => !value)}>
-            {expanded ? "Show fewer" : `Show all ${stage.options.length}`}
+            {expanded
+              ? "Show fewer"
+              : hiddenLowSample > 0
+                ? `Show ${hidden} more · ${hiddenLowSample} with few games`
+                : `Show ${hidden} more`}
           </Button>
         </div>
       ) : null}

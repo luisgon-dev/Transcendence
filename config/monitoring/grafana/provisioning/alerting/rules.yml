@@ -11,6 +11,30 @@
 # failures/freshness; host disk capacity; and frontend lab sweep freshness and regression.
 apiVersion: 1
 
+# File provisioning only ever adds and updates rules; one removed from this file keeps evaluating from
+# Grafana's database until it is deleted here. These are the retired Build Lab modeler's rules.
+deleteRules:
+  - orgId: 1
+    uid: trn-buildlab-unclaimed-generation
+  - orgId: 1
+    uid: trn-buildlab-modeling-wedged
+  - orgId: 1
+    uid: trn-buildlab-training-failures
+  - orgId: 1
+    uid: trn-buildlab-generation-stale
+  - orgId: 1
+    uid: trn-buildlab-dataset-lag
+  - orgId: 1
+    uid: trn-buildlab-rollback
+  - orgId: 1
+    uid: trn-buildlab-no-published-estimates
+  - orgId: 1
+    uid: trn-buildlab-coverage-collapse
+  - orgId: 1
+    uid: trn-buildlab-evidence-gate-breach
+  - orgId: 1
+    uid: trn-buildlab-calibration-breach
+
 groups:
   - orgId: 1
     name: transcendence-platform

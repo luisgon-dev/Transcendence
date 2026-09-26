@@ -19,7 +19,7 @@ public sealed class BuildLabDecisionsTests
         new(++eventIndex, MatchItemEventType.Sold, atSeconds * 1000, itemId, null, null, null);
 
     [Fact]
-    public void Items_EmitsStarterSetThenEachLegendaryConditionedOnTheOnesBefore()
+    public void Items_EmitsBootsThenEachLegendaryConditionedOnTheOnesBefore()
     {
         var decisions = BuildLabDecisions.Items(
         [
@@ -32,7 +32,6 @@ public sealed class BuildLabDecisionsTests
         ]).ToList();
 
         decisions.Select(d => (d.Family, d.Stage, string.Join(",", d.Prefix), d.ActionKey)).Should().Equal(
-            (BuildLabFamily.Starter, (short)0, "", "1055+2003"),
             (BuildLabFamily.Boots, (short)1, "", "3006"),
             (BuildLabFamily.Item, (short)1, "", "6672"),
             (BuildLabFamily.Item, (short)2, "6672", "3031"),
@@ -41,7 +40,7 @@ public sealed class BuildLabDecisionsTests
     }
 
     [Fact]
-    public void Items_IgnoresLaterPotionsAndSecondBootsAndUndonePurchases()
+    public void Items_IgnoresSecondBootsAndUndonePurchases()
     {
         var decisions = BuildLabDecisions.Items(
         [
@@ -54,7 +53,7 @@ public sealed class BuildLabDecisionsTests
             Buy(6655, 650, BuildItemCategory.Legendary)
         ]).ToList();
 
-        decisions.Single(d => d.Family == BuildLabFamily.Starter).ActionKey.Should().Be("1056");
+        decisions.Should().NotContain(d => d.Family == BuildLabFamily.Starter, "the opening buy is OpeningBuy's");
         decisions.Single(d => d.Family == BuildLabFamily.Boots).ActionKey.Should().Be("3020");
         decisions.Where(d => d.Family == BuildLabFamily.Item).Select(d => d.ActionKey)
             .Should().Equal("6655");
@@ -97,6 +96,88 @@ public sealed class BuildLabDecisionsTests
         ]).ToList();
 
         decisions.Select(d => d.ActionKey).Should().Equal("3031");
+    }
+
+    // Patch 16.19 prices for the items the prod sequences below use.
+    private static readonly Dictionary<int, int> Prices = new()
+    {
+        [1056] = 400, [1055] = 450, [2003] = 50, [1052] = 400, [3070] = 400, [1029] = 300,
+        [1027] = 350, [1036] = 350, [2031] = 150, [3340] = 0
+    };
+
+    private static string? Opening(params BuildLabItemEvent[] events) =>
+        BuildLabDecisions.OpeningBuy(events, Prices).Decision?.ActionKey;
+
+    [Fact]
+    public void OpeningBuy_IsTheStartingPurchasesAsOneSet()
+    {
+        Opening(Buy(1056, 2, BuildItemCategory.Starter), Buy(2003, 2, BuildItemCategory.Starter),
+                Buy(2003, 2, BuildItemCategory.Starter), Buy(3340, 2, null))
+            .Should().Be("1056+2003+2003", "the free trinket carries no information");
+    }
+
+    [Fact]
+    public void OpeningBuy_NetsOutAnItemSoldBackAtTheStart()
+    {
+        // Prod: Tear bought, sold for the full refund, then Doran's Ring. Counting both made a 900g start.
+        Opening(Buy(3070, 15, BuildItemCategory.Starter), Sell(3070, 16), Buy(1056, 17, BuildItemCategory.Starter),
+                Buy(2003, 18, BuildItemCategory.Starter), Buy(2003, 18, BuildItemCategory.Starter))
+            .Should().Be("1056+2003+2003");
+    }
+
+    [Fact]
+    public void OpeningBuy_NetsOutUndonePurchases()
+    {
+        // Prod: Doran's Ring and two potions, all three undone, then Doran's Blade and a potion.
+        Opening(Buy(1056, 15, BuildItemCategory.Starter), Buy(2003, 16, BuildItemCategory.Starter),
+                Buy(2003, 16, BuildItemCategory.Starter), Undo(2003, 17), Undo(2003, 17), Undo(1056, 17),
+                Buy(1055, 18, BuildItemCategory.Starter), Buy(2003, 19, BuildItemCategory.Starter))
+            .Should().Be("1055+2003");
+    }
+
+    [Fact]
+    public void OpeningBuy_LeavesOutASecondShopAfterTheWindow()
+    {
+        // Prod: a potion bought again at 1:26 after two were used in lane.
+        Opening(Buy(1056, 6, BuildItemCategory.Starter), Buy(2003, 6, BuildItemCategory.Starter),
+                Buy(2003, 7, BuildItemCategory.Starter), Buy(2003, 86, BuildItemCategory.Starter))
+            .Should().Be("1056+2003+2003");
+    }
+
+    [Fact]
+    public void OpeningBuy_CountsNonStarterCategoryItems()
+    {
+        Opening(Buy(1036, 3, null), Buy(2031, 4, BuildItemCategory.Starter)).Should().Be("1036+2031",
+            "a Long Sword start is a start even though Long Sword is not a starter-category item");
+    }
+
+    [Fact]
+    public void OpeningBuy_RejectsAnythingThatCostsMoreThanTheStartingGold()
+    {
+        // Whatever the replay misses, the budget is the rule the game enforces: 400 + 400 + 100 > 500.
+        var result = BuildLabDecisions.OpeningBuy(
+            [Buy(1052, 3, null), Buy(1056, 4, BuildItemCategory.Starter),
+             Buy(2003, 4, BuildItemCategory.Starter), Buy(2003, 4, BuildItemCategory.Starter)],
+            Prices);
+
+        result.Decision.Should().BeNull();
+        result.Rejection.Should().Be(OpeningBuyRejection.OverBudget);
+    }
+
+    [Fact]
+    public void OpeningBuy_RejectsAnItemWithNoKnownPrice()
+    {
+        var result = BuildLabDecisions.OpeningBuy([Buy(999_999, 3, BuildItemCategory.Starter)], Prices);
+
+        result.Decision.Should().BeNull();
+        result.Rejection.Should().Be(OpeningBuyRejection.UnknownPrice);
+    }
+
+    [Fact]
+    public void OpeningBuy_IsEmptyWhenNothingPricedWasBought()
+    {
+        BuildLabDecisions.OpeningBuy([Buy(3340, 2, null)], Prices).Rejection
+            .Should().Be(OpeningBuyRejection.Empty);
     }
 
     [Fact]

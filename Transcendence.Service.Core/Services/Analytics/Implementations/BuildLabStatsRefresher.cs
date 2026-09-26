@@ -51,20 +51,31 @@ public sealed class BuildLabStatsRefresher(
             var batchSize = Math.Clamp(options.MatchBatchSize, 10, 5_000);
             var counted = 0;
             var rowsWritten = 0;
+            var rejected = new Dictionary<OpeningBuyRejection, int>();
             foreach (var patch in refreshed)
             {
+                var prices = await context.ItemVersions.AsNoTracking()
+                    .Where(item => item.PatchVersion == patch)
+                    .ToDictionaryAsync(item => item.ItemId, item => item.PriceTotal, ct);
                 while (counted < budget)
                 {
                     var matchIds = await NextBatchAsync(patch, Math.Min(batchSize, budget - counted), ct);
                     if (matchIds.Count == 0)
                         break;
-                    rowsWritten += await CountBatchAsync(patch, matchIds, ct);
+                    rowsWritten += await CountBatchAsync(patch, matchIds, prices, rejected, ct);
                     counted += matchIds.Count;
                     logger.LogInformation(
                         "Build Lab patch {Patch}: counted {Batch} matches ({Counted} this run).",
                         patch, matchIds.Count, counted);
                 }
             }
+
+            // An over-budget or unpriceable opening buy is dropped, not counted; a sudden rise here is
+            // the replay mis-reading a new event shape, which is worth knowing before it skews the page.
+            if (rejected.Count > 0)
+                logger.LogInformation(
+                    "Build Lab rejected opening buys this run: {Rejections}.",
+                    string.Join(", ", rejected.Select(pair => $"{pair.Key}={pair.Value}")));
 
             var backlog = await EligibleUncounted(refreshed).LongCountAsync(ct);
             return new BuildLabRefreshResult(refreshed, counted, rowsWritten, backlog);
@@ -125,7 +136,12 @@ public sealed class BuildLabStatsRefresher(
             .Take(size)
             .ToListAsync(ct);
 
-    private async Task<int> CountBatchAsync(string patch, List<Guid> matchIds, CancellationToken ct)
+    private async Task<int> CountBatchAsync(
+        string patch,
+        List<Guid> matchIds,
+        IReadOnlyDictionary<int, int> prices,
+        Dictionary<OpeningBuyRejection, int> rejected,
+        CancellationToken ct)
     {
         var participants = await context.MatchParticipants.IgnoreQueryFilters().AsNoTracking()
             .Where(participant => matchIds.Contains(participant.MatchId))
@@ -193,7 +209,12 @@ public sealed class BuildLabStatsRefresher(
                 var opponent = match.FirstOrDefault(other =>
                     other.TeamId != participant.TeamId && other.Role == participant.Role)?.ChampionId ?? 0;
 
-                var decisions = BuildLabDecisions.Items(events[(participant.MatchId, participant.ParticipantId)])
+                var itemEvents = events[(participant.MatchId, participant.ParticipantId)].ToList();
+                var opening = BuildLabDecisions.OpeningBuy(itemEvents, prices);
+                if (opening.Rejection is OpeningBuyRejection.OverBudget or OpeningBuyRejection.UnknownPrice)
+                    rejected[opening.Rejection] = rejected.GetValueOrDefault(opening.Rejection) + 1;
+                var decisions = (opening.Decision is { } start ? [start] : Array.Empty<BuildLabDecision>())
+                    .Concat(BuildLabDecisions.Items(itemEvents))
                     .Concat(BuildLabDecisions.Runes(runes[participant.Id]))
                     .Concat(BuildLabDecisions.Spells(participant.Spell1Id, participant.Spell2Id));
                 foreach (var decision in decisions)

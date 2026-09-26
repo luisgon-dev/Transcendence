@@ -156,6 +156,34 @@ public sealed class BuildLabRealPostgresTests(PostgresIntegrationFixture fixture
     }
 
     [Fact]
+    public async Task Refresh_NeverCountsAnOpeningBuyThatCostsMoreThanTheStartingGold()
+    {
+        var patch = await SeedPatchAsync();
+        await using (var db = NewDb())
+        {
+            AddGame(db, patch, ahriWins: true, firstItem: Luden, ahriGoldLead: 0);
+            // Doran's Ring + Amplifying Tome = 800g: not something anyone can start with.
+            AddGame(db, patch, ahriWins: true, firstItem: Luden, ahriGoldLead: 0, extraOpeningItems: [1052]);
+            await db.SaveChangesAsync();
+        }
+
+        await RefreshAsync();
+
+        await using var check = NewDb();
+        var starters = await check.BuildLabOptionStats.AsNoTracking()
+            .Where(row => row.Patch == patch && row.Region == "ALL" && row.OpponentChampionId == 0 &&
+                          row.Family == BuildLabFamily.Starter)
+            .ToListAsync();
+        starters.Should().ContainSingle().Which.Should()
+            .Match<BuildLabOptionStat>(row => row.ActionKey == "1056" && row.Games == 1);
+        // The rest of that game still counts: only the impossible start is dropped.
+        (await check.BuildLabOptionStats.Where(row =>
+                row.Patch == patch && row.Region == "ALL" && row.OpponentChampionId == 0 &&
+                row.Family == BuildLabFamily.Item && row.Stage == 1)
+            .SumAsync(row => row.Games)).Should().Be(2);
+    }
+
+    [Fact]
     public async Task Migrations_PinTheSourceTablesMatchCardinality_SoTheBatchReadUsesTheIndex()
     {
         // A sampled ANALYZE badly underestimates distinct MatchIds on these clustered tables, which on
@@ -219,6 +247,9 @@ public sealed class BuildLabRealPostgresTests(PostgresIntegrationFixture fixture
             DetectedAt = DateTime.UtcNow,
             IsActive = true
         });
+        // Opening buys are priced against the patch, so the items the games start with need versions.
+        foreach (var (itemId, price) in new[] { (1056, 400), (1052, 400), (3340, 0) })
+            db.ItemVersions.Add(new ItemVersion { ItemId = itemId, PatchVersion = patch, Name = $"Item {itemId}", PriceTotal = price });
         await db.SaveChangesAsync();
         return patch;
     }
@@ -229,7 +260,8 @@ public sealed class BuildLabRealPostgresTests(PostgresIntegrationFixture fixture
         bool ahriWins,
         int firstItem,
         int ahriGoldLead,
-        int timelineSchema = 2)
+        int timelineSchema = 2,
+        int[]? extraOpeningItems = null)
     {
         var match = new Match
         {
@@ -276,6 +308,8 @@ public sealed class BuildLabRealPostgresTests(PostgresIntegrationFixture fixture
                 BuildCategory = category
             });
         Item(1, 5, 1056, BuildItemCategory.Starter);
+        foreach (var extra in extraOpeningItems ?? [])
+            Item(1, 8, extra, BuildItemCategory.Starter);
         Item(1, 480, 3020, BuildItemCategory.Boots);
         Item(1, 700, firstItem, BuildItemCategory.Legendary);
         Item(1, 1200, 3089, BuildItemCategory.Legendary);

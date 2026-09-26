@@ -243,8 +243,16 @@ var host = builder.Build();
 // The Build Lab refresh job is the only consumer of BuildLabTelemetry, so nothing would construct the
 // lazily-resolved singleton before its first run and its series would be missing rather than zero.
 // Resolving it here creates the meter at startup, so a feature-off worker reports a defined 0.
+//
+// The MeterProvider is resolved FIRST. It is otherwise built when the host starts, after this line, and
+// a counter's seeding Add(0) made before any listener exists is simply dropped: on prod the gauges
+// (read by callback, later) exported and both counters were missing, so the error alert's increase()
+// had no zero to measure the first failure from.
 if (builder.Configuration.GetValue("Telemetry:Enabled", true))
+{
+    host.Services.GetService<OpenTelemetry.Metrics.MeterProvider>();
     host.Services.GetRequiredService<Transcendence.Service.Core.Services.Diagnostics.BuildLabTelemetry>();
+}
 
 // Apply pending EF migrations before the worker starts (gated by Database:AutoMigrate). EF Core's migration
 // lock makes this safe even though the WebAPI host runs the same step on a simultaneous deploy.

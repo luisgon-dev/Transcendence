@@ -305,7 +305,9 @@ export function liftToneClass(value: number | null | undefined, lowSample = fals
 
 export function formatLift(value?: number | null) {
   if (value == null) return "—";
-  const points = value * 100;
+  // Rounded first, so a lift of -0.0004 prints "0.0 pp" instead of a signed zero.
+  const points = Math.round(value * 1000) / 10;
+  if (points === 0) return "0.0 pp";
   return `${points > 0 ? "+" : ""}${points.toFixed(1)} pp`;
 }
 

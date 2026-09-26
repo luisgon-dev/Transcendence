@@ -20,13 +20,20 @@ const champions = [
   { championId: 238, slug: "Zed", name: "Zed" }
 ];
 
-const items = {
+const items: Record<string, { name: string }> = {
   "1056": { name: "Doran's Ring" },
   "3020": { name: "Sorcerer's Shoes" },
   "6655": { name: "Luden's Companion" },
   "3118": { name: "Malignance" }
 };
-const runes = { "8112": { name: "Electrocute", icon: "perk-images/Styles/Domination/Electrocute.png" } };
+const runes = {
+  "8112": { name: "Electrocute", icon: "perk-images/Styles/Domination/Electrocute.png" },
+  "8139": { name: "Taste of Blood", icon: "perk-images/Styles/Domination/TasteOfBlood.png" },
+  "8143": { name: "Sudden Impact", icon: "perk-images/Styles/Domination/SuddenImpact.png" },
+  "8226": { name: "Manaflow Band", icon: "perk-images/Styles/Sorcery/ManaflowBand.png" },
+  "8237": { name: "Scorch", icon: "perk-images/Styles/Sorcery/Scorch.png" }
+};
+const items2003 = { "2003": { name: "Health Potion" } };
 const spells = { "4": { id: "SummonerFlash", name: "Flash" }, "14": { id: "SummonerDot", name: "Ignite" } };
 
 function option(overrides: Partial<BuildLabOption>): BuildLabOption {
@@ -267,5 +274,48 @@ describe("BuildLab", () => {
     const url = router.replace.mock.calls.at(-1)?.[0] as string;
     expect(url).not.toContain("opponentChampionId");
     expect(url).not.toContain("itemPath");
+  });
+  it("counts a repeated starter item instead of listing it twice", async () => {
+    Object.assign(items, items2003);
+    renderLab({
+      response: {
+        stages: [
+          stage({
+            family: "STARTER",
+            stage: 0,
+            label: "Starting items",
+            options: [option({ actionKey: "1056+2003+2003", actionIds: [1056, 2003, 2003] })]
+          })
+        ]
+      }
+    });
+
+    expect(screen.getAllByText("Doran's Ring + 2× Health Potion").length).toBeGreaterThan(0);
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+  });
+
+  it("tells same-keystone rune pages apart by what each swaps in", async () => {
+    renderLab({
+      state: { section: "runes" },
+      response: {
+        stages: [
+          stage({
+            family: "RUNE_PAGE",
+            stage: 0,
+            label: "Complete rune page",
+            options: [
+              option({ actionKey: "a", actionIds: [8112, 8139, 8226], games: 5000 }),
+              option({ actionKey: "b", actionIds: [8112, 8139, 8237], games: 300 }),
+              option({ actionKey: "c", actionIds: [8112, 8226, 8139], games: 200 })
+            ]
+          })
+        ]
+      }
+    });
+
+    expect(screen.getAllByText("Taste of Blood · Manaflow Band").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Swaps in Scorch").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Same runes, different order").length).toBeGreaterThan(0);
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
   });
 });

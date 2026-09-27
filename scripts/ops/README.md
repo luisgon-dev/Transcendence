@@ -20,6 +20,10 @@ with a deterministic, **outbound-only** release poll:
 3. If they differ, deploy in dependency order: `service` → `webapi` → `web`. Before replacing the
    worker, run the newly pulled image once with `Database__MigrateOnly=true`; only a successful
    migration continues the release.
+   The webapi also waits for the worker: images build in parallel, so the webapi image can reach
+   `:main` a poll before the worker image of the same merge. While the commits from the running
+   worker's revision to the webapi's contain a migration the worker has not deployed, the poll logs
+   `HOLD webapi` and retries (it uses the checkout's git history; if it cannot tell, it deploys).
 4. Recreate one service at a time with `--no-deps` (PostgreSQL/Redis are never touched), wait for its
    healthcheck, then continue. A component failure aborts all later components for that poll.
 5. On recreate/health failure, restore the exact prior container if Compose left it partially

@@ -134,6 +134,24 @@ local_revision() {
     2>/dev/null
 }
 
+# Images build in parallel, so a webapi image can reach :main a poll before the worker image of the
+# same merge, and the worker is what applies migrations. Deploying that webapi first ran new code
+# against the old schema (seen 2026-09-27: the webapi served ~30s ahead of AddBuildLabCoverage).
+# Holds (returns 0) while the commits from the running worker's revision up to the webapi's contain
+# a migration the worker has not deployed; answers "no hold" whenever it cannot tell, so an
+# unreachable GitHub or an unknown revision never blocks a deploy.
+webapi_waits_for_migrations() {
+  local target_rev="$1" worker_rev
+  worker_rev="$(local_revision transcendence-service)"
+  [ -n "$worker_rev" ] && [ -n "$target_rev" ] && [ "$worker_rev" != "$target_rev" ] || return 1
+  git -C "$COMPOSE_DIR" fetch -q origin 2>/dev/null || return 1
+  git -C "$COMPOSE_DIR" cat-file -e "${target_rev}^{commit}" 2>/dev/null || return 1
+  git -C "$COMPOSE_DIR" cat-file -e "${worker_rev}^{commit}" 2>/dev/null || return 1
+  # The worker already runs this release or a later one: nothing left to wait for.
+  git -C "$COMPOSE_DIR" merge-base --is-ancestor "$target_rev" "$worker_rev" 2>/dev/null && return 1
+  [ -n "$(git -C "$COMPOSE_DIR" diff --name-only "$worker_rev" "$target_rev" -- Transcendence.Service/Migrations 2>/dev/null)" ]
+}
+
 notify() {
   local msg="$1" url
   url="$(sed -n 's/^ALERTS_WEBHOOK_URL=//p' "$ENV_FILE" 2>/dev/null | head -1)"
@@ -338,6 +356,11 @@ deploy_one() {
   fi
   previous_image_id="$(docker inspect "$container" --format '{{.Image}}' 2>/dev/null)"
   previous_container_id="$(docker inspect "$container" --format '{{.Id}}' 2>/dev/null)"
+
+  if [ "$svc" = "webapi" ] && webapi_waits_for_migrations "$remote_rev"; then
+    log "HOLD webapi: rev ${remote_rev:0:12} has migrations the worker has not applied yet; retrying next poll"
+    return 0
+  fi
 
   log "UPDATE ${svc}: rev ${current_rev:0:12} -> ${remote_rev:0:12}; deploying"
   if [ "${DRY_RUN:-0}" = "1" ]; then

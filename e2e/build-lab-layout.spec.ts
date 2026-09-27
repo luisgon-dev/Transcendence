@@ -122,6 +122,12 @@ for (const [width, height] of [[390, 844], [768, 1024], [1024, 768], [1440, 900]
       );
 
       await page.goto(`/lol/builds/103?role=MIDDLE&section=${section}`);
+      // next dev's floating indicator can sit over the expander; production builds have none.
+      await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
+      // The server renders whatever the backend under test has counted before the page's own
+      // request returns the fixture; wait for the fixture itself (its coverage line) so the checks
+      // never run against the first render and race its replacement.
+      await expect(page.getByText(/311K games/)).toBeVisible();
       await expect(page.getByRole("heading", { name: "Recommended build" })).toBeVisible();
       await expect(page.getByRole("row").nth(1)).toBeVisible();
 

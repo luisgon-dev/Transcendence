@@ -204,7 +204,7 @@ function RecommendedBuild({
       <p className="mt-1 text-xs text-muted">
         The best common, well-sampled choice at each step; items follow on from each other.
       </p>
-      <ol className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
+      <ol className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-[repeat(auto-fill,minmax(11rem,1fr))]">
         {pieces.map((piece) => (
           <li
             key={piece.label}
@@ -213,7 +213,8 @@ function RecommendedBuild({
             <Icons ids={piece.ids} section={piece.section} lookups={lookups} size={28} max={2} />
             <div className="min-w-0">
               <p className="text-[0.6875rem] text-muted">{piece.label}</p>
-              <p className="truncate text-xs font-semibold text-fg">
+              {/* A skill order is already spelled out by its key caps. */}
+              <p className={cn("truncate text-xs font-semibold text-fg", piece.section === "skills" && "sr-only")}>
                 {piece.section === "runes"
                   ? entityName(piece.ids[0], "runes", lookups)
                   : optionName(piece.option.actionIds, piece.section, lookups)}
@@ -369,7 +370,12 @@ function StageList({
                 lookups={lookups}
               />
               <div className="min-w-0">
-                <p className="text-sm font-semibold leading-snug text-fg [overflow-wrap:anywhere]">
+                <p
+                  className={cn(
+                    "text-sm font-semibold leading-snug text-fg [overflow-wrap:anywhere]",
+                    section === "skills" && "sr-only"
+                  )}
+                >
                   {/* A rune page is named for its keystone; the rest of the page is what tells two
                       pages with the same keystone apart, so it is listed underneath. */}
                   {stage.family === "RUNE_PAGE"
@@ -721,7 +727,7 @@ export function BuildLab({
               label: SECTION_LABELS[section]
             }))}
             ariaLabel="Analytics section"
-            className="grid w-full grid-cols-3 md:inline-flex md:w-auto"
+            className="grid w-full grid-cols-4 md:inline-flex md:w-auto"
           />
           <SegmentedControl
             value={state.mode}

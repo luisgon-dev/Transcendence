@@ -30,6 +30,29 @@ public sealed class SchemaMigrationTests(PostgresIntegrationFixture fixture)
     }
 
     [Fact]
+    public async Task MatchTables_VacuumOnInsertOften_SoCurrentPatchReadsStayIndexOnly()
+    {
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<TranscendenceContext>();
+        var connection = db.Database.GetDbConnection();
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT relname, array_to_string(reloptions, ',') FROM pg_class
+            WHERE relname IN ('MatchParticipants', 'Matches') ORDER BY relname
+            """;
+        var options = new Dictionary<string, string>();
+        await using (var reader = await command.ExecuteReaderAsync())
+            while (await reader.ReadAsync())
+                options[reader.GetString(0)] = reader.GetString(1);
+
+        options["MatchParticipants"].Should().Contain("autovacuum_vacuum_insert_scale_factor=0.005")
+            .And.Contain("autovacuum_vacuum_insert_threshold=10000");
+        options["Matches"].Should().Contain("autovacuum_vacuum_insert_scale_factor=0.01")
+            .And.Contain("autovacuum_vacuum_scale_factor=0.01");
+    }
+
+    [Fact]
     public async Task CanConnect_AndCoreTablesExist()
     {
         using var scope = fixture.Factory.Services.CreateScope();

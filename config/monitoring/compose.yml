@@ -45,6 +45,11 @@ services:
       # secrets/grafana_admin_password and replace its placeholder before starting this stack.
       GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
       GF_USERS_ALLOW_SIGN_UP: "false"
+      # Write-ahead logging for Grafana's SQLite store. In the default rollback-journal mode every write
+      # locks the whole file, and with 18 alert rules evaluating on a schedule the rule evaluator
+      # regularly lost that race ("database is locked (5) (SQLITE_BUSY)", then retry). WAL lets reads
+      # proceed during a write. The volume is local disk, which WAL requires.
+      GF_DATABASE_WAL: "true"
       GF_SERVER_ROOT_URL: "${GRAFANA_ROOT_URL:-http://localhost:3300}"
       GF_SECURITY_COOKIE_SECURE: "${GRAFANA_COOKIE_SECURE:-false}"
       # Provisioned-alerting Discord/Slack webhook (interpolated into the discord contact point).

@@ -3,8 +3,8 @@
 -- Usage (read-only):
 --   psql ... -v target=16.19 -v prior1=16.18 -v prior2=16.17 -f scripts/analysis/build-lab-pooling-backtest.sql
 --
--- Every scheme builds the served model -- gold-bucket baseline plus observed-minus-expected lift, as
--- in build-lab-backtest.sql -- from the two prior patches only, with per-row weights, and is scored
+-- Every scheme builds the served model -- gold-bucket baseline plus the observed-minus-expected lift,
+-- shrunk by 1000 pseudo-games as BuildLabEstimator does -- from the two prior patches only, with per-row weights, and is scored
 -- on the target patch's games. A row is "changed" when, between its patch and the target, anything
 -- it depends on changed: one of its items or runes (content hash, the same test the retired modeler
 -- used) or the champion's balance hash.
@@ -83,37 +83,44 @@ GROUP BY 1, 2, 3, 4, 5, 6, 7, 8;
 ANALYZE weighted;
 ANALYZE tgt;
 
-WITH cell AS (
-    SELECT scheme, c, r, h, f, s, sum(w) / sum(g) AS rate FROM weighted GROUP BY 1, 2, 3, 4, 5, 6
-),
-bucket AS (
-    SELECT scheme, c, r, h, f, s, b, sum(w) / sum(g) AS rate FROM weighted GROUP BY 1, 2, 3, 4, 5, 6, 7
-),
-opt AS (
-    SELECT o.scheme, o.c, o.r, o.h, o.f, o.s, o.a,
-           (sum(o.w) - sum(o.g * bk.rate)) / sum(o.g) AS lift
-    FROM weighted o
-    JOIN bucket bk USING (scheme, c, r, h, f, s, b)
-    GROUP BY 1, 2, 3, 4, 5, 6, 7
-),
+-- Materialized and analyzed step by step: as one CTE chain over ~7M weighted rows the planner chose
+-- nested loops and the final query ran for over half an hour before being cancelled.
+CREATE TEMP TABLE cell AS
+SELECT scheme, c, r, h, f, s, sum(w) / sum(g) AS rate FROM weighted GROUP BY 1, 2, 3, 4, 5, 6;
+CREATE TEMP TABLE bucket AS
+SELECT scheme, c, r, h, f, s, b, sum(w) / sum(g) AS rate FROM weighted GROUP BY 1, 2, 3, 4, 5, 6, 7;
+ANALYZE cell; ANALYZE bucket;
+
+CREATE TEMP TABLE opt AS
+SELECT o.scheme, o.c, o.r, o.h, o.f, o.s, o.a, sum(o.g) AS g,
+       (sum(o.w) - sum(o.g * bk.rate)) / sum(o.g) AS lift
+FROM weighted o
+JOIN bucket bk USING (scheme, c, r, h, f, s, b)
+GROUP BY 1, 2, 3, 4, 5, 6, 7;
+ANALYZE opt;
+
 -- Scored only on decisions every scheme can answer, so no scheme is graded on a different set.
-common AS (
-    SELECT c, r, h, f, s FROM cell GROUP BY 1, 2, 3, 4, 5
-    HAVING count(DISTINCT scheme) = (SELECT count(*) FROM scheme)
-),
-scored AS (
-    SELECT cl.scheme, t.f, t.g, t.w,
-           least(0.99, greatest(0.01, coalesce(bk.rate, cl.rate) + coalesce(o.lift, 0))) AS p,
-           least(0.99, greatest(0.01, coalesce(bk.rate, cl.rate))) AS p0
-    FROM tgt t
-    JOIN common USING (c, r, h, f, s)
-    JOIN cell cl USING (c, r, h, f, s)
-    LEFT JOIN bucket bk ON bk.scheme = cl.scheme AND (bk.c, bk.r, bk.h, bk.f, bk.s, bk.b) = (t.c, t.r, t.h, t.f, t.s, t.b)
-    LEFT JOIN opt o ON o.scheme = cl.scheme AND (o.c, o.r, o.h, o.f, o.s, o.a) = (t.c, t.r, t.h, t.f, t.s, t.a)
-)
+CREATE TEMP TABLE common AS
+SELECT c, r, h, f, s FROM cell GROUP BY 1, 2, 3, 4, 5
+HAVING count(DISTINCT scheme) = (SELECT count(*) FROM scheme);
+ANALYZE common;
+
+-- The served model: bucket baseline plus the lift shrunk by BuildLabEstimator.LiftShrinkageGames.
+CREATE TEMP TABLE scored AS
+SELECT cl.scheme, t.f, t.g, t.w,
+       least(0.99, greatest(0.01, coalesce(bk.rate, cl.rate) + coalesce(o.lift * o.g / (o.g + 1000), 0))) AS p,
+       least(0.99, greatest(0.01, coalesce(bk.rate, cl.rate))) AS p0
+FROM tgt t
+JOIN common USING (c, r, h, f, s)
+JOIN cell cl USING (c, r, h, f, s)
+LEFT JOIN bucket bk ON bk.scheme = cl.scheme AND bk.c = t.c AND bk.r = t.r AND bk.h = t.h
+     AND bk.f = t.f AND bk.s = t.s AND bk.b = t.b
+LEFT JOIN opt o ON o.scheme = cl.scheme AND o.c = t.c AND o.r = t.r AND o.h = t.h
+     AND o.f = t.f AND o.s = t.s AND o.a = t.a;
+
 SELECT scheme,
        coalesce(CASE f WHEN 0 THEN 'STARTER' WHEN 1 THEN 'ITEM' WHEN 2 THEN 'BOOTS'
-                WHEN 3 THEN 'RUNE_PAGE' WHEN 4 THEN 'RUNE' WHEN 5 THEN 'SPELLS' END, 'ALL') AS family,
+                WHEN 3 THEN 'RUNE_PAGE' WHEN 4 THEN 'RUNE' WHEN 5 THEN 'SPELLS' WHEN 6 THEN 'SKILLS' END, 'ALL') AS family,
        round(sum(g)) AS games,
        round((sum(w * (1 - p) ^ 2 + (g - w) * p ^ 2) / sum(g))::numeric, 6) AS brier,
        round((-sum(w * ln(p) + (g - w) * ln(1 - p)) / sum(g))::numeric, 6) AS log_loss,

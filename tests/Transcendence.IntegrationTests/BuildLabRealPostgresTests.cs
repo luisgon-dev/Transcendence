@@ -215,6 +215,49 @@ public sealed class BuildLabRealPostgresTests(PostgresIntegrationFixture fixture
     }
 
     [Fact]
+    public async Task Service_BorrowsAnUnchangedItemFromThePriorPatchAtFullWeight()
+    {
+        // Its own champion and the newest release dates on the container, so no other test's patches
+        // are pooled in: the prior patch is 1 day older than the current one.
+        const int champion = 777;
+        var baseDate = DateTime.UtcNow.AddYears(60).AddSeconds(Random.Shared.Next(1, 1_000_000));
+        var current = $"blc-{Guid.NewGuid():N}"[..12];
+        var prior = $"blp-{Guid.NewGuid():N}"[..12];
+        await using (var db = NewDb())
+        {
+            foreach (var (patch, released) in new[] { (prior, baseDate), (current, baseDate.AddDays(1)) })
+            {
+                db.Patches.Add(new Patch { Version = patch, ReleaseDate = released, DetectedAt = DateTime.UtcNow, IsActive = true });
+                db.ItemVersions.Add(new ItemVersion { ItemId = 1056, PatchVersion = patch, Name = "Doran's Ring", PriceTotal = 400 });
+                db.ItemVersions.Add(new ItemVersion { ItemId = Luden, PatchVersion = patch, Name = "Luden's", Description = "unchanged", PriceTotal = 2750 });
+                // Malignance was rebalanced between the two patches.
+                db.ItemVersions.Add(new ItemVersion { ItemId = Malignance, PatchVersion = patch, Name = "Malignance", Description = patch == prior ? "old" : "new", PriceTotal = 2700 });
+            }
+            await db.SaveChangesAsync();
+            foreach (var patch in new[] { prior, current })
+            {
+                for (var index = 0; index < 10; index++)
+                {
+                    AddGame(db, patch, ahriWins: index % 2 == 0, firstItem: Luden, ahriGoldLead: 0, championId: champion);
+                    AddGame(db, patch, ahriWins: index % 2 == 0, firstItem: Malignance, ahriGoldLead: 0, championId: champion);
+                }
+            }
+            await db.SaveChangesAsync();
+        }
+        await RefreshAsync();
+
+        var response = await ServiceGetAsync(new BuildLabQuery(
+            champion, "MIDDLE", null, null, null, "items", "common", [], []));
+
+        response.Coverage.IncludedPatches.Take(2).Should().Equal(current, prior);
+        var firstItem = response.Stages.Single(stage => stage.Family == "ITEM").Options;
+        // 10 current games plus 10 prior games at full weight, against 10 plus 10 at the decay weight.
+        firstItem.Single(option => option.ActionKey == $"{Luden}").Games.Should().BeApproximately(20, 1e-9);
+        firstItem.Single(option => option.ActionKey == $"{Malignance}").Games.Should()
+            .BeApproximately(10 + 10 * BuildLabService.PatchRecencyWeights[1], 1e-9);
+    }
+
+    [Fact]
     public async Task Migrations_PinTheSourceTablesMatchCardinality_SoTheBatchReadUsesTheIndex()
     {
         // A sampled ANALYZE badly underestimates distinct MatchIds on these clustered tables, which on
@@ -248,7 +291,12 @@ public sealed class BuildLabRealPostgresTests(PostgresIntegrationFixture fixture
         await using var db = NewDb();
         var refresher = new BuildLabStatsRefresher(
             db,
-            Options.Create(new BuildLabOptions { Enabled = true, MatchBatchSize = 2, PatchesToRetain = 50 }),
+            // Every test patch refreshed: the container is shared, and another test's newer patches would
+            // otherwise push this one out of the active-plus-two window.
+            Options.Create(new BuildLabOptions
+            {
+                Enabled = true, MatchBatchSize = 2, PatchesToRetain = 50, PriorPatchesToRefresh = 50
+            }),
             NullLogger<BuildLabStatsRefresher>.Instance);
         return await refresher.RefreshAsync(CancellationToken.None);
     }
@@ -292,7 +340,8 @@ public sealed class BuildLabRealPostgresTests(PostgresIntegrationFixture fixture
         int firstItem,
         int ahriGoldLead,
         int timelineSchema = 2,
-        int[]? extraOpeningItems = null)
+        int[]? extraOpeningItems = null,
+        int championId = Ahri)
     {
         var match = new Match
         {
@@ -317,7 +366,7 @@ public sealed class BuildLabRealPostgresTests(PostgresIntegrationFixture fixture
             SchemaVersion = timelineSchema
         });
 
-        var ahri = AddParticipant(db, match, participantId: 1, teamId: 100, Ahri, ahriWins);
+        var ahri = AddParticipant(db, match, participantId: 1, teamId: 100, championId, ahriWins);
         AddParticipant(db, match, participantId: 6, teamId: 200, Zed, !ahriWins);
         db.MatchParticipantRunes.AddRange(
             Rune(ahri, RuneSelectionTree.Primary, 0, 8112),

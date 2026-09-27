@@ -26,8 +26,25 @@ public sealed class BuildLabService(
     /// </summary>
     public const double MinimumScopedStageGames = 150;
 
-    /// <summary>Weight of the active patch and each one before it, when no single patch is requested.</summary>
-    public static readonly double[] PatchRecencyWeights = [1.0, 0.6, 0.35];
+    /// <summary>
+    /// Weight of the active patch and each one before it, when no single patch is requested, for rows
+    /// the patches in between CHANGED: one of the option's items or runes, or the champion.
+    /// </summary>
+    public static readonly double[] PatchRecencyWeights = [1.0, 0.25, 0.25];
+
+    /// <summary>
+    /// Weight of an older patch's row when nothing it depends on changed since: the same item, rune
+    /// and champion, so the game it describes is the game being played now. A patch typically touches
+    /// a handful of items and champions (6 items and 9 champions between 16.18 and 16.19).
+    ///
+    /// Chosen by backtest (scripts/analysis/build-lab-pooling-backtest.sql): predicting 16.19's games
+    /// from 16.18 and 16.17, Brier was 0.238346 with every older row at full weight, 0.238360 with
+    /// unchanged rows at 1 and changed ones at 0.25 (this), 0.238399 dropping changed rows, 0.238407
+    /// with the 0.6/0.35 recency decay Build Lab shipped with, and 0.239552 from 16.18 alone. More
+    /// data is what helps; full weight throughout was best by a margin of noise, and damping the rows a
+    /// patch actually touched costs nothing measurable while still discounting a genuine rework.
+    /// </summary>
+    public const double UnchangedPriorPatchWeight = 1.0;
 
     private const int MaximumOptionsPerStage = 15;
     // A three-item core is what a build page leads with; deeper steps are too thin to recommend.
@@ -177,6 +194,25 @@ public sealed class BuildLabService(
         var weights = patches
             .Select((patch, index) => (patch, weight: coverage.PatchWeights[index]))
             .ToDictionary(pair => pair.patch, pair => pair.weight);
+        var changes = await ChangesSinceAsync(patches, ct);
+        bool Changed(string patch, BuildLabFamily family, string actionKey)
+        {
+            if (!changes.TryGetValue(patch, out var changed))
+                return false;
+            if (changed.Champions.Contains(query.ChampionId))
+                return true;
+            var ids = family switch
+            {
+                BuildLabFamily.Starter or BuildLabFamily.Item or BuildLabFamily.Boots => changed.Items,
+                BuildLabFamily.RunePage or BuildLabFamily.Rune => changed.Runes,
+                _ => null
+            };
+            return ids != null && BuildLabPath.ParseActionKey(actionKey).Any(ids.Contains);
+        }
+        double Weight(string patch, BuildLabFamily family, string actionKey) =>
+            patch == patches[0] || Changed(patch, family, actionKey)
+                ? weights[patch]
+                : UnchangedPriorPatchWeight;
         var opponent = query.OpponentChampionId ?? 0;
         // A request is answered from one narrow scope at most: a matchup if one is given, else a
         // region. Matchup-by-region is not counted; it would be empty for nearly every champion.
@@ -223,7 +259,7 @@ public sealed class BuildLabService(
                     : row.OpponentChampionId == 0 && row.Region == BuildLabStatsRefresher.AllRegions)
                 .Select(row =>
                 {
-                    var weight = weights[row.Patch];
+                    var weight = Weight(row.Patch, row.Family, row.ActionKey);
                     return new BuildLabCount(
                         row.ActionKey, row.GoldBucket, row.Games * weight, row.Wins * weight,
                         row.TimingSecondsSum * weight);
@@ -299,6 +335,67 @@ public sealed class BuildLabService(
         "SKILLS" => [(BuildLabFamily.Skills, EmptyPrefix)],
         _ => [(BuildLabFamily.Spells, EmptyPrefix)]
     };
+
+    private sealed record PatchChanges(HashSet<int> Items, HashSet<int> Runes, HashSet<int> Champions);
+
+    /// <summary>
+    /// For each older patch, what changed between it and the newest included patch: items and runes by
+    /// content (the same fields the retired modeler compared), champions by balance hash. An entity
+    /// missing from either patch counts as changed, so a removed or new item is never borrowed blind.
+    /// </summary>
+    private async Task<Dictionary<string, PatchChanges>> ChangesSinceAsync(
+        IReadOnlyList<string> patches,
+        CancellationToken ct)
+    {
+        if (patches.Count < 2)
+            return [];
+        return await cache.GetOrCreateAsync(
+            $"analytics:build-lab:v2:changes:{string.Join(',', patches)}",
+            async cancel =>
+            {
+                var target = patches[0];
+                var items = (await context.ItemVersions.AsNoTracking()
+                        .Where(item => patches.Contains(item.PatchVersion))
+                        .Select(item => new
+                        {
+                            item.ItemId, item.PatchVersion, item.Name, item.Description, item.PriceTotal,
+                            item.BuildsFrom, item.BuildsInto, item.InStore
+                        })
+                        .ToListAsync(cancel))
+                    .Select(item => (item.ItemId, item.PatchVersion,
+                        Fingerprint: string.Join('|', item.Name, item.Description, item.PriceTotal,
+                            string.Join(',', item.BuildsFrom), string.Join(',', item.BuildsInto), item.InStore)))
+                    .ToList();
+                var runes = (await context.RuneVersions.AsNoTracking()
+                        .Where(rune => patches.Contains(rune.PatchVersion))
+                        .Select(rune => new { rune.RuneId, rune.PatchVersion, rune.Name, rune.Description })
+                        .ToListAsync(cancel))
+                    .Select(rune => (rune.RuneId, rune.PatchVersion, Fingerprint: $"{rune.Name}|{rune.Description}"))
+                    .ToList();
+                var champions = (await context.ChampionVersions.AsNoTracking()
+                        .Where(champion => patches.Contains(champion.PatchVersion))
+                        .Select(champion => new { champion.ChampionId, champion.PatchVersion, champion.BalanceHash })
+                        .ToListAsync(cancel))
+                    .Select(champion => (champion.ChampionId, champion.PatchVersion, Fingerprint: champion.BalanceHash))
+                    .ToList();
+
+                HashSet<int> Diff(List<(int Id, string Patch, string Fingerprint)> versions, string older)
+                {
+                    var now = versions.Where(v => v.Patch == target).ToDictionary(v => v.Id, v => v.Fingerprint);
+                    var then = versions.Where(v => v.Patch == older).ToDictionary(v => v.Id, v => v.Fingerprint);
+                    return now.Keys.Union(then.Keys)
+                        .Where(id => !now.TryGetValue(id, out var a) || !then.TryGetValue(id, out var b) || a != b)
+                        .ToHashSet();
+                }
+
+                return patches.Skip(1).ToDictionary(
+                    older => older,
+                    older => new PatchChanges(Diff(items, older), Diff(runes, older), Diff(champions, older)));
+            },
+            CoverageCacheOptions,
+            tags: ["analytics", "analytics:build-lab"],
+            cancellationToken: ct);
+    }
 
     private async Task<BuildLabCoverageDto> CoverageAsync(string? requestedPatch, CancellationToken ct) =>
         await cache.GetOrCreateAsync(

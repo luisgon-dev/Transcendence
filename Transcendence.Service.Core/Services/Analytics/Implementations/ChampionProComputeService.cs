@@ -79,17 +79,24 @@ public sealed class ChampionProComputeService : IChampionProComputeService
         if (trackedPuuids.Count == 0)
             return new ChampionProBuildsResponse(championId, patch, normalizedRole, normalizedRegion, normalizedScope, [], [], []);
 
+        // Filter participants by summoner id, not the denormalized Puuid: MatchParticipants indexes
+        // SummonerId but not Puuid, so the Puuid test heap-fetched every row the champion ever had
+        // in this role (43K buffers for Ahri mid on prod, against 1.4K this way).
+        var trackedSummonerIds = await _context.Summoners
+            .AsNoTracking()
+            .Where(summoner => trackedPuuids.Contains(summoner.Puuid))
+            .Select(summoner => summoner.Id)
+            .ToListAsync(ct);
+        if (trackedSummonerIds.Count == 0)
+            return new ChampionProBuildsResponse(championId, patch, normalizedRole, normalizedRegion, normalizedScope, [], [], []);
+
         var participantQuery = _context.MatchParticipants
             .AsNoTracking()
-            .AsSplitQuery()
-            .Include(mp => mp.Items)
-            .Include(mp => mp.Runes)
-            .Include(mp => mp.Summoner)
             .Where(mp => mp.ChampionId == championId)
             .OnPatch(patch)
             .FromSuccessfulMatches()
             .InRankedSoloQueue()
-            .Where(mp => mp.Puuid != null && trackedPuuids.Contains(mp.Puuid));
+            .Where(mp => trackedSummonerIds.Contains(mp.SummonerId));
 
         if (!string.Equals(normalizedRole, "ALL", StringComparison.Ordinal))
             participantQuery = participantQuery.Where(mp => mp.TeamPosition == normalizedRole);
@@ -99,12 +106,16 @@ public sealed class ChampionProComputeService : IChampionProComputeService
         // recent matches + aggregate top-players/common-builds, which a recency window represents).
         var maxParticipantRows = Math.Max(100, _options.ProBuildMaxParticipantRows);
 
-        var rows = await participantQuery
+        // The filtered, sorted, limited participant read runs once; items and runes are then read by
+        // participant id through their primary keys. (As a split query with two collection
+        // projections, EF re-ran the whole participant read for each collection.)
+        var participants = await participantQuery
             .OrderByDescending(mp => mp.Match.MatchDate)
             .ThenByDescending(mp => mp.Match.MatchId)
             .Take(maxParticipantRows)
             .Select(mp => new
             {
+                mp.Id,
                 mp.Match.MatchId,
                 MatchGuid = mp.Match.Id,
                 mp.Match.MatchDate,
@@ -114,15 +125,55 @@ public sealed class ChampionProComputeService : IChampionProComputeService
                 mp.SummonerSpell2Id,
                 mp.Puuid,
                 mp.Summoner.GameName,
-                mp.Summoner.TagLine,
-                Items = mp.Items.Select(i => i.ItemId).ToList(),
-                Runes = mp.Runes.Select(r => new StoredRuneSelection(
-                    r.RuneId,
-                    r.SelectionTree,
-                    r.SelectionIndex,
-                    r.StyleId)).ToList()
+                mp.Summoner.TagLine
             })
             .ToListAsync(ct);
+        var participantIds = participants.Select(mp => mp.Id).ToList();
+        var itemsByParticipant = (await _context.MatchParticipantItems
+                .AsNoTracking()
+                // The participants above already passed the match filters; re-joining Matches per row
+                // through the query filter would only repeat them.
+                .IgnoreQueryFilters()
+                .Where(item => participantIds.Contains(item.MatchParticipantId))
+                .OrderBy(item => item.MatchParticipantId)
+                .ThenBy(item => item.SlotIndex)
+                .Select(item => new { item.MatchParticipantId, item.ItemId })
+                .ToListAsync(ct))
+            .ToLookup(item => item.MatchParticipantId, item => item.ItemId);
+        var runesByParticipant = (await _context.MatchParticipantRunes
+                .AsNoTracking()
+                // The participants above already passed the match filters; re-joining Matches per row
+                // through the query filter would only repeat them.
+                .IgnoreQueryFilters()
+                .Where(rune => participantIds.Contains(rune.MatchParticipantId))
+                .OrderBy(rune => rune.MatchParticipantId)
+                .ThenBy(rune => rune.SelectionTree)
+                .ThenBy(rune => rune.SelectionIndex)
+                .ThenBy(rune => rune.RuneId)
+                .Select(rune => new
+                {
+                    rune.MatchParticipantId,
+                    Rune = new StoredRuneSelection(rune.RuneId, rune.SelectionTree, rune.SelectionIndex, rune.StyleId)
+                })
+                .ToListAsync(ct))
+            .ToLookup(rune => rune.MatchParticipantId, rune => rune.Rune);
+        var rows = participants
+            .Select(mp => new
+            {
+                mp.MatchId,
+                mp.MatchGuid,
+                mp.MatchDate,
+                mp.Win,
+                mp.ParticipantId,
+                mp.SummonerSpell1Id,
+                mp.SummonerSpell2Id,
+                mp.Puuid,
+                mp.GameName,
+                mp.TagLine,
+                Items = itemsByParticipant[mp.Id].ToList(),
+                Runes = runesByParticipant[mp.Id].ToList()
+            })
+            .ToList();
 
         if (rows.Count == 0)
             return new ChampionProBuildsResponse(championId, patch, normalizedRole, normalizedRegion, normalizedScope, [], [], []);

@@ -32,17 +32,21 @@ public class RankRepository(TranscendenceContext context) : IRankRepository
 
                 if (changed)
                 {
-                    // Snapshot previous state into history (only if a different state isn't already recorded at latest)
-                    var hasLatestSnapshot = await context.HistoricalRanks
-                        .AnyAsync(hr =>
-                                EF.Property<Guid?>(hr, "SummonerId") == summoner.Id &&
-                                hr.QueueType == existing.QueueType &&
-                                hr.Tier == existing.Tier &&
-                                hr.RankNumber == existing.RankNumber &&
-                                hr.LeaguePoints == existing.LeaguePoints &&
-                                hr.Wins == existing.Wins &&
-                                hr.Losses == existing.Losses,
-                            cancellationToken);
+                    // Snapshot the previous state into history unless it is already the latest
+                    // snapshot. Only the latest counts: an identical state from an earlier season
+                    // is a new point in the history, not a duplicate.
+                    var latest = await context.HistoricalRanks.AsNoTracking()
+                        .Where(hr =>
+                            EF.Property<Guid?>(hr, "SummonerId") == summoner.Id &&
+                            hr.QueueType == existing.QueueType)
+                        .OrderByDescending(hr => hr.DateRecorded)
+                        .FirstOrDefaultAsync(cancellationToken);
+                    var hasLatestSnapshot = latest != null &&
+                                            latest.Tier == existing.Tier &&
+                                            latest.RankNumber == existing.RankNumber &&
+                                            latest.LeaguePoints == existing.LeaguePoints &&
+                                            latest.Wins == existing.Wins &&
+                                            latest.Losses == existing.Losses;
 
                     if (!hasLatestSnapshot)
                         await context.HistoricalRanks.AddAsync(new HistoricalRank

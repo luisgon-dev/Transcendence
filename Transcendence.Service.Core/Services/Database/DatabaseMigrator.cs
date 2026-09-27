@@ -39,6 +39,9 @@ public static class DatabaseMigrator
         logger.LogInformation(
             "AutoMigrate enabled: applying {Count} pending migration(s): {Migrations}",
             pending.Count, string.Join(", ", pending));
+        // EF's 30s command timeout fits requests, not schema changes: a concurrent index build on a
+        // multi-million-row table legitimately runs for minutes, and it blocks no writes meanwhile.
+        db.Database.SetCommandTimeout(TimeSpan.FromMinutes(30));
         await db.Database.MigrateAsync(ct);
         logger.LogInformation("AutoMigrate: applied {Count} migration(s).", pending.Count);
     }

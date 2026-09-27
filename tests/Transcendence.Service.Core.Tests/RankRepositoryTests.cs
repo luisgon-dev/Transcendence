@@ -80,4 +80,56 @@ public class RankRepositoryTests
         current.RankNumber.Should().Be("I");
         current.LeaguePoints.Should().Be(25);
     }
+
+    [Fact]
+    public async Task AddOrUpdateRank_RecordsAStateThatOnlyMatchesAnOlderSnapshot()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<TranscendenceContext>().UseSqlite(connection).Options;
+        await using var db = new SqliteCompatibleTranscendenceContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var summoner = new Summoner
+        {
+            Id = Guid.NewGuid(),
+            PlatformRegion = "NA1",
+            Region = "americas",
+            Puuid = $"puuid-{Guid.NewGuid():N}",
+            GameName = "SeasonTester",
+            TagLine = "NA1",
+            GameNameNormalized = "seasontester",
+            TagLineNormalized = "na1",
+            SummonerLevel = 100,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var current = new Rank
+        {
+            Id = Guid.NewGuid(),
+            QueueType = "RANKED_SOLO_5x5",
+            Tier = "SILVER",
+            RankNumber = "IV",
+            LeaguePoints = 0,
+            Wins = 5,
+            Losses = 5,
+            SummonerId = summoner.Id,
+            Summoner = summoner
+        };
+        db.AddRange(summoner, current);
+        await db.SaveChangesAsync();
+        var repository = new RankRepository(db);
+
+        // SILVER IV 0 LP 5-5 -> GOLD, then a season reset lands on SILVER IV 0 LP 5-5 again, then it moves.
+        foreach (var (tier, wins, losses) in new[] { ("GOLD", 30, 20), ("SILVER", 5, 5), ("SILVER", 6, 5) })
+        {
+            await repository.AddOrUpdateRank(summoner,
+                [new Rank { QueueType = current.QueueType, Tier = tier, RankNumber = "IV", Wins = wins, Losses = losses }]);
+            await db.SaveChangesAsync();
+            await Task.Delay(5);
+        }
+
+        // The repeated state is only identical to an older snapshot, not the latest, so it is history.
+        (await db.HistoricalRanks.OrderBy(hr => hr.DateRecorded).Select(hr => hr.Tier).ToListAsync())
+            .Should().Equal("SILVER", "GOLD", "SILVER");
+    }
 }

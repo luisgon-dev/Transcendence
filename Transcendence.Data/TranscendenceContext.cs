@@ -146,6 +146,13 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             })
             .IsUnique();
 
+        // Every rank refresh asks for this summoner's latest snapshot in one queue, and the profile
+        // reads one queue's history in date order; with only SummonerId indexed, both walked the
+        // summoner's whole history across scattered heap pages (~200 reads per check on prod).
+        modelBuilder.Entity<HistoricalRank>()
+            .HasIndex("SummonerId", nameof(HistoricalRank.QueueType), nameof(HistoricalRank.DateRecorded))
+            .HasDatabaseName("IX_HistoricalRanks_SummonerId_QueueType_DateRecorded");
+
         modelBuilder.Entity<Match>()
             .Property(x => x.MatchId)
             .IsRequired();

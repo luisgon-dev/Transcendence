@@ -118,9 +118,32 @@ public class ChampionAnalyticsIngestionJobRampTests
 
         await harness.Job.ExecuteForRegionAsync("NA1", CancellationToken.None);
 
-        acquiredKeys.Should().ContainSingle();
-        acquiredKeys[0].Should().Be(
+        acquiredKeys.Should().Equal(
+            RefreshLockKeys.BuildProducerRegionRunKey(nameof(ChampionAnalyticsIngestionJob), "NA1"),
             RefreshLockKeys.BuildSummonerRefreshKey(Camille.Enums.PlatformRoute.NA1, "PlayerOne", "tagone"));
+    }
+
+    [Fact]
+    public async Task ExecuteForRegionAsync_WhenTheRegionIsStillRunning_SkipsWithoutQueueingAnything()
+    {
+        await using var harness = await Harness.CreateAsync();
+        harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        harness.SeedSummoner("PlayerOne", "tagone");
+        await harness.Db.SaveChangesAsync();
+        var runKey = RefreshLockKeys.BuildProducerRegionRunKey(nameof(ChampionAnalyticsIngestionJob), "NA1");
+        harness.RefreshLockRepository
+            .Setup(x => x.TryAcquireOwnedAsync(runKey, It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid?)null);
+
+        await harness.Job.ExecuteForRegionAsync("NA1", CancellationToken.None);
+
+        harness.BackgroundJobClient.Verify(x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()), Times.Never);
+        harness.RefreshLockRepository.Verify(
+            x => x.TryAcquireOwnedAsync(It.Is<string>(key => key != runKey), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        harness.RefreshLockRepository.Verify(
+            x => x.ReleaseOwnedAsync(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never, "a run that never held the region must not release it");
     }
 
     [Fact]

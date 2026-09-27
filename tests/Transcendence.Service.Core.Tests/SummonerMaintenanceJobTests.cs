@@ -310,8 +310,14 @@ public class SummonerMaintenanceJobTests
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("enqueue failed");
         releaseToken.CanBeCanceled.Should().BeTrue();
         releaseToken.IsCancellationRequested.Should().BeFalse();
+        // The failed hand-off releases the summoner's lock once, and the run then releases its region.
         harness.RefreshLockRepository.Verify(
-            x => x.ReleaseOwnedAsync(It.IsAny<string>(), ownerToken, It.IsAny<CancellationToken>()),
+            x => x.ReleaseOwnedAsync(
+                It.Is<string>(key => key.StartsWith(RefreshLockKeys.SummonerRefreshPrefix)), ownerToken, It.IsAny<CancellationToken>()),
+            Times.Once);
+        harness.RefreshLockRepository.Verify(
+            x => x.ReleaseOwnedAsync(
+                RefreshLockKeys.BuildProducerRegionRunKey(nameof(SummonerMaintenanceJob), "NA1"), ownerToken, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 

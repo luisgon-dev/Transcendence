@@ -14,7 +14,6 @@ using Transcendence.Service.Core.Services.RiotApi;
 
 namespace Transcendence.Service.Core.Services.Jobs;
 
-[DisableConcurrentExecution(timeoutInSeconds: 10 * 60)]
 public class ChampionAnalyticsIngestionJob(
     TranscendenceContext db,
     ISummonerBootstrapService bootstrapService,
@@ -34,6 +33,10 @@ public class ChampionAnalyticsIngestionJob(
     private const string ProducerKeyBase = nameof(ChampionAnalyticsIngestionJob);
     private const string TelemetrySource = "champion-analytics-ingestion-job";
 
+    // Longer than any region run on prod (median ~20s, max ~11m including what was lock wait), so it
+    // only expires on its own when a worker died mid-run.
+    private static readonly TimeSpan RegionRunLease = TimeSpan.FromMinutes(15);
+
     private sealed record CandidateSummoner(
         string PlatformRegion,
         string GameName,
@@ -43,6 +46,7 @@ public class ChampionAnalyticsIngestionJob(
         bool IsTrackedHighValue,
         string? RankTier);
 
+    [DisableConcurrentExecution(timeoutInSeconds: 10 * 60)]
     public async Task ExecuteAsync(CancellationToken ct = default)
     {
         // Liveness beat for the worker watchdog — recorded on every dispatcher fire, before the
@@ -78,7 +82,27 @@ public class ChampionAnalyticsIngestionJob(
     [Queue(HangfireQueues.Discovery)]
     public async Task ExecuteForRegionAsync(string region, CancellationToken ct = default)
     {
-        await ExecuteForRegionInternalAsync(region, ct);
+        // One run per region at a time, and a tick that finds its region still running skips it. This
+        // used to be the class-level [DisableConcurrentExecution], but Hangfire keys that lock on the
+        // method, not its arguments: all ten regions queued behind one lock while every waiting worker
+        // polled hangfire.lock (1.5M lock inserts in four days, the most DB time of any statement).
+        ct.ThrowIfCancellationRequested();
+        var runKey = RefreshLockKeys.BuildProducerRegionRunKey(ProducerKeyBase, region);
+        if (await refreshLockRepository.TryAcquireOwnedAsync(runKey, RegionRunLease, ct) is not { } owner)
+        {
+            logger.LogDebug("Champion analytics ingestion for {Region} is still running; skipping this tick.", region);
+            return;
+        }
+
+        try
+        {
+            await ExecuteForRegionInternalAsync(region, ct);
+        }
+        finally
+        {
+            using var releaseTimeout = new CancellationTokenSource(QueueFailureLockReleaseTimeout);
+            await refreshLockRepository.ReleaseOwnedAsync(runKey, owner, releaseTimeout.Token);
+        }
     }
 
     // Acquires the producer's self-pacing slot. Returns false (skip) while a prior run's slot is still

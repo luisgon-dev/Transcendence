@@ -282,8 +282,11 @@ function BuildSummary({
 
 // One column template for every stage, so the stacked stages line up. Raw win rate and timing are
 // the least important columns and are only shown where there is room for them.
+// The adjusted column holds DataBar, whose bar is clamp(56px, 9vw, 104px) plus a gap and the value:
+// ~146px at 1024 (the widest md viewport before xl) and ~158px at its cap, so the column is sized to
+// those. At 8.75rem it spilled by 3px on a 1024px screen -- caught by e2e/build-lab-layout.spec.ts.
 const ROW_GRID =
-  "md:grid-cols-[minmax(0,1fr)_8.75rem_4.75rem_4.25rem_4.5rem_5.25rem] xl:grid-cols-[minmax(0,1fr)_10rem_5.5rem_5.5rem_5rem_5rem_4.5rem_5.5rem]";
+  "md:grid-cols-[minmax(0,1fr)_9.5rem_4.75rem_4.25rem_4.5rem_5.25rem] xl:grid-cols-[minmax(0,1fr)_10.5rem_5.5rem_5.5rem_5rem_5rem_4.5rem_5.5rem]";
 const COLLAPSED_OPTIONS = 8;
 
 function Stat({ label, className, children }: { label: string; className?: string; children: React.ReactNode }) {

@@ -60,3 +60,17 @@ public class BuildLabProcessedMatch
     public string Patch { get; set; } = "";
     public DateTime ProcessedAtUtc { get; set; }
 }
+
+/// <summary>
+/// How many matches the ledger holds per patch and region, kept by the refresher in the same
+/// transaction as the stats so a page's coverage line is a few rows instead of a scan of the
+/// ledger joined to every counted match. <see cref="Region"/> <c>ALL</c> is the patch total, which
+/// also counts matches with no platform region.
+/// </summary>
+public class BuildLabCoverage
+{
+    public string Patch { get; set; } = "";
+    public string Region { get; set; } = "";
+    public long Matches { get; set; }
+    public DateTime LastCountedAtUtc { get; set; }
+}

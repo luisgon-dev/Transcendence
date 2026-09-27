@@ -71,6 +71,10 @@ public sealed class BuildLabRealPostgresTests(PostgresIntegrationFixture fixture
                 row.Patch == patch && row.OpponentChampionId != 0 &&
                 row.Family == BuildLabFamily.Item && row.Stage == 2)).Should().Be(0);
             (await db.BuildLabProcessedMatches.CountAsync(row => row.Patch == patch)).Should().Be(11);
+            // Coverage is kept beside the ledger, and the second run (which counted nothing) left it alone.
+            (await db.BuildLabCoverage.AsNoTracking().Where(row => row.Patch == patch)
+                    .OrderBy(row => row.Region).Select(row => new { row.Region, row.Matches }).ToListAsync())
+                .Should().Equal(new { Region = "ALL", Matches = 11L }, new { Region = "KR", Matches = 11L });
         }
 
         var response = await ServiceGetAsync(new BuildLabQuery(
@@ -79,6 +83,7 @@ public sealed class BuildLabRealPostgresTests(PostgresIntegrationFixture fixture
         response.Available.Should().BeTrue();
         response.Coverage.IncludedPatches.Should().Equal(patch);
         response.Coverage.CountedMatches.Should().Be(11);
+        response.Coverage.IncludedRegions.Should().Equal("KR");
         var firstItemStage = response.Stages.Single(stage => stage.Family == "ITEM" && stage.Stage == 1);
         firstItemStage.Games.Should().Be(11);
         firstItemStage.WinRate.Should().BeApproximately(5.0 / 11, 1e-9);

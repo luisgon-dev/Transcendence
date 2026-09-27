@@ -106,6 +106,7 @@ public sealed class BuildLabStatsRefresher(
         {
             var stats = await context.BuildLabOptionStats.Where(row => row.Patch == patch).ExecuteDeleteAsync(ct);
             await context.BuildLabProcessedMatches.Where(row => row.Patch == patch).ExecuteDeleteAsync(ct);
+            await context.BuildLabCoverage.Where(row => row.Patch == patch).ExecuteDeleteAsync(ct);
             logger.LogInformation("Build Lab dropped {Rows} stat rows for expired patch {Patch}.", stats, patch);
         }
     }
@@ -242,15 +243,40 @@ public sealed class BuildLabStatsRefresher(
             }
         }
 
+        var regionByMatch = participants
+            .GroupBy(participant => participant.MatchId)
+            .ToDictionary(match => match.Key, match => match.First().Region);
+        var regions = matchIds.Select(id => regionByMatch.GetValueOrDefault(id, "")).ToArray();
+
         await using var transaction = await context.Database.BeginTransactionAsync(ct);
         await UpsertAsync(patch, counts, ct);
+        // Coverage counts only the matches this statement newly ledgered, so a match that was
+        // already counted can never be added to the coverage twice.
         await context.Database.ExecuteSqlRawAsync(
             """
-            INSERT INTO "BuildLabProcessedMatches" ("MatchId", "Patch", "ProcessedAtUtc")
-            SELECT id, @patch, now() FROM unnest(@ids) AS id
-            ON CONFLICT ("MatchId") DO NOTHING
+            WITH ledgered AS (
+                INSERT INTO "BuildLabProcessedMatches" ("MatchId", "Patch", "ProcessedAtUtc")
+                SELECT id, @patch, now() FROM unnest(@ids) AS id
+                ON CONFLICT ("MatchId") DO NOTHING
+                RETURNING "MatchId"
+            )
+            INSERT INTO "BuildLabCoverage" ("Patch", "Region", "Matches", "LastCountedAtUtc")
+            SELECT @patch, scope.region, count(*), now()
+            FROM ledgered
+            JOIN unnest(@ids, @regions) AS batch(id, region) ON batch.id = ledgered."MatchId"
+            CROSS JOIN LATERAL (VALUES (@all), (NULLIF(batch.region, ''))) AS scope(region)
+            WHERE scope.region IS NOT NULL
+            GROUP BY scope.region
+            ON CONFLICT ("Patch", "Region") DO UPDATE SET
+                "Matches" = "BuildLabCoverage"."Matches" + EXCLUDED."Matches",
+                "LastCountedAtUtc" = EXCLUDED."LastCountedAtUtc"
             """,
-            [new NpgsqlParameter("patch", patch), new NpgsqlParameter("ids", matchIds.ToArray())],
+            [
+                new NpgsqlParameter("patch", patch),
+                new NpgsqlParameter("ids", matchIds.ToArray()),
+                new NpgsqlParameter("regions", regions),
+                new NpgsqlParameter("all", AllRegions)
+            ],
             ct);
         await transaction.CommitAsync(ct);
         return counts.Count;

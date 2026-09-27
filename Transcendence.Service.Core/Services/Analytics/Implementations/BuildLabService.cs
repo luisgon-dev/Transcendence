@@ -408,15 +408,12 @@ public sealed class BuildLabService(
                     .Select(patch => patch.Version)
                     .Take(PatchRecencyWeights.Length)
                     .ToListAsync(cancel);
-                var counted = await context.BuildLabProcessedMatches.AsNoTracking()
-                    .GroupBy(match => match.Patch)
-                    .Select(group => new
-                    {
-                        Patch = group.Key,
-                        Matches = group.LongCount(),
-                        Last = group.Max(match => match.ProcessedAtUtc)
-                    })
-                    .ToListAsync(cancel);
+                // A few rows per retained patch, kept by the refresher; see BuildLabCoverage.
+                var coverage = await context.BuildLabCoverage.AsNoTracking().ToListAsync(cancel);
+                var counted = coverage
+                    .Where(row => row.Region == BuildLabStatsRefresher.AllRegions)
+                    .Select(row => new { row.Patch, row.Matches, Last = row.LastCountedAtUtc })
+                    .ToList();
 
                 List<string> patches;
                 List<double> patchWeights;
@@ -436,19 +433,12 @@ public sealed class BuildLabService(
                 }
 
                 var included = counted.Where(row => patches.Contains(row.Patch)).ToList();
-                var regions = patches.Count == 0
-                    ? []
-                    : await context.BuildLabProcessedMatches.AsNoTracking()
-                        .Where(processed => patches.Contains(processed.Patch))
-                        .Join(context.Matches.IgnoreQueryFilters(),
-                            processed => processed.MatchId,
-                            match => match.Id,
-                            (_, match) => match.PlatformRegion)
-                        .Where(region => region != null && region != "")
-                        .Distinct()
-                        .OrderBy(region => region)
-                        .Select(region => region!)
-                        .ToListAsync(cancel);
+                var regions = coverage
+                    .Where(row => patches.Contains(row.Patch) && row.Region != BuildLabStatsRefresher.AllRegions)
+                    .Select(row => row.Region)
+                    .Distinct()
+                    .Order(StringComparer.Ordinal)
+                    .ToList();
                 return new BuildLabCoverageDto(
                     patches,
                     patchWeights,

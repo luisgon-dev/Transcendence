@@ -57,6 +57,7 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<AnalyticsResponseSnapshot> AnalyticsResponseSnapshots { get; set; }
     public DbSet<BuildLabOptionStat> BuildLabOptionStats { get; set; }
     public DbSet<BuildLabProcessedMatch> BuildLabProcessedMatches { get; set; }
+    public DbSet<BuildLabCoverage> BuildLabCoverage { get; set; }
 
     // Versioned static data
     public DbSet<Patch> Patches { get; set; }
@@ -1035,6 +1036,14 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             entity.HasKey(x => x.MatchId);
             entity.Property(x => x.Patch).HasMaxLength(32);
             entity.HasIndex(x => x.Patch);
+        });
+
+        modelBuilder.Entity<BuildLabCoverage>(entity =>
+        {
+            entity.ToTable("BuildLabCoverage");
+            entity.HasKey(x => new { x.Patch, x.Region });
+            entity.Property(x => x.Patch).HasMaxLength(32);
+            entity.Property(x => x.Region).HasMaxLength(16);
         });
     }
 }

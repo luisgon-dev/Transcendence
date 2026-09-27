@@ -202,7 +202,8 @@ public class ChampionAnalyticsIngestionJob(
             1,
             baselineMaxQueued);
 
-        var pendingCandidateCount = await EstimatePendingCandidateCountAsync(region, ct);
+        var pendingCandidateCount = await EstimatePendingCandidateCountAsync(
+            region, adaptiveThroughputBudgetPolicy.SaturatingPendingCandidateCount(baselineMaxCandidates), ct);
         var budget = adaptiveThroughputBudgetPolicy.ComputeBudget(new AdaptiveThroughputBudgetInput(
             producerKey,
             evaluationUtc,
@@ -745,7 +746,7 @@ public class ChampionAnalyticsIngestionJob(
         };
     }
 
-    private Task<int> EstimatePendingCandidateCountAsync(string? region, CancellationToken ct)
+    private Task<int> EstimatePendingCandidateCountAsync(string? region, int cap, CancellationToken ct)
     {
         var query = db.Summoners
             .AsNoTracking()
@@ -754,7 +755,8 @@ public class ChampionAnalyticsIngestionJob(
         if (region != null)
             query = query.Where(s => s.PlatformRegion == region);
 
-        return query.CountAsync(ct);
+        // Capped at the policy's saturation point; see SaturatingPendingCandidateCount.
+        return query.Take(cap).CountAsync(ct);
     }
 
     private async Task<StarvationGuardrailDecision> EvaluateStarvationGuardrailAsync(

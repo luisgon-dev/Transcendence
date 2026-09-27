@@ -131,6 +131,8 @@ function renderLab({
     starter: [],
     runePage: [],
     spellPair: [],
+    skillPriority: [],
+    skillStart: [],
     ...state
   };
   const initialResponse = { ...baseResponse, ...response };
@@ -357,6 +359,49 @@ describe("BuildLab", () => {
     expect(screen.getAllByText("Luden's Companion").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Malignance").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /Show \d+ more/ })).toBeNull();
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+  });
+  it("leads with the recommended build and follows it into the lab", async () => {
+    const user = userEvent.setup();
+    renderLab({
+      response: {
+        summary: {
+          starter: option({ actionKey: "1056", actionIds: [1056] }),
+          items: [option({}), option({ actionKey: "3118", actionIds: [3118] })],
+          boots: option({ actionKey: "3020", actionIds: [3020] }),
+          runePage: null,
+          spellPair: option({ actionKey: "4+14", actionIds: [4, 14] }),
+          skillPriority: option({ actionKey: "1+3+2", actionIds: [1, 3, 2] })
+        }
+      }
+    });
+
+    const strip = screen.getByRole("region", { name: "Recommended build" });
+    expect(within(strip).getByText("Q › E › W")).toBeTruthy();
+    expect(within(strip).getByText("Flash + Ignite")).toBeTruthy();
+    await user.click(within(strip).getByRole("button", { name: "Follow this build" }));
+
+    const url = router.replace.mock.calls.at(-1)?.[0] as string;
+    expect(url).toContain("itemPath=6655&itemPath=3118");
+    expect(url).toContain("skillPriority=1&skillPriority=3&skillPriority=2");
+  });
+
+  it("shows a skill order as key caps in priority order", async () => {
+    renderLab({
+      state: { section: "skills" },
+      response: {
+        stages: [
+          stage({
+            family: "SKILLS",
+            stage: 0,
+            label: "Skill priority",
+            options: [option({ actionKey: "1+3+2", actionIds: [1, 3, 2], averageTimingMinutes: null })]
+          })
+        ]
+      }
+    });
+
+    expect(screen.getAllByText("Q › E › W").length).toBeGreaterThan(0);
     await waitFor(() => expect(fetch).toHaveBeenCalled());
   });
 });

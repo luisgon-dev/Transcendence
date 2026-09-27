@@ -1,5 +1,5 @@
 export const BUILD_LAB_ROLES = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"] as const;
-export const BUILD_LAB_SECTIONS = ["items", "runes", "spells"] as const;
+export const BUILD_LAB_SECTIONS = ["items", "runes", "spells", "skills"] as const;
 export const BUILD_LAB_MODES = ["supported", "impact", "common"] as const;
 
 export type BuildLabRole = (typeof BUILD_LAB_ROLES)[number];
@@ -18,8 +18,16 @@ export const BUILD_LAB_TERMINAL_FAMILIES: readonly string[] = [
   "STARTER",
   "BOOTS",
   "RUNE_PAGE",
-  "SPELLS"
+  "SPELLS",
+  "SKILLS"
 ];
+
+/** Skill actions are ability slots, Q=1 through R=4, so they share the integer id path. */
+export const ABILITY_LETTERS: Record<number, string> = { 1: "Q", 2: "W", 3: "E", 4: "R" };
+
+export function abilityLetter(id: number) {
+  return ABILITY_LETTERS[id] ?? "?";
+}
 
 export function isTerminalBuildLabFamily(family: string) {
   return BUILD_LAB_TERMINAL_FAMILIES.includes(family);
@@ -73,6 +81,16 @@ export type BuildLabStage = {
   options: BuildLabOption[];
 };
 
+/** The recommended choice at every decision; items follow the path (item 2 given item 1, ...). */
+export type BuildLabSummary = {
+  starter?: BuildLabOption | null;
+  items: BuildLabOption[];
+  boots?: BuildLabOption | null;
+  runePage?: BuildLabOption | null;
+  spellPair?: BuildLabOption | null;
+  skillPriority?: BuildLabOption | null;
+};
+
 export type BuildLabResponse = {
   available: boolean;
   context: BuildLabContext;
@@ -80,6 +98,7 @@ export type BuildLabResponse = {
   selectedPath: number[];
   stages: BuildLabStage[];
   unavailableReason?: string | null;
+  summary?: BuildLabSummary | null;
 };
 
 export type BuildLabState = {
@@ -98,6 +117,10 @@ export type BuildLabState = {
   boots?: number;
   runePage: number[];
   spellPair: number[];
+  /** Abilities in max order (Q=1, W=2, E=3). */
+  skillPriority: number[];
+  /** The first three levels. */
+  skillStart: number[];
 };
 
 function readIds(value: string | string[] | undefined, maximum: number) {
@@ -158,6 +181,10 @@ export function selectBuildLabOption(
       return { state: { ...state, runePage: ids, keystone: ids[0] } };
     case "SPELLS":
       return { state: { ...state, spellPair: ids.slice(0, 2) } };
+    case "SKILLS":
+      return stage === 0
+        ? { state: { ...state, skillPriority: ids.slice(0, 3) } }
+        : { state: { ...state, skillStart: ids.slice(0, 3) } };
     default:
       return { state };
   }
@@ -167,6 +194,7 @@ export function selectBuildLabOption(
 export function undoLastBuildLabSelection(state: BuildLabState): BuildLabState {
   if (state.section === "items") return { ...state, itemPath: state.itemPath.slice(0, -1) };
   if (state.section === "runes") return { ...state, keystone: undefined, runePage: [] };
+  if (state.section === "skills") return { ...state, skillPriority: [], skillStart: [] };
   return { ...state, spellPair: [] };
 }
 
@@ -174,6 +202,7 @@ export function undoLastBuildLabSelection(state: BuildLabState): BuildLabState {
 export function clearBuildLabSelection(state: BuildLabState): BuildLabState {
   if (state.section === "items") return { ...state, itemPath: [], starter: [], boots: undefined };
   if (state.section === "runes") return { ...state, keystone: undefined, runePage: [] };
+  if (state.section === "skills") return { ...state, skillPriority: [], skillStart: [] };
   return { ...state, spellPair: [] };
 }
 
@@ -183,6 +212,7 @@ export function hasBuildLabSelection(state: BuildLabState) {
     return state.itemPath.length > 0 || state.starter.length > 0 || state.boots != null;
   }
   if (state.section === "runes") return state.keystone != null || state.runePage.length > 0;
+  if (state.section === "skills") return state.skillPriority.length > 0 || state.skillStart.length > 0;
   return state.spellPair.length > 0;
 }
 
@@ -223,7 +253,9 @@ export function normalizeBuildLabState(
       starter: readIds(searchParams.starter, 6).ids,
       boots: readId(searchParams.boots),
       runePage: readIds(searchParams.runePage, 12).ids,
-      spellPair: readIds(searchParams.spellPair, 2).ids
+      spellPair: readIds(searchParams.spellPair, 2).ids,
+      skillPriority: readIds(searchParams.skillPriority, 3).ids.filter((id) => id <= 4),
+      skillStart: readIds(searchParams.skillStart, 3).ids.filter((id) => id <= 4)
     },
     issues
   };
@@ -246,6 +278,8 @@ export function buildLabQuery(state: BuildLabState) {
   if (state.boots) query.set("boots", String(state.boots));
   for (const id of state.runePage) query.append("runePage", String(id));
   for (const id of state.spellPair) query.append("spellPair", String(id));
+  for (const id of state.skillPriority) query.append("skillPriority", String(id));
+  for (const id of state.skillStart) query.append("skillStart", String(id));
   return query;
 }
 

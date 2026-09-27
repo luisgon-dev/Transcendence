@@ -14,7 +14,9 @@ public enum BuildLabFamily : short
     /// <summary>The rune in slot N; slots after the keystone are conditioned on the keystone.</summary>
     Rune = 4,
     /// <summary>The summoner-spell pair, as one choice.</summary>
-    Spells = 5
+    Spells = 5,
+    /// <summary>Stage 0: the order abilities are maxed (Q=1, W=2, E=3). Stage 1: the first three levels.</summary>
+    Skills = 6
 }
 
 /// <summary>

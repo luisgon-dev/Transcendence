@@ -186,6 +186,11 @@ public sealed class BuildLabStatsRefresher(
             .GroupBy(frame => (frame.MatchId, frame.TeamId, frame.MinuteMark))
             .ToDictionary(group => group.Key, group => group.Sum(frame => frame.Gold));
         var participantIds = participants.Select(participant => participant.Id).ToList();
+        var skills = (await context.MatchParticipantSkillOrders.AsNoTracking()
+                .Where(order => matchIds.Contains(order.MatchId))
+                .Select(order => new { order.MatchId, order.ParticipantId, order.MaxOrder, order.FirstThree })
+                .ToListAsync(ct))
+            .ToDictionary(order => (order.MatchId, order.ParticipantId));
         var runes = (await context.MatchParticipantRunes.IgnoreQueryFilters().AsNoTracking()
                 .Where(rune => participantIds.Contains(rune.MatchParticipantId))
                 .Select(rune => new
@@ -216,7 +221,10 @@ public sealed class BuildLabStatsRefresher(
                 var decisions = (opening.Decision is { } start ? [start] : Array.Empty<BuildLabDecision>())
                     .Concat(BuildLabDecisions.Items(itemEvents))
                     .Concat(BuildLabDecisions.Runes(runes[participant.Id]))
-                    .Concat(BuildLabDecisions.Spells(participant.Spell1Id, participant.Spell2Id));
+                    .Concat(BuildLabDecisions.Spells(participant.Spell1Id, participant.Spell2Id))
+                    .Concat(skills.TryGetValue((participant.MatchId, participant.ParticipantId), out var skill)
+                        ? BuildLabDecisions.Skills(skill.MaxOrder, skill.FirstThree)
+                        : []);
                 foreach (var decision in decisions)
                 {
                     var bucket = decision.TimestampMs is { } timestamp and > 0

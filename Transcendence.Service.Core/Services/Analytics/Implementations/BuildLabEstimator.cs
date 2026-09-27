@@ -30,8 +30,19 @@ public static class BuildLabEstimator
     /// <summary>Below this many games an option's interval is too wide to rank on.</summary>
     public const double LowSampleGames = 100;
 
-    /// <summary>Pseudo-games pulling a matchup or regional estimate toward the all-games estimate.</summary>
-    public const double ScopeShrinkageGames = 100;
+    /// <summary>
+    /// Pseudo-games every lift is shrunk by, toward its parent's lift: zero for the all-games scope, the
+    /// all-games lift for a matchup or region. A choice needs this many games before its own lift counts
+    /// for half.
+    ///
+    /// Chosen by backtest (scripts/analysis/build-lab-backtest.sql), scoring 16.18's games with
+    /// 16.17's numbers. Unshrunk, the lifts predicted WORSE than ignoring the choice altogether -- -104bp
+    /// Brier skill overall, -653bp on rune pages -- because a thin option's lift is mostly noise. Shrunk,
+    /// 1000 was best of 30/100/300/1000/3000 overall and on items, boots and rune pages alike. Real
+    /// differences between common choices are a point or two; anything that looks bigger on a small
+    /// sample almost never holds up the next patch.
+    /// </summary>
+    public const double LiftShrinkageGames = 1000;
 
     private const double Z95 = 1.959964;
 
@@ -72,15 +83,14 @@ public static class BuildLabEstimator
             var centred = (wins + 1) / (games + 2);
             var variance = centred * (1 - centred) / games;
 
-            if (parent != null)
-            {
-                var targetLift = parentOptions!.TryGetValue(option.Key, out var parentOption)
-                    ? parentOption.Lift
-                    : 0;
-                var keep = games / (games + ScopeShrinkageGames);
-                lift = keep * lift + (1 - keep) * targetLift;
-                variance *= keep * keep;
-            }
+            // Empirical-Bayes shrinkage: the estimate moves toward the parent by the share of evidence it
+            // lacks, and its posterior variance is the sampling variance scaled by the same share kept.
+            var targetLift = parent != null && parentOptions!.TryGetValue(option.Key, out var parentOption)
+                ? parentOption.Lift
+                : 0;
+            var keep = games / (games + LiftShrinkageGames);
+            lift = keep * lift + (1 - keep) * targetLift;
+            variance *= keep;
 
             var adjusted = Math.Clamp(cellWinRate + lift, 0, 1);
             var margin = Z95 * Math.Sqrt(variance);

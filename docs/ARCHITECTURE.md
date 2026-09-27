@@ -659,6 +659,8 @@ There is no offline model, no generation, and nothing to promote: readers see th
    - **Rune** — slot 1 is the keystone with an empty prefix; slots 2+ are conditioned on the keystone
      only. Full-prefix conditioning made nearly every page unique (64k keys from 3,000 matches).
    - **Spells** — the order-independent pair.
+   - **Skills** — the ability max order (stage 0) and the first three levels (stage 1), from
+     `MatchParticipantSkillOrders`; abilities encoded Q=1, W=2, E=3.
 
    `BuildLabPath.Hash` (first 8 bytes of SHA-256 over the comma-joined ids) is the prefix key, shared
    by writer and reader.

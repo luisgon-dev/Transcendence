@@ -184,6 +184,37 @@ public sealed class BuildLabRealPostgresTests(PostgresIntegrationFixture fixture
     }
 
     [Fact]
+    public async Task Service_SummarizesTheRecommendedChoiceAtEveryDecision_FollowingTheItemPath()
+    {
+        var patch = await SeedPatchAsync();
+        await using (var db = NewDb())
+        {
+            // Enough games that nothing is low-sample: every game starts Doran's Ring, buys Sorcerer's
+            // Shoes, then Luden's and 3089 in that order, and maxes Q>E>W.
+            for (var index = 0; index < 110; index++)
+                AddGame(db, patch, ahriWins: index % 2 == 0, firstItem: Luden, ahriGoldLead: 0);
+            await db.SaveChangesAsync();
+        }
+        await RefreshAsync();
+
+        var response = await ServiceGetAsync(new BuildLabQuery(
+            Ahri, "MIDDLE", null, patch, null, "items", "supported", [], []));
+        var summary = response.Summary!;
+
+        summary.Starter!.ActionKey.Should().Be("1056");
+        summary.Items.Select(item => item.ActionKey).Should().Equal($"{Luden}", "3089");
+        summary.Boots!.ActionKey.Should().Be("3020");
+        summary.RunePage!.ActionIds.Should().Equal(8112, 8143, 8304);
+        summary.SpellPair!.ActionKey.Should().Be("4+14");
+        summary.SkillPriority!.ActionIds.Should().Equal(1, 3, 2);
+
+        var skills = await ServiceGetAsync(new BuildLabQuery(
+            Ahri, "MIDDLE", null, patch, null, "skills", "common", [], []));
+        skills.Stages.Select(stage => (stage.Label, stage.Options.Single().ActionKey)).Should().Equal(
+            ("Skill priority", "1+3+2"), ("First three levels", "1+3+2"));
+    }
+
+    [Fact]
     public async Task Migrations_PinTheSourceTablesMatchCardinality_SoTheBatchReadUsesTheIndex()
     {
         // A sampled ANALYZE badly underestimates distinct MatchIds on these clustered tables, which on
@@ -328,6 +359,16 @@ public sealed class BuildLabRealPostgresTests(PostgresIntegrationFixture fixture
             });
         Frame(1, 5000 + ahriGoldLead);
         Frame(6, 5000);
+
+        db.MatchParticipantSkillOrders.Add(new MatchParticipantSkillOrder
+        {
+            MatchId = match.Id,
+            Match = match,
+            ParticipantId = 1,
+            Sequence = "Q,E,W,Q,Q,R,Q,E,Q,E,R,E,E,W,W,R,W,W",
+            FirstThree = "QEW",
+            MaxOrder = "Q>E>W"
+        });
     }
 
     private static MatchParticipant AddParticipant(

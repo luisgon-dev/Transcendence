@@ -7,18 +7,19 @@ import {
   formatLift,
   formatPercent,
   liftToneClass,
+  abilityLetter,
   type BuildLabCoverage,
-  type BuildLabOption
+  type BuildLabOption,
+  type BuildLabSummary
 } from "@/lib/buildLab";
+import { AbilityPill } from "@/components/ui/AbilityPill";
 import { rankTierDisplayLabel } from "@/lib/ranks";
 import { itemIconUrl, runeIconUrl, summonerSpellIconUrl } from "@/lib/staticData";
 
 export type ChampionRecommendationSummary = {
   available: boolean;
   coverage: BuildLabCoverage;
-  firstItem?: BuildLabOption | null;
-  runePage?: BuildLabOption | null;
-  spellPair?: BuildLabOption | null;
+  summary?: BuildLabSummary | null;
   unavailableReason?: string | null;
 };
 
@@ -34,12 +35,15 @@ function RecommendationChoice({
   label,
   option,
   name,
-  icons
+  icons,
+  media
 }: {
   label: string;
   option?: BuildLabOption | null;
   name: string;
-  icons: string[];
+  icons?: string[];
+  /** Used instead of icons when the choice is not an image (a skill order). */
+  media?: ReactNode;
 }) {
   return (
     <div className="min-w-0 border-t border-border/45 py-3 first:border-t-0 sm:border-l sm:border-t-0 sm:px-4 sm:first:border-l-0 sm:first:pl-0">
@@ -48,7 +52,8 @@ function RecommendationChoice({
         <>
           <div className="mt-2 flex min-w-0 items-center gap-2">
             <span className="flex shrink-0 -space-x-1">
-              {icons.map((icon, index) => (
+              {media}
+              {(icons ?? []).map((icon, index) => (
                 <Image
                   key={`${icon}-${index}`}
                   src={icon}
@@ -108,7 +113,11 @@ export function ChampionRecommendation({
   const query = new URLSearchParams({ role });
   if (patch) query.set("patch", patch);
   if (region && region !== "ALL") query.set("region", region);
-  const { firstItem: item, runePage, spellPair: spell } = recommendation;
+  const summary = recommendation.summary;
+  const core = summary?.items ?? [];
+  const runePage = summary?.runePage;
+  const spell = summary?.spellPair;
+  const skills = summary?.skillPriority;
   const patches = recommendation.coverage.includedPatches;
   // Build Lab counts every tracked ranked game; a rank filter on the page above does not narrow it,
   // so the difference is stated instead of left to be misread.
@@ -142,12 +151,12 @@ export function ChampionRecommendation({
         </Link>
       </div>
       {recommendation.available ? (
-        <div className="grid px-4 sm:grid-cols-3">
+        <div className="grid px-4 sm:grid-cols-2 lg:grid-cols-4">
           <RecommendationChoice
-            label="First item"
-            option={item}
-            name={item ? items[String(item.actionIds[0])]?.name ?? `Item ${item.actionIds[0]}` : ""}
-            icons={item?.actionIds.map((id) => itemIconUrl(itemVersion, id)) ?? []}
+            label={core.length > 1 ? "Core build" : "First item"}
+            option={core[0]}
+            name={core.map((item) => items[String(item.actionIds[0])]?.name ?? `Item ${item.actionIds[0]}`).join(" → ")}
+            icons={core.map((item) => itemIconUrl(itemVersion, item.actionIds[0]))}
           />
           <RecommendationChoice
             label="Rune page"
@@ -171,6 +180,18 @@ export function ChampionRecommendation({
               spell?.actionIds.map((id) =>
                 summonerSpellIconUrl(spellVersion, spells[String(id)]?.id ?? "")
               ) ?? []
+            }
+          />
+          <RecommendationChoice
+            label="Skill priority"
+            option={skills}
+            name={skills?.actionIds.map(abilityLetter).join(" › ") ?? ""}
+            media={
+              <span className="flex gap-1">
+                {skills?.actionIds.map((id, index) => (
+                  <AbilityPill key={index} letter={abilityLetter(id)} emphasis={index === 0} />
+                ))}
+              </span>
             }
           />
         </div>

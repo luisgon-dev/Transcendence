@@ -9,7 +9,7 @@ public sealed class BuildLabEstimatorTests
         new(key, bucket, games, wins, timing);
 
     [Fact]
-    public void Estimate_ForAPregameChoice_AdjustedEqualsRaw()
+    public void Estimate_ForAPregameChoice_ShrinksTheRawLiftTowardTheAverage()
     {
         var cell = BuildLabEstimator.Estimate(
             [Count("4+14", 2, 800, 440), Count("4+12", 2, 200, 90)], parent: null, timed: false);
@@ -18,8 +18,9 @@ public sealed class BuildLabEstimatorTests
         cell.WinRate.Should().BeApproximately(0.53, 1e-12);
         var flash = cell.Options.Single(option => option.ActionKey == "4+14");
         flash.WinRate.Should().BeApproximately(0.55, 1e-12);
-        flash.AdjustedWinRate.Should().BeApproximately(0.55, 1e-12);
-        flash.Lift.Should().BeApproximately(0.02, 1e-12);
+        // One gold bucket, so the lift is the raw +2pp, kept at 800 / (800 + 1000).
+        flash.Lift.Should().BeApproximately(0.02 * 800 / 1800, 1e-12);
+        flash.AdjustedWinRate.Should().BeApproximately(0.53 + 0.02 * 800 / 1800, 1e-12);
         flash.PickRate.Should().BeApproximately(0.8, 1e-12);
         flash.ActionIds.Should().Equal(4, 14);
         flash.AverageTimingMinutes.Should().BeNull();
@@ -69,19 +70,24 @@ public sealed class BuildLabEstimatorTests
             [Count("A", 2, 20, 18), Count("B", 2, 20, 2)], all, timed: false);
 
         var a = matchup.Options.Single(option => option.ActionKey == "A");
-        // Raw lift +0.4 on 20 games, pulled toward the all-games lift of 0 with 100 pseudo-games.
-        a.Lift.Should().BeApproximately(0.4 * 20 / 120, 1e-9);
+        // Raw lift +0.4 on 20 games, pulled toward the all-games lift of 0.
+        a.Lift.Should().BeApproximately(0.4 * 20 / (20 + BuildLabEstimator.LiftShrinkageGames), 1e-9);
         a.WinRate.Should().Be(0.9, "the raw rate is what happened and is never shrunk");
     }
 
     [Fact]
-    public void Estimate_GivesAnUndefeatedOptionANonZeroInterval()
+    public void Estimate_KeepsAnUndefeatedThinOptionNearTheDecisionAverage()
     {
-        var option = BuildLabEstimator.Estimate([Count("A", 2, 8, 8)], parent: null, timed: false)
-            .Options.Single();
+        // 8 wins from 8 games next to an ordinary 50% choice: the backtest says a streak like that does
+        // not hold up, so the estimate stays near the average -- but still carries a real interval.
+        var cell = BuildLabEstimator.Estimate(
+            [Count("streak", 2, 8, 8), Count("usual", 2, 1_000, 500)], parent: null, timed: false);
+        var streak = cell.Options.Single(option => option.ActionKey == "streak");
 
-        (option.ConfidenceHigh - option.ConfidenceLow).Should().BeGreaterThan(0.2);
-        option.IsLowSample.Should().BeTrue();
+        streak.WinRate.Should().Be(1.0);
+        streak.AdjustedWinRate.Should().BeApproximately(cell.WinRate, 0.01);
+        (streak.ConfidenceHigh - streak.ConfidenceLow).Should().BePositive();
+        streak.IsLowSample.Should().BeTrue();
     }
 
     [Fact]
@@ -128,5 +134,27 @@ public sealed class BuildLabEstimatorTests
 
         BuildLabEstimator.Recommend(widened)!.ActionKey.Should().Be("a");
         BuildLabEstimator.Recommend([]).Should().BeNull();
+    }
+
+    [Fact]
+    public void Estimate_LetsAWellSampledLiftStand()
+    {
+        var option = BuildLabEstimator.Estimate(
+            [Count("A", 2, 50_000, 27_500), Count("B", 2, 50_000, 22_500)], parent: null, timed: false)
+            .Options.Single(candidate => candidate.ActionKey == "A");
+
+        option.Lift.Should().BeApproximately(0.05 * 50_000 / 51_000, 1e-9, "50k games keep 98% of their lift");
+    }
+
+    [Fact]
+    public void Estimate_ShrinksAMatchupTowardTheAllGamesLiftNotTowardZero()
+    {
+        var all = BuildLabEstimator.Estimate(
+            [Count("A", 2, 50_000, 27_500), Count("B", 2, 50_000, 22_500)], parent: null, timed: false);
+        var matchup = BuildLabEstimator.Estimate([Count("A", 2, 40, 20), Count("B", 2, 40, 20)], all, timed: false);
+
+        var allLift = all.Options.Single(option => option.ActionKey == "A").Lift;
+        matchup.Options.Single(option => option.ActionKey == "A").Lift.Should()
+            .BeApproximately(allLift * 1000 / 1040, 1e-9, "40 even matchup games barely move the all-games +5pp");
     }
 }

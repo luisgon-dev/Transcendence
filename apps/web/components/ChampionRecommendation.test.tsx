@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { ChampionRecommendation, type ChampionRecommendationSummary } from "./ChampionRecommendation";
 import type { BuildLabOption } from "@/lib/buildLab";
 
-const items = { "6672": { name: "Kraken Slayer" } };
+const items = { "6672": { name: "Kraken Slayer" }, "3031": { name: "Infinity Edge" } };
 const runeById = {
   "8005": { name: "Press the Attack", icon: "perk-images/Styles/precision.png" },
   "9111": { name: "Triumph", icon: "perk-images/Styles/triumph.png" }
@@ -39,9 +39,12 @@ function summary(overrides: Partial<ChampionRecommendationSummary> = {}): Champi
       includedRegions: ["NA1"],
       rankScope: "ALL_TRACKED"
     },
-    firstItem: option(),
-    runePage: option({ actionKey: "8005+9111", actionIds: [8005, 9111] }),
-    spellPair: option({ actionKey: "4+7", actionIds: [4, 7] }),
+    summary: {
+      items: [option(), option({ actionKey: "3031", actionIds: [3031] })],
+      runePage: option({ actionKey: "8005+9111", actionIds: [8005, 9111] }),
+      spellPair: option({ actionKey: "4+7", actionIds: [4, 7] }),
+      skillPriority: option({ actionKey: "1+3+2", actionIds: [1, 3, 2] })
+    },
     unavailableReason: null,
     ...overrides
   };
@@ -69,10 +72,13 @@ describe("ChampionRecommendation", () => {
   it("shows each choice with its adjusted win rate, lift, pick rate and games", () => {
     renderRecommendation(summary());
 
-    expect(screen.getByText("Kraken Slayer")).toBeTruthy();
-    expect(screen.getAllByText("51.7%")).toHaveLength(3);
-    expect(screen.getAllByText("+1.4 pp")).toHaveLength(3);
-    expect(screen.getAllByText("1,240 games")).toHaveLength(3);
+    // The core build is the item path, read in order; its numbers are the first item's.
+    expect(screen.getByText("Core build")).toBeTruthy();
+    expect(screen.getByText("Kraken Slayer → Infinity Edge")).toBeTruthy();
+    expect(screen.getAllByText("51.7%")).toHaveLength(4);
+    expect(screen.getAllByText("+1.4 pp")).toHaveLength(4);
+    expect(screen.getAllByText("1,240 games")).toHaveLength(4);
+    expect(screen.getByText("Q › E › W")).toBeTruthy();
     // A rune page is named for its keystone, not a list of every rune on it.
     expect(screen.getByText("Press the Attack")).toBeTruthy();
     expect(screen.getByText("Flash + Heal")).toBeTruthy();
@@ -98,7 +104,7 @@ describe("ChampionRecommendation", () => {
   });
 
   it("marks a missing choice instead of leaving the slot blank", () => {
-    renderRecommendation(summary({ spellPair: null }));
+    renderRecommendation(summary({ summary: { ...summary().summary!, spellPair: null } }));
 
     expect(screen.getByText("Not enough games yet")).toBeTruthy();
   });

@@ -537,7 +537,7 @@ pro-build analytics before approval.
 
 `GET /api/lol/analytics/build-lab/{championId}` is the public decision-analytics surface (anonymous,
 `expensive-read` limiter). `role` is required. Optional context is `opponentChampionId`, `patch`, and
-`region` (`ALL`/`GLOBAL` or omitted means every region); `section=items|runes|spells` picks the
+`region` (`ALL`/`GLOBAL` or omitted means every region); `section=items|runes|spells|skills` picks the
 decision family and `mode=supported|impact|common` the ranking. Repeated `itemPath` values lock
 completed legendaries in order (max 5) and a single `runeSelections` value locks a keystone, so the
 whole state is permalinkable. Invalid context answers `400` ProblemDetails.
@@ -562,11 +562,19 @@ are counted.
 - `adjustedWinRate` standardizes over team gold difference at the decision minute: `lift` is the mean,
   over the option's games, of (won − the decision's win rate in that game's gold bucket), and
   `adjustedWinRate` is the decision's win rate plus `lift`. An item mostly bought while ahead is judged
-  against other ahead games instead of being credited for the lead. Pregame choices land in one bucket,
-  so their adjusted rate equals the raw one.
+  against other ahead games instead of being credited for the lead.
+- Every `lift` is then shrunk toward its parent's with 1,000 pseudo-games (`lift × games / (games +
+  1000)`): toward 0 for the all-games scope, toward the all-games lift for a matchup or region. The
+  value was chosen by backtest (`scripts/analysis/build-lab-backtest.sql`): scored on the next patch's
+  games, unshrunk lifts predicted worse than ignoring the choice (−104bp Brier skill 16.17→16.18,
+  −124bp 16.18→16.19), and 1,000 was best of 30–3,000 on both. The interval is the empirical-Bayes
+  posterior, so a thin option sits near the decision average with a narrow band -- read `isLowSample`
+  for how much evidence stands behind it.
+- `section=skills` returns the ability max order (stage 0) and the first three levels (stage 1);
+  `actionIds` encode abilities as Q=1, W=2, E=3.
 - `scope` is `MATCHUP`, `REGION`, or `ALL`. A matchup or region is used only when that stage has at
   least 150 weighted games there; otherwise the stage answers from all games with `isFallback: true`.
-  When used, each option's lift is shrunk toward its all-games lift with 100 pseudo-games. Only
+  Only
   Starter, the first item, Boots, the rune page, and spells are counted per matchup and per region;
   a matchup or regional request for any later stage always falls back to `ALL`, and opponent-by-region
   is never counted (a request with an opponent ignores `region`).
@@ -577,10 +585,16 @@ are counted.
   game followed the exact locked path). Responses are cached for 10 minutes under the
   `analytics:build-lab` HybridCache tag.
 
+Each available response also carries `summary` (`BuildLabSummaryDto { starter, items[], boots,
+runePage, spellPair, skillPriority }`): the recommended choice at every decision, picked by
+`BuildLabEstimator.Recommend` -- the highest adjusted win rate among choices with at least 5% of the
+decision's games and no low-sample flag. `items` follows the path: the second item is the
+recommendation given the first, up to three, stopping at the first step with nothing to recommend.
+
 `GET /api/lol/analytics/champions/{championId}/profile` includes an optional `recommendation`
-(`ChampionRecommendationSummary { available, coverage, firstItem, runePage, spellPair,
-unavailableReason }`) for Ranked Solo/Duo only: the top non-low-sample `supported` option of the first
-item stage, the rune page, and the spell pair, so the champion page needs no second request.
+(`ChampionRecommendationSummary { available, coverage, summary, unavailableReason }`) for Ranked
+Solo/Duo only -- the same summary for the champion and role, so the champion page needs no second
+request.
 
 ## OpenAPI Generation Workflow
 

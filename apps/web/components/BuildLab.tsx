@@ -757,7 +757,7 @@ export function BuildLab({
             {coverage.includedPatches.length === 0
               ? "No patches counted yet"
               : pooled
-                ? `Patches ${coverage.includedPatches.join(", ")} · older patches weigh less`
+                ? `Patches ${coverage.includedPatches.join(", ")} · older games count less only where the patch changed them`
                 : `Patch ${coverage.includedPatches[0]}`}
           </span>
           <span className="text-xs text-muted">

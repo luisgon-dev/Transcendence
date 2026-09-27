@@ -548,8 +548,11 @@ are counted.
 
 - `coverage` says what was counted: `includedPatches` with their `patchWeights`, `countedMatches`,
   `lastCountedAtUtc`, `includedRegions`, and `rankScope` (`ALL_TRACKED` — every tracked rank, not a
-  rank floor). Without `patch` the active patch and the two before it are pooled at weights
-  1.0/0.6/0.35; an explicit `patch` answers from that patch alone, or `available: false` when it was
+  rank floor). Without `patch` the active patch and the two before it are pooled: an older
+  patch's row counts at full weight when its items/runes and champion are unchanged since, and at 0.25
+  when the patch changed one of them (chosen by `scripts/analysis/build-lab-pooling-backtest.sql`);
+  `patchWeights` reports that changed-row weight per patch. An explicit `patch` answers from that
+  patch alone, or `available: false` when it was
   never counted.
 - `stages[]` carries `family` (`STARTER`, `ITEM`, `BOOTS`, `RUNE_PAGE`, `RUNE`, `SPELLS`), `stage`,
   `label`, the decision's (patch-weighted) `games` and `winRate`, and its `options[]`. `section=items`

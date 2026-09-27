@@ -181,6 +181,23 @@ public sealed class BuildLabDecisionsTests
     }
 
     [Fact]
+    public void Skills_EmitTheMaxOrderAndTheFirstThreeLevels()
+    {
+        var decisions = BuildLabDecisions.Skills("W>Q>E", "QWE").ToList();
+
+        decisions.Select(d => (d.Family, d.Stage, d.ActionKey)).Should().Equal(
+            (BuildLabFamily.Skills, (short)0, "2+1+3"),
+            (BuildLabFamily.Skills, (short)1, "1+2+3"));
+    }
+
+    [Theory]
+    [InlineData("", "")]           // the ingestion's value for a game too short to max anything
+    [InlineData("Q>Q>E", "QQR")]   // a repeated ability is not an order; R cannot be learned at 1-3
+    [InlineData("Q>W", "QW")]      // incomplete
+    public void Skills_IgnoreValuesThatAreNotARealOrder(string maxOrder, string firstThree) =>
+        BuildLabDecisions.Skills(maxOrder, firstThree).Should().BeEmpty();
+
+    [Fact]
     public void Runes_EmitsThePageThenEachSlotConditionedOnTheKeystone()
     {
         var decisions = BuildLabDecisions.Runes(

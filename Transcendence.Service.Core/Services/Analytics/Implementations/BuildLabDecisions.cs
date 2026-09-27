@@ -245,6 +245,35 @@ public static class BuildLabDecisions
     }
 
     /// <summary>
+    /// The skill order as two decisions: which ability is maxed first, second and third (stage 0), and
+    /// the first three levels (stage 1). Abilities are encoded Q=1, W=2, E=3, R=4 so they share the
+    /// integer action-id path every other family uses. A value that is not a real order -- the
+    /// ingestion writes "" for a game too short to max anything -- is not counted.
+    /// </summary>
+    public static IEnumerable<BuildLabDecision> Skills(string? maxOrder, string? firstThree)
+    {
+        var maxed = (maxOrder ?? "").Split('>', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(AbilityId)
+            .ToArray();
+        if (maxed.Length == 3 && maxed.All(id => id is >= 1 and <= 3) && maxed.Distinct().Count() == 3)
+            yield return new BuildLabDecision(BuildLabFamily.Skills, 0, [], maxed, null);
+
+        var start = (firstThree ?? "").Trim().Select(letter => AbilityId(letter.ToString())).ToArray();
+        // R cannot be learned before level 6, so a first three containing it is not a real start.
+        if (start.Length == 3 && start.All(id => id is >= 1 and <= 3))
+            yield return new BuildLabDecision(BuildLabFamily.Skills, 1, [], start, null);
+    }
+
+    private static int AbilityId(string letter) => letter.ToUpperInvariant() switch
+    {
+        "Q" => 1,
+        "W" => 2,
+        "E" => 3,
+        "R" => 4,
+        _ => 0
+    };
+
+    /// <summary>
     /// Whether a decision is also counted per lane opponent and per region. Those scopes hold a small
     /// fraction of a champion's games (a lane matchup's median is ~60 per patch). Measured on prod, 75% of
     /// matchup keys for items 1-3 were unique -- one game each -- so anything past the first item is

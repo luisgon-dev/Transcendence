@@ -60,14 +60,25 @@ public record BuildLabResponse(
     BuildLabCoverageDto Coverage,
     IReadOnlyList<int> SelectedPath,
     IReadOnlyList<BuildLabStageDto> Stages,
-    string? UnavailableReason);
+    string? UnavailableReason,
+    // The recommended choice at every decision, followed as a path: the answer before the drill-down.
+    BuildLabSummaryDto? Summary = null);
+
+// One recommended choice per decision, each picked by BuildLabEstimator.Recommend. Items follow the
+// path: the second is the recommendation given the first, and so on, until a step has nothing to
+// recommend. Any piece is null when no choice there is both common and well sampled.
+public record BuildLabSummaryDto(
+    BuildLabOptionDto? Starter,
+    IReadOnlyList<BuildLabOptionDto> Items,
+    BuildLabOptionDto? Boots,
+    BuildLabOptionDto? RunePage,
+    BuildLabOptionDto? SpellPair,
+    BuildLabOptionDto? SkillPriority);
 
 public record ChampionRecommendationSummary(
     bool Available,
     BuildLabCoverageDto Coverage,
-    BuildLabOptionDto? FirstItem,
-    BuildLabOptionDto? RunePage,
-    BuildLabOptionDto? SpellPair,
+    BuildLabSummaryDto? Summary,
     string? UnavailableReason);
 
 public record BuildLabQuery(

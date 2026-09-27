@@ -28,7 +28,9 @@ const completeState: BuildLabState = {
   starter: [1101, 2003],
   boots: 3006,
   runePage: [8005, 9111, 9104],
-  spellPair: [4, 11]
+  spellPair: [4, 11],
+  skillPriority: [1, 3, 2],
+  skillStart: [1, 2, 3]
 };
 
 const emptyState: BuildLabState = {
@@ -38,7 +40,9 @@ const emptyState: BuildLabState = {
   itemPath: [],
   starter: [],
   runePage: [],
-  spellPair: []
+  spellPair: [],
+  skillPriority: [],
+  skillStart: []
 };
 
 function reparse(query: URLSearchParams) {
@@ -63,7 +67,7 @@ describe("Build Lab URL state", () => {
 
     expect(query.getAll("itemPath")).toEqual(["6672", "3031"]);
     expect(query.getAll("runeSelections")).toEqual(["8005"]);
-    for (const terminal of ["starter", "boots", "runePage", "spellPair", "keystone"]) {
+    for (const terminal of ["starter", "boots", "runePage", "spellPair", "keystone", "skillPriority", "skillStart"]) {
       expect(query.has(terminal)).toBe(false);
     }
   });
@@ -153,6 +157,20 @@ describe("Build Lab selection", () => {
     expect(hasBuildLabSelection(emptyState)).toBe(false);
     expect(hasBuildLabSelection({ ...emptyState, boots: 3006 })).toBe(true);
     expect(hasBuildLabSelection({ ...emptyState, section: "spells" })).toBe(false);
+  });
+});
+
+describe("Build Lab skills", () => {
+  it("records the max order and the first three levels as separate picks", () => {
+    let state = selectBuildLabOption({ ...emptyState, section: "skills" }, "SKILLS", 0, [2, 1, 3]).state;
+    state = selectBuildLabOption(state, "SKILLS", 1, [1, 2, 3]).state;
+
+    expect(state).toMatchObject({ skillPriority: [2, 1, 3], skillStart: [1, 2, 3] });
+    expect(clearBuildLabSelection(state)).toMatchObject({ skillPriority: [], skillStart: [] });
+  });
+
+  it("ignores ability slots that do not exist in a link", () => {
+    expect(normalizeBuildLabState({ skillPriority: ["1", "9", "3"] }).state.skillPriority).toEqual([1, 3]);
   });
 });
 

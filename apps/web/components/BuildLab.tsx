@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { AbilityPill } from "@/components/ui/AbilityPill";
 import { Button } from "@/components/ui/Button";
 import { DataBar } from "@/components/ui/DataBar";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -14,6 +15,7 @@ import {
   BUILD_LAB_MODES,
   BUILD_LAB_ROLES,
   BUILD_LAB_SECTIONS,
+  abilityLetter,
   buildLabPermalink,
   buildLabRegionLabel,
   buildLabRegionOptions,
@@ -32,7 +34,8 @@ import {
   type BuildLabResponse,
   type BuildLabSection,
   type BuildLabStage,
-  type BuildLabState
+  type BuildLabState,
+  type BuildLabSummary
 } from "@/lib/buildLab";
 import { cn } from "@/lib/cn";
 import {
@@ -64,12 +67,14 @@ const MODE_LABELS: Record<BuildLabMode, { short: string; full: string }> = {
 const SECTION_LABELS: Record<BuildLabSection, string> = {
   items: "Items",
   runes: "Runes",
-  spells: "Spells"
+  spells: "Spells",
+  skills: "Skills"
 };
 
 function entityName(id: number, section: BuildLabSection, lookups: Lookups) {
   if (section === "items") return lookups.items[String(id)]?.name ?? `Item ${id}`;
   if (section === "runes") return lookups.runes[String(id)]?.name ?? `Rune ${id}`;
+  if (section === "skills") return abilityLetter(id);
   return lookups.spells[String(id)]?.name ?? `Spell ${id}`;
 }
 
@@ -81,6 +86,8 @@ function entityIcon(id: number, section: BuildLabSection, lookups: Lookups) {
 
 /** "Doran's Ring + 2× Health Potion": a starter set repeats items, and the repeat is the point. */
 function optionName(ids: number[], section: BuildLabSection, lookups: Lookups) {
+  // A max order reads as a priority; its letters repeat nothing, and "Q + W + E" would say nothing.
+  if (section === "skills") return ids.map(abilityLetter).join(" › ");
   const counts = new Map<number, number>();
   for (const id of ids) counts.set(id, (counts.get(id) ?? 0) + 1);
   return [...counts]
@@ -118,6 +125,15 @@ function Icons({
   size?: number;
   max?: number;
 }) {
+  if (section === "skills") {
+    return (
+      <span className="flex shrink-0 items-center gap-1">
+        {ids.map((id, index) => (
+          <AbilityPill key={index} letter={abilityLetter(id)} emphasis={index === 0} />
+        ))}
+      </span>
+    );
+  }
   const counts = new Map<number, number>();
   for (const id of ids) counts.set(id, (counts.get(id) ?? 0) + 1);
   const distinct = [...counts];
@@ -150,6 +166,69 @@ function Icons({
   );
 }
 
+/**
+ * The answer before the drill-down: the recommended choice at every decision, items followed as a
+ * path. "Follow this build" loads it into the lab so every step below is read under it.
+ */
+function RecommendedBuild({
+  summary,
+  lookups,
+  onFollow
+}: {
+  summary: BuildLabSummary;
+  lookups: Lookups;
+  onFollow: () => void;
+}) {
+  const pieces: { label: string; option: BuildLabOption; section: BuildLabSection; ids: number[] }[] = [];
+  if (summary.starter) pieces.push({ label: "Start", option: summary.starter, section: "items", ids: summary.starter.actionIds });
+  summary.items.forEach((item, index) =>
+    pieces.push({ label: `Item ${index + 1}`, option: item, section: "items", ids: item.actionIds })
+  );
+  if (summary.boots) pieces.push({ label: "Boots", option: summary.boots, section: "items", ids: summary.boots.actionIds });
+  if (summary.runePage)
+    pieces.push({ label: "Runes", option: summary.runePage, section: "runes", ids: summary.runePage.actionIds.slice(0, 1) });
+  if (summary.spellPair)
+    pieces.push({ label: "Spells", option: summary.spellPair, section: "spells", ids: summary.spellPair.actionIds });
+  if (summary.skillPriority)
+    pieces.push({ label: "Max", option: summary.skillPriority, section: "skills", ids: summary.skillPriority.actionIds });
+  if (pieces.length === 0) return null;
+
+  return (
+    <section aria-labelledby="recommended-build" className="border-b border-border/50 px-4 py-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="recommended-build" className="type-section">Recommended build</h2>
+        <Button size="sm" variant="outline" onClick={onFollow}>
+          Follow this build
+        </Button>
+      </div>
+      <p className="mt-1 text-xs text-muted">
+        The best common, well-sampled choice at each step; items follow on from each other.
+      </p>
+      <ol className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
+        {pieces.map((piece) => (
+          <li
+            key={piece.label}
+            className="flex min-w-0 items-center gap-2 rounded-control border border-border/60 bg-surface-2/50 px-2.5 py-2"
+          >
+            <Icons ids={piece.ids} section={piece.section} lookups={lookups} size={28} max={2} />
+            <div className="min-w-0">
+              <p className="text-[0.6875rem] text-muted">{piece.label}</p>
+              <p className="truncate text-xs font-semibold text-fg">
+                {piece.section === "runes"
+                  ? entityName(piece.ids[0], "runes", lookups)
+                  : optionName(piece.option.actionIds, piece.section, lookups)}
+              </p>
+              <p className="text-[0.6875rem] tabular-nums text-muted">
+                {formatPercent(piece.option.adjustedWinRate)} · {formatPercent(piece.option.pickRate)} pick
+              </p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 /** What the user has locked or picked in this section, in build order. */
 function BuildSummary({
   state,
@@ -170,6 +249,9 @@ function BuildSummary({
   } else if (state.section === "runes") {
     if (state.runePage.length > 0) groups.push({ label: "Page", ids: state.runePage });
     else if (state.keystone) groups.push({ label: "Keystone", ids: [state.keystone] });
+  } else if (state.section === "skills") {
+    if (state.skillPriority.length > 0) groups.push({ label: "Max", ids: state.skillPriority });
+    if (state.skillStart.length > 0) groups.push({ label: "Start", ids: state.skillStart });
   } else if (state.spellPair.length > 0) {
     groups.push({ label: "Spells", ids: state.spellPair });
   }
@@ -578,7 +660,9 @@ export function BuildLab({
                   boots: undefined,
                   keystone: undefined,
                   runePage: [],
-                  spellPair: []
+                  spellPair: [],
+                  skillPriority: [],
+                  skillStart: []
                 })
               }
               ariaLabel="Role"
@@ -686,6 +770,27 @@ export function BuildLab({
               <p key={issue}>{issue}</p>
             ))}
           </div>
+        ) : null}
+
+        {response.available && response.summary ? (
+          <RecommendedBuild
+            summary={response.summary}
+            lookups={lookups}
+            onFollow={() => {
+              const summary = response.summary!;
+              updateState({
+                ...state,
+                section: "items",
+                itemPath: summary.items.map((item) => item.actionIds[0]),
+                starter: summary.starter?.actionIds ?? state.starter,
+                boots: summary.boots?.actionIds[0] ?? state.boots,
+                runePage: summary.runePage?.actionIds ?? state.runePage,
+                keystone: summary.runePage?.actionIds[0] ?? state.keystone,
+                spellPair: summary.spellPair?.actionIds ?? state.spellPair,
+                skillPriority: summary.skillPriority?.actionIds ?? state.skillPriority
+              });
+            }}
+          />
         ) : null}
 
         <BuildSummary

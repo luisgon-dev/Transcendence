@@ -30,13 +30,15 @@ public sealed class BuildLabService(
     public static readonly double[] PatchRecencyWeights = [1.0, 0.6, 0.35];
 
     private const int MaximumOptionsPerStage = 15;
+    // A three-item core is what a build page leads with; deeper steps are too thin to recommend.
+    private const int SummaryItemDepth = 3;
     private const double MinimumOptionGames = 5;
     private const int MaximumItemPath = BuildLabDecisions.MaximumItemStage - 1;
     private const string DisabledReason = "Build Lab is not enabled on this deployment.";
 
     private static readonly HashSet<string> Roles =
         new(["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"], StringComparer.Ordinal);
-    private static readonly HashSet<string> Sections = new(["ITEMS", "RUNES", "SPELLS"], StringComparer.Ordinal);
+    private static readonly HashSet<string> Sections = new(["ITEMS", "RUNES", "SPELLS", "SKILLS"], StringComparer.Ordinal);
     private static readonly HashSet<string> Modes = new(["SUPPORTED", "IMPACT", "COMMON"], StringComparer.Ordinal);
     private static readonly long EmptyPrefix = BuildLabPath.Hash([]);
 
@@ -58,7 +60,10 @@ public sealed class BuildLabService(
         if (!options.Value.Enabled)
             return Empty(normalized, EmptyCoverage, DisabledReason);
         var coverage = await CoverageAsync(normalized.Patch, ct);
-        return await GetAsync(normalized, coverage, ct);
+        var response = await GetAsync(normalized, coverage, ct);
+        return response.Available
+            ? response with { Summary = await SummaryAsync(normalized, coverage, ct) }
+            : response;
     }
 
     public async Task<ChampionRecommendationSummary> GetChampionRecommendationAsync(
@@ -70,7 +75,7 @@ public sealed class BuildLabService(
         CancellationToken ct = default)
     {
         if (!options.Value.Enabled)
-            return new ChampionRecommendationSummary(false, EmptyCoverage, null, null, null, DisabledReason);
+            return new ChampionRecommendationSummary(false, EmptyCoverage, null, DisabledReason);
 
         BuildLabQuery normalized;
         try
@@ -83,24 +88,59 @@ public sealed class BuildLabService(
             // Embedded in the champion profile: invalid context degrades to an unavailable block
             // instead of failing the whole profile read.
             return new ChampionRecommendationSummary(
-                false, EmptyCoverage, null, null, null, "The requested Build Lab context is not valid.");
+                false, EmptyCoverage, null, "The requested Build Lab context is not valid.");
         }
 
         var coverage = await CoverageAsync(normalized.Patch, ct);
-        var items = await GetAsync(normalized, coverage, ct);
-        var runes = await GetAsync(normalized with { Section = "RUNES" }, coverage, ct);
-        var spells = await GetAsync(normalized with { Section = "SPELLS" }, coverage, ct);
-        var firstItem = Best(items, BuildLabFamily.Item, stage: 1);
-        var runePage = Best(runes, BuildLabFamily.RunePage, stage: 0);
-        var spellPair = Best(spells, BuildLabFamily.Spells, stage: 0);
-        var available = firstItem != null || runePage != null || spellPair != null;
+        var summary = await SummaryAsync(normalized, coverage, ct);
+        var available = summary.Items.Count > 0 || summary.RunePage != null || summary.SpellPair != null;
         return new ChampionRecommendationSummary(
             available,
             coverage,
-            firstItem,
-            runePage,
-            spellPair,
+            available ? summary : null,
             available ? null : "Not enough games have been counted for this champion and role yet.");
+    }
+
+    /// <summary>
+    /// The recommended choice at every decision. Items are followed as a path -- the second item is the
+    /// recommendation given the first -- because "the best second item" only means something after a
+    /// first one. The chain stops at the first step with nothing common and well sampled to recommend.
+    /// Every read goes through the cached per-section response, so a summary is at most six of them.
+    /// </summary>
+    private async Task<BuildLabSummaryDto> SummaryAsync(
+        BuildLabQuery query,
+        BuildLabCoverageDto coverage,
+        CancellationToken ct)
+    {
+        var context = query with { Mode = "SUPPORTED", ItemPath = [], RuneSelections = [] };
+        var items = await GetAsync(context with { Section = "ITEMS" }, coverage, ct);
+        var starter = Best(items, BuildLabFamily.Starter, stage: 0);
+        var boots = Best(items, BuildLabFamily.Boots, stage: 1);
+
+        var path = new List<BuildLabOptionDto>();
+        var step = items;
+        while (path.Count < SummaryItemDepth &&
+               Best(step, BuildLabFamily.Item, stage: path.Count + 1) is { } next)
+        {
+            path.Add(next);
+            if (path.Count == SummaryItemDepth)
+                break;
+            step = await GetAsync(
+                context with { Section = "ITEMS", ItemPath = path.Select(item => item.ActionIds[0]).ToArray() },
+                coverage,
+                ct);
+        }
+
+        var runes = await GetAsync(context with { Section = "RUNES" }, coverage, ct);
+        var spells = await GetAsync(context with { Section = "SPELLS" }, coverage, ct);
+        var skills = await GetAsync(context with { Section = "SKILLS" }, coverage, ct);
+        return new BuildLabSummaryDto(
+            starter,
+            path,
+            boots,
+            Best(runes, BuildLabFamily.RunePage, stage: 0),
+            Best(spells, BuildLabFamily.Spells, stage: 0),
+            Best(skills, BuildLabFamily.Skills, stage: 0));
     }
 
     private async Task<BuildLabResponse> GetAsync(
@@ -256,6 +296,7 @@ public sealed class BuildLabService(
         "RUNES" => path.Count == 0
             ? [(BuildLabFamily.RunePage, EmptyPrefix), (BuildLabFamily.Rune, EmptyPrefix)]
             : [(BuildLabFamily.RunePage, EmptyPrefix), (BuildLabFamily.Rune, BuildLabPath.Hash([path[0]]))],
+        "SKILLS" => [(BuildLabFamily.Skills, EmptyPrefix)],
         _ => [(BuildLabFamily.Spells, EmptyPrefix)]
     };
 
@@ -340,7 +381,7 @@ public sealed class BuildLabService(
             throw new ArgumentException("Role must be TOP, JUNGLE, MIDDLE, BOTTOM, or UTILITY.", nameof(query));
         var section = query.Section.Trim().ToUpperInvariant();
         if (!Sections.Contains(section))
-            throw new ArgumentException("Section must be items, runes, or spells.", nameof(query));
+            throw new ArgumentException("Section must be items, runes, spells, or skills.", nameof(query));
         var mode = query.Mode.Trim().ToUpperInvariant();
         if (!Modes.Contains(mode))
             throw new ArgumentException("Mode must be supported, impact, or common.", nameof(query));
@@ -402,6 +443,7 @@ public sealed class BuildLabService(
         BuildLabFamily.Boots => "BOOTS",
         BuildLabFamily.RunePage => "RUNE_PAGE",
         BuildLabFamily.Rune => "RUNE",
+        BuildLabFamily.Skills => "SKILLS",
         _ => "SPELLS"
     };
 
@@ -430,6 +472,7 @@ public sealed class BuildLabService(
         },
         BuildLabFamily.RunePage => "Complete rune page",
         BuildLabFamily.Rune => stage == 1 ? "Keystone" : $"Rune slot {stage}",
+        BuildLabFamily.Skills => stage == 0 ? "Skill priority" : "First three levels",
         _ => "Summoner spells"
     };
 }

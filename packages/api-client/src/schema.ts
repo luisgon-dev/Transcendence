@@ -5304,6 +5304,7 @@ export interface components {
             selectedPath: number[];
             stages: components["schemas"]["BuildLabStageDto"][];
             unavailableReason?: string | null;
+            summary?: components["schemas"]["BuildLabSummaryDto"] | null;
         };
         BuildLabStageDto: {
             family: string;
@@ -5317,6 +5318,14 @@ export interface components {
             scope: string;
             isFallback: boolean;
             options: components["schemas"]["BuildLabOptionDto"][];
+        };
+        BuildLabSummaryDto: {
+            starter?: components["schemas"]["BuildLabOptionDto"] | null;
+            items: components["schemas"]["BuildLabOptionDto"][];
+            boots?: components["schemas"]["BuildLabOptionDto"] | null;
+            runePage?: components["schemas"]["BuildLabOptionDto"] | null;
+            spellPair?: components["schemas"]["BuildLabOptionDto"] | null;
+            skillPriority?: components["schemas"]["BuildLabOptionDto"] | null;
         };
         BuildResourceAnalyticsDetailResponse: {
             resourceType: string;
@@ -5483,9 +5492,7 @@ export interface components {
         ChampionRecommendationSummary: {
             available: boolean;
             coverage: components["schemas"]["BuildLabCoverageDto"];
-            firstItem?: components["schemas"]["BuildLabOptionDto"] | null;
-            runePage?: components["schemas"]["BuildLabOptionDto"] | null;
-            spellPair?: components["schemas"]["BuildLabOptionDto"] | null;
+            summary?: components["schemas"]["BuildLabSummaryDto"] | null;
             unavailableReason?: string | null;
         };
         ChampionStatDto: {

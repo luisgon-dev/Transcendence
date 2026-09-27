@@ -109,9 +109,12 @@ public class SummonerRepository(TranscendenceContext context, IRankRepository ra
         if (normalizedMatch != null)
             return normalizedMatch;
 
-        // Secondary exact match for rows written before normalization fields were introduced.
+        // Secondary exact match for rows written before normalization fields were introduced. Every
+        // row written since carries the normalized key the fast path already checked, so only the
+        // legacy (null-key) rows can match here -- which IX_Summoners_LegacyRiotId covers.
         var exactMatch = await query.FirstOrDefaultAsync(x =>
                 x.PlatformRegion == normalizedPlatformRegion &&
+                x.GameNameNormalized == null &&
                 x.GameName == normalizedGameName &&
                 x.TagLine == normalizedTagLine,
             cancellationToken);

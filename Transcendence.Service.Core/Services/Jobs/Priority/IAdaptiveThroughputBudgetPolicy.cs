@@ -35,4 +35,10 @@ public interface IAdaptiveThroughputBudgetPolicy
     int VelocityLookbackMinutes { get; }
 
     AdaptiveThroughputBudgetDecision ComputeBudget(AdaptiveThroughputBudgetInput input);
+
+    /// <summary>
+    /// The pending-candidate count at and past which <see cref="ComputeBudget"/> decides the same, so a
+    /// producer can stop counting there instead of counting a region's whole Summoners table.
+    /// </summary>
+    int SaturatingPendingCandidateCount(int baselineMaxCandidates) => int.MaxValue;
 }

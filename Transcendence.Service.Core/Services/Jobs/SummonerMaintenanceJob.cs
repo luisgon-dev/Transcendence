@@ -177,7 +177,8 @@ public class SummonerMaintenanceJob(
         var recentSuccessfulMatchesForPatch = await matchQuery
             .Where(m => m.FetchedAt != null && m.FetchedAt >= recentSuccessWindowStartUtc)
             .CountAsync(ct);
-        var pendingCandidateCount = await EstimatePendingCandidateCountAsync(region, staleCutoffUtc, ct);
+        var pendingCandidateCount = await EstimatePendingCandidateCountAsync(
+            region, staleCutoffUtc, adaptiveThroughputBudgetPolicy.SaturatingPendingCandidateCount(baselineMaxCandidates), ct);
 
         var budget = adaptiveThroughputBudgetPolicy.ComputeBudget(new AdaptiveThroughputBudgetInput(
             producerKey,
@@ -710,7 +711,8 @@ public class SummonerMaintenanceJob(
         };
     }
 
-    private Task<int> EstimatePendingCandidateCountAsync(string? region, DateTime staleCutoffUtc, CancellationToken ct)
+    private Task<int> EstimatePendingCandidateCountAsync(
+        string? region, DateTime staleCutoffUtc, int cap, CancellationToken ct)
     {
         var query = db.Summoners
             .AsNoTracking()
@@ -720,7 +722,8 @@ public class SummonerMaintenanceJob(
         if (region != null)
             query = query.Where(s => s.PlatformRegion == region);
 
-        return query.CountAsync(ct);
+        // Capped at the policy's saturation point; see SaturatingPendingCandidateCount.
+        return query.Take(cap).CountAsync(ct);
     }
 
     private async Task<StarvationGuardrailDecision> EvaluateStarvationGuardrailAsync(

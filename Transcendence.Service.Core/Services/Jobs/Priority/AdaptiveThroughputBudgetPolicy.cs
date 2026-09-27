@@ -11,6 +11,15 @@ public class AdaptiveThroughputBudgetPolicy(IOptions<AdaptiveThroughputBudgetOpt
 
     public int VelocityLookbackMinutes => Math.Max(5, options.Value.VelocityLookbackMinutes);
 
+    // The pressure ratio (count / baseline) only feeds `ratio >= CatchUpCandidatePressureThreshold` and
+    // `clamp(ratio - 1, 0, 1)`, so every count at or past max(2, threshold) x baseline decides alike.
+    // Counting past it cost a full index scan of the region (~85K blocks, 87M disk reads in four days).
+    public int SaturatingPendingCandidateCount(int baselineMaxCandidates)
+    {
+        var saturationRatio = Math.Max(2d, Math.Max(0.1d, options.Value.CatchUpCandidatePressureThreshold));
+        return (int)Math.Min(int.MaxValue, Math.Ceiling(Math.Max(1, baselineMaxCandidates) * saturationRatio));
+    }
+
     public AdaptiveThroughputBudgetDecision ComputeBudget(AdaptiveThroughputBudgetInput input)
     {
         var config = options.Value;

@@ -244,6 +244,15 @@ docker compose -p transcendence --env-file "$COMPOSE_DIR/.env" \
   -f "$COMPOSE_DIR/compose.yml" up -d postgres
 ```
 
+**Checkpoints and prewarm (2026-09-27).** Prod's `.env` also sets `POSTGRES_CHECKPOINT_TIMEOUT=30min`,
+`POSTGRES_MAX_WAL_SIZE=8GB` and `POSTGRES_WAL_COMPRESSION=lz4`, and preloads `pg_prewarm`
+(`POSTGRES_SHARED_PRELOAD_LIBRARIES=pg_stat_statements,pg_prewarm`). At the defaults, checkpoints ran
+every ~4.4 minutes, and full-page images made up most of the 325GB of WAL written in four days to the HDD that
+reads share. The preloaded `pg_prewarm` autoprewarm worker saves the buffer list every 5 minutes and
+reloads it after a restart, so a deploy or reboot does not send the first page views to a cold HDD.
+Verify after a restart: `SELECT num_timed, num_requested FROM pg_stat_checkpointer;` should grow
+~2/hour with `num_requested` flat, and `SELECT * FROM pg_stat_wal;` shows `wal_fpi` per byte falling.
+
 `poll-deploy.sh` only redeploys the app containers, so it never touches PostgreSQL. **Note:** prod
 PostgreSQL is `pgautoupgrade/pgautoupgrade:18.3-alpine` (PG 18),
 data volume mounted at `/var/lib/postgresql` (PGDATA under `/var/lib/postgresql/18/docker`); the

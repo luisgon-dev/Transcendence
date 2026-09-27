@@ -286,6 +286,21 @@ public sealed class BuildLabRealPostgresTests(PostgresIntegrationFixture fixture
         tableOptions.Should().Contain("autovacuum_analyze_scale_factor=0.005");
     }
 
+    [Fact]
+    public async Task Migrations_CreateTheCoveringReadIndex_SoARequestNeverTouchesScatteredHeapPages()
+    {
+        await using var db = NewDb();
+        var definition = await db.Database
+            .SqlQueryRaw<string>(
+                """SELECT indexdef AS "Value" FROM pg_indexes WHERE indexname = 'IX_BuildLabOptionStats_Read'""")
+            .SingleAsync();
+
+        definition.Should().Contain("(\"ChampionId\", \"Role\", \"OpponentChampionId\", \"Region\", \"PrefixHash\", \"Family\")");
+        // Every column BuildLabService selects, or the read falls back to the heap.
+        definition.Should().Contain(
+            "INCLUDE (\"Stage\", \"Patch\", \"ActionKey\", \"GoldBucket\", \"Games\", \"Wins\", \"TimingSecondsSum\")");
+    }
+
     private async Task<BuildLabRefreshResult> RefreshAsync()
     {
         await using var db = NewDb();

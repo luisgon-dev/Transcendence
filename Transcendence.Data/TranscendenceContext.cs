@@ -1020,6 +1020,14 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             entity.Property(x => x.Region).HasMaxLength(16);
             entity.Property(x => x.Patch).HasMaxLength(32);
             entity.Property(x => x.ActionKey).HasMaxLength(128);
+            // The read path as an index-only scan. Batches insert a champion's rows a few at a time
+            // across the whole heap, so one request touched ~400 random heap pages -- seconds each on
+            // this box's spinning disk once the table fell out of cache, 30-70s for a page view while
+            // the weekly archive was streaming. Sorted and carrying the counts, the same read is a
+            // handful of adjacent index pages. The bare shape is declared here and the INCLUDE lives in
+            // the raw-SQL migration, as with the other covering indexes in this model.
+            entity.HasIndex(x => new { x.ChampionId, x.Role, x.OpponentChampionId, x.Region, x.PrefixHash, x.Family })
+                .HasDatabaseName("IX_BuildLabOptionStats_Read");
         });
 
         modelBuilder.Entity<BuildLabProcessedMatch>(entity =>

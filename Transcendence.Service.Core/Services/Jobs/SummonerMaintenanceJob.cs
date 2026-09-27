@@ -14,7 +14,6 @@ using Transcendence.Service.Core.Services.RiotApi;
 
 namespace Transcendence.Service.Core.Services.Jobs;
 
-[DisableConcurrentExecution(timeoutInSeconds: 10 * 60)]
 public class SummonerMaintenanceJob(
     TranscendenceContext db,
     IBackgroundJobClient backgroundJobClient,
@@ -33,6 +32,10 @@ public class SummonerMaintenanceJob(
     private const string ProducerKeyBase = nameof(SummonerMaintenanceJob);
     private const string TelemetrySource = "summoner-maintenance-job";
 
+    // Longer than any region run on prod (median ~12s, max ~6m including what was lock wait), so it
+    // only expires on its own when a worker died mid-run.
+    private static readonly TimeSpan RegionRunLease = TimeSpan.FromMinutes(15);
+
     private sealed record CandidateSummoner(
         string PlatformRegion,
         string GameName,
@@ -43,6 +46,7 @@ public class SummonerMaintenanceJob(
         string? RankTier);
 
     [Queue("refresh-low")]
+    [DisableConcurrentExecution(timeoutInSeconds: 10 * 60)]
     public async Task ExecuteAsync(CancellationToken ct = default)
     {
         // Self-pacing: one fast heartbeat cron fires this dispatcher; the pacing slot decides whether
@@ -73,7 +77,25 @@ public class SummonerMaintenanceJob(
     [Queue(HangfireQueues.Discovery)]
     public async Task ExecuteForRegionAsync(string region, CancellationToken ct = default)
     {
-        await ExecuteForRegionInternalAsync(region, ct);
+        // One run per region at a time, and a tick that finds its region still running skips it; see
+        // ChampionAnalyticsIngestionJob.ExecuteForRegionAsync for why this is not [DisableConcurrentExecution].
+        ct.ThrowIfCancellationRequested();
+        var runKey = RefreshLockKeys.BuildProducerRegionRunKey(ProducerKeyBase, region);
+        if (await refreshLockRepository.TryAcquireOwnedAsync(runKey, RegionRunLease, ct) is not { } owner)
+        {
+            logger.LogDebug("Summoner maintenance for {Region} is still running; skipping this tick.", region);
+            return;
+        }
+
+        try
+        {
+            await ExecuteForRegionInternalAsync(region, ct);
+        }
+        finally
+        {
+            using var releaseTimeout = new CancellationTokenSource(QueueFailureLockReleaseTimeout);
+            await refreshLockRepository.ReleaseOwnedAsync(runKey, owner, releaseTimeout.Token);
+        }
     }
 
     // Acquires the producer's self-pacing slot. Returns false (skip) while a prior run's slot is still

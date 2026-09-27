@@ -202,7 +202,17 @@ Automatic migrations on startup (`Database:AutoMigrate`):
 
 #### Applying index migrations to hot tables
 
-`Summoners` (~4M+ rows), `Matches`, `MatchParticipants`, and `MatchParticipantTimelineSnapshots` (~22.5M rows) are large and continuously written by ingestion. EF's generated `CreateIndex` emits a plain `CREATE INDEX`, which holds a `SHARE` lock for the entire build and blocks ingestion writes for its duration. **Do not** apply such a migration with `dotnet ef database update`. Split the apply instead:
+`Summoners` (~4M+ rows), `Matches`, `MatchParticipants`, and `MatchParticipantTimelineSnapshots` (~22.5M rows) are large and continuously written by ingestion. EF's generated `CreateIndex` emits a plain `CREATE INDEX`, which holds a `SHARE` lock for the entire build and blocks ingestion writes for its duration. **Do not** apply such a migration with `dotnet ef database update`.
+
+**Preferred: build it concurrently inside the migration.** Replace the generated `CreateIndex`/`DropIndex` with
+`migrationBuilder.Sql("CREATE INDEX CONCURRENTLY IF NOT EXISTS ...", suppressTransaction: true)` (and
+`DROP INDEX CONCURRENTLY IF EXISTS` for a replaced index, after the new one is built). The worker's
+pre-deploy migration runs it while the old worker keeps serving, and `DatabaseMigrator` raises the
+command timeout to 30 minutes for migrations, so a long build does not fail the deploy. Examples:
+`AddBuildLabCoveringReadIndex`, `AddRankHistoryLatestIndex`. **Never pre-build the same index by
+hand while its migration may run**: the migration's `IF NOT EXISTS` waits on the in-progress build.
+
+**Alternative: split the apply** by hand, when a build must be scheduled around load:
 
 1. Isolate the index in its own migration (don't bundle it with other DDL) so the steps below stay clean.
 2. Read the index name / table / columns from the generated migration's `Up()`.

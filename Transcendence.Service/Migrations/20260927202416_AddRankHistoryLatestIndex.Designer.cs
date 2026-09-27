@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Transcendence.Data;
@@ -12,9 +13,11 @@ using Transcendence.Data;
 namespace Transcendence.Service.Migrations
 {
     [DbContext(typeof(TranscendenceContext))]
-    partial class ProjectSyndraContextModelSnapshot : ModelSnapshot
+    [Migration("20260927202416_AddRankHistoryLatestIndex")]
+    partial class AddRankHistoryLatestIndex
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1257,27 +1260,6 @@ namespace Transcendence.Service.Migrations
                         .IsUnique();
 
                     b.ToTable("AnalyticsResponseSnapshots");
-                });
-
-            modelBuilder.Entity("Transcendence.Data.Models.LoL.Analytics.BuildLabCoverage", b =>
-                {
-                    b.Property<string>("Patch")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<string>("Region")
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
-
-                    b.Property<DateTime>("LastCountedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<long>("Matches")
-                        .HasColumnType("bigint");
-
-                    b.HasKey("Patch", "Region");
-
-                    b.ToTable("BuildLabCoverage", (string)null);
                 });
 
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Analytics.BuildLabOptionStat", b =>

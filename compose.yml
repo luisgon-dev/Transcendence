@@ -57,6 +57,17 @@ services:
       - "max_parallel_workers_per_gather=${POSTGRES_MAX_PARALLEL_WORKERS_PER_GATHER:-2}"
       - "-c"
       - "max_parallel_maintenance_workers=${POSTGRES_MAX_PARALLEL_MAINTENANCE_WORKERS:-2}"
+      # Checkpoint spacing. At the defaults (5min / 1GB) prod checkpointed every ~4.4 minutes, and
+      # after each one the first change to any page logs the whole 8KB page: 42M full-page images
+      # made up most of 325GB of WAL in four days, all written to the HDD the reads share. Wider
+      # spacing logs a hot page once per cycle instead of once per 4 minutes, and lz4 shrinks the
+      # images that remain. The cost is crash recovery replaying up to one cycle of WAL.
+      - "-c"
+      - "checkpoint_timeout=${POSTGRES_CHECKPOINT_TIMEOUT:-5min}"
+      - "-c"
+      - "max_wal_size=${POSTGRES_MAX_WAL_SIZE:-1GB}"
+      - "-c"
+      - "wal_compression=${POSTGRES_WAL_COMPRESSION:-off}"
     shm_size: "${POSTGRES_SHM_SIZE:-64mb}"
     environment:
       POSTGRES_DB: ${POSTGRES_DB}

@@ -195,6 +195,18 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             .HasDatabaseName("IX_Summoners_SearchPrefix")
             .HasFilter("\"GameNameNormalized\" IS NOT NULL AND \"TagLineNormalized\" IS NOT NULL");
 
+        // The Riot ID lookup's fallbacks for legacy rows written before the normalized keys existed
+        // (~235K of 4.75M on 2026-09-27). Without these, every lookup that missed the normalized path
+        // -- any summoner not stored yet -- walked the region's (PlatformRegion, UpdatedAt) index
+        // across the whole table: 17.6K disk reads per miss, 1.3TB read in four days. Partial on the
+        // missing key, so they cover only the legacy rows. The case-insensitive fallback's twin on
+        // (PlatformRegion, upper(GameName), upper(TagLine)) is an expression index EF cannot model;
+        // it is created in AddSummonerLegacyRiotIdIndexes.
+        modelBuilder.Entity<Summoner>()
+            .HasIndex(s => new { s.PlatformRegion, s.GameName, s.TagLine })
+            .HasDatabaseName("IX_Summoners_LegacyRiotId")
+            .HasFilter("\"GameNameNormalized\" IS NULL");
+
         // Drives per-region ingestion candidate selection: the coverage-cooldown / staleness filter
         // (UpdatedAt <= cutoff, ordered by UpdatedAt) and the oldest-eligible MinAsync(UpdatedAt) the
         // producers run each tick. Previously unindexed → sequential scans over the whole Summoners table.

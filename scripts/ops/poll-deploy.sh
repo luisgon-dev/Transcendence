@@ -321,7 +321,13 @@ deploy_one() {
     return 0
   fi
   current="$(local_digest "$container")"
-  if [ -z "$current" ]; then record_resolution_failure "$svc" local; return 1; fi
+  if [ -z "$current" ]; then
+    # A running image loses its registry digest once :main is pulled onto a newer one -- e.g. after
+    # a failed migration restored the old worker. It cannot be the remote release, so deploy it;
+    # only a container that cannot be inspected at all is a resolution failure.
+    docker inspect "$container" >/dev/null 2>&1 || { record_resolution_failure "$svc" local; return 1; }
+    current="untagged"
+  fi
   clear_resolution_failure "$svc" local
   current_rev="$(local_revision "$container")"
   if [ -z "$current_rev" ]; then record_resolution_failure "$svc" local-revision; return 1; fi

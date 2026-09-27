@@ -102,7 +102,10 @@ public sealed class ChampionSynergyService(
                 (focal, partner) => new { Focal = focal, Partner = partner })
             .Where(pair =>
                 pair.Focal.TeamId == pair.Partner.TeamId &&
-                pair.Focal.Id != pair.Partner.Id &&
+                // ParticipantId, not Id: within one match it names the same participant, and unlike Id
+                // it is in both covering indexes, so neither side of the pair needs a heap fetch
+                // (Id cost a random heap read per partner row, 150K disk reads an hour on prod).
+                pair.Focal.ParticipantId != pair.Partner.ParticipantId &&
                 pair.Focal.ChampionId != pair.Partner.ChampionId)
             .Where(pair =>
                 (role == "BOTTOM" && pair.Partner.TeamPosition == "UTILITY") ||

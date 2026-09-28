@@ -21,6 +21,7 @@ public sealed class BuildResourceSnapshotRefresher(
     IOptions<BuildResourceSnapshotOptions> optionsAccessor,
     ILogger<BuildResourceSnapshotRefresher> logger) : IBuildResourceSnapshotRefresher
 {
+    private const int ParticipantChunkSize = 1_000;
     private const string ItemType = "item";
     private const string RuneType = "rune";
     private readonly BuildResourceSnapshotOptions options = optionsAccessor.Value;
@@ -99,40 +100,47 @@ public sealed class BuildResourceSnapshotRefresher(
                 if (participantIds.Length > 0)
                 {
                     var participantMap = participants.ToDictionary(participant => participant.Id);
-                    if (allowedItemIds.Length > 0)
+                    // Read by participant in chunks: btree array lookups are costed per element, so
+                    // a whole batch (~5,000 ids) made the planner scan the 14 GB rune table (and the
+                    // items) in full every batch -- over half of prod's disk reads. At 1,000 ids,
+                    // with the pinned participant cardinality, it walks the primary key instead.
+                    foreach (var chunk in participantIds.Chunk(ParticipantChunkSize))
                     {
-                        var itemUses = await context.MatchParticipantItems.IgnoreQueryFilters().AsNoTracking()
-                            .Where(item =>
-                                participantIds.Contains(item.MatchParticipantId) &&
-                                item.PatchVersion == normalizedPatch &&
-                                item.ItemId != 0 &&
-                                allowedItemIds.Contains(item.ItemId))
-                            .Select(item => new ResourceUseRow
-                            {
-                                ParticipantId = item.MatchParticipantId,
-                                ResourceId = item.ItemId
-                            })
-                            .Distinct()
-                            .ToListAsync(ct);
-                        ApplyResourceRows(resources, snapshot.Id, ItemType, itemUses, participantMap);
-                    }
+                        if (allowedItemIds.Length > 0)
+                        {
+                            var itemUses = await context.MatchParticipantItems.IgnoreQueryFilters().AsNoTracking()
+                                .Where(item =>
+                                    chunk.Contains(item.MatchParticipantId) &&
+                                    item.PatchVersion == normalizedPatch &&
+                                    item.ItemId != 0 &&
+                                    allowedItemIds.Contains(item.ItemId))
+                                .Select(item => new ResourceUseRow
+                                {
+                                    ParticipantId = item.MatchParticipantId,
+                                    ResourceId = item.ItemId
+                                })
+                                .Distinct()
+                                .ToListAsync(ct);
+                            ApplyResourceRows(resources, snapshot.Id, ItemType, itemUses, participantMap);
+                        }
 
-                    if (allowedRuneIds.Length > 0)
-                    {
-                        var runeUses = await context.MatchParticipantRunes.IgnoreQueryFilters().AsNoTracking()
-                            .Where(rune =>
-                                participantIds.Contains(rune.MatchParticipantId) &&
-                                rune.PatchVersion == normalizedPatch &&
-                                rune.SelectionTree != RuneSelectionTree.StatShards &&
-                                allowedRuneIds.Contains(rune.RuneId))
-                            .Select(rune => new ResourceUseRow
-                            {
-                                ParticipantId = rune.MatchParticipantId,
-                                ResourceId = rune.RuneId
-                            })
-                            .Distinct()
-                            .ToListAsync(ct);
-                        ApplyResourceRows(resources, snapshot.Id, RuneType, runeUses, participantMap);
+                        if (allowedRuneIds.Length > 0)
+                        {
+                            var runeUses = await context.MatchParticipantRunes.IgnoreQueryFilters().AsNoTracking()
+                                .Where(rune =>
+                                    chunk.Contains(rune.MatchParticipantId) &&
+                                    rune.PatchVersion == normalizedPatch &&
+                                    rune.SelectionTree != RuneSelectionTree.StatShards &&
+                                    allowedRuneIds.Contains(rune.RuneId))
+                                .Select(rune => new ResourceUseRow
+                                {
+                                    ParticipantId = rune.MatchParticipantId,
+                                    ResourceId = rune.RuneId
+                                })
+                                .Distinct()
+                                .ToListAsync(ct);
+                            ApplyResourceRows(resources, snapshot.Id, RuneType, runeUses, participantMap);
+                        }
                     }
                 }
 

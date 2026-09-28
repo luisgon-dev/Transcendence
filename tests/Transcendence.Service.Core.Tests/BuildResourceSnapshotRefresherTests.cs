@@ -52,6 +52,29 @@ public sealed class BuildResourceSnapshotRefresherTests
     }
 
     [Fact]
+    public async Task RefreshAsync_CountsEveryParticipant_WhenABatchSpansSeveralReadChunks()
+    {
+        // Items and runes are read 1,000 participants at a time; a 1,500-participant batch spans two
+        // chunks, and every participant must still be counted exactly once.
+        await using var harness = await Harness.CreateAsync(matchBatchSize: 2_000);
+        for (var index = 0; index < 1_500; index++)
+            harness.AddMatch($"MATCH_{index}", win: index % 3 == 0);
+        await harness.Db.SaveChangesAsync();
+
+        var result = await harness.Refresher.RefreshAsync(
+            Harness.PatchVersion, forceFullRebuild: true, CancellationToken.None);
+
+        result.ProcessedMatchCount.Should().Be(1_500);
+        var stats = await harness.Db.BuildResourceStats.AsNoTracking()
+            .Where(row => row.SnapshotId == result.SnapshotId)
+            .ToListAsync();
+        stats.Single(row => row.ResourceType == "item").Should()
+            .Match<BuildResourceStat>(row => row.Games == 1_500 && row.Wins == 500);
+        stats.Single(row => row.ResourceType == "rune").Should()
+            .Match<BuildResourceStat>(row => row.Games == 1_500 && row.Wins == 500);
+    }
+
+    [Fact]
     public async Task RefreshAsync_IncrementallyPromotesNewMatchesAndNoopsWhenCurrent()
     {
         await using var harness = await Harness.CreateAsync();
@@ -152,7 +175,7 @@ public sealed class BuildResourceSnapshotRefresherTests
         public SqliteCompatibleTranscendenceContext Db { get; }
         public BuildResourceSnapshotRefresher Refresher { get; }
 
-        public static async Task<Harness> CreateAsync()
+        public static async Task<Harness> CreateAsync(int matchBatchSize = 50)
         {
             var connection = new SqliteConnection("Data Source=:memory:");
             await connection.OpenAsync();
@@ -194,7 +217,7 @@ public sealed class BuildResourceSnapshotRefresherTests
                 db,
                 Options.Create(new BuildResourceSnapshotOptions
                 {
-                    MatchBatchSize = 50,
+                    MatchBatchSize = matchBatchSize,
                     CommandTimeoutSeconds = 30
                 }),
                 NullLogger<BuildResourceSnapshotRefresher>.Instance);

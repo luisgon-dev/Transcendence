@@ -8,6 +8,7 @@ using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Models.LoL.Static;
 using Transcendence.Service.Core.Services.Analytics.Implementations;
+using Transcendence.Service.Core.Services.Cache;
 using Transcendence.Service.Core.Tests.Support;
 using MatchEntity = Transcendence.Data.Models.LoL.Match.Match;
 
@@ -73,6 +74,62 @@ public sealed class ChampionSynergyServiceTests
         partner.Games.Should().Be(4);
         partner.PickRate.Should().BeApproximately(1, 0.0001);
         partner.WinRateDelta.Should().BeApproximately(0, 0.0001);
+    }
+
+    [Fact]
+    public async Task Synergies_SurviveThePatchTagClear_ThatPrecomputedRefreshesIssue()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<TranscendenceContext>().UseSqlite(connection).Options;
+        await using var db = new SqliteCompatibleTranscendenceContext(options);
+        await db.Database.EnsureCreatedAsync();
+        db.Patches.Add(new Patch
+        {
+            Version = "16.14",
+            ReleaseDate = DateTime.UtcNow.AddDays(-4),
+            DetectedAt = DateTime.UtcNow.AddDays(-4),
+            IsActive = true
+        });
+        void AddGame(int index)
+        {
+            var match = new MatchEntity
+            {
+                Id = Guid.NewGuid(),
+                MatchId = $"NA1_SYNERGY_CACHE_{index}",
+                Patch = "16.14",
+                QueueId = 420,
+                QueueFamily = "RANKED_SOLO_DUO",
+                Status = FetchStatus.Success,
+                PlatformRegion = "NA1"
+            };
+            db.Matches.Add(match);
+            AddParticipant(db, match, 1, 266, "TOP", 100, true);
+            AddParticipant(db, match, 2, 64, "JUNGLE", 100, true);
+        }
+        for (var index = 0; index < 4; index++)
+            AddGame(index);
+        await db.SaveChangesAsync();
+
+        var serviceCollection = new ServiceCollection();
+        serviceCollection.AddLogging();
+        serviceCollection.AddHybridCache();
+        var services = serviceCollection.BuildServiceProvider();
+        var cache = services.GetRequiredService<HybridCache>();
+        var service = new ChampionSynergyService(db, cache, new AnalyticsPatchQueryService(db));
+
+        (await service.GetSynergiesAsync(266, "TOP", null, "NA1", "solo", null)).TotalGames.Should().Be(4);
+        AddGame(4);
+        await db.SaveChangesAsync();
+
+        // The precomputed-analytics, matchup and build-snapshot refreshes clear this tag hourly.
+        await cache.RemoveByTagAsync(CacheTags.ForPatch("16.14"));
+        (await service.GetSynergiesAsync(266, "TOP", null, "NA1", "solo", null)).TotalGames
+            .Should().Be(4, "a refresh of other tables must not force every synergy to be recomputed");
+
+        // A deliberate analytics-wide clear still recomputes.
+        await cache.RemoveByTagAsync("analytics");
+        (await service.GetSynergiesAsync(266, "TOP", null, "NA1", "solo", null)).TotalGames.Should().Be(5);
     }
 
     private static void AddParticipant(

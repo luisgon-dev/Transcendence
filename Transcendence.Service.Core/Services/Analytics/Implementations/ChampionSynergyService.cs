@@ -22,9 +22,15 @@ public sealed class ChampionSynergyService(
     private const int ConfiguredMinimumPairGames = 30;
     private const int PartnersToShow = 10;
 
+    // Synergies are computed live from match rows, so they go stale only as new matches arrive, and
+    // the patch is part of the key. They deliberately do not carry the patch tag: the precomputed-
+    // analytics, matchup and build-snapshot jobs clear that tag when *their* tables change (twice an
+    // hour), which wiped every synergy and made the hourly warm job recompute all ~170 champions
+    // from disk -- the top reader in prod's :00 IO peak. Six hours keeps a new patch's fast-growing
+    // samples reasonably fresh; the "analytics" tag still clears them on purpose.
     private static readonly HybridCacheEntryOptions CacheOptions = new()
     {
-        Expiration = TimeSpan.FromHours(24),
+        Expiration = TimeSpan.FromHours(6),
         LocalCacheExpiration = TimeSpan.FromHours(1)
     };
 
@@ -57,7 +63,7 @@ public sealed class ChampionSynergyService(
                 patch,
                 cancel),
             CacheOptions,
-            tags: ["analytics", CacheTags.ForPatch(patch)],
+            tags: ["analytics"],
             cancellationToken: ct);
     }
 

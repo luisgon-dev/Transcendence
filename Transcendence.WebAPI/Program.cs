@@ -17,16 +17,17 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading.RateLimiting;
 using System.Text;
-using Transcendence.WebAPI.Health;
+using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Auth.Implementations;
 using Transcendence.Service.Core.Services.Auth.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Models;
-using Transcendence.Service.Core.Services.Analytics.Models;
+using Transcendence.Service.Core.Services.Cache;
 using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Extensions;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Priority;
 using Transcendence.WebAPI.Errors;
+using Transcendence.WebAPI.Health;
 using Transcendence.WebAPI.Security;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -215,6 +216,8 @@ builder.Services.AddHybridCache(options =>
     // instead of being silently dropped, which re-runs DB-bound compute on every cold read.
     options.MaximumPayloadBytes = 8 * 1024 * 1024; // 8 MiB
 });
+// Cache fills run on the caller's DbContext, so they must not be abandoned by a cancelled caller.
+builder.Services.FillCacheEntriesToCompletion();
 
 // Register keyless application services used by the WebAPI host.
 builder.Services.AddTranscendenceCore();

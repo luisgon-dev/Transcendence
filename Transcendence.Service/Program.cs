@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration.Json;
 using Transcendence.Data;
 using Transcendence.Data.Extensions;
 using Transcendence.Service.Core.Services.Analytics.Models;
+using Transcendence.Service.Core.Services.Cache;
 using Transcendence.Service.Core.Services.Database;
 using Transcendence.Service.Core.Services.Diagnostics;
 using OpenTelemetry;
@@ -137,6 +138,8 @@ builder.Services.AddHybridCache(options =>
     // instead of being silently dropped, which re-runs DB-bound compute on every cold read.
     options.MaximumPayloadBytes = 8 * 1024 * 1024; // 8 MiB
 });
+// Cache fills run on the caller's DbContext, so they must not be abandoned by a cancelled caller.
+builder.Services.FillCacheEntriesToCompletion();
 
 builder.Services.Configure<WorkerJobScheduleOptions>(builder.Configuration.GetSection("Jobs:Schedule"));
 builder.Services.Configure<WorkerSchedulingProfileOptions>(builder.Configuration.GetSection("Jobs:SchedulingProfiles"));

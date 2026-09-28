@@ -53,6 +53,24 @@ public sealed class SchemaMigrationTests(PostgresIntegrationFixture fixture)
     }
 
     [Fact]
+    public async Task ItemAndRuneTables_PinParticipantCardinality_SoBatchReadsUseThePrimaryKey()
+    {
+        // ANALYZE underestimated distinct participants >10x on these clustered tables, which turned
+        // every Build Atlas batch into a full scan of the 14 GB rune table. The pin is the fix.
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<TranscendenceContext>();
+        var pins = await db.Database.SqlQueryRaw<string>("""
+            SELECT c.relname || '.' || array_to_string(a.attoptions, ',') AS "Value"
+            FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid
+            WHERE c.relname IN ('MatchParticipantRunes', 'MatchParticipantItems') AND a.attname = 'MatchParticipantId'
+            """).ToListAsync();
+
+        pins.Should().BeEquivalentTo(
+            "MatchParticipantRunes.n_distinct=-0.117",
+            "MatchParticipantItems.n_distinct=-0.163");
+    }
+
+    [Fact]
     public async Task CanConnect_AndCoreTablesExist()
     {
         using var scope = fixture.Factory.Services.CreateScope();

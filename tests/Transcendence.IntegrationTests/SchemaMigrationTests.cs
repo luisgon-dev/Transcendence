@@ -71,6 +71,21 @@ public sealed class SchemaMigrationTests(PostgresIntegrationFixture fixture)
     }
 
     [Fact]
+    public async Task TimelinePayloads_CarryOnlyTheirPrimaryKey()
+    {
+        // Every ingested match writes ~455 payload rows; each extra index is ~455 more random writes per
+        // match. The two the retired modeler used were dropped (0 scans on prod, 34 GB). Add one back
+        // only with a reader that needs it.
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<TranscendenceContext>();
+        var indexes = await db.Database.SqlQueryRaw<string>("""
+            SELECT indexname AS "Value" FROM pg_indexes WHERE tablename = 'MatchTimelineEventPayloads'
+            """).ToListAsync();
+
+        indexes.Should().Equal("PK_MatchTimelineEventPayloads");
+    }
+
+    [Fact]
     public async Task CanConnect_AndCoreTablesExist()
     {
         using var scope = fixture.Factory.Services.CreateScope();

@@ -22,6 +22,12 @@ public class AddOrUpdateHighEloProfiles(
     IRefreshLockRepository refreshLockRepository,
     IOptions<MultiRegionIngestionOptions> multiRegionOptions)
 {
+    private const string SoloQueueType = "RANKED_SOLO_5x5";
+    private static readonly TimeSpan FullRefreshInterval = TimeSpan.FromHours(24);
+
+    internal sealed record ApexLeagueState(
+        string Puuid, string Tier, string Division, int LeaguePoints, int Wins, int Losses);
+
     [Queue("refresh-low")]
     public async Task Execute(CancellationToken stoppingToken)
     {
@@ -88,17 +94,21 @@ public class AddOrUpdateHighEloProfiles(
             var masterLeague = await riotApiContext.Api.LeagueV4()
                 .GetMasterLeagueAsync(platform, QueueType.RANKED_SOLO_5x5, stoppingToken);
 
-            var summonerPuuids = challengerLeague.Entries.Select(x => x.Puuid)
-                .Concat(grandmasterLeague.Entries.Select(x => x.Puuid))
-                .Concat(masterLeague.Entries.Select(x => x.Puuid))
-                .Where(puuid => !string.IsNullOrWhiteSpace(puuid))
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
+            var leagueStates = new[] { challengerLeague, grandmasterLeague, masterLeague }
+                .SelectMany(league => league.Entries.Select(entry => new ApexLeagueState(
+                    entry.Puuid, league.Tier.ToString(), entry.Rank.ToString(), entry.LeaguePoints, entry.Wins, entry.Losses)))
+                .Where(state => !string.IsNullOrWhiteSpace(state.Puuid))
+                .GroupBy(state => state.Puuid, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+            var unchanged = await FindUnchangedSinceLastRefreshAsync(
+                context, leagueStates, DateTime.UtcNow, stoppingToken);
+            var summonerPuuids = leagueStates.Keys.Where(puuid => !unchanged.Contains(puuid)).ToList();
 
             logger.LogInformation(
-                "High-elo profile refresh starting for {Platform}: {Count} summoners to process.",
+                "High-elo profile refresh starting for {Platform}: {Count} summoners to process, {Skipped} unchanged since their last refresh.",
                 platform,
-                summonerPuuids.Count);
+                summonerPuuids.Count,
+                unchanged.Count);
 
             // Older versions treated every Master+ account as an OTP. Clear those unverified,
             // auto-created rows before rebuilding the roster from match evidence below.
@@ -164,6 +174,51 @@ public class AddOrUpdateHighEloProfiles(
                 logger.LogWarning(ex, "High-elo profile refresh failed to release lock {LockKey}.", lockKey);
             }
         }
+    }
+
+    // Apex players whose ladder entry (tier, division, LP, wins, losses) is exactly what we stored at
+    // their last refresh have not played a ranked game since, so re-fetching their profile would change
+    // nothing -- yet it cost three Riot calls each (summoner, account, league), every two hours, for
+    // ~11K players on EUW alone. That spent the same per-region budget match ingestion draws from:
+    // ~22 Riot calls per ingested match on prod. Each player is still re-fetched at least once a day,
+    // which picks up renames, profile icons and any late-ingested games for the one-trick evaluation.
+    internal static async Task<HashSet<string>> FindUnchangedSinceLastRefreshAsync(
+        TranscendenceContext context,
+        IReadOnlyDictionary<string, ApexLeagueState> leagueStates,
+        DateTime nowUtc,
+        CancellationToken stoppingToken)
+    {
+        var refreshedSince = nowUtc - FullRefreshInterval;
+        var unchanged = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var chunk in leagueStates.Keys.Chunk(1_000))
+        {
+            var stored = await context.Summoners.AsNoTracking()
+                .Where(summoner => chunk.Contains(summoner.Puuid) && summoner.UpdatedAt >= refreshedSince)
+                .Select(summoner => new
+                {
+                    summoner.Puuid,
+                    Solo = summoner.Ranks
+                        .Where(rank => rank.QueueType == SoloQueueType)
+                        .Select(rank => new { rank.Tier, rank.RankNumber, rank.LeaguePoints, rank.Wins, rank.Losses })
+                        .FirstOrDefault()
+                })
+                .ToListAsync(stoppingToken);
+            foreach (var row in stored)
+            {
+                var current = leagueStates[row.Puuid!];
+                if (row.Solo is { } solo &&
+                    solo.Tier == current.Tier &&
+                    solo.RankNumber == current.Division &&
+                    solo.LeaguePoints == current.LeaguePoints &&
+                    solo.Wins == current.Wins &&
+                    solo.Losses == current.Losses)
+                {
+                    unchanged.Add(row.Puuid!);
+                }
+            }
+        }
+
+        return unchanged;
     }
 
     private async Task<bool> ReconcileTrackedOtpAsync(

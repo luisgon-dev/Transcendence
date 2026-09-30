@@ -87,6 +87,12 @@ public class MatchTimelineIngestionGatingTests
         (await assertions.MatchTimelineEventPayloads.CountAsync()).Should().BeGreaterThan(0);
         (await assertions.MatchParticipantItemEvents.CountAsync()).Should().BeGreaterThan(0);
         (await assertions.MatchParticipantRankContexts.CountAsync()).Should().Be(2);
+        // Purchases live in the structured lifecycle table; their payload copies are no longer written,
+        // while the kills (which exist nowhere else) still are.
+        (await assertions.MatchParticipantItemEvents.CountAsync(row => row.EventType == MatchItemEventType.Purchased))
+            .Should().BeGreaterThan(0);
+        (await assertions.MatchTimelineEventPayloads.Select(row => row.EventType).Distinct().ToListAsync())
+            .Should().Equal("CHAMPION_KILL");
 
         var state = await assertions.MatchTimelineFetchStates.SingleAsync();
         state.SchemaVersion.Should().Be(MatchTimelineIngestionJob.CurrentTimelineSchemaVersion);

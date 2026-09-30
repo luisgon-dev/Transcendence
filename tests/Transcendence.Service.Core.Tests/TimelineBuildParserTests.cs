@@ -234,4 +234,27 @@ public class TimelineBuildParserTests
         skills[0].Sequence.Should().Be("Q,W,E");
         skills[0].FirstThree.Should().Be("QWE");
     }
+
+    [Theory]
+    [InlineData("ITEM_PURCHASED", 3, true)]
+    [InlineData("ITEM_SOLD", 3, true)]
+    [InlineData("ITEM_DESTROYED", 10, true)]
+    [InlineData("ITEM_UNDO", 3, false)]        // carries goldGain, which the lifecycle table does not
+    [InlineData("ITEM_PURCHASED", 0, false)]   // no participant: the lifecycle never records it
+    [InlineData("ITEM_PURCHASED", null, false)]
+    [InlineData("CHAMPION_KILL", 3, false)]
+    public void IsStoredAsItemLifecycle_OnlyCoversEventsTheLifecycleTableHoldsLosslessly(
+        string type, int? participantId, bool expected)
+    {
+        TimelineBuildParser.IsStoredAsItemLifecycle(type, participantId).Should().Be(expected);
+
+        // Everything it excludes from payloads must be something BuildItemLifecycle keeps.
+        if (expected)
+        {
+            TimelineBuildParser.BuildItemLifecycle(
+                    [new TimelineBuildEvent(type, participantId, 3078, null, null, 1000, null, null)],
+                    _ => null)
+                .Should().ContainSingle(row => row.ParticipantId == participantId && row.ItemId == 3078);
+        }
+    }
 }

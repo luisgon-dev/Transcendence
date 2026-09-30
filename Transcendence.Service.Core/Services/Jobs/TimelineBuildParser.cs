@@ -53,8 +53,9 @@ public static class TimelineBuildParser
     public const string EliteMonsterKillType = "ELITE_MONSTER_KILL";
 
     // The raw jsonb payload table keeps the three kill/objective types (in-game state for a future model
-    // to condition on; the Build Lab modeler that first read them is retired) and the item lifecycle.
-    // Every other Match-V5 event type is ~1 KB of jsonb nobody reads, so it is never persisted.
+    // to condition on; the Build Lab modeler that first read them is retired) and the item events the
+    // structured lifecycle does not already hold (see IsStoredAsItemLifecycle). Every other Match-V5
+    // event type is ~1 KB of jsonb nobody reads, so it is never persisted.
     private static readonly HashSet<string> PersistedPayloadEventTypes =
     [
         ItemPurchasedType,
@@ -68,6 +69,16 @@ public static class TimelineBuildParser
 
     public static bool IsPersistedPayloadEvent(string? type) =>
         type is not null && PersistedPayloadEventTypes.Contains(type);
+
+    /// <summary>
+    /// True for the item events a payload row would only duplicate: purchases, sales and destructions of
+    /// a real participant, which <see cref="BuildItemLifecycle"/> keeps losslessly (type, item,
+    /// timestamp, participant, order) in MatchParticipantItemEvents -- written whenever payloads are.
+    /// They were ~85% of payload rows (~240 KB of payload storage per match on prod). Undos keep their
+    /// payload, which alone carries the refunded gold, as do events without a participant.
+    /// </summary>
+    public static bool IsStoredAsItemLifecycle(string? type, int? participantId) =>
+        participantId is > 0 && type is ItemPurchasedType or ItemSoldType or ItemDestroyedType;
 
     /// <summary>
     /// Projects every item lifecycle event without netting it out. Event indexes are stable per

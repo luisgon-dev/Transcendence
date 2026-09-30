@@ -594,7 +594,9 @@ public class MatchTimelineIngestionJob(
             .Where(frame => frame?.Events != null)
             .SelectMany(frame => frame.Events ?? [])
             .Where(timelineEvent => timelineEvent != null &&
-                                    TimelineBuildParser.IsPersistedPayloadEvent(timelineEvent.Type))
+                                    TimelineBuildParser.IsPersistedPayloadEvent(timelineEvent.Type) &&
+                                    !TimelineBuildParser.IsStoredAsItemLifecycle(
+                                        timelineEvent.Type, timelineEvent.ParticipantId))
             .OrderBy(timelineEvent => timelineEvent.Timestamp)
             .Select((timelineEvent, index) => new MatchTimelineEventPayload
             {

@@ -4,7 +4,10 @@
   "packageManager": "pnpm@10.22.0",
   "pnpm": {
     "overrides": {
-      "esbuild@>=0.27.3 <0.28.1": "0.28.1"
+      "esbuild@>=0.27.3 <0.28.1": "0.28.1",
+      "undici@>=7.0.0 <7.29.1": "7.29.1",
+      "brace-expansion@<1.1.21": "1.1.21",
+      "brace-expansion@>=2.0.0 <2.1.7": "2.1.7"
     },
     "onlyBuiltDependencies": [
       "esbuild",

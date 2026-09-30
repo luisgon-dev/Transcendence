@@ -118,7 +118,7 @@ public sealed class AnalyticsEquivalenceRealPostgresTests(PostgresIntegrationFix
     }
 
     [Fact]
-    public async Task BuildAtlas_GenerationReadPath_PreservesExactCountsAcrossIncrementalPromotion()
+    public async Task BuildAtlas_ReadPath_SeesExactCountsAfterAnInPlaceIncrement_ThroughTheSameCache()
     {
         var patch = UniquePatch();
         await using var db = NewDb();
@@ -162,17 +162,6 @@ public sealed class AnalyticsEquivalenceRealPostgresTests(PostgresIntegrationFix
             NullLogger<BuildResourceSnapshotRefresher>.Instance);
         var first = await refresher.RefreshAsync(patch, forceFullRebuild: true, CancellationToken.None);
 
-        AddBuildResourceGame(db, patch, "build-two", win: false);
-        await db.SaveChangesAsync();
-        var second = await refresher.RefreshAsync(patch, forceFullRebuild: false, CancellationToken.None);
-
-        second.SnapshotId.Should().NotBe(first.SnapshotId);
-        second.ProcessedMatchCount.Should().Be(1);
-        var active = await db.BuildResourceSnapshots.AsNoTracking()
-            .SingleAsync(snapshot => snapshot.Patch == patch && snapshot.IsActive);
-        active.Status.Should().Be(BuildResourceSnapshotStatus.Ready);
-        active.ProcessedMatchCount.Should().Be(2);
-
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddLogging();
         serviceCollection.AddHybridCache();
@@ -183,6 +172,20 @@ public sealed class AnalyticsEquivalenceRealPostgresTests(PostgresIntegrationFix
                 db,
                 services.GetRequiredService<HybridCache>(),
                 new AnalyticsPatchQueryService(db));
+            (await service.GetItemsAsync("NA1", patch)).TotalParticipantGames.Should().Be(1);
+
+            AddBuildResourceGame(db, patch, "build-two", win: false);
+            await db.SaveChangesAsync();
+            var second = await refresher.RefreshAsync(patch, forceFullRebuild: false, CancellationToken.None);
+
+            second.SnapshotId.Should().Be(first.SnapshotId, "the increment lands in the active generation");
+            second.ProcessedMatchCount.Should().Be(1);
+            var active = await db.BuildResourceSnapshots.AsNoTracking()
+                .SingleAsync(snapshot => snapshot.Patch == patch && snapshot.IsActive);
+            active.Status.Should().Be(BuildResourceSnapshotStatus.Ready);
+            active.ProcessedMatchCount.Should().Be(2);
+
+            // Same cache, same generation id: the version in the key must still make this a fresh read.
             var items = await service.GetItemsAsync("NA1", patch);
             var runes = await service.GetRunesAsync("NA1", patch);
 

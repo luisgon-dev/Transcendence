@@ -75,7 +75,7 @@ public sealed class BuildResourceSnapshotRefresherTests
     }
 
     [Fact]
-    public async Task RefreshAsync_IncrementallyPromotesNewMatchesAndNoopsWhenCurrent()
+    public async Task RefreshAsync_AddsNewMatchesToTheActiveGenerationInPlace_AndNoopsWhenCurrent()
     {
         await using var harness = await Harness.CreateAsync();
         harness.AddMatch("MATCH_ONE", win: true);
@@ -83,40 +83,70 @@ public sealed class BuildResourceSnapshotRefresherTests
         var first = await harness.Refresher.RefreshAsync(
             Harness.PatchVersion, forceFullRebuild: true, CancellationToken.None);
 
+        // One match on a champion the generation already counts (its rows are incremented) and one on
+        // a champion it has never seen (its rows are inserted), in the same batch.
         harness.AddMatch("MATCH_TWO", win: false);
+        harness.AddMatch("MATCH_THREE", win: true, championId: 103);
         await harness.Db.SaveChangesAsync();
         var second = await harness.Refresher.RefreshAsync(
             Harness.PatchVersion, forceFullRebuild: false, CancellationToken.None);
 
-        second.SnapshotId.Should().NotBe(first.SnapshotId);
+        second.SnapshotId.Should().Be(first.SnapshotId, "incremental runs no longer clone a new generation");
         second.FullRebuild.Should().BeFalse();
-        second.ProcessedMatchCount.Should().Be(1);
-        var active = await harness.Db.BuildResourceSnapshots.AsNoTracking()
-            .SingleAsync(snapshot => snapshot.IsActive);
-        active.Id.Should().Be(second.SnapshotId);
+        second.ProcessedMatchCount.Should().Be(2);
+        var active = await harness.Db.BuildResourceSnapshots.AsNoTracking().SingleAsync();
+        active.Id.Should().Be(first.SnapshotId);
+        active.IsActive.Should().BeTrue();
         active.Status.Should().Be(BuildResourceSnapshotStatus.Ready);
-        active.ProcessedMatchCount.Should().Be(2);
-        (await harness.Db.BuildResourceSnapshots.AsNoTracking()
-                .SingleAsync(snapshot => snapshot.Id == first.SnapshotId))
-            .Status.Should().Be(BuildResourceSnapshotStatus.Retired);
+        active.ProcessedMatchCount.Should().Be(3);
 
-        var item = await harness.Db.BuildResourceStats.AsNoTracking()
-            .SingleAsync(row => row.SnapshotId == active.Id && row.ResourceType == "item");
-        item.Games.Should().Be(2);
-        item.Wins.Should().Be(1);
+        var items = await harness.Db.BuildResourceStats.AsNoTracking()
+            .Where(row => row.SnapshotId == active.Id && row.ResourceType == "item")
+            .ToDictionaryAsync(row => row.ChampionId);
+        items[266].Should().Match<BuildResourceStat>(row => row.Games == 2 && row.Wins == 1);
+        items[103].Should().Match<BuildResourceStat>(row => row.Games == 1 && row.Wins == 1);
         (await harness.Db.BuildResourcePopulationStats.AsNoTracking()
-                .SingleAsync(row => row.SnapshotId == active.Id))
-            .Games.Should().Be(2);
+                .Where(row => row.SnapshotId == active.Id)
+                .ToDictionaryAsync(row => row.ChampionId, row => row.Games))
+            .Should().BeEquivalentTo(new Dictionary<int, int> { [266] = 2, [103] = 1 });
+        (await harness.Db.BuildResourceProcessedMatches.CountAsync(row => row.SnapshotId == active.Id))
+            .Should().Be(3);
 
-        var snapshotCount = await harness.Db.BuildResourceSnapshots.CountAsync();
         var noOp = await harness.Refresher.RefreshAsync(
             Harness.PatchVersion, forceFullRebuild: false, CancellationToken.None);
 
         noOp.SnapshotId.Should().Be(active.Id);
         noOp.ProcessedMatchCount.Should().Be(0);
-        (await harness.Db.BuildResourceSnapshots.CountAsync()).Should().Be(snapshotCount);
-        (await harness.Db.BuildResourceSnapshots.CountAsync(snapshot =>
-            snapshot.Status == BuildResourceSnapshotStatus.Building)).Should().Be(0);
+        (await harness.Db.BuildResourceSnapshots.CountAsync()).Should().Be(1);
+        (await harness.Db.BuildResourceStats.AsNoTracking()
+                .SingleAsync(row => row.ResourceType == "item" && row.ChampionId == 266))
+            .Games.Should().Be(2, "a run with nothing new must not count anything twice");
+    }
+
+    [Fact]
+    public async Task RefreshAsync_ForcedRebuild_StillBuildsAndPromotesANewGeneration()
+    {
+        await using var harness = await Harness.CreateAsync();
+        harness.AddMatch("MATCH_ONE", win: true);
+        await harness.Db.SaveChangesAsync();
+        var first = await harness.Refresher.RefreshAsync(
+            Harness.PatchVersion, forceFullRebuild: true, CancellationToken.None);
+        harness.AddMatch("MATCH_TWO", win: false);
+        await harness.Db.SaveChangesAsync();
+
+        var rebuilt = await harness.Refresher.RefreshAsync(
+            Harness.PatchVersion, forceFullRebuild: true, CancellationToken.None);
+
+        rebuilt.SnapshotId.Should().NotBe(first.SnapshotId);
+        rebuilt.FullRebuild.Should().BeTrue();
+        rebuilt.ProcessedMatchCount.Should().Be(2);
+        (await harness.Db.BuildResourceSnapshots.AsNoTracking().SingleAsync(snapshot => snapshot.IsActive))
+            .Id.Should().Be(rebuilt.SnapshotId);
+        (await harness.Db.BuildResourceSnapshots.AsNoTracking().SingleAsync(snapshot => snapshot.Id == first.SnapshotId))
+            .Status.Should().Be(BuildResourceSnapshotStatus.Retired);
+        (await harness.Db.BuildResourceStats.AsNoTracking()
+                .SingleAsync(row => row.SnapshotId == rebuilt.SnapshotId && row.ResourceType == "item"))
+            .Should().Match<BuildResourceStat>(row => row.Games == 2 && row.Wins == 1);
     }
 
     [Fact]
@@ -224,7 +254,7 @@ public sealed class BuildResourceSnapshotRefresherTests
             return new Harness(connection, db, refresher);
         }
 
-        public void AddMatch(string matchId, bool win)
+        public void AddMatch(string matchId, bool win, int championId = 266)
         {
             participantNumber++;
             var match = new MatchEntity
@@ -255,7 +285,7 @@ public sealed class BuildResourceSnapshotRefresherTests
                 SummonerId = summoner.Id,
                 Summoner = summoner,
                 ParticipantId = 1,
-                ChampionId = 266,
+                ChampionId = championId,
                 TeamPosition = "TOP",
                 Win = win
             };

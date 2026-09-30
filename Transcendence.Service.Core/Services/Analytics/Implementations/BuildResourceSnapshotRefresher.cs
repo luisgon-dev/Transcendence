@@ -1,4 +1,6 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Transcendence.Data;
@@ -11,10 +13,11 @@ using Transcendence.Service.Core.Services.RiotApi;
 namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 
 /// <summary>
-/// Builds immutable Build Atlas generations in bounded match batches. A completed generation is
-/// promoted with a short transaction; readers never observe Building/Failed generations.
-/// Incremental runs clone the active atoms and process only matches not included by a Ready/Retired
-/// generation. A forced rebuild ignores the inclusion ledger and reconciles the full retained corpus.
+/// Maintains Build Atlas generations in bounded match batches. A full rebuild (the first for a patch,
+/// or forced) builds a new generation from the whole retained corpus and promotes it with a short
+/// transaction; readers never observe Building/Failed generations. Incremental runs add only matches no
+/// Ready/Retired generation has counted, straight into the active generation, one committed batch at a
+/// time. A forced rebuild ignores the inclusion ledger and reconciles the full retained corpus.
 /// </summary>
 public sealed class BuildResourceSnapshotRefresher(
     TranscendenceContext context,
@@ -41,108 +44,134 @@ public sealed class BuildResourceSnapshotRefresher(
                 snapshot.Status == BuildResourceSnapshotStatus.Ready)
             .OrderByDescending(snapshot => snapshot.CompletedAtUtc)
             .FirstOrDefaultAsync(ct);
-        var fullRebuild = forceFullRebuild || active is null;
-        var snapshot = new BuildResourceSnapshot
-        {
-            Id = Guid.NewGuid(),
-            Patch = normalizedPatch,
-            Status = BuildResourceSnapshotStatus.Building,
-            IsActive = false,
-            IsFullRebuild = fullRebuild,
-            StartedAtUtc = DateTime.UtcNow,
-            ProcessedMatchCount = fullRebuild ? 0 : active!.ProcessedMatchCount
-        };
-        context.BuildResourceSnapshots.Add(snapshot);
-        await context.SaveChangesAsync(ct);
 
         var previousTimeout = context.Database.GetCommandTimeout();
         context.Database.SetCommandTimeout(Math.Clamp(options.CommandTimeoutSeconds, 30, 600));
         try
         {
-            var resources = fullRebuild
-                ? new Dictionary<ResourceKey, BuildResourceStat>()
-                : await CloneResourceStatsAsync(active!.Id, snapshot.Id, ct);
-            var populations = fullRebuild
-                ? new Dictionary<PopulationKey, BuildResourcePopulationStat>()
-                : await ClonePopulationStatsAsync(active!.Id, snapshot.Id, ct);
-            var allowedItemIds = await LoadAllowedItemIdsAsync(normalizedPatch, ct);
-            var allowedRuneIds = await context.RuneVersions.AsNoTracking()
-                .Where(rune => rune.PatchVersion == normalizedPatch)
-                .Select(rune => rune.RuneId)
-                .ToArrayAsync(ct);
+            return active is not null && !forceFullRebuild
+                ? await AddToActiveGenerationAsync(active, normalizedPatch, ct)
+                : await RebuildGenerationAsync(normalizedPatch, ct);
+        }
+        finally
+        {
+            context.Database.SetCommandTimeout(previousTimeout);
+        }
+    }
+
+    // Adds each batch of new matches to the active generation's counts in place: the changed and new
+    // stat rows, the ledger rows and the generation's match count commit together, so a reader sees
+    // every batch completely or not at all (the counts grow, as in Build Lab). Incremental runs used to
+    // clone the whole generation (~228K rows on prod) into a new one every hour to add ~500 matches,
+    // then delete an older one -- the second-largest source of dirtied pages on prod.
+    private async Task<BuildResourceSnapshotRefreshResult> AddToActiveGenerationAsync(
+        BuildResourceSnapshot active,
+        string patch,
+        CancellationToken ct)
+    {
+        var resources = (await context.BuildResourceStats.AsNoTracking()
+                .Where(row => row.SnapshotId == active.Id)
+                .ToListAsync(ct))
+            .ToDictionary(row => new ResourceKey(
+                row.PlatformRegion, row.ResourceType, row.ResourceId, row.ChampionId, row.Role));
+        var populations = (await context.BuildResourcePopulationStats.AsNoTracking()
+                .Where(row => row.SnapshotId == active.Id)
+                .ToListAsync(ct))
+            .ToDictionary(row => new PopulationKey(row.PlatformRegion, row.ChampionId, row.Role));
+        var storedResources = resources.Keys.ToHashSet();
+        var storedPopulations = populations.Keys.ToHashSet();
+        var allowed = await LoadAllowedResourcesAsync(patch, ct);
+        var batchSize = Math.Clamp(options.MatchBatchSize, 50, 2_000);
+        var newlyProcessed = 0;
+
+        while (true)
+        {
+            var matchIds = await LoadNextMatchBatchAsync(patch, active.Id, fullRebuild: false, batchSize, ct);
+            if (matchIds.Count == 0)
+                break;
+
+            var touched = await CountBatchAsync(matchIds, patch, allowed, active.Id, resources, populations, ct);
+
+            await using var transaction = await context.Database.BeginTransactionAsync(ct);
+            foreach (var key in touched.Resources)
+            {
+                var row = resources[key];
+                if (storedResources.Contains(key))
+                    MarkCountsModified(context.Attach(row), stat => stat.Games, stat => stat.Wins);
+                else
+                    context.BuildResourceStats.Add(row);
+            }
+            foreach (var key in touched.Populations)
+            {
+                var row = populations[key];
+                if (storedPopulations.Contains(key))
+                    MarkCountsModified(context.Attach(row), stat => stat.Games);
+                else
+                    context.BuildResourcePopulationStats.Add(row);
+            }
+            context.BuildResourceProcessedMatches.AddRange(matchIds.Select(matchId =>
+                new BuildResourceProcessedMatch { SnapshotId = active.Id, MatchId = matchId }));
+            await context.SaveChangesAsync(ct);
+            await context.BuildResourceSnapshots
+                .Where(snapshot => snapshot.Id == active.Id)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(snapshot => snapshot.ProcessedMatchCount,
+                        snapshot => snapshot.ProcessedMatchCount + matchIds.Count)
+                    .SetProperty(snapshot => snapshot.CompletedAtUtc, DateTime.UtcNow), ct);
+            await transaction.CommitAsync(ct);
+            context.ChangeTracker.Clear();
+            storedResources.UnionWith(touched.Resources);
+            storedPopulations.UnionWith(touched.Populations);
+            newlyProcessed += matchIds.Count;
+
+            logger.LogInformation(
+                "Build Atlas snapshot {SnapshotId} patch {Patch}: added {Processed} new matches in place ({Changed} stat rows written).",
+                active.Id, patch, newlyProcessed, touched.Resources.Count + touched.Populations.Count);
+        }
+
+        if (newlyProcessed == 0)
+        {
+            logger.LogInformation(
+                "Build Atlas patch {Patch} is current at snapshot {SnapshotId}; no new matches were eligible.",
+                patch, active.Id);
+        }
+
+        return new BuildResourceSnapshotRefreshResult(
+            active.Id, patch, false, newlyProcessed, resources.Count, populations.Count);
+    }
+
+    // Builds a new generation from the whole retained corpus and promotes it with a short transaction;
+    // readers stay on the previous generation until then and never observe a partial or failed build.
+    private async Task<BuildResourceSnapshotRefreshResult> RebuildGenerationAsync(string patch, CancellationToken ct)
+    {
+        var snapshot = new BuildResourceSnapshot
+        {
+            Id = Guid.NewGuid(),
+            Patch = patch,
+            Status = BuildResourceSnapshotStatus.Building,
+            IsActive = false,
+            IsFullRebuild = true,
+            StartedAtUtc = DateTime.UtcNow,
+            ProcessedMatchCount = 0
+        };
+        context.BuildResourceSnapshots.Add(snapshot);
+        await context.SaveChangesAsync(ct);
+
+        try
+        {
+            var resources = new Dictionary<ResourceKey, BuildResourceStat>();
+            var populations = new Dictionary<PopulationKey, BuildResourcePopulationStat>();
+            var allowed = await LoadAllowedResourcesAsync(patch, ct);
             var batchSize = Math.Clamp(options.MatchBatchSize, 50, 2_000);
             var newlyProcessed = 0;
 
             while (true)
             {
-                var matchIds = await LoadNextMatchBatchAsync(
-                    normalizedPatch, snapshot.Id, fullRebuild, batchSize, ct);
+                var matchIds = await LoadNextMatchBatchAsync(patch, snapshot.Id, fullRebuild: true, batchSize, ct);
                 if (matchIds.Count == 0)
                     break;
 
-                var participants = await context.MatchParticipants.IgnoreQueryFilters().AsNoTracking()
-                    .Where(participant =>
-                        matchIds.Contains(participant.MatchId) &&
-                        participant.TeamPosition != null &&
-                        participant.TeamPosition != "")
-                    .Select(participant => new ParticipantRow
-                    {
-                        Id = participant.Id,
-                        Region = participant.Match.PlatformRegion ?? "",
-                        ChampionId = participant.ChampionId,
-                        Role = participant.TeamPosition!,
-                        Win = participant.Win
-                    })
-                    .ToListAsync(ct);
-                ApplyPopulationRows(populations, snapshot.Id, participants);
-
-                var participantIds = participants.Select(participant => participant.Id).ToArray();
-                if (participantIds.Length > 0)
-                {
-                    var participantMap = participants.ToDictionary(participant => participant.Id);
-                    // Read by participant in chunks: btree array lookups are costed per element, so
-                    // a whole batch (~5,000 ids) made the planner scan the 14 GB rune table (and the
-                    // items) in full every batch -- over half of prod's disk reads. At 1,000 ids,
-                    // with the pinned participant cardinality, it walks the primary key instead.
-                    foreach (var chunk in participantIds.Chunk(ParticipantChunkSize))
-                    {
-                        if (allowedItemIds.Length > 0)
-                        {
-                            var itemUses = await context.MatchParticipantItems.IgnoreQueryFilters().AsNoTracking()
-                                .Where(item =>
-                                    chunk.Contains(item.MatchParticipantId) &&
-                                    item.PatchVersion == normalizedPatch &&
-                                    item.ItemId != 0 &&
-                                    allowedItemIds.Contains(item.ItemId))
-                                .Select(item => new ResourceUseRow
-                                {
-                                    ParticipantId = item.MatchParticipantId,
-                                    ResourceId = item.ItemId
-                                })
-                                .Distinct()
-                                .ToListAsync(ct);
-                            ApplyResourceRows(resources, snapshot.Id, ItemType, itemUses, participantMap);
-                        }
-
-                        if (allowedRuneIds.Length > 0)
-                        {
-                            var runeUses = await context.MatchParticipantRunes.IgnoreQueryFilters().AsNoTracking()
-                                .Where(rune =>
-                                    chunk.Contains(rune.MatchParticipantId) &&
-                                    rune.PatchVersion == normalizedPatch &&
-                                    rune.SelectionTree != RuneSelectionTree.StatShards &&
-                                    allowedRuneIds.Contains(rune.RuneId))
-                                .Select(rune => new ResourceUseRow
-                                {
-                                    ParticipantId = rune.MatchParticipantId,
-                                    ResourceId = rune.RuneId
-                                })
-                                .Distinct()
-                                .ToListAsync(ct);
-                            ApplyResourceRows(resources, snapshot.Id, RuneType, runeUses, participantMap);
-                        }
-                    }
-                }
+                await CountBatchAsync(matchIds, patch, allowed, snapshot.Id, resources, populations, ct);
 
                 var ledgerRows = matchIds.Select(matchId => new BuildResourceProcessedMatch
                 {
@@ -158,25 +187,7 @@ public sealed class BuildResourceSnapshotRefresher(
 
                 logger.LogInformation(
                     "Build Atlas snapshot {SnapshotId} patch {Patch}: processed {Processed} new matches ({Total} total source matches).",
-                    snapshot.Id, normalizedPatch, newlyProcessed, snapshot.ProcessedMatchCount);
-            }
-
-            if (!fullRebuild && newlyProcessed == 0)
-            {
-                context.ChangeTracker.Clear();
-                await context.BuildResourceSnapshots
-                    .Where(candidate => candidate.Id == snapshot.Id)
-                    .ExecuteDeleteAsync(ct);
-                logger.LogInformation(
-                    "Build Atlas patch {Patch} is current at snapshot {SnapshotId}; no new matches were eligible.",
-                    normalizedPatch, active!.Id);
-                return new BuildResourceSnapshotRefreshResult(
-                    active.Id,
-                    normalizedPatch,
-                    false,
-                    0,
-                    resources.Count,
-                    populations.Count);
+                    snapshot.Id, patch, newlyProcessed, snapshot.ProcessedMatchCount);
             }
 
             context.BuildResourceStats.AddRange(resources.Values);
@@ -184,31 +195,114 @@ public sealed class BuildResourceSnapshotRefresher(
             await context.SaveChangesAsync(ct);
             context.ChangeTracker.Clear();
 
-            await PromoteAsync(snapshot.Id, normalizedPatch, ct);
-            await CleanupPayloadsBestEffortAsync(normalizedPatch, ct);
+            await PromoteAsync(snapshot.Id, patch, ct);
+            await CleanupPayloadsBestEffortAsync(patch, ct);
 
             logger.LogInformation(
-                "Build Atlas snapshot {SnapshotId} patch {Patch} promoted: full={Full}, newMatches={NewMatches}, resourceRows={ResourceRows}, populationRows={PopulationRows}.",
-                snapshot.Id, normalizedPatch, fullRebuild, newlyProcessed, resources.Count, populations.Count);
+                "Build Atlas snapshot {SnapshotId} patch {Patch} promoted: full=True, newMatches={NewMatches}, resourceRows={ResourceRows}, populationRows={PopulationRows}.",
+                snapshot.Id, patch, newlyProcessed, resources.Count, populations.Count);
 
             return new BuildResourceSnapshotRefreshResult(
-                snapshot.Id,
-                normalizedPatch,
-                fullRebuild,
-                newlyProcessed,
-                resources.Count,
-                populations.Count);
+                snapshot.Id, patch, true, newlyProcessed, resources.Count, populations.Count);
         }
         catch (Exception ex)
         {
             await MarkFailedAsync(snapshot.Id, ex, CancellationToken.None);
             throw;
         }
-        finally
-        {
-            context.Database.SetCommandTimeout(previousTimeout);
-        }
     }
+
+    // Reads one batch's participants, items and runes and adds them to the given counts. Items and
+    // runes are read 1,000 participants at a time: btree array lookups are costed per element, so a
+    // whole batch (~5,000 ids) made the planner scan the 14 GB rune table (and the items) in full every
+    // batch -- over half of prod's disk reads. At 1,000 ids, with the pinned participant cardinality,
+    // it walks the primary key instead. Returns the keys whose counts changed.
+    private async Task<TouchedKeys> CountBatchAsync(
+        List<Guid> matchIds,
+        string patch,
+        AllowedResources allowed,
+        Guid snapshotId,
+        Dictionary<ResourceKey, BuildResourceStat> resources,
+        Dictionary<PopulationKey, BuildResourcePopulationStat> populations,
+        CancellationToken ct)
+    {
+        var touched = new TouchedKeys();
+        var participants = await context.MatchParticipants.IgnoreQueryFilters().AsNoTracking()
+            .Where(participant =>
+                matchIds.Contains(participant.MatchId) &&
+                participant.TeamPosition != null &&
+                participant.TeamPosition != "")
+            .Select(participant => new ParticipantRow
+            {
+                Id = participant.Id,
+                Region = participant.Match.PlatformRegion ?? "",
+                ChampionId = participant.ChampionId,
+                Role = participant.TeamPosition!,
+                Win = participant.Win
+            })
+            .ToListAsync(ct);
+        touched.Populations.UnionWith(ApplyPopulationRows(populations, snapshotId, participants));
+
+        var participantMap = participants.ToDictionary(participant => participant.Id);
+        foreach (var chunk in participants.Select(participant => participant.Id).Chunk(ParticipantChunkSize))
+        {
+            if (allowed.ItemIds.Length > 0)
+            {
+                var itemUses = await context.MatchParticipantItems.IgnoreQueryFilters().AsNoTracking()
+                    .Where(item =>
+                        chunk.Contains(item.MatchParticipantId) &&
+                        item.PatchVersion == patch &&
+                        item.ItemId != 0 &&
+                        allowed.ItemIds.Contains(item.ItemId))
+                    .Select(item => new ResourceUseRow
+                    {
+                        ParticipantId = item.MatchParticipantId,
+                        ResourceId = item.ItemId
+                    })
+                    .Distinct()
+                    .ToListAsync(ct);
+                touched.Resources.UnionWith(
+                    ApplyResourceRows(resources, snapshotId, ItemType, itemUses, participantMap));
+            }
+
+            if (allowed.RuneIds.Length > 0)
+            {
+                var runeUses = await context.MatchParticipantRunes.IgnoreQueryFilters().AsNoTracking()
+                    .Where(rune =>
+                        chunk.Contains(rune.MatchParticipantId) &&
+                        rune.PatchVersion == patch &&
+                        rune.SelectionTree != RuneSelectionTree.StatShards &&
+                        allowed.RuneIds.Contains(rune.RuneId))
+                    .Select(rune => new ResourceUseRow
+                    {
+                        ParticipantId = rune.MatchParticipantId,
+                        ResourceId = rune.RuneId
+                    })
+                    .Distinct()
+                    .ToListAsync(ct);
+                touched.Resources.UnionWith(
+                    ApplyResourceRows(resources, snapshotId, RuneType, runeUses, participantMap));
+            }
+        }
+
+        return touched;
+    }
+
+    private static void MarkCountsModified<T>(
+        EntityEntry<T> entry,
+        params Expression<Func<T, int>>[] counts) where T : class
+    {
+        foreach (var count in counts)
+            entry.Property(count).IsModified = true;
+    }
+
+    private async Task<AllowedResources> LoadAllowedResourcesAsync(string patch, CancellationToken ct) =>
+        new(
+            await LoadAllowedItemIdsAsync(patch, ct),
+            await context.RuneVersions.AsNoTracking()
+                .Where(rune => rune.PatchVersion == patch)
+                .Select(rune => rune.RuneId)
+                .ToArrayAsync(ct));
 
     private async Task<List<Guid>> LoadNextMatchBatchAsync(
         string patch,
@@ -245,52 +339,6 @@ public sealed class BuildResourceSnapshotRefresher(
             .ToListAsync(ct);
     }
 
-    private async Task<Dictionary<ResourceKey, BuildResourceStat>> CloneResourceStatsAsync(
-        Guid sourceSnapshotId,
-        Guid targetSnapshotId,
-        CancellationToken ct)
-    {
-        var rows = await context.BuildResourceStats.AsNoTracking()
-            .Where(row => row.SnapshotId == sourceSnapshotId)
-            .ToListAsync(ct);
-        return rows.ToDictionary(
-            row => new ResourceKey(
-                row.PlatformRegion, row.ResourceType, row.ResourceId, row.ChampionId, row.Role),
-            row => new BuildResourceStat
-            {
-                Id = Guid.NewGuid(),
-                SnapshotId = targetSnapshotId,
-                PlatformRegion = row.PlatformRegion,
-                ResourceType = row.ResourceType,
-                ResourceId = row.ResourceId,
-                ChampionId = row.ChampionId,
-                Role = row.Role,
-                Games = row.Games,
-                Wins = row.Wins
-            });
-    }
-
-    private async Task<Dictionary<PopulationKey, BuildResourcePopulationStat>> ClonePopulationStatsAsync(
-        Guid sourceSnapshotId,
-        Guid targetSnapshotId,
-        CancellationToken ct)
-    {
-        var rows = await context.BuildResourcePopulationStats.AsNoTracking()
-            .Where(row => row.SnapshotId == sourceSnapshotId)
-            .ToListAsync(ct);
-        return rows.ToDictionary(
-            row => new PopulationKey(row.PlatformRegion, row.ChampionId, row.Role),
-            row => new BuildResourcePopulationStat
-            {
-                Id = Guid.NewGuid(),
-                SnapshotId = targetSnapshotId,
-                PlatformRegion = row.PlatformRegion,
-                ChampionId = row.ChampionId,
-                Role = row.Role,
-                Games = row.Games
-            });
-    }
-
     private async Task<int[]> LoadAllowedItemIdsAsync(string patch, CancellationToken ct)
     {
         var rows = await context.ItemVersions.AsNoTracking()
@@ -312,11 +360,12 @@ public sealed class BuildResourceSnapshotRefresher(
             .ToArray();
     }
 
-    private static void ApplyPopulationRows(
+    private static IEnumerable<PopulationKey> ApplyPopulationRows(
         Dictionary<PopulationKey, BuildResourcePopulationStat> rows,
         Guid snapshotId,
         IEnumerable<ParticipantRow> participants)
     {
+        var changed = new List<PopulationKey>();
         foreach (var group in participants.GroupBy(participant =>
                      new PopulationKey(participant.Region, participant.ChampionId, participant.Role)))
         {
@@ -334,16 +383,20 @@ public sealed class BuildResourceSnapshotRefresher(
             }
 
             row.Games += group.Count();
+            changed.Add(group.Key);
         }
+
+        return changed;
     }
 
-    private static void ApplyResourceRows(
+    private static IEnumerable<ResourceKey> ApplyResourceRows(
         Dictionary<ResourceKey, BuildResourceStat> rows,
         Guid snapshotId,
         string resourceType,
         IEnumerable<ResourceUseRow> uses,
         IReadOnlyDictionary<Guid, ParticipantRow> participants)
     {
+        var changed = new List<ResourceKey>();
         var hydrated = uses
             .Where(use => participants.ContainsKey(use.ParticipantId))
             .Select(use => new { Use = use, Participant = participants[use.ParticipantId] });
@@ -371,7 +424,10 @@ public sealed class BuildResourceSnapshotRefresher(
 
             stat.Games += group.Count();
             stat.Wins += group.Count(row => row.Participant.Win);
+            changed.Add(group.Key);
         }
+
+        return changed;
     }
 
     private async Task PromoteAsync(Guid snapshotId, string patch, CancellationToken ct)
@@ -499,6 +555,14 @@ public sealed class BuildResourceSnapshotRefresher(
         string Role);
 
     private readonly record struct PopulationKey(string Region, int ChampionId, string Role);
+
+    private sealed record AllowedResources(int[] ItemIds, int[] RuneIds);
+
+    private sealed class TouchedKeys
+    {
+        public HashSet<ResourceKey> Resources { get; } = [];
+        public HashSet<PopulationKey> Populations { get; } = [];
+    }
 
     private sealed class ParticipantRow
     {

@@ -4,7 +4,6 @@ using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Analytics;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
-using Transcendence.Service.Core.Services.Cache;
 using Transcendence.Service.Core.Services.RiotApi;
 
 namespace Transcendence.Service.Core.Services.Analytics.Implementations;
@@ -24,6 +23,10 @@ public sealed class BuildResourceAnalyticsService(
     private const int IndexChampionLimit = 3;
     private const int DetailChampionLimit = 100;
 
+    // Keys carry the generation's version (its id and counted-match total), which changes whenever the
+    // refresher adds matches in place or promotes a rebuild, so entries never go stale and need no
+    // patch tag -- the precomputed-analytics jobs clear that tag twice an hour for tables this does
+    // not read.
     private static readonly HybridCacheEntryOptions CacheOptions = new()
     {
         Expiration = TimeSpan.FromHours(24),
@@ -67,12 +70,12 @@ public sealed class BuildResourceAnalyticsService(
         if (selection is null)
             return EmptyIndex(resourceType, requestedPatch?.Trim() ?? string.Empty, normalizedRegion);
 
-        var key = $"analytics:build-resources:v2:{resourceType}:{selection.SnapshotId}:{normalizedRegion}";
+        var key = $"analytics:build-resources:v3:{resourceType}:{selection.Version}:{normalizedRegion}";
         return await cache.GetOrCreateAsync(
             key,
             cancel => ComputeIndexAsync(resourceType, normalizedRegion, selection, cancel),
             CacheOptions,
-            tags: ["analytics", CacheTags.ForPatch(selection.Patch)],
+            tags: ["analytics"],
             cancellationToken: ct);
     }
 
@@ -92,12 +95,12 @@ public sealed class BuildResourceAnalyticsService(
             return null;
 
         var key =
-            $"analytics:build-resource:v2:{resourceType}:{resourceId}:{selection.SnapshotId}:{normalizedRegion}";
+            $"analytics:build-resource:v3:{resourceType}:{resourceId}:{selection.Version}:{normalizedRegion}";
         return await cache.GetOrCreateAsync(
             key,
             cancel => ComputeDetailAsync(resourceType, resourceId, normalizedRegion, selection, cancel),
             CacheOptions,
-            tags: ["analytics", CacheTags.ForPatch(selection.Patch)],
+            tags: ["analytics"],
             cancellationToken: ct);
     }
 
@@ -281,7 +284,7 @@ public sealed class BuildResourceAnalyticsService(
                     snapshot.IsActive &&
                     snapshot.Status == BuildResourceSnapshotStatus.Ready)
                 .OrderByDescending(snapshot => snapshot.CompletedAtUtc)
-                .Select(snapshot => new SnapshotSelection(snapshot.Id, snapshot.Patch))
+                .Select(snapshot => new SnapshotSelection(snapshot.Id, snapshot.Patch, snapshot.ProcessedMatchCount))
                 .FirstOrDefaultAsync(ct);
             if (exact is not null || explicitPatch)
                 return exact;
@@ -294,7 +297,7 @@ public sealed class BuildResourceAnalyticsService(
                 snapshot.IsActive &&
                 snapshot.Status == BuildResourceSnapshotStatus.Ready)
             .OrderByDescending(snapshot => snapshot.CompletedAtUtc)
-            .Select(snapshot => new SnapshotSelection(snapshot.Id, snapshot.Patch))
+            .Select(snapshot => new SnapshotSelection(snapshot.Id, snapshot.Patch, snapshot.ProcessedMatchCount))
             .FirstOrDefaultAsync(ct);
     }
 
@@ -380,5 +383,8 @@ public sealed class BuildResourceAnalyticsService(
         Dictionary<ChampionRoleKey, int> ChampionTotals,
         int TotalParticipantGames);
 
-    private sealed record SnapshotSelection(Guid SnapshotId, string Patch);
+    private sealed record SnapshotSelection(Guid SnapshotId, string Patch, int ProcessedMatchCount)
+    {
+        public string Version => $"{SnapshotId}:{ProcessedMatchCount}";
+    }
 }

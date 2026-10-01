@@ -14,7 +14,7 @@ public sealed class ProRosterDiscoveryJob(
     IOptions<ProRosterDiscoveryOptions> options,
     ILogger<ProRosterDiscoveryJob> logger)
 {
-    [Queue("maintenance")]
+    [Queue(HangfireQueues.Default)]
     public async Task ExecuteAsync(CancellationToken ct)
     {
         var settings = options.Value;

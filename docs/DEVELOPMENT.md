@@ -6,9 +6,9 @@ This repo contains a .NET backend (API + background worker) and a Next.js web fr
 
 - .NET SDK (see `global.json`)
 - Docker Desktop (recommended) or local:
-  - PostgreSQL 16+
+  - PostgreSQL 18 (Compose and prod run `pgautoupgrade/pgautoupgrade:18.3-alpine`)
   - Redis 7+
-- Node.js (recommended: Node 22)
+- Node.js 26 (`.nvmrc`; matches the `node:26-bookworm-slim` web image and CI)
 - pnpm (repo pins `pnpm@10.22.0` in root `package.json`)
 
 ## Quick Start (Recommended)
@@ -168,12 +168,22 @@ Prometheus + Grafana are their own stack — the single source of truth for both
 docker compose -f config/monitoring/compose.yml up -d
 ```
 
-Grafana is file-provisioned from `config/monitoring/grafana/provisioning`, including six dashboards
-(fleet overview, read API, worker runtime, analytics refresh, Riot API, and ingestion rate gate), its datasource, and
-`alerting/rules.yml` + `alerting/contactpoints.yml`. Prometheus scrapes the API, worker, host,
-PostgreSQL, and Redis; provisioned liveness alerts cover each application/database/cache target in
-addition to PostgreSQL connection saturation, Redis rejected connections, API 5xx ratio, p95 latency,
-and host disk space. PostgreSQL exporter credentials belong in
+Grafana is file-provisioned from `config/monitoring/grafana/provisioning`, including nine dashboards
+(`config/monitoring/grafana/dashboards`: fleet overview, read API, Riot API, ingestion & rate gate,
+analytics refresh, Build Lab, worker runtime / hang watch, web performance (lab + field), and browser
+Web Vitals), its datasource, and `alerting/rules.yml` + `alerting/contactpoints.yml`. Prometheus
+scrapes the web frontend, API, worker, host, PostgreSQL, and Redis.
+
+The provisioned rules cover:
+- liveness of each application/database/cache target
+- PostgreSQL connection saturation and Redis rejected connections
+- API 5xx ratio and p95 latency
+- host disk space
+- browser Web Vitals p75 (LCP/INP/CLS)
+- matchup-generation and Build Lab refresh staleness and errors
+- web-lab sweep staleness, performance score, and LCP regression
+
+PostgreSQL exporter credentials belong in
 `config/monitoring/.env` and should use a dedicated `pg_monitor` role (see the monitoring runbook).
 
 - **`DISCORD_ALERT_WEBHOOK_URL`** (in `config/monitoring/.env`, see `.env.example`) — the `discord` contact point's URL is interpolated from it (`$VAR` provisioning interpolation). Grafana 13 **refuses to start** on an empty contact-point URL, so when unset the base compose falls back to a no-op placeholder URL: Grafana boots and the rules are visible in Grafana → Alerting, but alerts don't deliver anywhere real. In prod, set it to the same incoming webhook the worker's ingestion alerter uses (`Alerts__Webhook__Url`). Locally the `up == 0` rules go `pending`/`Alerting` because no webapi/worker target is scraped — expected.
@@ -198,7 +208,7 @@ Automatic migrations on startup (`Database:AutoMigrate`):
   image in this mode before replacing any app service, then aborts/quarantines the release on failure.
 - Locally, `dotnet run` with the shared config also auto-migrates your dev DB, so the manual `database update` above is optional; override with `Database:AutoMigrate=false` (user-secrets / `appsettings.Development.json`) if you want manual control. The OpenAPI export host force-disables it (`--Database:AutoMigrate=false`) since it boots against a throwaway connection.
 - **Hot-table index migrations are the exception** — auto-migrate would run them as a blocking `CREATE INDEX`. Apply them via the out-of-band recipe below (create the index concurrently, then record the migration in `__EFMigrationsHistory`) **before** the deploy so the migration is already applied and auto-migrate skips it. The migration-safety CI gate failing your PR is the signal to use the recipe.
-- **CI applies the full chain to real Postgres.** Because prod auto-migrates on worker startup, a migration that compiles and passes the drift check but fails at *runtime* (PG-specific DDL, ordering, or type error) would crash-loop the worker while the deploy still reports success. The `migration-apply` job (`.github/workflows/ci-web-backend.yml`) spins up an ephemeral `postgres:16` service and runs `dotnet ef database update` from an empty database on every PR to surface those failures pre-merge — SQLite/InMemory tests cannot. It applies to an *empty* DB, so data-dependent migration failures still need a seeded follow-up. The `Transcendence.IntegrationTests` tier (see Backend Tests) additionally applies the chain **in-process** against a Testcontainers Postgres 18 and asserts every migration is applied with none pending — catching migration/model drift and PG-runtime faults from within `dotnet test`.
+- **CI applies the full chain to real Postgres.** Because prod auto-migrates on worker startup, a migration that compiles and passes the drift check but fails at *runtime* (PG-specific DDL, ordering, or type error) would crash-loop the worker while the deploy still reports success. The `migration-apply` job (`.github/workflows/ci-web-backend.yml`) spins up an ephemeral `postgres:18` service (the same major as prod and the integration tests) and runs `dotnet ef database update` from an empty database on every PR to surface those failures pre-merge — SQLite/InMemory tests cannot. It applies to an *empty* DB, so data-dependent migration failures still need a seeded follow-up. The `Transcendence.IntegrationTests` tier (see Backend Tests) additionally applies the chain **in-process** against a Testcontainers Postgres 18 and asserts every migration is applied with none pending — catching migration/model drift and PG-runtime faults from within `dotnet test`.
 
 #### Applying index migrations to hot tables
 
@@ -301,6 +311,20 @@ Compose env contract:
 - [`compose.yml`](../compose.yml) injects the Riot key with `RiotApi__League__ApiKey`.
 - The repo-root [`.env.example`](../.env.example) uses the matching variable:
   - `RIOT_API_KEY_LOL`
+
+Deployment and tuning variables. `compose.yml` reads these too, every one has a safe default, and
+locally you can leave them unset. Prod sets them in `/root/transcendence/.env`.
+
+| Variable | Feeds |
+| --- | --- |
+| `TRN_PUBLIC_ORIGIN` | web: canonical origin and the BFF same-origin/CSRF check (required in production) |
+| `ALERTS_WEBHOOK_URL` | worker: `Alerts__Webhook__Url`, the Discord-compatible ingestion-health alert webhook (`poll-deploy.sh` reads the same variable from `.env` for deploy notifications) |
+| `WEB_IMAGE`, `WEBAPI_IMAGE`, `SERVICE_IMAGE` | image references, defaulting to `ghcr.io/luisgon-dev/transcendence-<component>:main`; pin one to a `:sha-<short>` tag for a break-glass rollback (see ARCHITECTURE.md "Deployment & rollback") |
+| `DOZZLE_IMAGE`, `WUD_PORT` | `ops-tools` Dozzle image and the `wud` profile's UI port (default `3001`) |
+| `POSTGRES_SHARED_BUFFERS`, `POSTGRES_WORK_MEM`, `POSTGRES_EFFECTIVE_CACHE_SIZE`, `POSTGRES_MAINTENANCE_WORK_MEM` | Postgres memory (`postgres -c` flags; stock defaults) |
+| `POSTGRES_MAX_WORKER_PROCESSES`, `POSTGRES_MAX_PARALLEL_WORKERS`, `POSTGRES_MAX_PARALLEL_WORKERS_PER_GATHER`, `POSTGRES_MAX_PARALLEL_MAINTENANCE_WORKERS` | Postgres parallelism (defaults 8 / 8 / 2 / 2) |
+| `POSTGRES_CHECKPOINT_TIMEOUT`, `POSTGRES_MAX_WAL_SIZE`, `POSTGRES_WAL_COMPRESSION` | Postgres checkpoints/WAL (defaults `5min` / `1GB` / `off`) |
+| `POSTGRES_SHARED_PRELOAD_LIBRARIES`, `POSTGRES_TRACK_IO_TIMING`, `POSTGRES_LOG_TEMP_FILES_KB`, `POSTGRES_SHM_SIZE` | Postgres instrumentation and shared memory |
 
 ## Web Commands
 
@@ -428,7 +452,7 @@ pnpm install --frozen-lockfile     # what CI runs
 pnpm audit --audit-level=high      # what the CI audit job runs; must stay at zero
 pnpm web:test && pnpm web:lint && pnpm web:build
 pnpm api:check
-pnpm perf:web                      # the Lighthouse CI chain, end to end
+pnpm perf:web                      # the Lighthouse chain (scripts/perf/web-lab.mjs), end to end
 ```
 
 `pnpm perf:web` is slow but it is the only step that exercises the Lighthouse toolchain for real.
@@ -640,7 +664,7 @@ Production defaults in `Transcendence.Service/appsettings.json` are coverage-fir
 
 ### Recurring Job Scheduling (Development and Production)
 
-`Transcendence.Service` hosts one of two background workers depending on environment (`Program.cs`): `DevelopmentWorker` when `ASPNETCORE_ENVIRONMENT=Development`, otherwise `ProductionWorker`. Both register the **same** recurring-job set through the shared `WorkerRecurringJobPolicy` — the two workers differ only in startup behavior, not in which recurring jobs they schedule.
+`Transcendence.Service` hosts one of two background workers depending on environment (`Program.cs`): `DevelopmentWorker` when `DOTNET_ENVIRONMENT=Development`, otherwise `ProductionWorker`. The worker is a generic host (`Host.CreateApplicationBuilder`), so it reads `DOTNET_ENVIRONMENT`, not `ASPNETCORE_ENVIRONMENT`; Compose sets `DOTNET_ENVIRONMENT: Production` on `service`. Both register the **same** recurring-job set through the shared `WorkerRecurringJobPolicy` — the two workers differ only in startup behavior, not in which recurring jobs they schedule.
 
 Which recurring jobs are active is determined by:
 

@@ -52,20 +52,21 @@ test.describe("Tierlist page", () => {
     expect(href).toMatch(/\/lol\/champions\/\d+/);
   });
 
-  test("Analyze links navigate to matchups page", async ({ page }) => {
+  test("Analyze links open the champion's matchups section", async ({ page }) => {
     const analyzeLink = page.locator("table tbody tr a:has-text('Analyze')").first();
     await expect(analyzeLink).toBeVisible();
     const href = await analyzeLink.getAttribute("href");
-    expect(href).toMatch(/\/lol\/matchups\/\d+/);
+    expect(href).toMatch(/^\/lol\/champions\/\d+\?[^#]*#matchups$/);
   });
 
   test("sortable columns respond to click", async ({ page }) => {
-    // Click "Win Rate" header to sort
-    const winRateHeader = page.locator("th").filter({ hasText: /win rate/i });
+    // Each tier section renders its own table; sorting any header re-sorts all of them.
+    const winRateHeader = page.locator("th").filter({ hasText: /win rate/i }).first();
     await expect(winRateHeader).toBeVisible();
-    await winRateHeader.click();
+    const before = await winRateHeader.getAttribute("aria-sort");
 
-    // Should show sort indicator
-    await expect(winRateHeader.locator("[data-sort-indicator]")).toBeVisible();
+    await winRateHeader.getByRole("button").click();
+
+    await expect(winRateHeader).toHaveAttribute("aria-sort", before === "descending" ? "ascending" : "descending");
   });
 });

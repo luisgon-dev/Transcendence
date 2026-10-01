@@ -6,7 +6,7 @@
 # measures production so the numbers are true.
 #
 # Base is pinned to the same digest as apps/web/Dockerfile, the base the rest of the fleet uses.
-FROM node:22-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3
+FROM node:26-bookworm-slim@sha256:cd9f682fa2885cd1056e830424764158570061c59736a1da836bc3d73df095ae
 
 # Chromium from the distro rather than Puppeteer's downloader: nothing here needs a browser
 # download path, and avoiding it keeps the image off `extract-zip` and its unpatched advisories.
@@ -33,7 +33,7 @@ WORKDIR /app
 USER sweep
 
 # Pinned to the versions the repo resolves, so the sweep and the gate measure identically.
-RUN npm install --no-save --omit=dev lighthouse@13.4.1 chrome-launcher@1.2.1
+RUN npm install --no-save --omit=dev lighthouse@13.5.0 chrome-launcher@1.2.1
 
 # Only what the runner actually needs: the runner, the shared route vocabulary and the route
 # list. No workspace install, no app source.

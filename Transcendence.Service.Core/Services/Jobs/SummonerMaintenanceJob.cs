@@ -45,7 +45,7 @@ public class SummonerMaintenanceJob(
         bool IsTrackedHighValue,
         string? RankTier);
 
-    [Queue("refresh-low")]
+    [Queue(HangfireQueues.RefreshLow)]
     [DisableConcurrentExecution(timeoutInSeconds: 10 * 60)]
     public async Task ExecuteAsync(CancellationToken ct = default)
     {

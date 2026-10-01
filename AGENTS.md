@@ -48,15 +48,15 @@ Monorepo with a **.NET backend** (WebAPI + Hangfire Worker) and a **Next.js fron
 | Project | Role |
 |---|---|
 | `Transcendence.WebAPI` | HTTP API — serves reads, enqueues background jobs |
-| `Transcendence.Service` | Hangfire worker — calls Riot API, writes data |
+| `Transcendence.Service` | Hangfire worker — calls Riot API, writes data; owns the EF migrations (`Migrations/`) and applies them on startup (`Database:AutoMigrate`; `Database:MigrateOnly=true` migrates and exits) |
 | `Transcendence.Service.Core` | Shared domain logic, DTOs, interfaces |
-| `Transcendence.Data` | EF Core DbContext, entities, migrations |
+| `Transcendence.Data` | EF Core DbContext, entities, repositories (migrations live in `Transcendence.Service`) |
 
 **Patterns:**
 
 - **BFF proxy** — Next.js proxies API requests to the backend; auth tokens live in HttpOnly cookies.
-- **Summoner refresh flow** — client gets `202 Accepted` → backend enqueues refresh job → worker fetches from Riot API → client polls until `200 OK`.
-- **Tech stack** — PostgreSQL 16, Redis 7, Hangfire (job processing), HybridCache (L1 in-memory + L2 Redis).
+- **Summoner refresh flow** — the Riot-ID lookup always returns `200` with `status` `ready` / `refreshing` / `missing`; a signed-in `POST …/refresh` returns `202 Accepted` and enqueues the refresh job → worker fetches from Riot API → client polls the lookup until `status` is `ready`.
+- **Tech stack** — PostgreSQL 18, Redis 7, Hangfire (job processing), HybridCache (L1 in-memory + L2 Redis).
 
 For deeper context see `docs/ARCHITECTURE.md`, `docs/DEVELOPMENT.md`, and `docs/API.md`.
 

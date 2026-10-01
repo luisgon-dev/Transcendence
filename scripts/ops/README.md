@@ -16,23 +16,36 @@ with a deterministic, **outbound-only** release poll:
    `org.opencontainers.image.revision` label (the packages are public).
 2. Compare both to the running container. The revision comparison is required because GHCR/Buildx
    can publish a rebuilt tag whose reported manifest digest is unchanged; digest-only comparison
-   would silently miss that release.
-3. If they differ, deploy in dependency order: `service` → `webapi` → `web`. Before replacing the
+   would silently miss that release. Every app service is compared against remote `:main`,
+   whatever tag its `*_IMAGE` variable names.
+3. If they differ, first verify the release's cosign **keyless** signature on the resolved digest.
+   - The check runs `cosign verify` from the digest-pinned `ghcr.io/sigstore/cosign` container image,
+     so the host needs no cosign install. It does need to be able to pull that image.
+   - The certificate identity must be this repo's `.github/workflows/docker-images.yml` on
+     `refs/heads/main`, issued by `https://token.actions.githubusercontent.com`.
+   - A release that fails verification is not deployed. The failure is retried every poll rather than
+     quarantined, so a sigstore outage cannot strand a good release; it alerts after 3 consecutive
+     failures. After `compose pull`, the pulled `:main` must still be the verified digest.
+   - Break-glass only (sigstore itself down): run with `POLL_DEPLOY_VERIFY_SIGNATURES=0`.
+4. Then deploy in dependency order: `service` → `webapi` → `web`. Before replacing the
    worker, run the newly pulled image once with `Database__MigrateOnly=true`; only a successful
    migration continues the release.
    The webapi also waits for the worker: images build in parallel, so the webapi image can reach
    `:main` a poll before the worker image of the same merge. While the commits from the running
    worker's revision to the webapi's contain a migration the worker has not deployed, the poll logs
    `HOLD webapi` and retries (it uses the checkout's git history; if it cannot tell, it deploys).
-4. Recreate one service at a time with `--no-deps` (PostgreSQL/Redis are never touched), wait for its
+5. Recreate one service at a time with `--no-deps` (PostgreSQL/Redis are never touched), wait for its
    healthcheck, then continue. A component failure aborts all later components for that poll.
-5. On recreate/health failure, restore the exact prior container if Compose left it partially
+6. On recreate/health failure, restore the exact prior container if Compose left it partially
    renamed. If that container is gone, retag and recreate the prior local image with `--pull never`.
    The failed digest is quarantined until `:main` changes, preventing a minute-by-minute rollback loop.
-6. `docker image prune -f`, **only if a service was deployed** in this poll. Never prune on an idle
+7. `docker image prune -f`, **only if a service was deployed** in this poll. Never prune on an idle
    poll: under the containerd image store a prune deletes the content of any pull still in flight,
    so a prune every ~60s made every pull longer than one interval (the large images) fail with
    `lease does not exist`.
+
+The stack it drives is a git checkout of this repo at `/root/transcendence` (`COMPOSE_DIR`) plus an
+untracked `.env`, run as Compose project `transcendence`. It is not a Portainer-managed copy.
 
 No inbound exposure, no CI secret, no self-hosted runner. A `flock` guard prevents
 overlapping runs. Runs every ~60s via the systemd timer (≈ wud's old cadence). Remote and
@@ -48,6 +61,10 @@ Optional overrides are `POLL_DEPLOY_RESOLUTION_ALERT_THRESHOLD`,
 `POLL_DEPLOY_STATE_DIR`.
 
 ### Install (on prod, as root)
+
+The timer runs the installed copy at `/root/deploy/poll-deploy.sh`, not the checkout's
+`scripts/ops/poll-deploy.sh`. Re-run the `install` line after any change to the script, including
+the signature check.
 
 ```bash
 # from a checkout / scp of scripts/ops/
@@ -69,8 +86,13 @@ systemctl disable --now transcendence-deploy.timer  # pause auto-deploy (e.g. du
 ```
 
 The automatic rollback protects single-service replacement failures. Break-glass rollback remains:
-pin a service to an immutable `:sha-<short>` tag in the compose file and `compose up -d` it (see
-`docs/ARCHITECTURE.md` "Deployment & rollback").
+1. Pause the timer (`systemctl disable --now transcendence-deploy.timer`). The poller compares
+   against remote `:main`, so while running it would keep redeploying a pinned service.
+2. Pin the service to an immutable `:sha-<short>` tag via `WEB_IMAGE`, `WEBAPI_IMAGE`, or
+   `SERVICE_IMAGE` in `/root/transcendence/.env`.
+3. Run `compose up -d --no-deps <svc>`.
+
+Re-enable the timer once the fix is on `main` (see `docs/ARCHITECTURE.md` "Deployment & rollback").
 
 > The app Compose services explicitly set `wud.watch=false`; keep that exclusion in place because
 > this poller is the app release source of truth and two independent recreators can race each other.
@@ -202,28 +224,21 @@ to Postgres's out-of-box values (local dev is unaffected — do **not** raise th
 Docker VM). The values live in the compose file / `.env`, which sit outside the
 `postgres_data` volume, so the tuning survives a DB volume rebuild.
 
-**Current prod state (verified 2026-07-24).** The **Portainer** compose's `postgres` service hardcodes
-the memory values plus query/I/O instrumentation in its command:
+**Current prod state.** Prod runs the repo `compose.yml` from the git checkout at `/root/transcendence`.
+It used to run a hand-maintained Portainer compose, which drifted from the repo, so the tuning now
+lives in `/root/transcendence/.env`. The memory values recorded on 2026-07-24 were:
 
-```yaml
-# in <COMPOSE_DIR>/compose.yml, postgres service
-command:
-  - postgres
-  - -c
-  - shared_buffers=4GB
-  - -c
-  - work_mem=24MB
-  - -c
-  - effective_cache_size=12GB
-  - -c
-  - maintenance_work_mem=512MB
-  - -c
-  - shared_preload_libraries=pg_stat_statements
-  - -c
-  - track_io_timing=on
-  - -c
-  - log_temp_files=65536
+```bash
+# /root/transcendence/.env
+POSTGRES_SHARED_BUFFERS=4GB
+POSTGRES_WORK_MEM=24MB
+POSTGRES_EFFECTIVE_CACHE_SIZE=12GB
+POSTGRES_MAINTENANCE_WORK_MEM=512MB
 ```
+
+`shared_preload_libraries=pg_stat_statements`, `track_io_timing=on`, and `log_temp_files=65536` are
+the compose defaults. Verify the live flags with
+`docker inspect transcendence-postgres --format '{{json .Config.Cmd}}'`.
 
 The database was deliberately restarted on 2026-07-24 and `pg_stat_statements` was created. General,
 query, I/O, and temp-spill metrics are scraped by the dedicated PostgreSQL exporter. Connection pools

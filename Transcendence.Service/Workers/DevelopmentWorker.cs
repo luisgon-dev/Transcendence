@@ -1,6 +1,7 @@
 using Hangfire;
 using Microsoft.Extensions.Options;
 using Transcendence.Service.Core.Services.Extensions;
+using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Workers.Startup;
 
@@ -17,6 +18,7 @@ public class DevelopmentWorker(
     public override async Task StartAsync(CancellationToken cancellationToken)
     {
         TryRemoveInvalidRecurringJobs();
+        WarnAboutUnservedQueueBacklog();
 
         var schedule = options.Value;
         if (schedule.CleanupOnStartup)
@@ -64,6 +66,23 @@ public class DevelopmentWorker(
             RecurringJob.RemoveIfExists(recurringJobId);
 
         logger.LogInformation("Cleared all jobs");
+    }
+
+    private void WarnAboutUnservedQueueBacklog()
+    {
+        try
+        {
+            var backlog = jobStorage.GetMonitoringApi().FindUnservedQueueBacklog(HangfireQueues.Served);
+            foreach (var (queue, count) in backlog)
+                logger.LogWarning(
+                    "Queue {Queue} holds {Count} enqueued jobs but no worker pool serves it; they will never run.",
+                    queue,
+                    count);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to check for unserved Hangfire queues during startup. Continuing startup.");
+        }
     }
 
     private void TryRemoveInvalidRecurringJobs()

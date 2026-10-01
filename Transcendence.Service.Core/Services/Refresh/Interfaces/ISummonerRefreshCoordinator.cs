@@ -1,4 +1,5 @@
 using Camille.Enums;
+using Transcendence.Service.Core.Services.Operations;
 
 namespace Transcendence.Service.Core.Services.Refresh.Interfaces;
 
@@ -8,7 +9,7 @@ public interface ISummonerRefreshCoordinator
         string gameName,
         string tagLine,
         PlatformRoute platform,
-        string? pollUrl,
+        OperationOwner owner,
         string traceId,
         Guid? requestedByUserAccountId,
         string telemetrySource,
@@ -22,12 +23,11 @@ public interface ISummonerRefreshCoordinator
         CancellationToken ct = default);
 }
 
-public sealed record RefreshEnqueueOutcome(bool WasQueued, string? PollUrl, int? RetryAfterSeconds)
+public sealed record RefreshEnqueueOutcome(bool WasQueued, Guid OperationId, int RetryAfterSeconds)
 {
-    public static RefreshEnqueueOutcome Queued(string? pollUrl) => new(true, pollUrl, null);
+    public static RefreshEnqueueOutcome Queued(Guid operationId) => new(true, operationId, 2);
 
-    public static RefreshEnqueueOutcome InProgress(string? pollUrl, int retryAfterSeconds) =>
-        new(false, pollUrl, retryAfterSeconds);
+    public static RefreshEnqueueOutcome InProgress(Guid operationId) => new(false, operationId, 2);
 }
 
 public sealed record RefreshProgress(int RetryAfterSeconds);

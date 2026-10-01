@@ -10,6 +10,7 @@ using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Analysis;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
+using Transcendence.Service.Core.Services.Operations;
 using Transcendence.Service.Core.Services.RiotApi;
 
 namespace Transcendence.Service.Core.Services.Jobs;
@@ -23,7 +24,8 @@ public sealed class FullHistoryBackfillJob(
     HybridCache cache,
     IOptions<FullHistoryBackfillJobOptions> options,
     IRefreshLockRepository refreshLockRepository,
-    ILogger<FullHistoryBackfillJob> logger)
+    ILogger<FullHistoryBackfillJob> logger,
+    IBackgroundOperationTracker operations)
 {
     private const string RankedSoloQueueType = "RANKED_SOLO_5x5";
     private const string RankedSoloQueueScope = QueueCatalog.QueueFamilyRankedSoloDuo;
@@ -37,13 +39,16 @@ public sealed class FullHistoryBackfillJob(
 
     [Queue(HangfireQueues.HistoryBackfill)]
     public async Task ProcessAsync(
+        Guid operationId,
         Guid summonerId,
         Guid? requestedByUserAccountId = null,
         CancellationToken ct = default)
     {
+        if (!await operations.StartAsync(operationId, ct)) return;
         var jobOptions = options.Value;
         if (!jobOptions.Enabled)
         {
+            await operations.FailAsync(operationId, "history_disabled", ct);
             logger.LogInformation("[FullHistory] Backfill disabled; skipping summoner {SummonerId}.", summonerId);
             return;
         }
@@ -52,27 +57,61 @@ public sealed class FullHistoryBackfillJob(
         // with an in-flight self-continuation chain) double-fetch the same matches — wasting the
         // scarce personal-tier Riot budget — and collide on the SummonerMatchFacts unique index,
         // rolling back the whole page. A short lease admits one run at a time; overlapping
-        // invocations skip. The lease TTL bounds recovery if a run dies without releasing.
+        // invocations defer. The lease TTL bounds recovery if a run dies without releasing;
+        // ownership fencing prevents an expired holder from releasing a newer lease.
         var backfillLockKey = $"fullhistory-backfill:{summonerId:N}";
-        if (!await refreshLockRepository.TryAcquireAsync(backfillLockKey, TimeSpan.FromMinutes(15), ct))
+        var lockOwner = await refreshLockRepository.TryAcquireOwnedAsync(backfillLockKey, TimeSpan.FromMinutes(15), ct);
+        if (!lockOwner.HasValue)
         {
             logger.LogInformation(
                 "[FullHistory] Backfill already running for summoner {SummonerId}; skipping overlapping run.",
                 summonerId);
+            await operations.RetryAsync(operationId, "history_busy", DateTime.UtcNow.AddSeconds(30), ct);
+            backgroundJobClient.Schedule<FullHistoryBackfillJob>(job =>
+                job.ProcessAsync(operationId, summonerId, requestedByUserAccountId, CancellationToken.None),
+                TimeSpan.FromSeconds(30));
             return;
         }
 
         try
         {
-            await RunBackfillAsync(summonerId, requestedByUserAccountId, jobOptions, ct);
+            // The advisory/lease locks serialize individual runs, not the time between
+            // continuations. A newer request must not take over an older active cursor.
+            var activeHistoryOwner = await db.SummonerFullHistoryBackfills.AsNoTracking()
+                .Where(x => x.SummonerId == summonerId && x.Scope == SummonerFullHistoryScopes.FullHistory
+                    && x.OperationId != operationId && x.OperationId != Guid.Empty)
+                .Select(x => (Guid?)x.OperationId).SingleOrDefaultAsync(ct);
+            if (activeHistoryOwner is { } activeId && await db.BackgroundOperations.AsNoTracking()
+                .AnyAsync(x => x.Id == activeId && x.Status != OperationStatuses.Succeeded
+                    && x.Status != OperationStatuses.Partial && x.Status != OperationStatuses.Failed, ct))
+            {
+                await operations.RetryAsync(operationId, "history_busy", DateTime.UtcNow.AddSeconds(30), ct);
+                backgroundJobClient.Schedule<FullHistoryBackfillJob>(job =>
+                    job.ProcessAsync(operationId, summonerId, requestedByUserAccountId, CancellationToken.None),
+                    TimeSpan.FromSeconds(30));
+                return;
+            }
+            await operations.SetPhaseAsync(operationId, "fullHistory", OperationStatuses.Running, ct);
+            await RunBackfillAsync(operationId, summonerId, requestedByUserAccountId, jobOptions, ct);
+        }
+        catch (Exception)
+        {
+            await operations.RetryAsync(operationId, "history_failed", ct: CancellationToken.None);
+            throw;
         }
         finally
         {
-            await refreshLockRepository.ReleaseAsync(backfillLockKey, ct);
+            using var releaseTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            try { await refreshLockRepository.ReleaseOwnedAsync(backfillLockKey, lockOwner.Value, releaseTimeout.Token); }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "[FullHistory] Failed to release owned history lease for {SummonerId}.", summonerId);
+            }
         }
     }
 
     private async Task RunBackfillAsync(
+        Guid operationId,
         Guid summonerId,
         Guid? requestedByUserAccountId,
         FullHistoryBackfillJobOptions jobOptions,
@@ -88,12 +127,14 @@ public sealed class FullHistoryBackfillJob(
             .FirstOrDefaultAsync(s => s.Id == summonerId, ct);
         if (summoner == null || string.IsNullOrWhiteSpace(summoner.Puuid))
         {
+            await operations.FailAsync(operationId, "summoner_missing", ct);
             logger.LogWarning("[FullHistory] Summoner {SummonerId} is missing or has no PUUID; skipping.", summonerId);
             return;
         }
 
         if (!PlatformRouteParser.TryParse(summoner.PlatformRegion ?? string.Empty, out var platformRoute))
         {
+            await operations.FailAsync(operationId, "unsupported_region", ct);
             logger.LogWarning(
                 "[FullHistory] Summoner {SummonerId} has unsupported platform region {PlatformRegion}; skipping.",
                 summonerId,
@@ -105,17 +146,19 @@ public sealed class FullHistoryBackfillJob(
         var configuredSeasons = await RankedSeasonResolver.GetConfiguredSeasonsAsync(db, ct);
         var activeSeason = await RankedSeasonResolver.GetActiveSeasonAsync(db, now, ct);
 
-        var backfill = await GetOrStartBackfillAsync(summonerId, requestedByUserAccountId, now, ct);
+        var backfill = await GetOrStartBackfillAsync(operationId, summonerId, requestedByUserAccountId, now, ct);
         if (IsTerminalStatus(backfill.Status) && requestedByUserAccountId == null)
         {
             await RecomputeSeasonAggregatesAsync(summonerId, activeSeason.SeasonKey, backfill.Status, now, ct);
+            await cache.RemoveByTagAsync($"summoner-stats:{summonerId}", ct);
+            await CompleteOperationAsync(operationId, backfill, ct);
             return;
         }
 
         if (backfill.CursorEndEpochSeconds.HasValue &&
             backfill.CursorEndEpochSeconds.Value <= lowerBoundEpochSeconds)
         {
-            await CompleteBackfillAsync(backfill, summonerId, activeSeason.SeasonKey, touchedSeasons, now, ct);
+            await CompleteBackfillAsync(operationId, backfill, summonerId, activeSeason.SeasonKey, touchedSeasons, now, ct);
             return;
         }
 
@@ -165,7 +208,7 @@ public sealed class FullHistoryBackfillJob(
 
             if (pageIds.Count == 0)
             {
-                await CompleteBackfillAsync(backfill, summonerId, activeSeason.SeasonKey, touchedSeasons, now, ct);
+                await CompleteBackfillAsync(operationId, backfill, summonerId, activeSeason.SeasonKey, touchedSeasons, now, ct);
                 return;
             }
 
@@ -297,7 +340,7 @@ public sealed class FullHistoryBackfillJob(
                 (backfill.CursorEndEpochSeconds.HasValue &&
                  backfill.CursorEndEpochSeconds.Value <= lowerBoundEpochSeconds))
             {
-                await CompleteBackfillAsync(backfill, summonerId, activeSeason.SeasonKey, touchedSeasons, now, ct);
+                await CompleteBackfillAsync(operationId, backfill, summonerId, activeSeason.SeasonKey, touchedSeasons, now, ct);
                 return;
             }
 
@@ -311,12 +354,15 @@ public sealed class FullHistoryBackfillJob(
 
         if (shouldContinue)
         {
-            backgroundJobClient.Enqueue<FullHistoryBackfillJob>(job =>
-                job.ProcessAsync(summonerId, null, CancellationToken.None));
+            var retryAt = DateTime.UtcNow.AddSeconds(15);
+            await operations.RetryAsync(operationId, "history_continuing", retryAt, ct);
+            backgroundJobClient.Schedule<FullHistoryBackfillJob>(job =>
+                job.ProcessAsync(operationId, summonerId, null, CancellationToken.None), TimeSpan.FromSeconds(15));
         }
     }
 
     private async Task<SummonerFullHistoryBackfill> GetOrStartBackfillAsync(
+        Guid operationId,
         Guid summonerId,
         Guid? requestedByUserAccountId,
         DateTime now,
@@ -330,6 +376,7 @@ public sealed class FullHistoryBackfillJob(
             backfill = new SummonerFullHistoryBackfill
             {
                 Id = Guid.NewGuid(),
+                OperationId = operationId,
                 SummonerId = summonerId,
                 Scope = SummonerFullHistoryScopes.FullHistory,
                 Status = SummonerFullHistoryBackfillStatuses.Queued,
@@ -343,9 +390,11 @@ public sealed class FullHistoryBackfillJob(
         else if (IsTerminalStatus(backfill.Status) &&
                  requestedByUserAccountId == null)
         {
+            backfill.OperationId = operationId;
+            await db.SaveChangesAsync(ct);
             return backfill;
         }
-        else if (requestedByUserAccountId.HasValue)
+        else if (requestedByUserAccountId.HasValue && backfill.OperationId != operationId)
         {
             backfill.RequestedByUserAccountId = requestedByUserAccountId;
             backfill.RequestedAtUtc = now;
@@ -357,6 +406,7 @@ public sealed class FullHistoryBackfillJob(
             backfill.StartedAtUtc ??= now;
         }
 
+        backfill.OperationId = operationId;
         backfill.Status = SummonerFullHistoryBackfillStatuses.Running;
         backfill.StartedAtUtc ??= now;
         backfill.UpdatedAtUtc = now;
@@ -524,6 +574,7 @@ public sealed class FullHistoryBackfillJob(
     }
 
     private async Task CompleteBackfillAsync(
+        Guid operationId,
         SummonerFullHistoryBackfill backfill,
         Guid summonerId,
         string activeSeasonKey,
@@ -545,6 +596,18 @@ public sealed class FullHistoryBackfillJob(
             await RecomputeSeasonAggregatesAsync(summonerId, seasonKey, backfill.Status, now, ct);
 
         await cache.RemoveByTagAsync($"summoner-stats:{summonerId}", ct);
+        await CompleteOperationAsync(operationId, backfill, ct);
+    }
+
+    private async Task CompleteOperationAsync(Guid operationId, SummonerFullHistoryBackfill backfill, CancellationToken ct)
+    {
+        var failedCount = await db.SummonerMatchFactFetchFailures
+            .CountAsync(x => x.SummonerId == backfill.SummonerId && x.ResolvedAtUtc == null, ct);
+        var status = failedCount > 0 ? OperationStatuses.Partial : OperationStatuses.Succeeded;
+        await operations.SetPhaseAsync(operationId, "fullHistory", status, ct);
+        await operations.CompleteAsync(operationId, status, new OperationResult(
+            SummonerId: backfill.SummonerId, PersistedMatchCount: backfill.FactsPersisted,
+            FailedMatchCount: failedCount, DeferredMatchCount: 0), ct);
     }
 
     private async Task RecordFetchFailureAsync(

@@ -9,6 +9,7 @@ using Transcendence.Service.Core.Services.Refresh.Interfaces;
 using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.DTOs;
 using Transcendence.WebAPI.Security;
+using Transcendence.Service.Core.Services.Operations;
 
 namespace Transcendence.WebAPI.Controllers;
 
@@ -142,10 +143,10 @@ public class ProSummonersController(
     [HttpPost("{id:guid}/refresh")]
     [EnableRateLimiting("admin-write")]
     [ProducesResponseType(
-        typeof(SummonerAcceptedResponse),
+        typeof(OperationAcceptedResponse),
         StatusCodes.Status202Accepted,
         Description =
-            "Accepted. Returns \"Refresh queued\" when the refresh lock is acquired, or \"Refresh in process\" with retryAfterSeconds when contention is detected.")]
+            "Accepted. Poll the owned durable refresh operation.")]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Refresh([FromRoute] Guid id, CancellationToken ct = default)
@@ -160,20 +161,21 @@ public class ProSummonersController(
         if (!PlatformRouteParser.TryParse(entity.PlatformRegion, out var platform))
             return BadRequest($"Unsupported platform region '{entity.PlatformRegion}'.");
 
-        var pollUrl = Url.ActionLink(nameof(GetById), null, new { id });
+        if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)) return Unauthorized();
 
         var outcome = await refreshCoordinator.EnqueueRefreshAsync(
             entity.GameName,
             entity.TagLine,
             platform,
-            pollUrl,
+            new OperationOwner(OperationOwnerKind.User, userId),
             HttpContext.TraceIdentifier,
             null,
             "pro-summoners-controller",
             ct);
 
         if (!outcome.WasQueued)
-            return Accepted(new SummonerAcceptedResponse("Refresh in process", outcome.PollUrl, outcome.RetryAfterSeconds));
+            return Accepted(new OperationAcceptedResponse(outcome.OperationId,
+                $"/api/lol/operations/{outcome.OperationId}", outcome.RetryAfterSeconds));
 
         await WriteAuditAsync("pro-summoners.refresh", entity.Id.ToString(), new
         {
@@ -183,9 +185,8 @@ public class ProSummonersController(
             entity.TagLine
         }, ct);
 
-        return Accepted(new SummonerAcceptedResponse(
-            "Refresh queued",
-            outcome.PollUrl));
+        return Accepted(new OperationAcceptedResponse(outcome.OperationId,
+            $"/api/lol/operations/{outcome.OperationId}", outcome.RetryAfterSeconds));
     }
 
     private async Task WriteAuditAsync(string action, string targetId, object? metadata, CancellationToken ct)

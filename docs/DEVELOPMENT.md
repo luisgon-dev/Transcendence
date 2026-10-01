@@ -1100,6 +1100,35 @@ The computed grade is persisted in the `ChampionScopeGradeStats` table (added by
 - Analytics APIs now expose sample metadata fields (`sampleStatus`, `sampleSize`, `minimumRecommendedSampleSize`, `patchAgeHours`, `isEarlyPatchWindow`, `patchPhase`, `isProvisional`).
 - Current behavior is current-patch only (no previous-patch fallback responses).
 
+### Owned operation completion verification
+
+The current refresh/probe contract is coordinated across API, worker, web, and desktop;
+there are no legacy response fallbacks. Normal backend CI runs the operation unit tests
+and real PostgreSQL/Testcontainers integration tests, including dispatch recovery,
+retry/exhaustion, owner access, and actual worker shutdown/resume. Web Vitest cases
+cover operation polling, stale results, separate history work, and retained filters.
+
+For focused backend verification:
+
+```sh
+dotnet test tests/Transcendence.IntegrationTests --filter FullyQualifiedName~BackgroundOperationPostgresTests
+```
+
+Optional browser verification uses the separately seeded desktop integration API
+(`../transcendence_desktop`: `bun run backend:local`), not production. Start a local
+built web app with `TRN_BACKEND_BASE_URL=http://localhost:18080` and the public test-only
+`TRN_BACKEND_API_KEY=desktop-local-integration-only`, then run:
+
+```sh
+BASE_URL=http://localhost:3030 LOCAL_OPERATION_BACKEND=seeded pnpm exec playwright test e2e/operation-completion.spec.ts --workers=1
+```
+
+The seeded browser lane has synthetic lifecycle responses plus actual seeded SSR reads.
+Native desktop tests separately execute actual queued domain jobs. Neither lane proves
+real Riot/League credentials or Windows gameplay. Never save the public local-test key
+in a production configuration or normal desktop keyring. Operation records currently
+have no automatic purge; choose a retention policy as separate operational hardening.
+
 ## Documentation Policy (Contributor Requirement)
 
 If a change affects any of the following, update docs in the same PR:

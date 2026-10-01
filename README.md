@@ -106,15 +106,17 @@ sequenceDiagram
   B->>W: POST /api/trn/user/.../refresh (HttpOnly cookie)
   W->>A: POST .../refresh (Bearer)
   A->>P: upsert RefreshLocks row (ON CONFLICT, owner token, 15 min TTL)
+  A->>P: save owned operation + durable dispatch entry
   A->>P: enqueue RefreshByRiotId on refresh-high
-  A-->>B: 202 Accepted
+  A-->>B: 202 { operationId, statusUrl, retryAfterSeconds }
   P-->>S: dequeue
   S->>R: account-v1 · summoner-v4 · league-v4 · match-v5 (rate-gated)
   S->>P: upsert summoner, ranks, mastery, matches
-  loop 1.4× backoff, clamped 1–10 s, honours retryAfterSeconds, ≤ 24 polls
-    B->>A: GET lookup
+  loop bounded, honours retryAfterSeconds
+    B->>W: GET /api/trn/user/lol/operations/{operationId}
+    W->>A: GET /api/lol/operations/{operationId} (Bearer)
   end
-  A-->>B: 200 { status: ready }
+  A-->>B: 200 { status: succeeded, result: recent import evidence }
 ```
 
 A signed-in refresh can also chain a `FullHistoryBackfillJob` on the `history-backfill` queue. That

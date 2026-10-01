@@ -14,6 +14,7 @@ import {
   winRateColorClass
 } from "@/lib/format";
 import { rankTierColorClass } from "@/lib/ranks";
+import { acceptedOperation, operationFailure, operationRequestSignal, pollOperation } from "@/lib/operations";
 import {
   championSquareIconUrlById,
   runeIconUrl,
@@ -54,7 +55,6 @@ type LiveGameStaticData = {
 
 // The BFF error envelope carries message/requestId, which the success DTO lacks.
 type LiveGameErrorFields = { message?: string | null; requestId?: string | null };
-type LiveGameProbeAccepted = components["schemas"]["LiveGameProbeAcceptedResponse"] & LiveGameErrorFields;
 
 const TEAMS: ReadonlyArray<{ id: number; label: string }> = [
   { id: 100, label: "Blue Side" },
@@ -304,6 +304,7 @@ export function LiveGameCard({
   const [error, setError] = useState<string | null>(null);
   const [staticData, setStaticData] = useState<LiveGameStaticData>({ spells: null, runes: null });
   const requestRef = useRef<AbortController | null>(null);
+  const verifiedObservation = useRef(false);
 
   useEffect(() => {
     if (!detailed) return;
@@ -336,42 +337,47 @@ export function LiveGameCard({
         `/api/trn/app/lol/summoners/${encodeURIComponent(region)}/${encodeURIComponent(
           gameName
         )}/${encodeURIComponent(tagLine)}/live-game`;
-      const probeStartedAt = Date.now();
+      // Reads remain stored-data reads. Do not give this snapshot a verified check time.
+      try {
+        const stored = await fetch(liveGamePath, { cache: "no-store", signal: operationRequestSignal(controller.signal) });
+        const snapshot = stored.ok ? await stored.json().catch(() => null) as LiveGameResponse | null : null;
+        if (snapshot && ["offline", "in_game"].includes(snapshot.state ?? "") && !controller.signal.aborted && !verifiedObservation.current) {
+          setData(snapshot);
+          setChecked(true);
+        }
+      } catch {
+        if (controller.signal.aborted) return;
+        // A stored read failure does not prevent an explicit probe.
+      }
       const probeRes = await fetch(`${liveGamePath}/probe`, {
         method: "POST",
         cache: "no-store",
-        signal: controller.signal
+        signal: operationRequestSignal(controller.signal)
       });
-      const probeJson = (await probeRes.json().catch(() => null)) as LiveGameProbeAccepted | null;
+      const probeJson: unknown = await probeRes.json().catch(() => null);
       if (!probeRes.ok) {
-        const msg = probeJson?.message ?? `Live game probe failed (${probeRes.status}).`;
-        const rid = probeJson?.requestId ? ` Request ID: ${probeJson.requestId}` : "";
+        const fields = probeJson as LiveGameErrorFields | null;
+        const msg = fields?.message ?? `Live game probe failed (${probeRes.status}).`;
+        const rid = fields?.requestId ? ` Request ID: ${fields.requestId}` : "";
         setError(`${msg}${rid}`);
         return;
       }
 
-      const retryDelayMs = Math.min(5_000, Math.max(0, (probeJson?.retryAfterSeconds ?? 2) * 1_000));
-      let json: (LiveGameResponse & LiveGameErrorFields) | null = null;
-      for (let attempt = 0; attempt < 4; attempt += 1) {
-        if (retryDelayMs > 0)
-          await new Promise((resolve) => window.setTimeout(resolve, retryDelayMs));
-        if (controller.signal.aborted) return;
-
-        const res = await fetch(liveGamePath, { cache: "no-store", signal: controller.signal });
-        json = (await res.json().catch(() => null)) as (LiveGameResponse & LiveGameErrorFields) | null;
-        if (!res.ok) {
-          const msg = json?.message ?? `Live game request failed (${res.status}).`;
-          const rid = json?.requestId ? ` Request ID: ${json.requestId}` : "";
-          setError(`${msg}${rid}`);
-          return;
-        }
-
-        const observedAt = json?.lastUpdatedUtc ? Date.parse(json.lastUpdatedUtc) : Number.NaN;
-        if (Number.isFinite(observedAt) && observedAt >= probeStartedAt - 1_000) break;
-      }
-
-      setData(json);
-      setCheckedAt(new Date());
+      const completed = await pollOperation(acceptedOperation(probeJson), "app", controller.signal, undefined, "live_game_probe", { region, gameName, tagLine });
+      if (completed.status === "failed") throw new Error(operationFailure(completed));
+      if (completed.status !== "succeeded") throw new Error("The probe finished only partially. Current live-game status has not been verified.");
+      const observation = completed.result.liveGame;
+      const observedAt = completed.result.observedAtUtc ? Date.parse(completed.result.observedAtUtc) : Number.NaN;
+      const snapshotTime = observation?.lastUpdatedUtc ? Date.parse(observation.lastUpdatedUtc) : Number.NaN;
+      if (
+        !completed.result.snapshotId || !observation ||
+        !["offline", "in_game"].includes(observation.state ?? "") ||
+        !Number.isFinite(observedAt) || snapshotTime !== observedAt
+      ) throw new Error("The probe finished without a verified stored observation. Stored data has been retained.");
+      controller.signal.throwIfAborted();
+      setData(observation);
+      setCheckedAt(new Date(observedAt));
+      verifiedObservation.current = true;
     } catch (e) {
       if (controller.signal.aborted) return;
       setError(e instanceof Error ? e.message : "Live game error.");
@@ -389,6 +395,11 @@ export function LiveGameCard({
   // Live state is time-sensitive, so check as soon as the card mounts instead of requiring the user
   // to discover and press a one-shot button.
   useEffect(() => {
+    setData(null);
+    setChecked(false);
+    setCheckedAt(null);
+    verifiedObservation.current = false;
+    setError(null);
     void check();
     return () => {
       const request = requestRef.current;
@@ -398,7 +409,7 @@ export function LiveGameCard({
   }, [check]);
 
   const participants = (data?.participants ?? []) as EnrichedParticipant[];
-  const inGame = data?.state === "in_game" || data?.state === "IN_PROGRESS" || participants.length > 0;
+  const inGame = data?.state === "in_game";
 
   // Once a game is detected, keep the scout view fresh at a deliberately light cadence. A timeout
   // (rather than an interval) avoids overlapping a slow request.
@@ -467,7 +478,7 @@ export function LiveGameCard({
                     <span className="absolute inline-flex size-2 animate-ping rounded-full bg-success/60 motion-reduce:hidden" />
                     <span className="relative inline-flex size-2 rounded-full bg-success" />
                   </span>
-                  Live
+                  {checkedAt && !error ? "Live" : "Stored game snapshot"}
                 </span>
                 {metaParts.map((part) => (
                   <span key={part} className="type-ui text-fg/80">
@@ -500,7 +511,9 @@ export function LiveGameCard({
               </div>
             </div>
           ) : (
-            <p className="type-ui mt-4 text-muted">Not currently in a game.</p>
+            <p className="type-ui mt-4 text-muted">
+              {checkedAt && !error ? "Not currently in a game." : "Stored snapshot: no active game. Current status has not been verified."}
+            </p>
           )
         ) : !error && !busy ? (
           <p className="type-ui mt-4 text-muted">Waiting to check live game status.</p>

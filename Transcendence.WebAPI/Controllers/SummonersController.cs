@@ -9,6 +9,7 @@ using Transcendence.Service.Core.Services.RiotApi.DTOs;
 using Transcendence.Service.Core.Services.Summoners.Interfaces;
 using Transcendence.WebAPI.Models.MultiSearch;
 using Transcendence.WebAPI.Security;
+using Transcendence.Service.Core.Services.Operations;
 
 namespace Transcendence.WebAPI.Controllers;
 
@@ -129,10 +130,10 @@ public class SummonersController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(
-        typeof(SummonerAcceptedResponse),
+        typeof(OperationAcceptedResponse),
         StatusCodes.Status202Accepted,
         Description =
-            "Accepted. Returns \"Refresh queued\" when the refresh lock is acquired, or \"Refresh in process\" with retryAfterSeconds when contention is detected.")]
+            "Accepted. Poll the owned operation for profile and recent-history outcomes; full history is a separate child.")]
     public async Task<IActionResult> RefreshByRiotId([FromRoute] string region, [FromRoute] string name,
         [FromRoute] string tag, CancellationToken ct)
     {
@@ -142,26 +143,18 @@ public class SummonersController(
         if (!TryGetUserId(out var requestedByUserAccountId))
             return Unauthorized();
 
-        var pollUrl = Url.ActionLink(nameof(GetByRiotId), null, new
-        {
-            region,
-            name,
-            tag
-        });
         var outcome = await refreshCoordinator.EnqueueRefreshAsync(
             name,
             tag,
             platform,
-            pollUrl,
+            new OperationOwner(OperationOwnerKind.User, requestedByUserAccountId),
             HttpContext.TraceIdentifier,
             requestedByUserAccountId,
             "summoners-controller",
             ct);
 
-        return Accepted(new SummonerAcceptedResponse(
-            outcome.WasQueued ? "Refresh queued" : "Refresh in process",
-            outcome.PollUrl,
-            outcome.RetryAfterSeconds));
+        return Accepted(new OperationAcceptedResponse(outcome.OperationId,
+            $"/api/lol/operations/{outcome.OperationId}", outcome.RetryAfterSeconds));
     }
 
     /// <summary>

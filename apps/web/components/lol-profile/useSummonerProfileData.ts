@@ -7,7 +7,7 @@ import {
   normalizeInitialQueue,
   normalizeInitialSort,
   pickApiError,
-  type AcceptedResponse,
+  type RefreshNotice,
   type ApiErrorResponse,
   type ChampionStatic,
   type ItemStatic,
@@ -23,7 +23,7 @@ import {
   type SummonerProfileResponse
 } from "@/components/lol-profile/shared";
 import { championDisplayName } from "@/lib/gameDisplay";
-import { computeNextPollDelayMs } from "@/lib/polling";
+import { acceptedOperation, operationFailure, operationRequestSignal, pollOperation } from "@/lib/operations";
 import { formatQueueLabel } from "@/lib/queues";
 import {
   buildLolPublicSummonerByIdPath,
@@ -31,8 +31,6 @@ import {
   buildLolPublicSummonerRankHistoryPath,
   buildLolUserSummonerRefreshPath
 } from "@/lib/lolPublicApi";
-
-const MAX_POLL_ATTEMPTS = 24;
 
 export function useProfileStaticData(initial: {
   championStatic: ChampionStatic | null;
@@ -93,110 +91,135 @@ export function useSummonerRefreshPolling({
   const initialAccepted =
     initialLookup && initialLookup.status !== "ready"
       ? {
-          message: initialLookup.message ?? undefined,
-          poll: initialLookup.poll ?? undefined,
-          retryAfterSeconds: initialLookup.retryAfterSeconds ?? undefined
+          message: initialLookup.message ?? undefined
         }
       : null;
   const [profile, setProfile] = useState<SummonerProfileResponse | null>(initialProfile);
-  const [accepted, setAccepted] = useState<AcceptedResponse | null>(initialAccepted);
+  const [accepted, setAccepted] = useState<RefreshNotice | null>(initialAccepted);
   const [error, setError] = useState<ApiErrorResponse | null>(initialError);
   const [busy, setBusy] = useState(false);
-  const [polling, setPolling] = useState(initialLookup?.status === "refreshing");
-  const [pollDelayMs, setPollDelayMs] = useState(2000);
-  const [pollAttempts, setPollAttempts] = useState(0);
+  const [polling, setPolling] = useState(false);
+  const [refreshRevision, setRefreshRevision] = useState(0);
+  const request = useRef<AbortController | null>(null);
 
-  const fetchProfileOnce = useCallback(async () => {
+  const fetchProfileOnce = useCallback(async (signal: AbortSignal) => {
     const res = await fetch(buildLolPublicSummonerByRiotIdPath(region, gameName, tagLine), {
-      cache: "no-store"
+      cache: "no-store", signal: operationRequestSignal(signal)
     });
     const json = (await res.json().catch(() => null)) as unknown;
     if (!res.ok) {
-      setAccepted(null);
-      setPolling(false);
-      setError(pickApiError(res.status, json));
-      return;
+      throw new Error(pickApiError(res.status, json).message ?? "Profile reload failed.");
     }
     const lookup = json as SummonerLookupResponse | null;
     if (lookup?.status === "ready" && lookup.profile) {
+      signal.throwIfAborted();
       setProfile(lookup.profile);
-      setAccepted(null);
-      setPolling(false);
+      setRefreshRevision((value) => value + 1);
       return;
     }
-    if (lookup?.status === "refreshing" || lookup?.status === "missing") {
-      setAccepted({
-        message: lookup.message ?? undefined,
-        poll: lookup.poll ?? undefined,
-        retryAfterSeconds: lookup.retryAfterSeconds ?? undefined
-      });
-      return;
-    }
-    setAccepted(null);
-    setPolling(false);
-    setError({ message: "The player lookup returned an invalid response.", code: "INVALID_RESPONSE" });
+    throw new Error("The operation finished, but its stored profile could not be loaded.");
   }, [gameName, region, tagLine]);
 
   useEffect(() => {
-    if (!polling) return;
-    if (pollAttempts >= MAX_POLL_ATTEMPTS) {
-      setPolling(false);
-      setAccepted({
-        message: "This update is taking longer than expected — it'll keep processing in the background. Use Update Now to check again."
-      });
-      return;
-    }
-    const timeout = setTimeout(async () => {
-      try {
-        await fetchProfileOnce();
-      } finally {
-        setPollAttempts((value) => value + 1);
-        setPollDelayMs((value) => computeNextPollDelayMs(value));
-      }
-    }, pollDelayMs);
-    return () => clearTimeout(timeout);
-  }, [fetchProfileOnce, pollAttempts, pollDelayMs, polling]);
+    setProfile(initialLookup?.status === "ready" ? initialLookup.profile ?? null : null);
+    setAccepted(initialLookup?.status !== "ready" ? { message: initialLookup?.message ?? undefined } : null);
+    setError(initialError);
+    setPolling(false);
+    setBusy(false);
+    setRefreshRevision(0);
+    return () => {
+      request.current?.abort();
+      request.current = null;
+    };
+  }, [region, gameName, tagLine, initialLookup, initialError]);
 
   const queueRefresh = useCallback(async () => {
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
     setBusy(true);
+    setPolling(true);
     setError(null);
     try {
       const res = await fetch(buildLolUserSummonerRefreshPath(region, gameName, tagLine), {
-        method: "POST"
+        method: "POST", signal: operationRequestSignal(controller.signal)
       });
-      const json = (await res.json().catch(() => null)) as AcceptedResponse | null;
+      const json: unknown = await res.json().catch(() => null);
+      controller.signal.throwIfAborted();
       if (!res.ok) {
         setAccepted(null);
         setError(pickApiError(res.status, json));
         return;
       }
-      setAccepted(json ?? { message: "Update started." });
-      setPollAttempts(0);
-      setPolling(true);
-      setPollDelayMs(computeNextPollDelayMs(2000, json?.retryAfterSeconds));
+      const operation = acceptedOperation(json);
+      setBusy(false);
+      setAccepted({ message: "Refresh queued. Waiting for the profile and recent imports to finish." });
+      const completed = await pollOperation(operation, "user", controller.signal, (progress) => {
+        const phase = progress.phases.find((entry) => entry.status === "running" || entry.status === "retrying");
+        setAccepted({ message: phase ? `Refresh ${progress.status}: ${phase.name}.` : `Refresh ${progress.status}.` });
+      }, "summoner_refresh", { region, gameName, tagLine });
+      if (completed.status === "failed") throw new Error(operationFailure(completed));
+      if (completed.status === "succeeded" &&
+          (!Number.isFinite(Date.parse(completed.result.profileUpdatedAtUtc ?? "")) ||
+           !Number.isFinite(Date.parse(completed.result.recentImportCompletedAtUtc ?? "")))) {
+        throw new Error("The refresh finished without profile and recent-import completion evidence.");
+      }
+      await fetchProfileOnce(controller.signal);
+      const missingMatches = (completed.result.deferredMatchCount ?? 0) + (completed.result.failedMatchCount ?? 0);
+      const recentMessage = completed.status === "partial"
+        ? missingMatches > 0
+          ? "Recent refresh finished with incomplete imports. Some matches may still be missing."
+          : "Recent refresh finished with warnings. Some requested data could not be updated."
+        : `Profile and recent-match refresh complete.${completed.result.warningCodes?.length ? ` Optional enrichment warnings: ${completed.result.warningCodes.join(", ")}.` : ""}`;
+      const child = completed.phases.find((phase) => phase.name === "fullHistory" && phase.operationId);
+      setAccepted({ message: child ? `${recentMessage} Full history is importing separately.` : recentMessage });
+      if (child?.operationId) {
+        try {
+          const history = await pollOperation({
+            operationId: child.operationId,
+            statusUrl: `/api/lol/operations/${child.operationId}`,
+            retryAfterSeconds: completed.retryAfterSeconds
+          }, "user", controller.signal, undefined, "full_history", { region, gameName, tagLine });
+          if (history.status === "failed") {
+            setAccepted({ message: `${recentMessage} Full-history import failed${history.errorCode ? ` (${history.errorCode})` : ""}.` });
+          } else {
+            await fetchProfileOnce(controller.signal);
+            setAccepted({ message: `${recentMessage} Full-history import ${history.status === "partial" ? "finished with missing matches" : "complete"}.` });
+          }
+        } catch (childError) {
+          if (controller.signal.aborted) return;
+          setAccepted({ message: `${recentMessage} Full-history completion has not been verified: ${childError instanceof Error ? childError.message : "check again later"}` });
+        }
+      }
     } catch (errorValue) {
+      if (controller.signal.aborted) return;
       setAccepted(null);
       setError({
         message: errorValue instanceof Error ? errorValue.message : "Request failed.",
         code: "CLIENT_FETCH_FAILED"
       });
     } finally {
-      setBusy(false);
+      if (request.current === controller) {
+        request.current = null;
+        setBusy(false);
+        setPolling(false);
+      }
     }
-  }, [gameName, region, tagLine]);
+  }, [gameName, region, tagLine, fetchProfileOnce]);
 
-  return { profile, accepted, error, busy, polling, queueRefresh };
+  return { profile, accepted, error, busy, polling, queueRefresh, refreshRevision };
 }
 
 export function useRankHistory(
   summonerId: string | null | undefined,
-  initialRankHistory: RankHistoryEntry[] | null
+  initialRankHistory: RankHistoryEntry[] | null,
+  refreshRevision = 0
 ) {
   const [rankHistory, setRankHistory] = useState<RankHistoryEntry[] | null>(initialRankHistory);
   const serverSummonerId = useRef(initialRankHistory && summonerId ? summonerId : null);
 
   useEffect(() => {
-    if (!summonerId || serverSummonerId.current === summonerId) return;
+    if (!summonerId || (refreshRevision === 0 && serverSummonerId.current === summonerId)) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -211,7 +234,7 @@ export function useRankHistory(
     return () => {
       cancelled = true;
     };
-  }, [summonerId]);
+  }, [summonerId, refreshRevision]);
 
   return rankHistory;
 }
@@ -224,7 +247,8 @@ export function useMatchHistory({
   initialSort,
   initialChampion,
   initialExpandMatchId,
-  initialHistory
+  initialHistory,
+  refreshRevision = 0
 }: {
   summonerId: string | null | undefined;
   championStatic: ChampionStatic | null;
@@ -234,6 +258,7 @@ export function useMatchHistory({
   initialChampion: string;
   initialExpandMatchId: string | null;
   initialHistory: PagedResultDto<MatchSummary> | null;
+  refreshRevision?: number;
 }) {
   const [page, setPage] = useState(Math.max(1, initialPage));
   const [queue, setQueue] = useState(normalizeInitialQueue(initialQueue));
@@ -245,6 +270,7 @@ export function useMatchHistory({
   const [expandedMatchId, setExpandedMatchId] = useState<string | null>(initialExpandMatchId);
   const [details, setDetails] = useState<Record<string, MatchDetail | null>>({});
   const [detailBusy, setDetailBusy] = useState<Record<string, boolean>>({});
+  const detailRequests = useRef(new Map<string, AbortController>());
   const initialIsUnfiltered = normalizeInitialQueue(initialQueue) === "ALL" && !initialChampion.trim();
   const serverHistoryKey = useRef(
     initialHistory && summonerId && initialIsUnfiltered
@@ -288,7 +314,7 @@ export function useMatchHistory({
   useEffect(() => {
     if (!summonerId) return;
     const historyKey = `${summonerId}:${page}:${requestFilterKey}`;
-    if (serverHistoryKey.current === historyKey) return;
+    if (refreshRevision === 0 && serverHistoryKey.current === historyKey) return;
     serverHistoryKey.current = null;
     let cancelled = false;
     void (async () => {
@@ -328,7 +354,21 @@ export function useMatchHistory({
     return () => {
       cancelled = true;
     };
-  }, [page, queue, requestFilterKey, selectedChampionId, summonerId]);
+  }, [page, queue, requestFilterKey, selectedChampionId, summonerId, refreshRevision]);
+
+  useEffect(() => {
+    // Imported matches can change detail/stat enrichment without changing their IDs.
+    // Preserve the user's page, filters, sort, and expanded selection.
+    const requests = detailRequests.current;
+    for (const controller of requests.values()) controller.abort();
+    requests.clear();
+    setDetails({});
+    setDetailBusy({});
+    return () => {
+      for (const controller of requests.values()) controller.abort();
+      requests.clear();
+    };
+  }, [refreshRevision, summonerId]);
 
   const visibleMatches = useMemo(() => {
     const sorted = [...(history?.items ?? [])];
@@ -344,22 +384,35 @@ export function useMatchHistory({
     setExpandedMatchId(null);
   }, [expandedMatchId, history, visibleMatches]);
 
-  const toggleExpanded = useCallback(async (matchId: string) => {
-    const next = expandedMatchId === matchId ? null : matchId;
-    setExpandedMatchId(next);
-    if (!next || details[next] || !summonerId) return;
-    setDetailBusy((state) => ({ ...state, [next]: true }));
+  const loadDetail = useCallback(async (matchId: string) => {
+    if (Object.hasOwn(details, matchId) || !summonerId || detailRequests.current.has(matchId)) return;
+    const controller = new AbortController();
+    detailRequests.current.set(matchId, controller);
+    setDetailBusy((state) => ({ ...state, [matchId]: true }));
     try {
       const res = await fetch(
-        `${buildLolPublicSummonerByIdPath(summonerId)}/matches/${encodeURIComponent(next)}`,
-        { cache: "no-store" }
+        `${buildLolPublicSummonerByIdPath(summonerId)}/matches/${encodeURIComponent(matchId)}`,
+        { cache: "no-store", signal: controller.signal }
       );
       const json = (await res.json().catch(() => null)) as MatchDetail | null;
-      setDetails((state) => ({ ...state, [next]: res.ok && json?.participants ? json : null }));
+      if (!controller.signal.aborted) setDetails((state) => ({ ...state, [matchId]: res.ok && json?.participants ? json : null }));
+    } catch {
+      if (!controller.signal.aborted) setDetails((state) => ({ ...state, [matchId]: null }));
     } finally {
-      setDetailBusy((state) => ({ ...state, [next]: false }));
+      if (detailRequests.current.get(matchId) === controller) {
+        detailRequests.current.delete(matchId);
+        setDetailBusy((state) => ({ ...state, [matchId]: false }));
+      }
     }
-  }, [details, expandedMatchId, summonerId]);
+  }, [details, summonerId]);
+
+  useEffect(() => {
+    if (expandedMatchId) void loadDetail(expandedMatchId);
+  }, [expandedMatchId, loadDetail]);
+
+  const toggleExpanded = useCallback((matchId: string) => {
+    setExpandedMatchId((current) => current === matchId ? null : matchId);
+  }, []);
 
   return {
     page,

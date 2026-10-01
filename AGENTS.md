@@ -55,7 +55,7 @@ Monorepo with a **.NET backend** (WebAPI + Hangfire Worker) and a **Next.js fron
 **Patterns:**
 
 - **BFF proxy** — Next.js proxies API requests to the backend; auth tokens live in HttpOnly cookies.
-- **Summoner refresh flow** — the Riot-ID lookup always returns `200` with `status` `ready` / `refreshing` / `missing`; a signed-in `POST …/refresh` returns `202 Accepted` and enqueues the refresh job → worker fetches from Riot API → client polls the lookup until `status` is `ready`.
+- **Summoner refresh flow** — the Riot-ID lookup returns `200` with `ready` / `refreshing` / `missing` availability. Signed-in `POST …/refresh` returns required `OperationAcceptedResponse`; clients poll authenticated `GET /api/lol/operations/{operationId}` for recent-import completion, not lookup readiness. Full history is separately tracked child work. Live probes use the same owned operation boundary and return the exact persisted observation.
 - **Tech stack** — PostgreSQL 18, Redis 7, Hangfire (job processing), HybridCache (L1 in-memory + L2 Redis).
 
 For deeper context see `docs/ARCHITECTURE.md`, `docs/DEVELOPMENT.md`, and `docs/API.md`.

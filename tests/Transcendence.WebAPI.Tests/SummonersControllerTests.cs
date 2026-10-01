@@ -19,6 +19,7 @@ using Transcendence.Service.Core.Services.Refresh.Implementations;
 using Transcendence.Service.Core.Services.Summoners.Implementations;
 using Transcendence.Service.Core.Services.RiotApi.DTOs;
 using Transcendence.WebAPI.Controllers;
+using Transcendence.Service.Core.Services.Operations;
 
 namespace Transcendence.WebAPI.Tests;
 
@@ -114,7 +115,7 @@ public class SummonersControllerTests
     }
 
     [Fact]
-    public async Task RefreshByRiotId_WhenLockHeld_ReturnsRetryHintWithPollLink()
+    public async Task RefreshByRiotId_WhenLockHeld_ReturnsOwnedOperationWithoutEnqueueing()
     {
         var refreshLockRepository = new Mock<IRefreshLockRepository>();
         var backgroundJobClient = new Mock<IBackgroundJobClient>();
@@ -129,6 +130,7 @@ public class SummonersControllerTests
             {
                 Key = "summoner-refresh:NA1:NAME:TAG",
                 LockedUntilUtc = lockExpiry
+                , OwnerToken = Guid.NewGuid()
             });
 
         var controller = BuildController(
@@ -140,9 +142,9 @@ public class SummonersControllerTests
         var result = await controller.RefreshByRiotId("na1", "name", "tag", CancellationToken.None);
 
         var accepted = result.Should().BeOfType<AcceptedResult>().Subject;
-        var payload = accepted.Value.Should().BeOfType<SummonerAcceptedResponse>().Subject;
-        payload.Message.Should().Be("Refresh in process");
-        payload.Poll.Should().Be("https://localhost/api/summoners/na1/name/tag");
+        var payload = accepted.Value.Should().BeOfType<OperationAcceptedResponse>().Subject;
+        payload.OperationId.Should().NotBeEmpty();
+        payload.StatusUrl.Should().Be($"/api/lol/operations/{payload.OperationId}");
         payload.RetryAfterSeconds.Should().BeGreaterThan(0);
         var expectedKey = RefreshLockKeys.BuildSummonerRefreshKey(Camille.Enums.PlatformRoute.NA1, "name", "tag");
         lockTelemetry.Verify(
@@ -151,7 +153,7 @@ public class SummonersControllerTests
         lockTelemetry.Verify(
             x => x.RecordContentionWaitHint(
                 expectedKey,
-                It.Is<int>(waitHint => waitHint == payload.RetryAfterSeconds),
+                It.Is<int>(waitHint => waitHint > 0),
                 "summoners-controller"),
             Times.Once);
         backgroundJobClient.Verify(
@@ -177,6 +179,7 @@ public class SummonersControllerTests
             {
                 Key = "summoner-refresh:NA1:NAME:TAG",
                 LockedUntilUtc = DateTime.UtcNow.AddSeconds(30)
+                , OwnerToken = Guid.NewGuid()
             });
 
         var controller = BuildController(
@@ -220,10 +223,10 @@ public class SummonersControllerTests
         var result = await controller.RefreshByRiotId("na1", "Name", "Tag", CancellationToken.None);
 
         var accepted = result.Should().BeOfType<AcceptedResult>().Subject;
-        var payload = accepted.Value.Should().BeOfType<SummonerAcceptedResponse>().Subject;
-        payload.Message.Should().Be("Refresh queued");
-        payload.Poll.Should().Be("https://localhost/api/summoners/na1/name/tag");
-        payload.RetryAfterSeconds.Should().BeNull();
+        var payload = accepted.Value.Should().BeOfType<OperationAcceptedResponse>().Subject;
+        payload.OperationId.Should().NotBeEmpty();
+        payload.StatusUrl.Should().Be($"/api/lol/operations/{payload.OperationId}");
+        payload.RetryAfterSeconds.Should().Be(2);
 
         lockTelemetry.Verify(
             x => x.RecordLifecycleOutcome(expectedMainKey, "acquired", "summoners-controller"),
@@ -257,7 +260,8 @@ public class SummonersControllerTests
                 Mock.Of<ISummonerMatchHistoryService>()),
             new SummonerRefreshCoordinator(
                 effectiveRefreshLockRepository,
-                effectiveBackgroundJobClient,
+                NewTracker(),
+                NewDispatcher(effectiveBackgroundJobClient),
                 refreshLockTelemetry ?? Mock.Of<IRefreshLockLifecycleTelemetry>(),
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<SummonerRefreshCoordinator>.Instance),
             multiSearchService ?? Mock.Of<IMultiSearchService>())
@@ -277,6 +281,28 @@ public class SummonersControllerTests
         return new ClaimsPrincipal(new ClaimsIdentity(
             [new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString())],
             "unit-test"));
+    }
+
+    private static IBackgroundOperationTracker NewTracker()
+    {
+        var tracker = new Mock<IBackgroundOperationTracker>();
+        tracker.Setup(x => x.CreateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<OperationResource>(),
+            It.IsAny<Guid>(), It.IsAny<OperationOwner>(), It.IsAny<OperationDispatch>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TrackedOperation(Guid.NewGuid(), Guid.NewGuid()));
+        tracker.Setup(x => x.JoinAsync(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<OperationOwner>(),
+            It.IsAny<CancellationToken>())).ReturnsAsync(new TrackedOperation(Guid.NewGuid(), Guid.NewGuid()));
+        return tracker.Object;
+    }
+    private static IBackgroundOperationDispatcher NewDispatcher(IBackgroundJobClient jobs)
+    {
+        var dispatcher = new Mock<IBackgroundOperationDispatcher>();
+        dispatcher.Setup(x => x.DispatchAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Returns<Guid, CancellationToken>((_, _) =>
+            {
+                jobs.Create(Hangfire.Common.Job.FromExpression(() => Console.WriteLine("tracked-test")), new Hangfire.States.EnqueuedState());
+                return Task.CompletedTask;
+            });
+        return dispatcher.Object;
     }
 
     private sealed class StaticUrlHelper(string url) : IUrlHelper

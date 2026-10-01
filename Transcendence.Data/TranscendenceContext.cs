@@ -70,6 +70,8 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<MatchParticipantItem> MatchParticipantItems { get; set; }
 
     public DbSet<RefreshLock> RefreshLocks { get; set; }
+    public DbSet<BackgroundOperation> BackgroundOperations { get; set; }
+    public DbSet<BackgroundOperationRequest> BackgroundOperationRequests { get; set; }
     public DbSet<ApiClientKey> ApiClientKeys { get; set; }
     public DbSet<UserAccount> UserAccounts { get; set; }
     public DbSet<UserRole> UserRoles { get; set; }
@@ -139,6 +141,28 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<BackgroundOperation>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Kind).HasMaxLength(40);
+            entity.Property(x => x.ResourceKey).HasMaxLength(256);
+            entity.Property(x => x.Status).HasMaxLength(24);
+            entity.Property(x => x.ErrorCode).HasMaxLength(80);
+            entity.Property(x => x.Revision).IsConcurrencyToken();
+            entity.HasIndex(x => new { x.ResourceKey, x.LeaseToken }).IsUnique();
+            entity.HasIndex(x => new { x.ParentId, x.Kind }).IsUnique();
+            entity.HasIndex(x => x.CompletedAtUtc);
+            entity.HasOne(x => x.Parent).WithMany().HasForeignKey(x => x.ParentId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<BackgroundOperationRequest>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.OwnerKind).HasMaxLength(24);
+            entity.HasIndex(x => new { x.ExecutionId, x.OwnerKind, x.OwnerId }).IsUnique();
+            entity.HasOne(x => x.Execution).WithMany().HasForeignKey(x => x.ExecutionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
         modelBuilder.Entity<Rank>()
             .HasIndex(x => new
             {

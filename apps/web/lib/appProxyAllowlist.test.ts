@@ -10,9 +10,17 @@ describe("isAllowedAppProxyPath", () => {
       .toBe(true);
     expect(isAllowedAppProxyPath("POST", ["lol", "summoners", "na", "Name", "Tag", "live-game", "probe"]))
       .toBe(true);
+    expect(isAllowedAppProxyPath("GET", ["lol", "operations", "11111111-1111-1111-1111-111111111111"]))
+      .toBe(true);
   });
 
   it("rejects methods and paths outside the narrow allowlist", () => {
+    expect(isAllowedAppProxyPath("POST", ["lol", "operations", "11111111-1111-1111-1111-111111111111"]))
+      .toBe(false);
+    expect(isAllowedAppProxyPath("GET", ["lol", "operations", "../admin"]))
+      .toBe(false);
+    expect(isAllowedAppProxyPath("GET", ["lol", "operations", "11111111-1111-1111-1111-111111111111", "jobs"]))
+      .toBe(false);
     expect(isAllowedAppProxyPath("GET", ["lol", "summoners", "multi-search"]))
       .toBe(false);
     expect(isAllowedAppProxyPath("GET", ["summoners", "na", "Name", "Tag", "live-game"]))

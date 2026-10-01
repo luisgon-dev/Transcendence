@@ -6,6 +6,7 @@ public interface ILiveGameProbeJob
 {
     [Queue(HangfireQueues.RefreshHigh)]
     Task ProbeAsync(
+        Guid operationId,
         string platformRegion,
         string gameName,
         string tagLine,

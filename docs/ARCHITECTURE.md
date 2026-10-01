@@ -110,7 +110,9 @@ Transcendence is a backend + web monorepo:
 2. Client triggers refresh:
    - The refresh endpoint is signed-in only (`UserOnly`); the web app reaches it through `/api/trn/user/*`
    - The shared `ISummonerRefreshCoordinator` acquires the refresh locks (preventing concurrent refreshes)
-   - The coordinator enqueues the Hangfire job and releases owned locks if enqueueing fails
+   - The coordinator atomically stores an execution, owner request, and dispatch outbox before
+     enqueueing. A worker dispatcher scans undispatched rows every five seconds; a lost enqueue
+     acknowledgement may redispatch the same execution, never a new completion identity.
 3. Worker performs refresh:
    - Calls Riot APIs
    - Upserts summoner/rank/match records
@@ -119,7 +121,18 @@ Transcendence is a backend + web monorepo:
      - all-mode head sync second
      - non-ranked backfill pagination (bounded by safety caps)
    - Signed-in manual refreshes then enqueue `FullHistoryBackfillJob` on the reserved `history-backfill` queue
-4. Client polls the GET endpoint until its lookup state changes from `refreshing` to `ready`
+4. Client polls authenticated operation status until recent work is terminal; profile availability
+   cannot certify imports. Stored profile/history remains visible. Child history progress is tracked
+   separately, and web completion refreshes dependent data without resetting active filters.
+
+Tracked execution uses PostgreSQL session advisory locks on execution and target resource, which
+release on connection/process death. Duplicate/busy jobs defer without consuming execution retry
+budget. Late Hangfire state filters publish retries/exhausted failure/deletion with bounded error
+codes; only domain jobs certify success. Terminal writes are revision-guarded and monotonic.
+Full-history continuations retain their execution identity; newer requests wait for the older active
+cursor owner rather than taking over its stored progress. Exhausted history failures update the
+matching stored history row, fenced by operation ID. These records currently have no automatic
+purge; status clients treat missing/expired records as errors, never successful completion.
 
 ### Full-History Profile Backfill
 
@@ -202,7 +215,10 @@ Operational implication:
 - Any stored profile can request an on-demand probe through the AppOnly BFF. The Web API takes a
   fenced, per-Riot-ID `live-game-probe:*` lease and enqueues `ILiveGameProbeJob` on `refresh-high`;
   the worker performs a rate-gated, cache-bypassing Spectator read, persists the complete snapshot,
-  and releases the lease. Concurrent checks coalesce and the browser polls the snapshot-only GET.
+  and releases the lease. Concurrent checks coalesce execution with separate owner request IDs.
+  Clients poll owned operation status for the exact snapshot ID/time/payload. Spectator uses a
+  narrow status-preserving HTTP adapter because the SDK collapses 404/204/422 to null; only actual
+  404 verifies offline. Other unverified outcomes retry/fail without publishing a fresh snapshot.
   Favorite polling remains the proactive background path, not a prerequisite for a manual live check.
 - Each snapshot stores its complete response as PostgreSQL `jsonb` alongside indexed
   state/game/timing columns. This preserves participant spells/runes and computed scouting analysis

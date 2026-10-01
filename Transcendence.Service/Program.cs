@@ -1,4 +1,5 @@
 using Hangfire;
+using Transcendence.Service.Core.Services.Operations;
 using Hangfire.PostgreSql;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration.Json;
@@ -41,7 +42,8 @@ var timelineWorkerCount = Math.Max(1, builder.Configuration.GetValue("Jobs:Hangf
 var discoveryWorkerCount = Math.Max(1, builder.Configuration.GetValue("Jobs:Hangfire:Workers:Discovery", 8));
 var historyWorkerCount = Math.Max(1, builder.Configuration.GetValue("Jobs:Hangfire:Workers:History", 2));
 
-builder.Services.AddHangfire(config =>
+builder.Services.AddBackgroundOperationWorker();
+builder.Services.AddHangfire((provider, config) =>
     config.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
         .UseSimpleAssemblyNameTypeSerializer()
         .UseRecommendedSerializerSettings()
@@ -49,6 +51,7 @@ builder.Services.AddHangfire(config =>
         {
             Attempts = hangfireRetryAttempts
         })
+        .UseBackgroundOperationTracking(provider)
         .UsePostgreSqlStorage(
             options => options.UseNpgsqlConnection(
                 builder.Configuration.GetConnectionString("MainDatabase")),

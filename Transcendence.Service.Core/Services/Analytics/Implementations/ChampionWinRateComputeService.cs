@@ -242,8 +242,8 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
     }
 
     /// <summary>
-    /// Computes tier list ranking champions by composite score.
-    /// S = top 10%, A = 10-30%, B = 30-60%, C = 60-85%, D = 85%+
+    /// Computes the tier list. Grades come from <c>ChampionTierScorer</c>: each champion's win rate is
+    /// shrunk toward its role baseline, then cut at absolute deltas (see <c>TieringOptions.Cutoffs</c>).
     /// </summary>
     public Task<List<TierListEntry>> ComputeTierListAsync(
         string? role,

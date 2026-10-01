@@ -3,8 +3,8 @@
 // The public proxy forwards to the backend WITHOUT any credentials (no session
 // cookie, no API key). Without an allowlist it would relay anonymous traffic to
 // *any* `/api/*` backend route. We restrict it to the only anonymous surface the
-// public frontend actually uses: LoL summoner reads, Build Lab estimates, and
-// token-addressed shared builds. Mutating requests go through `/api/trn/user/...`
+// public frontend actually uses: LoL summoner reads and Build Lab estimates.
+// Mutating requests go through `/api/trn/user/...`
 // so the BFF can attach a signed-in user's JWT.
 //
 // `normalizeProxyPath` (lib/proxyPath.ts) already rejects path traversal

@@ -22,14 +22,12 @@ describe("robots", () => {
     expect(rules.disallow).toContain("/lol/builds");
   });
 
-  it("allows the Build Lab once the flag is on but never the share links", async () => {
+  it("allows the Build Lab once the flag is on", async () => {
     vi.stubEnv("TRN_FEATURE_BUILD_LAB", "true");
 
     const rules = generalRule(await robots());
 
     expect(rules.disallow).not.toContain("/lol/builds");
-    // A share link is a capability URL: revoking it cannot un-index it.
-    expect(rules.disallow).toContain("/lol/builds/shared/");
   });
 
   it("keeps the pre-existing private surfaces disallowed in both flag states", async () => {
@@ -39,7 +37,7 @@ describe("robots", () => {
       const rules = generalRule(await robots());
 
       expect(rules.disallow).toEqual(
-        expect.arrayContaining(["/admin/", "/api/", "/favorites", "/login"]),
+        expect.arrayContaining(["/admin/", "/api/", "/account/"]),
       );
     }
   });

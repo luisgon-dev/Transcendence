@@ -37,14 +37,11 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
       {
         userAgent: "*",
         allow: "/",
-        // Shared-build links are capability URLs: revoking one cannot un-index it, so they must
-        // never be crawled in the first place.
+        // `/account/` covers sign-in, registration, password reset, and favorites.
         disallow: [
           "/admin/",
           "/api/",
-          "/favorites",
-          "/login",
-          "/lol/builds/shared/",
+          "/account/",
           ...(buildLab ? [] : ["/lol/builds"]),
         ],
       },

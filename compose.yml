@@ -3,10 +3,6 @@ name: transcendence
 x-app-env: &app-env
   ConnectionStrings__Redis: ${REDIS_CONNECTION}
   RiotApi__League__ApiKey: ${RIOT_API_KEY_LOL}
-  # Carried from the pre-Compose prod stack. Nothing binds RiotApi:Tft:ApiKey today -- the schema in
-  # config/backend.shared.json declares only League -- but the TFT module's tables and migrations
-  # exist, so this is kept rather than dropped during a migration whose rule is to change nothing.
-  RiotApi__Tft__ApiKey: ${RIOT_API_KEY_TFT:-}
 
 services:
   postgres:

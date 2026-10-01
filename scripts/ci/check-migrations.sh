@@ -43,7 +43,7 @@ for f in "${NEW_MIGRATIONS[@]}"; do
   #     blocks writes for the full build. Split RS on ");" so each migrationBuilder
   #     call is one record and the table is matched to the CreateIndex it belongs to.
   if awk 'BEGIN{RS=");"} /CreateIndex\(/ && /table: *"('"$HOT_TABLES"')"/ {hit=1} END{exit !hit}' "$f"; then
-    echo "::error file=$f::Adds an index on a hot table (Summoners/Matches/MatchParticipants) via plain CreateIndex, which write-locks the table. Apply it out-of-band with CREATE INDEX CONCURRENTLY and record it manually — see docs/DEVELOPMENT.md 'Applying index migrations to hot tables'."
+    echo "::error file=$f::Adds an index on a hot table (Summoners/Matches/MatchParticipants/MatchParticipantTimelineSnapshots) via plain CreateIndex, which write-locks the table. Build it with migrationBuilder.Sql("CREATE INDEX CONCURRENTLY IF NOT EXISTS ...", suppressTransaction: true) instead — see docs/DEVELOPMENT.md 'Applying index migrations to hot tables'."
     violations=$((violations + 1))
   fi
 

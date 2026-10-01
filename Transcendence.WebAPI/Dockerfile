@@ -28,8 +28,8 @@ RUN apt-get update \
 USER $APP_UID
 WORKDIR /app
 COPY --from=publish /app/publish .
-# Readiness healthcheck travels with the image, so it applies in prod (wud-managed)
-# without editing the deployment compose. /health/ready verifies Postgres + Redis.
+# Readiness healthcheck travels with the image, so it applies in prod without editing the
+# deployment compose; poll-deploy gates every rollout on it. /health/ready verifies Postgres + Redis.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
     CMD curl -fsS http://localhost:8080/health/ready || exit 1
 ENTRYPOINT ["dotnet", "Transcendence.WebAPI.dll"]

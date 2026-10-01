@@ -7,7 +7,7 @@ public interface ISummonerRefreshJob
 {
     // Jobs are enqueued via this interface (Enqueue<ISummonerRefreshJob>(...)), so Hangfire resolves
     // the [Queue] from the INTERFACE method — attributes on the implementation are ignored here.
-    [Queue("refresh-high")]
+    [Queue(HangfireQueues.RefreshHigh)]
     Task RefreshByRiotId(string gameName, string tagLine, PlatformRoute platformRoute, string lockKey,
         string? priorityLockKey, Guid? requestedByUserAccountId = null, CancellationToken ct = default);
 

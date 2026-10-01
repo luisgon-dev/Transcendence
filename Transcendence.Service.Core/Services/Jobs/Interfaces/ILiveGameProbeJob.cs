@@ -4,7 +4,7 @@ namespace Transcendence.Service.Core.Services.Jobs.Interfaces;
 
 public interface ILiveGameProbeJob
 {
-    [Queue("refresh-high")]
+    [Queue(HangfireQueues.RefreshHigh)]
     Task ProbeAsync(
         string platformRegion,
         string gameName,

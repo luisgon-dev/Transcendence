@@ -17,7 +17,7 @@ public class RefreshLockLifecycleJob(
     private const int MaxBatchesPerRunCap = 100;
     private const int ForensicsWindowMinutesCap = 24 * 60;
 
-    [Queue("refresh-low")]
+    [Queue(HangfireQueues.RefreshLow)]
     public async Task ExecuteAsync(CancellationToken ct = default)
     {
         var startedUtc = DateTime.UtcNow;

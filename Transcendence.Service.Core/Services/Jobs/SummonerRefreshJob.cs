@@ -46,7 +46,7 @@ public class SummonerRefreshJob(
             : lockKey;
     }
 
-    [Queue("refresh-high")]
+    [Queue(HangfireQueues.RefreshHigh)]
     public async Task RefreshByRiotId(string gameName, string tagLine, PlatformRoute platformRoute, string lockKey,
         string? priorityLockKey, Guid? requestedByUserAccountId = null, CancellationToken ct = default)
     {

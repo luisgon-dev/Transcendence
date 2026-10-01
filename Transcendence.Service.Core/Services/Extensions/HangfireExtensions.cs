@@ -54,6 +54,23 @@ public static class HangfireExtensions
         return new HangfireBacklogPurgeSummary(enqueuedJobs.Count, scheduledJobs.Count);
     }
 
+    /// <summary>
+    /// Enqueued-job counts for queues no worker pool serves. Hangfire accepts a job for any queue name,
+    /// so a job routed to an unserved queue waits there forever without failing; this makes that visible.
+    /// Read-only: it reports the backlog and leaves the jobs where they are.
+    /// </summary>
+    public static IReadOnlyDictionary<string, long> FindUnservedQueueBacklog(
+        this IMonitoringApi monitor,
+        IReadOnlySet<string> servedQueues)
+    {
+        ArgumentNullException.ThrowIfNull(monitor);
+        ArgumentNullException.ThrowIfNull(servedQueues);
+
+        return monitor.Queues()
+            .Where(queue => queue.Length > 0 && !servedQueues.Contains(queue.Name))
+            .ToDictionary(queue => queue.Name, queue => queue.Length, StringComparer.Ordinal);
+    }
+
     public static int RemoveInvalidRecurringJobs(
         this JobStorage storage,
         ILogger logger,

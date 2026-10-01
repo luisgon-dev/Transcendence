@@ -28,7 +28,7 @@ public class AddOrUpdateHighEloProfiles(
     internal sealed record ApexLeagueState(
         string Puuid, string Tier, string Division, int LeaguePoints, int Wins, int Losses);
 
-    [Queue("refresh-low")]
+    [Queue(HangfireQueues.RefreshLow)]
     public async Task Execute(CancellationToken stoppingToken)
     {
         var multiRegion = multiRegionOptions.Value;
@@ -55,7 +55,7 @@ public class AddOrUpdateHighEloProfiles(
         }
     }
 
-    [Queue("refresh-low")]
+    [Queue(HangfireQueues.RefreshLow)]
     public async Task ExecuteForRegionAsync(string region, CancellationToken stoppingToken)
     {
         if (!PlatformRouteParser.TryParse(region, out var platform))

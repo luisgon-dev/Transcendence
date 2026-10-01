@@ -1,14 +1,22 @@
 namespace Transcendence.Service.Core.Services.Jobs;
 
 /// <summary>
-/// Hangfire queue names. Most queues are referenced as inline literals at the worker host
-/// (<c>refresh-high</c>/<c>default</c>/<c>refresh-low</c>); this
-/// constant exists because the reserved analytics lane is referenced from several places
-/// (the dedicated <c>AddHangfireServer</c> registration plus the jobs' <c>[Queue]</c> attributes)
-/// and must not drift.
+/// Hangfire queue names, and the set of queues the worker host actually serves. Every <c>[Queue]</c>
+/// attribute and every <c>AddHangfireServer</c> registration references these constants: a job sent to
+/// a queue no server listens on is accepted by Hangfire and then never runs, with nothing failing.
+/// <c>HangfireQueueRoutingTests</c> holds every <c>[Queue]</c> attribute to <see cref="Served"/>.
 /// </summary>
 public static class HangfireQueues
 {
+    /// <summary>User-initiated work (profile refreshes, live-game probes). Highest priority on the main pool.</summary>
+    public const string RefreshHigh = "refresh-high";
+
+    /// <summary>Hangfire's default queue: jobs without a <c>[Queue]</c> attribute land here.</summary>
+    public const string Default = "default";
+
+    /// <summary>Broad background maintenance (ladder crawl, lock cleanup). Lowest priority on the main pool.</summary>
+    public const string RefreshLow = "refresh-low";
+
     /// <summary>
     /// Reserved lane for the jobs that keep champion analytics warm and fresh
     /// (default-profile warm + adaptive/ramp analytics refresh). Served by its own dedicated
@@ -39,4 +47,12 @@ public static class HangfireQueues
     /// match-detail archive pruning, so they are intentionally isolated from the quick refresh queues.
     /// </summary>
     public const string HistoryBackfill = "history-backfill";
+
+    /// <summary>Queues the main worker pool serves, highest priority first.</summary>
+    public static readonly IReadOnlyList<string> MainServer = [RefreshHigh, Default, RefreshLow];
+
+    /// <summary>Every queue some worker pool serves. A queue outside this set is never drained.</summary>
+    public static readonly IReadOnlySet<string> Served = new HashSet<string>(
+        [.. MainServer, AnalyticsWarm, TimelineIngest, Discovery, HistoryBackfill],
+        StringComparer.Ordinal);
 }

@@ -60,8 +60,8 @@ builder.Services.AddHangfire(config =>
             }));
 builder.Services.AddHangfireServer(options =>
 {
-    options.Queues = ["refresh-high", "default", "refresh-low"];
-    // Refresh jobs are I/O-bound (awaiting the Riot API, throttled per-region by Camille), so a
+    options.Queues = [.. HangfireQueues.MainServer];
+    // Refresh jobs are I/O-bound (awaiting the Riot API, throttled per-region by IRiotRateGate), so a
     // worker count well above CPU count keeps more regions/summoners in flight concurrently.
     options.WorkerCount = mainWorkerCount;
 });
@@ -102,7 +102,7 @@ builder.Services.AddHangfireServer(options =>
     options.Queues = [HangfireQueues.Discovery];
     // Discovery consumers are I/O-bound on the Riot API. Concurrency here = concurrent Riot requests,
     // which is capped by the prod key's rate limit, NOT by CPU/connections. Setting this too high makes
-    // consumers generate requests faster than the key allows, so Camille's rate limiter parks them and
+    // consumers generate requests faster than the key allows, so the rate gate parks them and
     // every Riot-calling job stalls (observed outage). Keep it modest so the steady request rate fits
     // the key; raise only if the key's tier genuinely supports more sustained throughput.
     options.WorkerCount = discoveryWorkerCount;
@@ -257,8 +257,8 @@ if (builder.Configuration.GetValue("Telemetry:Enabled", true))
     host.Services.GetRequiredService<Transcendence.Service.Core.Services.Diagnostics.BuildLabTelemetry>();
 }
 
-// Apply pending EF migrations before the worker starts (gated by Database:AutoMigrate). EF Core's migration
-// lock makes this safe even though the WebAPI host runs the same step on a simultaneous deploy.
+// Apply pending EF migrations before the worker starts (gated by Database:AutoMigrate). The worker is the
+// only host that migrates: the WebAPI never does, and poll-deploy runs this step alone (MigrateOnly) first.
 await DatabaseMigrator.MigrateIfEnabledAsync(
     host.Services,
     builder.Configuration.GetValue("Database:AutoMigrate", false),

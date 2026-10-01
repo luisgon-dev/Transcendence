@@ -23,6 +23,7 @@ public class ProductionWorker(
             TryCleanupHangfireJobs();
 
         TryRemoveInvalidRecurringJobs();
+        WarnAboutUnservedQueueBacklog();
 
         var profileName = recurringJobPolicy.ResolveProfile(schedule);
         var descriptors = recurringJobPolicy.BuildDescriptors(schedule);
@@ -126,6 +127,23 @@ public class ProductionWorker(
                 "Startup integrity optional failures for profile {Profile}: {OptionalFailures}",
                 profileName,
                 string.Join("; ", startupResult.OptionalFailures));
+        }
+    }
+
+    private void WarnAboutUnservedQueueBacklog()
+    {
+        try
+        {
+            var backlog = jobStorage.GetMonitoringApi().FindUnservedQueueBacklog(HangfireQueues.Served);
+            foreach (var (queue, count) in backlog)
+                logger.LogWarning(
+                    "Queue {Queue} holds {Count} enqueued jobs but no worker pool serves it; they will never run.",
+                    queue,
+                    count);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to check for unserved Hangfire queues during startup. Continuing startup.");
         }
     }
 

@@ -10,18 +10,20 @@
 #   digest changed), so pushes never auto-deployed. See task P1.3b.
 #
 #   This script replaces wud for the app services with an OUTBOUND-ONLY
-#   release poll (prod -> ghcr): it compares both the manifest digest and signed
-#   OCI revision label, needs no inbound exposure, no CI secret, and no self-hosted
-#   runner. Run it every ~60s via the systemd timer
+#   release poll (prod -> ghcr): it compares both the manifest digest and OCI
+#   revision label, verifies the release's cosign signature before pulling it, and
+#   needs no inbound exposure, no CI secret, and no self-hosted runner. Run it every ~60s via the systemd timer
 #   (scripts/ops/transcendence-deploy.timer).
 #
 # WHAT IT DOES
 #   For each app service, resolve the current `:main` manifest digest and OCI revision
 #   label from ghcr and compare both to the running container. The revision comparison
 #   catches registries/build pipelines that reuse a manifest digest across rebuilt tags.
-#   If either differs, `compose pull` + `up -d` just
-#   that service (--no-deps, so postgres/redis are never touched), then optionally
-#   post a Discord notification.
+#   If either differs, verify the new digest was signed keyless by docker-images.yml on main
+#   (cosign, run from a digest-pinned container so the host needs no install), then
+#   `compose pull` + `up -d` just that service (--no-deps, so postgres/redis are never
+#   touched), confirm the pulled image is the verified digest, and optionally post a
+#   Discord notification.
 #
 #   Services flagged `optional` in $SERVICES are polled last, are skipped in silence when their
 #   container is absent (Compose profile off on this host), verify as "running" because they ship no
@@ -50,6 +52,14 @@ STATE_DIR="${POLL_DEPLOY_STATE_DIR:-/var/lib/transcendence-deploy}"
 RESOLUTION_ALERT_THRESHOLD="${POLL_DEPLOY_RESOLUTION_ALERT_THRESHOLD:-3}"
 HEALTH_TIMEOUT_SECONDS="${POLL_DEPLOY_HEALTH_TIMEOUT_SECONDS:-420}"
 HEALTH_POLL_SECONDS="${POLL_DEPLOY_HEALTH_POLL_SECONDS:-5}"
+# docker-images.yml signs every pushed digest keyless (cosign, GitHub OIDC). A registry or token
+# compromise can push a :main, but cannot mint a Fulcio certificate for this workflow on main, so a
+# release is deployed only once its exact digest verifies against that identity. Set to 0 only for a
+# break-glass deploy while sigstore itself is down.
+VERIFY_SIGNATURES="${POLL_DEPLOY_VERIFY_SIGNATURES:-1}"
+COSIGN_IMAGE="${POLL_DEPLOY_COSIGN_IMAGE:-ghcr.io/sigstore/cosign/cosign:v2.6.3@sha256:4bedb8de1c5c1abd8dea60de704ba449402d238623fa8bb33d2ccaa9beffcbf5}"
+SIGNER_IDENTITY="https://github.com/${OWNER}/Transcendence/.github/workflows/docker-images.yml@refs/heads/main"
+SIGNER_ISSUER="https://token.actions.githubusercontent.com"
 
 [[ "$RESOLUTION_ALERT_THRESHOLD" =~ ^[1-9][0-9]*$ ]] || RESOLUTION_ALERT_THRESHOLD=3
 [[ "$HEALTH_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]] || HEALTH_TIMEOUT_SECONDS=420
@@ -134,6 +144,28 @@ local_revision() {
     2>/dev/null
 }
 
+# Verifies the exact remote digest was signed by docker-images.yml on main. Verification needs
+# sigstore (Fulcio roots via TUF, Rekor) to be reachable, so a failure is retried every poll, never
+# quarantined: an outage must not strand a good release, and a bad signature never deploys anyway.
+verify_signature() {
+  local repo="$1" digest="$2"
+  [ "$VERIFY_SIGNATURES" = "0" ] && return 0
+  run_logged "${repo} signature verification" \
+    docker run --rm "$COSIGN_IMAGE" verify \
+      --certificate-identity "$SIGNER_IDENTITY" \
+      --certificate-oidc-issuer "$SIGNER_ISSUER" \
+      "${REGISTRY_HOST}/${OWNER}/${repo}@${digest}"
+}
+
+# True when the local :main image was pulled at the given digest. Closes the window between
+# verifying a digest and `compose pull` resolving :main, which can move in between.
+pulled_digest_is() {
+  local repo="$1" digest="$2"
+  docker image inspect "${REGISTRY_HOST}/${OWNER}/${repo}:main" \
+      --format '{{range .RepoDigests}}{{println .}}{{end}}' 2>/dev/null \
+    | grep -qxF "${REGISTRY_HOST}/${OWNER}/${repo}@${digest}"
+}
+
 # Images build in parallel, so a webapi image can reach :main a poll before the worker image of the
 # same merge, and the worker is what applies migrations. Deploying that webapi first ran new code
 # against the old schema (seen 2026-09-27: the webapi served ~30s ahead of AddBuildLabCoverage).
@@ -161,7 +193,7 @@ notify() {
 }
 
 record_resolution_failure() {
-  local svc="$1" kind="$2" state_file count=0
+  local svc="$1" kind="$2" what="${3:-${2} digest resolution}" state_file count=0
   mkdir -p "$STATE_DIR"
   state_file="${STATE_DIR}/${svc}-${kind}.count"
   if [ -r "$state_file" ]; then
@@ -172,12 +204,12 @@ record_resolution_failure() {
   printf '%s\n' "$count" >"$state_file"
 
   if [ "$count" -eq "$RESOLUTION_ALERT_THRESHOLD" ]; then
-    log "ERROR ${svc}: ${kind} digest resolution failed ${count} consecutive times"
-    notify "🚨 deploy poll: ${svc} ${kind} digest resolution failed ${count} consecutive times"
+    log "ERROR ${svc}: ${what} failed ${count} consecutive times"
+    notify "🚨 deploy poll: ${svc} ${what} failed ${count} consecutive times"
   elif [ "$count" -gt "$RESOLUTION_ALERT_THRESHOLD" ]; then
-    log "WARN ${svc}: ${kind} digest resolution still failing (${count} consecutive; alerted at ${RESOLUTION_ALERT_THRESHOLD})"
+    log "WARN ${svc}: ${what} still failing (${count} consecutive; alerted at ${RESOLUTION_ALERT_THRESHOLD})"
   else
-    log "WARN ${svc}: could not resolve ${kind} digest (${count}/${RESOLUTION_ALERT_THRESHOLD})"
+    log "WARN ${svc}: ${what} failed (${count}/${RESOLUTION_ALERT_THRESHOLD})"
   fi
 }
 
@@ -363,6 +395,13 @@ deploy_one() {
   fi
 
   log "UPDATE ${svc}: rev ${current_rev:0:12} -> ${remote_rev:0:12}; deploying"
+  if ! verify_signature "$repo" "$remote"; then
+    log "ERROR ${svc}: ${repo}@${remote} did not verify as signed by docker-images.yml on main; not deploying"
+    record_resolution_failure "$svc" signature "signature verification"
+    return 1
+  fi
+  clear_resolution_failure "$svc" signature
+  log "VERIFIED ${svc}: ${repo}@${remote:0:19} is signed by docker-images.yml on main"
   if [ "${DRY_RUN:-0}" = "1" ]; then
     log "DRY_RUN ${svc}: would compose pull, migrate if needed, recreate, and health-check"
     return 0
@@ -370,6 +409,10 @@ deploy_one() {
   if ! run_logged "${svc} pull" \
       docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" pull "$svc"; then
     log "ERROR ${svc}: pull failed"; notify "⚠️ deploy: ${svc} pull failed"; return 1
+  fi
+  if [ "$VERIFY_SIGNATURES" != "0" ] && ! pulled_digest_is "$repo" "$remote"; then
+    log "WARN ${svc}: :main moved after ${remote:0:19} was verified; re-verifying on the next poll"
+    return 1
   fi
   if [ "$svc" = "service" ] && ! run_migrations; then
     mkdir -p "$STATE_DIR"

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,8 +17,20 @@ public class ChampionAnalyticsController(
     IChampionAnalyticsService analyticsService,
     IServiceScopeFactory? serviceScopeFactory,
     IChampionSynergyService? synergyService = null,
-    IBuildLabService? buildLabService = null) : ControllerBase
+    IBuildLabService? buildLabService = null,
+    ILogger<ChampionAnalyticsController>? logger = null,
+    TimeSpan? synergyWaitBudget = null) : ControllerBase
 {
+    /// <summary>
+    /// How long the profile waits for synergies. A cached entry answers in milliseconds; a miss is a
+    /// live computation over the participant tables that took 10.9s on average on prod (up to 108s),
+    /// so past this budget the profile is returned without the synergy section. The fill keeps running
+    /// in its own DI scope and caches its result for the next view.
+    /// </summary>
+    public static readonly TimeSpan DefaultSynergyWaitBudget = TimeSpan.FromSeconds(2);
+
+    private readonly TimeSpan _synergyWaitBudget = synergyWaitBudget ?? DefaultSynergyWaitBudget;
+
     private static readonly HashSet<string> ValidRoles = new(StringComparer.OrdinalIgnoreCase)
     {
         "TOP",
@@ -111,6 +124,7 @@ public class ChampionAnalyticsController(
         }
         else
         {
+            var fanOutStarted = Stopwatch.GetTimestamp();
             var buildsTask = RunInAnalyticsScopeAsync(
                 scoped => scoped.GetBuildsAsync(
                     championId, effectiveRole, rankTier, region, normalizedQueue, patch, ct));
@@ -130,13 +144,13 @@ public class ChampionAnalyticsController(
                     championId, effectiveRole, null, patch, region, ct))
                 : Task.FromResult<ChampionRecommendationSummary?>(null);
 
-            await Task.WhenAll(buildsTask, matchupsTask, gradeTask, trendTask, synergiesTask, recommendationTask);
+            await Task.WhenAll(buildsTask, matchupsTask, gradeTask, trendTask, recommendationTask);
             builds = await buildsTask;
             matchups = await matchupsTask;
             grade = await gradeTask;
             trend = await trendTask;
-            synergies = await synergiesTask;
             recommendation = await recommendationTask;
+            synergies = await WaitForSynergiesAsync(synergiesTask, fanOutStarted, championId, effectiveRole, ct);
         }
 
         return Ok(new ChampionProfileAnalyticsResponse(
@@ -334,6 +348,39 @@ public class ChampionAnalyticsController(
         using var scope = serviceScopeFactory!.CreateScope();
         var scopedAnalyticsService = scope.ServiceProvider.GetRequiredService<IChampionAnalyticsService>();
         return await action(scopedAnalyticsService);
+    }
+
+    // Synergies are the profile's only section computed live from match rows on a cache miss (every
+    // other section reads a durable snapshot or precomputed table). Waiting for that computation is
+    // what pushed the profile past 10s, and since cache fills run to completion even after the caller
+    // leaves (FillToCompletionHybridCache), waiting bought nothing. The task owns its DI scope, so
+    // leaving it running never disposes a DbContext under a live command; a result or failure that
+    // arrives within the budget is returned or thrown exactly as before.
+    private async Task<ChampionSynergiesResponse?> WaitForSynergiesAsync(
+        Task<ChampionSynergiesResponse> synergiesTask,
+        long fanOutStarted,
+        int championId,
+        string role,
+        CancellationToken ct)
+    {
+        var remaining = _synergyWaitBudget - Stopwatch.GetElapsedTime(fanOutStarted);
+        if (!synergiesTask.IsCompleted && remaining > TimeSpan.Zero)
+            await Task.WhenAny(synergiesTask, Task.Delay(remaining, ct));
+
+        if (synergiesTask.IsCompleted)
+            return await synergiesTask;
+
+        // Observe a late failure so it is logged rather than lost.
+        _ = synergiesTask.ContinueWith(
+            task => logger?.LogWarning(task.Exception,
+                "Background synergy fill failed for champion {ChampionId} {Role}.", championId, role),
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+        logger?.LogInformation(
+            "Synergies for champion {ChampionId} {Role} were not cached; answered the profile without them while the fill completes.",
+            championId, role);
+        return null;
     }
 
     private async Task<T> RunInSynergyScopeAsync<T>(Func<IChampionSynergyService, Task<T>> action)

@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
@@ -62,6 +64,88 @@ public class ChampionAnalyticsControllerTests
         payload.Builds.Role.Should().Be("MIDDLE");
         payload.Matchups.Role.Should().Be("MIDDLE");
         payload.Synergies!.BestPartners.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task GetProfile_AnswersWithoutSynergies_WhenTheFillOutlastsTheBudget()
+    {
+        var pending = new TaskCompletionSource<ChampionSynergiesResponse>();
+        var controller = ScopedProfileController(_ => pending.Task, TimeSpan.FromMilliseconds(100));
+
+        var stopwatch = Stopwatch.StartNew();
+        var result = await controller.GetProfile(103, null, null, null, null, "15.1", CancellationToken.None);
+        stopwatch.Stop();
+
+        var payload = result.Result.Should().BeOfType<OkObjectResult>().Subject.Value
+            .Should().BeOfType<ChampionProfileAnalyticsResponse>().Subject;
+        payload.Synergies.Should().BeNull("the panel is optional and its fill is still running");
+        payload.Builds.Role.Should().Be("MIDDLE");
+        stopwatch.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(5));
+        pending.SetResult(Synergies());
+    }
+
+    [Fact]
+    public async Task GetProfile_IncludesSynergies_ThatArriveWithinTheBudget()
+    {
+        var controller = ScopedProfileController(_ => Task.FromResult(Synergies()), TimeSpan.FromSeconds(5));
+
+        var result = await controller.GetProfile(103, null, null, null, null, "15.1", CancellationToken.None);
+
+        var payload = result.Result.Should().BeOfType<OkObjectResult>().Subject.Value
+            .Should().BeOfType<ChampionProfileAnalyticsResponse>().Subject;
+        payload.Synergies!.BestPartners.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task GetProfile_StillFails_WhenSynergiesFailWithinTheBudget()
+    {
+        var controller = ScopedProfileController(
+            _ => Task.FromException<ChampionSynergiesResponse>(new InvalidOperationException("boom")),
+            TimeSpan.FromSeconds(5));
+
+        var act = () => controller.GetProfile(103, null, null, null, null, "15.1", CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("boom");
+    }
+
+    private static ChampionSynergiesResponse Synergies() =>
+        new(103, "MIDDLE", "all", "ALL", "15.1", "RANKED_SOLO_DUO", 20, 11, 0.55,
+            [new ChampionSynergyEntryDto(64, "JUNGLE", 10, 6, 0.6, 0.5, 0.05, 0.01)]);
+
+    // The production shape: every section runs in its own DI scope, in parallel.
+    private static ChampionAnalyticsController ScopedProfileController(
+        Func<CancellationToken, Task<ChampionSynergiesResponse>> synergies,
+        TimeSpan budget)
+    {
+        var analytics = new Mock<IChampionAnalyticsService>();
+        analytics
+            .Setup(x => x.GetWinRatesAsync(103, It.IsAny<ChampionAnalyticsFilter>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ChampionWinRateSummary(103, "15.1",
+                [new ChampionWinRateDto(103, "MIDDLE", "all", 20, 11, 0.55, 0.2, 0.01, 1, 50, "15.1")]));
+        analytics
+            .Setup(x => x.GetBuildsAsync(103, "MIDDLE", null, null, "RANKED_SOLO_DUO", "15.1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ChampionBuildsResponse(103, "MIDDLE", "all", "ALL", "15.1", [], []));
+        analytics
+            .Setup(x => x.GetMatchupsAsync(103, "MIDDLE", null, null, "RANKED_SOLO_DUO", "15.1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ChampionMatchupsResponse { ChampionId = 103, Role = "MIDDLE", Patch = "15.1" });
+        analytics
+            .Setup(x => x.GetTrendAsync(103, "MIDDLE", null, "RANKED_SOLO_DUO", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ChampionTrendResponse(103, "RANKED_SOLO_DUO", "MIDDLE", "all", "ALL", []));
+        var synergy = new Mock<IChampionSynergyService>();
+        synergy
+            .Setup(x => x.GetSynergiesAsync(103, "MIDDLE", null, null, "RANKED_SOLO_DUO", "15.1", It.IsAny<CancellationToken>()))
+            .Returns<int, string, string?, string?, string?, string?, CancellationToken>(
+                (_, _, _, _, _, _, ct) => synergies(ct));
+
+        var services = new ServiceCollection();
+        services.AddScoped(_ => analytics.Object);
+        services.AddScoped(_ => synergy.Object);
+        var provider = services.BuildServiceProvider();
+        return new ChampionAnalyticsController(
+            analytics.Object,
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            synergy.Object,
+            synergyWaitBudget: budget);
     }
 
     [Fact]

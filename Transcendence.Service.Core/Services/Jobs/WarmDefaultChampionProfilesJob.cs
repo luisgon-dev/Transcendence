@@ -87,6 +87,10 @@ public class WarmDefaultChampionProfilesJob(
                     championId, opts.RankTier, opts.IncludeProBuilds, ct);
                 if (effectiveRole != null)
                 {
+                    // The synergy fill is a live aggregate over the participant tables; give it room
+                    // to finish rather than discard it at the 30s default (scope-local context).
+                    scope.ServiceProvider.GetRequiredService<TranscendenceContext>().Database
+                        .SetCommandTimeout(Math.Clamp(opts.SynergyCommandTimeoutSeconds, 30, 600));
                     var synergies = scope.ServiceProvider.GetRequiredService<IChampionSynergyService>();
                     await synergies.GetSynergiesAsync(
                         championId,

@@ -186,6 +186,7 @@ without legacy accepted DTOs or cross-version fallbacks.
 - `GET /api/lol/analytics/tierlist`
 - `GET /api/lol/analytics/regions`
 - `GET /api/lol/analytics/status`
+- `GET /api/lol/analytics/dataset`
 - `GET /api/lol/analytics/patches`
 - `GET /api/lol/analytics/champions/{championId}/winrates`
 - `GET /api/lol/analytics/champions/{championId}/profile`
@@ -202,6 +203,28 @@ without legacy accepted DTOs or cross-version fallbacks.
 
 Analytics cache invalidation is intentionally exposed only through the audited
 `POST /api/admin/cache/invalidate` operation.
+
+#### Dataset stats (`GET /api/lol/analytics/dataset`)
+
+Public, anonymous, `search-read` rate limit. Returns `DatasetStatsDto`: the scale and freshness of
+the stored match corpus, shown on the home page and `/about`.
+
+- `matchesStored`: exact count of successfully fetched matches, all queues.
+- `matchesLast24Hours`: matches fetched in the 24 hours before `computedAtUtc`.
+- `matchesPerDayLast7Days`: matches fetched per day, averaged over the last 7 complete UTC days
+  (today is excluded because it is still filling).
+- `activePatch` / `activePatchMatches`: the active analytics patch and the stored matches on it.
+- `playersIndexedEstimate`: **approximate** summoner row count from PostgreSQL planner statistics
+  (`pg_class.reltuples`), not a `count(*)`. `null` when the table has never been analyzed.
+- `databaseSizeBytes`: `pg_database_size`, or `null`.
+- `crawledPlatforms`: enabled ingestion platforms; `platforms`: stored and last-24-hour matches per
+  platform, largest first.
+- `lastMatchIngestedAtUtc`, `computedAtUtc`: freshness of the data and of the snapshot.
+
+The response is a snapshot the worker recomputes every 5 minutes (`refresh-dataset-stats`); a request
+never counts rows. `200` carries `Cache-Control: public, max-age=60, stale-while-revalidate=300`.
+`404` (ProblemDetails) means no snapshot has been computed yet, for example on a fresh database before
+the job's first run; clients hide the figures rather than showing zeros.
 
 ### LoL Static Content
 

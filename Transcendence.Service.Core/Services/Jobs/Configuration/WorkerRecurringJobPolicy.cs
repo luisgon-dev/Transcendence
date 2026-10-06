@@ -46,6 +46,7 @@ public sealed class WorkerRecurringJobPolicy(
     public const string RefreshProAnalyticsJobId = "refresh-pro-analytics";
     public const string RefreshBuildResourceAnalyticsJobId = "refresh-build-resource-analytics";
     public const string RefreshBuildLabStatsJobId = "refresh-build-lab-stats";
+    public const string RefreshDatasetStatsJobId = "refresh-dataset-stats";
 
     // Jobs that no longer exist. They stay in the descriptor list as permanently disabled entries so
     // startup keeps removing them from Hangfire storage on hosts that registered them before; a
@@ -83,6 +84,7 @@ public sealed class WorkerRecurringJobPolicy(
         RefreshProAnalyticsJobId,
         RefreshBuildResourceAnalyticsJobId,
         RefreshBuildLabStatsJobId,
+        RefreshDatasetStatsJobId,
         RetiredCreateBuildLabGenerationJobId,
         RetiredPromoteBuildLabGenerationJobId
     ];
@@ -172,6 +174,12 @@ public sealed class WorkerRecurringJobPolicy(
                 schedule.RefreshBuildLabStatsCron,
                 schedule.EnableRefreshBuildLabStats,
                 ConfigureRefreshBuildLabStats),
+            CreateDescriptor(
+                RefreshDatasetStatsJobId,
+                "Jobs:Schedule:RefreshDatasetStatsCron",
+                schedule.RefreshDatasetStatsCron,
+                schedule.EnableRefreshDatasetStats,
+                ConfigureRefreshDatasetStats),
             RetiredDescriptor(RetiredCreateBuildLabGenerationJobId),
             RetiredDescriptor(RetiredPromoteBuildLabGenerationJobId),
             CreateDescriptor(
@@ -366,6 +374,15 @@ public sealed class WorkerRecurringJobPolicy(
         string cronExpression) =>
         recurringJobManager.AddOrUpdate<RefreshBuildLabStatsJob>(
             RefreshBuildLabStatsJobId,
+            job => job.ExecuteAsync(CancellationToken.None),
+            cronExpression,
+            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
+    private static void ConfigureRefreshDatasetStats(
+        IRecurringJobManager recurringJobManager,
+        string cronExpression) =>
+        recurringJobManager.AddOrUpdate<RefreshDatasetStatsJob>(
+            RefreshDatasetStatsJobId,
             job => job.ExecuteAsync(CancellationToken.None),
             cronExpression,
             new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });

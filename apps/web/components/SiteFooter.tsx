@@ -21,6 +21,9 @@ export function SiteFooter() {
 
           <div className="grid gap-3 lg:justify-items-end">
             <nav className="type-ui flex flex-wrap items-center gap-x-5 gap-y-2 text-fg/62">
+              <Link href="/about" className="site-footer-link">
+                About the data
+              </Link>
               <Link href="/terms" className="site-footer-link">
                 Terms
               </Link>

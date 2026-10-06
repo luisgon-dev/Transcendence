@@ -25,9 +25,12 @@ function formatRelative(fromMs: number, nowMs: number): string {
 
 export function UpdatedAgo({
   timestamp,
+  prefix = "Updated",
   className
 }: {
   timestamp?: string | null;
+  // Leading word(s); pass "" for a bare "12 min ago" under a label that already names the event.
+  prefix?: string;
   className?: string;
 }) {
   const fromMs = React.useMemo(() => {
@@ -48,7 +51,8 @@ export function UpdatedAgo({
 
   if (fromMs == null || nowMs == null) return null;
 
+  const relative = formatRelative(fromMs, nowMs);
   return (
-    <span className={cn("text-muted", className)}>Updated {formatRelative(fromMs, nowMs)}</span>
+    <span className={cn("text-muted", className)}>{prefix ? `${prefix} ${relative}` : relative}</span>
   );
 }

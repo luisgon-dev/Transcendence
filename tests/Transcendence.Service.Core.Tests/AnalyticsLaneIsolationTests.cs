@@ -22,6 +22,7 @@ public class AnalyticsLaneIsolationTests
     [InlineData(typeof(RefreshProAnalyticsJob))]
     [InlineData(typeof(RefreshBuildResourceAnalyticsJob))]
     [InlineData(typeof(WarmDefaultChampionProfilesJob))]
+    [InlineData(typeof(RefreshDatasetStatsJob))]
     public void AnalyticsJob_RunsOnDedicatedAnalyticsWarmLane(Type jobType)
     {
         var execute = jobType.GetMethod(nameof(WarmDefaultChampionProfilesJob.ExecuteAsync));

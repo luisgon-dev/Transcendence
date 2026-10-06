@@ -18,6 +18,7 @@ const ROUTE_REPLACEMENTS = [
 
 const KNOWN_STATIC_ROUTES = new Set([
   "/",
+  "/about",
   "/account/favorites",
   "/account/forgot-password",
   "/account/login",

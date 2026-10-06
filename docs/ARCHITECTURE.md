@@ -88,6 +88,7 @@ Transcendence is a backend + web monorepo:
     the first response while preserving pagination, refresh completion, and recovery behavior.
     - Legacy `/lol/summoners/[region]/[riotId]/matches*` routes redirect into this unified view using query state (`page`, `queue`, `expandMatchId`)
 - Public LoL patch badges now read backend analytics patch status instead of raw Data Dragon latest so web patch labels match the active analytics dataset
+- The home page hero's "Live dataset" strip and the `/about` page ("About the data") render `GET /api/lol/analytics/dataset` server-side (`lib/datasetStatsServer.ts`, 60 s fetch revalidate). The home page awaits it with the rest of the page instead of streaming it behind its own `<Suspense>`, because a fallback that collapsed when no snapshot exists yet would shift the panels below. A `404` (no snapshot yet) hides the strip and shows an explanatory empty state on `/about`.
 - LoL analytics pages (tier list, champion, pro-builds) carry a historical patch selector (`AnalyticsPatchFilter`, backed by `lib/lolPatchFilters.ts` + `lib/lolAnalyticsPatches.ts`, surfaced via `FilterBar`) that reads `GET /api/lol/analytics/patches` and drives the `patch` query parameter
 - Analytics filter defaults and feedback:
   - The champion detail page (`/lol/champions/[championId]`) defaults to **Emerald+** when the `rankTier` param is absent (`resolveDefaultedRankTier` in `lib/ranks.ts`). An explicit `?rankTier=all` means all-ranks; to keep that selectable, the page's `FilterBar` runs in `explicitAllRank` mode so the rank dropdown/lane tabs emit and preserve a literal `rankTier=all`. The tier list keeps its own `DEFAULT_TIERLIST_RANK_TIER` handling.
@@ -350,8 +351,8 @@ The discovery lane stalls when all workers park on a few long, non-stoppable job
 - **The profile never waits on a synergy computation.** Synergies are the only profile section computed live from match rows on a miss (10.9s mean, up to 108s on prod). `ChampionAnalyticsController.GetProfile` waits at most 2s from the start of its fan-out (`DefaultSynergyWaitBudget`), then answers with `synergies: null`. The synergy task owns its DI scope, so it keeps running, disposes its own `DbContext` when done, and caches the result for the next request (a late failure is logged). A result or failure within the budget is returned or thrown as before.
 - **Reserved worker pool.** The "keep analytics warm/fresh" jobs (`WarmDefaultChampionProfilesJob`,
   `RefreshPrecomputedAnalyticsJob`, `RefreshChampionBuildSnapshotsJob`,
-  `RefreshChampionMatchupsJob`, `RefreshProAnalyticsJob`, `RefreshBuildResourceAnalyticsJob`, and
-  `RefreshBuildLabStatsJob`) run on a dedicated Hangfire queue,
+  `RefreshChampionMatchupsJob`, `RefreshProAnalyticsJob`, `RefreshBuildResourceAnalyticsJob`,
+  `RefreshBuildLabStatsJob`, and `RefreshDatasetStatsJob`) run on a dedicated Hangfire queue,
   `HangfireQueues.AnalyticsWarm` (`"analytics-warm"`), served by a **second
   `BackgroundJobServer`** with four workers (`Transcendence.Service/Program.cs`). The main 24-worker
   server pulls queues highest-priority-first and does **not** serve `analytics-warm`, so a saturated
@@ -530,6 +531,32 @@ detail is archived off-box and pruned to keep the database from growing unbounde
   lift over the focal baseline. The hourly default-profile warm also fills the synergy cache in an
   isolated per-champion DI scope, preserving the no-shared-DbContext concurrency rule.
 
+### Public Dataset Stats
+
+`GET /api/lol/analytics/dataset` makes the corpus's scale visible: matches stored, matches fetched in
+the last 24 hours and per day over the last 7 complete UTC days, platforms crawled, approximate players
+indexed, the active patch and its match count, database size, a per-platform breakdown, and when a match
+was last ingested. It is built so that no request ever counts rows:
+
+- **Compute (worker only).** `RefreshDatasetStatsJob` (`refresh-dataset-stats`, `*/5 * * * *`,
+  `analytics-warm` lane, `[DisableConcurrentExecution]`) calls `IDatasetStatsRefresher`, which is
+  registered only in `AddTranscendenceWorkerCore`, so the WebAPI cannot resolve it. Every match figure
+  comes from one grouped pass over `Matches`
+  (`count(*) FILTER (...)` per platform, `GROUP BY "PlatformRegion"`). On production (568K rows, 105 MB
+  heap) that is a parallel seq scan answered entirely from shared buffers: 214 ms, 13,424 buffer hits,
+  no disk reads. The players figure is `pg_class.reltuples` for `Summoners` (0.1 ms catalog lookup)
+  because an exact `count(*)` over its ~4.8M rows outlasts a 60 s statement timeout on the production
+  disk; it is labelled approximate and is `null` for a never-analyzed table rather than falling back to
+  the exact count. `pg_database_size` adds ~8 ms.
+- **Store.** The result is upserted as one `AnalyticsResponseSnapshot` row
+  (`Feature = "dataset-stats"`, `ScopeKey = "global"`, `Patch = "*"`), reusing the durable response-snapshot
+  table, so there is no new table or migration. `"*"` can never equal a real patch version, so the pro
+  refresh's per-patch delete never touches the row.
+- **Serve.** `DatasetStatsService` reads that row by its unique `(Feature, ScopeKey, Patch)` index
+  (0.1 ms, 2 buffer hits) behind a local-only HybridCache entry (60 s, distributed cache disabled; the
+  lookup is cheaper than a Redis round trip and needs no cross-host invalidation). HybridCache runs one
+  fill per key, so a burst on a cold cache issues one lookup. A missing row returns `404`.
+
 ### Match Queue Scope and History
 
 - Match rows now persist queue metadata (`queueId`, `queueFamily`, `queueType` label).
@@ -665,6 +692,8 @@ The web app never exposes backend tokens to browser JS:
 Backend uses a layered approach (see source and README):
 
 - HybridCache (L1 in-memory + L2 Redis) for derived stats/analytics
+- Public dataset stats are a worker-computed `AnalyticsResponseSnapshot` row served through a 60-second
+  local-only HybridCache entry (see *Public Dataset Stats*).
 - Leaderboards use a normalized five-minute L2 / 30-second L1 HybridCache key and factory coalescing,
   preventing identical region/queue/champion/role filters from repeatedly executing the aggregate.
   `Transcendence.Leaderboards` records request count/duration with bounded kind/cache/result tags.

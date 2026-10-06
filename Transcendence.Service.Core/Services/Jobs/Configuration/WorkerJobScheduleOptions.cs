@@ -23,6 +23,9 @@ public class WorkerJobScheduleOptions
     public string RefreshBuildResourceAnalyticsCron { get; set; } = "40 * * * *";
     // Each run is bounded by Analytics:BuildLab:MaxMatchesPerRun; the job itself no-ops while Build Lab is off.
     public string RefreshBuildLabStatsCron { get; set; } = "*/15 * * * *";
+    // Public dataset stats: one grouped scan of Matches (~0.2s from shared buffers on prod); the API
+    // only ever reads the stored snapshot.
+    public string RefreshDatasetStatsCron { get; set; } = "*/5 * * * *";
     public string ChampionAnalyticsIngestionCron { get; set; } = "*/2 * * * *";
     public string SummonerMaintenanceCron { get; set; } = "*/5 * * * *";
     public string MatchTimelineBackfillCron { get; set; } = "*/10 * * * *";
@@ -39,6 +42,7 @@ public class WorkerJobScheduleOptions
     public bool EnableRefreshProAnalytics { get; set; } = true;
     public bool EnableRefreshBuildResourceAnalytics { get; set; } = true;
     public bool EnableRefreshBuildLabStats { get; set; } = true;
+    public bool EnableRefreshDatasetStats { get; set; } = true;
     public bool EnableChampionAnalyticsIngestion { get; set; } = true;
     public bool EnableSummonerMaintenance { get; set; } = true;
     public bool EnableMatchTimelineBackfill { get; set; } = true;

@@ -185,6 +185,21 @@ public class WorkerSchedulingPolicyTests
         descriptors.Should().Contain(x => x.JobId == WorkerRecurringJobPolicy.PollLiveGamesJobId && !x.IsEnabled);
     }
 
+    [Fact]
+    public void BuildDescriptors_DefaultProfile_RefreshesDatasetStatsEveryFiveMinutes()
+    {
+        var policy = CreatePolicyWithDevelopmentOverrides(new WorkerSchedulingProfileDefinition());
+
+        var descriptor = policy.BuildDescriptors(new WorkerJobScheduleOptions())
+            .Single(x => x.JobId == WorkerRecurringJobPolicy.RefreshDatasetStatsJobId);
+
+        descriptor.IsEnabled.Should().BeTrue();
+        descriptor.IsMandatoryBaseline.Should().BeFalse();
+        descriptor.CronExpression.Should().Be("*/5 * * * *");
+        descriptor.CronSource.Should().Be("Jobs:Schedule:RefreshDatasetStatsCron");
+        policy.KnownJobIds.Should().Contain(WorkerRecurringJobPolicy.RefreshDatasetStatsJobId);
+    }
+
     private static WorkerRecurringJobPolicy CreatePolicyWithDevelopmentOverrides(
         WorkerSchedulingProfileDefinition developmentProfile) =>
         new(Options.Create(new WorkerSchedulingProfileOptions

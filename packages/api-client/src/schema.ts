@@ -2583,6 +2583,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/lol/analytics/dataset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["DatasetStatsDto"];
+                        "application/json": components["schemas"]["DatasetStatsDto"];
+                        "text/json": components["schemas"]["DatasetStatsDto"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/lol/leaderboards": {
         parameters: {
             query?: never;
@@ -5700,6 +5755,35 @@ export interface components {
             /** Format: date-span */
             readonly age: string;
             readonly ageDescription: string;
+        };
+        DatasetPlatformStatsDto: {
+            platform: string;
+            label: string;
+            /** Format: int64 */
+            matchesStored: number;
+            /** Format: int64 */
+            matchesLast24Hours: number;
+        };
+        DatasetStatsDto: {
+            /** Format: int64 */
+            matchesStored: number;
+            /** Format: int64 */
+            matchesLast24Hours: number;
+            /** Format: int64 */
+            matchesPerDayLast7Days: number;
+            activePatch?: string | null;
+            /** Format: int64 */
+            activePatchMatches: number;
+            /** Format: int64 */
+            playersIndexedEstimate?: number | null;
+            /** Format: int64 */
+            databaseSizeBytes?: number | null;
+            crawledPlatforms: string[];
+            platforms: components["schemas"]["DatasetPlatformStatsDto"][];
+            /** Format: date-time */
+            lastMatchIngestedAtUtc?: string | null;
+            /** Format: date-time */
+            computedAtUtc: string;
         };
         FavoriteSummonerDto: {
             /** Format: uuid */

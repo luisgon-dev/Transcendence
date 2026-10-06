@@ -36,6 +36,8 @@ public sealed class EndpointAuthorizationPolicyTests
         "GET api/lol/analytics/regions",
         "GET api/lol/analytics/patches",
         "GET api/lol/analytics/status",
+        // Aggregate corpus counts (matches, platforms, players estimate): no user or account data.
+        "GET api/lol/analytics/dataset",
         "GET api/lol/analytics/items",
         "GET api/lol/analytics/items/{itemId:int}",
         "GET api/lol/analytics/runes",

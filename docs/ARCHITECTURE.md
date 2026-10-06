@@ -850,3 +850,5 @@ full streamed response time, fallback failures, I/O pressure, and durable snapsh
 Lighthouse has a stable Docker name, resource caps, bounded RAM temporary storage, browser restart
 on sample failures, and explicit cleanup on timeout. Runtime errors and missing paint measurements
 cannot publish a fresh success timestamp; measuring a fast loading shell alone is insufficient.
+The lab uses verified HTTPS with HTTP/1.1 and an explicit transport label because Chromium 154's
+instrumented HTTP/2 session hangs against NPM. The proxy and full-response checks retain HTTP/2.

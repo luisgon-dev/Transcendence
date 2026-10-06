@@ -390,3 +390,7 @@ Chrome uses the provided 1 GiB shared-memory mount and a bounded 256 MiB `/tmp` 
 than HDD temporary files, within the same total container memory limit. Runtime errors or missing
 paint metrics fail the sample and restart Chrome; incomplete sweeps retain the previous metrics
 and their original success timestamp.
+The lab browser uses HTTPS with HTTP/1.1: Chromium 154's instrumented HTTP/2 navigation hangs
+against production NPM, while an HTTP/1.1 comparison completes. Lab route metrics include
+`transport="http1"` to establish a separate baseline. The production proxy still serves HTTP/2,
+and the independent full-response checks continue using it; TLS verification remains enabled.

@@ -38,6 +38,10 @@ import { webVitalsRouteTemplate } from "@transcendence/web-routes";
 
 // The bounded production container provides /dev/shm; spilling it to the HDD stalls Chrome.
 const CHROME_FLAGS = ["--headless=new", "--no-sandbox"];
+// Chromium 154 hangs during Lighthouse instrumentation over production NPM HTTP/2.
+// HTTPS HTTP/1.1 and ordinary HTTP/2 browsing work; isolate this lab-only workaround.
+CHROME_FLAGS.push("--disable-http2");
+const LAB_TRANSPORT = "http1";
 
 const LIGHTHOUSE_SETTINGS = {
   formFactor: "mobile",
@@ -200,7 +204,7 @@ function renderPrometheus(results, formFactor) {
     if (!withMetric.length) continue;
     lines.push(`# HELP ${name} ${help}`, `# TYPE ${name} gauge`);
     for (const result of withMetric) {
-      const labels = `{route="${escapeLabel(result.route)}",form_factor="${escapeLabel(formFactor)}"}`;
+      const labels = `{route="${escapeLabel(result.route)}",form_factor="${escapeLabel(formFactor)}",transport="${LAB_TRANSPORT}"}`;
       lines.push(`${name}${labels} ${result.metrics[key]}`);
     }
   }
@@ -215,7 +219,7 @@ function renderPrometheus(results, formFactor) {
       for (const [category, score] of Object.entries(result.categories)) {
         const labels =
           `{route="${escapeLabel(result.route)}",form_factor="${escapeLabel(formFactor)}"` +
-          `,category="${escapeLabel(category)}"}`;
+          `,category="${escapeLabel(category)}",transport="${LAB_TRANSPORT}"}`;
         lines.push(`transcendence_web_lab_category_score${labels} ${score}`);
       }
     }
@@ -299,7 +303,7 @@ async function main() {
   if (args.jsonOut) {
     writeAtomic(
       args.jsonOut,
-      `${JSON.stringify({ baseUrl: args.baseUrl, samples: args.samples, results }, null, 2)}\n`
+      `${JSON.stringify({ baseUrl: args.baseUrl, samples: args.samples, transport: LAB_TRANSPORT, results }, null, 2)}\n`
     );
   }
 

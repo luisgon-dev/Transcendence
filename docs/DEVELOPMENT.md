@@ -561,6 +561,9 @@ transcendence_web_lab_category_score{category}  transcendence_web_lab_last_succe
 The production runner uses bounded RAM temporary storage within its container memory limit.
 Runtime errors and missing paint metrics fail the sample and restart Chrome; an incomplete sweep
 retains the previous metrics and success timestamp.
+Chromium 154's Lighthouse session hangs over production NPM HTTP/2; the lab browser uses
+HTTP/1.1 over verified HTTPS and labels route metrics `transport="http1"` for a separate baseline.
+This changes only the lab browser; the production proxy and full-response checks still use HTTP/2.
 
 The `route` label comes from `webVitalsRouteTemplate()` in `@transcendence/web-routes` — the same
 function the browser Web Vitals reporter uses. **That shared vocabulary is the point**: it is what

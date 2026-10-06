@@ -717,6 +717,18 @@ failure reason for diagnosis, but their resource/population payload and processe
 deleted immediately (and swept again after each successful promotion). Cleanup is best-effort after
 promotion so a storage-hygiene failure can never demote a successfully published generation.
 
+### Dataset stats refresh
+
+`refresh-dataset-stats` (`RefreshDatasetStatsJob`, `analytics-warm` lane) recomputes the public
+figures behind `GET /api/lol/analytics/dataset` (home page strip and `/about`):
+
+- `Jobs:Schedule:RefreshDatasetStatsCron` (default `*/5 * * * *`)
+- `Jobs:Schedule:EnableRefreshDatasetStats` (default `true`)
+
+The platform list comes from `Jobs:MultiRegionIngestion:Regions` (enabled entries). Until the job has
+run once the endpoint returns `404` and the web hides the figures, so on a fresh local stack expect
+them to appear within five minutes of starting the worker.
+
 ### Build Lab stats refresh
 
 Build Lab is additive win/game counts per build decision, maintained by the worker in SQL (design in

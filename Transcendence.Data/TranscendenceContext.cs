@@ -227,6 +227,18 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             .HasDatabaseName("IX_Summoners_SearchPrefix")
             .HasFilter("\"GameNameNormalized\" IS NOT NULL AND \"TagLineNormalized\" IS NOT NULL");
 
+        // Search autosuggest (SummonerRepository.SearchByPrefixAsync) matches GameNameNormalized with
+        // LIKE 'PREFIX%'. The database collation is en_US.utf8, under which a default btree such as
+        // IX_Summoners_SearchPrefix above cannot serve LIKE, so every search read the whole table
+        // (~87K blocks, 9.2s mean on prod). This one is built with text_pattern_ops on the name
+        // column, which Npgsql-only API would be needed to model (this project references only
+        // EF.Relational), so the operator class lives in the AddSummonerSearchPatternIndex migration
+        // and the model declares the bare shape under the same name.
+        modelBuilder.Entity<Summoner>()
+            .HasIndex(s => new { s.PlatformRegion, s.GameNameNormalized })
+            .HasDatabaseName("IX_Summoners_SearchNamePattern")
+            .HasFilter("\"GameNameNormalized\" IS NOT NULL AND \"TagLineNormalized\" IS NOT NULL");
+
         // The Riot ID lookup's fallbacks for legacy rows written before the normalized keys existed
         // (~235K of 4.75M on 2026-09-27). Without these, every lookup that missed the normalized path
         // -- any summoner not stored yet -- walked the region's (PlatformRegion, UpdatedAt) index

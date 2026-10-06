@@ -56,7 +56,9 @@ describe("robots", () => {
     expect(ai?.userAgent).toEqual(
       expect.arrayContaining([
         "Amazonbot",
+        "Amzn-SearchBot",
         "ClaudeBot",
+        "Claude-SearchBot",
         "meta-externalagent",
         "GPTBot",
       ]),

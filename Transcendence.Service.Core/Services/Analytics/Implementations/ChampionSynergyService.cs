@@ -51,13 +51,14 @@ public sealed class ChampionSynergyService(
             return Empty(championId, normalizedRole, rankScope.CacheToken, normalizedRegion, patch, normalizedQueue);
 
         var key = CacheKey(championId, normalizedRole, rankScope.CacheToken, normalizedRegion, normalizedQueue, patch);
+        var snapshotKey = SnapshotKey(key);
         return await cache.GetOrCreateAsync(
             key,
             async cancel =>
             {
                 var oldest = DateTime.UtcNow.AddHours(-24);
                 var payload = await context.AnalyticsResponseSnapshots.AsNoTracking()
-                    .Where(row => row.Feature == "synergies" && row.ScopeKey == key && row.Patch == patch &&
+                    .Where(row => row.Feature == "synergies" && row.ScopeKey == snapshotKey && row.Patch == patch &&
                                   row.ComputedAtUtc >= oldest)
                     .Select(row => row.Payload).FirstOrDefaultAsync(cancel);
                 if (payload != null && JsonSerializer.Deserialize<ChampionSynergiesResponse>(payload) is { } stored)
@@ -71,14 +72,21 @@ public sealed class ChampionSynergyService(
     }
 
     private static string CacheKey(int champion, string role, string tier, string region, string queue, string patch) =>
-        $"analytics:synergies:v2:{champion}:{role}:{tier}:{region}:{queue}:{patch}";
+        // Raw and compact results have the same contract; preserve warm Redis entries on rollout.
+        $"analytics:synergies:v1:{champion}:{role}:{tier}:{region}:{queue}:{patch}";
+
+    // Durable scopes were introduced separately from the compatible Redis contract. Keeping that
+    // storage version preserves snapshots already produced by the first deployment of this feature.
+    private static string SnapshotKey(string cacheKey) => cacheKey.Replace(
+        "analytics:synergies:v1:", "analytics:synergies:v2:", StringComparison.Ordinal);
 
     public async Task RefreshSnapshotAsync(int championId, string role, string rankTier, string patch, CancellationToken ct = default)
     {
         var scope = AnalyticsScopeMath.ParseRankTierScope(rankTier);
         var key = CacheKey(championId, role, scope.CacheToken, "ALL", QueueCatalog.QueueFamilyRankedSoloDuo, patch);
+        var snapshotKey = SnapshotKey(key);
         var snapshot = await context.AnalyticsResponseSnapshots.FirstOrDefaultAsync(row =>
-            row.Feature == "synergies" && row.ScopeKey == key && row.Patch == patch, ct);
+            row.Feature == "synergies" && row.ScopeKey == snapshotKey && row.Patch == patch, ct);
         if (snapshot != null && snapshot.ComputedAtUtc > DateTime.UtcNow.AddHours(-6))
             return;
         var result = await ComputeAsync(championId, role, scope, "ALL", QueueCatalog.QueueFamilyRankedSoloDuo, patch, ct);
@@ -86,7 +94,7 @@ public sealed class ChampionSynergyService(
         {
             snapshot = new AnalyticsResponseSnapshot
             {
-                Id = Guid.NewGuid(), Feature = "synergies", ScopeKey = key, Patch = patch
+                Id = Guid.NewGuid(), Feature = "synergies", ScopeKey = snapshotKey, Patch = patch
             };
             context.AnalyticsResponseSnapshots.Add(snapshot);
         }

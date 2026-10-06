@@ -155,6 +155,36 @@ public sealed class ChampionSynergyServiceTests
         (await service.GetSynergiesAsync(266, "TOP", null, "NA1", "solo", null)).TotalGames.Should().Be(5);
     }
 
+    [Fact]
+    public async Task Deployment_ReusesExistingSynergyCacheKeys_WithoutAColdRawScan()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = new SqliteCompatibleTranscendenceContext(
+            new DbContextOptionsBuilder<TranscendenceContext>().UseSqlite(connection).Options);
+        await db.Database.EnsureCreatedAsync();
+        var collection = new ServiceCollection();
+        collection.AddHybridCache();
+        await using var provider = collection.BuildServiceProvider();
+        var cache = provider.GetRequiredService<HybridCache>();
+        var prior = new Transcendence.Service.Core.Services.Analytics.Models.ChampionSynergiesResponse(
+            266, "TOP", "all", "NA1", "16.14", "RANKED_SOLO_DUO", 100, 55, 0.55, []);
+        await cache.SetAsync("analytics:synergies:v1:266:TOP:all:NA1:RANKED_SOLO_DUO:16.14", prior);
+        var service = new ChampionSynergyService(db, cache, new AnalyticsPatchQueryService(db));
+        (await service.GetSynergiesAsync(266, "TOP", null, "NA1", "solo", "16.14")).Should().BeEquivalentTo(prior,
+            "the raw/facts response contract is unchanged, so deployment must preserve existing warm cache entries");
+        db.AnalyticsResponseSnapshots.Add(new Transcendence.Data.Models.LoL.Analytics.AnalyticsResponseSnapshot
+        {
+            Id = Guid.NewGuid(), Feature = "synergies", Patch = "16.14",
+            ScopeKey = "analytics:synergies:v2:266:TOP:all:NA1:RANKED_SOLO_DUO:16.14",
+            ComputedAtUtc = DateTime.UtcNow, Payload = System.Text.Json.JsonSerializer.Serialize(prior)
+        });
+        await db.SaveChangesAsync();
+        await cache.RemoveAsync("analytics:synergies:v1:266:TOP:all:NA1:RANKED_SOLO_DUO:16.14");
+        (await service.GetSynergiesAsync(266, "TOP", null, "NA1", "solo", "16.14")).Should().BeEquivalentTo(prior,
+            "a cold cache must reuse the durable scopes introduced by the initial deployment");
+    }
+
     private static void AddParticipant(
         TranscendenceContext db,
         MatchEntity match,

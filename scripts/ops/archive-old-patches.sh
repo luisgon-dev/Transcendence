@@ -39,7 +39,7 @@ log() { printf '%s archive: %s\n' "$(date -u +%FT%TZ)" "$*"; }
 pgq() {
   local readonly=""
   [[ "$APPLY" == 0 ]] && readonly=" -c default_transaction_read_only=on"
-  docker exec -i -e "PGOPTIONS=-c application_name=transcendence-archive -c statement_timeout=${DELETE_TIMEOUT_MS} -c lock_timeout=2000${readonly}" \
+  docker exec -e "PGOPTIONS=-c application_name=transcendence-archive -c statement_timeout=${DELETE_TIMEOUT_MS} -c lock_timeout=2000${readonly}" \
     "$PG_CONTAINER" psql -X -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 "$@"
 }
 pgval() { pgq -tAc "$1"; }
@@ -94,7 +94,7 @@ while budget_left; do
     [[ "${#saved[@]}" == 4 && "${saved[0]}" =~ ^[0-9]+\.[0-9]+$ && "${saved[2]}" =~ ^[0-9]+$ && "${saved[3]}" =~ ^[01]$ ]] || exit 1
     patch="${saved[0]}"; destination="${saved[1]}"; frozen="${saved[2]}"; verified="${saved[3]}"
     [[ "$destination" == "$NAS_DIR/"* && "$destination" != *"'"* && "$destination" != *$'\n'* ]] || exit 1
-    if [[ "$verified" == 1 ]] && "${SSH_NAS[@]}" "test -f '${destination}/_DONE'"; then
+    if [[ "$verified" == 1 ]] && "${SSH_NAS[@]}" "test -f '${destination}/_DONE'" </dev/null; then
       if [[ $(pgval "SELECT to_regclass('public.${WORK}') IS NOT NULL;") == f ]]; then
         rm -f "$state" "${STATE_DIR}/manifest.json"
         log "Recovered completed chunk after progress cleanup was interrupted."
@@ -138,7 +138,7 @@ while budget_left; do
     fi
     frozen=$(pgval "SELECT count(*) FROM ${WORK};")
     save_state
-    "${SSH_NAS[@]}" "mkdir -p '${destination}'"
+    "${SSH_NAS[@]}" "mkdir -p '${destination}'" </dev/null
     manifest="${STATE_DIR}/manifest.json"
     printf '{"patch":"%s","frozenMatches":%s,"rows":{' "$patch" "$frozen" >"$manifest"
     first=1
@@ -148,14 +148,14 @@ while budget_left; do
       rows=$(pgval "SET enable_seqscan=off; SELECT count(*) FROM (${source_sql}) src;" | tail -1)
       [[ "$rows" =~ ^[0-9]+$ ]] || exit 1
       log "Exporting ${table}: ${rows} rows."
-      docker exec -i -e "PGOPTIONS=-c application_name=transcendence-archive -c enable_seqscan=off -c statement_timeout=${EXPORT_TIMEOUT_MS} -c lock_timeout=2000" \
+      docker exec -e "PGOPTIONS=-c application_name=transcendence-archive -c enable_seqscan=off -c statement_timeout=${EXPORT_TIMEOUT_MS} -c lock_timeout=2000" \
         "$PG_CONTAINER" psql -X -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 \
         -c "COPY (${source_sql}) TO STDOUT WITH (FORMAT csv, HEADER true)" \
         | gzip | "${SSH_NAS[@]}" "cat > '${destination}/${table}.csv.gz'"
-      "${SSH_NAS[@]}" "gzip -t '${destination}/${table}.csv.gz'"
-      lines=$("${SSH_NAS[@]}" "zcat '${destination}/${table}.csv.gz' | wc -l")
+      "${SSH_NAS[@]}" "gzip -t '${destination}/${table}.csv.gz'" </dev/null
+      lines=$("${SSH_NAS[@]}" "zcat '${destination}/${table}.csv.gz' | wc -l" </dev/null)
       [[ "$lines" == "$((rows + 1))" ]] || { log "Verification failed for ${table}; no deletes."; exit 1; }
-      checksum=$("${SSH_NAS[@]}" "sha256sum '${destination}/${table}.csv.gz'" | awk '{print $1}')
+      checksum=$("${SSH_NAS[@]}" "sha256sum '${destination}/${table}.csv.gz'" </dev/null | awk '{print $1}')
       [[ "$checksum" =~ ^[a-f0-9]{64}$ ]] || exit 1
       [[ "$first" == 1 ]] || printf ',' >>"$manifest"
       first=0
@@ -194,7 +194,7 @@ while budget_left; do
   remaining=$(pgval "SELECT count(*) FROM ${WORK};")
   if [[ "$remaining" != 0 ]]; then log "Run budget reached; ${remaining} frozen matches remain."; exit 0; fi
   # The chunk marker is written before clearing progress; failed marker writes are resumable too.
-  "${SSH_NAS[@]}" "date -u +%FT%TZ > '${destination}/_DONE'"
+  "${SSH_NAS[@]}" "date -u +%FT%TZ > '${destination}/_DONE'" </dev/null
   # A completed NAS marker makes an interruption between DROP and local cleanup recoverable.
   pgq -c "DROP TABLE ${WORK};" >/dev/null
   rm -f "$state" "${STATE_DIR}/manifest.json"

@@ -710,7 +710,7 @@ the HTTP request path never falls back to scanning raw match resources. Its recu
 - `Analytics:BuildAtlas:MatchBatchSize` (default `500`)
 - `Analytics:BuildAtlas:CommandTimeoutSeconds` (default `120`, clamped to 30–600)
 
-The job runs independently on `analytics-warm`. A first/forced run rebuilds the retained active-patch
+The job runs independently on `analytics-batch`. A first/forced run rebuilds the retained active-patch
 ranked-Solo/Duo corpus in bounded match batches. Incremental runs clone the active resource and exact
 population atoms, add only matches not recorded by a completed generation, then atomically promote
 the result. The active generation is unchanged when there are no new eligible matches. Static-data
@@ -745,7 +745,7 @@ ingestion capture and stamp v2 at all — so the flip is the start of the backfi
 it. Enable it only with disk headroom confirmed, and read "Enabling Build Lab on an existing corpus"
 below first: the flip costs a multi-day, rate-gated re-ingestion of the retained corpus.
 
-`refresh-build-lab-stats` (`RefreshBuildLabStatsJob`, `analytics-warm` lane) counts newly eligible
+`refresh-build-lab-stats` (`RefreshBuildLabStatsJob`, `analytics-batch` lane) counts newly eligible
 matches every 15 minutes (`Jobs:Schedule:RefreshBuildLabStatsCron`, default `*/15 * * * *`;
 `Jobs:Schedule:EnableRefreshBuildLabStats`, default `true`). It is registered regardless of the feature
 flag and no-ops while `Analytics:BuildLab:Enabled` is false. A PostgreSQL session advisory lock
@@ -758,11 +758,14 @@ or redeploy mid-run loses nothing and double counts nothing; the next run resume
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `Enabled` | `false` | Serving, the refresh, **and** the detailed timeline capture it reads |
-| `MatchBatchSize` | `500` | Matches counted per transaction |
-| `MaxMatchesPerRun` | `20000` | Per-run bound; a fresh patch backfills over several runs (~45 min of IO per patch on the HDD box) |
+| `MatchBatchSize` | `25` | Matches counted per transaction |
+| `MaxMatchesPerRun` | `500` | Per-run match bound; catch-up spans small recurring runs |
 | `PriorPatchesToRefresh` | `2` | Patches before the active one still topped up with late matches |
-| `PatchesToRetain` | `4` | Newest patches whose counts are kept; older stats and ledger rows are deleted |
-| `CommandTimeoutSeconds` | `600` | Command timeout for the refresh's queries |
+| `PatchesToRetain` | `4` | Newest patches whose counts are kept; older stats and then ledger rows drain in bounded batches |
+| `CommandTimeoutSeconds` | `60` | Command timeout for the refresh's queries |
+| `MaxRunSeconds` | `120` | Elapsed budget checked between committed batches |
+| `BatchDelayMilliseconds` | `500` | Pause between committed batches |
+| `MaxWalMegabytesPerRun` | `32` | Cluster-wide WAL budget checked between committed batches |
 
 Environment variables Compose supplies:
 
@@ -771,7 +774,10 @@ Environment variables Compose supplies:
 | `BUILD_LAB_ENABLED` | `Analytics__BuildLab__Enabled` on the **worker** (the refresh, timeline extras + the effective timeline schema version) *and* the **WebAPI** (serving — without it the API answers "not enabled" even while the worker counts) — one switch |
 | `TRN_FEATURE_BUILD_LAB`, `TRN_FEATURE_CHAMPION_RECOMMENDATIONS`, `TRN_FEATURE_BUILD_REFERENCE_LINKS` | web; independently expose each consumer surface once the active patch has been counted |
 
-Everything else under `Analytics:BuildLab` is config-file only.
+Compose also supplies `BUILD_LAB_MATCH_BATCH_SIZE`, `BUILD_LAB_MAX_MATCHES_PER_RUN`,
+`BUILD_LAB_MAX_RUN_SECONDS`, `BUILD_LAB_BATCH_DELAY_MS`, `BUILD_LAB_MAX_WAL_MB`, and
+`BUILD_LAB_COMMAND_TIMEOUT_SECONDS` for the bounded worker refresh. Other Build Lab settings remain
+config-file settings; see the HDD operating limits below for the production overrides.
 
 Tests: `BuildLabDecisionsTests` and `BuildLabEstimatorTests` (`tests/Transcendence.Service.Core.Tests`)
 cover the pure replay and estimator; `BuildLabRealPostgresTests` (`tests/Transcendence.IntegrationTests`)
@@ -832,8 +838,8 @@ again. Only a row that fails and retries while the flag is off is rewritten down
 
 ### Precomputed Champion Analytics
 
-Champion analytics surfaces have independent recurring-job ownership on the four-worker
-`analytics-warm` pool:
+Champion analytics surfaces have independent recurring-job ownership. Heavy aggregation uses the
+one-worker `analytics-batch` pool; response warming has a separate one-worker `analytics-warm` pool:
 
 - `refresh-precomputed-analytics` publishes only the tabular core
   (`Jobs:Schedule:RefreshPrecomputedAnalyticsCron`, default `30 * * * *`).
@@ -841,7 +847,8 @@ Champion analytics surfaces have independent recurring-job ownership on the four
   (`Jobs:Schedule:RefreshChampionMatchupsCron`, default `35 * * * *`).
 - `refresh-champion-build-snapshots` atomically replaces serialized champion build responses
   (`Jobs:Schedule:RefreshChampionBuildSnapshotsCron`, default `10 */6 * * *`).
-- `refresh-pro-analytics` and `refresh-build-resource-analytics` retain their independent schedules.
+- `refresh-build-resource-analytics` retains its independent schedule on `analytics-batch`.
+- `refresh-pro-analytics` retains its independent schedule on `analytics-warm`.
 
 Each job has its own concurrency boundary. Deterministic full-corpus jobs disable automatic retries,
 so a slow build sweep cannot amplify database load or delay matchup ownership.

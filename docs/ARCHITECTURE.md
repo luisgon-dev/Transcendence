@@ -754,16 +754,17 @@ timeline fetched at `SchemaVersion >= 2`. A match with any early-surrender parti
 not counted. Rank scope is **every tracked rank**, not Emerald+: 57% of rank-context rows had no tier,
 and the crawler is already Master-heavy.
 
-**Exactly-once, resumable counting.** Each batch (`MatchBatchSize`, 500) loads participants, item
+**Exactly-once, resumable counting.** Each batch (`MatchBatchSize`, 25) loads participants, item
 events, snapshot gold, and runes, replays and aggregates in memory, then commits one transaction:
 `INSERT … SELECT FROM unnest(…) ON CONFLICT DO UPDATE SET "Games" = "Games" + EXCLUDED."Games" …` plus
 the batch's rows in the `BuildLabProcessedMatches` ledger (`MatchId` PK, `Patch`, `ProcessedAtUtc`).
 A crash leaves a batch either fully counted or not at all, eligibility excludes ledgered matches, and
 the next run resumes exactly where the last stopped — nothing can be double counted. A run refreshes
 the active patch plus `PriorPatchesToRefresh` (2) older ones for late matches, keeps the
-`PatchesToRetain` (4) newest patches and deletes the stats and ledger of anything older, and stops at
-`MaxMatchesPerRun` (20,000), so a fresh patch backfills over several runs (~45 minutes of IO per patch
-on the HDD box) instead of holding a worker slot for hours.
+`PatchesToRetain` (4) newest patches and drains older stats and then ledger rows in bounded cleanup
+batches. It checks limits between committed batches: `MaxMatchesPerRun` (500), `MaxRunSeconds`
+(120) and `MaxWalMegabytesPerRun` (32, cluster-wide), with 500 ms pacing and 60-second commands.
+Catch-up duration depends on I/O load and can span days on the HDD.
 
 **Job.** `RefreshBuildLabStatsJob` (recurring id `refresh-build-lab-stats`, default `*/15 * * * *`) runs
 on the `analytics-batch` lane under the PostgreSQL session advisory lock

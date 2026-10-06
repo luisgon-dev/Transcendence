@@ -103,10 +103,10 @@ Re-enable the timer once the fix is on `main` (see `docs/ARCHITECTURE.md` "Deplo
 Build Lab has no image, timer or unit of its own. It is the worker's `refresh-build-lab-stats` Hangfire
 job (`*/15 * * * *`), which adds each newly eligible match's build decisions to the additive
 `BuildLabOptionStats` table and records the match in the `BuildLabProcessedMatches` ledger, one
-transaction per 500-match batch. A crash mid-run therefore loses at most the batch in flight and never
-double counts; the next run resumes from the ledger. A run is capped at 20,000 matches
-(`Analytics:BuildLab:MaxMatchesPerRun`), so a fresh patch backfills over several runs — about 45
-minutes of disk IO per patch on this box. The job no-ops unless `BUILD_LAB_ENABLED=true`, the same flag
+transaction per 25-match batch by default. A crash mid-run leaves that batch uncounted and never
+double counts; the next run resumes from the ledger. A run stops between committed batches at
+500 matches, 120 seconds or 32 MiB of cluster-wide WAL, with 500 ms pacing. Catch-up time depends on
+the current I/O load and can take days. The job no-ops unless `BUILD_LAB_ENABLED=true`, the same flag
 that turns on the detailed timeline capture it reads.
 
 Is it keeping up?
@@ -125,8 +125,8 @@ The worker's `transcendence_buildlab_backlog_matches` gauge is the number of eli
 count; it should fall every run and sit near zero between patches. `trn-buildlab-refresh-stale` pages
 when no run has completed for two hours.
 
-Only the four newest patches are kept (`PatchesToRetain`); older patches' rows are deleted by the next
-run. To recount a patch from scratch — after changing how decisions are counted, say — delete its
+Only the four newest patches are kept (`PatchesToRetain`); older stats and then ledger rows are drained
+in bounded cleanup batches across runs. To recount a patch from scratch — after changing how decisions are counted, say — delete its
 ledger and stats rows and let the job refill them:
 
 ```sql

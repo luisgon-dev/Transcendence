@@ -53,6 +53,7 @@ jobs:
         with:
           filters: |
             webapi:
+              - 'config/backend.shared.json'
               - 'Transcendence.WebAPI/**'
               - 'Transcendence.Service.Core/**'
               - 'Transcendence.Data/**'
@@ -62,6 +63,7 @@ jobs:
               - 'Transcendence.WebAPI/Dockerfile'
               - '.github/workflows/docker-images.yml'
             service:
+              - 'config/backend.shared.json'
               - 'Transcendence.Service/**'
               - 'Transcendence.Service.Core/**'
               - 'Transcendence.Data/**'

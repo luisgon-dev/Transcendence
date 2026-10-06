@@ -165,8 +165,8 @@ function Pipeline({ platformCount }: { platformCount: number | null }) {
         <li className="grid gap-1">
           <span className="type-ui font-semibold text-fg">Serve</span>
           <span className="type-note text-muted">
-            Pages read precomputed snapshots and caches. Viewing a page never calls Riot or
-            recounts the database; refreshes run as background jobs.
+            Pages read precomputed snapshots and caches, and viewing one never calls Riot.
+            Profile refreshes and new matches arrive through background jobs.
           </span>
         </li>
       </ol>

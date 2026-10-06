@@ -21,4 +21,12 @@ public class WarmDefaultChampionProfilesJobOptions
 
     /// <summary>Also warm the lane-scoped pro-builds default per champion (heavier compute path).</summary>
     public bool IncludeProBuilds { get; set; } = true;
+
+    /// <summary>
+    /// Command timeout for the default-lane synergy fill. Synergies are computed live from the
+    /// participant tables; at the 30s connection default, 20-26% of champions failed every run on prod
+    /// (2026-10-06), threw the partial work away, and left those pages to compute synergies on a
+    /// request. The profile no longer waits for a miss, so this fill is what keeps the section filled.
+    /// </summary>
+    public int SynergyCommandTimeoutSeconds { get; set; } = 180;
 }

@@ -106,6 +106,8 @@ Profile responses include additional season/history metadata:
 - `q` (required; min length 2, supports `gameName` or `gameName#tag` prefix forms)
 - `limit` (optional; default `8`, max `10`)
 - Autosuggest only returns summoners with at least one stored match participant (to avoid low-signal entries)
+- The name prefix is matched through `IX_Summoners_SearchNamePattern` (`text_pattern_ops`), the only
+  index that can serve `LIKE 'PREFIX%'` under the database's `en_US.utf8` collation
 
 `POST /api/lol/summoners/multi-search` supports:
 - `region` (required; platform route or alias such as `NA1` or `na`)
@@ -359,7 +361,9 @@ Jungle+lane, and lane+Jungle. Each partner includes games, wins, pair win rate, 
 the focal champion-role sample, raw win-rate delta from that focal baseline, and a Wilson
 confidence score. `bestPartners` is ordered by confidence-adjusted lift so tiny lucky samples do
 not outrank supported pairings. The same `synergies` payload is included by the aggregate
-`/profile` response; roleless queues return an empty pairing set.
+`/profile` response; roleless queues return an empty pairing set. In `/profile` the field is
+`null` when the scope's synergies are not cached and their computation does not finish within 2s
+(see the profile notes below).
 
 `GET /api/lol/analytics/champions/{championId}/builds` includes full rune setup per build:
 
@@ -380,7 +384,12 @@ not outrank supported pairings. The same `synergies` payload is included by the 
 
 `GET /api/lol/analytics/champions/{championId}/profile` returns the champion detail payload in one request:
 - Query filters: `role`, `rankTier`, `region`, `queue`, `patch`
-- Response: `{ championId, effectiveRole, winRates, builds, matchups, grade, queueFamily, trend }`
+- Response: `{ championId, effectiveRole, winRates, builds, matchups, grade, queueFamily, trend, synergies, recommendation }`
+- `synergies` is `null` when the scope's synergies are not cached and their live computation does not
+  finish within 2s of the request's fan-out. The computation keeps running in its own scope and caches
+  its result, so a later request includes it; the web hides the section while it is `null`. The
+  default lane of every champion is kept cached by the hourly default-profile warm. A synergy failure
+  that arrives within the 2s still fails the request, as before.
 - `grade` (`ChampionGradeDto`, nullable) is the champion's tier grade for the resolved `effectiveRole` + scope — the **same** grade the tier list shows for that champion in that role (so the detail page hero is consistent with the list). It carries `tier`, `strengthScore`, `winRate`, `pickRate`, `banRate`, `contestedScore`, `games`, `roleBaseline`, `isLowSample`, `movement`, `previousTier`, `role`, `rankScope`. Null when the champion is not graded in scope (render "Unrated").
 - The endpoint reuses the cached winrate, build, matchup, and tier-list aggregates. For Solo/Duo and Flex, when `role` is omitted it chooses the most-played role from winrates; if a scoped rank filter has no winrate rows, it uses all-rank winrates only to choose the role while keeping the requested rank filter for build and matchup data. ARAM/Arena resolve `effectiveRole=ALL`.
 - The build and matchup reads run in separate backend scopes so their cached aggregate reads can execute concurrently without sharing an EF `DbContext`.

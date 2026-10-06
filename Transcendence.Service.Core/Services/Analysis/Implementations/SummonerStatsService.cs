@@ -593,24 +593,19 @@ public class SummonerStatsService(
         var matchIds = anchorByMatch.Keys.ToList();
 
         // Step 2: co-participants in those matches (excluding self), via the indexed MatchId IN (...).
+        // Their rows share heap pages with the anchor rows just read. Names are deliberately not
+        // joined here: up to 900 co-participants each cost a Summoners index + heap read, which
+        // was most of this method's disk reads on prod, while only the top few are shown.
         var coRows = await db.MatchParticipants
             .AsNoTracking()
             .Where(mp => matchIds.Contains(mp.MatchId) && mp.SummonerId != summonerId)
-            .Select(mp => new
-            {
-                mp.MatchId,
-                mp.SummonerId,
-                mp.TeamId,
-                mp.Summoner.GameName,
-                mp.Summoner.TagLine
-            })
+            .Select(mp => new { mp.MatchId, mp.SummonerId, mp.TeamId })
             .ToListAsync(ct);
 
-        return coRows
+        var top = coRows
             .GroupBy(r => r.SummonerId)
             .Select(g =>
             {
-                var first = g.First();
                 var sameTeamGames = 0;
                 var sameTeamWins = 0;
                 foreach (var row in g)
@@ -624,12 +619,33 @@ public class SummonerStatsService(
                     }
                 }
 
-                return new PlayedWithEntry(g.Key, first.GameName, first.TagLine, g.Count(), sameTeamGames, sameTeamWins);
+                return (SummonerId: g.Key, GamesTogether: g.Count(), SameTeamGames: sameTeamGames,
+                    SameTeamWins: sameTeamWins);
             })
             .Where(e => e.GamesTogether >= 2)
             .OrderByDescending(e => e.GamesTogether)
             .ThenByDescending(e => e.SameTeamGames)
             .Take(topCount)
+            .ToList();
+
+        if (top.Count == 0)
+            return [];
+
+        // Step 3: names for the shown partners only.
+        var topIds = top.Select(e => e.SummonerId).ToList();
+        var names = await db.Summoners
+            .AsNoTracking()
+            .Where(s => topIds.Contains(s.Id))
+            .Select(s => new { s.Id, s.GameName, s.TagLine })
+            .ToDictionaryAsync(s => s.Id, ct);
+
+        return top
+            .Select(e =>
+            {
+                var name = names.GetValueOrDefault(e.SummonerId);
+                return new PlayedWithEntry(e.SummonerId, name?.GameName, name?.TagLine, e.GamesTogether,
+                    e.SameTeamGames, e.SameTeamWins);
+            })
             .ToList();
     }
 
@@ -714,6 +730,7 @@ public class SummonerMatchHistoryService(
     // A new prefix avoids deserializing pre-deploy distributed-cache entries that
     // were written against the older record constructors.
     private const string RecentMatchesCacheKeyPrefix = "stats:recent:v2:";
+    private const string LatestMatchDateCacheKeyPrefix = "stats:latest-match-date:";
     private const string MatchDetailCacheKeyPrefix = "match:detail:v2:";
     private const string MatchTimelineCacheKeyPrefix = "match:timeline:";
     private const string SummonerStatsCacheTagPrefix = "summoner-stats:";
@@ -762,6 +779,23 @@ public class SummonerMatchHistoryService(
                     championId is > 0 ? championId : null,
                     includeFacets,
                     cancel),
+                StatsCacheOptions,
+                tags: new[] { BuildSummonerStatsTag(summonerId) },
+                cancellationToken: token),
+            ct);
+    }
+
+    public async Task<long?> GetLatestMatchDateAsync(Guid summonerId, CancellationToken ct)
+    {
+        var cacheKey = $"{LatestMatchDateCacheKeyPrefix}{summonerId}";
+        return await ExecuteStatsRequestAsync(
+            "Failed to load the latest match date.",
+            async token => await cache.GetOrCreateAsync(
+                cacheKey,
+                async cancel => await db.MatchParticipants
+                    .AsNoTracking()
+                    .Where(mp => mp.SummonerId == summonerId)
+                    .MaxAsync(mp => (long?)mp.Match.MatchDate, cancel),
                 StatsCacheOptions,
                 tags: new[] { BuildSummonerStatsTag(summonerId) },
                 cancellationToken: token),
@@ -843,22 +877,28 @@ public class SummonerMatchHistoryService(
             participantData.Select(value => value.MatchEntityId).Distinct().ToList(),
             ct);
 
-        // Get items and runes for these participants
+        // Get items and runes for these participants. The participant ids come from the filtered page
+        // query above, so the item/rune query filters (a join back through MatchParticipants to
+        // Matches per row) cannot exclude anything; IgnoreQueryFilters reads the rows by primary key
+        // alone. Items are read flat and grouped here: a grouped projection made EF emit the whole
+        // filtered join twice.
         var participantIds = participantData.Select(p => p.ParticipantId).Distinct().ToList();
 
-        var itemsByParticipant = await db.Set<Data.Models.LoL.Match.MatchParticipantItem>()
+        var itemRows = await db.Set<Data.Models.LoL.Match.MatchParticipantItem>()
+            .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(i => participantIds.Contains(i.MatchParticipantId))
+            .OrderBy(i => i.MatchParticipantId)
+            .ThenBy(i => i.SlotIndex)
+            .Select(i => new { i.MatchParticipantId, i.ItemId })
+            .ToListAsync(ct);
+        var itemsByParticipant = itemRows
             .GroupBy(i => i.MatchParticipantId)
-            .Select(g => new
-            {
-                ParticipantId = g.Key,
-                Items = g.OrderBy(i => i.SlotIndex).Select(i => i.ItemId).ToList()
-            })
-            .ToDictionaryAsync(x => x.ParticipantId, x => x.Items, ct);
+            .ToDictionary(g => g.Key, g => g.Select(i => i.ItemId).ToList());
 
         // Get runes with explicit selection hierarchy (plus metadata fallback fields)
         var runeRows = await db.Set<Data.Models.LoL.Match.MatchParticipantRune>()
+            .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(r => participantIds.Contains(r.MatchParticipantId))
             .Select(r => new

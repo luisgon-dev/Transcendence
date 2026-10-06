@@ -57,12 +57,14 @@ public sealed class SummonerProfileService(
 
         // These calls share a scoped DbContext and must remain sequential.
         var activeSeasonStats = await statsService.GetActiveSeasonProfileStatsAsync(summoner.Id, 5, 20, ct);
-        var recent = await matchHistoryService.GetRecentMatchesAsync(
-            summoner.Id, 1, 10, null, null, null, includeFacets: false, ct);
+        // Only the newest match's date is shown (StatsAge). This used to load a 10-match history page
+        // (items, runes and every participant for team-relative scores) and keep its first date: on
+        // prod those three queries were ~75% of a cold profile's database time, and nearly every
+        // profile read is cold because crawlers fetch each summoner once.
+        var mostRecentMatchDate = await matchHistoryService.GetLatestMatchDateAsync(summoner.Id, ct);
         var playedWith = await statsService.GetPlayedWithAsync(summoner.Id, 100, 6, ct);
         var mastery = await statsService.GetTopMasteryAsync(summoner.Id, 6, ct);
         var overview = activeSeasonStats.Overview;
-        var mostRecentMatchDate = recent.Items.Count > 0 ? recent.Items[0].MatchDate : (long?)null;
 
         return new SummonerProfileResponse
         {

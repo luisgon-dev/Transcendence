@@ -19,6 +19,12 @@ public interface ISummonerMatchHistoryService
         bool includeFacets,
         CancellationToken ct);
 
+    /// <summary>
+    /// The date (Unix ms) of the summoner's newest stored match, or null when none is stored. Use this
+    /// instead of loading a history page when only the date is needed.
+    /// </summary>
+    Task<long?> GetLatestMatchDateAsync(Guid summonerId, CancellationToken ct);
+
     Task<MatchDetailDto?> GetMatchDetailAsync(string matchId, CancellationToken ct);
 
     Task<MatchTimelineDto?> GetMatchTimelineAsync(string matchId, CancellationToken ct);

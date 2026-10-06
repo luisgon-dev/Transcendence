@@ -60,12 +60,12 @@ public class CancellationPropagationTests
             Mock.Of<IBackgroundJobClient>(),
             services.GetRequiredService<HybridCache>(),
             Options.Create(new MatchIngestionOptions()),
-            Options.Create(new TimelineIngestionOptions { Enabled = false }));
+            Options.Create(new TimelineIngestionOptions { Enabled = false }), OperationTrackerMock.Create().Object);
 
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        Func<Task> act = async () => await job.RefreshByRiotId(
+        Func<Task> act = async () => await job.RefreshByRiotId(Guid.NewGuid(),
             "name",
             "tag",
             PlatformRoute.NA1,

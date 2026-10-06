@@ -111,6 +111,13 @@ builder.Services.AddSwaggerGen(options =>
     // always-present fields as non-optional/non-null and sometimes-null fields as `T | null`, fixing the
     // inverted nullability the client shipped before (P1 — API Design & Contracts).
     options.SupportNonNullableReferenceTypes();
+    static string SchemaId(Type type)
+    {
+        if (type == typeof(Transcendence.Service.Core.Services.Operations.OperationResult)) return "OperationCompletionResult";
+        if (!type.IsConstructedGenericType) return type.Name.Replace("[]", "Array");
+        return string.Concat(type.GetGenericArguments().Select(SchemaId)) + type.Name.Split('`')[0];
+    }
+    options.CustomSchemaIds(SchemaId);
     options.NonNullableReferenceTypesAsRequired();
     // Wrap $ref properties in `allOf` so sibling keywords apply — in OpenAPI 3.0 a bare `$ref` cannot
     // carry a `nullable: true` sibling, so without this a nullable object property (e.g. `RankInfo? SoloRank`)

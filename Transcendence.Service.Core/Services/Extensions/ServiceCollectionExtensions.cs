@@ -27,6 +27,7 @@ using Transcendence.Service.Core.Services.ProSummoners.Implementations;
 using Transcendence.Service.Core.Services.ProSummoners.Interfaces;
 using Transcendence.Service.Core.Services.Refresh.Implementations;
 using Transcendence.Service.Core.Services.Refresh.Interfaces;
+using Transcendence.Service.Core.Services.Operations;
 using Transcendence.Service.Core.Services.StaticContent.Implementations;
 using Transcendence.Service.Core.Services.StaticContent.Interfaces;
 using Transcendence.Service.Core.Services.StaticData.Implementations;
@@ -41,6 +42,8 @@ public static class ServiceCollectionExtensions
     // Shared services used by both the keyless WebAPI host and the worker host.
     public static IServiceCollection AddTranscendenceCore(this IServiceCollection services)
     {
+        services.AddScoped<IBackgroundOperationTracker, BackgroundOperationTracker>();
+        services.AddScoped<IBackgroundOperationDispatcher, BackgroundOperationDispatcher>();
         services.AddScoped<ICacheService, CacheService>();
         services.AddScoped<IChampionLoadoutAnalysisService, ChampionLoadoutAnalysisService>();
         services.AddScoped<ISummonerStatsService, SummonerStatsService>();
@@ -190,6 +193,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MatchTimelineIngestionJob>();
         services.AddScoped<IRiotAccountService, RiotAccountService>();
         services.AddScoped<ILiveGamePollingService, RiotLiveGamePollingService>();
+        services.Configure<RiotSpectatorOptions>(options => options.ApiKey = riotApiKey);
+        services.AddHttpClient<IRiotSpectatorClient, RiotSpectatorClient>(client =>
+                client.Timeout = TimeSpan.FromSeconds(15))
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         return services;
     }
 }

@@ -12,6 +12,7 @@ public static class SummonerFullHistoryBackfillStatuses
 public class SummonerFullHistoryBackfill
 {
     public Guid Id { get; set; }
+    public Guid OperationId { get; set; }
     public Guid SummonerId { get; set; }
     public Summoner? Summoner { get; set; }
     public string Scope { get; set; } = SummonerFullHistoryScopes.FullHistory;

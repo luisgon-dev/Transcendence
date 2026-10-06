@@ -20,13 +20,14 @@ using Transcendence.Service.Core.Services.ProSummoners.Implementations;
 using Transcendence.Service.Core.Services.Refresh.Implementations;
 using Transcendence.Service.Core.Services.RiotApi.DTOs;
 using Transcendence.WebAPI.Controllers;
+using Transcendence.Service.Core.Services.Operations;
 
 namespace Transcendence.WebAPI.Tests;
 
 public class ProSummonersControllerTests
 {
     [Fact]
-    public async Task Refresh_WhenLockHeld_ReturnsRetryHintWithPollLinkAndSkipsEnqueue()
+    public async Task Refresh_WhenLockHeld_ReturnsOwnedOperationAndSkipsEnqueue()
     {
         await using var db = CreateDbContext();
         var tracked = SeedTrackedSummoner(db);
@@ -42,6 +43,7 @@ public class ProSummonersControllerTests
             {
                 Key = "summoner-refresh:NA1:NAME:TAG",
                 LockedUntilUtc = DateTime.UtcNow.AddSeconds(40)
+                , OwnerToken = Guid.NewGuid()
             });
 
         var backgroundJobClient = new Mock<IBackgroundJobClient>();
@@ -56,9 +58,9 @@ public class ProSummonersControllerTests
         var result = await controller.Refresh(tracked.Id, CancellationToken.None);
 
         var accepted = result.Should().BeOfType<AcceptedResult>().Subject;
-        var payload = accepted.Value.Should().BeOfType<SummonerAcceptedResponse>().Subject;
-        payload.Message.Should().Be("Refresh in process");
-        payload.Poll.Should().Be("https://localhost/api/admin/pro-summoners/tracked-id");
+        var payload = accepted.Value.Should().BeOfType<OperationAcceptedResponse>().Subject;
+        payload.OperationId.Should().NotBeEmpty();
+        payload.StatusUrl.Should().Be($"/api/lol/operations/{payload.OperationId}");
         payload.RetryAfterSeconds.Should().BeGreaterThan(0);
         var expectedKey = RefreshLockKeys.BuildSummonerRefreshKey(Camille.Enums.PlatformRoute.NA1, tracked.GameName!,
             tracked.TagLine!);
@@ -68,7 +70,7 @@ public class ProSummonersControllerTests
         lockTelemetry.Verify(
             x => x.RecordContentionWaitHint(
                 expectedKey,
-                It.Is<int>(waitHint => waitHint == payload.RetryAfterSeconds),
+                It.Is<int>(waitHint => waitHint > 0),
                 "pro-summoners-controller"),
             Times.Once);
         backgroundJobClient.Verify(
@@ -116,10 +118,10 @@ public class ProSummonersControllerTests
         var result = await controller.Refresh(tracked.Id, CancellationToken.None);
 
         var accepted = result.Should().BeOfType<AcceptedResult>().Subject;
-        var payload = accepted.Value.Should().BeOfType<SummonerAcceptedResponse>().Subject;
-        payload.Message.Should().Be("Refresh queued");
-        payload.Poll.Should().Be("https://localhost/api/admin/pro-summoners/tracked-id");
-        payload.RetryAfterSeconds.Should().BeNull();
+        var payload = accepted.Value.Should().BeOfType<OperationAcceptedResponse>().Subject;
+        payload.OperationId.Should().NotBeEmpty();
+        payload.StatusUrl.Should().Be($"/api/lol/operations/{payload.OperationId}");
+        payload.RetryAfterSeconds.Should().Be(2);
         lockTelemetry.Verify(
             x => x.RecordLifecycleOutcome(expectedMainKey, "acquired", "pro-summoners-controller"),
             Times.Once);
@@ -166,7 +168,8 @@ public class ProSummonersControllerTests
             new TrackedProSummonerService(db),
             new SummonerRefreshCoordinator(
                 refreshLockRepository,
-                backgroundJobClient,
+                NewTracker(),
+                NewDispatcher(backgroundJobClient),
                 refreshLockTelemetry ?? Mock.Of<IRefreshLockLifecycleTelemetry>(),
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<SummonerRefreshCoordinator>.Instance))
         {
@@ -183,6 +186,28 @@ public class ProSummonersControllerTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
             .Options;
         return new TranscendenceContext(options);
+    }
+
+    private static IBackgroundOperationTracker NewTracker()
+    {
+        var tracker = new Mock<IBackgroundOperationTracker>();
+        tracker.Setup(x => x.CreateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<OperationResource>(),
+            It.IsAny<Guid>(), It.IsAny<OperationOwner>(), It.IsAny<OperationDispatch>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TrackedOperation(Guid.NewGuid(), Guid.NewGuid()));
+        tracker.Setup(x => x.JoinAsync(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<OperationOwner>(),
+            It.IsAny<CancellationToken>())).ReturnsAsync(new TrackedOperation(Guid.NewGuid(), Guid.NewGuid()));
+        return tracker.Object;
+    }
+    private static IBackgroundOperationDispatcher NewDispatcher(IBackgroundJobClient jobs)
+    {
+        var dispatcher = new Mock<IBackgroundOperationDispatcher>();
+        dispatcher.Setup(x => x.DispatchAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Returns<Guid, CancellationToken>((_, _) =>
+            {
+                jobs.Create(Hangfire.Common.Job.FromExpression(() => Console.WriteLine("tracked-test")), new Hangfire.States.EnqueuedState());
+                return Task.CompletedTask;
+            });
+        return dispatcher.Object;
     }
 
     private static TrackedProSummoner SeedTrackedSummoner(TranscendenceContext db)

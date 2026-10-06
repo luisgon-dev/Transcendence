@@ -3293,17 +3293,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/LiveGameProbeAcceptedResponse"
+                  "$ref": "#/components/schemas/OperationAcceptedResponse"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/LiveGameProbeAcceptedResponse"
+                  "$ref": "#/components/schemas/OperationAcceptedResponse"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/LiveGameProbeAcceptedResponse"
+                  "$ref": "#/components/schemas/OperationAcceptedResponse"
                 }
               }
             }
@@ -3326,6 +3326,73 @@
           }
         },
         "security": [
+          { }
+        ]
+      }
+    },
+    "/api/lol/operations/{operationId}": {
+      "get": {
+        "tags": [
+          "Operations"
+        ],
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationStatusResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationStatusResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          { },
           { }
         ]
       }
@@ -3967,21 +4034,21 @@
         ],
         "responses": {
           "202": {
-            "description": "Accepted. Returns \"Refresh queued\" when the refresh lock is acquired, or \"Refresh in process\" with retryAfterSeconds when contention is detected.",
+            "description": "Accepted. Poll the owned durable refresh operation.",
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/SummonerAcceptedResponse"
+                  "$ref": "#/components/schemas/OperationAcceptedResponse"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SummonerAcceptedResponse"
+                  "$ref": "#/components/schemas/OperationAcceptedResponse"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SummonerAcceptedResponse"
+                  "$ref": "#/components/schemas/OperationAcceptedResponse"
                 }
               }
             }
@@ -4565,21 +4632,21 @@
             }
           },
           "202": {
-            "description": "Accepted. Returns \"Refresh queued\" when the refresh lock is acquired, or \"Refresh in process\" with retryAfterSeconds when contention is detected.",
+            "description": "Accepted. Poll the owned operation for profile and recent-history outcomes; full history is a separate child.",
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/SummonerAcceptedResponse"
+                  "$ref": "#/components/schemas/OperationAcceptedResponse"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SummonerAcceptedResponse"
+                  "$ref": "#/components/schemas/OperationAcceptedResponse"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SummonerAcceptedResponse"
+                  "$ref": "#/components/schemas/OperationAcceptedResponse"
                 }
               }
             }
@@ -8885,27 +8952,6 @@
         },
         "additionalProperties": false
       },
-      "LiveGameProbeAcceptedResponse": {
-        "required": [
-          "retryAfterSeconds",
-          "status"
-        ],
-        "type": "object",
-        "properties": {
-          "status": {
-            "type": "string"
-          },
-          "poll": {
-            "type": "string",
-            "nullable": true
-          },
-          "retryAfterSeconds": {
-            "type": "integer",
-            "format": "int32"
-          }
-        },
-        "additionalProperties": false
-      },
       "LiveGameResponseDto": {
         "required": [
           "dataAgeSeconds",
@@ -9622,6 +9668,110 @@
         },
         "additionalProperties": false
       },
+      "OperationAcceptedResponse": {
+        "required": [
+          "operationId",
+          "retryAfterSeconds",
+          "statusUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "statusUrl": {
+            "type": "string"
+          },
+          "retryAfterSeconds": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OperationCompletionResult": {
+        "type": "object",
+        "properties": {
+          "summonerId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "snapshotId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "observedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "profileUpdatedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "recentImportCompletedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "persistedMatchCount": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "deferredMatchCount": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "failedMatchCount": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "warningCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "liveGame": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LiveGameResponseDto"
+              }
+            ],
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "OperationPhase": {
+        "required": [
+          "name",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "OperationResult": {
         "required": [
           "message"
@@ -9634,6 +9784,78 @@
           "id": {
             "type": "string",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "OperationStatusResponse": {
+        "required": [
+          "gameName",
+          "kind",
+          "operationId",
+          "phases",
+          "platformRegion",
+          "queuedAtUtc",
+          "result",
+          "retryAfterSeconds",
+          "status",
+          "tagLine",
+          "updatedAtUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "platformRegion": {
+            "type": "string"
+          },
+          "gameName": {
+            "type": "string"
+          },
+          "tagLine": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "retryAfterSeconds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "queuedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "errorCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "phases": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperationPhase"
+            }
+          },
+          "result": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OperationCompletionResult"
+              }
+            ]
           }
         },
         "additionalProperties": false
@@ -11065,30 +11287,6 @@
         },
         "additionalProperties": false
       },
-      "SummonerAcceptedResponse": {
-        "required": [
-          "message"
-        ],
-        "type": "object",
-        "properties": {
-          "message": {
-            "type": "string",
-            "description": "Refresh state message. \"Refresh queued\" when accepted now, \"Refresh in process\" when contention is detected."
-          },
-          "poll": {
-            "type": "string",
-            "description": "Absolute URL clients can poll for current refresh status/result.",
-            "nullable": true
-          },
-          "retryAfterSeconds": {
-            "type": "integer",
-            "description": "Retry hint in seconds for contention responses; null when refresh was just queued.",
-            "format": "int32",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
       "SummonerLookupResponse": {
         "required": [
           "status"
@@ -12007,6 +12205,9 @@
     },
     {
       "name": "LiveGame"
+    },
+    {
+      "name": "Operations"
     },
     {
       "name": "ProAnalytics"

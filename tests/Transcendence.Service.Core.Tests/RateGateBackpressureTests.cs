@@ -16,6 +16,7 @@ using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
+using Transcendence.Service.Core.Services.Operations;
 using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.Implementations;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
@@ -33,6 +34,32 @@ namespace Transcendence.Service.Core.Tests;
 // must be revivable without disturbing genuine 404/gone rows.
 public sealed class RateGateBackpressureTests
 {
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task MatchPreparationDistinguishesDeferredRatePressureFromMissingDetails(bool lightweight, bool http429)
+    {
+        await using var context = await CreateContextAsync();
+        using var stub = new RiotApiServiceHttpTests.RiotApiStub
+        {
+            Response = (System.Net.HttpStatusCode.TooManyRequests, null), RetryAfterSeconds = 9
+        };
+        var gate = new Mock<IRiotRateGate>();
+        gate.Setup(x => x.AcquireAsync("AMERICAS", It.IsAny<CancellationToken>())).ReturnsAsync(http429);
+        var service = new MatchService(stub.BuildContext(), context, Mock.Of<IMatchRepository>(),
+            Mock.Of<ISummonerService>(), Mock.Of<ISummonerRepository>(), Mock.Of<IStaticDataService>(),
+            gate.Object, Options.Create(new MatchFetchOptions()), NullLogger<MatchService>.Instance);
+        Func<Task<DataMatch?>> act = lightweight
+            ? () => service.GetMatchDetailsLightweightAsync("NA1_429", Camille.Enums.RegionalRoute.AMERICAS, Camille.Enums.PlatformRoute.NA1)
+            : () => service.GetMatchDetailsAsync("NA1_429", Camille.Enums.RegionalRoute.AMERICAS, Camille.Enums.PlatformRoute.NA1);
+
+        await act.Should().ThrowAsync<MatchPreparationDeferredException>();
+        gate.Verify(x => x.Pause("AMERICAS", TimeSpan.FromSeconds(9)), http429 ? Times.Once() : Times.Never());
+        (await context.Matches.CountAsync()).Should().Be(0);
+    }
+
     private static async Task<TranscendenceContext> CreateContextAsync()
     {
         var connection = new SqliteConnection("DataSource=:memory:");
@@ -67,8 +94,13 @@ public sealed class RateGateBackpressureTests
         result.Should().BeNull("null is the explicit retry-later outcome; an empty page means end-of-history");
     }
 
-    [Fact]
-    public async Task FullHistoryBackfill_WhenMatchIdPageIsDeferred_RemainsRunningAndEnqueuesContinuation()
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, true, true)]
+    public async Task FullHistoryBackfill_DeferredPageContinuesSameOperationAndEventuallyCompletes(
+        bool hasUnresolvedFailure, bool retryExistingOperation, bool competingRequest)
     {
         await using var context = await CreateContextAsync();
         var summoner = new Summoner
@@ -80,12 +112,24 @@ public sealed class RateGateBackpressureTests
             PlatformRegion = "NA1",
             Region = "AMERICAS"
         };
+        var operationId = Guid.NewGuid();
         context.Summoners.Add(summoner);
+        if (retryExistingOperation)
+            context.SummonerFullHistoryBackfills.Add(new SummonerFullHistoryBackfill
+            {
+                Id = Guid.NewGuid(), SummonerId = summoner.Id, OperationId = operationId,
+                Status = SummonerFullHistoryBackfillStatuses.Running, CursorEndEpochSeconds = 123
+            });
+        if (hasUnresolvedFailure)
+            context.SummonerMatchFactFetchFailures.Add(new SummonerMatchFactFetchFailure
+            {
+                Id = Guid.NewGuid(), SummonerId = summoner.Id, MatchId = "NA1_gap", AttemptCount = 1
+            });
         await context.SaveChangesAsync();
 
         var matchIds = new Mock<IRiotMatchIdsClient>();
         matchIds
-            .Setup(client => client.GetMatchIdsByPuuidAsync(
+            .SetupSequence(client => client.GetMatchIdsByPuuidAsync(
                 It.IsAny<Camille.Enums.RegionalRoute>(),
                 summoner.Puuid,
                 It.IsAny<int>(),
@@ -95,23 +139,25 @@ public sealed class RateGateBackpressureTests
                 It.IsAny<int>(),
                 It.IsAny<string?>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IReadOnlyList<string>?)null);
+            .ReturnsAsync((IReadOnlyList<string>?)null)
+            .ReturnsAsync(Array.Empty<string>());
 
         var locks = new Mock<IRefreshLockRepository>();
         locks
-            .Setup(repository => repository.TryAcquireAsync(
+            .Setup(repository => repository.TryAcquireOwnedAsync(
                 It.IsAny<string>(),
                 It.IsAny<TimeSpan>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+            .ReturnsAsync(Guid.NewGuid());
         locks
-            .Setup(repository => repository.ReleaseAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(repository => repository.ReleaseOwnedAsync(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         var backgroundJobs = new Mock<IBackgroundJobClient>();
         backgroundJobs
             .Setup(client => client.Create(It.IsAny<Job>(), It.IsAny<IState>()))
             .Returns("continuation-job");
+        var operations = OperationTrackerMock.Create();
 
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddLogging();
@@ -133,18 +179,53 @@ public sealed class RateGateBackpressureTests
                 MinimumMatchStartEpochSeconds = 0
             }),
             locks.Object,
-            NullLogger<FullHistoryBackfillJob>.Instance);
+            NullLogger<FullHistoryBackfillJob>.Instance, operations.Object);
 
-        await job.ProcessAsync(summoner.Id, null, CancellationToken.None);
+        await job.ProcessAsync(operationId, summoner.Id,
+            retryExistingOperation ? Guid.NewGuid() : null, CancellationToken.None);
 
         var backfill = await context.SummonerFullHistoryBackfills.SingleAsync();
+        backfill.OperationId.Should().Be(operationId);
         backfill.Status.Should().Be(SummonerFullHistoryBackfillStatuses.Running);
         backfill.CompletedAtUtc.Should().BeNull();
         backfill.PagesScanned.Should().Be(0);
+        backfill.CursorEndEpochSeconds.Should().Be(retryExistingOperation ? 123 : null,
+            "retrying the initial user-request job must not reset the same operation's cursor");
         backgroundJobs.Verify(
-            client => client.Create(It.IsAny<Job>(), It.IsAny<IState>()),
+            client => client.Create(It.Is<Job>(j => (Guid)j.Args[0] == operationId), It.IsAny<IState>()),
             Times.Once,
             "a deferred page must be retried instead of terminating the backfill");
+        operations.Verify(x => x.CompleteAsync(It.IsAny<Guid>(), It.IsAny<string>(),
+            It.IsAny<OperationResult>(), It.IsAny<CancellationToken>()), Times.Never);
+        operations.Verify(x => x.RetryAsync(operationId, "history_continuing", It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+
+        if (competingRequest)
+        {
+            context.BackgroundOperations.Add(new Transcendence.Data.Models.Service.BackgroundOperation
+            {
+                Id = operationId, Kind = OperationKinds.FullHistory, ResourceKey = "history-test",
+                Status = OperationStatuses.Retrying
+            });
+            await context.SaveChangesAsync();
+            var newerId = Guid.NewGuid();
+            await job.ProcessAsync(newerId, summoner.Id, Guid.NewGuid());
+            backfill.OperationId.Should().Be(operationId);
+            backfill.CursorEndEpochSeconds.Should().Be(123);
+            operations.Verify(x => x.RetryAsync(newerId, "history_busy", It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()), Times.Once);
+            operations.Verify(x => x.CompleteAsync(newerId, It.IsAny<string>(), It.IsAny<OperationResult>(),
+                It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        // Execute the scheduled continuation, rather than treating an enqueue as completion.
+        await job.ProcessAsync(operationId, summoner.Id, null, CancellationToken.None);
+        backfill.Status.Should().Be(hasUnresolvedFailure
+            ? SummonerFullHistoryBackfillStatuses.CompletedWithGaps : SummonerFullHistoryBackfillStatuses.Completed);
+        backfill.CompletedAtUtc.Should().NotBeNull();
+        operations.Verify(x => x.CompleteAsync(operationId, hasUnresolvedFailure ? OperationStatuses.Partial : OperationStatuses.Succeeded,
+            It.Is<OperationResult>(r => r.SummonerId == summoner.Id && r.FailedMatchCount == (hasUnresolvedFailure ? 1 : 0)),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -185,13 +266,13 @@ public sealed class RateGateBackpressureTests
         gate.Setup(x => x.AcquireAsync("AMERICAS", It.IsAny<CancellationToken>())).ReturnsAsync(true);
         var locks = new Mock<IRefreshLockRepository>();
         locks
-            .Setup(repository => repository.TryAcquireAsync(
+            .Setup(repository => repository.TryAcquireOwnedAsync(
                 It.IsAny<string>(),
                 It.IsAny<TimeSpan>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+            .ReturnsAsync(Guid.NewGuid());
         locks
-            .Setup(repository => repository.ReleaseAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(repository => repository.ReleaseOwnedAsync(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         var backgroundJobs = new Mock<IBackgroundJobClient>();
         backgroundJobs.Setup(client => client.Create(It.IsAny<Job>(), It.IsAny<IState>())).Returns("continuation-job");
@@ -215,9 +296,9 @@ public sealed class RateGateBackpressureTests
                 MinimumMatchStartEpochSeconds = 0
             }),
             locks.Object,
-            NullLogger<FullHistoryBackfillJob>.Instance);
+            NullLogger<FullHistoryBackfillJob>.Instance, OperationTrackerMock.Create().Object);
 
-        await job.ProcessAsync(summoner.Id, null, CancellationToken.None);
+        await job.ProcessAsync(Guid.NewGuid(), summoner.Id, null, CancellationToken.None);
 
         var backfill = await context.SummonerFullHistoryBackfills.SingleAsync();
         backfill.Status.Should().Be(SummonerFullHistoryBackfillStatuses.Running);

@@ -6,6 +6,7 @@ using Camille.RiotGames;
 using Camille.RiotGames.Util;
 using FluentAssertions;
 using Moq;
+using Microsoft.Extensions.Options;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.Implementations;
@@ -137,6 +138,11 @@ public class RiotApiServiceHttpTests
             }.Build();
             return new LeagueRiotApiContext(RiotGamesApi.NewInstance(config));
         }
+
+        public RiotSpectatorClient BuildSpectatorClient() => new(new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(5)
+        }, Options.Create(new RiotSpectatorOptions { ApiKey = "FAKE-KEY", ApiUrlTemplate = _baseUrl }));
 
         private async Task ServeLoopAsync()
         {

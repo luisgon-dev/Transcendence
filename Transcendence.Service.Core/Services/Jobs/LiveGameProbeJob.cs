@@ -4,6 +4,7 @@ using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.LiveGame.Interfaces;
 using Transcendence.Service.Core.Services.LiveGame.Models;
+using Transcendence.Service.Core.Services.Operations;
 
 namespace Transcendence.Service.Core.Services.Jobs;
 
@@ -12,11 +13,13 @@ public sealed class LiveGameProbeJob(
     ILiveGamePollingService liveGamePollingService,
     ILiveGameSnapshotRepository snapshotRepository,
     IRefreshLockRepository refreshLockRepository,
-    ILogger<LiveGameProbeJob> logger) : ILiveGameProbeJob
+    ILogger<LiveGameProbeJob> logger,
+    IBackgroundOperationTracker operations) : ILiveGameProbeJob
 {
     private static readonly TimeSpan LockReleaseTimeout = TimeSpan.FromSeconds(5);
 
     public async Task ProbeAsync(
+        Guid operationId,
         string platformRegion,
         string gameName,
         string tagLine,
@@ -26,6 +29,7 @@ public sealed class LiveGameProbeJob(
         var (lockKey, ownerToken) = RefreshLockKeys.ParseOwnedHandle(lockHandle);
         try
         {
+            if (!await operations.StartAsync(operationId, ct)) return;
             var summoner = await summonerRepository.FindByRiotIdAsync(
                 platformRegion,
                 gameName,
@@ -33,6 +37,7 @@ public sealed class LiveGameProbeJob(
                 cancellationToken: ct);
             if (string.IsNullOrWhiteSpace(summoner?.Puuid))
             {
+                await operations.FailAsync(operationId, "summoner_missing", ct);
                 logger.LogInformation(
                     "Live-game probe skipped because {Region}/{GameName}#{TagLine} is not stored.",
                     platformRegion,
@@ -47,9 +52,11 @@ public sealed class LiveGameProbeJob(
                 tagLine,
                 ct);
             var observedAt = DateTime.UtcNow;
+            var snapshotId = Guid.NewGuid();
+            response = response with { LastUpdatedUtc = observedAt, DataAgeSeconds = 0 };
             await snapshotRepository.AddAsync(new LiveGameSnapshot
             {
-                Id = Guid.NewGuid(),
+                Id = snapshotId,
                 SummonerId = summoner.Id,
                 Puuid = summoner.Puuid,
                 PlatformRegion = platformRegion,
@@ -60,6 +67,13 @@ public sealed class LiveGameProbeJob(
                 NextPollAtUtc = observedAt.Add(LiveGamePollingState.GetNextInterval(response.State))
             }, ct);
             await snapshotRepository.SaveChangesAsync(ct);
+            await operations.CompleteAsync(operationId, OperationStatuses.Succeeded, new OperationResult(
+                SummonerId: summoner.Id, SnapshotId: snapshotId, ObservedAtUtc: observedAt, LiveGame: response), ct);
+        }
+        catch (Exception)
+        {
+            await operations.RetryAsync(operationId, "probe_failed", ct: CancellationToken.None);
+            throw;
         }
         finally
         {

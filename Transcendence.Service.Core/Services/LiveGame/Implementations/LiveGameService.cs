@@ -7,6 +7,7 @@ using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.LiveGame.Interfaces;
 using Transcendence.Service.Core.Services.LiveGame.Models;
 using Transcendence.Service.Core.Services.RiotApi;
+using Transcendence.Service.Core.Services.RiotApi.Interfaces;
 
 namespace Transcendence.Service.Core.Services.LiveGame.Implementations;
 
@@ -16,7 +17,8 @@ public class RiotLiveGamePollingService(
     IRiotRateGate rateGate,
     HybridCache cache,
     ILiveGameAnalysisService liveGameAnalysisService,
-    ILogger<RiotLiveGamePollingService> logger) : ILiveGamePollingService
+    ILogger<RiotLiveGamePollingService> logger,
+    IRiotSpectatorClient spectator) : ILiveGamePollingService
 {
     private static readonly HybridCacheEntryOptions LiveGameCacheOptions = new()
     {
@@ -62,15 +64,14 @@ public class RiotLiveGamePollingService(
     {
         var puuid = await ResolvePuuidAsync(request.Platform, request.GameName, request.TagLine, ct);
         if (string.IsNullOrWhiteSpace(puuid))
-            return BuildOfflineResponse(request.Region);
+            throw new InvalidOperationException("The Riot account could not be verified for this probe.");
 
         try
         {
             if (!await rateGate.AcquireAsync(request.Region, ct))
                 throw new InvalidOperationException($"Live-game probe deferred by the {request.Region} Riot rate gate.");
 
-            var gameInfo = await riotApiContext.Api.SpectatorV5()
-                .GetCurrentGameInfoByPuuidAsync(request.Platform, puuid, ct);
+            var gameInfo = await spectator.GetCurrentGameAsync(request.Platform, puuid, ct);
             if (gameInfo == null)
                 return BuildOfflineResponse(request.Region);
 
@@ -94,7 +95,7 @@ public class RiotLiveGamePollingService(
                 State: "in_game",
                 PlatformRegion: request.Region,
                 GameId: gameInfo.GameId.ToString(),
-                QueueType: gameInfo.GameQueueConfigId?.ToString(),
+                QueueType: gameInfo.GameQueueConfigId.ToString(),
                 Map: gameInfo.MapId.ToString(),
                 GameStartTimeUtc: DateTimeOffset.FromUnixTimeMilliseconds(gameInfo.GameStartTime).UtcDateTime,
                 GameLengthSeconds: gameInfo.GameLength,
@@ -105,10 +106,6 @@ public class RiotLiveGamePollingService(
             var analysis = await liveGameAnalysisService.AnalyzeAsync(request.Region, response, ct);
             return response with { Analysis = analysis };
         }
-        catch (RiotResponseException ex) when (ex.GetResponse()?.StatusCode == System.Net.HttpStatusCode.NotFound)
-        {
-            return BuildOfflineResponse(request.Region);
-        }
         catch (Exception ex) when (RiotRateLimitHandling.TryGetRetryAfter(ex, out var retryAfter))
         {
             rateGate.Pause(request.Region, retryAfter);
@@ -116,13 +113,13 @@ public class RiotLiveGamePollingService(
         }
         catch (JsonException ex)
         {
-            logger.LogInformation(
-                "Spectator payload parse fallback for {Region}/{GameName}#{TagLine}; treating as offline. Error: {Error}",
+            logger.LogWarning(
+                "Spectator payload could not be verified for {Region}/{GameName}#{TagLine}. Error: {Error}",
                 request.Region,
                 request.GameName,
                 request.TagLine,
                 ex.Message);
-            return BuildOfflineResponse(request.Region);
+            throw;
         }
         catch (Exception ex)
         {

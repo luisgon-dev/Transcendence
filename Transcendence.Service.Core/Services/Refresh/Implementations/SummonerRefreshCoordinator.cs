@@ -5,12 +5,14 @@ using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using Transcendence.Service.Core.Services.Refresh.Interfaces;
+using Transcendence.Service.Core.Services.Operations;
 
 namespace Transcendence.Service.Core.Services.Refresh.Implementations;
 
 public sealed class SummonerRefreshCoordinator(
     IRefreshLockRepository refreshLockRepository,
-    IBackgroundJobClient backgroundJobClient,
+    IBackgroundOperationTracker operations,
+    IBackgroundOperationDispatcher dispatcher,
     IRefreshLockLifecycleTelemetry lockTelemetry,
     ILogger<SummonerRefreshCoordinator> logger) : ISummonerRefreshCoordinator
 {
@@ -20,7 +22,7 @@ public sealed class SummonerRefreshCoordinator(
         string gameName,
         string tagLine,
         PlatformRoute platform,
-        string? pollUrl,
+        OperationOwner owner,
         string traceId,
         Guid? requestedByUserAccountId,
         string telemetrySource,
@@ -49,7 +51,10 @@ public sealed class SummonerRefreshCoordinator(
                 seconds,
                 traceId);
 
-            return RefreshEnqueueOutcome.InProgress(pollUrl, seconds);
+            if (existing?.OwnerToken is not { } token)
+                throw new InvalidOperationException("Refresh lease changed; retry the request.");
+            var joined = await operations.JoinAsync(key, token, owner, ct);
+            return RefreshEnqueueOutcome.InProgress(joined.OperationId);
         }
 
         EmitTelemetry(() => lockTelemetry.RecordLifecycleOutcome(key, "acquired", telemetrySource));
@@ -67,23 +72,23 @@ public sealed class SummonerRefreshCoordinator(
             });
         }
 
+        TrackedOperation? tracked = null;
         try
         {
             var priorityHandle = priorityToken.HasValue
                 ? RefreshLockKeys.BuildOwnedHandle(priorityKey, priorityToken.Value)
                 : null;
-            backgroundJobClient.Enqueue<ISummonerRefreshJob>(job =>
-                job.RefreshByRiotId(
-                    gameName,
-                    tagLine,
-                    platform,
-                    RefreshLockKeys.BuildOwnedHandle(key, keyToken.Value),
-                    priorityHandle,
-                    requestedByUserAccountId,
-                    CancellationToken.None));
+            tracked = await operations.CreateAsync(OperationKinds.SummonerRefresh, key,
+                new OperationResource(platform.ToString(), gameName.Trim(), tagLine.Trim()), keyToken.Value, owner,
+                new OperationDispatch(RefreshLockKeys.BuildOwnedHandle(key, keyToken.Value), priorityHandle, requestedByUserAccountId), ct);
         }
         catch (Exception ex)
         {
+            if (tracked is not null)
+            {
+                using var failureTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                await operations.FailAsync(tracked.ExecutionId, "enqueue_failed", failureTimeout.Token);
+            }
             await refreshLockRepository.ReleaseOwnedAsync(key, keyToken.Value, ct);
             if (priorityToken is not null)
                 await refreshLockRepository.ReleaseOwnedAsync(priorityKey, priorityToken.Value, ct);
@@ -99,6 +104,11 @@ public sealed class SummonerRefreshCoordinator(
             throw;
         }
 
+        // The row is the durable outbox. Dispatch failures leave it queued for the worker's bounded
+        // scanner; a host crash here cannot erase accepted work.
+        try { await dispatcher.DispatchAsync(tracked.ExecutionId, ct); }
+        catch (Exception ex) { logger.LogWarning(ex, "Durable refresh dispatch deferred for operation {OperationId}.", tracked.ExecutionId); }
+
         logger.LogInformation(
             "[RefreshApi] Queued summoner refresh for {GameName}#{Tag} on {Platform}. priorityLockAcquired={PriorityLockAcquired}, traceId={TraceId}.",
             gameName,
@@ -107,7 +117,7 @@ public sealed class SummonerRefreshCoordinator(
             priorityToken is not null,
             traceId);
 
-        return RefreshEnqueueOutcome.Queued(pollUrl);
+        return RefreshEnqueueOutcome.Queued(tracked.OperationId);
     }
 
     public async Task<RefreshProgress?> GetProgressAsync(

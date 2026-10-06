@@ -5,6 +5,8 @@ using Transcendence.Service.Core.Services.LiveGame.Interfaces;
 using Transcendence.Service.Core.Services.LiveGame.Models;
 using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.WebAPI.Security;
+using System.Security.Claims;
+using Transcendence.Service.Core.Services.Operations;
 
 namespace Transcendence.WebAPI.Controllers;
 
@@ -46,7 +48,7 @@ public class LiveGameController(
     /// Riot ID are coalesced while the probe is in flight.
     /// </summary>
     [HttpPost("{region}/{gameName}/{tagLine}/live-game/probe")]
-    [ProducesResponseType(typeof(LiveGameProbeAcceptedResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(OperationAcceptedResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ProbeCurrentGame(
         [FromRoute] string region,
@@ -57,16 +59,10 @@ public class LiveGameController(
         if (!PlatformRouteParser.TryParse(region, out var platform))
             return BadRequest($"Unsupported platform region '{region}'.");
 
-        var poll = Url.ActionLink(nameof(GetCurrentGame), values: new
-        {
-            region = platform.ToString(),
-            gameName,
-            tagLine
-        });
-        var outcome = await liveGameProbeCoordinator.EnqueueAsync(platform, gameName, tagLine, ct);
-        return Accepted(new LiveGameProbeAcceptedResponse(
-            outcome.WasQueued ? "queued" : "in_progress",
-            poll,
-            outcome.RetryAfterSeconds));
+        if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var applicationId)) return Unauthorized();
+        var outcome = await liveGameProbeCoordinator.EnqueueAsync(platform, gameName, tagLine,
+            new OperationOwner(OperationOwnerKind.Application, applicationId), ct);
+        return Accepted(new OperationAcceptedResponse(outcome.OperationId,
+            $"/api/lol/operations/{outcome.OperationId}", outcome.RetryAfterSeconds));
     }
 }

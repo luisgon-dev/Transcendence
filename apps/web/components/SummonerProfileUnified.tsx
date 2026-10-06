@@ -140,9 +140,10 @@ export function SummonerProfileClient({
     initialSort,
     initialChampion,
     initialExpandMatchId,
-    initialHistory
+    initialHistory,
+    refreshRevision: lookup.refreshRevision
   });
-  const rankHistory = useRankHistory(lookup.profile?.summonerId, initialRankHistory);
+  const rankHistory = useRankHistory(lookup.profile?.summonerId, initialRankHistory, lookup.refreshRevision);
 
   useEffect(() => {
     const params = new URLSearchParams();

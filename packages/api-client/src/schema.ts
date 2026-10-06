@@ -2746,9 +2746,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["LiveGameProbeAcceptedResponse"];
-                        "application/json": components["schemas"]["LiveGameProbeAcceptedResponse"];
-                        "text/json": components["schemas"]["LiveGameProbeAcceptedResponse"];
+                        "text/plain": components["schemas"]["OperationAcceptedResponse"];
+                        "application/json": components["schemas"]["OperationAcceptedResponse"];
+                        "text/json": components["schemas"]["OperationAcceptedResponse"];
                     };
                 };
                 /** @description Bad Request */
@@ -2785,6 +2785,70 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lol/operations/{operationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    operationId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OperationStatusResponse"];
+                        "application/json": components["schemas"]["OperationStatusResponse"];
+                        "text/json": components["schemas"]["OperationStatusResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3347,15 +3411,15 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Accepted. Returns "Refresh queued" when the refresh lock is acquired, or "Refresh in process" with retryAfterSeconds when contention is detected. */
+                /** @description Accepted. Poll the owned durable refresh operation. */
                 202: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["SummonerAcceptedResponse"];
-                        "application/json": components["schemas"]["SummonerAcceptedResponse"];
-                        "text/json": components["schemas"]["SummonerAcceptedResponse"];
+                        "text/plain": components["schemas"]["OperationAcceptedResponse"];
+                        "application/json": components["schemas"]["OperationAcceptedResponse"];
+                        "text/json": components["schemas"]["OperationAcceptedResponse"];
                     };
                 };
                 /** @description Bad Request */
@@ -3856,15 +3920,15 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Accepted. Returns "Refresh queued" when the refresh lock is acquired, or "Refresh in process" with retryAfterSeconds when contention is detected. */
+                /** @description Accepted. Poll the owned operation for profile and recent-history outcomes; full history is a separate child. */
                 202: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["SummonerAcceptedResponse"];
-                        "application/json": components["schemas"]["SummonerAcceptedResponse"];
-                        "text/json": components["schemas"]["SummonerAcceptedResponse"];
+                        "text/plain": components["schemas"]["OperationAcceptedResponse"];
+                        "application/json": components["schemas"]["OperationAcceptedResponse"];
+                        "text/json": components["schemas"]["OperationAcceptedResponse"];
                     };
                 };
                 /** @description Bad Request */
@@ -5767,12 +5831,6 @@ export interface components {
             /** Format: int32 */
             perkSubStyleId?: number | null;
         };
-        LiveGameProbeAcceptedResponse: {
-            status: string;
-            poll?: string | null;
-            /** Format: int32 */
-            retryAfterSeconds: number;
-        };
         LiveGameResponseDto: {
             state: string;
             platformRegion: string;
@@ -5971,9 +6029,62 @@ export interface components {
             kills: number;
             first: boolean;
         };
+        OperationAcceptedResponse: {
+            /** Format: uuid */
+            operationId: string;
+            statusUrl: string;
+            /** Format: int32 */
+            retryAfterSeconds: number;
+        };
+        OperationCompletionResult: {
+            /** Format: uuid */
+            summonerId?: string | null;
+            /** Format: uuid */
+            snapshotId?: string | null;
+            /** Format: date-time */
+            observedAtUtc?: string | null;
+            /** Format: date-time */
+            profileUpdatedAtUtc?: string | null;
+            /** Format: date-time */
+            recentImportCompletedAtUtc?: string | null;
+            /** Format: int32 */
+            persistedMatchCount?: number | null;
+            /** Format: int32 */
+            deferredMatchCount?: number | null;
+            /** Format: int32 */
+            failedMatchCount?: number | null;
+            warningCodes?: string[] | null;
+            liveGame?: components["schemas"]["LiveGameResponseDto"] | null;
+        };
+        OperationPhase: {
+            name: string;
+            status: string;
+            /** Format: uuid */
+            operationId?: string | null;
+        };
         OperationResult: {
             message: string;
             id?: string | null;
+        };
+        OperationStatusResponse: {
+            /** Format: uuid */
+            operationId: string;
+            kind: string;
+            platformRegion: string;
+            gameName: string;
+            tagLine: string;
+            status: string;
+            /** Format: int32 */
+            retryAfterSeconds: number;
+            /** Format: date-time */
+            queuedAtUtc: string;
+            /** Format: date-time */
+            updatedAtUtc: string;
+            /** Format: date-time */
+            completedAtUtc?: string | null;
+            errorCode?: string | null;
+            phases: components["schemas"]["OperationPhase"][];
+            result: components["schemas"]["OperationCompletionResult"];
         };
         ParticipantDetailDto: {
             puuid?: string | null;
@@ -6395,17 +6506,6 @@ export interface components {
         StaticVersionsResponse: {
             latest: string;
             versions: string[];
-        };
-        SummonerAcceptedResponse: {
-            /** @description Refresh state message. "Refresh queued" when accepted now, "Refresh in process" when contention is detected. */
-            message: string;
-            /** @description Absolute URL clients can poll for current refresh status/result. */
-            poll?: string | null;
-            /**
-             * Format: int32
-             * @description Retry hint in seconds for contention responses; null when refresh was just queued.
-             */
-            retryAfterSeconds?: number | null;
         };
         SummonerLookupResponse: {
             /** @description Lookup state: ready, refreshing, or missing. */

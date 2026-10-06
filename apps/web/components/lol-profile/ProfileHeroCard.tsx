@@ -8,10 +8,9 @@ import { formatPercent } from "@/lib/format";
 import { profileIconUrl } from "@/lib/staticData";
 
 import {
-  friendlyAcceptedMessage,
   rankColorClass,
   RECENT_FORM_SLOTS,
-  type AcceptedResponse,
+  type RefreshNotice,
   type ApiErrorResponse,
   type ChampionStatic,
   type RankInfo,
@@ -52,7 +51,7 @@ export function ProfileHeroCard({
   dataAge: string;
   rankedEntries: RankedEntry[];
   recentForm: boolean[];
-  accepted: AcceptedResponse | null;
+  accepted: RefreshNotice | null;
   error: ApiErrorResponse | null;
   busy: boolean;
   onRefresh: () => void;
@@ -165,7 +164,7 @@ export function ProfileHeroCard({
 
       {accepted?.message ? (
         <p className="rounded-card border border-info/30 bg-info/10 px-4 py-3 text-sm text-fg/84">
-          {friendlyAcceptedMessage(accepted.message)}
+          {accepted.message}
         </p>
       ) : null}
       {error?.message ? (

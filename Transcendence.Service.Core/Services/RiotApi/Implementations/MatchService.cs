@@ -43,12 +43,12 @@ public class MatchService(
         if (!await rateGate.AcquireAsync(regionalRoute.ToString(), cancellationToken))
         {
             logger.LogDebug("Riot rate gate skipped match {MatchId} ({Region}); will retry later.", matchId, regionalRoute);
-            return null;
+            throw new MatchPreparationDeferredException();
         }
 
         var fetchResult = await FetchMatchAsync(regionalRoute, matchId, cancellationToken);
         if (fetchResult.DeferredByRateLimit)
-            return null;
+            throw new MatchPreparationDeferredException();
 
         var matchDto = fetchResult.Match;
         if (matchDto == null)
@@ -92,12 +92,12 @@ public class MatchService(
         if (!await rateGate.AcquireAsync(regionalRoute.ToString(), cancellationToken))
         {
             logger.LogDebug("[Lightweight] Riot rate gate skipped match {MatchId} ({Region}); will retry later.", matchId, regionalRoute);
-            return null;
+            throw new MatchPreparationDeferredException();
         }
 
         var fetchResult = await FetchMatchAsync(regionalRoute, matchId, cancellationToken);
         if (fetchResult.DeferredByRateLimit)
-            return null;
+            throw new MatchPreparationDeferredException();
 
         var matchDto = fetchResult.Match;
         if (matchDto == null)

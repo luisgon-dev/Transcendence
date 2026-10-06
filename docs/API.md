@@ -21,7 +21,7 @@ The Next.js web frontend uses route handlers as a BFF:
 - Next talks to the backend at `TRN_BACKEND_BASE_URL`
 - Tokens live in HttpOnly cookies on the web domain (never exposed to browser JS)
 - AppOnly calls attach `X-API-Key` server-side from `TRN_BACKEND_API_KEY`
-- `/api/trn/app/*` is allowlisted to approved AppOnly routes only (not a generic AppOnly passthrough)
+- `/api/trn/app/*` is allowlisted to approved AppOnly routes and exact authenticated operation GETs (not a generic passthrough)
 - Proxy route handlers reject invalid path segments (`.`/`..`)
 
 ## Rate Limiting
@@ -37,6 +37,7 @@ Auth endpoints use dedicated per-client rate limits: `/api/auth/register`, `/api
 All error responses use RFC 7807 **ProblemDetails** (`application/problem+json`):
 
 - Empty-body `4xx/5xx` (e.g. `NotFound()`), model-validation failures, and unhandled exceptions are ProblemDetails automatically.
+- Authentication challenges may return an empty `401`; clients must rely on status, not a required error body.
 - Body-carrying errors are normalized: a bare string body (`BadRequest("…")`) is rewrapped as ProblemDetails `detail`, and admin operations return `Problem(title, detail, status)` rather than the legacy `{ message, detail }` object.
 - Model-validation failures (e.g. `POST /api/lol/summoners/multi-search`) return **`ValidationProblemDetails`** — ProblemDetails plus a per-field `errors` map. The schema is published in the OpenAPI contract.
 - The OpenAPI document declares only `application/problem+json` for these error schemas, matching the runtime response rather than the ordinary JSON/text formatter list.
@@ -136,7 +137,7 @@ Stats and profile read surfaces now fail closed on backend errors:
 - `POST /api/lol/summoners/{region}/{name}/{tag}/refresh` requires a signed-in user (`UserOnly`) and returns `401` when no user JWT is present.
 - The Next.js app calls this through `/api/trn/user/lol/summoners/{region}/{name}/{tag}/refresh`; the anonymous `/api/trn/public/*` proxy does not forward refresh POSTs.
 - The refresh is implicitly treated as a high-priority refresh request.
-- The request/response contract is unchanged (no priority request parameter).
+- There is no priority request parameter. Accepted responses use the owned operation contract below.
 - When high-priority refresh demand is active, lower-priority Riot-calling background jobs are temporarily paused.
 - After the normal quick refresh completes, signed-in manual refreshes enqueue a full-history profile backfill. The backfill scans all Riot-searchable queues for that PUUID and persists compact per-summoner facts/season aggregates independently of the raw match-detail retention window.
 
@@ -144,24 +145,39 @@ Stats and profile read surfaces now fail closed on backend errors:
 
 `POST /api/lol/summoners/{region}/{name}/{tag}/refresh` and `POST /api/admin/pro-summoners/{id}/refresh` share deterministic `202 Accepted` semantics:
 
-- **Queued (lock acquired):**
-  - `message`: `"Refresh queued"`
-  - `poll`: absolute URL to query refresh progress
-  - `retryAfterSeconds`: omitted (`null`)
-- **In progress (lock contention):**
-  - `message`: `"Refresh in process"`
-  - `poll`: absolute URL to query refresh progress
-  - `retryAfterSeconds`: positive integer hint (seconds) for next poll attempt
+- Both newly queued and coalesced requests return required `OperationAcceptedResponse`.
+- Coalescing shares execution, not authorization: each authenticated user/application receives
+  an opaque owner-scoped request ID. Both-header requests resolve each auth scheme independently.
 
-Example (`SummonerAcceptedResponse`):
+Example (`OperationAcceptedResponse`):
 
 ```json
 {
-  "message": "Refresh in process",
-  "poll": "https://localhost/api/lol/summoners/na1/name/tag",
-  "retryAfterSeconds": 42
+  "operationId": "11111111-1111-1111-1111-111111111111",
+  "statusUrl": "/api/lol/operations/11111111-1111-1111-1111-111111111111",
+  "retryAfterSeconds": 2
 }
 ```
+
+`GET /api/lol/operations/{operationId}` requires `AppOrUser`, returns `no-store`, and uses
+`401` for anonymous requests and `404` for unknown or another owner's request. Web clients
+reach it through exact GET-only user/app BFF routes; the public BFF denies access. Construct
+allowlisted paths from the ID rather than forwarding credentials to arbitrary returned URLs.
+
+`OperationStatusResponse` includes the request ID, kind, canonical target, status, retry hint,
+queued/updated/completed timestamps, sanitized error code, phases, and `OperationCompletionResult`.
+Statuses are `queued`, `running`, `retrying`, `succeeded`, `partial`, or `failed`.
+Recent refresh succeeds only after profile and configured recent imports persist and relevant
+caches are invalidated. `partial` identifies incomplete imports; optional mastery failures are
+warning codes. Match counts are unique within the operation, not per-scope attempts; unknown
+deferred match-ID pages yield a nullable deferred count, never a fabricated number of matches.
+Full-history phase IDs identify independently polled child operations; parent success does not
+certify child completion. Stored profile history coverage remains a separate read projection.
+Successful probes include `snapshotId`, `observedAtUtc`, and the exact persisted `liveGame`
+payload. A different snapshot or newer read timestamp does not complete a requested probe.
+Only a verified Spectator 404 certifies offline; 204/422, null/malformed 200, auth/rate/network
+failures cannot publish a fresh offline observation. This is a coordinated current contract,
+without legacy accepted DTOs or cross-version fallbacks.
 
 ### LoL Analytics
 
@@ -386,9 +402,9 @@ Response: `{ patch, region, scope, champions[], sample }` where each champion en
 - Returns the latest worker-observed snapshot. `lastUpdatedUtc` and `dataAgeSeconds` expose
   freshness; the Web API does not call Riot directly.
 - The probe endpoint queues a fresh Spectator-V5 check on the credentialed worker and returns
-  `202` with `status` (`queued` or `in_progress`), `poll`, and `retryAfterSeconds`. A per-Riot-ID
-  fenced lease coalesces repeated browser checks; the frontend polls the GET until it observes the
-  newly persisted snapshot. Both routes are exposed only through the narrow AppOnly BFF allowlist.
+  `202 OperationAcceptedResponse`. A fenced lease coalesces repeated checks; clients poll the
+  owned operation for its exact saved observation, not the latest-snapshot GET. Live routes and
+  exact operation GETs use the narrow AppOnly BFF allowlist.
 - Active-game participants include champion, summoner spells, selected perk IDs/styles, and a
   stored-data analysis projection with Solo/Duo rank, recent-20 win rate/KDA, signed current streak
   (positive wins, negative losses), and the three most-played champions in that recent window.

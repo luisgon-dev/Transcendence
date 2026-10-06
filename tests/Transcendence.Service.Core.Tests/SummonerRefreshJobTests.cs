@@ -17,6 +17,7 @@ using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
+using Transcendence.Service.Core.Services.Operations;
 using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
 using Transcendence.Service.Core.Tests.Support;
@@ -27,6 +28,132 @@ namespace Transcendence.Service.Core.Tests;
 public class SummonerRefreshJobTests
 {
     [Fact]
+    public async Task DetailRatePressureReportsKnownDeferredMatchesAndPreservesBackfillCursor()
+    {
+        await using var harness = await SummonerRefreshJobHarness.CreateAsync();
+        var summoner = harness.SeedSummoner("name", "tag", "details-deferred-puuid");
+        harness.Db.SummonerIngestionCursors.Add(new SummonerIngestionCursor
+        {
+            SummonerId = summoner.Id, Summoner = summoner, Scope = SummonerIngestionScopes.NonRankedBackfill,
+            BackfillBeforeEpochSeconds = 123
+        });
+        await harness.Db.SaveChangesAsync();
+        harness.SummonerService.Setup(x => x.GetSummonerByRiotIdAsync("name", "tag", PlatformRoute.NA1,
+            It.IsAny<CancellationToken>())).ReturnsAsync(summoner);
+        harness.SummonerRepository.Setup(x => x.AddOrUpdateSummonerAsync(summoner,
+            It.IsAny<CancellationToken>())).ReturnsAsync(summoner);
+        harness.RiotMatchIdsClient.Setup(x => x.GetMatchIdsByPuuidAsync(It.IsAny<RegionalRoute>(), summoner.Puuid!,
+            It.IsAny<int>(), It.IsAny<long?>(), It.IsAny<Queue?>(), It.IsAny<long?>(), It.IsAny<int>(),
+            It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync(["NA1_deferred", "NA1_not_attempted"]);
+        harness.MatchService.Setup(x => x.GetMatchDetailsAsync("NA1_deferred", It.IsAny<RegionalRoute>(),
+            PlatformRoute.NA1, It.IsAny<CancellationToken>())).ThrowsAsync(new MatchPreparationDeferredException());
+        var id = Guid.NewGuid();
+
+        await harness.Job.RefreshByRiotId(id, "name", "tag", PlatformRoute.NA1, "main", null);
+
+        harness.Operations.Verify(x => x.CompleteAsync(id, OperationStatuses.Partial,
+            It.Is<OperationResult>(r => r.FailedMatchCount == 0 && r.DeferredMatchCount == 2 &&
+                r.RecentImportCompletedAtUtc == null), It.IsAny<CancellationToken>()), Times.Once);
+        harness.MatchService.Verify(x => x.GetMatchDetailsAsync("NA1_not_attempted", It.IsAny<RegionalRoute>(),
+            It.IsAny<PlatformRoute>(), It.IsAny<CancellationToken>()), Times.Never);
+        (await harness.Db.SummonerIngestionCursors.SingleAsync()).BackfillBeforeEpochSeconds.Should().Be(123);
+    }
+
+    [Fact]
+    public async Task FailedMasteryMutationIsDiscardedBeforeRecentHistoryPersistence()
+    {
+        await using var harness = await SummonerRefreshJobHarness.CreateAsync();
+        var summoner = harness.SeedSummoner("name", "tag", "mastery-save-puuid");
+        await harness.Db.SaveChangesAsync();
+        harness.SummonerService.Setup(x => x.GetSummonerByRiotIdAsync("name", "tag", PlatformRoute.NA1,
+            It.IsAny<CancellationToken>())).ReturnsAsync(summoner);
+        harness.SummonerRepository.Setup(x => x.AddOrUpdateSummonerAsync(summoner,
+            It.IsAny<CancellationToken>())).ReturnsAsync(summoner);
+        harness.ChampionMasteryRepository.Setup(x => x.UpsertAsync(summoner.Id,
+                It.IsAny<List<ChampionMastery>>(), It.IsAny<CancellationToken>()))
+            .Callback(() => harness.Db.ChampionMasteries.Add(new ChampionMastery
+                { SummonerId = Guid.NewGuid(), ChampionId = 999 }))
+            .ThrowsAsync(new InvalidOperationException("failed after staging mastery"));
+
+        var operationId = Guid.NewGuid();
+        await harness.Job.RefreshByRiotId(operationId, "name", "tag", PlatformRoute.NA1, "main", null);
+
+        (await harness.Db.ChampionMasteries.CountAsync()).Should().Be(0);
+        harness.Operations.Verify(x => x.CompleteAsync(operationId, OperationStatuses.Succeeded,
+            It.Is<OperationResult>(r => r.WarningCodes != null && r.WarningCodes.Contains("mastery_unavailable")),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RefreshReportsPartialInsteadOfSuccessWhenRecentImportsAreDeferredOrFail(bool deferred)
+    {
+        await using var harness = await SummonerRefreshJobHarness.CreateAsync();
+        var summoner = harness.SeedSummoner("name", "tag", "partial-puuid");
+        await harness.Db.SaveChangesAsync();
+        harness.SummonerService.Setup(x => x.GetSummonerByRiotIdAsync("name", "tag", PlatformRoute.NA1,
+            It.IsAny<CancellationToken>())).ReturnsAsync(summoner);
+        harness.SummonerRepository.Setup(x => x.AddOrUpdateSummonerAsync(summoner,
+            It.IsAny<CancellationToken>())).ReturnsAsync(summoner);
+        harness.RiotMatchIdsClient.Setup(x => x.GetMatchIdsByPuuidAsync(It.IsAny<RegionalRoute>(),
+            summoner.Puuid!, It.IsAny<int>(), It.IsAny<long?>(), It.IsAny<Queue?>(), It.IsAny<long?>(),
+            It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(deferred ? null : ["NA1_unavailable"]);
+        harness.MatchService.Setup(x => x.GetMatchDetailsAsync("NA1_unavailable", It.IsAny<RegionalRoute>(),
+            PlatformRoute.NA1, It.IsAny<CancellationToken>())).ReturnsAsync((MatchEntity?)null);
+
+        var operationId = Guid.NewGuid();
+        await harness.Job.RefreshByRiotId(operationId, "name", "tag", PlatformRoute.NA1, "main", null);
+
+        harness.Operations.Verify(x => x.CompleteAsync(operationId, OperationStatuses.Partial,
+            It.Is<OperationResult>(result => result.RecentImportCompletedAtUtc == null &&
+                (deferred ? result.DeferredMatchCount == null : result.FailedMatchCount == 1)),
+            It.IsAny<CancellationToken>()), Times.Once);
+        harness.Operations.Verify(x => x.SetPhaseAsync(operationId, "profile", OperationStatuses.Succeeded,
+            It.IsAny<CancellationToken>()), Times.Once);
+        harness.Operations.Verify(x => x.SetPhaseAsync(operationId, "recentHistory", OperationStatuses.Partial,
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task OptionalMasteryFailureRemainsWarningWhileVerifiedEmptyRecentHistorySucceeds()
+    {
+        await using var harness = await SummonerRefreshJobHarness.CreateAsync();
+        var summoner = harness.SeedSummoner("name", "tag", "mastery-puuid");
+        await harness.Db.SaveChangesAsync();
+        harness.SummonerService.Setup(x => x.GetSummonerByRiotIdAsync("name", "tag", PlatformRoute.NA1,
+            It.IsAny<CancellationToken>())).ReturnsAsync(summoner);
+        harness.SummonerRepository.Setup(x => x.AddOrUpdateSummonerAsync(summoner,
+            It.IsAny<CancellationToken>())).ReturnsAsync(summoner);
+        harness.ChampionMasteryService.Setup(x => x.GetMasteriesAsync(summoner.Puuid!, PlatformRoute.NA1,
+            It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("enrichment unavailable"));
+        var operationId = Guid.NewGuid();
+
+        await harness.Job.RefreshByRiotId(operationId, "name", "tag", PlatformRoute.NA1, "main", null);
+
+        harness.Operations.Verify(x => x.CompleteAsync(operationId, OperationStatuses.Succeeded,
+            It.Is<OperationResult>(result => result.WarningCodes != null &&
+                result.WarningCodes.Contains("mastery_unavailable") && result.RecentImportCompletedAtUtc != null &&
+                result.FailedMatchCount == 0 && result.DeferredMatchCount == 0), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task UnexpectedFailureLeavesOperationRetryingAndNeverPublishesSuccess()
+    {
+        await using var harness = await SummonerRefreshJobHarness.CreateAsync();
+        harness.SummonerService.Setup(x => x.GetSummonerByRiotIdAsync("name", "tag", PlatformRoute.NA1,
+            It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("unavailable"));
+        var operationId = Guid.NewGuid();
+        var act = () => harness.Job.RefreshByRiotId(operationId, "name", "tag", PlatformRoute.NA1, "main", null);
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        harness.Operations.Verify(x => x.RetryAsync(operationId, "refresh_failed", null,
+            It.IsAny<CancellationToken>()), Times.Once);
+        harness.Operations.Verify(x => x.CompleteAsync(It.IsAny<Guid>(), It.IsAny<string>(),
+            It.IsAny<OperationResult>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task RefreshByRiotId_ReleasesMainAndPriorityLocks_WhenSummonerLookupFails()
     {
         await using var harness = await SummonerRefreshJobHarness.CreateAsync();
@@ -36,7 +163,7 @@ public class SummonerRefreshJobTests
             .ThrowsAsync(new InvalidOperationException("lookup failed"));
 
         Func<Task> act = async () =>
-            await harness.Job.RefreshByRiotId("name", "tag", PlatformRoute.NA1, "lock:main", "lock:priority");
+            await harness.Job.RefreshByRiotId(Guid.NewGuid(), "name", "tag", PlatformRoute.NA1, "lock:main", "lock:priority");
 
         await act.Should().ThrowAsync<InvalidOperationException>();
         harness.RefreshLockRepository.Verify(x => x.ReleaseAsync("lock:main", It.IsAny<CancellationToken>()), Times.Once);
@@ -54,7 +181,7 @@ public class SummonerRefreshJobTests
             .ThrowsAsync(new InvalidOperationException("lookup failed"));
 
         Func<Task> act = async () =>
-            await harness.Job.RefreshByRiotId("name", "tag", PlatformRoute.NA1, "lock:main", null);
+            await harness.Job.RefreshByRiotId(Guid.NewGuid(), "name", "tag", PlatformRoute.NA1, "lock:main", null);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
         harness.RefreshLockRepository.Verify(x => x.ReleaseAsync("lock:main", It.IsAny<CancellationToken>()), Times.Once);
@@ -77,7 +204,7 @@ public class SummonerRefreshJobTests
             .ThrowsAsync(new InvalidOperationException("lookup failed"));
 
         Func<Task> act = async () =>
-            await harness.Job.RefreshByRiotId("name", "tag", PlatformRoute.NA1, "lock:main", "lock:priority");
+            await harness.Job.RefreshByRiotId(Guid.NewGuid(), "name", "tag", PlatformRoute.NA1, "lock:main", "lock:priority");
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("lookup failed");
@@ -124,7 +251,7 @@ public class SummonerRefreshJobTests
                 It.IsAny<CancellationToken>()))
             .ThrowsAsync(new OperationCanceledException(cts.Token));
 
-        Func<Task> act = async () => await harness.Job.RefreshByRiotId(
+        Func<Task> act = async () => await harness.Job.RefreshByRiotId(Guid.NewGuid(),
             "name",
             "tag",
             PlatformRoute.NA1,
@@ -178,7 +305,7 @@ public class SummonerRefreshJobTests
             .Setup(x => x.GetMasteriesAsync("puuid-mastery", PlatformRoute.NA1, It.IsAny<CancellationToken>()))
             .ReturnsAsync([new ChampionMastery { ChampionId = 1, ChampionLevel = 7, ChampionPoints = 100_000 }]);
 
-        await harness.Job.RefreshByRiotId("name", "tag", PlatformRoute.NA1, "lock:main", "lock:priority");
+        await harness.Job.RefreshByRiotId(Guid.NewGuid(), "name", "tag", PlatformRoute.NA1, "lock:main", "lock:priority");
 
         harness.ChampionMasteryRepository.Verify(
             x => x.UpsertAsync(persisted.Id, It.IsAny<List<ChampionMastery>>(), It.IsAny<CancellationToken>()),
@@ -544,7 +671,7 @@ public class SummonerRefreshJobTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(BuildMatch("NA1_aram_1", 450));
 
-        await harness.Job.RefreshByRiotId("name", "tag", PlatformRoute.NA1, "lock:main", "lock:priority");
+        await harness.Job.RefreshByRiotId(Guid.NewGuid(), "name", "tag", PlatformRoute.NA1, "lock:main", "lock:priority");
 
         harness.RiotMatchIdsClient.Verify(
             x => x.GetMatchIdsByPuuidAsync(
@@ -633,7 +760,7 @@ public class SummonerRefreshJobTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(BuildMatch("NA1_aram_manual", 450));
 
-        await harness.Job.RefreshByRiotId("name", "tag", PlatformRoute.NA1, "lock:main", "lock:priority");
+        await harness.Job.RefreshByRiotId(Guid.NewGuid(), "name", "tag", PlatformRoute.NA1, "lock:main", "lock:priority");
 
         harness.RiotMatchIdsClient.Verify(
             x => x.GetMatchIdsByPuuidAsync(
@@ -699,7 +826,8 @@ public class SummonerRefreshJobTests
             Mock<IBackgroundJobClient> backgroundJobClient,
             Mock<IRefreshLockLifecycleTelemetry> lockTelemetry,
             Mock<IChampionMasteryService> championMasteryService,
-            Mock<IChampionMasteryRepository> championMasteryRepository)
+            Mock<IChampionMasteryRepository> championMasteryRepository,
+            Mock<IBackgroundOperationTracker> operations)
         {
             _connection = connection;
             Db = db;
@@ -715,6 +843,7 @@ public class SummonerRefreshJobTests
             LockTelemetry = lockTelemetry;
             ChampionMasteryService = championMasteryService;
             ChampionMasteryRepository = championMasteryRepository;
+            Operations = operations;
         }
 
         public SqliteCompatibleTranscendenceContext Db { get; }
@@ -730,6 +859,7 @@ public class SummonerRefreshJobTests
         public Mock<IRefreshLockLifecycleTelemetry> LockTelemetry { get; }
         public Mock<IChampionMasteryService> ChampionMasteryService { get; }
         public Mock<IChampionMasteryRepository> ChampionMasteryRepository { get; }
+        public Mock<IBackgroundOperationTracker> Operations { get; }
 
         public static async Task<SummonerRefreshJobHarness> CreateAsync()
         {
@@ -804,6 +934,7 @@ public class SummonerRefreshJobTests
                 LowPriorityNonRankedBackfillMaxPages = 1
             });
             var timelineOptions = Options.Create(new TimelineIngestionOptions { Enabled = false });
+            var operations = OperationTrackerMock.Create();
 
             var championMasteryService = new Mock<IChampionMasteryService>();
             championMasteryService
@@ -826,6 +957,7 @@ public class SummonerRefreshJobTests
                 services.GetRequiredService<HybridCache>(),
                 ingestionOptions,
                 timelineOptions,
+                operations.Object,
                 lockTelemetry.Object);
 
             return new SummonerRefreshJobHarness(
@@ -842,7 +974,8 @@ public class SummonerRefreshJobTests
                 backgroundJobClient,
                 lockTelemetry,
                 championMasteryService,
-                championMasteryRepository);
+                championMasteryRepository,
+                operations);
         }
 
         public Summoner SeedSummoner(string gameName, string tagLine, string puuid)

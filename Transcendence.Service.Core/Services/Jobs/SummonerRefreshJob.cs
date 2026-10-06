@@ -10,6 +10,7 @@ using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
+using Transcendence.Service.Core.Services.Operations;
 using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
 using DataMatch = Transcendence.Data.Models.LoL.Match.Match;
@@ -31,10 +32,33 @@ public class SummonerRefreshJob(
     HybridCache cache,
     IOptions<MatchIngestionOptions> ingestionOptions,
     IOptions<TimelineIngestionOptions> timelineIngestionOptions,
+    IBackgroundOperationTracker operations,
     IRefreshLockLifecycleTelemetry? lockTelemetry = null) : ISummonerRefreshJob
 {
-    private sealed record BackfillSyncResult(int PersistedCount, bool StoppedEarly, bool HadFetchFailure);
+    private sealed record BackfillSyncResult(int PersistedCount, int FailedCount, int DeferredCount);
+    private sealed record WindowSyncResult(int PersistedCount, int FailedCount, int DeferredCount);
+    private sealed record PersistenceResult(List<DataMatch> Matches, int FailedCount);
     private sealed record AnalyticsExecutionContext(string LockKey, bool AllowForcedCatchUpExecution);
+    // Recent scopes overlap. Completion metrics count unique matches, never scope attempts.
+    private sealed class ImportAccounting
+    {
+        public HashSet<string> Persisted { get; } = new(StringComparer.Ordinal);
+        public HashSet<string> Failed { get; } = new(StringComparer.Ordinal);
+        public HashSet<string> Deferred { get; } = new(StringComparer.Ordinal);
+        public bool UnknownDeferred { get; set; }
+        public void Resolve(IEnumerable<string> ids)
+        {
+            Failed.ExceptWith(ids);
+            Deferred.ExceptWith(ids);
+        }
+        public void Persist(IEnumerable<DataMatch> requested, IEnumerable<DataMatch> saved)
+        {
+            var ids = saved.Select(x => x.MatchId).OfType<string>().ToHashSet(StringComparer.Ordinal);
+            Persisted.UnionWith(ids);
+            Failed.UnionWith(requested.Select(x => x.MatchId).OfType<string>().Except(ids));
+            Resolve(ids);
+        }
+    }
 
     private static readonly TimeSpan LockReleaseTimeout = TimeSpan.FromSeconds(5);
     private const string ForcedCatchUpExecutionSuffix = "|forced-catch-up";
@@ -47,7 +71,7 @@ public class SummonerRefreshJob(
     }
 
     [Queue(HangfireQueues.RefreshHigh)]
-    public async Task RefreshByRiotId(string gameName, string tagLine, PlatformRoute platformRoute, string lockKey,
+    public async Task RefreshByRiotId(Guid operationId, string gameName, string tagLine, PlatformRoute platformRoute, string lockKey,
         string? priorityLockKey, Guid? requestedByUserAccountId = null, CancellationToken ct = default)
     {
         // The keys arrive as owned handles (key + fencing token). Split so we release only the lock we
@@ -66,6 +90,8 @@ public class SummonerRefreshJob(
         try
         {
             ct.ThrowIfCancellationRequested();
+            if (!await operations.StartAsync(operationId, ct)) return;
+            await operations.SetPhaseAsync(operationId, "profile", OperationStatuses.Running, ct);
             var options = ingestionOptions.Value;
 
             // Fetch/update summoner first. Reassign to the PERSISTED, change-tracked summoner the repo
@@ -80,12 +106,17 @@ public class SummonerRefreshJob(
             var summoner = await summonerService.GetSummonerByRiotIdAsync(gameName, tagLine, platformRoute, ct);
             summoner = await summonerRepository.AddOrUpdateSummonerAsync(summoner, ct);
             await db.SaveChangesAsync(ct);
+            await operations.SetPhaseAsync(operationId, "profile", OperationStatuses.Succeeded, ct);
 
             // Enrich with champion mastery (fail-soft — never block a refresh on it).
-            await TryRefreshChampionMasteryAsync(summoner, platformRoute, gameName, tagLine, ct);
+            var masterySucceeded = await TryRefreshChampionMasteryAsync(summoner, platformRoute, gameName, tagLine, ct);
+            await operations.SetPhaseAsync(operationId, "mastery",
+                masterySucceeded ? OperationStatuses.Succeeded : OperationStatuses.Partial, ct);
+            await operations.SetPhaseAsync(operationId, "recentHistory", OperationStatuses.Running, ct);
 
             var regional = platformRoute.ToRegional();
             var pageSize = Math.Max(1, options.MatchIdsPageSize);
+            var accounting = new ImportAccounting();
 
             var rankedHeadPersisted = await SyncMatchWindowAsync(
                 gameName,
@@ -103,7 +134,7 @@ public class SummonerRefreshJob(
                 lightweight: false,
                 matchFilter: match => QueueCatalog.IsRankedAnalyticsQueue(match.QueueId),
                 shouldStop: null,
-                ct);
+                ct, accounting);
 
             var allModesHeadPersisted = await SyncMatchWindowAsync(
                 gameName,
@@ -121,7 +152,7 @@ public class SummonerRefreshJob(
                 lightweight: false,
                 matchFilter: match => QueueCatalog.IsInDefaultHistoryScope(match.QueueId),
                 shouldStop: null,
-                ct);
+                ct, accounting);
 
             // Exhaustive non-ranked backfill up to a conservative safety cap.
             var nonRankedBackfillResult = await SyncNonRankedBackfillWithCursorAsync(
@@ -135,31 +166,48 @@ public class SummonerRefreshJob(
                 Math.Max(1, options.HighPriorityNonRankedBackfillMaxPages),
                 lightweight: false,
                 shouldStop: null,
-                ct);
+                ct, accounting);
 
             await InvalidateStatsCacheAsync(summoner.Id, ct);
 
+            var failedCount = accounting.Failed.Count;
+            int? deferredCount = accounting.UnknownDeferred ? null : accounting.Deferred.Count;
+            var recentStatus = failedCount > 0 || accounting.UnknownDeferred || deferredCount > 0
+                ? OperationStatuses.Partial : OperationStatuses.Succeeded;
+            await operations.SetPhaseAsync(operationId, "recentHistory", recentStatus, ct);
+
             if (requestedByUserAccountId.HasValue)
             {
-                backgroundJobClient.Enqueue<FullHistoryBackfillJob>(job =>
-                    job.ProcessAsync(summoner.Id, requestedByUserAccountId, CancellationToken.None));
+                await operations.CreateChildAsync(operationId,
+                    OperationKinds.FullHistory, $"fullhistory:{summoner.Id:N}", summoner.Id, ct);
+                // Child creation atomically records its dispatch outbox entry. The worker's
+                // durable dispatcher enqueues it, including after a crash at this boundary.
             }
+
+            await operations.CompleteAsync(operationId, recentStatus, new OperationResult(
+                SummonerId: summoner.Id, ProfileUpdatedAtUtc: summoner.UpdatedAt,
+                RecentImportCompletedAtUtc: recentStatus == OperationStatuses.Succeeded ? DateTime.UtcNow : null,
+                PersistedMatchCount: accounting.Persisted.Count,
+                FailedMatchCount: failedCount, DeferredMatchCount: deferredCount,
+                WarningCodes: masterySucceeded ? null : ["mastery_unavailable"]), ct);
 
             logger.LogInformation(
                 "[Refresh] Completed refresh for {GameName}#{Tag} on {Platform}. Persisted rankedHead={RankedHead}, allModesHead={AllModesHead}, nonRankedBackfill={NonRankedBackfill}.",
                 gameName,
                 tagLine,
                 platformRoute,
-                rankedHeadPersisted,
-                allModesHeadPersisted,
+                rankedHeadPersisted.PersistedCount,
+                allModesHeadPersisted.PersistedCount,
                 nonRankedBackfillResult.PersistedCount);
         }
         catch (OperationCanceledException)
         {
+            await operations.RetryAsync(operationId, "refresh_cancelled", ct: CancellationToken.None);
             throw;
         }
         catch (RiotAccountNotFoundException ex)
         {
+            await operations.FailAsync(operationId, "account_not_found", CancellationToken.None);
             // Riot id no longer resolves (deleted/renamed/reassigned). Permanent — skip without
             // failing so Hangfire does not retry this dead entry indefinitely.
             logger.LogWarning(ex, "[Refresh] Skipping {GameName}#{Tag} on {Platform}: account no longer resolves.",
@@ -167,6 +215,7 @@ public class SummonerRefreshJob(
         }
         catch (Exception ex)
         {
+            await operations.RetryAsync(operationId, "refresh_failed", ct: CancellationToken.None);
             logger.LogError(ex, "[Refresh] Error refreshing {GameName}#{Tag} on {Platform}", gameName, tagLine,
                 platformRoute);
             throw;
@@ -260,7 +309,7 @@ public class SummonerRefreshJob(
 
             if (includeAllModes && !await ShouldStopAsync())
             {
-                allModesHeadPersisted = await SyncMatchWindowAsync(
+                allModesHeadPersisted = (await SyncMatchWindowAsync(
                     gameName,
                     tagLine,
                     summoner.Puuid,
@@ -276,7 +325,7 @@ public class SummonerRefreshJob(
                     lightweight: true,
                     matchFilter: match => QueueCatalog.IsInDefaultHistoryScope(match.QueueId),
                     shouldStop: ShouldStopAsync,
-                    ct);
+                    ct)).PersistedCount;
 
                 nonRankedBackfillPersisted = (await SyncNonRankedBackfillWithCursorAsync(
                     gameName,
@@ -301,7 +350,7 @@ public class SummonerRefreshJob(
                 tagLine,
                 platformRoute,
                 includeAllModes,
-                rankedHeadPersisted,
+                rankedHeadPersisted.PersistedCount,
                 allModesHeadPersisted,
                 nonRankedBackfillPersisted);
         }
@@ -331,7 +380,7 @@ public class SummonerRefreshJob(
         return new AnalyticsExecutionContext(lockKey, AllowForcedCatchUpExecution: false);
     }
 
-    private async Task<int> SyncMatchWindowAsync(
+    private async Task<WindowSyncResult> SyncMatchWindowAsync(
         string gameName,
         string tagLine,
         string puuid,
@@ -347,12 +396,15 @@ public class SummonerRefreshJob(
         bool lightweight,
         Func<DataMatch, bool> matchFilter,
         Func<Task<bool>>? shouldStop,
-        CancellationToken ct)
+        CancellationToken ct, ImportAccounting? accounting = null)
     {
         if (maxPages <= 0)
-            return 0;
+            return new WindowSyncResult(0, 0, 0);
 
         var persistedCount = 0;
+        var persistenceFailures = 0;
+        var deferredCount = 0;
+        var stoppedEarly = false;
         var seenIds = new HashSet<string>(StringComparer.Ordinal);
         var nullFetchCount = 0;
         var fetchExceptionCount = 0;
@@ -371,6 +423,8 @@ public class SummonerRefreshJob(
             ct.ThrowIfCancellationRequested();
             if (shouldStop != null && await shouldStop())
             {
+                deferredCount++;
+                if (accounting is not null) accounting.UnknownDeferred = true;
                 logger.LogInformation(
                     "[Refresh] Stopping window sync for {GameName}#{Tag} due to high-priority demand.",
                     gameName,
@@ -391,6 +445,8 @@ public class SummonerRefreshJob(
                     ct);
             if (matchIdPage == null)
             {
+                deferredCount++;
+                if (accounting is not null) accounting.UnknownDeferred = true;
                 logger.LogInformation(
                     "[Refresh] Match-id window deferred for {GameName}#{Tag} on {Platform}; preserving paging state for the next refresh.",
                     gameName,
@@ -408,6 +464,7 @@ public class SummonerRefreshJob(
                 break;
 
             var existingMatchIds = await matchRepository.GetExistingMatchIdsAsync(pageIds, ct);
+            accounting?.Resolve(existingMatchIds);
             var pendingIds = pageIds
                 .Where(id => !existingMatchIds.Contains(id))
                 .ToList();
@@ -421,6 +478,7 @@ public class SummonerRefreshJob(
             }
 
             var matchesToPersist = new List<DataMatch>(pendingIds.Count);
+            var processedCount = 0;
             // Keep match preparation sequential. IMatchService builds EF entity graphs with this
             // job's scoped DbContext; parallel calls would share that context and EF contexts are
             // not thread-safe.
@@ -428,7 +486,13 @@ public class SummonerRefreshJob(
             {
                 ct.ThrowIfCancellationRequested();
                 if (shouldStop != null && await shouldStop())
+                {
+                    deferredCount += pendingIds.Count - processedCount;
+                    accounting?.Deferred.UnionWith(pendingIds.Skip(processedCount));
+                    stoppedEarly = true;
                     break;
+                }
+                processedCount++;
 
                 try
                 {
@@ -439,6 +503,7 @@ public class SummonerRefreshJob(
                     if (match == null)
                     {
                         nullFetchCount++;
+                        accounting?.Failed.Add(matchId);
                         AddSample(fetchFailureSamples, matchId);
                         logger.LogDebug("[Refresh] Match {MatchId} failed to fetch for {GameName}#{Tag}",
                             matchId, gameName, tagLine);
@@ -471,6 +536,13 @@ public class SummonerRefreshJob(
 
                     matchesToPersist.Add(match);
                 }
+                catch (MatchPreparationDeferredException)
+                {
+                    deferredCount += pendingIds.Count - processedCount + 1;
+                    accounting?.Deferred.UnionWith(pendingIds.Skip(processedCount - 1));
+                    stoppedEarly = true;
+                    break;
+                }
                 catch (OperationCanceledException)
                 {
                     throw;
@@ -478,6 +550,7 @@ public class SummonerRefreshJob(
                 catch (Exception ex)
                 {
                     fetchExceptionCount++;
+                    accounting?.Failed.Add(matchId);
                     firstFetchException ??= ex;
                     AddSample(fetchFailureSamples, matchId);
                     logger.LogDebug(ex, "[Refresh] Error fetching match {MatchId} for {GameName}#{Tag}",
@@ -488,12 +561,14 @@ public class SummonerRefreshJob(
             if (matchesToPersist.Count > 0)
             {
                 var persistedMatches = await PersistMatchesAsync(matchesToPersist, gameName, tagLine, ct);
-                persistedCount += persistedMatches.Count;
-                await EnqueueTimelineForRankedMatchesAsync(persistedMatches, ct);
+                accounting?.Persist(matchesToPersist, persistedMatches.Matches);
+                persistedCount += persistedMatches.Matches.Count;
+                persistenceFailures += persistedMatches.FailedCount;
+                await EnqueueTimelineForRankedMatchesAsync(persistedMatches.Matches, ct);
             }
 
             // Region not on an acceptable patch (not yet rolled out): stop paging — the rest is old-patch.
-            if (regionNotOnAcceptablePatch)
+            if (regionNotOnAcceptablePatch || stoppedEarly)
                 break;
 
             if (pageIds.Count < pageSize)
@@ -528,7 +603,7 @@ public class SummonerRefreshJob(
             }
         }
 
-        return persistedCount;
+        return new WindowSyncResult(persistedCount, nullFetchCount + fetchExceptionCount + persistenceFailures, deferredCount);
     }
 
     private async Task<BackfillSyncResult> SyncNonRankedBackfillWithCursorAsync(
@@ -542,10 +617,10 @@ public class SummonerRefreshJob(
         int maxPages,
         bool lightweight,
         Func<Task<bool>>? shouldStop,
-        CancellationToken ct)
+        CancellationToken ct, ImportAccounting? accounting = null)
     {
         if (maxPages <= 0)
-            return new BackfillSyncResult(0, false, false);
+            return new BackfillSyncResult(0, 0, 0);
 
         var existingCursor = await db.SummonerIngestionCursors
             .AsNoTracking()
@@ -558,6 +633,8 @@ public class SummonerRefreshJob(
         var oldestSeenEpochSeconds = long.MaxValue;
         var stoppedEarly = false;
         var hadFetchFailure = false;
+        var persistenceFailures = 0;
+        var deferredCount = 0;
         var nullFetchCount = 0;
         var fetchExceptionCount = 0;
         Exception? firstFetchException = null;
@@ -569,6 +646,8 @@ public class SummonerRefreshJob(
             if (shouldStop != null && await shouldStop())
             {
                 stoppedEarly = true;
+                deferredCount++;
+                if (accounting is not null) accounting.UnknownDeferred = true;
                 logger.LogInformation(
                     "[Refresh] Stopping non-ranked backfill for {GameName}#{Tag} due to high-priority demand.",
                     gameName,
@@ -590,6 +669,8 @@ public class SummonerRefreshJob(
             if (matchIdPage == null)
             {
                 stoppedEarly = true;
+                deferredCount++;
+                if (accounting is not null) accounting.UnknownDeferred = true;
                 logger.LogInformation(
                     "[Refresh] Non-ranked match-id backfill deferred for {GameName}#{Tag} on {Platform}; preserving its cursor.",
                     gameName,
@@ -630,16 +711,21 @@ public class SummonerRefreshJob(
             var pendingIds = pageIds
                 .Where(id => !existingMatchIds.Contains(id))
                 .ToList();
+            accounting?.Resolve(existingMatchIds.OfType<string>());
 
             var matchesToPersist = new List<DataMatch>(pendingIds.Count);
+            var processedCount = 0;
             foreach (var matchId in pendingIds)
             {
                 ct.ThrowIfCancellationRequested();
                 if (shouldStop != null && await shouldStop())
                 {
                     stoppedEarly = true;
+                    deferredCount += pendingIds.Count - processedCount;
+                    accounting?.Deferred.UnionWith(pendingIds.Skip(processedCount));
                     break;
                 }
+                processedCount++;
 
                 try
                 {
@@ -651,6 +737,7 @@ public class SummonerRefreshJob(
                     {
                         hadFetchFailure = true;
                         nullFetchCount++;
+                        accounting?.Failed.Add(matchId);
                         AddSample(fetchFailureSamples, matchId);
                         logger.LogDebug("[Refresh] Match {MatchId} failed to fetch for {GameName}#{Tag}",
                             matchId,
@@ -672,6 +759,13 @@ public class SummonerRefreshJob(
 
                     matchesToPersist.Add(match);
                 }
+                catch (MatchPreparationDeferredException)
+                {
+                    deferredCount += pendingIds.Count - processedCount + 1;
+                    accounting?.Deferred.UnionWith(pendingIds.Skip(processedCount - 1));
+                    stoppedEarly = true;
+                    break;
+                }
                 catch (OperationCanceledException)
                 {
                     throw;
@@ -680,6 +774,7 @@ public class SummonerRefreshJob(
                 {
                     hadFetchFailure = true;
                     fetchExceptionCount++;
+                    accounting?.Failed.Add(matchId);
                     firstFetchException ??= ex;
                     AddSample(fetchFailureSamples, matchId);
                     logger.LogDebug(ex, "[Refresh] Error fetching non-ranked backfill match {MatchId} for {GameName}#{Tag}",
@@ -690,11 +785,14 @@ public class SummonerRefreshJob(
             if (matchesToPersist.Count > 0)
             {
                 var persistedMatches = await PersistMatchesAsync(matchesToPersist, gameName, tagLine, ct);
-                persistedCount += persistedMatches.Count;
-                await EnqueueTimelineForRankedMatchesAsync(persistedMatches, ct);
+                accounting?.Persist(matchesToPersist, persistedMatches.Matches);
+                persistedCount += persistedMatches.Matches.Count;
+                persistenceFailures += persistedMatches.FailedCount;
+                hadFetchFailure |= persistedMatches.FailedCount > 0;
+                await EnqueueTimelineForRankedMatchesAsync(persistedMatches.Matches, ct);
             }
 
-            if (pageIds.Count < pageSize)
+            if (stoppedEarly || pageIds.Count < pageSize)
                 break;
         }
 
@@ -746,7 +844,8 @@ public class SummonerRefreshJob(
             }
         }
 
-        return new BackfillSyncResult(persistedCount, stoppedEarly, hadFetchFailure);
+        return new BackfillSyncResult(persistedCount, nullFetchCount + fetchExceptionCount + persistenceFailures,
+            deferredCount);
     }
 
     private async Task UpsertCursorAsync(
@@ -887,7 +986,7 @@ public class SummonerRefreshJob(
         }
     }
 
-    private async Task<List<DataMatch>> PersistMatchesAsync(
+    private async Task<PersistenceResult> PersistMatchesAsync(
         IReadOnlyList<DataMatch> matches,
         string gameName,
         string tagLine,
@@ -896,7 +995,7 @@ public class SummonerRefreshJob(
         ct.ThrowIfCancellationRequested();
         var persisted = new List<DataMatch>(matches.Count);
         if (matches.Count == 0)
-            return persisted;
+            return new PersistenceResult(persisted, 0);
 
         try
         {
@@ -905,7 +1004,7 @@ public class SummonerRefreshJob(
 
             await db.SaveChangesAsync(ct);
             persisted.AddRange(matches);
-            return persisted;
+            return new PersistenceResult(persisted, 0);
         }
         catch (OperationCanceledException)
         {
@@ -991,20 +1090,21 @@ public class SummonerRefreshJob(
                 failureSamples.ToArray());
         }
 
-        return persisted;
+        return new PersistenceResult(persisted, fallbackFailureCount);
     }
 
-    private async Task TryRefreshChampionMasteryAsync(Summoner summoner, PlatformRoute platformRoute,
+    private async Task<bool> TryRefreshChampionMasteryAsync(Summoner summoner, PlatformRoute platformRoute,
         string gameName, string tagLine, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(summoner.Puuid))
-            return;
+            return false;
 
         try
         {
             var masteries = await championMasteryService.GetMasteriesAsync(summoner.Puuid, platformRoute, ct);
             await championMasteryRepository.UpsertAsync(summoner.Id, masteries, ct);
             await db.SaveChangesAsync(ct);
+            return true;
         }
         catch (OperationCanceledException)
         {
@@ -1013,9 +1113,16 @@ public class SummonerRefreshJob(
         catch (Exception ex)
         {
             // Mastery is enrichment; never let its failure fail a refresh.
+            // An upsert/save can leave failed mastery mutations tracked. Discard only those
+            // mutations so later match/cursor saves do not silently retry the failed enrichment.
+            foreach (var entry in db.ChangeTracker.Entries<ChampionMastery>()
+                         .Where(x => x.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+                         .ToList())
+                entry.State = EntityState.Detached;
             logger.LogWarning(ex,
                 "[Refresh] Champion mastery refresh failed for {GameName}#{Tag} on {Platform}; continuing refresh.",
                 gameName, tagLine, platformRoute);
+            return false;
         }
     }
 

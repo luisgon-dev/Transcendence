@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { LiveScoutClient } from "./LiveScoutClient";
+import { accepted, operationStatus } from "@/test/operationFixtures";
 
 describe("LiveScoutClient", () => {
   it("validates Riot IDs and starts a scout from the first-class entry form", async () => {
@@ -14,11 +15,12 @@ describe("LiveScoutClient", () => {
         });
       }
       if (url.endsWith("/probe")) {
-        return new Response(JSON.stringify({ status: "queued", retryAfterSeconds: 0 }), {
+        return new Response(JSON.stringify(accepted), {
           status: 200,
           headers: { "content-type": "application/json" }
         });
       }
+      if (url.includes("/operations/")) return new Response(JSON.stringify(operationStatus()), { status: 200 });
       return new Response(JSON.stringify({ state: "offline", participants: [], dataAgeSeconds: 8, lastUpdatedUtc: new Date().toISOString() }), {
         status: 200,
         headers: { "content-type": "application/json" }
@@ -51,11 +53,14 @@ describe("LiveScoutClient", () => {
         });
       }
       if (url.endsWith("/probe")) {
-        return new Response(JSON.stringify({ status: "queued", retryAfterSeconds: 0 }), {
+        return new Response(JSON.stringify(accepted), {
           status: 200,
           headers: { "content-type": "application/json" }
         });
       }
+      if (url.includes("/operations/")) return new Response(JSON.stringify(operationStatus({
+        platformRegion: "KR", gameName: "Hide on bush", tagLine: "KR1"
+      })), { status: 200 });
       return new Response(JSON.stringify({ state: "offline", participants: [], dataAgeSeconds: 8, lastUpdatedUtc: new Date().toISOString() }), {
         status: 200,
         headers: { "content-type": "application/json" }

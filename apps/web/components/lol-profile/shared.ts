@@ -103,10 +103,9 @@ export type SummonerProfileResponse = {
   statsAge?: DataAgeMetadata | null;
 };
 
-export type AcceptedResponse = {
+// Presentation-only notice; accepted API responses use the generated operation DTO.
+export type RefreshNotice = {
   message?: string;
-  retryAfterSeconds?: number;
-  poll?: string;
 };
 
 type ApiSummonerLookupResponse = components["schemas"]["SummonerLookupResponse"];
@@ -323,13 +322,6 @@ export function pickApiError(status: number, json: unknown): ApiErrorResponse {
           ? `traceId: ${json.traceId as string}`
           : undefined
   };
-}
-
-export function friendlyAcceptedMessage(msg?: string) {
-  const m = (msg ?? "").toLowerCase();
-  if (m.includes("refresh queued")) return "Update started. This page will refresh automatically.";
-  if (m.includes("refresh in process")) return "Update in progress. This page will refresh automatically.";
-  return msg ?? null;
 }
 
 export function rankColorClass(tier?: string): string {

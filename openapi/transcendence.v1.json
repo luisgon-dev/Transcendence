@@ -3062,6 +3062,55 @@
         }
       }
     },
+    "/api/lol/analytics/dataset": {
+      "get": {
+        "tags": [
+          "DatasetStats"
+        ],
+        "responses": {
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetStatsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetStatsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetStatsDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/lol/leaderboards": {
       "get": {
         "tags": [
@@ -8545,6 +8594,98 @@
         },
         "additionalProperties": false
       },
+      "DatasetPlatformStatsDto": {
+        "required": [
+          "label",
+          "matchesLast24Hours",
+          "matchesStored",
+          "platform"
+        ],
+        "type": "object",
+        "properties": {
+          "platform": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "matchesStored": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "matchesLast24Hours": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DatasetStatsDto": {
+        "required": [
+          "activePatchMatches",
+          "computedAtUtc",
+          "crawledPlatforms",
+          "matchesLast24Hours",
+          "matchesPerDayLast7Days",
+          "matchesStored",
+          "platforms"
+        ],
+        "type": "object",
+        "properties": {
+          "matchesStored": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "matchesLast24Hours": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "matchesPerDayLast7Days": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "activePatch": {
+            "type": "string",
+            "nullable": true
+          },
+          "activePatchMatches": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "playersIndexedEstimate": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "databaseSizeBytes": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "crawledPlatforms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "platforms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DatasetPlatformStatsDto"
+            }
+          },
+          "lastMatchIngestedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "computedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
       "FavoriteSummonerDto": {
         "required": [
           "createdAtUtc",
@@ -12199,6 +12340,9 @@
     },
     {
       "name": "ChampionAnalytics"
+    },
+    {
+      "name": "DatasetStats"
     },
     {
       "name": "Leaderboards"

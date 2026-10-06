@@ -3,6 +3,7 @@ import Link from "next/link";
 import { cache, Suspense } from "react";
 import type { components } from "@transcendence/api-client/schema";
 
+import { DatasetFigures } from "@/components/DatasetFigures";
 import { GlobalSearchLauncher } from "@/components/GlobalSearchLauncher";
 import { Badge } from "@/components/ui/Badge";
 import { DataBar } from "@/components/ui/DataBar";
@@ -10,6 +11,7 @@ import { ArrowCornerIcon } from "@/components/ui/icons";
 import { LaneIcon } from "@/components/ui/LaneIcon";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { cn } from "@/lib/cn";
+import { fetchDatasetStats } from "@/lib/datasetStatsServer";
 import { getBackendBaseUrl } from "@/lib/env";
 import { championDisplayName } from "@/lib/gameDisplay";
 import { selectStarterPicks } from "@/lib/homeGuidance";
@@ -190,7 +192,12 @@ async function HomeBrowsePrompt() {
 }
 
 export default async function LandingPage() {
-  const { version, champions, patch, tierEntries } = await loadHomeLiveData();
+  // Awaited with the rest of the page rather than streamed separately: the figures sit in the hero,
+  // and a fallback that later collapsed (no snapshot yet) would shift everything below it.
+  const [{ version, champions, patch, tierEntries }, datasetStats] = await Promise.all([
+    loadHomeLiveData(),
+    fetchDatasetStats()
+  ]);
   const lolTop = tierEntries.slice(0, 5);
   const starterPicks = selectStarterPicks(tierEntries, champions);
   const hasPicks = lolTop.length > 0;
@@ -213,6 +220,24 @@ export default async function LandingPage() {
             <HomeBrowsePrompt />
           </Suspense>
         </div>
+
+        {datasetStats ? (
+          <section
+            aria-labelledby="dataset-heading"
+            className="mt-8 border-t border-border/60 pt-6"
+          >
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <h2 id="dataset-heading" className="type-kicker text-muted">
+                Live dataset
+              </h2>
+              <Link href="/about" className={SEE_ALL_LINK}>
+                How the data is collected
+                <ArrowCornerIcon className="h-3 w-3" />
+              </Link>
+            </div>
+            <DatasetFigures stats={datasetStats} className="mt-4" />
+          </section>
+        ) : null}
       </section>
 
       {starterPicks.length > 0 ? (

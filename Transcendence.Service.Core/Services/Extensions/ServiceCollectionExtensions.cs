@@ -80,6 +80,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IChampionMatchupComputeService, ChampionMatchupComputeService>();
         services.AddScoped<IChampionAnalyticsService, ChampionAnalyticsService>();
         services.AddScoped<IAnalyticsPatchQueryService, AnalyticsPatchQueryService>();
+        services.AddScoped<IDatasetStatsService, DatasetStatsService>();
         services.AddScoped<IBuildResourceAnalyticsService, BuildResourceAnalyticsService>();
         services.AddScoped<IBuildResourceSnapshotRefresher, BuildResourceSnapshotRefresher>();
         services.AddScoped<IBuildLabService, BuildLabService>();
@@ -141,6 +142,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<RefreshProAnalyticsJob>();
         services.AddScoped<RefreshBuildResourceAnalyticsJob>();
         services.AddScoped<RefreshBuildLabStatsJob>();
+        // The dataset-stats refresher scans Matches, so only the worker can resolve it; the API only
+        // reads the stored snapshot through IDatasetStatsService.
+        services.AddScoped<IDatasetStatsRefresher, DatasetStatsRefresher>();
+        services.AddScoped<RefreshDatasetStatsJob>();
         services.AddScoped<LiveGamePollingJob>();
         services.AddScoped<ILiveGameProbeJob, LiveGameProbeJob>();
         services.AddScoped<RuneSelectionIntegrityBackfillJob>();

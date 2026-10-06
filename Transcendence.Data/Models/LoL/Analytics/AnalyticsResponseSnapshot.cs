@@ -15,12 +15,16 @@ namespace Transcendence.Data.Models.LoL.Analytics;
 /// </list>
 /// All at the all-region scope; a specific region (or a role/scope not precomputed) falls back to live compute.
 /// </para>
+/// <para>
+/// Also holds the patch-independent public dataset stats: <c>Feature="dataset-stats"</c>,
+/// <c>ScopeKey="global"</c>, <c>Patch="*"</c> (one row, upserted by <c>refresh-dataset-stats</c>).
+/// </para>
 /// </summary>
 public class AnalyticsResponseSnapshot
 {
     public Guid Id { get; set; }
 
-    /// <summary>Surface discriminator: "probuilds" | "proplayrate".</summary>
+    /// <summary>Surface discriminator: "probuilds" | "proplayrate" | "dataset-stats".</summary>
     public string Feature { get; set; } = "";
 
     /// <summary>Feature-specific scope key (see the class summary).</summary>

@@ -65,7 +65,7 @@ flowchart LR
   end
 
   subgraph worker["Transcendence.Service"]
-    HF["Hangfire: 5 servers, 7 queues<br/>20 recurring jobs"]
+    HF["Hangfire: 5 servers, 7 queues<br/>21 recurring jobs"]
     Gate["IRiotRateGate<br/>per-region token bucket"]
   end
 
@@ -229,6 +229,7 @@ the worker verifies registration (3 attempts) and fails if a mandatory job is mi
 | `refresh-champion-matchups` | `35 * * * *` | |
 | `refresh-build-resource-analytics` | `40 * * * *` | Build Atlas |
 | `refresh-champion-build-snapshots` | `10 */6 * * *` | |
+| `refresh-dataset-stats` | `*/5 * * * *` | Public dataset stats snapshot; one grouped pass over `Matches` |
 | `high-elo-profile-refresh` | `0 */2 * * *` | Apex crawl |
 | `pro-roster-discovery` | `15 3 * * *` | Leaguepedia |
 | `refresh-champion-analytics` | `0 4 * * *` | Disabled in `stable`; the adaptive job replaces it |
@@ -302,7 +303,7 @@ with a full rebuild once per patch and hourly in-place additions under an adviso
 
 ## API
 
-83 endpoints across 15 controllers. The committed contract is
+85 endpoints across 17 controllers. The committed contract is
 [`openapi/transcendence.v1.json`](openapi/transcendence.v1.json); see [`docs/API.md`](docs/API.md)
 for status-code semantics.
 
@@ -310,7 +311,7 @@ for status-code semantics.
 | --- | --- |
 | Summoner lookup, search, refresh, multi-search, live game | `api/lol/summoners` |
 | Summoner stats and matches | `api/lol/summoners/{summonerId:guid}` |
-| Tier list, patches, regions, items/runes, champions, pro, Build Lab | `api/lol/analytics/*` |
+| Tier list, patches, regions, dataset stats, items/runes, champions, pro, Build Lab | `api/lol/analytics/*` |
 | Leaderboards, static data | `api/lol/leaderboards`, `api/lol/static` |
 | Auth, API keys, current user (favorites, preferences, linked Riot account) | `api/auth`, `api/auth/keys`, `api/users/me` |
 | Admin: jobs, queues, failed-job retry, cache, audit log, logs, pro roster | `api/admin`, `api/admin/pro-summoners` |
@@ -365,7 +366,7 @@ exempt private and loopback addresses:
 | Tier list, champion pages, items, runes | 3600 |
 | Pro builds | 1800–3600 |
 | Patch list | 600 |
-| Leaderboards, analytics status | 60 |
+| Leaderboards, analytics status, dataset stats | 60 |
 | Summoner lookup | `no-store` |
 
 **BFF proxies** ([`app/api/trn`](apps/web/app/api/trn)). All four share

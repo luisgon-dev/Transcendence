@@ -25,6 +25,15 @@ export default function Loading() {
           <Skeleton className="h-14 w-full max-w-2xl rounded-control" />
           <Skeleton className="h-3.5 w-64 rounded-md" />
         </div>
+        {/* Live dataset figures: kicker row + one row of label/value pairs. */}
+        <div className="mt-8 grid gap-4 border-t border-border/60 pt-6">
+          <Skeleton className="h-3 w-28 rounded-md" />
+          <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 xl:grid-cols-6">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-12 w-full rounded-md" />
+            ))}
+          </div>
+        </div>
       </section>
 
       <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr] lg:items-start">

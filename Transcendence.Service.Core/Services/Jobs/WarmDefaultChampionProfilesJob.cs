@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Transcendence.Data;
+using Transcendence.Data.Models.LoL.Analytics;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Service.Core.Queries;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
@@ -14,12 +15,12 @@ using Transcendence.Service.Core.Services.RiotApi;
 namespace Transcendence.Service.Core.Services.Jobs;
 
 /// <summary>
-/// Hourly job that keeps every popular champion's DEFAULT profile-page analytics warm and fresh.
+/// Bounded recurring job that keeps every popular champion's DEFAULT profile-page analytics warm and fresh.
 /// For each champion with enough games on the active patch it recomputes win rates / builds /
 /// matchups, synergies (and optionally pro-builds) for the page-default params and OVERWRITES the cache via
 /// <see cref="IChampionAnalyticsService.RefreshDefaultProfileCacheAsync"/> (gap-free SetAsync).
 /// Runs on the reserved <see cref="HangfireQueues.AnalyticsWarm"/> lane (its own dedicated worker
-/// pool) so it is always ready regardless of how saturated the shared refresh queues are.
+/// pool) so it is reserved independently from ingestion and heavy batch work.
 /// Per-champion work is still bounded internally to yield the DB to ingestion/API demand.
 /// </summary>
 [DisableConcurrentExecution(timeoutInSeconds: 60 * 60)]
@@ -68,6 +69,14 @@ public class WarmDefaultChampionProfilesJob(
             return;
         }
 
+        // Persist successful coverage so short runs rotate across every champion, including after
+        // a worker restart. A long champion sweep must not occupy the warm lane for hours.
+        var updated = await db.AnalyticsResponseSnapshots.AsNoTracking()
+            .Where(row => row.Feature == "profile-warm" && row.Patch == patch)
+            .ToDictionaryAsync(row => row.ScopeKey, row => row.ComputedAtUtc, ct);
+        champions = champions.OrderBy(champion => updated.GetValueOrDefault(
+                $"{opts.RankTier}:{champion}", DateTime.MinValue))
+            .Take(Math.Clamp(opts.MaxChampionsPerRun, 1, 200)).ToList();
         var maxConcurrency = Math.Clamp(opts.MaxConcurrency, 1, 8);
         using var gate = new SemaphoreSlim(maxConcurrency);
         var warmed = 0;
@@ -78,6 +87,8 @@ public class WarmDefaultChampionProfilesJob(
             await gate.WaitAsync(ct);
             try
             {
+                if (stopwatch.Elapsed.TotalSeconds >= Math.Max(1, opts.MaxRunSeconds))
+                    return;
                 // Fresh DI scope per champion -> isolated DbContext. The analytics compute path is
                 // not safe to run concurrently on a single shared context, so we don't reuse this
                 // job's injected db for the per-champion work.
@@ -87,20 +98,27 @@ public class WarmDefaultChampionProfilesJob(
                     championId, opts.RankTier, opts.IncludeProBuilds, ct);
                 if (effectiveRole != null)
                 {
-                    // The synergy fill is a live aggregate over the participant tables; give it room
-                    // to finish rather than discard it at the 30s default (scope-local context).
+                    // A missing snapshot can still require the raw fallback during catch-up.
+                    // Keep that fill bounded on this champion's isolated context.
                     scope.ServiceProvider.GetRequiredService<TranscendenceContext>().Database
                         .SetCommandTimeout(Math.Clamp(opts.SynergyCommandTimeoutSeconds, 30, 600));
                     var synergies = scope.ServiceProvider.GetRequiredService<IChampionSynergyService>();
-                    await synergies.GetSynergiesAsync(
-                        championId,
-                        effectiveRole,
-                        opts.RankTier,
-                        region: null,
-                        QueueCatalog.QueueFamilyRankedSoloDuo,
-                        patch,
-                        ct);
+                    await synergies.RefreshSnapshotAsync(championId, effectiveRole, opts.RankTier, patch, ct);
                 }
+                var context = scope.ServiceProvider.GetRequiredService<TranscendenceContext>();
+                var key = $"{opts.RankTier}:{championId}";
+                var coverage = await context.AnalyticsResponseSnapshots.FirstOrDefaultAsync(row =>
+                    row.Feature == "profile-warm" && row.ScopeKey == key && row.Patch == patch, ct);
+                if (coverage == null)
+                {
+                    coverage = new AnalyticsResponseSnapshot
+                    {
+                        Id = Guid.NewGuid(), Feature = "profile-warm", ScopeKey = key, Patch = patch, Payload = "true"
+                    };
+                    context.AnalyticsResponseSnapshots.Add(coverage);
+                }
+                coverage.ComputedAtUtc = DateTime.UtcNow;
+                await context.SaveChangesAsync(ct);
                 Interlocked.Increment(ref warmed);
             }
             catch (OperationCanceledException)

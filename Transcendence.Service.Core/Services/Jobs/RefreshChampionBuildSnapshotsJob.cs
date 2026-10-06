@@ -18,7 +18,7 @@ public sealed class RefreshChampionBuildSnapshotsJob(
     IChampionAnalyticsService analyticsService,
     ILogger<RefreshChampionBuildSnapshotsJob> logger)
 {
-    [Queue(HangfireQueues.AnalyticsWarm)]
+    [Queue(HangfireQueues.AnalyticsBatch)]
     public async Task ExecuteAsync(CancellationToken ct)
     {
         var patch = await db.Patches

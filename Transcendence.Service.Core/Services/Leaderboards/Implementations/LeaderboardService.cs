@@ -1,5 +1,9 @@
 using System.Diagnostics;
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
+using Transcendence.Data;
+using Transcendence.Data.Models.LoL.Analytics;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Diagnostics;
 using Transcendence.Service.Core.Services.Leaderboards.Interfaces;
@@ -11,8 +15,10 @@ namespace Transcendence.Service.Core.Services.Leaderboards.Implementations;
 public sealed class LeaderboardService(
     ILeaderboardRepository repository,
     HybridCache cache,
-    LeaderboardTelemetry telemetry) : ILeaderboardService
+    LeaderboardTelemetry telemetry,
+    TranscendenceContext? snapshots = null) : ILeaderboardService
 {
+    public const string SnapshotFeature = "leaderboard-regional";
     private static readonly HybridCacheEntryOptions CacheOptions = new()
     {
         Expiration = TimeSpan.FromMinutes(5),
@@ -63,6 +69,17 @@ public sealed class LeaderboardService(
                 async token =>
                 {
                     cacheMiss = true;
+                    if (championId is null && snapshots != null)
+                    {
+                        var scope = $"{normalizedPlatform}:{normalizedQueue}";
+                        var oldest = DateTime.UtcNow.AddHours(-24);
+                        var snapshot = await snapshots.AnalyticsResponseSnapshots.AsNoTracking()
+                            .Where(row => row.Feature == SnapshotFeature && row.ScopeKey == scope && row.Patch == "*" &&
+                                          row.ComputedAtUtc >= oldest)
+                            .Select(row => row.Payload).FirstOrDefaultAsync(token);
+                        if (snapshot != null && JsonSerializer.Deserialize<LeaderboardResponse>(snapshot) is { } board)
+                            return board with { Entries = board.Entries.Take(safeLimit).ToList() };
+                    }
                     return await ComputeAsync(
                         normalizedPlatform,
                         normalizedQueue,
@@ -86,6 +103,33 @@ public sealed class LeaderboardService(
                 succeeded,
                 Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }
+    }
+
+    // Refresh before expiry. A failure leaves both the durable snapshot and the previous cache intact.
+    public async Task RefreshRegionalAsync(string platformRegion, string queue, CancellationToken ct = default)
+    {
+        var platform = platformRegion.Trim().ToUpperInvariant();
+        var normalizedQueue = NormalizeQueue(queue);
+        var board = await ComputeAsync(platform, normalizedQueue, null, null, 100, 5, ct);
+        if (snapshots != null)
+        {
+            var scope = $"{platform}:{normalizedQueue}";
+            var snapshot = await snapshots.AnalyticsResponseSnapshots
+                .FirstOrDefaultAsync(row => row.Feature == SnapshotFeature && row.ScopeKey == scope && row.Patch == "*", ct);
+            if (snapshot == null)
+            {
+                snapshot = new AnalyticsResponseSnapshot
+                {
+                    Id = Guid.NewGuid(), Feature = SnapshotFeature, ScopeKey = scope, Patch = "*"
+                };
+                snapshots.AnalyticsResponseSnapshots.Add(snapshot);
+            }
+            snapshot.Payload = JsonSerializer.Serialize(board);
+            snapshot.ComputedAtUtc = board.GeneratedAtUtc;
+            await snapshots.SaveChangesAsync(ct);
+        }
+        await cache.SetAsync($"leaderboards:v1:regional:{platform}:{normalizedQueue}:100",
+            board, CacheOptions, tags: ["leaderboards"], cancellationToken: ct);
     }
 
     private async Task<LeaderboardResponse> ComputeAsync(

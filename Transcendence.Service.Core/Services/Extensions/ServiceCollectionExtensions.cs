@@ -136,6 +136,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ChampionAnalyticsIngestionJob>();
         services.AddScoped<RefreshChampionAnalyticsJob>();
         services.AddScoped<WarmDefaultChampionProfilesJob>();
+        services.AddScoped<RefreshLeaderboardsJob>();
+        services.AddScoped<ChampionSynergyFactMaterializer>();
+        services.AddScoped<RefreshChampionSynergyFactsJob>();
         services.AddScoped<RefreshPrecomputedAnalyticsJob>();
         services.AddScoped<RefreshChampionBuildSnapshotsJob>();
         services.AddScoped<RefreshChampionMatchupsJob>();

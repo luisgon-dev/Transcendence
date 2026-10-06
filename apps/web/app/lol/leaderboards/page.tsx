@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
+import { Skeleton } from "@/components/ui/Skeleton";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -54,24 +56,35 @@ export default async function LeaderboardsPage({
   const rawFilters = searchParams ? await searchParams : {};
   const filters = normalizeLeaderboardFilters(rawFilters);
   filters.region = normalizeLolRegionSlug(filters.region);
-  const query = leaderboardSearchParams(filters);
+  const { version, champions } = await fetchChampionMap();
+  return (
+    <div className="grid gap-4">
+      <Toolbar eyebrow="Ranked" title="Leaderboards" filters={<LeaderboardFilters filters={filters} champions={champions} />} />
+      <Suspense fallback={<Card className="grid gap-3 p-6">{Array.from({ length: 8 }, (_, index) => <Skeleton key={index} className="h-12 w-full" />)}</Card>}>
+        <LeaderboardResults filters={filters} version={version} champions={champions} />
+      </Suspense>
+    </div>
+  );
+}
 
-  const [{ version, champions }, response] = await Promise.all([
-    fetchChampionMap(),
-    fetchBackendJson<LeaderboardResponse>(`${getBackendBaseUrl()}/api/lol/leaderboards?${query.toString()}`, {
-      next: { revalidate: 60 }
-    })
-  ]);
+async function LeaderboardResults({ filters, version, champions }: {
+  filters: ReturnType<typeof normalizeLeaderboardFilters>;
+  version: string;
+  champions: Awaited<ReturnType<typeof fetchChampionMap>>["champions"];
+}) {
+  const query = leaderboardSearchParams(filters);
+  const response = await fetchBackendJson<LeaderboardResponse>(
+    `${getBackendBaseUrl()}/api/lol/leaderboards?${query.toString()}`,
+    { next: { revalidate: 60 } }
+  );
   const activeChampion = filters.championId ? champions[String(filters.championId)] : null;
   const boardLabel = activeChampion
     ? `${activeChampion.name}${filters.role ? ` · ${roleDisplayLabel(filters.role)}` : ""}`
     : filters.queue === "flex" ? "Regional Flex Ladder" : "Regional Solo/Duo Ladder";
 
-  const filterBar = <LeaderboardFilters filters={filters} champions={champions} />;
   if (!response.ok || !response.body) {
     return (
       <div className="grid gap-4">
-        <Toolbar eyebrow="Ranked" title="Leaderboards" filters={filterBar} />
         <BackendErrorCard
           title="Leaderboard unavailable"
           message="We couldn't load this ranked board right now."
@@ -87,19 +100,12 @@ export default async function LeaderboardsPage({
 
   return (
     <div className="grid gap-4">
-      <Toolbar
-        eyebrow="Ranked"
-        title="Leaderboards"
-        meta={
-          <>
-            <Badge className="border-primary/40 bg-primary/10 text-primary">{boardLabel}</Badge>
-            <span>{board.entries.length} tracked players</span>
-            <span aria-hidden="true">·</span>
-            <UpdatedAgo timestamp={board.generatedAtUtc} />
-          </>
-        }
-        filters={filterBar}
-      />
+      <div className="type-note flex flex-wrap items-center gap-2 text-muted">
+        <Badge className="border-primary/40 bg-primary/10 text-primary">{boardLabel}</Badge>
+        <span>{board.entries.length} tracked players</span>
+        <span aria-hidden="true">·</span>
+        <UpdatedAgo timestamp={board.generatedAtUtc} />
+      </div>
 
       <Card className="overflow-hidden p-0">
         {board.entries.length === 0 ? (

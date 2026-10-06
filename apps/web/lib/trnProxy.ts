@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 
 import { resolveClientIp } from "@/lib/clientIp";
 import { getBackendBaseUrl, getBackendTimeoutMs, getErrorVerbosity } from "@/lib/env";
-import { fetchWithTimeout, isAbortError } from "@/lib/fetchWithTimeout";
+import { fetchAndConsumeWithTimeout, isAbortError } from "@/lib/fetchWithTimeout";
 import { normalizeProxyPath } from "@/lib/proxyPath";
 import { newRequestId } from "@/lib/requestId";
 import { logEvent } from "@/lib/serverLog";
@@ -26,6 +26,16 @@ function copyHeaders(req: NextRequest) {
   if (clientIp) headers.set("x-forwarded-for", clientIp);
 
   return headers;
+}
+
+// BFF endpoints return finite API responses. Consume the complete body inside the deadline so
+// a backend that sends headers and then stalls still produces the existing structured 504.
+async function consumeResponse(response: Response): Promise<Response> {
+  return new Response(response.body === null ? null : await response.arrayBuffer(), {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers
+  });
 }
 
 export async function proxyToBackend(
@@ -64,7 +74,7 @@ export async function proxyToBackend(
 
   let res: Response;
   try {
-    res = await fetchWithTimeout(
+    res = await fetchAndConsumeWithTimeout(
       url,
       {
         method: req.method,
@@ -72,6 +82,7 @@ export async function proxyToBackend(
         body,
         redirect: "manual"
       },
+      consumeResponse,
       { timeoutMs: getBackendTimeoutMs() }
     );
   } catch (err: unknown) {
@@ -117,9 +128,10 @@ export async function proxyToBackend(
     if (newHeaders) {
       for (const [k, v] of Object.entries(newHeaders)) headers.set(k, v);
       try {
-        res = await fetchWithTimeout(
+        res = await fetchAndConsumeWithTimeout(
           url,
           { method: req.method, headers, body, redirect: "manual" },
+          consumeResponse,
           { timeoutMs: getBackendTimeoutMs() }
         );
       } catch (err: unknown) {

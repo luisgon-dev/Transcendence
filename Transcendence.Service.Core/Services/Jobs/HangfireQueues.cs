@@ -25,6 +25,9 @@ public static class HangfireQueues
     /// </summary>
     public const string AnalyticsWarm = "analytics-warm";
 
+    /// <summary>Heavy analytics materialization, isolated from serving-cache warming.</summary>
+    public const string AnalyticsBatch = "analytics-batch";
+
     /// <summary>
     /// Reserved lane for per-match timeline ingestion. Served by its own dedicated worker pool so a
     /// large re-ingestion backlog drains at the Riot rate limit without being starved by the (much
@@ -53,6 +56,6 @@ public static class HangfireQueues
 
     /// <summary>Every queue some worker pool serves. A queue outside this set is never drained.</summary>
     public static readonly IReadOnlySet<string> Served = new HashSet<string>(
-        [.. MainServer, AnalyticsWarm, TimelineIngest, Discovery, HistoryBackfill],
+        [.. MainServer, AnalyticsWarm, AnalyticsBatch, TimelineIngest, Discovery, HistoryBackfill],
         StringComparer.Ordinal);
 }

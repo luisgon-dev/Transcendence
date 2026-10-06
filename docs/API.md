@@ -659,3 +659,17 @@ The spec is OpenAPI 3.0 with C# nullable-reference-type fidelity: Swashbuckle is
 See root `package.json` scripts:
 - `api:gen`
 - `api:check`
+
+### Read freshness and backend deadlines
+
+Regional leaderboards keep their existing response shape and expose the successful snapshot time in
+`generatedAtUtc`. Background refresh replaces the full top hundred without a cache gap; cold reads
+may reuse a durable snapshot up to 24 hours old, plus the normal five-minute cache TTL. Champion-filtered
+boards keep their current query behavior. Default synergy snapshots target six-hour refresh and may
+serve a previous successful snapshot accepted within 24 hours, plus the normal six-hour cache TTL.
+Compact synergy facts preserve the existing queue/patch/region and current-rank semantics; incomplete
+backfills use raw data. These are eventual consistency bounds, not guarantees of successful refresh.
+
+The web BFF applies `TRN_BACKEND_TIMEOUT_MS` through the complete finite response body, including JSON
+consumption, and returns the existing structured 504 on timeout. An early HTTP 200 loading shell does
+not establish that the backend data succeeded. Endpoint contracts and OpenAPI shapes are unchanged.

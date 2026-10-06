@@ -48,6 +48,8 @@ const LIGHTHOUSE_SETTINGS = {
     disabled: false
   },
   throttlingMethod: "simulate",
+  maxWaitForFcp: 15_000,
+  maxWaitForLoad: 45_000,
   onlyCategories: ["performance", "accessibility", "best-practices", "seo"]
 };
 
@@ -252,7 +254,7 @@ async function main() {
     throw new Error(`${args.routes} must be a non-empty array of paths`);
   }
 
-  const chrome = await chromeLauncher.launch({ chromeFlags: CHROME_FLAGS });
+  let chrome = await chromeLauncher.launch({ chromeFlags: CHROME_FLAGS });
   const results = [];
   let failedRoutes = 0;
 
@@ -272,6 +274,9 @@ async function main() {
           }
         } catch (error) {
           console.error(`  ! ${url} sample ${i + 1}/${args.samples}: ${error.message}`);
+          // A failed browser must not poison every remaining route in the sweep.
+          await chrome.kill().catch(() => {});
+          chrome = await chromeLauncher.launch({ chromeFlags: CHROME_FLAGS });
         }
       }
       if (!samples.length) {

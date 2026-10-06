@@ -11,13 +11,13 @@ public sealed class BuildLabOptions
     public bool Enabled { get; set; }
 
     /// <summary>Matches counted per transaction.</summary>
-    public int MatchBatchSize { get; set; } = 500;
+    public int MatchBatchSize { get; set; } = 25;
 
     /// <summary>
     /// Matches counted per job run. Bounds a run so the one-time backfill of a fresh patch proceeds over
     /// several scheduled runs instead of occupying a worker slot for hours.
     /// </summary>
-    public int MaxMatchesPerRun { get; set; } = 20_000;
+    public int MaxMatchesPerRun { get; set; } = 500;
 
     /// <summary>Patches before the active one that the refresh keeps topping up with late matches.</summary>
     public int PriorPatchesToRefresh { get; set; } = 2;
@@ -25,5 +25,12 @@ public sealed class BuildLabOptions
     /// <summary>Patches whose counts are kept; older ones are deleted.</summary>
     public int PatchesToRetain { get; set; } = 4;
 
-    public int CommandTimeoutSeconds { get; set; } = 600;
+    public int CommandTimeoutSeconds { get; set; } = 60;
+
+    /// <summary>Stop starting batches after this elapsed budget. Committed batches remain counted.</summary>
+    public int MaxRunSeconds { get; set; } = 120;
+    /// <summary>Yield between transactions to keep foreground reads responsive.</summary>
+    public int BatchDelayMilliseconds { get; set; } = 500;
+    /// <summary>Cluster WAL growth budget per run; includes other writers and deliberately fails closed.</summary>
+    public int MaxWalMegabytesPerRun { get; set; } = 32;
 }

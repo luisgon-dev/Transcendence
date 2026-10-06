@@ -1,0 +1,18 @@
+[Unit]
+Description=Transcendence full-response and data freshness checks
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/root/deploy/data-health-sweep.sh
+Nice=10
+IOSchedulingClass=idle
+CPUWeight=20
+TimeoutStartSec=60
+ProtectSystem=strict
+ReadWritePaths=/var/lib/transcendence-perf
+StateDirectory=transcendence-perf
+StateDirectoryMode=0755
+PrivateTmp=true
+NoNewPrivileges=true

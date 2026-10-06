@@ -1,173 +1,203 @@
 #!/usr/bin/env bash
-#
-# archive-old-patches.sh — recurring retention: archive (not delete) old-patch LoL match detail to
-# the NAS, then prune it. Runs on the Docker host (192.168.0.221), weekly via /etc/cron.d/trn-archive.
-#
-# For every patch OLDER than the newest KEEP_PATCHES it streams each match table (Matches + all
-# cascade children) out via Postgres COPY -> gzip -> ssh to the NAS, verifies (gzip integrity +
-# exact row count), writes a manifest, and only THEN prunes (one cascading DELETE on Matches, in
-# bounded batches). Correctness guarantees:
-#
-#  * Consistency under the LIVE ingestion worker — the worker keeps inserting old-patch matches as
-#    lapsed players return / failed matches are retried. So per patch we first FREEZE that patch's
-#    match-ID set into a work table (T0 snapshot); every count / export / verify / delete is bounded
-#    to that frozen set. Rows inserted after T0 are excluded (no verify race, no data loss) and are
-#    caught on the next run.
-#  * Adaptive plan for HDD — a big patch (> SEQSCAN_THRESHOLD matches) exports a large slice, so the
-#    default sequential scan wins; a small patch forces index nested-loops (enable_seqscan=off) to
-#    avoid full scans of the ~100M-row child tables. (Forcing index on a big patch = tens of millions
-#    of random HDD fetches = catastrophic; forcing seq-scan on a tiny patch = a needless full scan.)
-#  * Residual-safe + idempotent — a patch's first archive lands in NAS/<patch>/ and writes _DONE. If a
-#    _DONE patch later accrues a residual (post-T0 inserts), that residual is archived to
-#    NAS/<patch>/residual-<epoch>/ before pruning — never clobbering the primary archive.
-#
-# Restore a table:  zcat <Table>.csv.gz | docker exec -i transcendence-postgres \
-#                     psql -U postgres -d transcendence -c "COPY \"<Table>\" FROM STDIN WITH (FORMAT csv, HEADER true)"
-#   (restore parents before children: Matches -> MatchParticipants -> Items/Runes, then the rest.)
-#   NOTE the $TABLES list below is exhaustive by contract — a cascade child that is not listed is
-#   silently destroyed by the prune with no archive. Add new Match children there when they land.
-#   A listed table that does not exist yet (migration not applied on this host) fails its pre-export
-#   count and skips the whole patch, so an incomplete schema can never prune un-archived rows.
-#
-# Safety: DRY-RUN by default (APPLY=1 to archive+prune). Verify-before-delete is mandatory; any table
-# that fails verification skips the prune for that patch (archive on the NAS is left intact).
-#
-# Env: KEEP_PATCHES(3) NAS_HOST(192.168.0.199) NAS_DIR(/mnt/user/backup/transcendence-match-archive)
-#      PG_CONTAINER(transcendence-postgres) PG_USER(postgres) PG_DB(transcendence) APPLY(0)
-#      ONLY_PATCH('') DELETE_BATCH(20000) SEQSCAN_THRESHOLD(50000)
-set -uo pipefail
-
+# Bounded archive-then-prune for an HDD: frozen chunks, verified exports, resumable paced deletes.
+# A verified chunk is never exported again after any of its rows have been pruned.
+set -Eeuo pipefail
 KEEP_PATCHES="${KEEP_PATCHES:-3}"
+APPLY="${APPLY:-0}"
+ONLY_PATCH="${ONLY_PATCH:-}"
 NAS_HOST="${NAS_HOST:-192.168.0.199}"
 NAS_DIR="${NAS_DIR:-/mnt/user/backup/transcendence-match-archive}"
 PG_CONTAINER="${PG_CONTAINER:-transcendence-postgres}"
 PG_USER="${PG_USER:-postgres}"
 PG_DB="${PG_DB:-transcendence}"
-APPLY="${APPLY:-0}"
-ONLY_PATCH="${ONLY_PATCH:-}"
-BATCH="${DELETE_BATCH:-20000}"
-SEQSCAN_THRESHOLD="${SEQSCAN_THRESHOLD:-50000}"
+DELETE_BATCH="${DELETE_BATCH:-25}"
+FREEZE_MATCHES="${FREEZE_MATCHES:-500}"
+MAX_RUN_SECONDS="${MAX_RUN_SECONDS:-1200}"
+MAX_WAL_MB="${MAX_WAL_MB:-256}"
+DELETE_TIMEOUT_MS="${DELETE_TIMEOUT_MS:-15000}"
+EXPORT_TIMEOUT_MS="${EXPORT_TIMEOUT_MS:-120000}"
+BATCH_SLEEP_SECONDS="${BATCH_SLEEP_SECONDS:-2}"
+MAX_IO_PRESSURE="${MAX_IO_PRESSURE:-35}"
+IO_PRESSURE_FILE="${IO_PRESSURE_FILE:-/proc/pressure/io}"
+STATE_DIR="${ARCHIVE_STATE_DIR:-/var/lib/transcendence-archive}"
 WORK="_patch_archive_pending"
-
-SSH_NAS=(ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 "root@${NAS_HOST}")
-PGENV=()   # set per-patch for the export (empty = default seq-scan; index-forcing for small patches)
-pgq()   { docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 "$@"; }                  # default planner
-pgx()   { docker exec -i "${PGENV[@]}" "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 "$@"; }    # planner per $PGENV
-pgval() { pgq -tAc "$1"; }            # planner-neutral scalar reads
-
-# EVERY table with an ON DELETE CASCADE path to "Matches" must be listed here: the prune is a single
-# DELETE on "Matches", so anything missing is destroyed by the cascade WITHOUT ever being archived.
-# Cross-check against TranscendenceContext's Match relationships when a child table is added.
 TABLES=(Matches MatchParticipants MatchParticipantItems MatchParticipantRunes MatchBans
         MatchTeamObjectives MatchParticipantTimelineSnapshots MatchTimelineFetchStates
         MatchParticipantItemPurchases MatchParticipantSkillOrders
         MatchParticipantItemEvents MatchParticipantRankContexts MatchTimelineEventPayloads)
-# Row source for table $1 — every table joined to the frozen per-patch work table of match IDs.
-sel_for() { case "$1" in
-  Matches)                           echo "SELECT m.* FROM \"Matches\" m JOIN ${WORK} a ON m.\"Id\"=a.\"Id\"";;
-  MatchParticipants)                 echo "SELECT mp.* FROM \"MatchParticipants\" mp JOIN ${WORK} a ON mp.\"MatchId\"=a.\"Id\"";;
-  MatchParticipantItems)             echo "SELECT i.* FROM \"MatchParticipantItems\" i JOIN \"MatchParticipants\" mp ON i.\"MatchParticipantId\"=mp.\"Id\" JOIN ${WORK} a ON mp.\"MatchId\"=a.\"Id\"";;
-  MatchParticipantRunes)             echo "SELECT r.* FROM \"MatchParticipantRunes\" r JOIN \"MatchParticipants\" mp ON r.\"MatchParticipantId\"=mp.\"Id\" JOIN ${WORK} a ON mp.\"MatchId\"=a.\"Id\"";;
-  MatchBans)                         echo "SELECT b.* FROM \"MatchBans\" b JOIN ${WORK} a ON b.\"MatchId\"=a.\"Id\"";;
-  MatchTeamObjectives)               echo "SELECT o.* FROM \"MatchTeamObjectives\" o JOIN ${WORK} a ON o.\"MatchId\"=a.\"Id\"";;
-  MatchParticipantTimelineSnapshots) echo "SELECT ts.* FROM \"MatchParticipantTimelineSnapshots\" ts JOIN ${WORK} a ON ts.\"MatchId\"=a.\"Id\"";;
-  MatchTimelineFetchStates)          echo "SELECT fs.* FROM \"MatchTimelineFetchStates\" fs JOIN ${WORK} a ON fs.\"MatchId\"=a.\"Id\"";;
-  MatchParticipantItemPurchases)     echo "SELECT ip.* FROM \"MatchParticipantItemPurchases\" ip JOIN ${WORK} a ON ip.\"MatchId\"=a.\"Id\"";;
-  MatchParticipantSkillOrders)       echo "SELECT so.* FROM \"MatchParticipantSkillOrders\" so JOIN ${WORK} a ON so.\"MatchId\"=a.\"Id\"";;
-  MatchParticipantItemEvents)        echo "SELECT ie.* FROM \"MatchParticipantItemEvents\" ie JOIN ${WORK} a ON ie.\"MatchId\"=a.\"Id\"";;
-  MatchParticipantRankContexts)      echo "SELECT rc.* FROM \"MatchParticipantRankContexts\" rc JOIN ${WORK} a ON rc.\"MatchId\"=a.\"Id\"";;
-  MatchTimelineEventPayloads)        echo "SELECT ep.* FROM \"MatchTimelineEventPayloads\" ep JOIN ${WORK} a ON ep.\"MatchId\"=a.\"Id\"";;
-esac; }
+SSH_NAS=(ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 "root@${NAS_HOST}")
 
-mapfile -t PATCHES < <(pgval "
-  SELECT DISTINCT m.\"Patch\" FROM \"Matches\" m
+for option in KEEP_PATCHES DELETE_BATCH FREEZE_MATCHES MAX_RUN_SECONDS MAX_WAL_MB DELETE_TIMEOUT_MS EXPORT_TIMEOUT_MS; do
+  [[ "${!option}" =~ ^[1-9][0-9]*$ ]] || { echo "Invalid ${option}" >&2; exit 2; }
+done
+[[ "$APPLY" =~ ^[01]$ && "$BATCH_SLEEP_SECONDS" =~ ^[0-9]+$ && "$MAX_IO_PRESSURE" =~ ^[0-9]+$ ]] || exit 2
+[[ "$STATE_DIR" == /* && "$STATE_DIR" != / && "$NAS_DIR" == /* && "$NAS_DIR" != / ]] || exit 2
+[[ "$NAS_DIR" != *"'"* && "$NAS_DIR" != *$'\n'* ]] || exit 2
+[[ -z "$ONLY_PATCH" || "$ONLY_PATCH" =~ ^[0-9]+\.[0-9]+$ ]] || exit 2
+started=$SECONDS
+log() { printf '%s archive: %s\n' "$(date -u +%FT%TZ)" "$*"; }
+pgq() {
+  local readonly=""
+  [[ "$APPLY" == 0 ]] && readonly=" -c default_transaction_read_only=on"
+  docker exec -i -e "PGOPTIONS=-c application_name=transcendence-archive -c statement_timeout=${DELETE_TIMEOUT_MS} -c lock_timeout=2000${readonly}" \
+    "$PG_CONTAINER" psql -X -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 "$@"
+}
+pgval() { pgq -tAc "$1"; }
+eligible_sql="SELECT DISTINCT m.\"Patch\" FROM \"Matches\" m
   WHERE m.\"Patch\" IS NOT NULL AND m.\"Patch\" <> ''
     AND m.\"Patch\" NOT IN (SELECT \"Version\" FROM \"Patches\" ORDER BY \"ReleaseDate\" DESC NULLS LAST LIMIT ${KEEP_PATCHES})
     AND m.\"Patch\" <> COALESCE((SELECT \"Version\" FROM \"Patches\" WHERE \"IsActive\" LIMIT 1), '__none__')
-  ORDER BY m.\"Patch\";") || { echo "FATAL: could not query eligible patches"; exit 1; }
+  ORDER BY m.\"Patch\""
 
-echo "Mode: $([ "$APPLY" = 1 ] && echo APPLY || echo DRY-RUN) | keep newest ${KEEP_PATCHES} | NAS root@${NAS_HOST}:${NAS_DIR}"
-echo "Eligible patches (${#PATCHES[@]}): ${PATCHES[*]:-<none>}"
-[ "${#PATCHES[@]}" -eq 0 ] && { echo "Nothing to archive."; exit 0; }
-
-for P in "${PATCHES[@]}"; do
-  [ -n "$ONLY_PATCH" ] && [ "$P" != "$ONLY_PATCH" ] && continue
-  echo "=== Patch ${P} ==="
-
-  # T0 snapshot: freeze this patch's match-ID set.
-  pgq -c "DROP TABLE IF EXISTS ${WORK};
-          CREATE TABLE ${WORK} AS SELECT \"Id\" FROM \"Matches\" WHERE \"Patch\"='${P}';
-          ALTER TABLE ${WORK} ADD PRIMARY KEY (\"Id\");" \
-    || { echo "  could not freeze ${P}; skipping"; continue; }
-  frozen=$(pgval "SELECT count(*) FROM ${WORK}")
-  if [ "${frozen:-0}" -eq 0 ]; then echo "  0 matches; skipping"; pgq -c "DROP TABLE IF EXISTS ${WORK};" >/dev/null 2>&1; continue; fi
-
-  # Primary archive -> NAS/<P>/ ; residual (patch already _DONE) -> NAS/<P>/residual-<epoch>/
-  if "${SSH_NAS[@]}" "test -f '${NAS_DIR}/${P}/_DONE'" 2>/dev/null; then
-    is_residual=1; dest="${NAS_DIR}/${P}/residual-$(date +%s)"
-    echo "  patch already archived (_DONE) — ${frozen} residual matches -> ${dest}"
-  else
-    is_residual=0; dest="${NAS_DIR}/${P}"
-    echo "  ${frozen} matches -> ${dest}"
+# Dry-run is actually read-only: no frozen work table, NAS directories, or state files are created.
+if [[ "$APPLY" == 0 ]]; then
+  pgval "$eligible_sql"
+  log "Dry-run: eligible patches above; frozen chunks <=${FREEZE_MATCHES}, deletes <=${DELETE_BATCH}, run <=${MAX_RUN_SECONDS}s."
+  exit 0
+fi
+install -d -m 0750 "$STATE_DIR"
+exec 9>"${STATE_DIR}/run.lock"
+flock -n 9 || { log "Another archive run is active."; exit 0; }
+state="${STATE_DIR}/current"
+budget_left() { (( SECONDS - started < MAX_RUN_SECONDS )); }
+pressure_ok() {
+  [[ ! -r "$IO_PRESSURE_FILE" ]] && return 0
+  awk -v cap="$MAX_IO_PRESSURE" '$1=="full" {for(i=2;i<=NF;i++) if($i ~ /^avg60=/) {split($i,a,"="); exit(a[2]>=cap)}}' "$IO_PRESSURE_FILE"
+}
+wal_position() { pgval "SELECT pg_current_wal_insert_lsn()::text;"; }
+wal_start=$(wal_position)
+wal_ok() {
+  local delta
+  delta=$(pgval "SELECT pg_wal_lsn_diff(pg_current_wal_insert_lsn(), '${wal_start}'::pg_lsn)::bigint;") || return 1
+  (( delta < MAX_WAL_MB * 1024 * 1024 ))
+}
+save_state() {
+  printf '%s\n' "$patch" "$destination" "$frozen" "$verified" >"${state}.tmp"
+  mv -f "${state}.tmp" "$state"
+}
+select_for() {
+  case "$1" in
+    Matches) echo "SELECT m.* FROM \"Matches\" m JOIN ${WORK} a ON m.\"Id\"=a.\"Id\"" ;;
+    MatchParticipants) echo "SELECT p.* FROM \"MatchParticipants\" p JOIN ${WORK} a ON p.\"MatchId\"=a.\"Id\"" ;;
+    MatchParticipantItems|MatchParticipantRunes)
+      echo "SELECT c.* FROM \"$1\" c JOIN \"MatchParticipants\" p ON c.\"MatchParticipantId\"=p.\"Id\" JOIN ${WORK} a ON p.\"MatchId\"=a.\"Id\"" ;;
+    *) echo "SELECT c.* FROM \"$1\" c JOIN ${WORK} a ON c.\"MatchId\"=a.\"Id\"" ;;
+  esac
+}
+while budget_left; do
+  if ! pressure_ok || ! wal_ok; then
+    log "Yielding to database I/O pressure/WAL budget; frozen progress retained for the next run."
+    exit 0
   fi
-
-  # Adaptive planner: big slice -> default seq scan; small slice -> force index nested-loops.
-  if [ "$frozen" -gt "$SEQSCAN_THRESHOLD" ]; then PGENV=(); else PGENV=(-e "PGOPTIONS=-c enable_seqscan=off"); fi
-
-  unset CNT; declare -A CNT; total=0; cnt_ok=1
-  for T in "${TABLES[@]}"; do
-    c=$(pgx -tAc "SELECT count(*) FROM ($(sel_for "$T")) _s") || { echo "  count failed ${T}"; cnt_ok=0; break; }
-    CNT[$T]=$c; total=$((total + c))
-  done
-  [ "$cnt_ok" = 1 ] || { echo "  skipping ${P} (count error)"; pgq -c "DROP TABLE IF EXISTS ${WORK};" >/dev/null 2>&1; continue; }
-  printf '  rows:'; for T in "${TABLES[@]}"; do printf ' %s=%s' "$T" "${CNT[$T]}"; done; printf ' | total=%s | plan=%s\n' "$total" "$([ "${#PGENV[@]}" -eq 0 ] && echo seqscan || echo index)"
-
-  if [ "$APPLY" != "1" ]; then echo "  [dry-run] would archive -> ${dest} then prune ${frozen} matches"; pgq -c "DROP TABLE IF EXISTS ${WORK};" >/dev/null 2>&1; continue; fi
-
-  "${SSH_NAS[@]}" "mkdir -p '${dest}'" || { echo "  NAS mkdir failed; skipping ${P}"; pgq -c "DROP TABLE IF EXISTS ${WORK};" >/dev/null 2>&1; continue; }
-  verified=1
-  for T in "${TABLES[@]}"; do
-    docker exec -i "${PGENV[@]}" "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 \
-      -c "COPY ($(sel_for "$T")) TO STDOUT WITH (FORMAT csv, HEADER true)" 2>/tmp/trn_arc_err.$$ \
-      | gzip | "${SSH_NAS[@]}" "cat > '${dest}/${T}.csv.gz'"
-    ps=("${PIPESTATUS[@]}")
-    if [ "${ps[0]:-1}" -ne 0 ] || [ "${ps[1]:-1}" -ne 0 ] || [ "${ps[2]:-1}" -ne 0 ]; then
-      echo "  EXPORT FAIL ${T} (pipestatus=${ps[*]}): $(head -c 300 /tmp/trn_arc_err.$$ 2>/dev/null)"; verified=0; break
+  if [[ -f "$state" ]]; then
+    mapfile -t saved <"$state"
+    [[ "${#saved[@]}" == 4 && "${saved[0]}" =~ ^[0-9]+\.[0-9]+$ && "${saved[2]}" =~ ^[0-9]+$ && "${saved[3]}" =~ ^[01]$ ]] || exit 1
+    patch="${saved[0]}"; destination="${saved[1]}"; frozen="${saved[2]}"; verified="${saved[3]}"
+    [[ "$destination" == "$NAS_DIR/"* && "$destination" != *"'"* && "$destination" != *$'\n'* ]] || exit 1
+    if [[ "$verified" == 1 ]] && "${SSH_NAS[@]}" "test -f '${destination}/_DONE'"; then
+      if [[ $(pgval "SELECT to_regclass('public.${WORK}') IS NOT NULL;") == f ]]; then
+        rm -f "$state" "${STATE_DIR}/manifest.json"
+        log "Recovered completed chunk after progress cleanup was interrupted."
+        continue
+      fi
     fi
-    if ! "${SSH_NAS[@]}" "gzip -t '${dest}/${T}.csv.gz'"; then echo "  GZIP CORRUPT ${T}"; verified=0; break; fi
-    fl=$("${SSH_NAS[@]}" "zcat '${dest}/${T}.csv.gz' | wc -l") || { echo "  count-back failed ${T}"; verified=0; break; }
-    exp=$(( CNT[$T] + 1 ))   # +1 = CSV header line
-    if [ "$fl" -ne "$exp" ]; then echo "  VERIFY FAIL ${T}: archived_lines=${fl} expected=${exp}"; verified=0; break; fi
-    echo "    ok ${T}: ${CNT[$T]} rows archived + verified"
-  done
-  rm -f /tmp/trn_arc_err.$$
-
-  if [ "$verified" != "1" ]; then echo "  !! verification failed for ${P} — DB NOT modified."; pgq -c "DROP TABLE IF EXISTS ${WORK};" >/dev/null 2>&1; continue; fi
-
-  { printf '{"patch":"%s","archivedAtUtc":"%s","keepPatches":%s,"residual":%s,"frozenMatches":%s,"rows":{' \
-      "$P" "$(date -u +%FT%TZ)" "$KEEP_PATCHES" "$is_residual" "$frozen"
-    first=1; for T in "${TABLES[@]}"; do [ "$first" = 1 ] || printf ','; printf '"%s":%s' "$T" "${CNT[$T]}"; first=0; done
-    printf '}}\n'; } | "${SSH_NAS[@]}" "cat > '${dest}/_manifest.json'"
-
-  # Bounded cascade prune of exactly the frozen set.
-  prune_ok=1
-  while :; do
-    rem=$(pgval "SELECT count(*) FROM ${WORK}") || { echo "  remaining-count failed"; prune_ok=0; break; }
-    [ "${rem:-0}" -eq 0 ] && break
-    pgq -c "WITH batch AS (SELECT \"Id\" FROM ${WORK} LIMIT ${BATCH}),
-                         del_m AS (DELETE FROM \"Matches\" WHERE \"Id\" IN (SELECT \"Id\" FROM batch))
-                    DELETE FROM ${WORK} WHERE \"Id\" IN (SELECT \"Id\" FROM batch);" \
-      || { echo "  batch delete failed (remaining=${rem})"; prune_ok=0; break; }
-  done
-  pgq -c "DROP TABLE IF EXISTS ${WORK};" >/dev/null 2>&1
-
-  if [ "$prune_ok" = 1 ]; then
-    [ "$is_residual" = 0 ] && "${SSH_NAS[@]}" "date -u +%FT%TZ > '${NAS_DIR}/${P}/_DONE'"
-    echo "  ✓ archived + pruned ${P} (${frozen} matches, ~${total} rows)"
+    # A patch can be promoted between runs: never prune the active or newly retained patch.
+    still_eligible=$(pgval "SELECT count(*) FROM ($eligible_sql) e WHERE e.\"Patch\"='${patch}';")
+    [[ "$still_eligible" != 0 || $(pgval "SELECT count(*) FROM ${WORK};") == 0 ]] || { log "${patch} is now protected; retaining frozen state without deletes."; exit 0; }
+    log "Resuming ${patch}, originally ${frozen} frozen matches, verified=${verified}."
   else
-    echo "  prune incomplete for ${P} (archive intact on NAS; remainder left in DB for next run)."
+    # An old-script or interrupted unowned work table is never silently destroyed.
+    existing=$(pgval "SELECT to_regclass('public.${WORK}') IS NOT NULL;")
+    if [[ "$existing" == t ]]; then
+      [[ $(pgval "SELECT count(*) FROM ${WORK};") == 0 ]] || { log "Unowned ${WORK} exists; refusing to replace its frozen set."; exit 1; }
+      pgq -c "DROP TABLE ${WORK};" >/dev/null
+    fi
+    patches=$(pgval "$eligible_sql")
+    patch=""
+    while IFS= read -r candidate; do
+      [[ "$candidate" =~ ^[0-9]+\.[0-9]+$ ]] || continue
+      [[ -z "$ONLY_PATCH" || "$candidate" == "$ONLY_PATCH" ]] || continue
+      patch="$candidate"; break
+    done <<<"$patches"
+    [[ -n "$patch" ]] || { log "No eligible patches remain."; exit 0; }
+    stamp="$(date -u +%Y%m%dT%H%M%S)-$$"
+    destination="${NAS_DIR}/${patch}/chunk-${stamp}"
+    frozen=0; verified=0
+    # Save ownership first. A crash before CREATE can be resumed safely.
+    save_state
+    pgq -c "CREATE TABLE ${WORK} AS SELECT \"Id\" FROM \"Matches\" WHERE \"Patch\"='${patch}' ORDER BY \"Id\" LIMIT ${FREEZE_MATCHES}; ALTER TABLE ${WORK} ADD PRIMARY KEY (\"Id\");" >/dev/null
+    frozen=$(pgval "SELECT count(*) FROM ${WORK};")
+    save_state
+    log "Frozen ${frozen} matches for ${patch} -> ${destination}."
   fi
-done
 
-echo "Done. Deleted rows free pages for reuse inside Postgres (DB file does not shrink without VACUUM FULL,"
-echo "which is intentionally avoided — it locks the table; autovacuum + plain reuse keep the DB from growing)."
+  if [[ "$verified" == 0 ]]; then
+    exists=$(pgval "SELECT to_regclass('public.${WORK}') IS NOT NULL;")
+    if [[ "$exists" == f && "$frozen" == 0 ]]; then
+      pgq -c "CREATE TABLE ${WORK} AS SELECT \"Id\" FROM \"Matches\" WHERE \"Patch\"='${patch}' ORDER BY \"Id\" LIMIT ${FREEZE_MATCHES}; ALTER TABLE ${WORK} ADD PRIMARY KEY (\"Id\");" >/dev/null
+    fi
+    frozen=$(pgval "SELECT count(*) FROM ${WORK};")
+    save_state
+    "${SSH_NAS[@]}" "mkdir -p '${destination}'"
+    manifest="${STATE_DIR}/manifest.json"
+    printf '{"patch":"%s","frozenMatches":%s,"rows":{' "$patch" "$frozen" >"$manifest"
+    first=1
+    for table in "${TABLES[@]}"; do
+      budget_left && pressure_ok && wal_ok || { log "Export paused; no deletes permitted."; exit 0; }
+      source_sql=$(select_for "$table")
+      rows=$(pgval "SET enable_seqscan=off; SELECT count(*) FROM (${source_sql}) src;" | tail -1)
+      [[ "$rows" =~ ^[0-9]+$ ]] || exit 1
+      log "Exporting ${table}: ${rows} rows."
+      docker exec -i -e "PGOPTIONS=-c application_name=transcendence-archive -c enable_seqscan=off -c statement_timeout=${EXPORT_TIMEOUT_MS} -c lock_timeout=2000" \
+        "$PG_CONTAINER" psql -X -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 \
+        -c "COPY (${source_sql}) TO STDOUT WITH (FORMAT csv, HEADER true)" \
+        | gzip | "${SSH_NAS[@]}" "cat > '${destination}/${table}.csv.gz'"
+      "${SSH_NAS[@]}" "gzip -t '${destination}/${table}.csv.gz'"
+      lines=$("${SSH_NAS[@]}" "zcat '${destination}/${table}.csv.gz' | wc -l")
+      [[ "$lines" == "$((rows + 1))" ]] || { log "Verification failed for ${table}; no deletes."; exit 1; }
+      checksum=$("${SSH_NAS[@]}" "sha256sum '${destination}/${table}.csv.gz'" | awk '{print $1}')
+      [[ "$checksum" =~ ^[a-f0-9]{64}$ ]] || exit 1
+      [[ "$first" == 1 ]] || printf ',' >>"$manifest"
+      first=0
+      printf '"%s":{"count":%s,"sha256":"%s"}' "$table" "$rows" "$checksum" >>"$manifest"
+    done
+    printf '}}\n' >>"$manifest"
+    "${SSH_NAS[@]}" "cat > '${destination}/_manifest.json'" <"$manifest"
+    verified=1
+    save_state
+    log "Every child export verified; pruning is now permitted."
+  fi
+
+  batch=$DELETE_BATCH
+  while budget_left && pressure_ok && wal_ok; do
+    remaining=$(pgval "SELECT count(*) FROM ${WORK};")
+    [[ "$remaining" != 0 ]] || break
+    # Preserve compact synergy facts before removing their raw source. The bounded worker prioritizes
+    # this frozen table; old deployments without the new tables retain their existing archive behavior.
+    facts_exist=$(pgval "SELECT to_regclass('public.\"ChampionSynergySourceMatches\"') IS NOT NULL;")
+    if [[ "$facts_exist" == t ]]; then
+      missing=$(pgval "SELECT EXISTS(SELECT 1 FROM \"Matches\" m JOIN ${WORK} a ON a.\"Id\"=m.\"Id\" WHERE m.\"Status\"=1 AND (m.\"QueueFamily\"='RANKED_FLEX' OR m.\"QueueId\" IN (420,440) OR (m.\"QueueId\"=0 AND m.\"QueueType\" IN ('420','440'))) AND NOT EXISTS(SELECT 1 FROM \"ChampionSynergySourceMatches\" s WHERE s.\"MatchId\"=m.\"Id\"));")
+      [[ "$missing" == f ]] || { log "Waiting for compact synergy facts for the frozen chunk; verified exports retained."; exit 0; }
+    fi
+    batch_started=$SECONDS
+    if ! pgq -c "WITH batch AS (SELECT \"Id\" FROM ${WORK} ORDER BY \"Id\" LIMIT ${batch}), del_m AS (DELETE FROM \"Matches\" WHERE \"Id\" IN (SELECT \"Id\" FROM batch)) DELETE FROM ${WORK} WHERE \"Id\" IN (SELECT \"Id\" FROM batch);" >/dev/null; then
+      if (( batch <= 1 )); then log "Single-match prune failed; frozen verified state retained."; exit 1; fi
+      batch=$(( (batch + 1) / 2 ))
+      log "Prune rolled back; reducing batch to ${batch}."
+    else
+      elapsed=$((SECONDS - batch_started))
+      log "Pruned <=${batch} matches in ${elapsed}s; previous remaining=${remaining}."
+      if (( elapsed > 5 && batch > 1 )); then batch=$(( (batch + 1) / 2 )); fi
+    fi
+    sleep "$BATCH_SLEEP_SECONDS"
+  done
+  remaining=$(pgval "SELECT count(*) FROM ${WORK};")
+  if [[ "$remaining" != 0 ]]; then log "Run budget reached; ${remaining} frozen matches remain."; exit 0; fi
+  # The chunk marker is written before clearing progress; failed marker writes are resumable too.
+  "${SSH_NAS[@]}" "date -u +%FT%TZ > '${destination}/_DONE'"
+  # A completed NAS marker makes an interruption between DROP and local cleanup recoverable.
+  pgq -c "DROP TABLE ${WORK};" >/dev/null
+  rm -f "$state" "${STATE_DIR}/manifest.json"
+  log "Verified chunk archived and pruned for ${patch}."
+done
+log "Run time budget reached; continuing on the next invocation."

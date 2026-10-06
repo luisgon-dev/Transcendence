@@ -5,7 +5,7 @@ import {
   isExplicitlyCacheableBackendRequest
 } from "@/lib/backendRequestHeaders";
 import { getBackendTimeoutMs } from "@/lib/env";
-import { fetchWithTimeout, isAbortError } from "@/lib/fetchWithTimeout";
+import { fetchAndConsumeWithTimeout, isAbortError } from "@/lib/fetchWithTimeout";
 import { newRequestId } from "@/lib/requestId";
 import { safeReadJson } from "@/lib/safeJson";
 
@@ -42,16 +42,15 @@ export async function fetchBackendJson<T>(
   const effectiveTimeoutMs = timeoutMs ?? getBackendTimeoutMs();
 
   try {
-    const res = await fetchWithTimeout(
+    const { res, body } = await fetchAndConsumeWithTimeout(
       url,
       {
         ...init,
         headers: buildBackendRequestHeaders(init, requestId)
       },
+      async res => ({ res, body: (await safeReadJson(res)) as T | null }),
       { timeoutMs: effectiveTimeoutMs }
     );
-
-    const body = (await safeReadJson(res)) as T | null;
     const durationMs = started === null ? 0 : Date.now() - started;
 
     if (!res.ok) {

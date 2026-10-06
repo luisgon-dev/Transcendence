@@ -22,7 +22,7 @@ export function BackendErrorCard({
   const hasTechnicalInfo = requestId || detail;
 
   return (
-    <Card className="page-panel p-6">
+    <Card className="page-panel p-6" data-backend-error="true">
       <h1 className="type-title">{title}</h1>
       <p className="type-ui mt-3 text-fg/75">{message}</p>
       {hint ? <p className="mt-2 text-sm text-muted">{hint}</p> : null}

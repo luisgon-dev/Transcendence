@@ -31,6 +31,8 @@ public sealed class WorkerRecurringJobPolicy(
     public const string RefreshChampionAnalyticsJobId = "refresh-champion-analytics";
     public const string RefreshChampionAnalyticsAdaptiveJobId = "refresh-champion-analytics-adaptive";
     public const string WarmDefaultChampionProfilesJobId = "warm-default-champion-profiles";
+    public const string RefreshLeaderboardsJobId = "refresh-leaderboards";
+    public const string RefreshChampionSynergyFactsJobId = "refresh-champion-synergy-facts";
     public const string ChampionAnalyticsIngestionJobId = "champion-analytics-ingestion";
     public const string SummonerMaintenanceJobId = "summoner-maintenance";
     public const string MatchTimelineBackfillJobId = "match-timeline-backfill";
@@ -69,6 +71,8 @@ public sealed class WorkerRecurringJobPolicy(
         RefreshChampionAnalyticsJobId,
         RefreshChampionAnalyticsAdaptiveJobId,
         WarmDefaultChampionProfilesJobId,
+        RefreshLeaderboardsJobId,
+        RefreshChampionSynergyFactsJobId,
         ChampionAnalyticsIngestionJobId,
         SummonerMaintenanceJobId,
         MatchTimelineBackfillJobId,
@@ -108,6 +112,16 @@ public sealed class WorkerRecurringJobPolicy(
     {
         var descriptors = new List<WorkerRecurringJobDescriptor>
         {
+            CreateDescriptor(RefreshChampionSynergyFactsJobId, "Jobs:Schedule:RefreshChampionSynergyFactsCron",
+                schedule.RefreshChampionSynergyFactsCron, schedule.EnableRefreshChampionSynergyFacts,
+                (manager, cron) => manager.AddOrUpdate<RefreshChampionSynergyFactsJob>(RefreshChampionSynergyFactsJobId,
+                    job => job.ExecuteAsync(CancellationToken.None), cron,
+                    new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc })),
+            CreateDescriptor(RefreshLeaderboardsJobId, "Jobs:Schedule:RefreshLeaderboardsCron",
+                schedule.RefreshLeaderboardsCron, schedule.EnableRefreshLeaderboards,
+                (manager, cron) => manager.AddOrUpdate<RefreshLeaderboardsJob>(RefreshLeaderboardsJobId,
+                    job => job.ExecuteAsync(CancellationToken.None), cron,
+                    new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc })),
             CreateDescriptor(
                 DetectPatchJobId,
                 "Jobs:Schedule:DetectPatchCron",

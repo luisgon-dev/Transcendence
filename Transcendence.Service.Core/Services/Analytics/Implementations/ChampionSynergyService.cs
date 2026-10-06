@@ -1,6 +1,8 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
 using Transcendence.Data;
+using Transcendence.Data.Models.LoL.Analytics;
 using Transcendence.Service.Core.Queries;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
@@ -22,12 +24,9 @@ public sealed class ChampionSynergyService(
     private const int ConfiguredMinimumPairGames = 30;
     private const int PartnersToShow = 10;
 
-    // Synergies are computed live from match rows, so they go stale only as new matches arrive, and
-    // the patch is part of the key. They deliberately do not carry the patch tag: the precomputed-
-    // analytics, matchup and build-snapshot jobs clear that tag when *their* tables change (twice an
-    // hour), which wiped every synergy and made the hourly warm job recompute all ~170 champions
-    // from disk -- the top reader in prod's :00 IO peak. Six hours keeps a new patch's fast-growing
-    // samples reasonably fresh; the "analytics" tag still clears them on purpose.
+    // Durable default snapshots survive process/L2 cold starts. Compact facts retain current-rank
+    // semantics after source archiving; incomplete patches use the raw fallback. Patch refreshes of
+    // unrelated tables must not invalidate these six-hour entries (only the analytics tag does).
     private static readonly HybridCacheEntryOptions CacheOptions = new()
     {
         Expiration = TimeSpan.FromHours(6),
@@ -51,20 +50,50 @@ public sealed class ChampionSynergyService(
         if (string.IsNullOrEmpty(patch) || !AnalyticsQueueCatalog.HasRoles(normalizedQueue))
             return Empty(championId, normalizedRole, rankScope.CacheToken, normalizedRegion, patch, normalizedQueue);
 
-        var key = $"analytics:synergies:v1:{championId}:{normalizedRole}:{rankScope.CacheToken}:{normalizedRegion}:{normalizedQueue}:{patch}";
+        var key = CacheKey(championId, normalizedRole, rankScope.CacheToken, normalizedRegion, normalizedQueue, patch);
         return await cache.GetOrCreateAsync(
             key,
-            cancel => ComputeAsync(
-                championId,
-                normalizedRole,
-                rankScope,
-                normalizedRegion,
-                normalizedQueue,
-                patch,
-                cancel),
+            async cancel =>
+            {
+                var oldest = DateTime.UtcNow.AddHours(-24);
+                var payload = await context.AnalyticsResponseSnapshots.AsNoTracking()
+                    .Where(row => row.Feature == "synergies" && row.ScopeKey == key && row.Patch == patch &&
+                                  row.ComputedAtUtc >= oldest)
+                    .Select(row => row.Payload).FirstOrDefaultAsync(cancel);
+                if (payload != null && JsonSerializer.Deserialize<ChampionSynergiesResponse>(payload) is { } stored)
+                    return stored;
+                return await ComputeAsync(championId, normalizedRole, rankScope, normalizedRegion,
+                    normalizedQueue, patch, cancel);
+            },
             CacheOptions,
             tags: ["analytics"],
             cancellationToken: ct);
+    }
+
+    private static string CacheKey(int champion, string role, string tier, string region, string queue, string patch) =>
+        $"analytics:synergies:v2:{champion}:{role}:{tier}:{region}:{queue}:{patch}";
+
+    public async Task RefreshSnapshotAsync(int championId, string role, string rankTier, string patch, CancellationToken ct = default)
+    {
+        var scope = AnalyticsScopeMath.ParseRankTierScope(rankTier);
+        var key = CacheKey(championId, role, scope.CacheToken, "ALL", QueueCatalog.QueueFamilyRankedSoloDuo, patch);
+        var snapshot = await context.AnalyticsResponseSnapshots.FirstOrDefaultAsync(row =>
+            row.Feature == "synergies" && row.ScopeKey == key && row.Patch == patch, ct);
+        if (snapshot != null && snapshot.ComputedAtUtc > DateTime.UtcNow.AddHours(-6))
+            return;
+        var result = await ComputeAsync(championId, role, scope, "ALL", QueueCatalog.QueueFamilyRankedSoloDuo, patch, ct);
+        if (snapshot == null)
+        {
+            snapshot = new AnalyticsResponseSnapshot
+            {
+                Id = Guid.NewGuid(), Feature = "synergies", ScopeKey = key, Patch = patch
+            };
+            context.AnalyticsResponseSnapshots.Add(snapshot);
+        }
+        snapshot.Payload = JsonSerializer.Serialize(result);
+        snapshot.ComputedAtUtc = DateTime.UtcNow;
+        await context.SaveChangesAsync(ct);
+        await cache.SetAsync(key, result, CacheOptions, tags: ["analytics"], cancellationToken: ct);
     }
 
     private async ValueTask<ChampionSynergiesResponse> ComputeAsync(
@@ -76,6 +105,10 @@ public sealed class ChampionSynergyService(
         string patch,
         CancellationToken ct)
     {
+        if (await context.AnalyticsResponseSnapshots.AsNoTracking().AnyAsync(row =>
+                row.Feature == ChampionSynergyFactMaterializer.CoverageFeature && row.ScopeKey == "global" && row.Patch == patch, ct))
+            return await ComputeFromFactsAsync(championId, role, rankScope, region, queueFamily, patch, ct);
+
         var focalQuery = context.MatchParticipants
             .AsNoTracking()
             .Where(participant => participant.ChampionId == championId && participant.TeamPosition == role)
@@ -129,6 +162,44 @@ public sealed class ChampionSynergyService(
             })
             .ToListAsync(ct);
 
+        return BuildResponse(championId, role, rankScope.CacheToken, region, queueFamily, patch, baseline, pairRows);
+    }
+
+    private async Task<ChampionSynergiesResponse> ComputeFromFactsAsync(
+        int championId, string role, AnalyticsScopeMath.RankTierScope rankScope,
+        string region, string queueFamily, string patch, CancellationToken ct)
+    {
+        var query = context.ChampionSynergyFacts.AsNoTracking().Where(fact =>
+            fact.Patch == patch && fact.QueueFamily == queueFamily && fact.ChampionId == championId && fact.Role == role);
+        var platform = AnalyticsRegionCatalog.NormalizeToFilter(region);
+        if (platform != null)
+            query = query.Where(fact => fact.PlatformRegion == platform);
+        if (rankScope.HasFilter)
+        {
+            var ranks = context.Ranks.AsNoTracking().InAnalyticsRankQueue(queueFamily);
+            query = rankScope.IsEmeraldPlus
+                ? query.Where(fact => ranks.Any(rank => rank.SummonerId == fact.SummonerId && RankTierCatalog.EmeraldPlusTiers.Contains(rank.Tier)))
+                : query.Where(fact => ranks.Any(rank => rank.SummonerId == fact.SummonerId && rank.Tier == rankScope.ExactTier));
+        }
+        var baseline = await query.Where(fact => fact.PartnerParticipantId == 0).GroupBy(_ => 1)
+            .Select(group => new BaselineRow { Games = group.Count(), Wins = group.Count(fact => fact.Win) })
+            .FirstOrDefaultAsync(ct);
+        if (baseline == null || baseline.Games == 0)
+            return Empty(championId, role, rankScope.CacheToken, region, patch, queueFamily);
+        var pairs = await query.Where(fact => fact.PartnerParticipantId != 0)
+            .GroupBy(fact => new { fact.PartnerChampionId, fact.PartnerRole })
+            .Select(group => new PairAggregateRow
+            {
+                PartnerChampionId = group.Key.PartnerChampionId, PartnerRole = group.Key.PartnerRole,
+                Games = group.Count(), Wins = group.Count(fact => fact.Win)
+            }).ToListAsync(ct);
+        return BuildResponse(championId, role, rankScope.CacheToken, region, queueFamily, patch, baseline, pairs);
+    }
+
+    private static ChampionSynergiesResponse BuildResponse(
+        int championId, string role, string rankToken, string region, string queueFamily, string patch,
+        BaselineRow baseline, List<PairAggregateRow> pairRows)
+    {
         var baselineWinRate = (double)baseline.Wins / baseline.Games;
         var minimumGames = AnalyticsScopeMath.ResolveEffectiveSampleSize(
             ConfiguredMinimumPairGames,
@@ -159,7 +230,7 @@ public sealed class ChampionSynergyService(
         return new ChampionSynergiesResponse(
             championId,
             role,
-            rankScope.CacheToken,
+            rankToken,
             region,
             patch,
             queueFamily,

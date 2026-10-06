@@ -10,7 +10,11 @@ public class WorkerJobScheduleOptions
     // Heartbeat cadence — the job self-paces internally (adaptive cooldown / ramp-vs-steady interval),
     // so these fire often and the job decides whether a tick does real work.
     public string RefreshChampionAnalyticsAdaptiveCron { get; set; } = "*/5 * * * *";
-    public string WarmDefaultChampionProfilesCron { get; set; } = "0 * * * *";
+    public string WarmDefaultChampionProfilesCron { get; set; } = "2-59/5 * * * *";
+    public string RefreshLeaderboardsCron { get; set; } = "3-59/5 * * * *";
+    public bool EnableRefreshLeaderboards { get; set; } = true;
+    public string RefreshChampionSynergyFactsCron { get; set; } = "1-59/5 * * * *";
+    public bool EnableRefreshChampionSynergyFacts { get; set; } = true;
     // Tabular core only; heavier response snapshots and matchups have independent ownership below.
     public string RefreshPrecomputedAnalyticsCron { get; set; } = "30 * * * *";
     // Matchups are incremental/resumable and must not wait behind the much longer build snapshot sweep.

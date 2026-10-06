@@ -6,6 +6,7 @@ using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.RiotApi;
+using Transcendence.Service.Core.Services.Jobs.Priority;
 
 namespace Transcendence.Service.Core.Services.Jobs;
 
@@ -19,7 +20,8 @@ public class MatchTimelineBackfillJob(
     IOptions<TimelineIngestionOptions> timelineOptions,
     IOptions<ChampionAnalyticsIngestionJobOptions> analyticsIngestionOptions,
     IRefreshLockRepository refreshLockRepository,
-    ILogger<MatchTimelineBackfillJob> logger)
+    ILogger<MatchTimelineBackfillJob> logger,
+    IQueueDepthProbe? queueDepthProbe = null)
 {
     // Runs on the dedicated timeline lane (not the shared refresh-low backlog) so the feeder itself
     // isn't starved behind ~100k other refresh-low jobs and can keep the ingestion workers fed.
@@ -39,6 +41,17 @@ public class MatchTimelineBackfillJob(
 
         var take = Math.Max(1, options.BackfillBatchSize);
         var maxEnqueues = Math.Max(1, options.BackfillMaxEnqueuesPerRun);
+        if (queueDepthProbe != null)
+        {
+            var queued = queueDepthProbe.GetEnqueuedCount(HangfireQueues.TimelineIngest);
+            maxEnqueues = QueueBackpressure.Apply(maxEnqueues, queued,
+                options.BackfillQueueSoftCap, options.BackfillQueueHardCap);
+            if (maxEnqueues == 0)
+            {
+                logger.LogInformation("[TimelineBackfill] Paused: queue depth {Depth} reached its budget.", queued);
+                return;
+            }
+        }
         var minuteMark = Math.Max(1, options.MinuteMark);
 
         var activePatch = await db.Patches

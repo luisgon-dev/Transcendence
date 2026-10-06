@@ -223,6 +223,32 @@ services:
       # One switch for Build Lab: the stats refresh AND the detailed timeline capture it reads (see
       # BuildLabOptions.Enabled). Turning it off stops that capture as well as the refresh.
       Analytics__BuildLab__Enabled: ${BUILD_LAB_ENABLED:-false}
+      # HDD-friendly defaults: independent queues still share one database device.
+      Jobs__Hangfire__Workers__Main: ${WORKER_MAIN_CONCURRENCY:-8}
+      Jobs__Hangfire__Workers__Analytics: ${WORKER_ANALYTICS_CONCURRENCY:-1}
+      Jobs__Hangfire__Workers__Batch: ${WORKER_BATCH_CONCURRENCY:-1}
+      Jobs__Hangfire__Workers__Timeline: ${WORKER_TIMELINE_CONCURRENCY:-2}
+      Jobs__Hangfire__Workers__Discovery: ${WORKER_DISCOVERY_CONCURRENCY:-2}
+      Jobs__Hangfire__Workers__History: ${WORKER_HISTORY_CONCURRENCY:-1}
+      Jobs__WarmDefaultChampionProfiles__MaxConcurrency: ${CHAMPION_WARM_CONCURRENCY:-1}
+      Jobs__ChampionAnalyticsIngestion__MaxRefreshJobsToQueuePerRun: ${DISCOVERY_JOBS_PER_RUN:-3}
+      Jobs__ChampionAnalyticsIngestion__RampMaxRefreshJobsToQueuePerRun: ${DISCOVERY_RAMP_JOBS_PER_RUN:-3}
+      Jobs__ChampionAnalyticsIngestion__RampMinRefreshJobsToQueuePerRun: 1
+      Jobs__ChampionAnalyticsIngestion__DiscoveryQueueBackpressureSoftCap: ${DISCOVERY_QUEUE_SOFT_CAP:-100}
+      Jobs__ChampionAnalyticsIngestion__DiscoveryQueueBackpressureHardCap: ${DISCOVERY_QUEUE_HARD_CAP:-300}
+      Jobs__AdaptiveThroughputBudget__MaxQueueTargetHardCap: ${DISCOVERY_MAX_QUEUE_TARGET:-6}
+      Jobs__SummonerMaintenance__MaxRefreshJobsToQueuePerRun: 2
+      Jobs__SummonerMaintenance__RampMaxRefreshJobsToQueuePerRun: 3
+      Jobs__TimelineIngestion__BackfillBatchSize: ${TIMELINE_BACKFILL_BATCH_SIZE:-50}
+      Jobs__TimelineIngestion__BackfillMaxEnqueuesPerRun: ${TIMELINE_BACKFILL_ENQUEUES:-25}
+      Jobs__TimelineIngestion__BackfillQueueSoftCap: ${TIMELINE_QUEUE_SOFT_CAP:-100}
+      Jobs__TimelineIngestion__BackfillQueueHardCap: ${TIMELINE_QUEUE_HARD_CAP:-250}
+      Analytics__BuildLab__MatchBatchSize: ${BUILD_LAB_MATCH_BATCH_SIZE:-25}
+      Analytics__BuildLab__MaxMatchesPerRun: ${BUILD_LAB_MAX_MATCHES_PER_RUN:-500}
+      Analytics__BuildLab__MaxRunSeconds: ${BUILD_LAB_MAX_RUN_SECONDS:-120}
+      Analytics__BuildLab__BatchDelayMilliseconds: ${BUILD_LAB_BATCH_DELAY_MS:-500}
+      Analytics__BuildLab__MaxWalMegabytesPerRun: ${BUILD_LAB_MAX_WAL_MB:-32}
+      Analytics__BuildLab__CommandTimeoutSeconds: ${BUILD_LAB_COMMAND_TIMEOUT_SECONDS:-60}
       # Worker-stall and job-failure alerts. Program.cs logs instead of posting when unset, so a
       # dropped value degrades silently to no alerting at all.
       Alerts__Webhook__Url: ${ALERTS_WEBHOOK_URL:-}

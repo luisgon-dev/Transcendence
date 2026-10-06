@@ -4,6 +4,7 @@ namespace Transcendence.Service.Core.Services.Leaderboards.Interfaces;
 
 public interface ILeaderboardService
 {
+    Task RefreshRegionalAsync(string platformRegion, string queue, CancellationToken ct = default);
     Task<LeaderboardResponse> GetAsync(
         string platformRegion,
         string queue,

@@ -21,4 +21,6 @@ public class TimelineIngestionOptions
     /// still-queued matches every run and re-enqueues them, wasting Riot API budget on duplicates.
     /// </summary>
     public int BackfillReattemptCooldownMinutes { get; set; } = 60;
+    public int BackfillQueueSoftCap { get; set; } = 100;
+    public int BackfillQueueHardCap { get; set; } = 250;
 }

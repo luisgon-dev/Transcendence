@@ -16,6 +16,14 @@ STATE_DIR="${PERF_STATE_DIR:-/var/lib/transcendence-perf}"
 TEXTFILE_DIR="${PERF_TEXTFILE_DIR:-${STATE_DIR}/textfile}"
 SAMPLES="${PERF_SAMPLES:-3}"
 OUT_NAME="web_lab.prom"
+CONTAINER_NAME="transcendence-web-perf-runner"
+TIMEOUT_SECONDS="${PERF_TIMEOUT_SECONDS:-1500}"
+[[ "$TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]] || exit 2
+
+# The Docker daemon owns the runner, so killing this systemd client does not stop Chromium.
+install -d -m 0755 "$STATE_DIR"
+exec 9>"${STATE_DIR}/sweep.lock"
+flock -n 9 || exit 0
 
 log() { printf '%s %s\n' "$(date -Is)" "$*"; }
 
@@ -43,9 +51,21 @@ fi
 SCRATCH="${STATE_DIR}/staging"
 rm -rf "${SCRATCH}"
 install -d -m 0777 "${SCRATCH}"
-trap 'rm -rf "${SCRATCH}"' EXIT
+cleanup() {
+  docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+  rm -rf "${SCRATCH}"
+}
+trap cleanup EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
+docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
 
-if docker run --rm \
+if timeout --signal=TERM --kill-after=15 "$TIMEOUT_SECONDS" docker run --rm \
+  --name "$CONTAINER_NAME" \
+  --cpus="${PERF_CPUS:-1.5}" \
+  --memory="${PERF_MEMORY_LIMIT:-1536m}" \
+  --memory-swap="${PERF_MEMORY_LIMIT:-1536m}" \
+  --pids-limit=256 \
   --network host \
   --shm-size=1g \
   -v "${SCRATCH}:/out" \
@@ -53,11 +73,14 @@ if docker run --rm \
   --base-url "${BASE_URL}" \
   --routes scripts/perf/routes.prod.json \
   --samples "${SAMPLES}" \
+  --report-dir /out/reports \
   --prom-out /out/${OUT_NAME}
 then
   if [[ -s "${SCRATCH}/${OUT_NAME}" ]]; then
     install -m 0644 "${SCRATCH}/${OUT_NAME}" "${TEXTFILE_DIR}/${OUT_NAME}.tmp"
     mv -f "${TEXTFILE_DIR}/${OUT_NAME}.tmp" "${TEXTFILE_DIR}/${OUT_NAME}"
+    rm -rf "${STATE_DIR}/reports"
+    mv "${SCRATCH}/reports" "${STATE_DIR}/reports"
     log "sweep complete: $(grep -c '^transcendence_web_lab' "${TEXTFILE_DIR}/${OUT_NAME}") samples published"
   else
     log "ERROR: runner exited 0 but produced no exposition file"

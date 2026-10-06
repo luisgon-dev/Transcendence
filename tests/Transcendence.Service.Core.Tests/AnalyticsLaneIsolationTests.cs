@@ -5,25 +5,21 @@ using Transcendence.Service.Core.Services.Jobs;
 
 namespace Transcendence.Service.Core.Tests;
 
-/// <summary>
-/// Guards the analytics jobs' lane isolation: they MUST run on the reserved
-/// <see cref="HangfireQueues.AnalyticsWarm"/> queue, which is served by its own dedicated
-/// <c>BackgroundJobServer</c> worker pool (Program.cs). That is what guarantees they always run on
-/// schedule and never wait in line behind Riot-rate-limited ingestion/discovery jobs (which live on the
-/// main and discovery pools). If a refactor dropped the <c>[Queue]</c> attribute, the job would fall back
-/// to the shared "default" queue on the rate-limited main pool — exactly the stall this test prevents.
-/// </summary>
+// Cache refreshes and heavy batch work have separate reserved worker pools.
 public class AnalyticsLaneIsolationTests
 {
     [Theory]
-    [InlineData(typeof(RefreshPrecomputedAnalyticsJob))]
-    [InlineData(typeof(RefreshChampionBuildSnapshotsJob))]
-    [InlineData(typeof(RefreshChampionMatchupsJob))]
-    [InlineData(typeof(RefreshProAnalyticsJob))]
-    [InlineData(typeof(RefreshBuildResourceAnalyticsJob))]
-    [InlineData(typeof(WarmDefaultChampionProfilesJob))]
-    [InlineData(typeof(RefreshDatasetStatsJob))]
-    public void AnalyticsJob_RunsOnDedicatedAnalyticsWarmLane(Type jobType)
+    [InlineData(typeof(RefreshPrecomputedAnalyticsJob), HangfireQueues.AnalyticsBatch)]
+    [InlineData(typeof(RefreshChampionBuildSnapshotsJob), HangfireQueues.AnalyticsBatch)]
+    [InlineData(typeof(RefreshChampionMatchupsJob), HangfireQueues.AnalyticsBatch)]
+    [InlineData(typeof(RefreshProAnalyticsJob), HangfireQueues.AnalyticsWarm)]
+    [InlineData(typeof(RefreshBuildResourceAnalyticsJob), HangfireQueues.AnalyticsBatch)]
+    [InlineData(typeof(WarmDefaultChampionProfilesJob), HangfireQueues.AnalyticsWarm)]
+    [InlineData(typeof(RefreshDatasetStatsJob), HangfireQueues.AnalyticsWarm)]
+    [InlineData(typeof(RefreshBuildLabStatsJob), HangfireQueues.AnalyticsBatch)]
+    [InlineData(typeof(RefreshChampionSynergyFactsJob), HangfireQueues.AnalyticsBatch)]
+    [InlineData(typeof(RefreshLeaderboardsJob), HangfireQueues.AnalyticsWarm)]
+    public void AnalyticsJob_RunsOnItsReservedLane(Type jobType, string expectedQueue)
     {
         var execute = jobType.GetMethod(nameof(WarmDefaultChampionProfilesJob.ExecuteAsync));
         execute.Should().NotBeNull($"{jobType.Name} must expose ExecuteAsync");
@@ -32,6 +28,6 @@ public class AnalyticsLaneIsolationTests
         queue.Should().NotBeNull(
             $"{jobType.Name}.ExecuteAsync must carry [Queue(AnalyticsWarm)] so it runs on the dedicated, " +
             "rate-limit-free analytics pool and never queues behind Riot-throttled jobs");
-        queue!.Queue.Should().Be(HangfireQueues.AnalyticsWarm);
+        queue!.Queue.Should().Be(expectedQueue);
     }
 }

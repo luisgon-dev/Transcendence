@@ -147,69 +147,41 @@ It creates the successful-ranked-match and minute-15 timeline indexes with
 runs `ANALYZE`. The script is idempotent, must run outside a transaction, and does not replace the EF
 migration that creates the new narrow fact/generation tables.
 
-## `archive-old-patches.sh` — match-detail retention (archive-then-prune)
+## `archive-old-patches.sh` — bounded archive-then-prune
 
-Keeps the DB bounded by archiving **old-patch** LoL match detail to the NAS and then
-pruning it, keeping only the newest `KEEP_PATCHES` (default 3) patches plus the active
-patch. For each eligible patch it freezes that patch's match-ID set into a work table
-(T0 snapshot — consistent under the live ingestion worker, which keeps inserting
-old-patch rows as lapsed players return), streams every match table (`Matches` + all
-cascade children) out via Postgres `COPY` → `gzip` → `ssh` to the NAS, **verifies**
-(gzip integrity + exact row count), writes a manifest, and only then prunes — one
-cascading `DELETE` on `Matches` in bounded batches (`DELETE_BATCH=20000`). It is a
-**bounded-batch job**: dry-run by default (`APPLY=1` to act), verify-before-delete is
-mandatory (a failed verify skips the prune and leaves the NAS archive intact),
-residual-safe/idempotent (post-T0 inserts to an already-`_DONE` patch archive to
-`residual-<epoch>/`), and HDD-adaptive (big slice → seq scan; small slice → forced
-index nested-loops, since forcing index on a big slice = catastrophic random HDD reads).
+Keep the active and newest three patches. Eligible old details are frozen in chunks (default 500
+matches), exported to `<NAS_DIR>/<patch>/chunk-<UTC>-<PID>/`, verified, and pruned in paced batches
+(default 25 matches, two-second pause). All thirteen tables in `TABLES` cover the full match cascade.
+Each compressed file must pass gzip verification and row-count verification; `_manifest.json` records
+counts and SHA-256. `_DONE` marks a completed **chunk**, not a whole patch. Restore must include every
+completed chunk plus any historical flat patch archives, using the manifest and primary keys to
+handle overlapping residual captures. Older archives may lack children added after their capture.
 
-**Why a host cron, not a Hangfire job:** it needs host-level `docker exec` (psql `COPY`)
-and NAS `ssh` that the worker container neither has nor should have. The script is the
-version-controlled source of truth; prod runs a synced copy (`sha256` must match).
+A state file at `/var/lib/transcendence-archive/current` owns `_patch_archive_pending`. Time/WAL/I/O
+limits retain progress; verified exports are never overwritten after any partial prune. Failed deletes
+roll back and halve the batch. Single-match failures stop safely. Unknown/unowned frozen work fails
+closed. Ranked source matches must have compact synergy inclusion-ledger rows before pruning; the
+bounded facts job prioritizes the frozen set. No newly active/retained patch is pruned on resume.
 
-### Install / operate (on prod, as root)
+Defaults: `MAX_RUN_SECONDS=1200`, `MAX_WAL_MB=256` (whole cluster), `DELETE_TIMEOUT_MS=15000`,
+`EXPORT_TIMEOUT_MS=120000`, `MAX_IO_PRESSURE=35` (full avg60), `FREEZE_MATCHES=500`, `DELETE_BATCH=25`,
+`BATCH_SLEEP_SECONDS=2`. Checks are between bounded statements; an in-flight statement can finish past
+the elapsed/WAL threshold. Keep autovacuum and normal durability enabled. Avoid overlapping maintenance
+rewrites. A completed delete reuses space later; it does not shrink the filesystem immediately.
 
 ```bash
-install -m 0755 archive-old-patches.sh /root/archive-old-patches.sh   # keep in sync with repo
-# /etc/cron.d/trn-archive runs it weekly:
-#   0 5 * * 0 root APPLY=1 KEEP_PATCHES=3 bash /root/archive-old-patches.sh >> /root/trn-archive.log 2>&1
-APPLY=0 bash /root/archive-old-patches.sh                    # dry-run (preview eligible patches + counts)
-ONLY_PATCH=16.9 APPLY=1 bash /root/archive-old-patches.sh    # archive+prune one patch
-tail -f /root/trn-archive.log                                # run history
+install -m 0755 archive-old-patches.sh /root/archive-old-patches.sh
+install -m 0755 archive-remaining-bulk.sh /root/archive-remaining-bulk.sh
+# /etc/cron.d/trn-archive: short resumable windows, every thirty minutes
+# */30 * * * * root APPLY=1 KEEP_PATCHES=3 bash /root/archive-old-patches.sh >> /root/trn-archive.log 2>&1
+APPLY=0 bash /root/archive-old-patches.sh  # genuinely read-only preview; no NAS/state/work-table writes
+ONLY_PATCH=16.9 APPLY=1 bash /root/archive-old-patches.sh
+python3 -m unittest discover -s scripts/ops/tests
 ```
 
-`archive-remaining-bulk.sh` is the one-time bulk sweep used to clear the initial backlog
-(same archive-then-prune guarantees, looped). **Do not run either during a DB-load
-incident** — the `COPY` of millions of rows saturates the HDD. Restore instructions are
-in each script's header. Deleted rows free pages for reuse inside Postgres; the file does
-not shrink without `VACUUM FULL` (intentionally avoided — it locks the table).
-
-#### The `TABLES` list is exhaustive by contract
-
-The prune is a single cascading `DELETE` on `Matches`, so **a child table missing from a script's
-`TABLES` array is destroyed by the cascade without ever being archived** — silently, with a successful
-exit code. Adding a `Match` child in `TranscendenceContext` therefore requires adding it to
-`archive-old-patches.sh` *and* `archive-remaining-bulk.sh` in the same change. Cross-check against
-every `HasForeignKey(x => x.MatchId)` with `OnDelete(DeleteBehavior.Cascade)` plus the two
-participant-level children (`MatchParticipantItems`, `MatchParticipantRunes`). The current full set is:
-
-```
-Matches MatchParticipants MatchParticipantItems MatchParticipantRunes MatchBans
-MatchTeamObjectives MatchParticipantTimelineSnapshots MatchTimelineFetchStates
-MatchParticipantItemPurchases MatchParticipantSkillOrders
-MatchParticipantItemEvents MatchParticipantRankContexts MatchTimelineEventPayloads
-```
-
-A listed table that does not exist on the host yet (migration not applied) fails its pre-export count,
-which skips the entire patch — the failure mode is fail-closed, never prune-without-archive.
-
-> **Known gap in existing archives.** `MatchTeamObjectives`, `MatchParticipantItemPurchases`, and
-> `MatchParticipantSkillOrders` were absent from both scripts' lists before this change, so any patch
-> already archived and pruned has **no NAS copy of those three tables**. They are unrecoverable for
-> those patches; only the retained (unpruned) patches still hold them. Restores from older archives
-> will produce `Matches` with no objectives/purchase-order/skill-order detail, which is expected, not
-> corruption. `archive-remaining-bulk.sh` still carries the old seven-table list and must be updated
-> before it is ever run again.
+The former bulk script now delegates to this same entrypoint, sharing the lock and verification
+contract. SSH host keys must already be trusted (`StrictHostKeyChecking=yes`). Back up installed
+scripts and cron before replacement. Do not delete progress or drop a nonempty frozen table manually.
 
 ## Postgres memory tuning (declarative)
 
@@ -384,3 +356,33 @@ sweep are **only comparable to other runs of this sweep**. `/lol/tierlist` measu
 compare these against CI gate numbers or treat them as an absolute quality score. The regression
 alert, which compares each route against its own 7-day baseline on this host, is the instrument
 that actually works.
+
+## `data-health-sweep.sh` — useful response completion and freshness
+
+Every five minutes, sequentially checks leaderboard, Ahri, and Kronic pages with a twelve-second
+full-body deadline. HTTP failures, backend error cards, and unavailable champion data count as failures
+even after a fast HTTP 200 shell. This covers initial server data, not subsequent client hydration,
+match-history loading, or WAN browser experience. A read-only, five-second snapshot query reports
+oldest active-patch/regional ages; no raw corpus scan is added. Reports are atomic node-exporter
+textfiles; failed sweeps retain the prior timestamp so staleness remains visible.
+
+```bash
+install -D -m 0755 data-health-sweep.sh /root/deploy/data-health-sweep.sh
+install -D -m 0644 transcendence-data-health.service /etc/systemd/system/transcendence-data-health.service
+install -D -m 0644 transcendence-data-health.timer /etc/systemd/system/transcendence-data-health.timer
+systemctl daemon-reload
+systemctl enable --now transcendence-data-health.timer
+systemctl start transcendence-data-health.service
+```
+
+Metrics: `transcendence_data_probe_{failure,first_byte_seconds,complete_seconds}` by route,
+`transcendence_snapshot_oldest_age_seconds` by feature, `transcendence_io_full_pressure_percent`,
+and `transcendence_data_health_last_success_unixtime_seconds`. Snapshot age -1 means no snapshot yet.
+Grafana warns on repeated fallbacks, missing checks, and stale regional/synergy snapshots; inspect
+profile-warm ages and successful coverage counts against the two-hour warming target. Reload the
+updated provisioned rules after backing them up.
+
+The nightly lab sweep also checks Ahri/Kronic. Docker caps are `PERF_CPUS=1.5`,
+`PERF_MEMORY_LIMIT=1536m`, pids=256, `PERF_TIMEOUT_SECONDS=1500`; it uses the stable
+`transcendence-web-perf-runner` name and removes that container on success, error, and systemd stop.
+Successful raw Lighthouse reports are retained in `/var/lib/transcendence-perf/reports`.

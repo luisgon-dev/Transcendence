@@ -129,3 +129,15 @@ mid-backfill. `trn-buildlab-refresh-stale` fires when the last success is over t
 moving. `trn-buildlab-refresh-errors` fires on three or more `result="error"` runs in an hour. Each
 batch commits atomically with its ledger rows, so repeated errors mean no progress, never double
 counting.
+
+### Full-response checks and durable snapshot ages
+
+Install `scripts/ops/transcendence-data-health.{service,timer}` and `data-health-sweep.sh` on the
+Docker host. Every five minutes it publishes full streamed response time and fallback failures for
+leaderboards, Ahri and Kronic, plus snapshot ages and full I/O pressure, to the existing node-exporter
+textfile mount. This complements browser Web Vitals and the nightly bounded Lighthouse runner.
+The provisioned rules warn on missing probes, repeated backend fallbacks, leaderboard age above
+thirty minutes (or absent snapshots), and default synergy age above eight hours (or absent snapshots).
+Back up rules and reload Grafana file provisioning when installing. Current-patch `profile-warm` age
+is also exposed: target complete successful coverage within two hours. Observe queue completion and
+WAL/device latency when changing worker throughput; separate worker pools still share the HDD.

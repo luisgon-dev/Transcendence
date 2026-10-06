@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -44,6 +45,8 @@ public sealed class BuildLabStatsRefresher(
         context.Database.SetCommandTimeout(Math.Clamp(options.CommandTimeoutSeconds, 30, 1800));
         try
         {
+            var started = Stopwatch.StartNew();
+            var initialWal = await ReadWalPositionAsync(ct);
             await DeleteExpiredPatchesAsync(retained, ct);
 
             var refreshed = retained.Take(1 + Math.Max(0, options.PriorPatchesToRefresh)).ToList();
@@ -57,8 +60,12 @@ public sealed class BuildLabStatsRefresher(
                 var prices = await context.ItemVersions.AsNoTracking()
                     .Where(item => item.PatchVersion == patch)
                     .ToDictionaryAsync(item => item.ItemId, item => item.PriceTotal, ct);
-                while (counted < budget)
+                while (counted < budget && started.Elapsed.TotalSeconds < Math.Max(1, options.MaxRunSeconds))
                 {
+                    if (initialWal is { } wal &&
+                        await ReadWalPositionAsync(ct) is { } currentWal &&
+                        currentWal >= wal && currentWal - wal >= (ulong)Math.Max(1, options.MaxWalMegabytesPerRun) * 1024 * 1024)
+                        break;
                     var matchIds = await NextBatchAsync(patch, Math.Min(batchSize, budget - counted), ct);
                     if (matchIds.Count == 0)
                         break;
@@ -67,6 +74,8 @@ public sealed class BuildLabStatsRefresher(
                     logger.LogInformation(
                         "Build Lab patch {Patch}: counted {Batch} matches ({Counted} this run).",
                         patch, matchIds.Count, counted);
+                    if (options.BatchDelayMilliseconds > 0)
+                        await Task.Delay(Math.Clamp(options.BatchDelayMilliseconds, 0, 10_000), ct);
                 }
             }
 
@@ -86,6 +95,16 @@ public sealed class BuildLabStatsRefresher(
         }
     }
 
+    private async Task<ulong?> ReadWalPositionAsync(CancellationToken ct)
+    {
+        if (context.Database.ProviderName != "Npgsql.EntityFrameworkCore.PostgreSQL")
+            return null;
+        var text = await context.Database.SqlQueryRaw<string>(
+            "SELECT pg_current_wal_insert_lsn()::text AS \"Value\"").SingleAsync(ct);
+        var parts = text.Split('/');
+        return (Convert.ToUInt64(parts[0], 16) << 32) | Convert.ToUInt64(parts[1], 16);
+    }
+
     /// <summary>The newest patches first, active patch leading, by release date.</summary>
     private async Task<List<string>> RecentPatchesAsync(int count, CancellationToken ct) =>
         await context.Patches.AsNoTracking()
@@ -97,18 +116,24 @@ public sealed class BuildLabStatsRefresher(
 
     private async Task DeleteExpiredPatchesAsync(IReadOnlyList<string> retained, CancellationToken ct)
     {
-        var expired = await context.BuildLabProcessedMatches.AsNoTracking()
-            .Where(match => !retained.Contains(match.Patch))
-            .Select(match => match.Patch)
-            .Distinct()
-            .ToListAsync(ct);
-        foreach (var patch in expired)
+        // Never turn a small counting run into an unbounded retention delete. Remove stats before
+        // their ledger/coverage so an interrupted cleanup cannot make an expired patch count twice.
+        var expired = await context.BuildLabOptionStats.AsNoTracking()
+            .Where(row => !retained.Contains(row.Patch)).Select(row => row.Patch)
+            .Union(context.BuildLabProcessedMatches.Where(row => !retained.Contains(row.Patch)).Select(row => row.Patch))
+            .OrderBy(patch => patch).FirstOrDefaultAsync(ct);
+        if (expired == null)
+            return;
+        var stats = await context.BuildLabOptionStats.Where(row => row.Patch == expired)
+            .Take(500).ExecuteDeleteAsync(ct);
+        if (!await context.BuildLabOptionStats.AnyAsync(row => row.Patch == expired, ct))
         {
-            var stats = await context.BuildLabOptionStats.Where(row => row.Patch == patch).ExecuteDeleteAsync(ct);
-            await context.BuildLabProcessedMatches.Where(row => row.Patch == patch).ExecuteDeleteAsync(ct);
-            await context.BuildLabCoverage.Where(row => row.Patch == patch).ExecuteDeleteAsync(ct);
-            logger.LogInformation("Build Lab dropped {Rows} stat rows for expired patch {Patch}.", stats, patch);
+            await context.BuildLabProcessedMatches.Where(row => row.Patch == expired)
+                .Take(500).ExecuteDeleteAsync(ct);
+            if (!await context.BuildLabProcessedMatches.AnyAsync(row => row.Patch == expired, ct))
+                await context.BuildLabCoverage.Where(row => row.Patch == expired).ExecuteDeleteAsync(ct);
         }
+        logger.LogInformation("Build Lab removed {Rows} expired stat rows for {Patch}; cleanup resumes next run.", stats, expired);
     }
 
     // Eligible = a completed ranked solo/duo game long enough not to be a remake, whose timeline was

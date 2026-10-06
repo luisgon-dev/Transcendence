@@ -1,4 +1,8 @@
 using FluentAssertions;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Transcendence.Data;
+using Transcendence.Service.Core.Tests.Support;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
@@ -85,6 +89,39 @@ public sealed class LeaderboardServiceTests
         repository.Verify(
             x => x.GetChampionAsync("KR", 420, 157, "MIDDLE", 10, 10, It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task DurableRegionalSnapshot_ServesColdLimits_AndSurvivesFailedRefresh()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = new SqliteCompatibleTranscendenceContext(
+            new DbContextOptionsBuilder<TranscendenceContext>().UseSqlite(connection).Options);
+        await db.Database.EnsureCreatedAsync();
+        var repository = new Mock<ILeaderboardRepository>(MockBehavior.Strict);
+        repository.Setup(x => x.GetRegionalAsync("NA1", false, 100, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new RegionalLeaderboardRow(Guid.NewGuid(), "First", "NA1", 1, "CHALLENGER", "I", 900, 100, 50, DateTime.UtcNow),
+                new RegionalLeaderboardRow(Guid.NewGuid(), "Second", "NA1", 2, "MASTER", "I", 700, 80, 40, DateTime.UtcNow)
+            ]);
+        using (var warmCache = BuildServices())
+            await new LeaderboardService(repository.Object, warmCache.GetRequiredService<HybridCache>(),
+                new LeaderboardTelemetry(), db).RefreshRegionalAsync("NA1", "solo");
+        repository.Reset();
+        using var coldCache = BuildServices();
+        var reader = new LeaderboardService(repository.Object, coldCache.GetRequiredService<HybridCache>(),
+            new LeaderboardTelemetry(), db);
+        (await reader.GetAsync("na1", "solo", null, null, 1, 5)).Entries.Select(row => row.GameName).Should().Equal("First");
+        repository.VerifyNoOtherCalls();
+        repository.Setup(x => x.GetRegionalAsync("NA1", false, 100, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("database temporarily unavailable"));
+        await reader.Invoking(service => service.RefreshRegionalAsync("NA1", "solo")).Should().ThrowAsync<InvalidOperationException>();
+        using var restartedCache = BuildServices();
+        var restarted = new LeaderboardService(repository.Object, restartedCache.GetRequiredService<HybridCache>(),
+            new LeaderboardTelemetry(), db);
+        (await restarted.GetAsync("NA1", "solo", null, null, 100, 5)).Entries.Should().HaveCount(2);
+        repository.Verify(x => x.GetRegionalAsync("NA1", false, 100, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     private static ServiceProvider BuildServices()

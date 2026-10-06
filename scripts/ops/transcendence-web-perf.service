@@ -7,6 +7,7 @@ Requires=docker.service
 [Service]
 Type=oneshot
 ExecStart=/root/deploy/web-perf-sweep.sh
+ExecStopPost=-/usr/bin/docker rm -f transcendence-web-perf-runner
 # Chromium is heavy and this box also serves traffic. Same posture as the Postgres report:
 # lowest IO priority and a small CPU share so a sweep can never contend with a live request.
 Nice=10

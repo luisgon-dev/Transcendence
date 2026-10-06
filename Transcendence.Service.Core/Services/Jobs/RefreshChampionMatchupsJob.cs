@@ -18,7 +18,7 @@ public sealed class RefreshChampionMatchupsJob(
     IChampionAnalyticsService analyticsService,
     ILogger<RefreshChampionMatchupsJob> logger)
 {
-    [Queue(HangfireQueues.AnalyticsWarm)]
+    [Queue(HangfireQueues.AnalyticsBatch)]
     public async Task ExecuteAsync(CancellationToken ct)
     {
         var patch = await db.Patches

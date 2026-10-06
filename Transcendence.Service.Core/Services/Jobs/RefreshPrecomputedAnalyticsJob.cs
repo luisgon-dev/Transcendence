@@ -20,7 +20,7 @@ public class RefreshPrecomputedAnalyticsJob(
     IChampionAnalyticsService analyticsService,
     ILogger<RefreshPrecomputedAnalyticsJob> logger)
 {
-    [Queue(HangfireQueues.AnalyticsWarm)]
+    [Queue(HangfireQueues.AnalyticsBatch)]
     public async Task ExecuteAsync(CancellationToken ct)
     {
         var stopwatch = Stopwatch.StartNew();

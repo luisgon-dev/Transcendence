@@ -36,11 +36,12 @@ builder.Services.AddDbContextPool<TranscendenceContext>(options =>
         b => b.MigrationsAssembly("Transcendence.Service")));
 
 var hangfireRetryAttempts = Math.Max(0, builder.Configuration.GetValue<int?>("Jobs:Hangfire:GlobalRetryAttempts") ?? 1);
-var mainWorkerCount = Math.Max(1, builder.Configuration.GetValue("Jobs:Hangfire:Workers:Main", 24));
-var analyticsWorkerCount = Math.Max(1, builder.Configuration.GetValue("Jobs:Hangfire:Workers:Analytics", 4));
-var timelineWorkerCount = Math.Max(1, builder.Configuration.GetValue("Jobs:Hangfire:Workers:Timeline", 8));
-var discoveryWorkerCount = Math.Max(1, builder.Configuration.GetValue("Jobs:Hangfire:Workers:Discovery", 8));
-var historyWorkerCount = Math.Max(1, builder.Configuration.GetValue("Jobs:Hangfire:Workers:History", 2));
+var mainWorkerCount = Math.Max(1, builder.Configuration.GetValue("Jobs:Hangfire:Workers:Main", 8));
+var analyticsWorkerCount = Math.Max(1, builder.Configuration.GetValue("Jobs:Hangfire:Workers:Analytics", 1));
+var timelineWorkerCount = Math.Max(1, builder.Configuration.GetValue("Jobs:Hangfire:Workers:Timeline", 2));
+var discoveryWorkerCount = Math.Max(1, builder.Configuration.GetValue("Jobs:Hangfire:Workers:Discovery", 2));
+var historyWorkerCount = Math.Max(1, builder.Configuration.GetValue("Jobs:Hangfire:Workers:History", 1));
+var batchWorkerCount = Math.Max(1, builder.Configuration.GetValue("Jobs:Hangfire:Workers:Batch", 1));
 
 builder.Services.AddBackgroundOperationWorker();
 builder.Services.AddHangfire((provider, config) =>
@@ -80,6 +81,13 @@ builder.Services.AddHangfireServer(options =>
     // Sized for the lane's recurring jobs (default-profile warm + adaptive + ramp refresh) running
     // concurrently; each fans out internally, so a small dedicated pool is plenty.
     options.WorkerCount = analyticsWorkerCount;
+});
+
+builder.Services.AddHangfireServer(options =>
+{
+    options.ServerName = HangfireQueues.AnalyticsBatch;
+    options.Queues = [HangfireQueues.AnalyticsBatch];
+    options.WorkerCount = batchWorkerCount;
 });
 
 // Dedicated worker pool for per-match timeline ingestion. The main pool's shared refresh-low queue
@@ -180,6 +188,8 @@ builder.Services.Configure<BuildResourceSnapshotOptions>(
     builder.Configuration.GetSection("Analytics:BuildAtlas"));
 builder.Services.Configure<BuildLabOptions>(
     builder.Configuration.GetSection("Analytics:BuildLab"));
+builder.Services.Configure<Transcendence.Service.Core.Services.Analytics.Implementations.ChampionSynergyFactOptions>(
+    builder.Configuration.GetSection("Analytics:SynergyFacts"));
 builder.Services.AddSingleton<IWorkerRecurringJobPolicy, WorkerRecurringJobPolicy>();
 builder.Services.AddSingleton<WorkerStartupIntegrityState>();
 builder.Services.AddSingleton<IWorkerStartupIntegrityService, WorkerStartupIntegrityService>();

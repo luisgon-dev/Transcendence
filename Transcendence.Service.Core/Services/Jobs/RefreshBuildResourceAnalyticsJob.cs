@@ -22,7 +22,7 @@ public sealed class RefreshBuildResourceAnalyticsJob(
 {
     private const string ExecutionLockResource = "transcendence:build-atlas-refresh";
 
-    [Queue(HangfireQueues.AnalyticsWarm)]
+    [Queue(HangfireQueues.AnalyticsBatch)]
     [DisableConcurrentExecution(timeoutInSeconds: 60 * 60)]
     public async Task ExecuteAsync(bool onlyIfMissing, bool forceFullRebuild, CancellationToken ct)
     {

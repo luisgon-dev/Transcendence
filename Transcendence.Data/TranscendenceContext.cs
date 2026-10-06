@@ -46,6 +46,8 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<ChampionScopeGradeStat> ChampionScopeGradeStats { get; set; }
     public DbSet<ChampionMatchupSnapshot> ChampionMatchupSnapshots { get; set; }
     public DbSet<ChampionMatchupFact> ChampionMatchupFacts { get; set; }
+    public DbSet<ChampionSynergyFact> ChampionSynergyFacts { get; set; }
+    public DbSet<ChampionSynergySourceMatch> ChampionSynergySourceMatches { get; set; }
     public DbSet<ChampionMatchupSourceMatch> ChampionMatchupSourceMatches { get; set; }
     public DbSet<ChampionMatchupRankSnapshot> ChampionMatchupRankSnapshots { get; set; }
     public DbSet<ChampionMatchupStat> ChampionMatchupStats { get; set; }
@@ -1075,6 +1077,24 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             entity.HasKey(x => new { x.Patch, x.Region });
             entity.Property(x => x.Patch).HasMaxLength(32);
             entity.Property(x => x.Region).HasMaxLength(16);
+        });
+
+        modelBuilder.Entity<ChampionSynergyFact>(entity =>
+        {
+            entity.HasKey(x => new { x.MatchId, x.QueueFamily, x.ParticipantId, x.PartnerParticipantId });
+            entity.Property(x => x.Patch).HasMaxLength(32);
+            entity.Property(x => x.QueueFamily).HasMaxLength(32);
+            entity.Property(x => x.PlatformRegion).HasMaxLength(16);
+            entity.Property(x => x.Role).HasMaxLength(16);
+            entity.Property(x => x.PartnerRole).HasMaxLength(16);
+            entity.HasIndex(x => new { x.Patch, x.QueueFamily, x.ChampionId, x.Role, x.PlatformRegion })
+                .HasAnnotation("Npgsql:IndexInclude", new[] { "SummonerId", "Win", "PartnerParticipantId", "PartnerChampionId", "PartnerRole" });
+        });
+        modelBuilder.Entity<ChampionSynergySourceMatch>(entity =>
+        {
+            entity.HasKey(x => x.MatchId);
+            entity.Property(x => x.Patch).HasMaxLength(32);
+            entity.HasIndex(x => x.Patch);
         });
     }
 }

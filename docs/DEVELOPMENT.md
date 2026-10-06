@@ -1141,6 +1141,44 @@ real Riot/League credentials or Windows gameplay. Never save the public local-te
 in a production configuration or normal desktop keyring. Operation records currently
 have no automatic purge; choose a retention policy as separate operational hardening.
 
+## Running within a shared HDD budget
+
+Production Compose defaults to worker pools main=8, analytics-warm=1, analytics-batch=1,
+ timeline=2, discovery=2, history=1. Override the `WORKER_*_CONCURRENCY` variables in `.env`
+only after measuring full page response time, I/O pressure, WAL rate, and freshness.
+Discovery stops producing at 300 queued jobs (starts reducing at 100); timeline backfill stops
+at 250 (reduces at 100). Existing queued work drains normally. Interactive refresh queues retain
+priority in the main pool; reduced historical/discovery throughput is deliberate.
+
+Build Lab defaults to 25 matches per transaction, 500 matches/120 seconds/32 MiB of **cluster-wide**
+WAL per run, with 500 ms pacing and a 60-second statement timeout. Time/WAL checks happen between
+atomic batches; an in-flight batch can finish beyond the run budget. Expired stats and ledger cleanup
+removes at most 500 rows from each table per run, retaining coverage until the ledger is drained.
+The `BUILD_LAB_*` Compose variables in `.env.example` expose these settings without disabling
+Build Lab or detailed timeline capture.
+
+`Analytics:SynergyFacts` controls compact catch-up: `MatchBatchSize=50`, `MaxMatchesPerRun=500`,
+`MaxRunSeconds=90`, `MaxWalMegabytesPerRun=32`, `CommandTimeoutSeconds=30`,
+`BatchDelayMilliseconds=500`, `PatchesToMaterialize=3`. Successful source matches and facts commit
+together. Partial patch coverage continues using raw reads; completing a patch enables the compact
+read path. Catch-up takes multiple runs and never requires a full-table rewrite. Frozen archive
+chunks get priority, and pruning waits for their source ledger.
+
+Profile warming runs every five minutes, with `Jobs:WarmDefaultChampionProfiles:MaxChampionsPerRun=20`,
+`MaxRunSeconds=120`, `MaxConcurrency=1`, and oldest successful coverage first. Successful coverage
+survives worker restarts. Target complete default-profile coverage within two hours; verify coverage
+and age rather than assuming every champion warmed. Synergy snapshots refresh at six hours; target
+age under eight hours. Regional leaderboard snapshots refresh up to eight scopes every five minutes;
+target age under thirty minutes. Both retain the previous successful snapshot on refresh failure;
+request readers accept durable snapshots up to 24 hours old, then compute using the existing fallback.
+A cache populated from an accepted snapshot may retain it for its normal TTL (leaderboard five minutes,
+synergies six hours). Background job failures and hardware contention can breach these targets;
+`data-health-sweep.sh` exposes ages/fallbacks for alerting rather than hiding that delay.
+
+Install the bounded archive, lab runner, and five-minute data checks following `scripts/ops/README.md`.
+Validate scripts with `python3 -m unittest discover -s scripts/ops/tests`; validate compact raw/fact
+semantics and migrations with `dotnet test tests/Transcendence.IntegrationTests` (Docker required).
+
 ## Documentation Policy (Contributor Requirement)
 
 If a change affects any of the following, update docs in the same PR:

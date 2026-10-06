@@ -3,6 +3,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Models.LoL.Match;
@@ -74,6 +75,28 @@ public sealed class ChampionSynergyServiceTests
         partner.Games.Should().Be(4);
         partner.PickRate.Should().BeApproximately(1, 0.0001);
         partner.WinRateDelta.Should().BeApproximately(0, 0.0001);
+
+        var materializer = new ChampionSynergyFactMaterializer(db, Options.Create(new ChampionSynergyFactOptions
+        {
+            MatchBatchSize = 2, MaxMatchesPerRun = 2, BatchDelayMilliseconds = 0
+        }));
+        (await materializer.RefreshAsync(CancellationToken.None)).Should().Be(2);
+        (await db.AnalyticsResponseSnapshots.AnyAsync(row => row.Feature == ChampionSynergyFactMaterializer.CoverageFeature))
+            .Should().BeFalse("a partially materialized patch must continue using complete raw data");
+        var cache = services.GetRequiredService<HybridCache>();
+        await cache.RemoveByTagAsync("analytics");
+        (await service.GetSynergiesAsync(266, "TOP", null, "NA1", "solo", null)).Should().BeEquivalentTo(result);
+        (await materializer.RefreshAsync(CancellationToken.None)).Should().Be(2);
+        (await materializer.RefreshAsync(CancellationToken.None)).Should().Be(0);
+        (await db.ChampionSynergySourceMatches.CountAsync()).Should().Be(4);
+        (await db.AnalyticsResponseSnapshots.AnyAsync(row => row.Feature == ChampionSynergyFactMaterializer.CoverageFeature))
+            .Should().BeTrue();
+        await cache.RemoveByTagAsync("analytics");
+        (await service.GetSynergiesAsync(266, "TOP", null, "NA1", "solo", null)).Should().BeEquivalentTo(result);
+        await db.Matches.IgnoreQueryFilters().ExecuteDeleteAsync();
+        await cache.RemoveByTagAsync("analytics");
+        (await service.GetSynergiesAsync(266, "TOP", null, "NA1", "solo", "16.14")).Should().BeEquivalentTo(result,
+            "compact facts must survive deletion of the archived match details");
     }
 
     [Fact]

@@ -29,6 +29,21 @@ Surfaces: tier list, champion pages (builds, matchups, synergy), tracked pro and
 item and rune pages, ladders, summoner profiles with match history and post-game breakdowns, live
 game lookup, and a 5-player champ-select multi-search.
 
+## Highlights
+
+- **Scale:** crawls the ranked ladders on 10 Riot platforms and ingests about 23K matches a day. As of
+  October 2026, production holds 560K+ matches and their timelines in a 300 GB PostgreSQL database.
+- **Pipeline:** a .NET 10 Hangfire worker (5 servers, 7 queues, 20 recurring jobs) precomputes tier
+  grades, builds, matchups, and Build Lab win rates. Every Riot call passes a per-region token bucket.
+- **API:** the ASP.NET Core API serves reads and enqueues jobs, and holds no Riot key. It has JWT and
+  API-key auth, rate limiting, and HybridCache over Redis.
+- **Testing:** every pull request runs xUnit unit tests, Testcontainers integration tests on Postgres
+  18, an OpenAPI drift check, migration-safety checks, and k6 and Lighthouse performance budgets.
+- **Delivery:** images are cosign-signed with SBOMs and provenance. A pull-based deploy verifies the
+  signature, migrates first, and rolls back when a container fails its health check.
+- **Operations:** OpenTelemetry metrics feed 9 Grafana dashboards and 18 alerts to Discord, a
+  watchdog restarts a stalled worker, and a weekly job archives old patches to cold storage.
+
 **Contents:** [Architecture](#architecture) · [Data pipeline](#data-pipeline) ·
 [Analytics](#analytics-methodology) · [API](#api) · [Frontend](#frontend) ·
 [Observability](#observability) · [CI/CD](#cicd-and-deployment) ·

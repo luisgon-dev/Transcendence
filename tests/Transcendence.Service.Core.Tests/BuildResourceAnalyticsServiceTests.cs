@@ -269,6 +269,109 @@ public sealed class BuildResourceAnalyticsServiceTests
             "an explicit warming patch must return immediately instead of scanning raw matches");
     }
 
+    [Fact]
+    public async Task Refresher_CachesTheAllRegionPagesTheReadPathWouldCompute_OnRebuildAndOnAdd()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<TranscendenceContext>().UseSqlite(connection).Options;
+        await using var db = new SqliteCompatibleTranscendenceContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        const string patch = "16.14";
+        db.Patches.Add(new Patch { Version = patch, ReleaseDate = DateTime.UtcNow.AddDays(-5), IsActive = true });
+        db.ItemVersions.Add(new ItemVersion
+        {
+            ItemId = 3078, PatchVersion = patch, Name = "Trinity Force", BuildsFrom = [3057],
+            BuildsInto = [], Tags = ["Damage"], InStore = true, PriceTotal = 3333
+        });
+        db.RuneVersions.Add(new RuneVersion
+        {
+            RuneId = 8005, PatchVersion = patch, Name = "Press the Attack", RunePathId = 8000,
+            RunePathName = "Precision", Slot = 0
+        });
+        // Two regions, so the all-region pages sum per champion/role across them as the read path does.
+        AddMatch(db, "NA1_WARM_1", patch, "NA1", (1, 266, "TOP", true, true), (2, 64, "JUNGLE", false, true));
+        AddMatch(db, "EUW1_WARM_1", patch, "EUW1", (1, 266, "TOP", false, true), (2, 266, "TOP", true, false));
+        await db.SaveChangesAsync();
+
+        var warmed = NewService(db);
+        var refresher = new BuildResourceSnapshotRefresher(
+            db,
+            Options.Create(new BuildResourceSnapshotOptions { MatchBatchSize = 50 }),
+            NullLogger<BuildResourceSnapshotRefresher>.Instance,
+            warmed);
+
+        await refresher.RefreshAsync(patch, forceFullRebuild: true, CancellationToken.None);
+        await AssertWarmedPagesMatchAColdComputeAsync(db, warmed);
+
+        // An in-place add changes the generation version every key carries; the new keys are warmed too.
+        AddMatch(db, "NA1_WARM_2", patch, "NA1", (1, 64, "JUNGLE", true, true), (2, 266, "TOP", false, true));
+        await db.SaveChangesAsync();
+        await refresher.RefreshAsync(patch, forceFullRebuild: false, CancellationToken.None);
+        (await db.BuildResourceSnapshots.SingleAsync(x => x.IsActive)).ProcessedMatchCount.Should().Be(3);
+        await AssertWarmedPagesMatchAColdComputeAsync(db, warmed);
+    }
+
+    private static async Task AssertWarmedPagesMatchAColdComputeAsync(
+        TranscendenceContext db,
+        BuildResourceAnalyticsService warmed)
+    {
+        var cold = NewService(db);
+        var coldItems = await cold.GetItemsAsync(null, null);
+        var coldRunes = await cold.GetRunesAsync(null, null);
+        var coldItem = await cold.GetItemAsync(3078, null, null);
+        var coldRune = await cold.GetRuneAsync(8005, null, null);
+        coldItem.Should().NotBeNull();
+        coldRune.Should().NotBeNull();
+
+        // With the stat rows gone, the warmed service can only answer from what the refresher cached.
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        await db.BuildResourceStats.ExecuteDeleteAsync();
+        await db.BuildResourcePopulationStats.ExecuteDeleteAsync();
+
+        (await warmed.GetItemsAsync(null, null)).Should().BeEquivalentTo(coldItems);
+        (await warmed.GetRunesAsync(null, null)).Should().BeEquivalentTo(coldRunes);
+        (await warmed.GetItemAsync(3078, null, null)).Should().BeEquivalentTo(coldItem);
+        (await warmed.GetRuneAsync(8005, null, null)).Should().BeEquivalentTo(coldRune);
+        await transaction.RollbackAsync();
+    }
+
+    private static BuildResourceAnalyticsService NewService(TranscendenceContext db)
+    {
+        var serviceCollection = new ServiceCollection();
+        serviceCollection.AddLogging();
+        serviceCollection.AddHybridCache();
+        var services = serviceCollection.BuildServiceProvider();
+        return new BuildResourceAnalyticsService(
+            db, services.GetRequiredService<HybridCache>(), new AnalyticsPatchQueryService(db));
+    }
+
+    private static void AddMatch(
+        TranscendenceContext db,
+        string matchId,
+        string patch,
+        string region,
+        params (int ParticipantId, int ChampionId, string Role, bool Win, bool IncludeResources)[] participants)
+    {
+        var match = new MatchEntity
+        {
+            Id = Guid.NewGuid(),
+            MatchId = matchId,
+            Patch = patch,
+            QueueId = 420,
+            QueueFamily = "RANKED_SOLO_DUO",
+            Status = FetchStatus.Success,
+            PlatformRegion = region
+        };
+        db.Matches.Add(match);
+        foreach (var participant in participants)
+        {
+            AddParticipant(db, match, participant.ParticipantId, participant.ChampionId, participant.Role,
+                participant.Win, participant.IncludeResources);
+        }
+    }
+
     private static void AddParticipant(
         TranscendenceContext db,
         MatchEntity match,
@@ -281,7 +384,7 @@ public sealed class BuildResourceAnalyticsServiceTests
         var summoner = new Summoner
         {
             Id = Guid.NewGuid(),
-            Puuid = $"puuid-{participantId}",
+            Puuid = $"puuid-{participantId}-{Guid.NewGuid():N}",
             PlatformRegion = "NA1",
             Region = "AMERICAS"
         };

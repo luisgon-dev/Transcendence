@@ -22,7 +22,8 @@ namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 public sealed class BuildResourceSnapshotRefresher(
     TranscendenceContext context,
     IOptions<BuildResourceSnapshotOptions> optionsAccessor,
-    ILogger<BuildResourceSnapshotRefresher> logger) : IBuildResourceSnapshotRefresher
+    ILogger<BuildResourceSnapshotRefresher> logger,
+    IBuildResourceAnalyticsService? readCache = null) : IBuildResourceSnapshotRefresher
 {
     private const int ParticipantChunkSize = 1_000;
     private const string ItemType = "item";
@@ -136,6 +137,8 @@ public sealed class BuildResourceSnapshotRefresher(
                 patch, active.Id);
         }
 
+        await WarmReadCacheAsync(active.Id, patch, resources.Values, populations.Values, ct);
+
         return new BuildResourceSnapshotRefreshResult(
             active.Id, patch, false, newlyProcessed, resources.Count, populations.Count);
     }
@@ -197,6 +200,7 @@ public sealed class BuildResourceSnapshotRefresher(
 
             await PromoteAsync(snapshot.Id, patch, ct);
             await CleanupPayloadsBestEffortAsync(patch, ct);
+            await WarmReadCacheAsync(snapshot.Id, patch, resources.Values, populations.Values, ct);
 
             logger.LogInformation(
                 "Build Atlas snapshot {SnapshotId} patch {Patch} promoted: full=True, newMatches={NewMatches}, resourceRows={ResourceRows}, populationRows={PopulationRows}.",
@@ -428,6 +432,36 @@ public sealed class BuildResourceSnapshotRefresher(
         }
 
         return changed;
+    }
+
+    // Every run changes the generation version the read keys carry, so the item/rune pages would all
+    // start cold. The counts are already in memory here; caching the pages from them costs no table
+    // reads. Best effort: the generation is committed, and a failed warm only leaves reads to compute.
+    private async Task WarmReadCacheAsync(
+        Guid snapshotId,
+        string patch,
+        IEnumerable<BuildResourceStat> resources,
+        IEnumerable<BuildResourcePopulationStat> populations,
+        CancellationToken ct)
+    {
+        if (readCache is null)
+            return;
+
+        try
+        {
+            var processedMatchCount = await context.BuildResourceSnapshots.AsNoTracking()
+                .Where(snapshot => snapshot.Id == snapshotId)
+                .Select(snapshot => snapshot.ProcessedMatchCount)
+                .SingleAsync(ct);
+            await readCache.WarmGenerationAsync(
+                snapshotId, patch, processedMatchCount, resources.ToList(), populations.ToList(), ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex,
+                "Build Atlas snapshot {SnapshotId} patch {Patch}: caching the item/rune pages failed; reads will compute on a miss.",
+                snapshotId, patch);
+        }
     }
 
     private async Task PromoteAsync(Guid snapshotId, string patch, CancellationToken ct)

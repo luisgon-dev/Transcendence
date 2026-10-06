@@ -70,7 +70,7 @@ public sealed class BuildResourceAnalyticsService(
         if (selection is null)
             return EmptyIndex(resourceType, requestedPatch?.Trim() ?? string.Empty, normalizedRegion);
 
-        var key = $"analytics:build-resources:v3:{resourceType}:{selection.Version}:{normalizedRegion}";
+        var key = IndexKey(resourceType, selection.Version, normalizedRegion);
         return await cache.GetOrCreateAsync(
             key,
             cancel => ComputeIndexAsync(resourceType, normalizedRegion, selection, cancel),
@@ -94,8 +94,7 @@ public sealed class BuildResourceAnalyticsService(
         if (selection is null)
             return null;
 
-        var key =
-            $"analytics:build-resource:v3:{resourceType}:{resourceId}:{selection.Version}:{normalizedRegion}";
+        var key = DetailKey(resourceType, resourceId, selection.Version, normalizedRegion);
         return await cache.GetOrCreateAsync(
             key,
             cancel => ComputeDetailAsync(resourceType, resourceId, normalizedRegion, selection, cancel),
@@ -116,6 +115,16 @@ public sealed class BuildResourceAnalyticsService(
 
         var snapshot = await LoadSnapshotDataAsync(
             selection.SnapshotId, resourceType, region, metadata.Keys.ToArray(), ct);
+        return ProjectIndex(resourceType, selection.Patch, region, metadata, snapshot);
+    }
+
+    private static BuildResourceAnalyticsIndexResponse ProjectIndex(
+        string resourceType,
+        string patch,
+        string region,
+        IReadOnlyDictionary<int, ResourceMetadata> metadata,
+        SnapshotData snapshot)
+    {
         var entries = snapshot.Aggregates
             .GroupBy(row => row.ResourceId)
             .Select(group => BuildEntry(
@@ -131,7 +140,7 @@ public sealed class BuildResourceAnalyticsService(
 
         return new BuildResourceAnalyticsIndexResponse(
             resourceType,
-            selection.Patch,
+            patch,
             region,
             snapshot.TotalParticipantGames,
             entries);
@@ -150,6 +159,17 @@ public sealed class BuildResourceAnalyticsService(
 
         var snapshot = await LoadSnapshotDataAsync(
             selection.SnapshotId, resourceType, region, [resourceId], ct);
+        return ProjectDetail(resourceType, resourceId, selection.Patch, region, resourceMetadata, snapshot);
+    }
+
+    private static BuildResourceAnalyticsDetailResponse? ProjectDetail(
+        string resourceType,
+        int resourceId,
+        string patch,
+        string region,
+        ResourceMetadata resourceMetadata,
+        SnapshotData snapshot)
+    {
         if (snapshot.Aggregates.Count == 0)
             return null;
 
@@ -168,12 +188,77 @@ public sealed class BuildResourceAnalyticsService(
 
         return new BuildResourceAnalyticsDetailResponse(
             resourceType,
-            selection.Patch,
+            patch,
             region,
             snapshot.TotalParticipantGames,
             entry,
             championStats);
     }
+
+    /// <summary>
+    /// Writes the all-region index and every detail entry of a generation's version into the cache from
+    /// rows the refresher already holds in memory, so no read path has to aggregate them.
+    /// </summary>
+    /// <remarks>
+    /// The keys carry the generation version, which changes every hourly in-place add, so a page that
+    /// was not requested within the hour was always a miss. A miss aggregates one resource's rows, which
+    /// sit one per heap page across the stat table: 2,515 pages and 36s for one rune on prod
+    /// (2026-10-06). Only the all-region scope is warmed; a region filter still computes on a miss.
+    /// </remarks>
+    public async Task WarmGenerationAsync(
+        Guid snapshotId,
+        string patch,
+        int processedMatchCount,
+        IReadOnlyCollection<BuildResourceStat> stats,
+        IReadOnlyCollection<BuildResourcePopulationStat> populations,
+        CancellationToken ct = default)
+    {
+        const string region = AnalyticsRegionCatalog.GlobalRegionCode;
+        var version = new SnapshotSelection(snapshotId, patch, processedMatchCount).Version;
+        var championTotals = populations
+            .GroupBy(row => new ChampionRoleKey(row.ChampionId, row.Role))
+            .ToDictionary(group => group.Key, group => group.Sum(row => row.Games));
+        var totalParticipantGames = championTotals.Values.Sum();
+
+        foreach (var resourceType in new[] { ItemType, RuneType })
+        {
+            var metadata = await LoadMetadataAsync(resourceType, patch, ct);
+            var aggregates = stats
+                .Where(row => row.ResourceType == resourceType && metadata.ContainsKey(row.ResourceId))
+                .GroupBy(row => (row.ResourceId, row.ChampionId, row.Role))
+                .Select(group => new ResourceAggregateRow
+                {
+                    ResourceId = group.Key.ResourceId,
+                    ChampionId = group.Key.ChampionId,
+                    Role = group.Key.Role,
+                    Games = group.Sum(row => row.Games),
+                    Wins = group.Sum(row => row.Wins)
+                })
+                .ToList();
+
+            var index = metadata.Count == 0
+                ? new BuildResourceAnalyticsIndexResponse(resourceType, patch, region, 0, [])
+                : ProjectIndex(
+                    resourceType, patch, region, metadata,
+                    new SnapshotData(aggregates, championTotals, totalParticipantGames));
+            await cache.SetAsync(IndexKey(resourceType, version, region), index, CacheOptions, ["analytics"], ct);
+
+            foreach (var resource in aggregates.GroupBy(row => row.ResourceId))
+            {
+                var detail = ProjectDetail(
+                    resourceType, resource.Key, patch, region, metadata[resource.Key],
+                    new SnapshotData(resource.ToList(), championTotals, totalParticipantGames));
+                await cache.SetAsync(
+                    DetailKey(resourceType, resource.Key, version, region), detail, CacheOptions, ["analytics"], ct);
+            }
+        }
+    }
+
+    private static string IndexKey(string resourceType, string version, string region) =>
+        $"analytics:build-resources:v3:{resourceType}:{version}:{region}";
+
+    private static string DetailKey(string resourceType, int resourceId, string version, string region) =>
+        $"analytics:build-resource:v3:{resourceType}:{resourceId}:{version}:{region}";
 
     private async Task<SnapshotData> LoadSnapshotDataAsync(
         Guid snapshotId,

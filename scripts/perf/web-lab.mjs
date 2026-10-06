@@ -276,7 +276,8 @@ async function main() {
         } catch (error) {
           console.error(`  ! ${url} sample ${i + 1}/${args.samples}: ${error.message}`);
           // A failed browser must not poison every remaining route in the sweep.
-          await chrome.kill().catch(() => {});
+          // chrome-launcher 1.2 can return void from kill(), so do not chain .catch().
+          try { await chrome.kill(); } catch { /* Already exited; replace the browser below. */ }
           chrome = await chromeLauncher.launch({ chromeFlags: CHROME_FLAGS });
         }
       }

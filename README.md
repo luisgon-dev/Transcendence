@@ -31,8 +31,9 @@ game lookup, and a 5-player champ-select multi-search.
 
 ## Highlights
 
-- **Scale:** crawls the ranked ladders on 10 Riot platforms and ingests about 23K matches a day. As of
-  October 2026, production holds 560K+ matches and their timelines in a 300 GB PostgreSQL database.
+- **Scale:** crawls the ranked ladders on 10 Riot platforms and ingests about 23K matches a day. Production holds
+  500K+ matches and their timelines in a 300 GB PostgreSQL database; live figures are on
+  [About the data](https://transcend.kronic.one/about).
 - **Pipeline:** a .NET 10 Hangfire worker (5 servers, 7 queues, 20 recurring jobs) precomputes tier
   grades, builds, matchups, and Build Lab win rates. Every Riot call passes a per-region token bucket.
 - **API:** the ASP.NET Core API serves reads and enqueues jobs, and holds no Riot key. It has JWT and

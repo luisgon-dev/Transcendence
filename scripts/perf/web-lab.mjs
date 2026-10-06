@@ -32,11 +32,12 @@ import { pathToFileURL } from "node:url";
 
 import * as chromeLauncher from "chrome-launcher";
 import lighthouse from "lighthouse";
+import { validateLighthouseResult } from "./lighthouse-result.mjs";
 
 import { webVitalsRouteTemplate } from "@transcendence/web-routes";
 
-// Chrome flags mirror the retired lighthouserc.cjs so numbers stay comparable across the swap.
-const CHROME_FLAGS = ["--headless=new", "--no-sandbox", "--disable-dev-shm-usage"];
+// The bounded production container provides /dev/shm; spilling it to the HDD stalls Chrome.
+const CHROME_FLAGS = ["--headless=new", "--no-sandbox"];
 
 const LIGHTHOUSE_SETTINGS = {
   formFactor: "mobile",
@@ -133,7 +134,7 @@ async function runOnce(url, port) {
     { port, output: "json", logLevel: "error" },
     { extends: "lighthouse:default", settings: LIGHTHOUSE_SETTINGS }
   );
-  if (!result?.lhr) throw new Error(`Lighthouse returned no result for ${url}`);
+  validateLighthouseResult(result?.lhr, url);
   return result.lhr;
 }
 

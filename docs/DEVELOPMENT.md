@@ -558,6 +558,10 @@ transcendence_web_lab_fcp_milliseconds          transcendence_web_lab_total_byte
 transcendence_web_lab_category_score{category}  transcendence_web_lab_last_success_unixtime_seconds
 ```
 
+The production runner uses bounded RAM temporary storage within its container memory limit.
+Runtime errors and missing paint metrics fail the sample and restart Chrome; an incomplete sweep
+retains the previous metrics and success timestamp.
+
 The `route` label comes from `webVitalsRouteTemplate()` in `@transcendence/web-routes` — the same
 function the browser Web Vitals reporter uses. **That shared vocabulary is the point**: it is what
 lets a lab series and a field series for the same route sit on one Grafana panel
@@ -1166,7 +1170,8 @@ chunks get priority, and pruning waits for their source ledger.
 
 Profile warming runs every five minutes, with `Jobs:WarmDefaultChampionProfiles:MaxChampionsPerRun=20`,
 `MaxRunSeconds=120`, `MaxConcurrency=1`, and oldest successful coverage first. Successful coverage
-survives worker restarts. Target complete default-profile coverage within two hours; verify coverage
+survives worker restarts. Candidate eligibility retains its hourly cadence through a one-hour cached
+roster; a short tick does not rescan raw participants. Target complete default-profile coverage within two hours; verify coverage
 and age rather than assuming every champion warmed. Synergy snapshots refresh at six hours; target
 age under eight hours. Regional leaderboard snapshots refresh up to eight scopes every five minutes;
 target age under thirty minutes. Both retain the previous successful snapshot on refresh failure;

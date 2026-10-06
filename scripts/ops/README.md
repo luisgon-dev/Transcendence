@@ -386,3 +386,7 @@ The nightly lab sweep also checks Ahri/Kronic. Docker caps are `PERF_CPUS=1.5`,
 `PERF_MEMORY_LIMIT=1536m`, pids=256, `PERF_TIMEOUT_SECONDS=1500`; it uses the stable
 `transcendence-web-perf-runner` name and removes that container on success, error, and systemd stop.
 Successful raw Lighthouse reports are retained in `/var/lib/transcendence-perf/reports`.
+Chrome uses the provided 1 GiB shared-memory mount and a bounded 256 MiB `/tmp` tmpfs rather
+than HDD temporary files, within the same total container memory limit. Runtime errors or missing
+paint metrics fail the sample and restart Chrome; incomplete sweeps retain the previous metrics
+and their original success timestamp.

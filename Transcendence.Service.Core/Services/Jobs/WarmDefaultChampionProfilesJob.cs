@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Caching.Hybrid;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Analytics;
 using Transcendence.Data.Models.LoL.Match;
@@ -28,7 +29,8 @@ public class WarmDefaultChampionProfilesJob(
     IServiceScopeFactory scopeFactory,
     TranscendenceContext db,
     IOptions<WarmDefaultChampionProfilesJobOptions> options,
-    ILogger<WarmDefaultChampionProfilesJob> logger)
+    ILogger<WarmDefaultChampionProfilesJob> logger,
+    HybridCache cache)
 {
     [Queue(HangfireQueues.AnalyticsWarm)]
     public async Task ExecuteAsync(CancellationToken ct)
@@ -49,17 +51,24 @@ public class WarmDefaultChampionProfilesJob(
         }
 
         var minGames = Math.Max(1, opts.MinimumGamesToWarm);
-        var champions = await db.MatchParticipants
-            .AsNoTracking()
-            .OnPatch(patch)
-            .FromSuccessfulMatches()
-            .Where(mp => mp.TeamPosition != null)
-            .GroupBy(mp => mp.ChampionId)
-            .Select(g => new { ChampionId = g.Key, Games = g.Count() })
-            .Where(x => x.Games >= minGames)
-            .OrderByDescending(x => x.Games)
-            .Select(x => x.ChampionId)
-            .ToListAsync(ct);
+        // Short runs must not repeat the corpus scan twelve times per hour. Preserve the original
+        // hourly eligibility cadence; cache factories own their context even if a caller cancels.
+        var champions = await cache.GetOrCreateAsync(
+            $"analytics:profile-warm-candidates:v1:{patch}:{minGames}",
+            async cancel =>
+            {
+                using var queryScope = scopeFactory.CreateScope();
+                var queryDb = queryScope.ServiceProvider.GetRequiredService<TranscendenceContext>();
+                queryDb.Database.SetCommandTimeout(30);
+                return await queryDb.MatchParticipants.AsNoTracking().OnPatch(patch).FromSuccessfulMatches()
+                    .Where(mp => mp.TeamPosition != null)
+                    .GroupBy(mp => mp.ChampionId)
+                    .Select(group => new { ChampionId = group.Key, Games = group.Count() })
+                    .Where(row => row.Games >= minGames).OrderByDescending(row => row.Games)
+                    .Select(row => row.ChampionId).ToListAsync(cancel);
+            },
+            new HybridCacheEntryOptions { Expiration = TimeSpan.FromHours(1), LocalCacheExpiration = TimeSpan.FromHours(1) },
+            cancellationToken: ct);
 
         if (champions.Count == 0)
         {

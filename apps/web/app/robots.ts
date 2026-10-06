@@ -9,9 +9,14 @@ import { getPublicSiteOrigin } from "@/lib/env";
 // database's disk wait on prod's HDD, growing with every summoner ingestion links to. Search engines
 // (Googlebot, Bingbot, Applebot) and link previews (facebookexternalhit) are unaffected;
 // Google-Extended and Applebot-Extended are those vendors' AI-training opt-outs, not their search.
+// Claude-SearchBot and Amzn-SearchBot are the AI-answer search indexers: after the list above went
+// in, they made about 99% of summoner-profile requests (99,053 hits on 79,969 distinct summoners in
+// two weeks to 2026-10-06), so the profile cache almost never hit.
 export const blockedAiCrawlers = [
   "Amazonbot",
+  "Amzn-SearchBot",
   "ClaudeBot",
+  "Claude-SearchBot",
   "Claude-Web",
   "anthropic-ai",
   "GPTBot",

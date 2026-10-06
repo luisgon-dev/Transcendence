@@ -581,14 +581,76 @@ public class SummonerStatsServiceTests
         result[0].SummonerId.Should().Be(duo.Id); // ordered by gamesTogether desc
 
         var duoEntry = result.Single(x => x.SummonerId == duo.Id);
+        duoEntry.GameName.Should().Be("Duo");
+        duoEntry.TagLine.Should().Be("NA1");
         duoEntry.GamesTogether.Should().Be(3);
         duoEntry.SameTeamGames.Should().Be(3);
         duoEntry.SameTeamWins.Should().Be(2);
 
         var rivalEntry = result.Single(x => x.SummonerId == rival.Id);
+        rivalEntry.GameName.Should().Be("Rival");
         rivalEntry.GamesTogether.Should().Be(2);
         rivalEntry.SameTeamGames.Should().Be(0);
         rivalEntry.SameTeamWins.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task GetLatestMatchDateAsync_ReturnsTheNewestStoredMatchInAnyQueue()
+    {
+        await using var harness = await SummonerStatsHarness.CreateAsync();
+        var summoner = harness.CreateSummoner();
+        var empty = harness.CreateSummoner();
+
+        harness.AddParticipant(summoner, QueueCatalog.RankedSoloDuoQueueId, QueueCatalog.QueueFamilyRankedSoloDuo,
+            "RANKED_SOLO_5x5", matchDate: 1000, duration: 1800, kills: 1, deaths: 1, assists: 1);
+        harness.AddParticipant(summoner, 450, QueueCatalog.QueueFamilyAram, "ARAM",
+            matchDate: 3000, duration: 1200, kills: 1, deaths: 1, assists: 1);
+        // Matches the global query filter hides must not count, as they never appeared in the history page.
+        var hidden = harness.AddParticipant(summoner, QueueCatalog.RankedSoloDuoQueueId,
+            QueueCatalog.QueueFamilyRankedSoloDuo, "RANKED_SOLO_5x5", matchDate: 9000, duration: 1800,
+            kills: 1, deaths: 1, assists: 1);
+        hidden.Match.Status = FetchStatus.PermanentlyUnfetchable;
+        await harness.Db.SaveChangesAsync();
+
+        (await harness.MatchHistory.GetLatestMatchDateAsync(summoner.Id, CancellationToken.None))
+            .Should().Be(3000);
+        (await harness.MatchHistory.GetLatestMatchDateAsync(empty.Id, CancellationToken.None))
+            .Should().BeNull();
+
+        var page = await harness.MatchHistory.GetRecentMatchesAsync(
+            summoner.Id, 1, 10, null, null, null, includeFacets: false, CancellationToken.None);
+        page.Items[0].MatchDate.Should().Be(3000, "the profile used to read this page's first date");
+    }
+
+    [Fact]
+    public async Task GetRecentMatchesAsync_ReturnsEachParticipantsItemsInSlotOrder()
+    {
+        await using var harness = await SummonerStatsHarness.CreateAsync();
+        var summoner = harness.CreateSummoner();
+        var older = harness.AddParticipant(summoner, QueueCatalog.RankedSoloDuoQueueId,
+            QueueCatalog.QueueFamilyRankedSoloDuo, "RANKED_SOLO_5x5", matchDate: 1000, duration: 1800,
+            kills: 1, deaths: 1, assists: 1);
+        var newer = harness.AddParticipant(summoner, QueueCatalog.RankedSoloDuoQueueId,
+            QueueCatalog.QueueFamilyRankedSoloDuo, "RANKED_SOLO_5x5", matchDate: 2000, duration: 1800,
+            kills: 1, deaths: 1, assists: 1);
+        foreach (var (participant, slot, item) in new[]
+                 {
+                     (newer, 2, 3006), (newer, 0, 3078), (older, 1, 6672), (newer, 1, 3071), (older, 0, 3031)
+                 })
+        {
+            harness.Db.Set<MatchParticipantItem>().Add(new MatchParticipantItem
+            {
+                MatchParticipantId = participant.Id, SlotIndex = slot, ItemId = item, PatchVersion = "14.2"
+            });
+        }
+        await harness.Db.SaveChangesAsync();
+
+        var page = await harness.MatchHistory.GetRecentMatchesAsync(
+            summoner.Id, 1, 20, null, null, null, includeFacets: false, CancellationToken.None);
+
+        page.Items.Select(x => x.MatchDate).Should().Equal(2000, 1000);
+        page.Items[0].Items.Should().Equal(3078, 3071, 3006, 0, 0, 0, 0);
+        page.Items[1].Items.Should().Equal(3031, 6672, 0, 0, 0, 0, 0);
     }
 
     [Fact]

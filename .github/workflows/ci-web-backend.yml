@@ -84,6 +84,9 @@ jobs:
       - name: Lint
         run: pnpm --filter web lint
 
+      - name: Verify ESLint root discovery
+        run: node --test scripts/security/eslint-root-dirs.test.mjs
+
       - name: Test
         run: pnpm --filter web test
 

@@ -370,6 +370,15 @@ resolution rather than GitHub's periodic scan. That is why CI gates on it and no
 
 ### Prefer a dependency bump over an override
 
+The October 15, 2026 production-fix validation removed two pre-existing audit failures. The lockfile
+now resolves `source-map-js` to patched `1.2.2` within its existing ranges. Next's ESLint plugin still
+pins `fast-glob`, whose `micromatch` dependency pulls unpatched `braces` (GHSA-vfj7-8cjw-p6xm).
+A scoped override replaces only `@next/eslint-plugin-next>fast-glob` with `tinyglobby@0.2.15`, already
+used elsewhere in the toolchain. The plugin calls only `globSync(pattern, { onlyDirectories: true })`;
+`scripts/security/eslint-root-dirs.test.mjs` verifies its actual root discovery with brace globs,
+directory filtering, default roots, and multiple roots. CI runs that check alongside ESLint.
+No advisory is ignored. Remove the override when the plugin no longer pulls the vulnerable chain.
+
 Overrides are a fallback, not the default fix. In the Sept 2026 sweep the block had grown to 26
 entries; **22 of them were dead weight** — the direct dependency's semver range already reached a
 patched version and the pin was doing nothing. Only four chains were genuinely frozen.

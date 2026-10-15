@@ -4,6 +4,7 @@
   "packageManager": "pnpm@10.22.0",
   "pnpm": {
     "overrides": {
+      "@next/eslint-plugin-next>fast-glob": "npm:tinyglobby@0.2.15",
       "esbuild@>=0.27.3 <0.28.1": "0.28.1",
       "undici@>=7.0.0 <7.29.1": "7.29.1",
       "brace-expansion@<1.1.21": "1.1.21",

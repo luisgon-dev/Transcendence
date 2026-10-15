@@ -48,6 +48,7 @@ builder.Services.AddHangfire((provider, config) =>
     config.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
         .UseSimpleAssemblyNameTypeSerializer()
         .UseRecommendedSerializerSettings()
+        .UseFilter(new WorkerProgressFilter(provider.GetRequiredService<IWorkerHeartbeat>()) { Order = int.MinValue })
         .UseFilter(new AutomaticRetryAttribute
         {
             Attempts = hangfireRetryAttempts
@@ -197,11 +198,12 @@ builder.Services.AddSingleton<IStartupPatchRolloverService, StartupPatchRollover
 builder.Services.AddSingleton<IAdaptiveThroughputBudgetPolicy, AdaptiveThroughputBudgetPolicy>();
 builder.Services.AddSingleton<IStarvationGuardrailPolicy, StarvationGuardrailPolicy>();
 
-// Worker liveness: producers beat IWorkerHeartbeat each dispatcher tick; a stale beat requests a
+// Worker liveness: every job start/completion records progress; a stale beat requests a
 // bounded graceful host stop before the watchdog's hard-exit fallback lets restart:unless-stopped
 // recreate a truly hung worker. Disable with Worker__Watchdog__Enabled=false.
 builder.Services.Configure<WorkerWatchdogOptions>(builder.Configuration.GetSection("Worker:Watchdog"));
 builder.Services.AddSingleton<IWorkerHeartbeat, WorkerHeartbeat>();
+builder.Services.AddHostedService<WorkerHeartbeatPublisher>();
 builder.Services.AddHostedService<WorkerWatchdogService>();
 
 // Poll-based ingestion-health alerts (failed-job spike / stuck discovery backlog / throughput

@@ -20,7 +20,7 @@ function reportMetric(metric: Parameters<typeof useReportWebVitals>[0] extends (
 ) => unknown
   ? T
   : never) {
-  if (!shouldReportMetric(metric.name)) return;
+  if (!shouldReportMetric(metric.name) || navigator.webdriver) return;
   const body = JSON.stringify({
     name: metric.name,
     value: metric.value,

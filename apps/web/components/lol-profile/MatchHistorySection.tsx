@@ -1,6 +1,7 @@
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import { AnimatePresence, motion } from "framer-motion";
+import { memo } from "react";
 
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
@@ -11,7 +12,6 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { ChevronRightIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
-import { MatchScoreboard } from "@/components/lol-profile/MatchScoreboard";
 import { PerformanceIndicator } from "@/components/lol-profile/PerformanceIndicator";
 import { useStaticData } from "@/components/lol-profile/StaticDataContext";
 import {
@@ -42,6 +42,11 @@ import {
   type PagedResultDto,
   type QueueOption
 } from "@/components/lol-profile/shared";
+
+const MatchScoreboard = dynamic(
+  () => import("@/components/lol-profile/MatchScoreboard").then((module) => module.MatchScoreboard),
+  { loading: () => <Skeleton className="h-12 w-full" /> }
+);
 
 type ChampionOption = {
   id: number;
@@ -89,15 +94,13 @@ type MatchHistorySectionProps = {
   filters: MatchHistoryFilters;
   pageState: MatchHistoryPageState;
   expansion: MatchHistoryExpansion;
-  prefersReducedMotion: boolean;
 };
 
-function MatchHistoryCard({
+const MatchHistoryCard = memo(function MatchHistoryCard({
   match,
   expanded,
   detail,
   detailBusy,
-  prefersReducedMotion,
   region,
   gameName,
   tagLine,
@@ -108,7 +111,6 @@ function MatchHistoryCard({
   expanded: boolean;
   detail: MatchDetail | null;
   detailBusy: boolean;
-  prefersReducedMotion: boolean;
   region: string;
   gameName: string;
   tagLine: string;
@@ -319,42 +321,28 @@ function MatchHistoryCard({
         </div>
       </button>
 
-      <AnimatePresence initial={false}>
-        {expanded ? (
-          <motion.div
-            id={matchPanelId}
-            initial={prefersReducedMotion ? undefined : { height: 0, opacity: 0 }}
-            animate={prefersReducedMotion ? undefined : { height: "auto", opacity: 1 }}
-            exit={prefersReducedMotion ? undefined : { height: 0, opacity: 0 }}
-            transition={
-              prefersReducedMotion
-                ? undefined
-                : { height: { duration: 0.28, ease: [0.25, 1, 0.5, 1] }, opacity: { duration: 0.18 } }
-            }
-            className="overflow-hidden"
-            style={prefersReducedMotion ? { height: "auto", opacity: 1 } : undefined}
-          >
-            <div className="mt-4 border-t border-border/55 px-4 pt-4 md:px-5">
-              {detailBusy ? <Skeleton className="h-12 w-full" /> : null}
-              {!detailBusy && !detail ? (
-                <p className="text-sm text-fg/75">Detailed stats are unavailable for this match.</p>
-              ) : null}
-              {detail ? (
-                <MatchScoreboard
-                  detail={detail}
-                  summonerId={summonerId}
-                  region={region}
-                  gameName={gameName}
-                  tagLine={tagLine}
-                />
-              ) : null}
-            </div>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+      {expanded ? (
+        <div id={matchPanelId} className="overflow-hidden">
+          <div className="mt-4 border-t border-border/55 px-4 pt-4 md:px-5">
+            {detailBusy ? <Skeleton className="h-12 w-full" /> : null}
+            {!detailBusy && !detail ? (
+              <p className="text-sm text-fg/75">Detailed stats are unavailable for this match.</p>
+            ) : null}
+            {detail ? (
+              <MatchScoreboard
+                detail={detail}
+                summonerId={summonerId}
+                region={region}
+                gameName={gameName}
+                tagLine={tagLine}
+              />
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
-}
+});
 
 export function MatchHistorySection({
   identity: { region, gameName, tagLine, summonerId },
@@ -379,7 +367,6 @@ export function MatchHistorySection({
     onNextPage
   },
   expansion: { expandedMatchId, details, detailBusy, onToggleExpanded },
-  prefersReducedMotion,
 }: MatchHistorySectionProps) {
   return (
     <section className="flex min-w-0 max-w-full flex-col gap-5">
@@ -459,7 +446,6 @@ export function MatchHistorySection({
               expanded={expandedMatchId === match.matchId}
               detail={details[match.matchId]}
               detailBusy={detailBusy[match.matchId] === true}
-              prefersReducedMotion={prefersReducedMotion}
               region={region}
               gameName={gameName}
               tagLine={tagLine}

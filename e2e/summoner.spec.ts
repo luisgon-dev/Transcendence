@@ -22,4 +22,16 @@ test.describe("Summoner profiles", () => {
       page.getByRole("button", { name: /^(Victory|Defeat) on /i }).first()
     ).toBeVisible({ timeout: 15_000 });
   });
+
+  test("match details load on expansion and can be collapsed", async ({ page }) => {
+    await page.goto("/lol/summoners/na/Kronic-NA1");
+    const match = page.getByRole("button", { name: /^(Victory|Defeat) on /i }).first();
+    await expect(match).toBeVisible({ timeout: 15_000 });
+    await match.click();
+    await expect(match).toHaveAttribute("aria-expanded", "true");
+    await expect(page.getByRole("radiogroup", { name: "Match detail view" })).toBeVisible();
+    await match.click();
+    await expect(match).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByRole("radiogroup", { name: "Match detail view" })).toHaveCount(0);
+  });
 });

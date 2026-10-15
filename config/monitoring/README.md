@@ -87,7 +87,10 @@ Grafana-provisioned alert rules live in `grafana/provisioning/alerting/`:
 - `contactpoints.yml` — a `discord` receiver; URL from `DISCORD_ALERT_WEBHOOK_URL`.
 
 `grafana/dashboards/web-vitals.json` shows route-filtered report volume, rating mix, p75 LCP/INP, and
-p75 CLS from the Next.js Web Vitals endpoint. A new web process starts with empty in-memory histogram
+p75 CLS for visitor reports. The browser reporter skips webdriver sessions and the collector ignores
+HeadlessChrome/Lighthouse user agents; automated runs belong to the separate lab series. This is a
+best-effort synthetic exclusion, not an authenticated visitor classification.
+A new web process starts with empty in-memory histogram
 state; Prometheus retains previously scraped samples according to its normal retention policy.
 
 `grafana/dashboards/analytics-refresh.json` shows active matchup-generation age/size, resume attempt,
@@ -136,6 +139,11 @@ Install `scripts/ops/transcendence-data-health.{service,timer}` and `data-health
 Docker host. Every five minutes it publishes full streamed response time and fallback failures for
 leaderboards, Ahri and Kronic, plus snapshot ages and full I/O pressure, to the existing node-exporter
 textfile mount. This complements browser Web Vitals and the nightly bounded Lighthouse runner.
+HTTP reads have an outer 14-second timeout in addition to curl's 12-second deadline. The database
+read has a five-second statement budget and an outer eight-second timeout. A database probe failure
+publishes `transcendence_snapshot_probe_failure=1` and retains current page results; it does not
+publish partial snapshot ages or freeze the complete metrics file. The page-data alert covers this
+gauge too. The systemd unit allows 75 seconds for the bounded checks and shutdown margin.
 The provisioned rules warn on missing probes, repeated backend fallbacks, leaderboard age above
 thirty minutes (or absent snapshots), and default synergy age above eight hours (or absent snapshots).
 Back up rules and reload Grafana file provisioning when installing. Current-patch `profile-warm` age

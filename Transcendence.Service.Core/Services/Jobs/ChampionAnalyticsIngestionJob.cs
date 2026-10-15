@@ -49,9 +49,9 @@ public class ChampionAnalyticsIngestionJob(
     [DisableConcurrentExecution(timeoutInSeconds: 10 * 60)]
     public async Task ExecuteAsync(CancellationToken ct = default)
     {
-        // Liveness beat for the worker watchdog — recorded on every dispatcher fire, before the
-        // pacing gate, so a hung worker (no dispatcher fires at all) goes stale even in steady state.
-        await workerHeartbeat.BeatAsync(ct);
+        // Also record direct invocations outside Hangfire, before the pacing gate. Hosted jobs
+        // record progress through the global filter across every queue.
+        workerHeartbeat.RecordProgress();
 
         // Self-pacing: one fast heartbeat cron fires this dispatcher; the pacing slot decides whether
         // this tick actually fans out (tighter cadence during a new-patch ramp, looser in steady state).

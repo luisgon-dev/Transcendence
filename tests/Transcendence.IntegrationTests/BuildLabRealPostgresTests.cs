@@ -1,5 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using System.Data.Common;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -27,6 +29,57 @@ public sealed class BuildLabRealPostgresTests(PostgresIntegrationFixture fixture
     private const int Zed = 238;
     private const int Luden = 6655;
     private const int Malignance = 3118;
+
+    [Fact]
+    public async Task Refresh_SplitUpsertsRollBackTogetherWithTheLedger_AndRetryCountsOnce()
+    {
+        var patch = await SeedPatchAsync();
+        await using (var seed = NewDb())
+        {
+            for (var index = 0; index < 200; index++)
+                AddGame(seed, patch, ahriWins: true, firstItem: 60_000 + index, ahriGoldLead: 0);
+            await seed.SaveChangesAsync();
+        }
+
+        var failure = new FailSecondUpsert();
+        await using (var failing = new TranscendenceContext(new DbContextOptionsBuilder<TranscendenceContext>()
+                         .UseNpgsql(fixture.ConnectionString).AddInterceptors(failure).Options))
+        {
+            var refresher = new BuildLabStatsRefresher(failing,
+                Options.Create(new BuildLabOptions { Enabled = true, MatchBatchSize = 200,
+                    PatchesToRetain = 50, PriorPatchesToRefresh = 50 }),
+                NullLogger<BuildLabStatsRefresher>.Instance);
+            await Assert.ThrowsAsync<InvalidOperationException>(() => refresher.RefreshAsync(CancellationToken.None));
+        }
+
+        failure.Upserts.Should().Be(2);
+        await using (var check = NewDb())
+        {
+            (await check.BuildLabOptionStats.AnyAsync(row => row.Patch == patch)).Should().BeFalse();
+            (await check.BuildLabProcessedMatches.AnyAsync(row => row.Patch == patch)).Should().BeFalse();
+            (await check.BuildLabCoverage.AnyAsync(row => row.Patch == patch)).Should().BeFalse();
+        }
+
+        (await RefreshAsync()).MatchesCounted.Should().BeGreaterThanOrEqualTo(200);
+        (await RefreshAsync()).MatchesCounted.Should().Be(0);
+        await using var verified = NewDb();
+        (await verified.BuildLabProcessedMatches.CountAsync(row => row.Patch == patch)).Should().Be(200);
+    }
+
+    private sealed class FailSecondUpsert : DbCommandInterceptor
+    {
+        public int Upserts { get; private set; }
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command, CommandEventData eventData, InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.StartsWith("INSERT INTO \"BuildLabOptionStats\"", StringComparison.Ordinal)
+                && ++Upserts == 2)
+                throw new InvalidOperationException("Simulated failure after the first upsert chunk.");
+            return new(result);
+        }
+    }
 
     [Fact]
     public async Task Refresh_CountsEachMatchOnce_AndTheServiceReadsTheCountsBack()

@@ -9,7 +9,8 @@ ExecStart=/root/deploy/data-health-sweep.sh
 Nice=10
 IOSchedulingClass=idle
 CPUWeight=20
-TimeoutStartSec=60
+# Three bounded HTTP checks plus a bounded Docker/DB check, with shutdown margin under I/O pressure.
+TimeoutStartSec=75
 ProtectSystem=strict
 ReadWritePaths=/var/lib/transcendence-perf
 StateDirectory=transcendence-perf

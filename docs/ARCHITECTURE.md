@@ -55,7 +55,9 @@ Transcendence is a backend + web monorepo:
   or arbitrary paths. The web container exposes cumulative Prometheus histograms at
   `/api/telemetry/metrics`; timing metrics use millisecond buckets while CLS stays dimensionless. Labels are
   deliberately limited to metric/route/rating, so route-level p75 field performance remains useful without
-  unbounded telemetry cardinality.
+  unbounded telemetry cardinality. Automated browsers (`navigator.webdriver`) skip the reporter;
+  the collector also discards HeadlessChrome/Lighthouse user agents with HTTP 204. Lab runs remain
+  in the separate Lighthouse series rather than entering visitor percentiles.
 - **Auth token refresh runs in `proxy.ts` (Next 16 middleware), not during render.** Auth uses a short-lived access token + a single-use, rotated refresh token (the backend revokes the presented refresh token on every `/api/auth/refresh`, no grace window). Refreshing inside a Server Component render can't persist the rotated cookie (cookie writes are illegal during render), which would burn the refresh token and silently log users out. So `proxy.ts` refreshes a stale access token on page navigations and writes the rotated cookies to **both** the forwarded request (so the SSR render reads the fresh token and doesn't refresh again) and the response (so the browser persists them). It is fail-safe: it only acts when a refresh token exists and the access token is stale, skips prefetch requests (so a speculative prefetch can't burn the single-use token), and on any failure (401/5xx/network/timeout/malformed) passes through **without** clearing cookies. The matcher excludes `/api/*` (route handlers refresh + clear in their own writable context via `getAccessTokenOrRefresh`/`getSessionMe`), `_next`, and static files. Pure helpers live in `lib/proxyAuth.ts`; cookie names + the staleness check in `lib/authCookieShared.ts`.
 - Riot Sign On uses two same-origin route handlers: `/api/session/riot/start` creates a 256-bit
   correlation state in an HttpOnly, SameSite=Lax, ten-minute cookie; `/api/session/riot/callback`
@@ -207,7 +209,11 @@ Operational implication:
   (`AddOrUpdateHighEloProfiles`), the summoner-maintenance sweep, and refresh-lock cleanup.
   `ProRosterDiscoveryJob` runs on `default`.
 - Refresh locks use DB-backed lease semantics (atomic acquire/renew + explicit lease expiry on release) so concurrent lock races do not require lock-row deletion.
-- The worker watchdog treats a stale producer heartbeat as a shutdown request first: it calls the
+- Every Hangfire job start and completion records an in-memory progress timestamp through a global
+  server filter, before blocking execution filters. Liveness no longer depends on one ingestion
+  dispatcher. A publisher writes the actual timestamp to the healthcheck file and Redis every 30
+  seconds, preserving the file's progress mtime; publication itself never advances the beat.
+- The worker watchdog treats stale job progress as a shutdown request first: it calls the
   generic host's `StopApplication`, allowing Hangfire and scoped writes to unwind, and waits up to
   `Worker:Watchdog:GracefulShutdownTimeout` (15 seconds by default). `Environment.Exit(70)` remains
   only as the bounded fallback for a host too wedged to enter `StopAsync`; the watchdog thread and
@@ -847,9 +853,26 @@ Compact synergy coverage is checked before pruning. Autovacuum and transaction d
 Server JSON fetches and BFF proxy responses keep their deadline through body consumption. The finite
 BFF response is buffered so a stalled body returns a structured 504. Backend error cards expose an
 inert data attribute to bounded synthetic checks. A five-minute data-health timer records first byte,
-full streamed response time, fallback failures, I/O pressure, and durable snapshot ages. Nightly
-Lighthouse has a stable Docker name, resource caps, bounded RAM temporary storage, browser restart
+full streamed response time, fallback failures, I/O pressure, and durable snapshot ages.
+HTTP checks have a 12-second curl deadline plus a 14-second outer timeout; the read-only database
+probe has a five-second statement budget and an eight-second outer timeout. Snapshot probe failures
+publish `transcendence_snapshot_probe_failure=1` alongside current page results rather than discarding
+the whole sweep. The page-data alert covers either failure. The service has a 75-second ceiling.
+Nightly Lighthouse has a stable Docker name, resource caps, bounded RAM temporary storage, browser restart
 on sample failures, and explicit cleanup on timeout. Runtime errors and missing paint measurements
 cannot publish a fresh success timestamp; measuring a fast loading shell alone is insufficient.
 The lab uses verified HTTPS with HTTP/1.1 and an explicit transport label because Chromium 154's
 instrumented HTTP/2 session hangs against NPM. The proxy and full-response checks retain HTTP/2.
+
+Summoner reads cache the assembled profile for 30 seconds (10 seconds in local memory), keyed by
+summoner ID and profile revision and tagged with the existing `summoner-stats:{id}` invalidation tag.
+Missing/refreshing lookups are not cached. This coalesces assembly and avoids repeated sequential
+stats-cache round trips while preserving refresh invalidation. Match cards are memoized, and the
+expanded scoreboard loads only when opened; collapsed cards do not load the animation library.
+
+Build Lab upserts follow primary-key order in statements of at most 500 option rows, all in the same
+transaction as their match ledger and coverage. A failed chunk rolls back the entire match batch. Its PostgreSQL session
+advisory lock remains authoritative; overlapping triggers skip instead of waiting on an additional
+hour-long Hangfire execution lock. Retention discovers expired patches from coverage and the indexed
+ledger rather than scanning the option-stats corpus on every refresh. Existing time/WAL limits,
+transaction sizes, pacing, and worker counts remain in force.

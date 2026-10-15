@@ -1000,7 +1000,7 @@ groups:
             model:
               refId: A
               editorMode: code
-              expr: 'max(transcendence_data_probe_failure)'
+              expr: 'max({__name__=~"transcendence_data_probe_failure|transcendence_snapshot_probe_failure"})'
               instant: true
               range: false
               intervalMs: 1000
@@ -1026,7 +1026,7 @@ groups:
           severity: warning
         annotations:
           summary: Production page data unavailable
-          description: A representative full page response repeatedly timed out or rendered a backend fallback. Inspect the route metrics and application logs.
+          description: A representative page timed out or rendered a backend fallback, or the bounded snapshot database probe failed. Inspect the route metrics, transcendence_snapshot_probe_failure, and application logs.
         notification_settings:
           receiver: transcendence-discord
           group_by:

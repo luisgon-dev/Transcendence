@@ -445,6 +445,11 @@ Response: `{ patch, region, scope, champions[], sample }` where each champion en
 
 ### Operational Health
 
+The web BFF accepts browser Web Vitals at `POST /api/telemetry/web-vitals` and exposes their aggregate
+histograms at `GET /api/telemetry/metrics`. HeadlessChrome/Lighthouse user agents receive `204` without
+recording a measurement; the browser reporter also skips webdriver sessions. This best-effort
+synthetic exclusion keeps lab measurements separate from visitor percentiles.
+
 - `GET /health/live`
 - `GET /health/ready`
 

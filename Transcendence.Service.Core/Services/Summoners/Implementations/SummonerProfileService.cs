@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Caching.Hybrid;
+using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Analysis.Interfaces;
 using Transcendence.Service.Core.Services.RiotApi.DTOs;
@@ -8,8 +10,14 @@ namespace Transcendence.Service.Core.Services.Summoners.Implementations;
 public sealed class SummonerProfileService(
     ISummonerRepository summonerRepository,
     ISummonerStatsService statsService,
-    ISummonerMatchHistoryService matchHistoryService) : ISummonerProfileService
+    ISummonerMatchHistoryService matchHistoryService,
+    HybridCache cache) : ISummonerProfileService
 {
+    private static readonly HybridCacheEntryOptions ProfileCacheOptions = new()
+    {
+        Expiration = TimeSpan.FromSeconds(30),
+        LocalCacheExpiration = TimeSpan.FromSeconds(10)
+    };
     public async Task<IReadOnlyList<SummonerSearchCandidateDto>> SearchByPrefixAsync(
         string platformRegion,
         string gameNamePrefix,
@@ -45,6 +53,19 @@ public sealed class SummonerProfileService(
             ct);
         if (summoner is null)
             return null;
+
+        // Collapse concurrent profile reads and reuse the assembled response. Sub-query caches
+        // alone still require several sequential Redis round trips on every request.
+        return await cache.GetOrCreateAsync(
+            $"summoner-profile:v1:{summoner.Id}:{summoner.UpdatedAt.Ticks}",
+            async cancel => await BuildProfileAsync(summoner, cancel),
+            ProfileCacheOptions,
+            tags: [$"summoner-stats:{summoner.Id}"],
+            cancellationToken: ct);
+    }
+
+    private async Task<SummonerProfileResponse> BuildProfileAsync(Summoner summoner, CancellationToken ct)
+    {
 
         var soloRank = summoner.Ranks
             .Where(r => IsSoloRankQueue(r.QueueType))

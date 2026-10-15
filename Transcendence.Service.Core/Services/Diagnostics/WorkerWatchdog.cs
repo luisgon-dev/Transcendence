@@ -14,8 +14,8 @@ public sealed class WorkerWatchdogOptions
     public bool Enabled { get; set; } = true;
 
     /// <summary>
-    /// How stale the last producer beat may get before the worker is considered hung. Must
-    /// comfortably exceed the producer cadence (ChampionAnalyticsIngestion fires every 2 min).
+    /// How stale the last job-progress beat may get before the worker is considered hung.
+    /// Must comfortably exceed the normal interval between job starts/completions.
     /// </summary>
     public TimeSpan StalenessThreshold { get; set; } = TimeSpan.FromMinutes(10);
 
@@ -33,11 +33,11 @@ public sealed class WorkerWatchdogOptions
 }
 
 /// <summary>
-/// Watches the producer heartbeat on a dedicated thread — not a thread-pool timer — so it keeps
+/// Watches the job-progress heartbeat on a dedicated thread — not a thread-pool timer — so it keeps
 /// running even when the managed thread pool is exhausted (the documented worker-hang class). When
 /// the heartbeat goes stale it first requests a bounded generic-host shutdown, then exits only as a
 /// fallback so the container restart policy still recovers a truly wedged host. It arms only after
-/// the first beat, so broken wiring or a deliberately-disabled producer can never drive a restart
+/// the first beat, so broken wiring or a deliberately-disabled worker can never drive a restart
 /// loop (a never-beating worker is left alone).
 /// </summary>
 public sealed class WorkerWatchdogService(
@@ -90,7 +90,7 @@ public sealed class WorkerWatchdogService(
             }
 
             logger.LogCritical(
-                "Worker watchdog: last producer beat {LastBeatUtc:o} is older than {Threshold}; the worker " +
+                "Worker watchdog: last job progress {LastBeatUtc:o} is older than {Threshold}; the worker " +
                 "appears hung. Requesting graceful host shutdown before the hard-exit fallback.",
                 last,
                 opts.StalenessThreshold);

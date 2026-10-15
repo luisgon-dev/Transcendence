@@ -90,7 +90,6 @@ function props(overrides: TestOverrides = {}): React.ComponentProps<typeof Match
       detailBusy: {},
       onToggleExpanded: overrides.onToggleExpanded ?? vi.fn()
     },
-    prefersReducedMotion: true,
   };
 }
 

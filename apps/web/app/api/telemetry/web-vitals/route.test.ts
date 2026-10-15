@@ -15,6 +15,14 @@ function request(body: Record<string, unknown>, headers: HeadersInit = {}) {
 }
 
 describe("POST /api/telemetry/web-vitals", () => {
+  it("does not count synthetic browser measurements as visitor reports", async () => {
+    const response = await POST(request(
+      { name: "LCP", value: 9000, rating: "poor", route: "/", navigationType: "navigate" },
+      { "user-agent": "Mozilla/5.0 HeadlessChrome/154.0.0.0" }
+    ));
+    expect(response.status).toBe(204);
+    expect(getWebVitalsMetricsStore().renderPrometheus()).not.toContain("transcendence_web_vital_reports_total{");
+  });
   beforeEach(() => {
     resetWebVitalsMetricsStoreForTests();
   });

@@ -26,7 +26,6 @@ public sealed class RefreshBuildLabStatsJob(
     private const string ExecutionLockResource = "transcendence:build-lab-refresh";
 
     [Queue(HangfireQueues.AnalyticsBatch)]
-    [DisableConcurrentExecution(timeoutInSeconds: 60 * 60)]
     [AutomaticRetry(Attempts = 0)]
     public async Task ExecuteAsync(CancellationToken ct)
     {

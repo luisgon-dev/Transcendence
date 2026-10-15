@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Caching.Hybrid;
 using Moq;
 using System.Security.Claims;
 using Transcendence.Data.Models.LoL.Account;
@@ -23,8 +24,10 @@ using Transcendence.Service.Core.Services.Operations;
 
 namespace Transcendence.WebAPI.Tests;
 
-public class SummonersControllerTests
+public class SummonersControllerTests : IDisposable
 {
+    private readonly ServiceProvider cacheProvider = new ServiceCollection().AddHybridCache().Services.BuildServiceProvider();
+    public void Dispose() => cacheProvider.Dispose();
     [Fact]
     public async Task GetByRiotId_ReturnsBadRequestForInvalidRegion()
     {
@@ -242,7 +245,7 @@ public class SummonersControllerTests
             Times.Once);
     }
 
-    private static SummonersController BuildController(
+    private SummonersController BuildController(
         ISummonerRepository? summonerRepository = null,
         IRefreshLockRepository? refreshLockRepository = null,
         IBackgroundJobClient? backgroundJobClient = null,
@@ -257,7 +260,8 @@ public class SummonersControllerTests
             new SummonerProfileService(
                 effectiveSummonerRepository,
                 statsService ?? Mock.Of<ISummonerStatsService>(),
-                Mock.Of<ISummonerMatchHistoryService>()),
+                Mock.Of<ISummonerMatchHistoryService>(),
+                cacheProvider.GetRequiredService<HybridCache>()),
             new SummonerRefreshCoordinator(
                 effectiveRefreshLockRepository,
                 NewTracker(),

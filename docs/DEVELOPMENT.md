@@ -680,7 +680,10 @@ Which recurring jobs are active is determined by:
 
 The base `appsettings.json` ships `Jobs:Schedule:Profile = "stable"` (there is no `appsettings.Development.json`), so a local worker resolves the **same `stable` profile as production** unless you override `Jobs:Schedule:Profile` (or individual `Enable*` / `JobOverrides` values) via user-secrets or environment variables. Under `stable` the enabled jobs are the LoL analytics-coverage set (adaptive analytics refresh, champion-analytics ingestion, summoner maintenance, each a single self-pacing job that tightens cadence during the new-patch ramp window, plus match-timeline backfill, live-game polling for opted-in favorites, high-elo profile refresh, and pro-roster discovery), plus the baseline jobs (`detect-patch`, `retry-failed-matches`, `refresh-lock-lifecycle-cleanup`); `rune-selection-integrity-backfill` and the daily `refresh-champion-analytics` are disabled.
 
-The worker watchdog requests graceful generic-host shutdown on a stale producer heartbeat, waiting
+The worker watchdog follows job starts/completions across every Hangfire queue, rather than only
+the champion-ingestion dispatcher. A 30-second publisher updates the file and Redis with the actual
+progress timestamp; timer ticks do not count as progress. It requests graceful generic-host shutdown
+when that progress becomes stale, waiting
 `Worker:Watchdog:GracefulShutdownTimeout` (default `00:00:15`) before its hard-exit/container-restart
 fallback. Override it with `Worker__Watchdog__GracefulShutdownTimeout`; keep it long enough for an
 ordinary Hangfire scope and transaction to observe cancellation and unwind.
@@ -752,6 +755,10 @@ flag and no-ops while `Analytics:BuildLab:Enabled` is false. A PostgreSQL sessio
 (`transcendence:build-lab-refresh`) keeps a manual trigger from overlapping the recurring run. Each
 batch commits its counts and its `BuildLabProcessedMatches` ledger rows in one transaction, so a crash
 or redeploy mid-run loses nothing and double counts nothing; the next run resumes where it stopped.
+Each upsert statement contains at most 500 option rows, while all chunks still commit atomically
+with the match ledger and coverage. Overlapping triggers skip through the session advisory lock
+instead of blocking on a second Hangfire mutex. Retention uses coverage/the indexed match ledger
+to discover old patches without scanning every option row.
 
 `Analytics:BuildLab` (`BuildLabOptions`, defaults in `config/backend.shared.json`):
 

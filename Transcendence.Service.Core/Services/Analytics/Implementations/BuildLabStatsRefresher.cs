@@ -118,7 +118,9 @@ public sealed class BuildLabStatsRefresher(
     {
         // Never turn a small counting run into an unbounded retention delete. Remove stats before
         // their ledger/coverage so an interrupted cleanup cannot make an expired patch count twice.
-        var expired = await context.BuildLabOptionStats.AsNoTracking()
+        // Coverage is created atomically with every counted batch (and seeded from the ledger by
+        // its migration). Finding an expired patch must not scan millions of option rows each run.
+        var expired = await context.BuildLabCoverage.AsNoTracking()
             .Where(row => !retained.Contains(row.Patch)).Select(row => row.Patch)
             .Union(context.BuildLabProcessedMatches.Where(row => !retained.Contains(row.Patch)).Select(row => row.Patch))
             .OrderBy(patch => patch).FirstOrDefaultAsync(ct);
@@ -353,7 +355,26 @@ public sealed class BuildLabStatsRefresher(
     {
         if (counts.Count == 0)
             return;
-        var keys = counts.Keys.ToArray();
+        // Keep individual statements bounded even when 25 matches expand into thousands of options.
+        // All chunks still share CountBatchAsync's transaction with the ledger and coverage.
+        // Follow the primary-key order to reduce random index access on the HDD and keep lock
+        // acquisition order consistent between statements.
+        var ordered = counts.Keys.OrderBy(key => key.ChampionId)
+            .ThenBy(key => key.Role, StringComparer.Ordinal)
+            .ThenBy(key => key.OpponentChampionId)
+            .ThenBy(key => key.Region, StringComparer.Ordinal)
+            .ThenBy(key => key.PrefixHash)
+            .ThenBy(key => key.Family)
+            .ThenBy(key => key.Stage)
+            .ThenBy(key => key.ActionKey, StringComparer.Ordinal)
+            .ThenBy(key => key.GoldBucket);
+        foreach (var chunk in ordered.Chunk(500))
+            await UpsertChunkAsync(patch, chunk, counts, ct);
+    }
+
+    private async Task UpsertChunkAsync(
+        string patch, StatKey[] keys, Dictionary<StatKey, Counts> counts, CancellationToken ct)
+    {
         var values = keys.Select(key => counts[key]).ToArray();
         await context.Database.ExecuteSqlRawAsync(
             """

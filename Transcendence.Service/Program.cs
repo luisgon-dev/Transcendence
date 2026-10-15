@@ -48,7 +48,7 @@ builder.Services.AddHangfire((provider, config) =>
     config.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
         .UseSimpleAssemblyNameTypeSerializer()
         .UseRecommendedSerializerSettings()
-        .UseFilter(new WorkerProgressFilter(provider.GetRequiredService<IWorkerHeartbeat>()) { Order = int.MinValue })
+        .UseFilter(new WorkerProgressFilter(provider.GetRequiredService<IWorkerHeartbeat>()))
         .UseFilter(new AutomaticRetryAttribute
         {
             Attempts = hangfireRetryAttempts

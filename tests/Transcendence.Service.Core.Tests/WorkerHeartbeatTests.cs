@@ -2,12 +2,33 @@ using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
+using Hangfire.Common;
 using Transcendence.Service.Core.Services.Diagnostics;
 
 namespace Transcendence.Service.Core.Tests;
 
 public sealed class WorkerHeartbeatTests
 {
+    [Fact]
+    public void ProgressFilter_UsesSupportedOrderBeforeConcurrencyLocks()
+    {
+        var filter = new WorkerProgressFilter(Mock.Of<IWorkerHeartbeat>());
+        var globals = new JobFilterCollection();
+        globals.Add(filter);
+        var providers = new JobFilterProviderCollection { globals, new JobFilterAttributeFilterProvider() };
+        var filters = providers.GetFilters(Job.FromExpression(() => LockedJob.Execute())).ToArray();
+
+        Assert.Equal(-1, filter.Order);
+        Assert.Same(filter, filters[0].Instance);
+        Assert.IsType<Hangfire.DisableConcurrentExecutionAttribute>(filters[1].Instance);
+    }
+
+    public static class LockedJob
+    {
+        [Hangfire.DisableConcurrentExecution(60)]
+        public static void Execute() { }
+    }
+
     [Fact]
     public async Task PublishingDoesNotInventProgress_AndHealthcheckMtimeTracksTheActualBeat()
     {

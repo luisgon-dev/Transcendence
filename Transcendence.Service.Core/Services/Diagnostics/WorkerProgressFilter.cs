@@ -8,8 +8,17 @@ namespace Transcendence.Service.Core.Services.Diagnostics;
 /// Liveness follows work across every queue, including failed jobs that returned control.
 /// One blocked ingestion dispatcher must not restart other pools that are making progress.
 /// </summary>
-public sealed class WorkerProgressFilter(IWorkerHeartbeat heartbeat) : JobFilterAttribute, IServerFilter
+public sealed class WorkerProgressFilter : JobFilterAttribute, IServerFilter
 {
+    private readonly IWorkerHeartbeat heartbeat;
+
+    public WorkerProgressFilter(IWorkerHeartbeat heartbeat)
+    {
+        this.heartbeat = heartbeat;
+        // Hangfire rejects values below -1. At equal order, global filters precede job attributes.
+        Order = -1;
+    }
+
     public void OnPerforming(PerformingContext context) => heartbeat.RecordProgress();
     public void OnPerformed(PerformedContext context) => heartbeat.RecordProgress();
 }

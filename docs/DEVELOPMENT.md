@@ -1207,6 +1207,8 @@ synergies six hours). Background job failures and hardware contention can breach
 `data-health-sweep.sh` exposes ages/fallbacks for alerting rather than hiding that delay.
 
 Install the bounded archive, lab runner, and five-minute data checks following `scripts/ops/README.md`.
+Keep the lightweight data-health unit at best-effort I/O priority 7; idle I/O scheduling can starve
+the probe itself during database load and prevent fresh metrics from being published.
 Validate scripts with `python3 -m unittest discover -s scripts/ops/tests`; validate compact raw/fact
 semantics and migrations with `dotnet test tests/Transcendence.IntegrationTests` (Docker required).
 

@@ -7,7 +7,9 @@ Requires=docker.service
 Type=oneshot
 ExecStart=/root/deploy/data-health-sweep.sh
 Nice=10
-IOSchedulingClass=idle
+# Keep probes low priority without starving their file/command I/O behind database work.
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
 CPUWeight=20
 # Three bounded HTTP checks plus a bounded Docker/DB check, with shutdown margin under I/O pressure.
 TimeoutStartSec=75

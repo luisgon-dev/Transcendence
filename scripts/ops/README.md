@@ -365,6 +365,9 @@ even after a fast HTTP 200 shell. This covers initial server data, not subsequen
 match-history loading, or WAN browser experience. A read-only, five-second snapshot query reports
 oldest active-patch/regional ages; no raw corpus scan is added. Reports are atomic node-exporter
 textfiles; failed sweeps retain the prior timestamp so staleness remains visible.
+The lightweight probe unit uses best-effort I/O priority 7, Nice 10, and CPU weight 20. Idle I/O
+priority can starve the probe's own executable/file reads on a saturated HDD and exhaust its
+75-second service deadline even when the HTTP/database checks are individually bounded.
 
 ```bash
 install -D -m 0755 data-health-sweep.sh /root/deploy/data-health-sweep.sh

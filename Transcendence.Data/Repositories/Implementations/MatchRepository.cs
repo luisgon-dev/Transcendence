@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Repositories.Interfaces;
 
@@ -22,7 +23,24 @@ public class MatchRepository(TranscendenceContext transcendenceContext) : IMatch
         if (exists)
             return;
 
-        await transcendenceContext.Matches.AddAsync(match, cancellationToken);
+        // Insert only the match aggregate. Participants' summoners are upserted while the match is
+        // prepared, so they are existing rows, never inserts. A plain Add marked them Added whenever they
+        // were untracked -- every per-match fallback after ChangeTracker.Clear() -- which failed on
+        // PK_Summoners and, through Summoner.MatchParticipants, dragged the batch's other matches in too.
+        transcendenceContext.ChangeTracker.TrackGraph<object?>(match, null, node =>
+        {
+            if (node.Entry.State != EntityState.Detached)
+                return false;
+
+            if (node.Entry.Entity is Summoner)
+            {
+                node.Entry.State = EntityState.Unchanged;
+                return false;
+            }
+
+            node.Entry.State = EntityState.Added;
+            return true;
+        });
     }
 
     public Task<Match?> GetMatchByIdAsync(string matchId, CancellationToken cancellationToken)

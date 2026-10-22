@@ -124,6 +124,28 @@ public class RefreshLockRepository(TranscendenceContext db, ILogger<RefreshLockR
         }
     }
 
+    public async Task<bool> TryRenewOwnedAsync(string key, Guid ownerToken, TimeSpan ttl, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            throw new ArgumentException("Lock key is required.", nameof(key));
+
+        // Fenced on the token alone: a lapsed lease nobody re-acquired is still safe to extend, because
+        // any re-acquire rotates the token first.
+        var lockedUntil = DateTime.UtcNow.Add(ttl);
+        var affectedRows = await db.RefreshLocks
+            .Where(x => x.Key == key && x.OwnerToken == ownerToken)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.LockedUntilUtc, lockedUntil), ct);
+
+        var renewed = affectedRows > 0;
+        EmitLifecycleLog(
+            "refresh_lock.lifecycle",
+            key,
+            renewed ? "renewed" : "renew_lost",
+            ttlSeconds: ttl.TotalSeconds);
+
+        return renewed;
+    }
+
     public Task<RefreshLock?> GetAsync(string key, CancellationToken ct = default)
     {
         return db.RefreshLocks

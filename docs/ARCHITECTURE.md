@@ -592,7 +592,10 @@ was last ingested. It is built so that no request ever counts rows:
 - `high-elo-profile-refresh` still uses Riot's current Master/Grandmaster/Challenger leagues as the
   discovery pool, but only sets `IsHighEloOtp` when the account has a complete latest-50 Ranked
   Solo/Duo sample with at least 30 games on one champion. The job stores champion, sample, and
-  evaluation evidence and retires legacy auto-created rows that lack that evidence.
+  evaluation evidence and retires legacy auto-created rows that lack that evidence. A full pass over
+  every region outlasts its two-hour cron, so one run holds the `high-elo-refresh` lock (a 30-minute
+  lease renewed every save batch) and later ticks skip while it runs. Overlapping runs once filled all
+  eight main-pool workers and starved the `default` queue, including the ingestion dispatcher.
 - The same roster table is also used as a high-value analytics seed source. Pro-build analytics can
   select `pro`, `highelo`, or `all`; missing/invalid scope defaults to `pro`.
 - Admin API (`/api/admin/pro-summoners`) allows manual curation, candidate approval/rejection, and updates.

@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Transcendence.Data;
 using Transcendence.Data.Repositories.Implementations;
 using Transcendence.Service.Core.Services.Jobs;
@@ -71,6 +72,45 @@ public sealed class RefreshLockFencingTests
 
         var second = await repo.TryAcquireOwnedAsync(key, TimeSpan.FromMinutes(15));
         second.Should().BeNull("the lock is still actively held");
+    }
+
+    [Fact]
+    public async Task TryRenewOwnedAsync_ExtendsOnlyTheCurrentOwnersLease()
+    {
+        await using var context = await CreateContextAsync();
+        var repo = new RefreshLockRepository(context);
+        const string key = "high-elo-refresh";
+
+        var tokenA = await repo.TryAcquireOwnedAsync(key, TimeSpan.FromMinutes(1));
+        (await repo.TryRenewOwnedAsync(key, tokenA!.Value, TimeSpan.FromMinutes(30))).Should().BeTrue();
+        (await repo.GetAsync(key))!.LockedUntilUtc.Should().BeAfter(DateTime.UtcNow.AddMinutes(29));
+
+        // A's lease lapses and B takes over: A can no longer extend it.
+        var row = await context.RefreshLocks.SingleAsync(x => x.Key == key);
+        row.LockedUntilUtc = DateTime.UtcNow.AddMinutes(-1);
+        await context.SaveChangesAsync();
+        var tokenB = await repo.TryAcquireOwnedAsync(key, TimeSpan.FromMinutes(30));
+
+        (await repo.TryRenewOwnedAsync(key, tokenA.Value, TimeSpan.FromMinutes(30))).Should().BeFalse();
+        (await repo.GetAsync(key))!.OwnerToken.Should().Be(tokenB!.Value);
+    }
+
+    [Fact]
+    public async Task HighEloRefresh_WhileAnotherRunHoldsTheLock_SkipsWithoutTouchingTheLock()
+    {
+        await using var context = await CreateContextAsync();
+        var repo = new RefreshLockRepository(context);
+        var runningOwner = await repo.TryAcquireOwnedAsync("high-elo-refresh", TimeSpan.FromMinutes(30));
+
+        // Only the lock is wired: a run that failed to skip would dereference the null dependencies.
+        var job = new AddOrUpdateHighEloProfiles(
+            null!, context, NullLogger<AddOrUpdateHighEloProfiles>.Instance, null!, null!, repo, null!);
+        await job.Execute(CancellationToken.None);
+        await job.ExecuteForRegionAsync("NA1", CancellationToken.None);
+
+        var lockRow = await repo.GetAsync("high-elo-refresh");
+        lockRow!.OwnerToken.Should().Be(runningOwner!.Value);
+        lockRow.LockedUntilUtc.Should().BeAfter(DateTime.UtcNow);
     }
 
     [Fact]

@@ -100,7 +100,7 @@ public class ChampionAnalyticsController(
         ChampionMatchupsResponse matchups;
         ChampionGradeDto? grade;
         ChampionTrendResponse trend;
-        ChampionSynergiesResponse synergies;
+        ChampionSynergiesResponse? synergies;
         ChampionRecommendationSummary? recommendation;
         if (serviceScopeFactory == null)
         {

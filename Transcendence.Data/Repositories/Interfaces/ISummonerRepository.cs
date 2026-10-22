@@ -33,6 +33,18 @@ public interface ISummonerRepository
     Task<Summoner> AddOrUpdateSummonerAsync(Summoner summoner, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Stamp <c>UpdatedAt</c> on every row this Riot ID resolves to in the region, set-based. Stale
+    /// duplicate rows (renames, transfers) share a Riot ID, so a refresh resolved by Riot ID must
+    /// stamp them all or the producers keep picking the unstamped one.
+    /// </summary>
+    Task MarkRiotIdRefreshedAsync(
+        string platformRegion,
+        string gameName,
+        string tagLine,
+        DateTime refreshedAtUtc,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Batch lookup summoners by Riot ID pairs within a single region.
     /// Returns summoners with Ranks eagerly loaded.
     /// </summary>

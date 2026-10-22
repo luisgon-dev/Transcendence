@@ -658,11 +658,13 @@ The public Web API also consumes `Jobs:MultiRegionIngestion` from `Transcendence
 Host-level concurrency is configurable without rebuilding:
 
 - `Worker:ThreadPoolMinThreads` (default `200`, never lower than the logical CPU count)
-- `Jobs:Hangfire:Workers:Main` (default `24`)
-- `Jobs:Hangfire:Workers:Analytics` (default `4`)
-- `Jobs:Hangfire:Workers:Timeline` (default `8`)
-- `Jobs:Hangfire:Workers:Discovery` (default `8`)
-- `Jobs:Hangfire:Workers:History` (default `2`)
+- `Jobs:Hangfire:Workers:Main` (default `8`)
+- `Jobs:Hangfire:Workers:Analytics` (default `1`)
+- `Jobs:Hangfire:Workers:Batch` (default `1`)
+- `Jobs:Hangfire:Workers:Timeline` (default `2`)
+- `Jobs:Hangfire:Workers:Discovery` (default `2`)
+- `Jobs:Hangfire:Workers:History` (default `1`)
+- `Jobs:Hangfire:Workers:ApexCrawl` (default `1`)
 
 Tune worker pools against observed database/Riot capacity rather than host CPU alone. Production
 Compose separately caps WebAPI connections at 20 and worker connections at 35, leaving 45 connections

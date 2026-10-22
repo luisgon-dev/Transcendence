@@ -44,7 +44,11 @@ public class ChampionAnalyticsIngestionJob(
         DateTime UpdatedAt,
         bool IsFavorite,
         bool IsTrackedHighValue,
-        string? RankTier);
+        string? RankTier,
+        bool PlayedSinceRefresh = false);
+
+    // How far back a ladder change still marks a player as having unsynced games.
+    private static readonly TimeSpan PlayedSinceRefreshWindow = TimeSpan.FromDays(1);
 
     [DisableConcurrentExecution(timeoutInSeconds: 10 * 60)]
     public async Task ExecuteAsync(CancellationToken ct = default)
@@ -672,6 +676,42 @@ public class ChampionAnalyticsIngestionJob(
                 IsFavorite: false,
                 IsTrackedHighValue: false,
                 x.RankTier)));
+
+            // Players the apex ladder crawl saw move (W/L or LP) since their last match sync have new
+            // ranked games waiting; stalest-first order picks exactly the ones who have NOT played,
+            // because the crawl stamps the players who did. The crawl stamps the rank after the
+            // summoner and a match sync stamps the summoner, so Rank.UpdatedAt > Summoner.UpdatedAt
+            // means "played, not yet synced". Ranks is small, so this read stays cheap.
+            var playedSinceUtc = evaluationUtc - PlayedSinceRefreshWindow;
+            var playedQuery =
+                from r in db.Ranks.AsNoTracking()
+                join s in db.Summoners.AsNoTracking() on r.SummonerId equals s.Id
+                where r.QueueType == "RANKED_SOLO_5x5"
+                      && r.UpdatedAt >= playedSinceUtc
+                      && r.UpdatedAt > s.UpdatedAt
+                      && s.GameName != null
+                      && s.TagLine != null
+                      && s.PlatformRegion != null
+                      && highEloTiers.Contains((r.Tier ?? string.Empty).ToUpper())
+                select new { s.PlatformRegion, s.GameName, s.TagLine, s.UpdatedAt, RankTier = r.Tier, RankUpdatedAt = r.UpdatedAt };
+
+            if (region != null)
+                playedQuery = playedQuery.Where(x => x.PlatformRegion == region);
+
+            var playedCandidates = await playedQuery
+                .OrderByDescending(x => x.RankUpdatedAt)
+                .Take(maxCandidates)
+                .ToListAsync(ct);
+
+            combined.AddRange(playedCandidates.Select(x => new CandidateSummoner(
+                x.PlatformRegion!,
+                x.GameName!,
+                x.TagLine!,
+                x.UpdatedAt,
+                IsFavorite: false,
+                IsTrackedHighValue: false,
+                x.RankTier,
+                PlayedSinceRefresh: true)));
         }
 
         if (jobOptions.FallbackToTrackedSummoners)
@@ -706,8 +746,9 @@ public class ChampionAnalyticsIngestionJob(
         }
 
         // Each source is read stalest-first, so filtering after Take() drops only recently refreshed rows.
+        // A player who played since the crawl stamped them is exempt: that stamp is not a match sync.
         var rankedCandidates = RankCandidates(
-            combined.Where(candidate => candidate.UpdatedAt <= refreshedBeforeUtc),
+            combined.Where(candidate => candidate.UpdatedAt <= refreshedBeforeUtc || candidate.PlayedSinceRefresh),
             patchReleaseUtc,
             evaluationUtc,
             maxCandidates);
@@ -744,6 +785,7 @@ public class ChampionAnalyticsIngestionJob(
                     new IngestionPriorityContext(patchReleaseUtc, evaluationUtc))
             })
             .OrderBy(x => x.Bucket)
+            .ThenByDescending(x => x.Candidate.PlayedSinceRefresh)
             .ThenBy(x => x.TierPriority)
             .ThenByDescending(x => x.Score)
             .ThenBy(x => x.Candidate.UpdatedAt)

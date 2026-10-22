@@ -132,4 +132,40 @@ public class RankRepositoryTests
         (await db.HistoricalRanks.OrderBy(hr => hr.DateRecorded).Select(hr => hr.Tier).ToListAsync())
             .Should().Equal("SILVER", "GOLD", "SILVER");
     }
+
+    [Fact]
+    public async Task AddOrUpdateRank_StampsUpdatedAtOnlyWhenTheLadderEntryMoves()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<TranscendenceContext>().UseSqlite(connection).Options;
+        await using var db = new SqliteCompatibleTranscendenceContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var summoner = new Summoner
+        {
+            Id = Guid.NewGuid(), PlatformRegion = "NA1", Region = "americas", Puuid = $"puuid-{Guid.NewGuid():N}",
+            GameName = "StampTester", TagLine = "NA1", UpdatedAt = DateTime.UtcNow
+        };
+        var dayAgo = DateTime.UtcNow.AddDays(-1);
+        var current = new Rank
+        {
+            Id = Guid.NewGuid(), QueueType = "RANKED_SOLO_5x5", Tier = "MASTER", RankNumber = "I",
+            LeaguePoints = 100, Wins = 10, Losses = 5, SummonerId = summoner.Id, Summoner = summoner, UpdatedAt = dayAgo
+        };
+        db.AddRange(summoner, current);
+        await db.SaveChangesAsync();
+        var repository = new RankRepository(db);
+
+        Rank Incoming(int wins) => new()
+        {
+            QueueType = current.QueueType, Tier = "MASTER", RankNumber = "I", LeaguePoints = 100, Wins = wins, Losses = 5
+        };
+
+        await repository.AddOrUpdateRank(summoner, [Incoming(10)]);
+        current.UpdatedAt.Should().Be(dayAgo, "an unchanged entry means the player has not played");
+
+        await repository.AddOrUpdateRank(summoner, [Incoming(11)]);
+        current.UpdatedAt.Should().BeAfter(summoner.UpdatedAt, "ingestion reads rank-after-summoner as unsynced games");
+    }
 }

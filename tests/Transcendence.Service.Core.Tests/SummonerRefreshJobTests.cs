@@ -362,7 +362,6 @@ public class SummonerRefreshJobTests
         await using var harness = await SummonerRefreshJobHarness.CreateAsync();
         var summoner = harness.SeedSummoner("name", "tag", "puuid-forced-catchup");
         await harness.Db.SaveChangesAsync();
-        var previousUpdatedAt = summoner.UpdatedAt;
 
         harness.RefreshLockRepository
             .Setup(x => x.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, It.IsAny<CancellationToken>()))
@@ -408,7 +407,9 @@ public class SummonerRefreshJobTests
             includeAllModes: false);
 
         harness.Db.Matches.Should().ContainSingle(m => m.MatchId == "NA1_ranked_forced");
-        summoner.UpdatedAt.Should().BeAfter(previousUpdatedAt);
+        harness.SummonerRepository.Verify(
+            x => x.MarkRiotIdRefreshedAsync("NA1", "name", "tag", It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
+            Times.Once);
         harness.RefreshLockRepository.Verify(x => x.ReleaseAsync("lock:low", It.IsAny<CancellationToken>()), Times.Once);
         harness.RefreshLockRepository.Verify(
             x => x.ReleaseAsync("lock:low|forced-catch-up", It.IsAny<CancellationToken>()),
@@ -462,7 +463,6 @@ public class SummonerRefreshJobTests
         await using var harness = await SummonerRefreshJobHarness.CreateAsync();
         var summoner = harness.SeedSummoner("name", "tag", "puuid-ranked-only");
         await harness.Db.SaveChangesAsync();
-        var previousUpdatedAt = summoner.UpdatedAt;
 
         harness.RefreshLockRepository
             .Setup(x => x.AnyActiveByPrefixAsync(RefreshLockKeys.ApiPriorityRefreshPrefix, It.IsAny<CancellationToken>()))
@@ -536,7 +536,9 @@ public class SummonerRefreshJobTests
             Times.Never);
 
         harness.Db.Matches.Should().ContainSingle(m => m.MatchId == "NA1_ranked_1");
-        summoner.UpdatedAt.Should().BeAfter(previousUpdatedAt);
+        harness.SummonerRepository.Verify(
+            x => x.MarkRiotIdRefreshedAsync("NA1", "name", "tag", It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
+            Times.Once);
         harness.RefreshLockRepository.Verify(x => x.ReleaseAsync("lock:low", It.IsAny<CancellationToken>()), Times.Once);
     }
 

@@ -205,8 +205,9 @@ Operational implication:
   - `refresh-low`
 - API refresh jobs run on `refresh-high`. Ingestion-driven summoner refreshes
   (`ISummonerRefreshJob.RefreshForAnalytics`) run on the reserved `discovery` lane (see
-  "Discovery reserved lane" below). `refresh-low` carries the apex ladder crawl
-  (`AddOrUpdateHighEloProfiles`), the summoner-maintenance sweep, and refresh-lock cleanup.
+  "Discovery reserved lane" below). `refresh-low` carries the summoner-maintenance sweep and
+  refresh-lock cleanup. The apex ladder crawl (`AddOrUpdateHighEloProfiles`) has its own one-worker
+  `apex-crawl` pool: a pass runs for most of a day, which would otherwise hold a main-pool worker.
   `ProRosterDiscoveryJob` runs on `default`.
 - Refresh locks use DB-backed lease semantics (atomic acquire/renew + explicit lease expiry on release) so concurrent lock races do not require lock-row deletion.
 - Every Hangfire job start and completion records an in-memory progress timestamp through a global
@@ -278,6 +279,11 @@ Operational implication:
   - per-region coverage targets scale with configured region weights
   - tracked high-value roster candidates are considered before the generic stale summoner pool
   - ranked Emerald+ candidates are preferred ahead of lower-value fallback rows
+  - within a bucket, apex players whose ladder entry moved since their last match sync go first
+    (`Rank.UpdatedAt > Summoner.UpdatedAt`: the crawl stamps the rank after the summoner, a sync stamps
+    the summoner); everyone else refreshed inside the region's stale window is skipped
+  - a completed refresh stamps every row its Riot ID resolves to, so stale duplicate rows from renames
+    and transfers stop being re-picked
 - Ingestion scales queued refresh count based on:
   - current patch coverage vs target
   - staleness of recent successful fetches

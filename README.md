@@ -34,7 +34,7 @@ game lookup, and a 5-player champ-select multi-search.
 - **Scale:** crawls the ranked ladders on 10 Riot platforms and ingests several thousand matches a day
   within an HDD I/O budget. Production holds 500K+ matches and their timelines in a 300 GB PostgreSQL
   database; live figures are on [About the data](https://transcend.kronic.one/about).
-- **Pipeline:** a .NET 10 Hangfire worker (5 servers, 7 queues, 20 recurring jobs) precomputes tier
+- **Pipeline:** a .NET 10 Hangfire worker (7 servers, 9 queues, 21 recurring jobs) precomputes tier
   grades, builds, matchups, and Build Lab win rates. Every Riot call passes a per-region token bucket.
 - **API:** the ASP.NET Core API serves reads and enqueues jobs, and holds no Riot key. It has JWT and
   API-key auth, rate limiting, and HybridCache over Redis.
@@ -66,7 +66,7 @@ flowchart LR
   end
 
   subgraph worker["Transcendence.Service"]
-    HF["Hangfire: 5 servers, 7 queues<br/>21 recurring jobs"]
+    HF["Hangfire: 7 servers, 9 queues<br/>21 recurring jobs"]
     Gate["IRiotRateGate<br/>per-region token bucket"]
   end
 
@@ -192,15 +192,17 @@ gate is in-process, so budgets are not shared across worker replicas.
 ### Job topology
 
 Hangfire runs on PostgreSQL storage with a sliding invisibility timeout and a global
-`AutomaticRetry` of 1. It is split into five servers, so one slow lane can't starve another:
+`AutomaticRetry` of 1. It is split into seven servers, so one slow lane can't starve another:
 
 | Server | Queues (priority order) | Workers | Workload |
 | --- | --- | --- | --- |
-| main | `refresh-high` → `default` → `refresh-low` | 24 | User refreshes, live-game probes, general jobs |
-| analytics | `analytics-warm` | 4 | Cache warming, adaptive analytics refresh |
-| timeline | `timeline-ingest` | 8 | Timeline fetch and parse |
-| discovery | `discovery` | 8 | Producer-driven summoner refreshes (Riot-bound) |
-| history | `history-backfill` | 2 | Full-history backfill |
+| main | `refresh-high` → `default` → `refresh-low` | 8 | User refreshes, live-game probes, general jobs |
+| analytics | `analytics-warm` | 1 | Cache warming, adaptive analytics refresh |
+| batch | `analytics-batch` | 1 | Heavy analytics materialization (matchups, Build Atlas, synergies) |
+| timeline | `timeline-ingest` | 2 | Timeline fetch and parse |
+| discovery | `discovery` | 2 | Producer-driven summoner refreshes (Riot-bound) |
+| history | `history-backfill` | 1 | Full-history backfill |
+| apex | `apex-crawl` | 1 | Apex ladder crawl (one run at a time, most of a day per pass) |
 
 Worker counts come from `Jobs:Hangfire:Workers:*`.
 

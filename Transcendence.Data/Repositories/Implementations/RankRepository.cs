@@ -67,11 +67,15 @@ public class RankRepository(TranscendenceContext context) : IRankRepository
                     existing.LeaguePoints = incoming.LeaguePoints;
                     existing.Wins = incoming.Wins;
                     existing.Losses = incoming.Losses;
+                    // Stamped after the summoner's own UpdatedAt, so "rank moved since the last match
+                    // sync" reads as Rank.UpdatedAt > Summoner.UpdatedAt (see ChampionAnalyticsIngestionJob).
+                    existing.UpdatedAt = DateTime.UtcNow;
                 }
             }
             else
             {
                 // Attach to summoner and add as new current rank
+                incoming.UpdatedAt = DateTime.UtcNow;
                 incoming.Summoner = summoner;
                 await context.Ranks.AddAsync(incoming, cancellationToken);
             }

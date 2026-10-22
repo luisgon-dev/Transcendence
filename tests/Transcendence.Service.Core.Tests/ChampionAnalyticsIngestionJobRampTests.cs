@@ -422,6 +422,42 @@ public class ChampionAnalyticsIngestionJobRampTests
     }
 
     [Fact]
+    public async Task ExecuteForRegionAsync_PrefersApexPlayersWhoseRankMovedSinceTheirLastSync()
+    {
+        var fixedBudgetPolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
+            AdaptiveThroughputBudgetMode.Balanced,
+            MaxCandidates: 10,
+            QueueTarget: 1,
+            IncludeAllModes: false,
+            CoverageRatio: 0.2d,
+            BacklogAgeMinutes: 120d,
+            RecentVelocityPerHour: 2d,
+            CandidatePressureRatio: 2d));
+
+        await using var harness = await Harness.CreateAsync(fixedBudgetPolicy);
+        harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        harness.SeedSuccessfulMatch("15.2");
+        harness.SeedSummoner("GenericFallback", "NA1", DateTime.UtcNow.AddHours(-48));
+        // Stalest apex player, but the ladder has not moved for them: nothing new to fetch.
+        harness.SeedRankedSummoner("Idle", "NA1", DateTime.UtcNow.AddHours(-24), DateTime.UtcNow.AddDays(-30));
+        // The crawl just saw this one play: it stamped the summoner, then the rank right after.
+        var crawledAt = DateTime.UtcNow.AddMinutes(-10);
+        harness.SeedRankedSummoner("JustPlayed", "NA1", crawledAt, crawledAt.AddSeconds(1));
+        await harness.Db.SaveChangesAsync();
+
+        var queuedJobs = new List<Job>();
+        harness.BackgroundJobClient
+            .Setup(x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()))
+            .Callback<Job, IState>((job, _) => queuedJobs.Add(job))
+            .Returns("job-1");
+
+        await harness.Job.ExecuteForRegionAsync("NA1", CancellationToken.None);
+
+        queuedJobs.Should().ContainSingle();
+        queuedJobs[0].Args[0].Should().Be("JustPlayed");
+    }
+
+    [Fact]
     public async Task ExecuteForRegionAsync_SkipsTrackedCandidatesRefreshedInsideTheStaleWindow()
     {
         var fixedBudgetPolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
@@ -660,6 +696,43 @@ public class ChampionAnalyticsIngestionJobRampTests
                 FetchedAt = DateTime.UtcNow.AddMinutes(-1),
                 Duration = 1800,
                 QueueId = 420
+            });
+        }
+
+        public void SeedRankedSummoner(
+            string gameName,
+            string tagLine,
+            DateTime summonerUpdatedAtUtc,
+            DateTime rankUpdatedAtUtc,
+            string tier = "MASTER")
+        {
+            var summoner = new Summoner
+            {
+                Id = Guid.NewGuid(),
+                PlatformRegion = "NA1",
+                Region = "americas",
+                Puuid = $"puuid-{Guid.NewGuid():N}",
+                GameName = gameName,
+                TagLine = tagLine,
+                GameNameNormalized = gameName.ToUpperInvariant(),
+                TagLineNormalized = tagLine.ToUpperInvariant(),
+                SummonerLevel = 100,
+                UpdatedAt = summonerUpdatedAtUtc,
+                LastActiveAtUtc = summonerUpdatedAtUtc
+            };
+            Db.Summoners.Add(summoner);
+            Db.Ranks.Add(new Rank
+            {
+                Id = Guid.NewGuid(),
+                QueueType = "RANKED_SOLO_5x5",
+                Tier = tier,
+                RankNumber = "I",
+                LeaguePoints = 100,
+                Wins = 10,
+                Losses = 5,
+                SummonerId = summoner.Id,
+                Summoner = summoner,
+                UpdatedAt = rankUpdatedAtUtc
             });
         }
 

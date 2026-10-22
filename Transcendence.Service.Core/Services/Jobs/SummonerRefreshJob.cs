@@ -341,8 +341,12 @@ public class SummonerRefreshJob(
                     ct)).PersistedCount;
             }
 
-            summoner.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync(ct);
+            // Set-based, so a ChangeTracker.Clear() in match persistence cannot drop the stamp, and across
+            // every row sharing this Riot ID: the producers pick candidate rows, but this job resolves the
+            // newest one, so a stale duplicate row was never stamped and got re-picked every tick.
+            await summonerRepository.MarkRiotIdRefreshedAsync(
+                platformRoute.ToString(), gameName, tagLine, DateTime.UtcNow, ct);
 
             logger.LogInformation(
                 "[AnalyticsRefresh] Completed for {GameName}#{Tag} on {Platform}. includeAllModes={IncludeAllModes}, persisted rankedHead={RankedHead}, allModesHead={AllModesHead}, nonRankedBackfill={NonRankedBackfill}.",

@@ -134,6 +134,32 @@ public class SummonerRepository(TranscendenceContext context, IRankRepository ra
             cancellationToken);
     }
 
+    public async Task MarkRiotIdRefreshedAsync(
+        string platformRegion,
+        string gameName,
+        string tagLine,
+        DateTime refreshedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var region = string.IsNullOrWhiteSpace(platformRegion) ? null : platformRegion.Trim();
+        var gameNameKey = NormalizeForLookup(gameName);
+        var tagLineKey = NormalizeForLookup(tagLine);
+        if (region == null || gameNameKey == null || tagLineKey == null)
+            return;
+
+        // The same keys FindByRiotIdAsync resolves through, each backed by an index.
+        await context.Summoners
+            .Where(x => x.PlatformRegion == region &&
+                        ((x.GameNameNormalized == gameNameKey && x.TagLineNormalized == tagLineKey) ||
+                         (x.GameNameNormalized == null &&
+                          x.TagLineNormalized == null &&
+                          x.GameName != null &&
+                          x.TagLine != null &&
+                          x.GameName.ToUpper() == gameNameKey &&
+                          x.TagLine.ToUpper() == tagLineKey)))
+            .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.UpdatedAt, refreshedAtUtc), cancellationToken);
+    }
+
     public Task<Summoner?> FindByRiotIdWithRanksAsync(
         string platformRegion,
         string gameName,

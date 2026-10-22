@@ -596,12 +596,13 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
                 parameters.Add(rankTierValues[index]);
             }
 
-            await _context.Database.ExecuteSqlRawAsync(
-                $"""
+            // values holds only "({0},{n},{n+1})" placeholders; every value travels as a parameter.
+            var sql = $"""
                  INSERT INTO "ChampionMatchupRankSnapshots" ("SnapshotId", "SummonerId", "RankTier")
                  VALUES {values}
                  ON CONFLICT ("SnapshotId", "SummonerId") DO NOTHING
-                 """, parameters, ct);
+                 """;
+            await _context.Database.ExecuteSqlRawAsync(sql, parameters, ct);
         }
     }
 
@@ -609,7 +610,8 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
         ChampionMatchupSnapshot snapshot,
         IReadOnlyList<int> championIds,
         bool split,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool extendedTimeout = false)
     {
         var stopwatch = Stopwatch.StartNew();
         try
@@ -711,6 +713,34 @@ public class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefresher
                 championIds.Count - midpoint);
             await AggregateMatchupBatchWithSplitAsync(snapshot, championIds.Take(midpoint).ToArray(), split: true, ct);
             await AggregateMatchupBatchWithSplitAsync(snapshot, championIds.Skip(midpoint).ToArray(), split: true, ct);
+        }
+        catch (Exception exception) when (
+            exception is not OperationCanceledException &&
+            IsTimeout(exception) &&
+            championIds.Count == 1 &&
+            !extendedTimeout)
+        {
+            // One champion cannot split further. Right after a fresh rank snapshot its join reads cold
+            // HDD pages (prod: 45s+ cold, 80ms warm), and failing here abandoned whole generations after
+            // three attempts. Give it one longer attempt before failing the generation.
+            DetachAddedMatchupStats(snapshot.Id);
+            var previousTimeout = _context.Database.GetCommandTimeout();
+            var extendedSeconds = Math.Clamp(_precomputedOptions.CommandTimeoutSeconds * 4, 60, 600);
+            _logger.LogWarning(
+                exception,
+                "Matchup aggregation for champion {ChampionId} timed out in generation {SnapshotId}; retrying once with a {Timeout}s budget.",
+                championIds[0],
+                snapshot.Id,
+                extendedSeconds);
+            _context.Database.SetCommandTimeout(extendedSeconds);
+            try
+            {
+                await AggregateMatchupBatchWithSplitAsync(snapshot, championIds, split: true, ct, extendedTimeout: true);
+            }
+            finally
+            {
+                _context.Database.SetCommandTimeout(previousTimeout);
+            }
         }
     }
 

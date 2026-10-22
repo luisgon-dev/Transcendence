@@ -1,6 +1,8 @@
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
+using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Transcendence.Data;
@@ -52,6 +54,50 @@ public class ChampionMatchupStatsEquivalenceTests
 
             stats.Should().BeEquivalentTo(raw, o => o.WithStrictOrdering(),
                 $"matchups for champ 100 MIDDLE scope={tier ?? "ALL"}");
+        }
+    }
+
+    [Fact]
+    public async Task Matchups_SingleChampionTimeout_RetriesOnceWithALongerBudget()
+    {
+        var timeouts = new TimeoutFirstMatchupAggregation();
+        await using var ctx = await SeededAsync(timeouts);
+
+        var rows = await Refresher(ctx.Db).RefreshMatchupsAsync(Patch, CancellationToken.None);
+
+        timeouts.Thrown.Should().BeTrue();
+        timeouts.RetryTimeoutSeconds.Should().Be(180, "45s batch budget x4 for the lone champion");
+        rows.Should().BeGreaterThan(0);
+        (await ctx.Db.ChampionMatchupSnapshots.AsNoTracking().SingleAsync(s => s.Patch == Patch && s.IsActive))
+            .ProcessedChampionCount.Should().Be(await ctx.Db.ChampionMatchupFacts.Select(f => f.ChampionId).Distinct().CountAsync());
+    }
+
+    // Times out the first per-champion aggregation (batch size 1, so it cannot split) the way a cold HDD
+    // read does in production, then records the budget the retry runs with.
+    private sealed class TimeoutFirstMatchupAggregation : DbCommandInterceptor
+    {
+        public bool Thrown { get; private set; }
+        public int? RetryTimeoutSeconds { get; private set; }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.Contains("\"ChampionMatchupRankSnapshots\"") &&
+                command.CommandText.Contains("GROUP BY"))
+            {
+                if (!Thrown)
+                {
+                    Thrown = true;
+                    throw new TimeoutException("Timeout during reading attempt");
+                }
+
+                RetryTimeoutSeconds ??= command.CommandTimeout;
+            }
+
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
         }
     }
 
@@ -239,11 +285,11 @@ public class ChampionMatchupStatsEquivalenceTests
             }),
             NullLogger<ChampionBuildComputeService>.Instance);
 
-    private static async Task<SeededContext> SeededAsync()
+    private static async Task<SeededContext> SeededAsync(params IInterceptor[] interceptors)
     {
         var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
-        var options = new DbContextOptionsBuilder<TranscendenceContext>().UseSqlite(connection).Options;
+        var options = new DbContextOptionsBuilder<TranscendenceContext>().UseSqlite(connection).AddInterceptors(interceptors).Options;
         var db = new SqliteCompatibleTranscendenceContext(options);
         await db.Database.EnsureCreatedAsync();
 

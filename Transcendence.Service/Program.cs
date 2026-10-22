@@ -41,6 +41,7 @@ var analyticsWorkerCount = Math.Max(1, builder.Configuration.GetValue("Jobs:Hang
 var timelineWorkerCount = Math.Max(1, builder.Configuration.GetValue("Jobs:Hangfire:Workers:Timeline", 2));
 var discoveryWorkerCount = Math.Max(1, builder.Configuration.GetValue("Jobs:Hangfire:Workers:Discovery", 2));
 var historyWorkerCount = Math.Max(1, builder.Configuration.GetValue("Jobs:Hangfire:Workers:History", 1));
+var apexCrawlWorkerCount = Math.Max(1, builder.Configuration.GetValue("Jobs:Hangfire:Workers:ApexCrawl", 1));
 var batchWorkerCount = Math.Max(1, builder.Configuration.GetValue("Jobs:Hangfire:Workers:Batch", 1));
 
 builder.Services.AddBackgroundOperationWorker();
@@ -127,6 +128,15 @@ builder.Services.AddHangfireServer(options =>
     options.ServerName = HangfireQueues.HistoryBackfill;
     options.Queues = [HangfireQueues.HistoryBackfill];
     options.WorkerCount = historyWorkerCount;
+});
+
+// The apex ladder crawl runs for most of a day per pass and allows one run at a time, so a single worker
+// of its own keeps it from holding one of the main pool's workers indefinitely.
+builder.Services.AddHangfireServer(options =>
+{
+    options.ServerName = HangfireQueues.ApexCrawl;
+    options.Queues = [HangfireQueues.ApexCrawl];
+    options.WorkerCount = apexCrawlWorkerCount;
 });
 
 builder.Services.AddHttpClient();

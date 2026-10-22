@@ -36,7 +36,7 @@ public class AddOrUpdateHighEloProfiles(
     internal sealed record ApexLeagueState(
         string Puuid, string Tier, string Division, int LeaguePoints, int Wins, int Losses);
 
-    [Queue(HangfireQueues.RefreshLow)]
+    [Queue(HangfireQueues.ApexCrawl)]
     public async Task Execute(CancellationToken stoppingToken)
     {
         if (await TryAcquireRunAsync(stoppingToken) is not { } runOwner)
@@ -74,7 +74,7 @@ public class AddOrUpdateHighEloProfiles(
         }
     }
 
-    [Queue(HangfireQueues.RefreshLow)]
+    [Queue(HangfireQueues.ApexCrawl)]
     public async Task ExecuteForRegionAsync(string region, CancellationToken stoppingToken)
     {
         if (!PlatformRouteParser.TryParse(region, out var platform))

@@ -26,6 +26,18 @@ jobs:
       - name: Backend Tests
         run: dotnet test Transcendence.sln -v minimal
 
+  # The host scripts in scripts/ops (deploy, data-health, perf sweeps, archive) run on the prod box under
+  # systemd. Their tests need Linux tools such as flock, so they run here rather than on dev machines.
+  ops-scripts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Ops script tests
+        run: python3 -I -m unittest discover -s scripts/ops/tests -p 'test_*.py' -v
+
   audit:
     runs-on: ubuntu-latest
 

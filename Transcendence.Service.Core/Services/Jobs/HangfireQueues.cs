@@ -14,8 +14,15 @@ public static class HangfireQueues
     /// <summary>Hangfire's default queue: jobs without a <c>[Queue]</c> attribute land here.</summary>
     public const string Default = "default";
 
-    /// <summary>Broad background maintenance (ladder crawl, lock cleanup). Lowest priority on the main pool.</summary>
+    /// <summary>Broad background maintenance (summoner maintenance, lock cleanup). Lowest priority on the main pool.</summary>
     public const string RefreshLow = "refresh-low";
+
+    /// <summary>
+    /// Reserved lane for the apex ladder crawl (<c>AddOrUpdateHighEloProfiles</c>). One pass over every
+    /// region runs for most of a day, so on the main pool it permanently held one of its workers (and,
+    /// before its single-run lock, all of them). Its own one-worker pool keeps it off the main pool.
+    /// </summary>
+    public const string ApexCrawl = "apex-crawl";
 
     /// <summary>
     /// Reserved lane for the jobs that keep champion analytics warm and fresh
@@ -56,6 +63,6 @@ public static class HangfireQueues
 
     /// <summary>Every queue some worker pool serves. A queue outside this set is never drained.</summary>
     public static readonly IReadOnlySet<string> Served = new HashSet<string>(
-        [.. MainServer, AnalyticsWarm, AnalyticsBatch, TimelineIngest, Discovery, HistoryBackfill],
+        [.. MainServer, AnalyticsWarm, AnalyticsBatch, TimelineIngest, Discovery, HistoryBackfill, ApexCrawl],
         StringComparer.Ordinal);
 }

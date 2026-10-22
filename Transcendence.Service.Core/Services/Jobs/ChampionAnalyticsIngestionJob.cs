@@ -364,7 +364,13 @@ public class ChampionAnalyticsIngestionJob(
         var lockTtl = TimeSpan.FromMinutes(Math.Max(2, jobOptions.RefreshLockMinutes));
         var includeAllModes = false;
 
-        var candidates = await GetCandidatesAsync(region, maxCandidates, jobOptions, releaseUtc, evaluationUtc, ct);
+        // A summoner refreshed inside the stale window has had no time to play a new game, so it must not
+        // take a slot. Tier priority ranks ahead of staleness, so without this the same few Challenger
+        // tracked players won every tick and nearly every queued refresh persisted zero matches. Cold
+        // start is exempt: bootstrap has just stamped every seeded summoner as updated.
+        var refreshedBeforeUtc = requiresColdStartProgress ? evaluationUtc : staleCutoffUtc;
+        var candidates = await GetCandidatesAsync(
+            region, maxCandidates, jobOptions, releaseUtc, evaluationUtc, refreshedBeforeUtc, ct);
         if (candidates.Count == 0)
         {
             ingestionThroughputTelemetry.RecordQueueTargetOutput(
@@ -538,6 +544,7 @@ public class ChampionAnalyticsIngestionJob(
         ChampionAnalyticsIngestionJobOptions jobOptions,
         DateTime patchReleaseUtc,
         DateTime evaluationUtc,
+        DateTime refreshedBeforeUtc,
         CancellationToken ct)
     {
         var combined = new List<CandidateSummoner>();
@@ -698,7 +705,12 @@ public class ChampionAnalyticsIngestionJob(
             combined.AddRange(fallbackCandidates);
         }
 
-        var rankedCandidates = RankCandidates(combined, patchReleaseUtc, evaluationUtc, maxCandidates);
+        // Each source is read stalest-first, so filtering after Take() drops only recently refreshed rows.
+        var rankedCandidates = RankCandidates(
+            combined.Where(candidate => candidate.UpdatedAt <= refreshedBeforeUtc),
+            patchReleaseUtc,
+            evaluationUtc,
+            maxCandidates);
 
         return rankedCandidates.ToList();
     }

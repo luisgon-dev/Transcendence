@@ -421,6 +421,39 @@ public class ChampionAnalyticsIngestionJobRampTests
         queuedJobs[0].Args[0].Should().Be("TrackedPriority");
     }
 
+    [Fact]
+    public async Task ExecuteForRegionAsync_SkipsTrackedCandidatesRefreshedInsideTheStaleWindow()
+    {
+        var fixedBudgetPolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
+            AdaptiveThroughputBudgetMode.Balanced,
+            MaxCandidates: 10,
+            QueueTarget: 1,
+            IncludeAllModes: false,
+            CoverageRatio: 0.2d,
+            BacklogAgeMinutes: 120d,
+            RecentVelocityPerHour: 2d,
+            CandidatePressureRatio: 2d));
+
+        await using var harness = await Harness.CreateAsync(fixedBudgetPolicy);
+        harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        harness.SeedSuccessfulMatch("15.2");
+        harness.SeedSummoner("GenericFallback", "NA1", DateTime.UtcNow.AddHours(-24));
+        // Refreshed five minutes ago, inside the 90-minute stale window: no new games to find yet.
+        harness.SeedTrackedHighValueSummoner("JustRefreshed", "NA1", "NA1", DateTime.UtcNow.AddMinutes(-5));
+        await harness.Db.SaveChangesAsync();
+
+        var queuedJobs = new List<Job>();
+        harness.BackgroundJobClient
+            .Setup(x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()))
+            .Callback<Job, IState>((job, _) => queuedJobs.Add(job))
+            .Returns("job-1");
+
+        await harness.Job.ExecuteForRegionAsync("NA1", CancellationToken.None);
+
+        queuedJobs.Should().ContainSingle();
+        queuedJobs[0].Args[0].Should().Be("GenericFallback");
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;

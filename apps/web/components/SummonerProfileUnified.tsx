@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -67,20 +67,6 @@ const MatchHistorySection = dynamic(
   }
 );
 
-function usePrefersReducedMotion() {
-  const [reduced, setReduced] = useState(false);
-
-  useEffect(() => {
-    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReduced(query.matches);
-    update();
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, []);
-
-  return reduced;
-}
-
 export function SummonerProfileClient({
   region,
   gameName,
@@ -117,7 +103,6 @@ export function SummonerProfileClient({
   initialRuneStatic?: RuneStatic | null;
 }) {
   const pathname = usePathname();
-  const prefersReducedMotion = usePrefersReducedMotion();
   const title = `${gameName}#${tagLine}`;
   const staticData = useProfileStaticData({
     championStatic: initialChampionStatic,
@@ -183,7 +168,10 @@ export function SummonerProfileClient({
 
   return (
     <StaticDataProvider value={staticData}>
-      <div className="grid grid-cols-1 gap-8">
+      <div
+        className="grid grid-cols-1 gap-8"
+        data-trn-backend-error={lookup.error && !lookup.profile ? "summoner-profile" : undefined}
+      >
         <ProfileHeroCard
           title={title}
           region={region}
@@ -285,7 +273,6 @@ export function SummonerProfileClient({
                   detailBusy: matches.detailBusy,
                   onToggleExpanded: matches.toggleExpanded
                 }}
-                prefersReducedMotion={prefersReducedMotion}
               />
             </div>
           </div>

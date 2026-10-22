@@ -4,6 +4,7 @@
   "packageManager": "pnpm@10.22.0",
   "pnpm": {
     "overrides": {
+      "@next/eslint-plugin-next>fast-glob": "npm:tinyglobby@0.2.15",
       "esbuild@>=0.27.3 <0.28.1": "0.28.1",
       "undici@>=7.0.0 <7.29.1": "7.29.1",
       "brace-expansion@<1.1.21": "1.1.21",
@@ -37,7 +38,7 @@
     "e2e:stack": "bash scripts/e2e/run-compose-stack.sh"
   },
   "devDependencies": {
-    "@playwright/test": "^1.63.0",
+    "@playwright/test": "^1.64.1",
     "@transcendence/web-routes": "workspace:*",
     "chrome-launcher": "^1.2.2",
     "lighthouse": "^13.5.0"

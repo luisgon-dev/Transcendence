@@ -25,33 +25,52 @@ public class AddOrUpdateHighEloProfiles(
     private const string SoloQueueType = "RANKED_SOLO_5x5";
     private static readonly TimeSpan FullRefreshInterval = TimeSpan.FromHours(24);
 
+    // One run at a time across both entry points. A pass over every region outlasts the two-hour cron,
+    // and the old per-region 30-minute lock lapsed mid-region, so runs stacked up until they held all
+    // eight main-pool workers and starved the default queue, ingestion dispatcher included. The lease is
+    // renewed as the run progresses, so it only lapses when the worker died mid-run.
+    private const string RunLockKey = "high-elo-refresh";
+    private static readonly TimeSpan RunLockLease = TimeSpan.FromMinutes(30);
+    private static readonly TimeSpan RunLockReleaseTimeout = TimeSpan.FromSeconds(5);
+
     internal sealed record ApexLeagueState(
         string Puuid, string Tier, string Division, int LeaguePoints, int Wins, int Losses);
 
     [Queue(HangfireQueues.RefreshLow)]
     public async Task Execute(CancellationToken stoppingToken)
     {
-        var multiRegion = multiRegionOptions.Value;
+        if (await TryAcquireRunAsync(stoppingToken) is not { } runOwner)
+            return;
 
-        if (multiRegion.Enabled && multiRegion.Regions.Count > 0)
+        try
         {
-            var enabledRegions = multiRegion.Regions.Where(r => r.Enabled).ToList();
-            foreach (var regionConfig in enabledRegions)
-            {
-                if (!PlatformRouteParser.TryParse(regionConfig.Region, out var platform))
-                {
-                    logger.LogWarning(
-                        "High-elo profile refresh skipping region: invalid platform {PlatformRegion}.",
-                        regionConfig.Region);
-                    continue;
-                }
+            var multiRegion = multiRegionOptions.Value;
 
-                await ExecuteForPlatformAsync(platform, stoppingToken);
+            if (multiRegion.Enabled && multiRegion.Regions.Count > 0)
+            {
+                var enabledRegions = multiRegion.Regions.Where(r => r.Enabled).ToList();
+                foreach (var regionConfig in enabledRegions)
+                {
+                    if (!PlatformRouteParser.TryParse(regionConfig.Region, out var platform))
+                    {
+                        logger.LogWarning(
+                            "High-elo profile refresh skipping region: invalid platform {PlatformRegion}.",
+                            regionConfig.Region);
+                        continue;
+                    }
+
+                    if (!await ExecuteForPlatformAsync(platform, runOwner, stoppingToken))
+                        return;
+                }
+            }
+            else
+            {
+                await ExecuteForPlatformAsync(PlatformRoute.NA1, runOwner, stoppingToken);
             }
         }
-        else
+        finally
         {
-            await ExecuteForPlatformAsync(PlatformRoute.NA1, stoppingToken);
+            await ReleaseRunAsync(runOwner);
         }
     }
 
@@ -66,114 +85,141 @@ public class AddOrUpdateHighEloProfiles(
             return;
         }
 
-        await ExecuteForPlatformAsync(platform, stoppingToken);
-    }
-
-    private async Task ExecuteForPlatformAsync(PlatformRoute platform, CancellationToken stoppingToken)
-    {
-        var lockKey = $"high-elo-refresh:{platform}";
-        var lockTtl = TimeSpan.FromMinutes(30);
-
-        var acquired = await refreshLockRepository.TryAcquireAsync(lockKey, lockTtl, stoppingToken);
-        if (!acquired)
-        {
-            logger.LogDebug("High-elo profile refresh skipped for {Platform}: lock held.", platform);
+        if (await TryAcquireRunAsync(stoppingToken) is not { } runOwner)
             return;
-        }
 
         try
         {
-            const int saveBatchSize = 50;
-            var pendingChanges = 0;
-            var rosterUpdates = 0;
-
-            var challengerLeague = await riotApiContext.Api.LeagueV4()
-                .GetChallengerLeagueAsync(platform, QueueType.RANKED_SOLO_5x5, stoppingToken);
-            var grandmasterLeague = await riotApiContext.Api.LeagueV4()
-                .GetGrandmasterLeagueAsync(platform, QueueType.RANKED_SOLO_5x5, stoppingToken);
-            var masterLeague = await riotApiContext.Api.LeagueV4()
-                .GetMasterLeagueAsync(platform, QueueType.RANKED_SOLO_5x5, stoppingToken);
-
-            var leagueStates = new[] { challengerLeague, grandmasterLeague, masterLeague }
-                .SelectMany(league => league.Entries.Select(entry => new ApexLeagueState(
-                    entry.Puuid, league.Tier.ToString(), entry.Rank.ToString(), entry.LeaguePoints, entry.Wins, entry.Losses)))
-                .Where(state => !string.IsNullOrWhiteSpace(state.Puuid))
-                .GroupBy(state => state.Puuid, StringComparer.Ordinal)
-                .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
-            var unchanged = await FindUnchangedSinceLastRefreshAsync(
-                context, leagueStates, DateTime.UtcNow, stoppingToken);
-            var summonerPuuids = leagueStates.Keys.Where(puuid => !unchanged.Contains(puuid)).ToList();
-
-            logger.LogInformation(
-                "High-elo profile refresh starting for {Platform}: {Count} summoners to process, {Skipped} unchanged since their last refresh.",
-                platform,
-                summonerPuuids.Count,
-                unchanged.Count);
-
-            // Older versions treated every Master+ account as an OTP. Clear those unverified,
-            // auto-created rows before rebuilding the roster from match evidence below.
-            await context.TrackedProSummoners
-                .Where(x =>
-                    x.PlatformRegion == platform.ToString() &&
-                    !x.IsPro &&
-                    x.IsHighEloOtp &&
-                    x.OtpEvaluatedAtUtc == null &&
-                    x.ProName == null &&
-                    x.TeamName == null)
-                .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(x => x.IsHighEloOtp, false)
-                    .SetProperty(x => x.IsActive, false)
-                    .SetProperty(x => x.Source, "riot-high-elo")
-                    .SetProperty(x => x.UpdatedAtUtc, DateTime.UtcNow), stoppingToken);
-
-            foreach (var summonerPuuid in summonerPuuids)
-            {
-                try
-                {
-                    var summoner =
-                        await summonerService.GetSummonerByPuuidAsync(summonerPuuid, platform, stoppingToken);
-                    await summonerRepository.AddOrUpdateSummonerAsync(summoner, stoppingToken);
-                    var isOtp = await ReconcileTrackedOtpAsync(summoner, platform, stoppingToken);
-                    pendingChanges++;
-                    if (isOtp)
-                        rosterUpdates++;
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    // Isolate per summoner: a single account that fails to enrich (e.g. a Riot payload the
-                    // client can't parse, or a dead riot-id) must not abort the whole platform's refresh.
-                    logger.LogWarning(ex,
-                        "High-elo profile refresh skipped summoner {Puuid} on {Platform}.", summonerPuuid, platform);
-                    continue;
-                }
-
-                if (pendingChanges < saveBatchSize)
-                    continue;
-
-                await context.SaveChangesAsync(stoppingToken);
-                pendingChanges = 0;
-            }
-
-            if (pendingChanges > 0)
-                await context.SaveChangesAsync(stoppingToken);
-
-            logger.LogInformation(
-                "High-elo profile refresh completed for {Platform}. UpdatedSummoners={UpdatedSummoners}, TrackedRosterUpdates={TrackedRosterUpdates}.",
-                platform,
-                summonerPuuids.Count,
-                rosterUpdates);
+            await ExecuteForPlatformAsync(platform, runOwner, stoppingToken);
         }
         finally
         {
+            await ReleaseRunAsync(runOwner);
+        }
+    }
+
+    private async Task<Guid?> TryAcquireRunAsync(CancellationToken stoppingToken)
+    {
+        var runOwner = await refreshLockRepository.TryAcquireOwnedAsync(RunLockKey, RunLockLease, stoppingToken);
+        if (runOwner is null)
+            logger.LogInformation("High-elo profile refresh skipped: the previous run is still in progress.");
+        return runOwner;
+    }
+
+    private async Task<bool> TryRenewRunAsync(Guid runOwner, PlatformRoute platform, CancellationToken stoppingToken)
+    {
+        if (await refreshLockRepository.TryRenewOwnedAsync(RunLockKey, runOwner, RunLockLease, stoppingToken))
+            return true;
+
+        logger.LogWarning("High-elo profile refresh stopped at {Platform}: another run took over its lock.", platform);
+        return false;
+    }
+
+    private async Task ReleaseRunAsync(Guid runOwner)
+    {
+        // Not the job token: a run cancelled by shutdown should still free the lock for the next one.
+        using var releaseTimeout = new CancellationTokenSource(RunLockReleaseTimeout);
+        try
+        {
+            await refreshLockRepository.ReleaseOwnedAsync(RunLockKey, runOwner, releaseTimeout.Token);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "High-elo profile refresh failed to release lock {LockKey}.", RunLockKey);
+        }
+    }
+
+    // Returns false when the run lost its lock and must stop.
+    private async Task<bool> ExecuteForPlatformAsync(
+        PlatformRoute platform,
+        Guid runOwner,
+        CancellationToken stoppingToken)
+    {
+        if (!await TryRenewRunAsync(runOwner, platform, stoppingToken))
+            return false;
+
+        const int saveBatchSize = 50;
+        var pendingChanges = 0;
+        var rosterUpdates = 0;
+
+        var challengerLeague = await riotApiContext.Api.LeagueV4()
+            .GetChallengerLeagueAsync(platform, QueueType.RANKED_SOLO_5x5, stoppingToken);
+        var grandmasterLeague = await riotApiContext.Api.LeagueV4()
+            .GetGrandmasterLeagueAsync(platform, QueueType.RANKED_SOLO_5x5, stoppingToken);
+        var masterLeague = await riotApiContext.Api.LeagueV4()
+            .GetMasterLeagueAsync(platform, QueueType.RANKED_SOLO_5x5, stoppingToken);
+
+        var leagueStates = new[] { challengerLeague, grandmasterLeague, masterLeague }
+            .SelectMany(league => league.Entries.Select(entry => new ApexLeagueState(
+                entry.Puuid, league.Tier.ToString(), entry.Rank.ToString(), entry.LeaguePoints, entry.Wins, entry.Losses)))
+            .Where(state => !string.IsNullOrWhiteSpace(state.Puuid))
+            .GroupBy(state => state.Puuid, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        var unchanged = await FindUnchangedSinceLastRefreshAsync(
+            context, leagueStates, DateTime.UtcNow, stoppingToken);
+        var summonerPuuids = leagueStates.Keys.Where(puuid => !unchanged.Contains(puuid)).ToList();
+
+        logger.LogInformation(
+            "High-elo profile refresh starting for {Platform}: {Count} summoners to process, {Skipped} unchanged since their last refresh.",
+            platform,
+            summonerPuuids.Count,
+            unchanged.Count);
+
+        // Older versions treated every Master+ account as an OTP. Clear those unverified,
+        // auto-created rows before rebuilding the roster from match evidence below.
+        await context.TrackedProSummoners
+            .Where(x =>
+                x.PlatformRegion == platform.ToString() &&
+                !x.IsPro &&
+                x.IsHighEloOtp &&
+                x.OtpEvaluatedAtUtc == null &&
+                x.ProName == null &&
+                x.TeamName == null)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.IsHighEloOtp, false)
+                .SetProperty(x => x.IsActive, false)
+                .SetProperty(x => x.Source, "riot-high-elo")
+                .SetProperty(x => x.UpdatedAtUtc, DateTime.UtcNow), stoppingToken);
+
+        foreach (var summonerPuuid in summonerPuuids)
+        {
             try
             {
-                await refreshLockRepository.ReleaseAsync(lockKey, stoppingToken);
+                var summoner =
+                    await summonerService.GetSummonerByPuuidAsync(summonerPuuid, platform, stoppingToken);
+                await summonerRepository.AddOrUpdateSummonerAsync(summoner, stoppingToken);
+                var isOtp = await ReconcileTrackedOtpAsync(summoner, platform, stoppingToken);
+                pendingChanges++;
+                if (isOtp)
+                    rosterUpdates++;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                logger.LogWarning(ex, "High-elo profile refresh failed to release lock {LockKey}.", lockKey);
+                // Isolate per summoner: a single account that fails to enrich (e.g. a Riot payload the
+                // client can't parse, or a dead riot-id) must not abort the whole platform's refresh.
+                logger.LogWarning(ex,
+                    "High-elo profile refresh skipped summoner {Puuid} on {Platform}.", summonerPuuid, platform);
+                continue;
             }
+
+            if (pendingChanges < saveBatchSize)
+                continue;
+
+            await context.SaveChangesAsync(stoppingToken);
+            pendingChanges = 0;
+            if (!await TryRenewRunAsync(runOwner, platform, stoppingToken))
+                return false;
         }
+
+        if (pendingChanges > 0)
+            await context.SaveChangesAsync(stoppingToken);
+
+        logger.LogInformation(
+            "High-elo profile refresh completed for {Platform}. UpdatedSummoners={UpdatedSummoners}, TrackedRosterUpdates={TrackedRosterUpdates}.",
+            platform,
+            summonerPuuids.Count,
+            rosterUpdates);
+        return true;
     }
 
     // Apex players whose ladder entry (tier, division, LP, wins, losses) is exactly what we stored at

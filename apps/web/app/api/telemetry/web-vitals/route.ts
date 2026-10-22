@@ -10,6 +10,11 @@ import {
 } from "@/lib/webVitalsMetrics";
 
 export async function POST(request: Request) {
+  // Synthetic browsers execute the same reporter. Keep lab runs out of visitor percentiles,
+  // including older clients that have not yet loaded the webdriver check.
+  if (/HeadlessChrome|Lighthouse/i.test(request.headers.get("user-agent") ?? "")) {
+    return new NextResponse(null, { status: 204 });
+  }
   if (Number(request.headers.get("content-length") ?? 0) > 4096) {
     return new NextResponse(null, { status: 413 });
   }

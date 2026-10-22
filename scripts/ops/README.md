@@ -103,10 +103,10 @@ Re-enable the timer once the fix is on `main` (see `docs/ARCHITECTURE.md` "Deplo
 Build Lab has no image, timer or unit of its own. It is the worker's `refresh-build-lab-stats` Hangfire
 job (`*/15 * * * *`), which adds each newly eligible match's build decisions to the additive
 `BuildLabOptionStats` table and records the match in the `BuildLabProcessedMatches` ledger, one
-transaction per 500-match batch. A crash mid-run therefore loses at most the batch in flight and never
-double counts; the next run resumes from the ledger. A run is capped at 20,000 matches
-(`Analytics:BuildLab:MaxMatchesPerRun`), so a fresh patch backfills over several runs — about 45
-minutes of disk IO per patch on this box. The job no-ops unless `BUILD_LAB_ENABLED=true`, the same flag
+transaction per 25-match batch by default. A crash mid-run leaves that batch uncounted and never
+double counts; the next run resumes from the ledger. A run stops between committed batches at
+500 matches, 120 seconds or 32 MiB of cluster-wide WAL, with 500 ms pacing. Catch-up time depends on
+the current I/O load and can take days. The job no-ops unless `BUILD_LAB_ENABLED=true`, the same flag
 that turns on the detailed timeline capture it reads.
 
 Is it keeping up?
@@ -125,8 +125,8 @@ The worker's `transcendence_buildlab_backlog_matches` gauge is the number of eli
 count; it should fall every run and sit near zero between patches. `trn-buildlab-refresh-stale` pages
 when no run has completed for two hours.
 
-Only the four newest patches are kept (`PatchesToRetain`); older patches' rows are deleted by the next
-run. To recount a patch from scratch — after changing how decisions are counted, say — delete its
+Only the four newest patches are kept (`PatchesToRetain`); older stats and then ledger rows are drained
+in bounded cleanup batches across runs. To recount a patch from scratch — after changing how decisions are counted, say — delete its
 ledger and stats rows and let the job refill them:
 
 ```sql
@@ -365,6 +365,9 @@ even after a fast HTTP 200 shell. This covers initial server data, not subsequen
 match-history loading, or WAN browser experience. A read-only, five-second snapshot query reports
 oldest active-patch/regional ages; no raw corpus scan is added. Reports are atomic node-exporter
 textfiles; failed sweeps retain the prior timestamp so staleness remains visible.
+The lightweight probe unit uses best-effort I/O priority 7, Nice 10, and CPU weight 20. Idle I/O
+priority can starve the probe's own executable/file reads on a saturated HDD and exhaust its
+75-second service deadline even when the HTTP/database checks are individually bounded.
 
 ```bash
 install -D -m 0755 data-health-sweep.sh /root/deploy/data-health-sweep.sh
@@ -386,3 +389,11 @@ The nightly lab sweep also checks Ahri/Kronic. Docker caps are `PERF_CPUS=1.5`,
 `PERF_MEMORY_LIMIT=1536m`, pids=256, `PERF_TIMEOUT_SECONDS=1500`; it uses the stable
 `transcendence-web-perf-runner` name and removes that container on success, error, and systemd stop.
 Successful raw Lighthouse reports are retained in `/var/lib/transcendence-perf/reports`.
+Chrome uses the provided 1 GiB shared-memory mount and a bounded 256 MiB `/tmp` tmpfs rather
+than HDD temporary files, within the same total container memory limit. Runtime errors or missing
+paint metrics fail the sample and restart Chrome; incomplete sweeps retain the previous metrics
+and their original success timestamp.
+The lab browser uses HTTPS with HTTP/1.1: Chromium 154's instrumented HTTP/2 navigation hangs
+against production NPM, while an HTTP/1.1 comparison completes. Lab route metrics include
+`transport="http1"` to establish a separate baseline. The production proxy still serves HTTP/2,
+and the independent full-response checks continue using it; TLS verification remains enabled.

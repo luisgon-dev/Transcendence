@@ -31,6 +31,7 @@ class PerfTests(unittest.TestCase):
             self.assertIn("'--name', 'transcendence-web-perf-runner'",calls)
             self.assertIn("'--memory=1536m'",calls)
             self.assertIn("'--cpus=1.5'",calls)
+            self.assertIn("'--tmpfs', '/tmp:rw,nosuid,nodev,size=256m,mode=1777'",calls)
             self.assertGreaterEqual(calls.count("['rm', '-f', 'transcendence-web-perf-runner']"),2)
             self.assertFalse((root/'staging').exists())
             if fail: self.assertEqual(previous.read_text(),'previous\n')

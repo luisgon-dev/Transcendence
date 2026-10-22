@@ -55,7 +55,9 @@ Transcendence is a backend + web monorepo:
   or arbitrary paths. The web container exposes cumulative Prometheus histograms at
   `/api/telemetry/metrics`; timing metrics use millisecond buckets while CLS stays dimensionless. Labels are
   deliberately limited to metric/route/rating, so route-level p75 field performance remains useful without
-  unbounded telemetry cardinality.
+  unbounded telemetry cardinality. Automated browsers (`navigator.webdriver`) skip the reporter;
+  the collector also discards HeadlessChrome/Lighthouse user agents with HTTP 204. Lab runs remain
+  in the separate Lighthouse series rather than entering visitor percentiles.
 - **Auth token refresh runs in `proxy.ts` (Next 16 middleware), not during render.** Auth uses a short-lived access token + a single-use, rotated refresh token (the backend revokes the presented refresh token on every `/api/auth/refresh`, no grace window). Refreshing inside a Server Component render can't persist the rotated cookie (cookie writes are illegal during render), which would burn the refresh token and silently log users out. So `proxy.ts` refreshes a stale access token on page navigations and writes the rotated cookies to **both** the forwarded request (so the SSR render reads the fresh token and doesn't refresh again) and the response (so the browser persists them). It is fail-safe: it only acts when a refresh token exists and the access token is stale, skips prefetch requests (so a speculative prefetch can't burn the single-use token), and on any failure (401/5xx/network/timeout/malformed) passes through **without** clearing cookies. The matcher excludes `/api/*` (route handlers refresh + clear in their own writable context via `getAccessTokenOrRefresh`/`getSessionMe`), `_next`, and static files. Pure helpers live in `lib/proxyAuth.ts`; cookie names + the staleness check in `lib/authCookieShared.ts`.
 - Riot Sign On uses two same-origin route handlers: `/api/session/riot/start` creates a 256-bit
   correlation state in an HttpOnly, SameSite=Lax, ten-minute cookie; `/api/session/riot/callback`
@@ -207,7 +209,11 @@ Operational implication:
   (`AddOrUpdateHighEloProfiles`), the summoner-maintenance sweep, and refresh-lock cleanup.
   `ProRosterDiscoveryJob` runs on `default`.
 - Refresh locks use DB-backed lease semantics (atomic acquire/renew + explicit lease expiry on release) so concurrent lock races do not require lock-row deletion.
-- The worker watchdog treats a stale producer heartbeat as a shutdown request first: it calls the
+- Every Hangfire job start and completion records an in-memory progress timestamp through a global
+  server filter, before blocking execution filters. Liveness no longer depends on one ingestion
+  dispatcher. A publisher writes the actual timestamp to the healthcheck file and Redis every 30
+  seconds, preserving the file's progress mtime; publication itself never advances the beat.
+- The worker watchdog treats stale job progress as a shutdown request first: it calls the
   generic host's `StopApplication`, allowing Hangfire and scoped writes to unwind, and waits up to
   `Worker:Watchdog:GracefulShutdownTimeout` (15 seconds by default). `Environment.Exit(70)` remains
   only as the bounded fallback for a host too wedged to enter `StopAsync`; the watchdog thread and
@@ -347,7 +353,7 @@ The discovery lane stalls when all workers park on a few long, non-stoppable job
   Hangfire retry amplification and rely on their next scheduled run.
 - **Matchups use incremental facts and immutable generations.** Eligible ranked-Solo/Duo matches are materialized in bounded batches into `ChampionMatchupFact`, a narrow lane-pair table with minute-15 diffs and no foreign key to retained `Matches`, plus a source ledger that selectively rematerializes a match when timeline backfill advances. A generation freezes current-rank attribution, aggregates disjoint champion batches, commits every batch, and records progress in `ChampionMatchupSnapshot`. Timed-out batches split recursively; a later run resumes missing ranks/champions. Readers resolve only the active Ready generation, so Building output is invisible and promotion is a short transaction that retires the previous generation. This removes the hourly joins over the multi-GB participant/timeline tables while preserving raw-vs-stats semantics after old match detail is archived.
 - **Champion patch trends.** The profile endpoint also projects up to 12 historical `ChampionScopeGradeStat` rows joined to `Patches.ReleaseDate` for the same champion/queue/role/global rank scope. This reuses the already-durable grade history instead of introducing a duplicate time-series table; the web renders the chart only with at least two real patch points.
-- **Bounded default-profile refresh-ahead.** `WarmDefaultChampionProfilesJob` runs every five minutes on `analytics-warm`, rotating through up to twenty champions with a 120-second budget and concurrency one. Successful `profile-warm` coverage is persisted in `AnalyticsResponseSnapshots`, so oldest coverage wins after restarts as well. Each champion has its own DI scope. The existing exact default cache keys (Emerald+, ALL regions, most-played lane) are overwritten with `SetAsync`; previously cached values remain available while the refresh runs. Profile cache L2 TTL remains 24 hours. Synergies are persisted separately, refreshed at six hours, and accepted from durable storage up to 24 hours old before fallback computation.
+- **Bounded default-profile refresh-ahead.** `WarmDefaultChampionProfilesJob` runs every five minutes on `analytics-warm`, rotating through up to twenty champions with a 120-second budget and concurrency one. The candidate roster is cached for one hour, retaining the original eligibility cadence and avoiding a raw corpus scan on every short tick. Its cache factory owns an isolated context and thirty-second statement deadline. Successful `profile-warm` coverage is persisted in `AnalyticsResponseSnapshots`, so oldest coverage wins after restarts as well. Each champion has its own DI scope. The existing exact default cache keys (Emerald+, ALL regions, most-played lane) are overwritten with `SetAsync`; previously cached values remain available while the refresh runs. Profile cache L2 TTL remains 24 hours. Synergies are persisted separately, refreshed at six hours, and accepted from durable storage up to 24 hours old before fallback computation.
 - **Compact synergy reads.** `ChampionSynergyFactMaterializer` incrementally records one baseline per participant plus qualifying same-team bot/support and jungle/lane partners. Facts retain patch, queue, platform, role, outcome, and summoner; the reader applies **current** queue-specific ranks, sample gates, and Wilson ranking. The existing `analytics:synergies:v1` keys remain compatible, preserving warm Redis entries across rollout. Facts and the source-match inclusion ledger commit atomically. A complete-patch coverage marker enables reads; partial coverage retains the raw fallback. Facts/ledger deliberately have no cascading match foreign key and survive verified archival. The archive refuses to prune ranked sources absent from this ledger. Defaults bound catch-up to 500 matches, ninety seconds, and 32 MiB of cluster WAL per tick; checks occur between committed batches. Backfill prioritizes the archive's frozen chunk.
 - **Regional leaderboard snapshots.** `RefreshLeaderboardsJob` refreshes up to eight oldest regional solo/flex boards every five minutes, with a 120-second run budget. It computes the full top hundred, persists the successful response, then updates Redis. Cold regional reads project the requested limit from that durable snapshot without executing the ranking query. Refresh failure retains the old response, whose `generatedAtUtc` remains visible. Snapshots over 24 hours old fall back to the existing query. Champion-filtered boards retain their scoped cache/query behavior. The web page streams results under Suspense while filter controls remain available.
 - **The profile has a two-second synergy wait budget.** Default synergies normally read Redis or a durable snapshot. A missing snapshot uses compact facts once coverage is complete, otherwise the existing raw fallback. The profile's isolated fill scope can complete after the response and populate the cache; its existing bounded database command lifecycle remains in place.
@@ -586,7 +592,10 @@ was last ingested. It is built so that no request ever counts rows:
 - `high-elo-profile-refresh` still uses Riot's current Master/Grandmaster/Challenger leagues as the
   discovery pool, but only sets `IsHighEloOtp` when the account has a complete latest-50 Ranked
   Solo/Duo sample with at least 30 games on one champion. The job stores champion, sample, and
-  evaluation evidence and retires legacy auto-created rows that lack that evidence.
+  evaluation evidence and retires legacy auto-created rows that lack that evidence. A full pass over
+  every region outlasts its two-hour cron, so one run holds the `high-elo-refresh` lock (a 30-minute
+  lease renewed every save batch) and later ticks skip while it runs. Overlapping runs once filled all
+  eight main-pool workers and starved the `default` queue, including the ingestion dispatcher.
 - The same roster table is also used as a high-value analytics seed source. Pro-build analytics can
   select `pro`, `highelo`, or `all`; missing/invalid scope defaults to `pro`.
 - Admin API (`/api/admin/pro-summoners`) allows manual curation, candidate approval/rejection, and updates.
@@ -754,16 +763,17 @@ timeline fetched at `SchemaVersion >= 2`. A match with any early-surrender parti
 not counted. Rank scope is **every tracked rank**, not Emerald+: 57% of rank-context rows had no tier,
 and the crawler is already Master-heavy.
 
-**Exactly-once, resumable counting.** Each batch (`MatchBatchSize`, 500) loads participants, item
+**Exactly-once, resumable counting.** Each batch (`MatchBatchSize`, 25) loads participants, item
 events, snapshot gold, and runes, replays and aggregates in memory, then commits one transaction:
 `INSERT … SELECT FROM unnest(…) ON CONFLICT DO UPDATE SET "Games" = "Games" + EXCLUDED."Games" …` plus
 the batch's rows in the `BuildLabProcessedMatches` ledger (`MatchId` PK, `Patch`, `ProcessedAtUtc`).
 A crash leaves a batch either fully counted or not at all, eligibility excludes ledgered matches, and
 the next run resumes exactly where the last stopped — nothing can be double counted. A run refreshes
 the active patch plus `PriorPatchesToRefresh` (2) older ones for late matches, keeps the
-`PatchesToRetain` (4) newest patches and deletes the stats and ledger of anything older, and stops at
-`MaxMatchesPerRun` (20,000), so a fresh patch backfills over several runs (~45 minutes of IO per patch
-on the HDD box) instead of holding a worker slot for hours.
+`PatchesToRetain` (4) newest patches and drains older stats and then ledger rows in bounded cleanup
+batches. It checks limits between committed batches: `MaxMatchesPerRun` (500), `MaxRunSeconds`
+(120) and `MaxWalMegabytesPerRun` (32, cluster-wide), with 500 ms pacing and 60-second commands.
+Catch-up duration depends on I/O load and can span days on the HDD.
 
 **Job.** `RefreshBuildLabStatsJob` (recurring id `refresh-build-lab-stats`, default `*/15 * * * *`) runs
 on the `analytics-batch` lane under the PostgreSQL session advisory lock
@@ -846,6 +856,26 @@ Compact synergy coverage is checked before pruning. Autovacuum and transaction d
 Server JSON fetches and BFF proxy responses keep their deadline through body consumption. The finite
 BFF response is buffered so a stalled body returns a structured 504. Backend error cards expose an
 inert data attribute to bounded synthetic checks. A five-minute data-health timer records first byte,
-full streamed response time, fallback failures, I/O pressure, and durable snapshot ages. Nightly
-Lighthouse has a stable Docker name, resource caps, browser restart on sample failures, and explicit
-cleanup on timeout; measuring a fast loading shell alone is insufficient.
+full streamed response time, fallback failures, I/O pressure, and durable snapshot ages.
+HTTP checks have a 12-second curl deadline plus a 14-second outer timeout; the read-only database
+probe has a five-second statement budget and an eight-second outer timeout. Snapshot probe failures
+publish `transcendence_snapshot_probe_failure=1` alongside current page results rather than discarding
+the whole sweep. The page-data alert covers either failure. The service has a 75-second ceiling.
+Nightly Lighthouse has a stable Docker name, resource caps, bounded RAM temporary storage, browser restart
+on sample failures, and explicit cleanup on timeout. Runtime errors and missing paint measurements
+cannot publish a fresh success timestamp; measuring a fast loading shell alone is insufficient.
+The lab uses verified HTTPS with HTTP/1.1 and an explicit transport label because Chromium 154's
+instrumented HTTP/2 session hangs against NPM. The proxy and full-response checks retain HTTP/2.
+
+Summoner reads cache the assembled profile for 30 seconds (10 seconds in local memory), keyed by
+summoner ID and profile revision and tagged with the existing `summoner-stats:{id}` invalidation tag.
+Missing/refreshing lookups are not cached. This coalesces assembly and avoids repeated sequential
+stats-cache round trips while preserving refresh invalidation. Match cards are memoized, and the
+expanded scoreboard loads only when opened; collapsed cards do not load the animation library.
+
+Build Lab upserts follow primary-key order in statements of at most 500 option rows, all in the same
+transaction as their match ledger and coverage. A failed chunk rolls back the entire match batch. Its PostgreSQL session
+advisory lock remains authoritative; overlapping triggers skip instead of waiting on an additional
+hour-long Hangfire execution lock. Retention discovers expired patches from coverage and the indexed
+ledger rather than scanning the option-stats corpus on every refresh. Existing time/WAL limits,
+transaction sizes, pacing, and worker counts remain in force.

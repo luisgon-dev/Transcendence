@@ -6,18 +6,24 @@ using Microsoft.Extensions.Options;
 namespace Transcendence.Service.Core.Services.Diagnostics;
 
 /// <summary>
-/// Records a liveness "beat" from the ingestion producers so a watchdog can tell whether the
+/// Records a liveness "beat" from Hangfire job progress so a watchdog can tell whether the
 /// worker is still executing Hangfire jobs (vs. the documented hang where every worker parks on
 /// a non-stoppable job and the process sits idle). Distinct from the dispatcher pacing cron —
 /// this is the process-liveness marker.
 /// </summary>
 public interface IWorkerHeartbeat
 {
-    /// <summary>UTC time of the last recorded producer beat, or null if none yet.</summary>
+    /// <summary>Record actual job progress without performing I/O on a Hangfire worker thread.</summary>
+    void RecordProgress();
+
+    /// <summary>Publish the most recent progress timestamp without advancing it.</summary>
+    Task PublishAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>UTC time of the last recorded job progress, or null if none yet.</summary>
     DateTime? LastBeatUtc { get; }
 
     /// <summary>
-    /// Record a producer beat: updates the in-memory marker (read by the watchdog), the heartbeat
+    /// Record progress: updates the in-memory marker (read by the watchdog), the heartbeat
     /// file (read by the container HEALTHCHECK), and a Redis key (external observability / alerting).
     /// File and Redis writes are best-effort and never throw into the caller.
     /// </summary>
@@ -43,10 +49,18 @@ public sealed class WorkerHeartbeat(
         }
     }
 
+    public void RecordProgress() => Interlocked.Exchange(ref _lastBeatTicks, DateTime.UtcNow.Ticks);
+
     public async Task BeatAsync(CancellationToken cancellationToken = default)
     {
-        var now = DateTime.UtcNow;
-        Interlocked.Exchange(ref _lastBeatTicks, now.Ticks);
+        RecordProgress();
+        await PublishAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task PublishAsync(CancellationToken cancellationToken = default)
+    {
+        if (LastBeatUtc is not { } now)
+            return;
 
         var stamp = now.ToString("O", CultureInfo.InvariantCulture);
 
@@ -57,6 +71,9 @@ public sealed class WorkerHeartbeat(
             try
             {
                 await File.WriteAllTextAsync(path, stamp, cancellationToken).ConfigureAwait(false);
+                // HEALTHCHECK reads mtime. Publishing an old beat must never make a stalled
+                // worker look healthy just because this publisher is still scheduled.
+                File.SetLastWriteTimeUtc(path, now);
             }
             catch (Exception ex)
             {

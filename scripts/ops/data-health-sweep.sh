@@ -13,7 +13,7 @@ trap 'rm -rf "$scratch"' EXIT
 metrics="${scratch}/data_health.prom"
 for route in /lol/leaderboards /lol/champions/103 /lol/summoners/na/Kronic-NA1; do
   failed=0
-  timing=$(curl --silent --show-error --fail --max-time 12 -o "${scratch}/body" \
+  timing=$(timeout --signal=TERM --kill-after=1 14 curl --silent --show-error --fail --max-time 12 -o "${scratch}/body" \
     -w '%{time_starttransfer} %{time_total}' "${BASE_URL}${route}") || failed=1
   # Next can send HTTP 200 and a fast loading shell before the backend fails. Do not count it healthy.
   if [[ ! -s "${scratch}/body" ]] || grep -Eq 'data-backend-error|data-trn-backend-error|Win-rate data is unavailable right now|Build data is unavailable right now' "${scratch}/body"; then failed=1; fi
@@ -23,14 +23,22 @@ for route in /lol/leaderboards /lol/champions/103 /lol/summoners/na/Kronic-NA1; 
   printf 'transcendence_data_probe_complete_seconds{route="%s"} %s\n' "$route" "${total:-12}" >>"$metrics"
 done
 # Only the small snapshot table is scanned. Enforce read-only sessions and a five-second DB budget.
-docker exec -e 'PGOPTIONS=-c default_transaction_read_only=on -c statement_timeout=5000 -c lock_timeout=1000 -c application_name=transcendence-data-health' \
+snapshot_failed=0
+if timeout --signal=TERM --kill-after=1 8 docker exec -e 'PGOPTIONS=-c default_transaction_read_only=on -c statement_timeout=5000 -c lock_timeout=1000 -c application_name=transcendence-data-health' \
   "${PG_CONTAINER:-transcendence-postgres}" psql -X -U "${PG_USER:-postgres}" -d "${PG_DB:-transcendence}" -At -v ON_ERROR_STOP=1 -c '
   SELECT '\''transcendence_snapshot_oldest_age_seconds{feature="'\'' || f.feature || '\''"} '\'' ||
       COALESCE(EXTRACT(epoch FROM now()-min(s."ComputedAtUtc"))::bigint,-1)
   FROM (VALUES ('\''leaderboard-regional'\''),('\''synergies'\''),('\''profile-warm'\'')) f(feature)
   LEFT JOIN "AnalyticsResponseSnapshots" s ON s."Feature"=f.feature
     AND (s."Patch"='\''*'\'' OR s."Patch"=(SELECT "Version" FROM "Patches" WHERE "IsActive" LIMIT 1))
-  GROUP BY f.feature;' >>"$metrics"
+  GROUP BY f.feature;' >"${scratch}/snapshots.prom"; then
+  cat "${scratch}/snapshots.prom" >>"$metrics"
+else
+  snapshot_failed=1
+fi
+# A failed database check must not discard completed page probes and leave yesterday's gauges
+# looking healthy. Missing snapshot ages are explicitly covered by this independent failure gauge.
+printf 'transcendence_snapshot_probe_failure %s\n' "$snapshot_failed" >>"$metrics"
 if [[ -r /proc/pressure/io ]]; then
   awk '$1=="full" {for(i=2;i<=NF;i++) if($i ~ /^avg60=/) {split($i,a,"=");print "transcendence_io_full_pressure_percent " a[2]}}' /proc/pressure/io >>"$metrics"
 fi

@@ -68,6 +68,7 @@ if timeout --signal=TERM --kill-after=15 "$TIMEOUT_SECONDS" docker run --rm \
   --pids-limit=256 \
   --network host \
   --shm-size=1g \
+  --tmpfs /tmp:rw,nosuid,nodev,size=256m,mode=1777 \
   -v "${SCRATCH}:/out" \
   "${IMAGE}" \
   --base-url "${BASE_URL}" \

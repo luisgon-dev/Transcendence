@@ -59,11 +59,14 @@
     },
     "BuildLab": {
       "Enabled": false,
-      "MatchBatchSize": 500,
-      "MaxMatchesPerRun": 20000,
+      "MatchBatchSize": 25,
+      "MaxMatchesPerRun": 500,
       "PriorPatchesToRefresh": 2,
       "PatchesToRetain": 4,
-      "CommandTimeoutSeconds": 600
+      "CommandTimeoutSeconds": 60,
+      "MaxRunSeconds": 120,
+      "BatchDelayMilliseconds": 500,
+      "MaxWalMegabytesPerRun": 32
     }
   }
 }

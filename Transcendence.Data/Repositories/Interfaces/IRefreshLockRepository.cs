@@ -16,6 +16,12 @@ public interface IRefreshLockRepository
 
     /// <summary>Release only if <paramref name="ownerToken"/> still matches the current lease.</summary>
     Task ReleaseOwnedAsync(string key, Guid ownerToken, CancellationToken ct = default);
+
+    /// <summary>
+    /// Push the lease out to now + <paramref name="ttl"/> while <paramref name="ownerToken"/> still owns it.
+    /// False means another holder re-acquired the lock, so the caller must stop.
+    /// </summary>
+    Task<bool> TryRenewOwnedAsync(string key, Guid ownerToken, TimeSpan ttl, CancellationToken ct = default);
     Task<RefreshLock?> GetAsync(string key, CancellationToken ct = default);
     Task<bool> AnyActiveByPrefixAsync(string prefix, CancellationToken ct = default);
     Task<int> DeleteExpiredAsync(DateTime expiresOnOrBeforeUtc, int batchSize, CancellationToken ct = default);

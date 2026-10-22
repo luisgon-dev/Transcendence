@@ -115,3 +115,72 @@ Suggested delivery sequence: (1) background work budgets and measurement, (2) st
 
 Operational targets and overrides are documented in `docs/DEVELOPMENT.md` and `scripts/ops/README.md`.
 Targets require ongoing observation; catch-up may take multiple days on the current disk.
+
+## Rollout verification
+
+The software rollout uses app commits `c95538f`, `b8b38d7`, and `5e75255` on `main`, followed by
+lab-only corrections `077778b` and `3f8be81`, with
+signed image verification and the normal migration-before-worker deployment. Hardware and the
+PostgreSQL data volume were not moved. Worker pools now total fifteen slots: main=8, warm=1,
+batch=1, timeline=2, discovery=2, history=1. Normal vacuum and durable transactions remain enabled.
+
+At approximately 13:55 PDT, full-response health checks measured leaderboards at 0.197 seconds,
+Ahri at 0.316 seconds, and Kronic at 0.949 seconds, with no backend fallback marker. Five-minute
+full I/O pressure was 22.28%, versus approximately 54% during diagnosis. These are warm LAN
+samples under changing load, not an external browser measurement or proof of p95 targets.
+By 13:56 PDT all twenty regional leaderboard scopes and ninety-three default profile/synergy
+entries were populated; the compact source ledger had processed 3,500 matches. Partial compact
+coverage continues using the raw fallback until the patch is complete.
+
+Local validation passed 338 frontend tests, 472 core tests, 89 API tests, 61 PostgreSQL-backed
+integration tests, seven archive/performance-wrapper tests, and three Lighthouse-result validation
+tests. Frontend production build, API contract check, EF model/migration checks and focused lint
+also passed. Functional CI gates passed for the preceding rollout. The dependency audit remains
+red for existing high-severity `braces` and `source-map-js` findings; its policy was not weakened.
+
+Archive cron now retries every thirty minutes within a twenty-minute/256 MiB global-WAL budget,
+and yields to I/O pressure. The dry-run passed; the first bounded attempt yielded and a later run
+found no eligible old patches. No forced bulk archive was added for validation. The NAS key gate
+now permits a narrowly confined SHA-256 verification command; eight permitted command shapes
+and five denied traversal/shell/path cases passed. Homelab regression checks passed with no
+failures. Configuration backups remain under `/var/lib/transcendence-config-backups` and the
+compose backup is `/root/transcendence/compose.yml.bak-hdd-limits-20261006T195456Z`.
+
+The first live browser sweep revealed `NO_FCP` reports that the old runner treated as empty
+successful measurements. The follow-up rejects runtime errors and missing paints, restarts Chrome,
+and uses bounded RAM temporary storage and shared memory under the same total memory limit.
+Incomplete sweeps preserve the old metrics and timestamp so the staleness alert remains truthful.
+Chrome Launcher's synchronous cleanup is handled safely on retries. Repeated instrumented HTTPS
+HTTP/2 samples hung, while ordinary Chrome, localhost HTTP and a verified HTTPS HTTP/1.1 sample
+completed. The lab alone uses HTTP/1.1 and labels route metrics `transport="http1"` to separate its
+new baseline; production NPM and full-response checks retain HTTP/2. No TLS bypass was introduced.
+
+At approximately 14:14 PDT, full responses were leaderboards 0.194 seconds, Ahri 0.269 seconds,
+and Kronic 0.255 seconds, with no fallback detected. Five-minute full I/O pressure was 8.48% in
+the subsequent sample. By 14:16 PDT twenty board scopes and 162 profile/synergy entries were
+populated and 5,500 compact source matches processed. All six live worker pools matched the
+fifteen-slot configuration. Functional CI gates passed for `5e75255` and `077778b`; the existing
+dependency audit is the only failed gate for those releases.
+
+The final shared-config audit found old Build Lab overrides in `config/backend.shared.json`, despite
+the correct production Compose limits. Commit `fdf48f7` aligns those shared defaults, corrects their
+earlier documentation, and adds the shared file to backend image-build filters. By approximately
+14:22 PDT the cached 173-champion eligibility roster had complete profile/synergy snapshot coverage,
+all twenty leaderboard scopes remained populated, and compact source coverage reached 6,500 matches.
+
+At 14:23 PDT the installed lab unit completed all seventeen routes with one sample each, published
+206 metric samples with a fresh success timestamp, retained seventeen raw Lighthouse reports, and
+removed its browser container. The temporary validation override was removed; nightly runs retain
+three samples per route. Mobile simulated LCP on this 1.5-CPU-limited runner was 5.56 seconds for
+Ahri, 4.41 seconds for Kronic, and 4.16 seconds for leaderboards. This establishes working monitoring,
+not achievement of the 2.5-second browser LCP target or a real-user percentile. The lab transport
+change also requires a fresh baseline; compare real user measurements separately.
+
+Final state at approximately 14:28 PDT: worker, API and web all run signed revision `fdf48f7` and
+pass their healthchecks. The final code CI run passed migration safety/apply, backend, frontend,
+API performance and frontend lab budgets; only the existing dependency audit failed. A sequential
+post-deployment scan of all seventeen routes returned HTTP 200 over HTTP/2 with zero backend
+fallback markers. Full bodies completed in 0.09–0.72 seconds: Ahri 0.256, Kronic 0.162, leaderboards
+0.213 seconds. These remain single warm LAN samples, not percentile or WAN acceptance measurements.
+All diagnostic/runner containers and the temporary lab override were removed. Normal health,
+deployment, archive and nightly performance schedules remain enabled.

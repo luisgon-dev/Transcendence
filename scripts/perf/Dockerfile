@@ -38,6 +38,7 @@ RUN npm install --no-save --omit=dev lighthouse@13.5.0 chrome-launcher@1.2.1
 # Only what the runner actually needs: the runner, the shared route vocabulary and the route
 # list. No workspace install, no app source.
 COPY --chown=sweep:sweep scripts/perf/web-lab.mjs ./scripts/perf/web-lab.mjs
+COPY --chown=sweep:sweep scripts/perf/lighthouse-result.mjs ./scripts/perf/lighthouse-result.mjs
 COPY --chown=sweep:sweep scripts/perf/routes.prod.json ./scripts/perf/routes.prod.json
 COPY --chown=sweep:sweep packages/web-routes ./node_modules/@transcendence/web-routes
 

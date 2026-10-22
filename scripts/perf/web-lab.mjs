@@ -32,11 +32,16 @@ import { pathToFileURL } from "node:url";
 
 import * as chromeLauncher from "chrome-launcher";
 import lighthouse from "lighthouse";
+import { validateLighthouseResult } from "./lighthouse-result.mjs";
 
 import { webVitalsRouteTemplate } from "@transcendence/web-routes";
 
-// Chrome flags mirror the retired lighthouserc.cjs so numbers stay comparable across the swap.
-const CHROME_FLAGS = ["--headless=new", "--no-sandbox", "--disable-dev-shm-usage"];
+// The bounded production container provides /dev/shm; spilling it to the HDD stalls Chrome.
+const CHROME_FLAGS = ["--headless=new", "--no-sandbox"];
+// Chromium 154 hangs during Lighthouse instrumentation over production NPM HTTP/2.
+// HTTPS HTTP/1.1 and ordinary HTTP/2 browsing work; isolate this lab-only workaround.
+CHROME_FLAGS.push("--disable-http2");
+const LAB_TRANSPORT = "http1";
 
 const LIGHTHOUSE_SETTINGS = {
   formFactor: "mobile",
@@ -133,7 +138,7 @@ async function runOnce(url, port) {
     { port, output: "json", logLevel: "error" },
     { extends: "lighthouse:default", settings: LIGHTHOUSE_SETTINGS }
   );
-  if (!result?.lhr) throw new Error(`Lighthouse returned no result for ${url}`);
+  validateLighthouseResult(result?.lhr, url);
   return result.lhr;
 }
 
@@ -199,7 +204,7 @@ function renderPrometheus(results, formFactor) {
     if (!withMetric.length) continue;
     lines.push(`# HELP ${name} ${help}`, `# TYPE ${name} gauge`);
     for (const result of withMetric) {
-      const labels = `{route="${escapeLabel(result.route)}",form_factor="${escapeLabel(formFactor)}"}`;
+      const labels = `{route="${escapeLabel(result.route)}",form_factor="${escapeLabel(formFactor)}",transport="${LAB_TRANSPORT}"}`;
       lines.push(`${name}${labels} ${result.metrics[key]}`);
     }
   }
@@ -214,7 +219,7 @@ function renderPrometheus(results, formFactor) {
       for (const [category, score] of Object.entries(result.categories)) {
         const labels =
           `{route="${escapeLabel(result.route)}",form_factor="${escapeLabel(formFactor)}"` +
-          `,category="${escapeLabel(category)}"}`;
+          `,category="${escapeLabel(category)}",transport="${LAB_TRANSPORT}"}`;
         lines.push(`transcendence_web_lab_category_score${labels} ${score}`);
       }
     }
@@ -275,7 +280,8 @@ async function main() {
         } catch (error) {
           console.error(`  ! ${url} sample ${i + 1}/${args.samples}: ${error.message}`);
           // A failed browser must not poison every remaining route in the sweep.
-          await chrome.kill().catch(() => {});
+          // chrome-launcher 1.2 can return void from kill(), so do not chain .catch().
+          try { await chrome.kill(); } catch { /* Already exited; replace the browser below. */ }
           chrome = await chromeLauncher.launch({ chromeFlags: CHROME_FLAGS });
         }
       }
@@ -297,7 +303,7 @@ async function main() {
   if (args.jsonOut) {
     writeAtomic(
       args.jsonOut,
-      `${JSON.stringify({ baseUrl: args.baseUrl, samples: args.samples, results }, null, 2)}\n`
+      `${JSON.stringify({ baseUrl: args.baseUrl, samples: args.samples, transport: LAB_TRANSPORT, results }, null, 2)}\n`
     );
   }
 

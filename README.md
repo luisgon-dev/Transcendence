@@ -408,11 +408,11 @@ primitives. See [`DESIGN.md`](DESIGN.md).
   - **Alerts (18), sent to Discord:** scrape targets down, API 5xx rate and p95 latency, Postgres
     connection saturation, Redis rejections, disk space, stale or failing matchup and Build Lab
     refreshes, Web Vitals p75 regressions, and Lighthouse score or LCP regressions.
-- **Worker liveness:** a watchdog thread writes a heartbeat to `/tmp/worker-heartbeat` and to Redis.
-  If the heartbeat is stale for more than 10 min, the worker exits with code 70 so the container
-  restarts.
+- **Worker liveness:** job starts/completions update a progress timestamp, published to
+  `/tmp/worker-heartbeat` and Redis every 30 seconds. After 10 minutes without progress, a watchdog
+  requests graceful shutdown, with exit code 70 as a fallback so the container restarts.
 - **Logs:** JSON-lines operational logs per service, rotated at 10 MB with 5 files kept.
-- **Scheduled reports:** a nightly Lighthouse sweep of 15 production routes feeds node-exporter's
+- **Scheduled reports:** a nightly Lighthouse sweep of 17 production routes feeds node-exporter's
   textfile collector, and a daily read-only Postgres performance report is written to disk.
 
 ## CI/CD and deployment

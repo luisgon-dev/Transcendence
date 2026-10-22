@@ -28,10 +28,14 @@ if timeout --signal=TERM --kill-after=1 8 docker exec -e 'PGOPTIONS=-c default_t
   "${PG_CONTAINER:-transcendence-postgres}" psql -X -U "${PG_USER:-postgres}" -d "${PG_DB:-transcendence}" -At -v ON_ERROR_STOP=1 -c '
   SELECT '\''transcendence_snapshot_oldest_age_seconds{feature="'\'' || f.feature || '\''"} '\'' ||
       COALESCE(EXTRACT(epoch FROM now()-min(s."ComputedAtUtc"))::bigint,-1)
-  FROM (VALUES ('\''leaderboard-regional'\''),('\''synergies'\''),('\''profile-warm'\'')) f(feature)
+  FROM (VALUES ('\''leaderboard-regional'\''),('\''synergies'\''),('\''profile-warm'\''),('\''dataset-stats'\'')) f(feature)
   LEFT JOIN "AnalyticsResponseSnapshots" s ON s."Feature"=f.feature
     AND (s."Patch"='\''*'\'' OR s."Patch"=(SELECT "Version" FROM "Patches" WHERE "IsActive" LIMIT 1))
-  GROUP BY f.feature;' >"${scratch}/snapshots.prom"; then
+  GROUP BY f.feature
+  UNION ALL
+  SELECT '\''transcendence_matches_ingested_last_24h '\'' ||
+      COALESCE(max(("Payload"::jsonb->>'\''matchesLast24Hours'\'')::bigint),-1)
+  FROM "AnalyticsResponseSnapshots" WHERE "Feature"='\''dataset-stats'\'' AND "Patch"='\''*'\'';' >"${scratch}/snapshots.prom"; then
   cat "${scratch}/snapshots.prom" >>"$metrics"
 else
   snapshot_failed=1

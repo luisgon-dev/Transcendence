@@ -1130,3 +1130,101 @@ groups:
           group_by:
             - alertname
             - grafana_folder
+
+
+      - uid: trn-match-ingestion-low
+        title: Match ingestion collapsed
+        condition: B
+        for: 1h
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 86400
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              editorMode: code
+              expr: 'max(transcendence_matches_ingested_last_24h)'
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: prometheus
+                uid: prometheus
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: math
+              expression: ($A >= 0) && ($A < 2000)
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: __expr__
+                uid: __expr__
+        labels:
+          severity: warning
+        annotations:
+          summary: Match ingestion collapsed
+          description: Fewer than 2,000 matches were fetched in the last 24 hours (the HDD-budgeted rate is roughly 6-8K/day). Check main-pool Hangfire workers for long-running jobs starving the default queue, and refresh yields in worker logs.
+        notification_settings:
+          receiver: transcendence-discord
+          group_by:
+            - alertname
+            - grafana_folder
+
+
+      - uid: trn-dataset-stats-stale
+        title: Worker default queue stalled
+        condition: B
+        for: 15m
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 86400
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              editorMode: code
+              expr: 'max(transcendence_snapshot_oldest_age_seconds{feature="dataset-stats"})'
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: prometheus
+                uid: prometheus
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: math
+              expression: ($A < 0) || ($A > 1800)
+              intervalMs: 1000
+              maxDataPoints: 43200
+              datasource:
+                type: __expr__
+                uid: __expr__
+        labels:
+          severity: warning
+        annotations:
+          summary: Worker default queue stalled
+          description: The dataset-stats snapshot, refreshed every five minutes on the default queue, is over thirty minutes old. Main-pool workers are likely all held by long-running jobs; the in-worker ingestion-health alert runs on that same queue and cannot report it.
+        notification_settings:
+          receiver: transcendence-discord
+          group_by:
+            - alertname
+            - grafana_folder

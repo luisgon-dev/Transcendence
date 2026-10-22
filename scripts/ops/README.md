@@ -380,6 +380,7 @@ systemctl start transcendence-data-health.service
 
 Metrics: `transcendence_data_probe_{failure,first_byte_seconds,complete_seconds}` by route,
 `transcendence_snapshot_oldest_age_seconds` by feature, `transcendence_io_full_pressure_percent`,
+`transcendence_matches_ingested_last_24h` (read from the stored `dataset-stats` snapshot, not the corpus),
 and `transcendence_data_health_last_success_unixtime_seconds`. Snapshot age -1 means no snapshot yet.
 Grafana warns on repeated fallbacks, missing checks, and stale regional/synergy snapshots; inspect
 profile-warm ages and successful coverage counts against the two-hour warming target. Reload the

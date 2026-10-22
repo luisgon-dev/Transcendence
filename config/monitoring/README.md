@@ -146,6 +146,10 @@ publish partial snapshot ages or freeze the complete metrics file. The page-data
 gauge too. The systemd unit allows 75 seconds for the bounded checks and shutdown margin.
 The provisioned rules warn on missing probes, repeated backend fallbacks, leaderboard age above
 thirty minutes (or absent snapshots), and default synergy age above eight hours (or absent snapshots).
+Two rules watch ingestion from outside the worker, because the in-worker ingestion-health alert runs on
+the same `default` queue that a stuck main worker pool starves: `trn-match-ingestion-low` fires when
+fewer than 2,000 matches were fetched in 24 hours (held an hour), and `trn-dataset-stats-stale` fires
+when the five-minute `dataset-stats` snapshot is over thirty minutes old.
 Back up rules and reload Grafana file provisioning when installing. Current-patch `profile-warm` age
 is also exposed: target complete successful coverage within two hours. Observe queue completion and
 WAL/device latency when changing worker throughput; separate worker pools still share the HDD.

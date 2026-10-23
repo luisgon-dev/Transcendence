@@ -186,8 +186,8 @@ public class SummonerMaintenanceJob(
             .Where(m => m.FetchedAt != null)
             .MaxAsync(m => m.FetchedAt, ct);
 
-        var staleAfterMinutes = Math.Max(5,
-            isRampActive ? jobOptions.RampDataStaleAfterMinutes : jobOptions.DataStaleAfterMinutes);
+        // Not shortened during the ramp: it is the refresh cooldown (see ChampionAnalyticsIngestionJob).
+        var staleAfterMinutes = Math.Max(5, jobOptions.DataStaleAfterMinutes);
         var staleCutoffUtc = evaluationUtc.AddMinutes(-staleAfterMinutes);
         var baselineMaxCandidates = Math.Max(1,
             isRampActive ? jobOptions.RampMaxCandidateSummonersPerRun : jobOptions.MaxCandidateSummonersPerRun);

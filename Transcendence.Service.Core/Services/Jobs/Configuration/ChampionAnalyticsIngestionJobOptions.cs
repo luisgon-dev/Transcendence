@@ -23,7 +23,6 @@ public class ChampionAnalyticsIngestionJobOptions
     public int SelfPaceRampIntervalMinutes { get; set; } = 2;
     public int SelfPaceSteadyIntervalMinutes { get; set; } = 5;
 
-    public int RampDataStaleAfterMinutes { get; set; } = 30;
     public int RampMaxCandidateSummonersPerRun { get; set; } = 250;
     public int RampMinRefreshJobsToQueuePerRun { get; set; } = 6;
     public int RampMaxRefreshJobsToQueuePerRun { get; set; } = 20;

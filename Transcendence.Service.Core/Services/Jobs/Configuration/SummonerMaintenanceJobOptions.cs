@@ -28,7 +28,6 @@ public class SummonerMaintenanceJobOptions
 
     public int RampMaxCandidateSummonersPerRun { get; set; } = 250;
     public int RampMaxRefreshJobsToQueuePerRun { get; set; } = 12;
-    public int RampDataStaleAfterMinutes { get; set; } = 30;
     public List<string> HighEloTiers { get; set; } =
     [
         "CHALLENGER",

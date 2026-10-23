@@ -198,8 +198,9 @@ public class ChampionAnalyticsIngestionJob(
         var targetMatchesForPatch = Math.Max(
             minMatchesForPatch,
             ScaleTargetForRegion(jobOptions.TargetSuccessfulMatchesForCurrentPatch, regionWeight));
-        var staleAfterMinutes = Math.Max(5,
-            isRampActive ? jobOptions.RampDataStaleAfterMinutes : jobOptions.DataStaleAfterMinutes);
+        // Not shortened during the ramp: this is also the refresh cooldown, and a 30-minute one re-picked
+        // the same idle apex players every half hour (25% of refreshes, ~2% of them found a match).
+        var staleAfterMinutes = Math.Max(5, jobOptions.DataStaleAfterMinutes);
         var staleCutoffUtc = evaluationUtc.AddMinutes(-staleAfterMinutes);
 
         // Region-scoped coverage queries

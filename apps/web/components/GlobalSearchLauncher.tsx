@@ -50,7 +50,7 @@ export function GlobalSearchLauncher({
         <span className="font-heading text-sm font-semibold text-muted" aria-hidden="true">
           /
         </span>
-        <span className="type-ui">Search players, champions, or pages</span>
+        <span className="type-ui">Search a Riot ID or champion</span>
       </span>
       <span className="type-kicker hidden rounded-md border border-border/70 bg-surface/88 px-2 py-1 text-muted sm:inline">
         Ctrl/Cmd+K

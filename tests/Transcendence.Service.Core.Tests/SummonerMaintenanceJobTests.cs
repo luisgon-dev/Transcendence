@@ -79,7 +79,7 @@ public class SummonerMaintenanceJobTests
         await using var harness = await Harness.CreateAsync(adaptivePolicy);
         harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
         harness.SeedSummoner("PatchFirst", "NA1", DateTime.UtcNow.AddHours(-6));
-        harness.SeedSummoner("NonPatchSecond", "NA1", DateTime.UtcNow.AddMinutes(-40));
+        harness.SeedSummoner("NonPatchSecond", "NA1", DateTime.UtcNow.AddMinutes(-100));
         await harness.Db.SaveChangesAsync();
 
         var queuedJobs = new List<Job>();
@@ -400,7 +400,6 @@ public class SummonerMaintenanceJobTests
                     NewPatchRampHours = 48,
                     RampMaxCandidateSummonersPerRun = 20,
                     RampMaxRefreshJobsToQueuePerRun = 6,
-                    RampDataStaleAfterMinutes = 30
                 }),
                 Options.Create(new ChampionAnalyticsIngestionJobOptions
                 {

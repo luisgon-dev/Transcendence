@@ -48,6 +48,28 @@ public sealed class SummonerRiotIdLookupTests(PostgresIntegrationFixture fixture
         (await repository.FindByRiotIdAsync("EUW1", $"Nobody{suffix}", "EUW")).Should().BeNull();
     }
 
+    [Fact]
+    public async Task MarkRiotIdRefreshed_StampsALegacyRowWithADotlessI()
+    {
+        // Production: Postgres upper() maps 'ı' to 'I' but ToUpperInvariant keeps it, so the upper() branch
+        // never matched this row, it stayed the stalest candidate and was re-queued every tick.
+        var row = Legacy($"Legacyı{Guid.NewGuid().ToString("N")[..8]}", "EUW");
+        row.UpdatedAt = new DateTime(2026, 2, 10, 0, 0, 0, DateTimeKind.Utc);
+        await using (var db = CreateContext())
+        {
+            db.Summoners.Add(row);
+            await db.SaveChangesAsync();
+        }
+
+        var refreshedAt = new DateTime(2026, 10, 23, 3, 0, 0, DateTimeKind.Utc);
+        await using var context = CreateContext();
+        await new SummonerRepository(context, new RankRepository(context))
+            .MarkRiotIdRefreshedAsync("EUW1", row.GameName!, "EUW", refreshedAt);
+
+        (await context.Summoners.AsNoTracking().SingleAsync(s => s.Id == row.Id)).UpdatedAt
+            .Should().Be(refreshedAt);
+    }
+
     private Summoner Legacy(string gameName, string tagLine) => new()
     {
         Id = Guid.NewGuid(),

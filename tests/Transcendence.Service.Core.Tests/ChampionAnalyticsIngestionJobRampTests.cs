@@ -162,7 +162,7 @@ public class ChampionAnalyticsIngestionJobRampTests
         await using var harness = await Harness.CreateAsync(fixedBudgetPolicy);
         harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
         harness.SeedSummoner("PatchFirst", "NA1", DateTime.UtcNow.AddHours(-6));
-        harness.SeedSummoner("NonPatchSecond", "NA1", DateTime.UtcNow.AddMinutes(-40));
+        harness.SeedSummoner("NonPatchSecond", "NA1", DateTime.UtcNow.AddMinutes(-100));
         await harness.Db.SaveChangesAsync();
 
         var queuedJobs = new List<Job>();
@@ -490,6 +490,40 @@ public class ChampionAnalyticsIngestionJobRampTests
         queuedJobs[0].Args[0].Should().Be("GenericFallback");
     }
 
+    [Fact]
+    public async Task ExecuteForRegionAsync_KeepsTheSteadyRefreshCooldownDuringTheRamp()
+    {
+        var fixedBudgetPolicy = new FixedAdaptiveBudgetPolicy(new AdaptiveThroughputBudgetDecision(
+            AdaptiveThroughputBudgetMode.Balanced,
+            MaxCandidates: 10,
+            QueueTarget: 1,
+            IncludeAllModes: false,
+            CoverageRatio: 0.2d,
+            BacklogAgeMinutes: 120d,
+            RecentVelocityPerHour: 2d,
+            CandidatePressureRatio: 2d));
+
+        await using var harness = await Harness.CreateAsync(fixedBudgetPolicy);
+        // Released two hours ago: inside the 48-hour ramp.
+        harness.SeedActivePatch("15.2", DateTime.UtcNow.AddHours(-2));
+        harness.SeedSuccessfulMatch("15.2");
+        harness.SeedSummoner("GenericFallback", "NA1", DateTime.UtcNow.AddHours(-24));
+        // Production: a 30-minute ramp cooldown re-picked idle apex players like this every half hour.
+        harness.SeedRankedSummoner("IdleApex", "NA1", DateTime.UtcNow.AddMinutes(-45), DateTime.UtcNow.AddDays(-30));
+        await harness.Db.SaveChangesAsync();
+
+        var queuedJobs = new List<Job>();
+        harness.BackgroundJobClient
+            .Setup(x => x.Create(It.IsAny<Job>(), It.IsAny<IState>()))
+            .Callback<Job, IState>((job, _) => queuedJobs.Add(job))
+            .Returns("job-1");
+
+        await harness.Job.ExecuteForRegionAsync("NA1", CancellationToken.None);
+
+        queuedJobs.Should().ContainSingle();
+        queuedJobs[0].Args[0].Should().Be("GenericFallback");
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
@@ -594,7 +628,6 @@ public class ChampionAnalyticsIngestionJobRampTests
                     FallbackToTrackedSummoners = true,
                     PauseWhenApiPriorityRefreshActive = true,
                     NewPatchRampHours = 48,
-                    RampDataStaleAfterMinutes = 30,
                     RampMaxCandidateSummonersPerRun = 100,
                     RampMinRefreshJobsToQueuePerRun = 6,
                     RampMaxRefreshJobsToQueuePerRun = 10

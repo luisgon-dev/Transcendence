@@ -281,7 +281,9 @@ Operational implication:
   - ranked Emerald+ candidates are preferred ahead of lower-value fallback rows
   - within a bucket, apex players whose ladder entry moved since their last match sync go first
     (`Rank.UpdatedAt > Summoner.UpdatedAt`: the crawl stamps the rank after the summoner, a sync stamps
-    the summoner); everyone else refreshed inside the region's stale window is skipped
+    the summoner); everyone else refreshed inside the stale window (`DataStaleAfterMinutes`) is
+    skipped, and a new-patch ramp does not shorten it: a 30-minute ramp window re-picked idle apex
+    players every half hour
   - a completed refresh stamps every row its Riot ID resolves to, so stale duplicate rows from renames
     and transfers stop being re-picked
 - Ingestion scales queued refresh count based on:

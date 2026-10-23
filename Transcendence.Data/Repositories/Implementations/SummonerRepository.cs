@@ -142,15 +142,20 @@ public class SummonerRepository(TranscendenceContext context, IRankRepository ra
         CancellationToken cancellationToken = default)
     {
         var region = string.IsNullOrWhiteSpace(platformRegion) ? null : platformRegion.Trim();
+        var exactGameName = NormalizeValue(gameName);
+        var exactTagLine = NormalizeValue(tagLine);
         var gameNameKey = NormalizeForLookup(gameName);
         var tagLineKey = NormalizeForLookup(tagLine);
         if (region == null || gameNameKey == null || tagLineKey == null)
             return;
 
-        // The same keys FindByRiotIdAsync resolves through, each backed by an index.
+        // The same keys FindByRiotIdAsync resolves through, each backed by an index. The exact legacy match
+        // is not redundant: Postgres upper() maps 'ı' to 'I' but ToUpperInvariant keeps it, so the upper()
+        // branch never stamps a legacy row with a dotless i and it was re-picked every tick.
         await context.Summoners
             .Where(x => x.PlatformRegion == region &&
                         ((x.GameNameNormalized == gameNameKey && x.TagLineNormalized == tagLineKey) ||
+                         (x.GameNameNormalized == null && x.GameName == exactGameName && x.TagLine == exactTagLine) ||
                          (x.GameNameNormalized == null &&
                           x.TagLineNormalized == null &&
                           x.GameName != null &&

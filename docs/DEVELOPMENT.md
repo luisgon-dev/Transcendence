@@ -912,7 +912,6 @@ separate from the EF migration so ingestion writes are never blocked by a normal
 - `FallbackToTrackedSummoners`
 - `PauseWhenApiPriorityRefreshActive`
 - `NewPatchRampHours`
-- `RampDataStaleAfterMinutes`
 - `RampMaxCandidateSummonersPerRun`
 - `RampMinRefreshJobsToQueuePerRun`
 - `RampMaxRefreshJobsToQueuePerRun`
@@ -1001,7 +1000,6 @@ Signed-in manual profile refreshes enqueue `FullHistoryBackfillJob` after the no
 - `NewPatchRampHours`
 - `RampMaxCandidateSummonersPerRun`
 - `RampMaxRefreshJobsToQueuePerRun`
-- `RampDataStaleAfterMinutes`
 
 This recurring job refreshes stale summoners in low-priority mode when no active high-priority API refresh lock exists.
 

@@ -412,6 +412,43 @@ body::before {
       var(--t-surface);
     box-shadow: var(--shadow-card);
   }
+  /* Landing hero: the current strongest pick's splash art bleeds in from the right (a top band on
+     narrow screens) and fades into the surface. A mask rather than a color overlay, so the same
+     art reads on either theme and the text column always sits on solid surface. */
+  .landing-hero {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: var(--radius-hero);
+    border: 1px solid var(--t-border);
+    background: var(--t-surface);
+    box-shadow: var(--shadow-card);
+    padding: clamp(1.5rem, 4vw, 2.75rem);
+  }
+  .landing-hero-art {
+    position: absolute;
+    z-index: -1;
+    inset: 0 0 auto;
+    height: clamp(14rem, 50vw, 19rem);
+    mask-image: linear-gradient(to bottom, black 30%, transparent);
+  }
+  @media (min-width: 64rem) {
+    .landing-hero {
+      min-height: 34rem;
+    }
+    .landing-hero-art {
+      inset: 0 0 0 auto;
+      width: 68%;
+      height: auto;
+      mask-image:
+        linear-gradient(to right, transparent, black 48%),
+        linear-gradient(to bottom, black 62%, transparent);
+      mask-composite: intersect;
+    }
+  }
+
   .page-panel {
     position: relative;
     border-radius: var(--radius-panel);

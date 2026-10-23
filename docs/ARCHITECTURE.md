@@ -73,7 +73,7 @@ Transcendence is a backend + web monorepo:
   - `/lol/pro-builds/*`: the **Pro Solo Queue Builds** surface is explicitly scoped to ranked solo-queue observations from tracked pros and verified high-elo one-tricks; it is not an esports schedule, tournament draft, or official-results feed. The default scope is reviewed pros only, with one switch to include one-tricks, plus a public "Tracked Pros" roster panel. The toolbar, playrate table, roster, and champion search render from the first fetch batch; the fan-out recent-match feed and its item map stream independently behind `<Suspense>` with a stable row skeleton.
   - `/lol/items/*` and `/lol/runes/*` are the Build Atlas: searchable index and detail pages for
     resource pick rate, win rate, sample size, and champion-role fit. The indexes, detail pages,
-    header, command palette, landing discovery, and sitemap all expose the new surfaces.
+    header, command palette, and sitemap all expose the new surfaces.
   - `/lol/builds` (champion picker) and `/lol/builds/[championId]` (`components/BuildLab.tsx`,
     `lib/buildLab.ts`) are the Build Lab surface, behind `TRN_FEATURE_BUILD_LAB`. It is step-by-step:
     "Lock" on a legendary extends the item path and "Lock" on a keystone conditions the runes (both

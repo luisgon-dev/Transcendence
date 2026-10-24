@@ -359,6 +359,30 @@ public sealed class BuildLabRealPostgresTests(PostgresIntegrationFixture fixture
             "INCLUDE (\"Stage\", \"Patch\", \"ActionKey\", \"GoldBucket\", \"Games\", \"Wins\", \"TimingSecondsSum\")");
     }
 
+    [Fact]
+    public async Task ItemPurchaseReads_MatchThePartialIndexPredicate()
+    {
+        await using var db = NewDb();
+        await db.Database.OpenConnectionAsync();
+        // The shared container's table is tiny, so a sequential scan would win on cost; disabling it
+        // asks only whether the index can serve the read, i.e. whether its predicate is implied.
+        await db.Database.ExecuteSqlRawAsync("SET enable_seqscan = off");
+
+        foreach (var itemId in new[] { "3031", null })
+        {
+            await using var command = BuildResourceAnalyticsService
+                .PurchaseCountsQuery(db, "16.20", "ALL", itemId)
+                .CreateDbCommand();
+            command.CommandText = "EXPLAIN " + command.CommandText;
+            var plan = new List<string>();
+            await using (var reader = await command.ExecuteReaderAsync())
+                while (await reader.ReadAsync())
+                    plan.Add(reader.GetString(0));
+
+            string.Join('\n', plan).Should().Contain("IX_BuildLabOptionStats_ItemPurchases");
+        }
+    }
+
     private async Task<BuildLabRefreshResult> RefreshAsync()
     {
         await using var db = NewDb();

@@ -39,3 +39,19 @@ export function buildResourceHref(
   const base = resourceId == null ? `/lol/${kind}` : `/lol/${kind}/${resourceId}`;
   return region && region !== "ALL" ? `${base}?region=${encodeURIComponent(region)}` : base;
 }
+
+export type BuildResourceRoleShare = { role: string; games: number; wins: number; share: number };
+
+// The detail payload lists at most the top 100 champion-role pairs, so the long tail is missing;
+// its share of uses is a rounding error next to the listed pairs.
+export function roleShares(rows: BuildResourceChampionStat[]): BuildResourceRoleShare[] {
+  const byRole = new Map<string, BuildResourceRoleShare>();
+  for (const row of rows) {
+    const entry = byRole.get(row.role) ?? { role: row.role, games: 0, wins: 0, share: 0 };
+    entry.games += row.games;
+    entry.wins += row.wins;
+    entry.share += row.shareOfResourceUses;
+    byRole.set(row.role, entry);
+  }
+  return [...byRole.values()].sort((a, b) => b.games - a.games);
+}

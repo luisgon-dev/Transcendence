@@ -3,44 +3,60 @@ import Link from "next/link";
 import { Suspense } from "react";
 import type { components } from "@transcendence/api-client";
 
-import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { AnalyticsRegionFilter } from "@/components/AnalyticsRegionFilter";
 import { BackendErrorCard } from "@/components/BackendErrorCard";
+import { ItemStrip, RunePair } from "@/components/ProBuildBits";
 import { ProScopeToggle } from "@/components/ProScopeToggle";
-import { Card } from "@/components/ui/Card";
 import { DataBar } from "@/components/ui/DataBar";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Toolbar } from "@/components/ui/Toolbar";
 import { fetchBackendJson } from "@/lib/backendCall";
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
-import { type AnalyticsSampleLike } from "@/lib/analyticsSample";
+import { cn } from "@/lib/cn";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { formatDateTimeMs, formatGames, formatRelativeTime } from "@/lib/format";
-import { championDisplayName, itemDisplayName } from "@/lib/gameDisplay";
+import { championDisplayName } from "@/lib/gameDisplay";
 import { buildProBuildPageHref, normalizeProBuildScope, type ProBuildScope } from "@/lib/proBuilds";
 import { encodeRiotIdPath } from "@/lib/riotid";
-import { championIconUrl, fetchChampionMap, fetchItemMap, itemIconUrl } from "@/lib/staticData";
-import { normalizeTierListEntries } from "@/lib/tierlist";
+import {
+  championIconUrl,
+  fetchChampionMap,
+  fetchItemMap,
+  fetchRunesReforged
+} from "@/lib/staticData";
 
-type TierListResponse = components["schemas"]["TierListResponse"];
 type ChampionProBuildsResponse = components["schemas"]["ChampionProBuildsResponse"];
 type ProMatchBuildDto = components["schemas"]["ProMatchBuildDto"];
 type ProChampionPlayrateResponse = components["schemas"]["ProChampionPlayrateResponse"];
 type ProRosterResponse = components["schemas"]["ProRosterResponse"];
-
-const SCOPE_TITLE: Record<ProBuildScope, string> = {
-  all: "Pro and One-Trick",
-  pro: "Pro",
-  highelo: "One-Trick"
-};
+type ProPlayerDto = components["schemas"]["ProPlayerDto"];
 
 const SCOPE_NOUN: Record<ProBuildScope, string> = {
-  all: "pros and high-elo one-tricks",
-  pro: "pro players",
-  highelo: "high-elo one-tricks"
+  all: "pros and one-tricks",
+  pro: "pros",
+  highelo: "one-tricks"
 };
 
-const MAX_PLAYRATE_ROWS = 30;
+const MAX_PLAYRATE_ROWS = 20;
+const MAX_SEARCH_RESULTS = 12;
+const MAX_FEED_CHAMPIONS_DEFAULT = 8;
+const MAX_FEED_CHAMPIONS_SEARCH = 6;
+const MAX_MATCHES_PER_CHAMPION = 8;
+const MAX_FEED_ROWS = 15;
+
+const ROW_LINK =
+  "transition-colors hover:bg-surface-2/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/45";
+
+type ChampionLookup = {
+  championId: number;
+  slug: string;
+  name: string;
+};
+
+type ProFeedRow = {
+  championId: number;
+  match: ProMatchBuildDto;
+};
 
 function buildProHomeHref({
   scope,
@@ -59,49 +75,12 @@ function buildProHomeHref({
   return qs ? `/lol/pro-builds?${qs}` : "/lol/pro-builds";
 }
 
-type ChampionLookup = {
-  championId: number;
-  slug: string;
-  name: string;
-};
-
-type ProFeedRow = {
-  championId: number;
-  match: ProMatchBuildDto;
-  patch: string | null | undefined;
-};
-
-const MAX_SEARCH_RESULTS = 12;
-const MAX_FEED_CHAMPIONS_DEFAULT = 8;
-const MAX_FEED_CHAMPIONS_SEARCH = 6;
-const MAX_MATCHES_PER_CHAMPION = 8;
-const MAX_FEED_ROWS = 48;
-
 function normalizeChampionQuery(query: string | undefined): string | null {
-  if (!query) return null;
-  const trimmed = query.trim();
-  return trimmed.length > 0 ? trimmed : null;
+  const trimmed = query?.trim();
+  return trimmed ? trimmed : null;
 }
 
-function uniqueChampionIdsByGames(entries: ReturnType<typeof normalizeTierListEntries>): number[] {
-  return entries
-    .slice()
-    .sort((a, b) => b.games - a.games)
-    .map((entry) => entry.championId)
-    .filter((championId, idx, rows) => rows.indexOf(championId) === idx);
-}
-
-function championMatchesQuery(champion: ChampionLookup, queryLower: string) {
-  return (
-    champion.name.toLowerCase().includes(queryLower) || String(champion.championId) === queryLower
-  );
-}
-
-function compareChampionQueryRelevance(
-  a: ChampionLookup,
-  b: ChampionLookup,
-  queryLower: string
-) {
+function compareChampionQueryRelevance(a: ChampionLookup, b: ChampionLookup, queryLower: string) {
   const aName = a.name.toLowerCase();
   const bName = b.name.toLowerCase();
   const aStarts = aName.startsWith(queryLower) ? 0 : 1;
@@ -109,6 +88,24 @@ function compareChampionQueryRelevance(
   if (aStarts !== bStarts) return aStarts - bStarts;
   if (aName.length !== bName.length) return aName.length - bName.length;
   return aName.localeCompare(bName);
+}
+
+function proProfileHref(pro: ProPlayerDto): string | null {
+  if (!pro.gameName || !pro.tagLine || !pro.platformRegion) return null;
+  return `/lol/summoners/${pro.platformRegion.toLowerCase()}/${encodeRiotIdPath({
+    gameName: pro.gameName,
+    tagLine: pro.tagLine
+  })}`;
+}
+
+// Esports fans read a roster by team, so the tracked list is grouped that way; bigger teams first.
+function groupRosterByTeam(players: ProPlayerDto[]) {
+  const teams = new Map<string, ProPlayerDto[]>();
+  for (const pro of players) {
+    const team = pro.teamName?.trim() || "Free agents";
+    teams.set(team, [...(teams.get(team) ?? []), pro]);
+  }
+  return [...teams.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
 }
 
 export default async function ProBuildsIndexPage({
@@ -124,14 +121,9 @@ export default async function ProBuildsIndexPage({
   const championQuery = normalizeChampionQuery(resolvedSearchParams?.q);
   const scope = normalizeProBuildScope(resolvedSearchParams?.scope);
   const includeOneTricks = scope !== "pro";
-  const tierListQuery = new URLSearchParams();
-  if (activeRegion !== "ALL") tierListQuery.set("region", activeRegion);
 
-  const [{ version, champions }, tierListRes, playrateRes, rosterRes] = await Promise.all([
+  const [{ version, champions }, playrateRes, rosterRes] = await Promise.all([
     fetchChampionMap(),
-    fetchBackendJson<TierListResponse>(`${getBackendBaseUrl()}/api/lol/analytics/tierlist?${tierListQuery.toString()}`, {
-      next: { revalidate: 60 * 60 }
-    }),
     fetchBackendJson<ProChampionPlayrateResponse>(
       `${getBackendBaseUrl()}/api/lol/analytics/pro/champions?scope=${encodeURIComponent(scope)}&region=${encodeURIComponent(activeRegion)}`,
       { next: { revalidate: 60 * 30 } }
@@ -142,107 +134,81 @@ export default async function ProBuildsIndexPage({
     )
   ]);
 
-  const playrateChampions = (playrateRes.ok ? playrateRes.body?.champions ?? [] : []).slice(
-    0,
-    MAX_PLAYRATE_ROWS
-  );
-  const rosterPlayers = rosterRes.ok ? rosterRes.body?.players ?? [] : [];
-
-  const championCatalog = Object.entries(champions)
-    .map(([championId, champion]) => ({
-      championId: Number(championId),
-      slug: champion.id,
-      name: champion.name
-    }))
-    .filter((row) => Number.isFinite(row.championId) && row.championId > 0)
-    .sort((a, b) => a.name.localeCompare(b.name));
-
-  const championById = new Map<number, ChampionLookup>(
-    championCatalog.map((champion) => [champion.championId, champion])
-  );
-
-  const tierEntries = tierListRes.ok ? normalizeTierListEntries(tierListRes.body?.entries ?? []) : [];
-  const featuredChampionIds =
-    tierEntries.length > 0
-      ? uniqueChampionIdsByGames(tierEntries).slice(0, MAX_SEARCH_RESULTS)
-      : championCatalog.slice(0, MAX_SEARCH_RESULTS).map((champion) => champion.championId);
-
-  const queryLower = championQuery?.toLowerCase() ?? null;
-  const matchingChampions = queryLower
-    ? championCatalog
-        .filter((champion) => championMatchesQuery(champion, queryLower))
-        .sort((a, b) => compareChampionQueryRelevance(a, b, queryLower))
-    : [];
-
-  const championsToShow = (championQuery
-    ? matchingChampions.slice(0, MAX_SEARCH_RESULTS)
-    : featuredChampionIds.map((championId) => championById.get(championId)).filter(Boolean)) as ChampionLookup[];
-
-  const feedChampionIds = (
-    championQuery
-      ? matchingChampions.slice(0, MAX_FEED_CHAMPIONS_SEARCH).map((champion) => champion.championId)
-      : featuredChampionIds.slice(0, MAX_FEED_CHAMPIONS_DEFAULT)
-  ).filter((championId, idx, rows) => rows.indexOf(championId) === idx);
-
-  if (!tierListRes.ok) {
+  if (!playrateRes.ok && !rosterRes.ok) {
     return (
       <BackendErrorCard
-        title="Pro Solo Queue Builds"
+        title="Pro Solo Q"
         message={
-          tierListRes.errorKind === "timeout"
+          playrateRes.errorKind === "timeout"
             ? "This page is taking too long to load."
-            : tierListRes.errorKind === "unreachable"
-              ? "We couldn't load pro-build data right now."
-              : "We couldn't load pro-build data."
+            : playrateRes.errorKind === "unreachable"
+              ? "We couldn't load pro solo queue data right now."
+              : "We couldn't load pro solo queue data."
         }
-        requestId={tierListRes.requestId}
+        requestId={playrateRes.requestId}
         detail={
           verbosity === "verbose"
-            ? JSON.stringify({ status: tierListRes.status, errorKind: tierListRes.errorKind }, null, 2)
+            ? JSON.stringify({ status: playrateRes.status, errorKind: playrateRes.errorKind }, null, 2)
             : null
         }
       />
     );
   }
 
+  const allPlayrates = playrateRes.ok ? playrateRes.body?.champions ?? [] : [];
+  const playrateChampions = allPlayrates.slice(0, MAX_PLAYRATE_ROWS);
+  const trackedGames = allPlayrates.reduce((sum, entry) => sum + (entry.games ?? 0), 0);
+  const patch = playrateRes.ok ? playrateRes.body?.patch : null;
+  const rosterPlayers = rosterRes.ok ? rosterRes.body?.players ?? [] : [];
+  const rosterTeams = groupRosterByTeam(rosterPlayers);
+
+  const championCatalog: ChampionLookup[] = Object.entries(champions)
+    .map(([championId, champion]) => ({
+      championId: Number(championId),
+      slug: champion.id,
+      name: champion.name
+    }))
+    .filter((row) => Number.isFinite(row.championId) && row.championId > 0);
+  const championById = new Map(championCatalog.map((champion) => [champion.championId, champion]));
+
+  const queryLower = championQuery?.toLowerCase() ?? null;
+  const matchingChampions = queryLower
+    ? championCatalog
+        .filter(
+          (champion) =>
+            champion.name.toLowerCase().includes(queryLower) ||
+            String(champion.championId) === queryLower
+        )
+        .sort((a, b) => compareChampionQueryRelevance(a, b, queryLower))
+    : [];
+
+  // The feed follows what pros actually play (or the search), not the general ladder.
+  const feedChampionIds = championQuery
+    ? matchingChampions.slice(0, MAX_FEED_CHAMPIONS_SEARCH).map((champion) => champion.championId)
+    : allPlayrates
+        .slice(0, MAX_FEED_CHAMPIONS_DEFAULT)
+        .map((entry) => entry.championId ?? 0)
+        .filter((championId) => championId > 0);
+
+  const detailHref = (championId: number) =>
+    buildProBuildPageHref(championId, { role: "ALL", region: activeRegion, scope, patch: null });
+
   return (
-    <div className="grid gap-4">
+    <div className="grid grid-cols-1 gap-4">
       <Toolbar
-        eyebrow="Ranked Solo Queue"
-        title="Pro Solo Queue Builds"
+        title="Pro Solo Q"
         meta={
           <>
-            <span className="type-tabular tabular-nums">{playrateChampions.length} ranked picks</span>
-            <span aria-hidden="true">·</span>
+            {patch ? <span>Patch {patch}</span> : null}
             <span>{activeRegionLabel}</span>
-            {championQuery ? (
-              <>
-                <span aria-hidden="true">·</span>
-                <span>Search: {championQuery}</span>
-              </>
+            {trackedGames > 0 ? (
+              <span className="type-tabular tabular-nums">
+                {formatGames(trackedGames)} games from tracked {SCOPE_NOUN[scope]}
+              </span>
             ) : null}
           </>
         }
-        filters={<AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} variant="select" />}
-      />
-      <AnalyticsSampleBanner
-        sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
-      />
-
-      <Card className="bg-surface-2/50 px-5 py-4">
-        <p className="type-ui text-fg/80">
-          Ranked Solo/Duo matches from tracked professional accounts. Tournament matches are not included.
-        </p>
-      </Card>
-
-      <Card className="page-panel p-0">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/40 px-5 py-4">
-          <div>
-            <h2 className="type-section">{SCOPE_TITLE[scope]} Picks</h2>
-            <p className="type-ui mt-1 text-muted">
-              Champions most picked by tracked {SCOPE_NOUN[scope]} this patch.
-            </p>
-          </div>
+        actions={
           <ProScopeToggle
             checked={includeOneTricks}
             href={buildProHomeHref({
@@ -251,216 +217,233 @@ export default async function ProBuildsIndexPage({
               query: championQuery
             })}
           />
-        </div>
+        }
+        filters={
+          <>
+            <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} variant="select" />
+            <form action="/lol/pro-builds" method="get" className="flex min-w-0 flex-1 items-center gap-2">
+              {activeRegion !== "ALL" ? <input type="hidden" name="region" value={activeRegion} /> : null}
+              {scope !== "pro" ? <input type="hidden" name="scope" value={scope} /> : null}
+              <label className="min-w-0 flex-1 sm:max-w-sm">
+                <span className="sr-only">Find a champion</span>
+                <input
+                  type="search"
+                  name="q"
+                  defaultValue={championQuery ?? ""}
+                  placeholder="Find a champion's pro builds"
+                  className="control-input h-9"
+                />
+              </label>
+              {championQuery ? (
+                <Link
+                  href={buildProHomeHref({ scope, region: activeRegion, query: null })}
+                  className="type-ui rounded-sm text-muted transition-colors hover:text-fg"
+                >
+                  Clear
+                </Link>
+              ) : null}
+            </form>
+          </>
+        }
+      />
 
-        {playrateChampions.length === 0 ? (
-          <p className="px-5 py-6 text-sm text-muted">
-            No tracked solo-queue picks are available for the current selection yet. Try a different region or scope.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
+      {championQuery ? (
+        <section aria-label={`Champions matching ${championQuery}`} className="page-panel px-4 py-3 sm:px-5">
+          {matchingChampions.length === 0 ? (
+            <p className="type-ui text-muted">No champion matches &ldquo;{championQuery}&rdquo;.</p>
+          ) : (
+            <ul className="flex flex-wrap gap-2">
+              {matchingChampions.slice(0, MAX_SEARCH_RESULTS).map((champion) => (
+                <li key={champion.championId}>
+                  <Link
+                    href={detailHref(champion.championId)}
+                    className="group inline-flex items-center gap-2 rounded-control border border-border bg-surface py-1 pl-1 pr-3 transition-colors hover:border-border-strong hover:bg-surface-2/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  >
+                    <Image
+                      src={championIconUrl(version, champion.slug)}
+                      alt=""
+                      width={28}
+                      height={28}
+                      sizes="28px"
+                      className="rounded-md"
+                    />
+                    <span className="type-ui font-semibold text-fg group-hover:text-primary">{champion.name}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
+        <section aria-labelledby="pro-picks-heading" className="page-panel overflow-hidden">
+          <div className="px-4 py-4 sm:px-5">
+            <h2 id="pro-picks-heading" className="type-title text-fg">
+              What pros are playing
+            </h2>
+            <p className="type-caption mt-1 text-muted">
+              Ranked Solo/Duo on tracked accounts this patch; tournament games are not included.
+            </p>
+          </div>
+          {playrateChampions.length === 0 ? (
+            <p className="border-t border-border px-5 py-6 text-sm text-muted">
+              No tracked solo-queue picks for this region and scope yet.
+            </p>
+          ) : (
+            <div className="overflow-x-auto border-t border-border">
             <table className="w-full text-left text-sm">
-              <thead className="type-overline text-muted">
-                <tr className="border-b border-border/30">
-                  <th className="w-10 py-2.5 pl-5 pr-3">#</th>
-                  <th className="py-2.5 pr-4">Champion</th>
-                  <th className="py-2.5 pr-4 text-right">Games</th>
-                  <th className="py-2.5 pr-4 text-right">Win Rate</th>
-                  <th className="py-2.5 pr-5 text-right">Players</th>
+              <thead>
+                <tr className="border-b border-border">
+                  <th scope="col" className="type-overline hidden w-10 py-2.5 pl-4 pr-2 font-semibold text-muted sm:table-cell sm:pl-5">
+                    #
+                  </th>
+                  <th scope="col" className="type-overline w-full py-2.5 pl-4 pr-3 font-semibold text-muted sm:pl-0">
+                    Champion
+                  </th>
+                  <th scope="col" className="type-overline py-2.5 pr-3 text-right font-semibold text-muted">
+                    Games
+                  </th>
+                  <th scope="col" className="type-overline hidden py-2.5 pr-3 text-right font-semibold text-muted sm:table-cell">
+                    Pros
+                  </th>
+                  <th scope="col" className="type-overline py-2.5 pr-4 text-right font-semibold text-muted sm:pr-5">
+                    Win rate
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {playrateChampions.map((entry, idx) => {
                   const championId = entry.championId ?? 0;
                   const champion = championById.get(championId);
-                  const slug = champion?.slug ?? "Unknown";
-                  const name = championDisplayName(champion);
                   return (
-                    <tr
-                      key={championId || idx}
-                      className="border-t border-border/40 transition hover:bg-surface-2/40"
-                    >
-                      <td className="type-tabular py-2.5 pl-5 pr-3 tabular-nums text-muted">{idx + 1}</td>
-                      <td className="py-2.5 pr-4">
+                    <tr key={championId || idx} className="tierlist-row border-b border-border/50 last:border-b-0">
+                      <td className="type-tabular hidden py-2 pl-4 pr-2 tabular-nums text-muted sm:table-cell sm:pl-5">{idx + 1}</td>
+                      <td className="max-w-0 py-2 pl-4 pr-3 sm:pl-0">
                         <Link
-                          href={buildProBuildPageHref(championId, {
-                            role: "ALL",
-                            region: activeRegion,
-                            scope,
-                            patch: null
-                          })}
-                          className="flex min-w-0 items-center gap-2.5 hover:underline"
+                          href={detailHref(championId)}
+                          className="group flex min-w-0 items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                         >
                           <Image
-                            src={championIconUrl(version, slug)}
-                            alt={name}
-                            width={28}
-                            height={28}
-                            className="rounded-md border border-border/50"
+                            src={championIconUrl(version, champion?.slug ?? "Unknown")}
+                            alt=""
+                            width={30}
+                            height={30}
+                            sizes="30px"
+                            className="shrink-0 rounded-md border border-border/50"
                           />
-                          <span className="truncate font-medium text-fg">{name}</span>
+                          <span className="truncate font-semibold text-fg transition-colors group-hover:text-primary">
+                            {championDisplayName(champion)}
+                          </span>
                         </Link>
                       </td>
-                      <td className="type-tabular py-2.5 pr-4 text-right tabular-nums text-fg/75">
+                      <td className="type-tabular py-2 pr-3 text-right tabular-nums text-fg/85">
                         {formatGames(entry.games ?? 0)}
                       </td>
-                      <td className="py-2.5 pr-4 text-right">
-                        <DataBar value={entry.winRate ?? 0} decimals={1} className="justify-end" />
-                      </td>
-                      <td className="type-tabular py-2.5 pr-5 text-right tabular-nums text-fg/70">
+                      <td className="type-tabular hidden py-2 pr-3 text-right tabular-nums text-fg/70 sm:table-cell">
                         {entry.uniquePlayers ?? 0}
+                      </td>
+                      <td className="py-2 pr-4 text-right sm:pr-5">
+                        {/* Pro samples are small; the whisker shows how wide the plausible range is. */}
+                        <DataBar value={entry.winRate ?? 0} games={entry.games ?? 0} className="justify-end" />
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-          </div>
-        )}
-      </Card>
-
-      {rosterPlayers.length > 0 ? (
-        <Card className="p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="type-section">Tracked Pros</h2>
-              <p className="type-ui mt-1 text-muted">Open a tracked pro profile.</p>
             </div>
-            <span className="type-tabular tabular-nums text-muted">{rosterPlayers.length} players</span>
-          </div>
-          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {rosterPlayers.map((pro, idx) => {
-              const displayName =
-                pro.proName?.trim() ||
-                (pro.gameName ? `${pro.gameName}#${pro.tagLine ?? ""}` : "Unknown player");
-              const meta = [pro.teamName, pro.platformRegion?.toUpperCase()].filter(Boolean).join(" · ");
-              const canLink = Boolean(pro.gameName && pro.tagLine && pro.platformRegion);
-              const body = (
-                <>
-                  <p className="truncate text-sm font-medium text-fg">{displayName}</p>
-                  {meta ? <p className="truncate text-xs text-muted">{meta}</p> : null}
-                </>
-              );
-              return canLink ? (
-                <Link
-                  key={`${displayName}-${idx}`}
-                  href={`/lol/summoners/${(pro.platformRegion ?? "").toLowerCase()}/${encodeRiotIdPath({ gameName: pro.gameName!, tagLine: pro.tagLine! })}`}
-                  className="surface-subtle min-w-0 rounded-card p-3 transition hover:bg-surface-2/72"
-                >
-                  {body}
-                </Link>
-              ) : (
-                <div key={`${displayName}-${idx}`} className="surface-subtle min-w-0 rounded-card p-3 opacity-80">
-                  {body}
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      ) : null}
-
-      <Card className="page-panel p-5">
-        <h2 className="type-section">Search Champions</h2>
-        <form action="/lol/pro-builds" method="get" className="mt-3 flex flex-wrap items-center gap-2">
-          {activeRegion !== "ALL" ? <input type="hidden" name="region" value={activeRegion} /> : null}
-          {scope !== "pro" ? <input type="hidden" name="scope" value={scope} /> : null}
-          <input
-            type="text"
-            name="q"
-            defaultValue={championQuery ?? ""}
-            placeholder="Search champion name (for example, Ahri)"
-            className="control-input min-w-[220px] flex-1"
-          />
-          <button
-            type="submit"
-            className="type-ui h-11 rounded-control border border-primary/40 bg-primary/12 px-4 font-semibold text-primary transition hover:bg-primary/20"
-          >
-            Search
-          </button>
-          {championQuery ? (
-            <Link
-              href={buildProHomeHref({ scope, region: activeRegion, query: null })}
-              className="control-tab type-ui h-11 px-4"
-            >
-              Clear
-            </Link>
-          ) : null}
-        </form>
-
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {championsToShow.length === 0 ? (
-            <p className="col-span-full text-sm text-muted">
-              No champions matched your search.
-            </p>
-          ) : (
-            championsToShow.map((champion) => (
-              <Link
-                key={champion.championId}
-                href={buildProBuildPageHref(champion.championId, {
-                  role: "ALL",
-                  region: activeRegion,
-                  scope,
-                  patch: null
-                })}
-                className="surface-subtle rounded-card p-3 transition hover:bg-surface-2/72"
-              >
-                <div className="flex items-center gap-2.5">
-                  <Image
-                    src={championIconUrl(version, champion.slug)}
-                    alt={champion.name}
-                    width={34}
-                    height={34}
-                    className="rounded-md"
-                  />
-                  <p className="truncate text-sm font-medium text-fg">{champion.name}</p>
-                </div>
-              </Link>
-            ))
           )}
-        </div>
-      </Card>
+        </section>
 
-      <Suspense fallback={<RecentProMatchesFallback />}>
-        <RecentProMatches
-          championIds={feedChampionIds}
-          championById={championById}
-          version={version}
-          activeRegion={activeRegion}
-          scope={scope}
-        />
-      </Suspense>
+        <Suspense fallback={<RecentProMatchesFallback />}>
+          <RecentProMatches
+            championIds={feedChampionIds}
+            championById={championById}
+            version={version}
+            activeRegion={activeRegion}
+            scope={scope}
+            searching={championQuery != null}
+          />
+        </Suspense>
+      </div>
+
+      {rosterTeams.length > 0 ? (
+        <section aria-labelledby="roster-heading" className="page-panel px-4 py-4 sm:px-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2 id="roster-heading" className="type-title text-fg">
+              Tracked pros
+            </h2>
+            <p className="type-caption text-muted">
+              <span className="type-tabular tabular-nums">{rosterPlayers.length}</span> players on{" "}
+              <span className="type-tabular tabular-nums">{rosterTeams.length}</span> teams
+            </p>
+          </div>
+          <div className="mt-4 columns-2 gap-x-6 sm:columns-3 lg:columns-5">
+            {rosterTeams.map(([team, players]) => (
+              <div key={team} className="mb-4 break-inside-avoid">
+                <h3 className="type-caption truncate font-semibold text-muted">{team}</h3>
+                <ul className="mt-1 grid gap-0.5">
+                  {players.map((pro, idx) => {
+                    const name =
+                      pro.proName?.trim() || (pro.gameName ? `${pro.gameName}#${pro.tagLine ?? ""}` : "Unknown player");
+                    const href = proProfileHref(pro);
+                    return (
+                      <li key={`${name}-${idx}`} className="flex min-w-0 items-baseline gap-1.5">
+                        {href ? (
+                          <Link
+                            href={href}
+                            className="type-ui truncate rounded-sm text-fg transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                          >
+                            {name}
+                          </Link>
+                        ) : (
+                          <span className="type-ui truncate text-muted">{name}</span>
+                        )}
+                        {pro.platformRegion ? (
+                          <span className="type-caption shrink-0 text-muted">{pro.platformRegion.toUpperCase()}</span>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function FeedHeader({ subtitle }: { subtitle: string }) {
+  return (
+    <div className="px-4 py-4 sm:px-5">
+      <h2 id="pro-feed-heading" className="type-title text-fg">
+        Latest games
+      </h2>
+      <p className="type-caption mt-1 text-muted">{subtitle}</p>
     </div>
   );
 }
 
 function RecentProMatchesFallback() {
   return (
-    <Card className="p-0" aria-busy="true" aria-label="Loading recent tracked solo-queue matches">
-      <div className="border-b border-border/40 px-4 py-3">
-        <h2 className="type-section">Recent Tracked Solo Queue Matches</h2>
-        <p className="type-ui mt-1 text-muted">Loading the latest tracked builds…</p>
-      </div>
-      <div className="grid gap-0">
-        {Array.from({ length: 5 }, (_, index) => (
-          <div
-            key={index}
-            className="grid gap-3 border-b border-border/20 px-4 py-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"
-          >
-            <div className="flex items-center gap-3">
-              <Skeleton className="size-[34px] shrink-0 rounded-md" />
-              <div className="grid flex-1 gap-2">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-3 w-48 max-w-full" />
-              </div>
+    <section aria-busy="true" aria-labelledby="pro-feed-heading" className="page-panel overflow-hidden">
+      <FeedHeader subtitle="Loading the latest tracked games…" />
+      <ul className="border-t border-border">
+        {Array.from({ length: 8 }, (_, index) => (
+          <li key={index} className="flex max-w-none items-center gap-3 border-b border-border/50 px-4 py-2.5 last:border-b-0 sm:px-5">
+            <Skeleton className="size-10 shrink-0 rounded-md" />
+            <div className="grid flex-1 gap-1.5">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-3 w-44 max-w-full" />
             </div>
-            <div className="hidden justify-self-end sm:grid sm:gap-2">
-              <Skeleton className="h-3 w-20" />
-              <Skeleton className="h-3 w-28" />
-            </div>
-          </div>
+            <Skeleton className="hidden h-6 w-40 sm:block" />
+          </li>
         ))}
-      </div>
-    </Card>
+      </ul>
+    </section>
   );
 }
 
@@ -469,16 +452,19 @@ async function RecentProMatches({
   championById,
   version,
   activeRegion,
-  scope
+  scope,
+  searching
 }: {
   championIds: number[];
   championById: Map<number, ChampionLookup>;
   version: string;
   activeRegion: string;
   scope: ProBuildScope;
+  searching: boolean;
 }) {
-  const [itemStatic, proResponses] = await Promise.all([
+  const [itemStatic, runeStatic, proResponses] = await Promise.all([
     fetchItemMap(),
+    fetchRunesReforged(),
     Promise.all(
       championIds.map(async (championId) => ({
         championId,
@@ -491,136 +477,101 @@ async function RecentProMatches({
   ]);
 
   const successfulFeeds = proResponses.filter((row) => row.response.ok && row.response.body);
-  const proFeedRows: ProFeedRow[] = [];
+  const rows: ProFeedRow[] = successfulFeeds.flatMap((row) =>
+    (row.response.body?.recentProMatches ?? [])
+      .slice(0, MAX_MATCHES_PER_CHAMPION)
+      .map((match) => ({ championId: row.championId, match }))
+  );
 
-  for (const row of successfulFeeds) {
-    for (const match of (row.response.body?.recentProMatches ?? []).slice(0, MAX_MATCHES_PER_CHAMPION)) {
-      proFeedRows.push({ championId: row.championId, match, patch: row.response.body?.patch });
-    }
-  }
-
-  const dedupe = new Set<string>();
-  const recentMatchesFeed = proFeedRows
+  const seen = new Set<string>();
+  const feed = rows
     .sort((a, b) => (b.match.playedAt ?? 0) - (a.match.playedAt ?? 0))
-    .filter((entry) => {
-      const key = `${entry.match.matchId ?? "unknown"}:${entry.championId}`;
-      if (dedupe.has(key)) return false;
-      dedupe.add(key);
+    .filter((row) => {
+      const key = `${row.match.matchId ?? "unknown"}:${row.championId}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
       return true;
     })
     .slice(0, MAX_FEED_ROWS);
   const failedFeedCount = proResponses.length - successfulFeeds.length;
+  const subtitle = searching
+    ? "Recent tracked games on the champions you searched."
+    : "Recent tracked games on the champions pros play most.";
 
   return (
-    <Card className="p-0">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-4 py-3">
-        <div>
-          <h2 className="type-section">Recent Tracked Solo Queue Matches</h2>
-          <p className="type-ui mt-1 text-muted">
-            {recentMatchesFeed.length > 0
-              ? `${recentMatchesFeed.length} recent builds. Open any row for champion-specific details.`
-              : "Click any row to open champion-specific solo-queue builds and recent match details."}
-          </p>
-        </div>
-        {failedFeedCount > 0 ? (
-          <p className="text-xs text-muted">
-            {failedFeedCount} champion feed{failedFeedCount === 1 ? "" : "s"} unavailable right now.
-          </p>
-        ) : null}
-      </div>
-
-      {recentMatchesFeed.length === 0 ? (
-        <p className="px-4 py-4 text-sm text-muted">
-          No tracked solo-queue matches are available for the current selection.
+    <section aria-labelledby="pro-feed-heading" className="page-panel overflow-hidden">
+      <FeedHeader subtitle={subtitle} />
+      {feed.length === 0 ? (
+        <p className="border-t border-border px-5 py-6 text-sm text-muted">
+          No tracked solo-queue games for this selection yet.
         </p>
       ) : (
-        <ul className="grid gap-0">
-          {recentMatchesFeed.map((entry, idx) => {
-            const champion = championById.get(entry.championId);
-            const championSlug = champion?.slug ?? "Unknown";
+        <ul className="border-t border-border">
+          {feed.map(({ championId, match }, idx) => {
+            const champion = championById.get(championId);
             const championName = championDisplayName(champion);
-            const playedAt = entry.match.playedAt ?? 0;
+            const playedAt = match.playedAt ?? 0;
             const hasTimestamp = Number.isFinite(playedAt) && playedAt > 0;
-            const items = (entry.match.items ?? [])
-              .filter((itemId) => Number.isFinite(itemId) && itemId > 0)
-              .slice(0, 6);
-
             return (
-              <li key={`${entry.match.matchId ?? "match"}-${entry.championId}-${idx}`}>
+              <li key={`${match.matchId ?? "match"}-${championId}-${idx}`} className="max-w-none border-b border-border/50 last:border-b-0">
                 <Link
-                  href={buildProBuildPageHref(entry.championId, {
-                    role: "ALL",
-                    region: activeRegion,
-                    scope,
-                    patch: null
-                  })}
-                  className="block border-b border-border/20 px-4 py-3 transition hover:bg-surface-2/40"
+                  href={buildProBuildPageHref(championId, { role: "ALL", region: activeRegion, scope, patch: null })}
+                  className={cn("flex items-center gap-3 px-4 py-2.5 sm:px-5", ROW_LINK)}
                 >
-                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-3">
-                        <Image
-                          src={championIconUrl(version, championSlug)}
-                          alt={championName}
-                          width={34}
-                          height={34}
-                          className="rounded-md border border-border/60"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="truncate text-sm font-medium text-fg">{championName}</p>
-                            <span className={`shrink-0 text-xs font-semibold sm:hidden ${entry.match.win ? "text-wr-high" : "text-wr-low"}`}>
-                              {entry.match.win ? "Win" : "Loss"}
-                            </span>
-                          </div>
-                          <p className="truncate text-xs text-muted">
-                            {entry.match.playerName ?? "Unknown player"}
-                            {entry.match.teamName ? ` (${entry.match.teamName})` : ""}
-                            {hasTimestamp ? ` · ${formatRelativeTime(playedAt)}` : ""}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                        {items.map((itemId, itemIdx) => {
-                          const itemMeta = itemStatic.items[String(itemId)];
-                          return (
-                            <Image
-                              key={`${itemId}-${itemIdx}`}
-                              src={itemIconUrl(itemStatic.version, itemId)}
-                              alt={itemDisplayName(itemMeta)}
-                              title={itemDisplayName(itemMeta)}
-                              width={24}
-                              height={24}
-                              className="rounded-md border border-border/40"
-                            />
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="hidden sm:block">
-                      <p className={`text-sm font-semibold ${entry.match.win ? "text-wr-high" : "text-wr-low"}`}>
-                        {entry.match.win ? "Win" : "Loss"}
-                      </p>
-                      <p className="mt-1 text-xs text-muted">Patch {entry.patch ?? "Unknown"}</p>
-                    </div>
-
-                    <div className="hidden text-left lg:block lg:text-right">
-                      <p className="text-xs text-muted">
-                        {hasTimestamp ? formatRelativeTime(playedAt) : "Time unavailable"}
-                      </p>
-                      <p className="text-xs text-muted">
-                        {hasTimestamp ? formatDateTimeMs(playedAt) : "-"}
-                      </p>
-                    </div>
-                  </div>
+                  <span className="flex shrink-0 items-center gap-1">
+                    <Image
+                      src={championIconUrl(version, champion?.slug ?? "Unknown")}
+                      alt={championName}
+                      width={40}
+                      height={40}
+                      sizes="40px"
+                      className="rounded-md border border-border/50"
+                    />
+                    <RunePair
+                      primaryRunes={match.primaryRunes}
+                      subStyleId={match.subStyleId}
+                      runeStatic={runeStatic}
+                      size={20}
+                      className="flex-col"
+                    />
+                  </span>
+                  <span className="grid min-w-0 flex-1">
+                    <span className="flex min-w-0 items-baseline gap-1.5">
+                      <span className="truncate font-semibold text-fg">{match.playerName ?? "Unknown player"}</span>
+                      {match.teamName ? (
+                        <span className="type-caption truncate text-muted">{match.teamName}</span>
+                      ) : null}
+                    </span>
+                    <span className="type-caption truncate text-muted">
+                      {championName}
+                      {hasTimestamp ? (
+                        <>
+                          {" · "}
+                          <time title={formatDateTimeMs(playedAt)}>{formatRelativeTime(playedAt)}</time>
+                        </>
+                      ) : null}
+                    </span>
+                  </span>
+                  <ItemStrip itemIds={match.items} itemStatic={itemStatic} size={24} className="hidden shrink-0 flex-nowrap sm:flex" />
+                  <span
+                    className={cn(
+                      "type-ui w-9 shrink-0 text-right font-semibold",
+                      match.win ? "text-win" : "text-loss"
+                    )}
+                  >
+                    {match.win ? "Win" : "Loss"}
+                  </span>
                 </Link>
               </li>
             );
           })}
         </ul>
       )}
-    </Card>
+      {failedFeedCount > 0 ? (
+        <p className="type-caption border-t border-border px-4 py-2.5 text-muted sm:px-5">
+          {failedFeedCount} champion {failedFeedCount === 1 ? "feed is" : "feeds are"} unavailable right now.
+        </p>
+      ) : null}
+    </section>
   );
 }

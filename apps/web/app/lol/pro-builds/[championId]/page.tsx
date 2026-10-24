@@ -3,25 +3,24 @@ import Link from "next/link";
 import type { components } from "@transcendence/api-client";
 
 import { BackendErrorCard } from "@/components/BackendErrorCard";
-import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { AnalyticsPatchFilter } from "@/components/AnalyticsPatchFilter";
 import { AnalyticsRegionFilter } from "@/components/AnalyticsRegionFilter";
+import { ItemStrip, keystoneId, RunePair, SpellPair, cleanItemIds } from "@/components/ProBuildBits";
 import { ProScopeToggle } from "@/components/ProScopeToggle";
 import { RoleFilterTabs } from "@/components/RoleFilterTabs";
-import { RuneSetupDisplay } from "@/components/RuneSetupDisplay";
-import { WinRateText } from "@/components/WinRateText";
-import { Badge } from "@/components/ui/Badge";
-import { Card } from "@/components/ui/Card";
+import { sortRuneSelections } from "@/components/lol-profile/shared";
+import { buttonClassName } from "@/components/ui/buttonStyles";
+import { DataBar } from "@/components/ui/DataBar";
 import { fetchBackendJson, type BackendJsonResult } from "@/lib/backendCall";
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
-import { pickMostSevereAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyticsSample";
+import { cn } from "@/lib/cn";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
-import { formatDateTimeMs, formatRelativeTime } from "@/lib/format";
-import { championDisplayName, itemDisplayName } from "@/lib/gameDisplay";
+import { formatDateTimeMs, formatGames, formatPercent, formatRelativeTime, plural } from "@/lib/format";
+import { championDisplayName } from "@/lib/gameDisplay";
 import { fetchLolAnalyticsPatches } from "@/lib/lolAnalyticsPatches";
 import {
-  buildProBuildFilterParams,
   buildProBuildPageHref,
+  mostCommon,
   normalizeProBuildPatch,
   normalizeProBuildRole,
   normalizeProBuildScope,
@@ -34,17 +33,18 @@ import {
   fetchItemMap,
   fetchRunesReforged,
   fetchSummonerSpellMap,
-  itemIconUrl,
-  summonerSpellIconUrl
+  runeIconUrl,
+  type RuneStaticData
 } from "@/lib/staticData";
 
 type ChampionWinRateSummary = components["schemas"]["ChampionWinRateSummary"];
 type ChampionProBuildsResponse = components["schemas"]["ChampionProBuildsResponse"];
+type ProMatchBuildDto = components["schemas"]["ProMatchBuildDto"];
 
-const SCOPE_LABEL: Record<ProBuildScope, string> = {
-  all: "Pros and One-Tricks",
-  pro: "Pros",
-  highelo: "One-Tricks"
+const SCOPE_NOUN: Record<ProBuildScope, string> = {
+  all: "pros and one-tricks",
+  pro: "pros",
+  highelo: "one-tricks"
 };
 
 function proFeedErrorMessage(result: BackendJsonResult<ChampionProBuildsResponse>) {
@@ -53,86 +53,82 @@ function proFeedErrorMessage(result: BackendJsonResult<ChampionProBuildsResponse
   return "We couldn't load pro-build data.";
 }
 
-function ProItemsRow({
-  itemIds,
-  itemVersion,
-  items,
-  size = 28
-}: {
-  itemIds: number[];
-  itemVersion: string;
-  items: Record<string, { name: string; plaintext?: string }>;
-  size?: number;
-}) {
-  const cleaned = itemIds.filter((itemId) => Number.isFinite(itemId) && itemId > 0);
-  if (cleaned.length === 0) {
-    return <p className="text-xs text-muted">Items unavailable.</p>;
-  }
-
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {cleaned.map((itemId, idx) => {
-        const meta = items[String(itemId)];
-        const name = itemDisplayName(meta);
-        const title = meta?.plaintext ? `${name}: ${meta.plaintext}` : name;
-        return (
-          <Image
-            key={`${itemId}-${idx}`}
-            src={itemIconUrl(itemVersion, itemId)}
-            alt={name}
-            title={title}
-            width={size}
-            height={size}
-            sizes={`${size}px`}
-            className="rounded-md border border-border/50"
-          />
-        );
-      })}
-    </div>
-  );
-}
-
-function itemSetKey(itemIds: number[]) {
-  return itemIds
-    .filter((itemId) => Number.isFinite(itemId) && itemId > 0)
-    .slice()
+function itemSetKey(itemIds: readonly number[] | null | undefined) {
+  return cleanItemIds(itemIds)
     .sort((a, b) => a - b)
     .join(",");
 }
 
-function ProSpellPair({
-  spell1Id,
-  spell2Id,
-  spellVersion,
-  spells
-}: {
-  spell1Id: number;
-  spell2Id: number;
-  spellVersion: string;
-  spells: Record<string, { id: string; name: string }>;
-}) {
-  const ids = [spell1Id, spell2Id].filter((id) => Number.isFinite(id) && id > 0);
-  if (ids.length === 0) return null;
+function skillKeys(maxOrder: string | null | undefined): string[] {
+  return (maxOrder ?? "").toUpperCase().replace(/[^QWER]/g, "").split("");
+}
 
+function SkillOrder({ maxOrder, size = "md" }: { maxOrder: string | null | undefined; size?: "sm" | "md" }) {
+  const keys = skillKeys(maxOrder);
+  if (keys.length === 0) return null;
   return (
-    <div className="flex items-center gap-1">
-      {ids.map((id, idx) => {
-        const spell = spells[String(id)];
-        if (!spell) return null;
-        return (
-          <Image
-            key={`${id}-${idx}`}
-            src={summonerSpellIconUrl(spellVersion, spell.id)}
-            alt={spell.name}
-            title={spell.name}
-            width={22}
-            height={22}
-            className="rounded-md border border-border/50"
-          />
-        );
-      })}
+    <span className="flex items-center gap-1" aria-label={`Skill max order ${keys.join(", ")}`}>
+      {keys.map((key, idx) => (
+        <span key={`${key}-${idx}`} className="flex items-center gap-1" aria-hidden="true">
+          {idx > 0 ? <span className="text-muted">›</span> : null}
+          <span
+            className={cn(
+              "grid place-items-center rounded-md border border-border bg-surface-2 font-semibold text-fg",
+              size === "md" ? "size-8 text-sm" : "size-6 text-xs"
+            )}
+          >
+            {key}
+          </span>
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function RuneIcon({ id, runeStatic, size }: { id: number; runeStatic: RuneStaticData; size: number }) {
+  const rune = runeStatic.runeById[String(id)];
+  if (!rune) return null;
+  return (
+    <Image
+      src={runeIconUrl(rune.icon)}
+      alt={rune.name}
+      title={rune.name}
+      width={size}
+      height={size}
+      sizes={`${size}px`}
+      className="rounded-full bg-surface-2/70 p-0.5"
+    />
+  );
+}
+
+function BuildCell({
+  label,
+  footer,
+  children
+}: {
+  label: string;
+  footer?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="grid content-start gap-3 bg-surface p-4 sm:p-5">
+      <h3 className="type-caption font-semibold text-muted">{label}</h3>
+      {children}
+      {footer ? <p className="type-caption text-muted">{footer}</p> : null}
     </div>
   );
+}
+
+// A build seen once or twice reads 0% or 100%; below this many games only the count is shown.
+const MIN_GAMES_FOR_WIN_RATE = 3;
+
+function gamesLine(games: number, winRate: number) {
+  const count = `${formatGames(games)} ${plural(games, "game")}`;
+  return games >= MIN_GAMES_FOR_WIN_RATE ? `${count} · ${formatPercent(winRate)} win rate` : count;
+}
+
+function shareOf(count: number, total: number) {
+  return `${count} of ${total} ${plural(total, "game")}`;
 }
 
 export default async function ProBuildsChampionPage({
@@ -149,73 +145,51 @@ export default async function ProBuildsChampionPage({
   );
   const championId = Number(resolvedParams.championId);
   if (!Number.isFinite(championId) || championId <= 0) {
-    return <BackendErrorCard title="Pro Solo Queue Builds" message="That champion route is invalid." />;
+    return <BackendErrorCard title="Pro Solo Q" message="That champion route is invalid." />;
   }
 
   const roleFilter = normalizeProBuildRole(resolvedSearchParams?.role);
-  const regionFilter = activeRegion;
   const scopeFilter = normalizeProBuildScope(resolvedSearchParams?.scope);
   const patchFilter = normalizeProBuildPatch(resolvedSearchParams?.patch);
 
-  const proFilters = buildProBuildFilterParams({
-    role: roleFilter,
-    region: regionFilter,
-    scope: scopeFilter,
-    patch: patchFilter
-  });
-  const proFilterQuery = proFilters.toString();
+  const proFilterQuery = new URLSearchParams();
+  if (roleFilter !== "ALL") proFilterQuery.set("role", roleFilter);
+  if (activeRegion !== "ALL") proFilterQuery.set("region", activeRegion);
+  if (scopeFilter !== "pro") proFilterQuery.set("scope", scopeFilter);
+  if (patchFilter) proFilterQuery.set("patch", patchFilter);
   const winrateQuery = new URLSearchParams();
   if (patchFilter) winrateQuery.set("patch", patchFilter);
 
   const verbosity = getErrorVerbosity();
-  const [
-    { version, champions },
-    itemStatic,
-    runeStatic,
-    spellStatic,
-    patchOptions,
-    winratesRes,
-    proBuildsRes
-  ] =
+  const [{ version, champions }, itemStatic, runeStatic, spellStatic, patchOptions, winratesRes, proBuildsRes] =
     await Promise.all([
-    fetchChampionMap(),
-    fetchItemMap(),
-    fetchRunesReforged(),
-    fetchSummonerSpellMap(),
-    fetchLolAnalyticsPatches(),
-    fetchBackendJson<ChampionWinRateSummary>(
-      `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/winrates${winrateQuery.toString() ? `?${winrateQuery.toString()}` : ""}`,
-      { next: { revalidate: 60 * 60 } }
-    ),
-    fetchBackendJson<ChampionProBuildsResponse>(
-      `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/pro-builds${
-        proFilterQuery ? `?${proFilterQuery}` : ""
-      }`,
-      { next: { revalidate: 60 * 60 } }
-    )
-  ]);
+      fetchChampionMap(),
+      fetchItemMap(),
+      fetchRunesReforged(),
+      fetchSummonerSpellMap(),
+      fetchLolAnalyticsPatches(),
+      fetchBackendJson<ChampionWinRateSummary>(
+        `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/winrates${winrateQuery.size ? `?${winrateQuery}` : ""}`,
+        { next: { revalidate: 60 * 60 } }
+      ),
+      fetchBackendJson<ChampionProBuildsResponse>(
+        `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/pro-builds${proFilterQuery.size ? `?${proFilterQuery}` : ""}`,
+        { next: { revalidate: 60 * 60 } }
+      )
+    ]);
 
   if (!winratesRes.ok && !proBuildsRes.ok) {
     return (
       <BackendErrorCard
-        title="Pro Solo Queue Builds"
-        message={
-          proBuildsRes.errorKind === "timeout"
-            ? "This page is taking too long to load."
-            : proBuildsRes.errorKind === "unreachable"
-              ? "We couldn't load pro-build data right now."
-              : "We couldn't load pro-build data."
-        }
+        title="Pro Solo Q"
+        message={proFeedErrorMessage(proBuildsRes)}
         requestId={winratesRes.requestId || proBuildsRes.requestId}
         detail={
           verbosity === "verbose"
             ? JSON.stringify(
                 {
                   winrates: { status: winratesRes.status, errorKind: winratesRes.errorKind },
-                  proBuilds: {
-                    status: proBuildsRes.status,
-                    errorKind: proBuildsRes.errorKind
-                  }
+                  proBuilds: { status: proBuildsRes.status, errorKind: proBuildsRes.errorKind }
                 },
                 null,
                 2
@@ -232,362 +206,361 @@ export default async function ProBuildsChampionPage({
   const championName = championDisplayName(champion);
   const recentMatches = proBuilds?.recentProMatches ?? [];
   const topPlayers = proBuilds?.topPlayers ?? [];
-  const commonBuilds = proBuilds?.commonBuilds ?? [];
   // Older cached responses can still contain the former empty-inventory aggregate.
   // Never promote that placeholder into the answer-first recommendation.
-  const usableCommonBuilds = commonBuilds.filter((build) => itemSetKey(build.items ?? []).length > 0);
-  const recommendedBuild = usableCommonBuilds[0] ?? null;
-  const recommendedMatch = recommendedBuild
-    ? recentMatches.find((match) => itemSetKey(match.items ?? []) === itemSetKey(recommendedBuild.items ?? [])) ?? null
-    : null;
-  const alternativeBuilds = usableCommonBuilds.slice(1);
-  const roleExtraParams: Record<string, string> = {};
-  if (regionFilter !== "ALL") roleExtraParams.region = regionFilter;
-  if (scopeFilter !== "pro") roleExtraParams.scope = scopeFilter;
-  if (patchFilter) roleExtraParams.patch = patchFilter;
+  const commonBuilds = (proBuilds?.commonBuilds ?? []).filter((build) => itemSetKey(build.items).length > 0);
+  const coreBuild = commonBuilds[0] ?? null;
+  const otherBuilds = commonBuilds.slice(1);
 
-  const effectivePatch =
-    proBuilds?.patch ?? winrates?.patch ?? patchFilter ?? "Unknown";
-  // When no role is in the URL the backend resolves the champion's most-played lane and
-  // echoes it back as proBuilds.role; drive the active tab, badge, and scope/patch links
-  // off that so the most-played lane lights up and navigation preserves it.
+  // Runes, spells, and skill order are tallied across the recent tracked games rather than lifted
+  // from one "representative" match, so each choice carries how many of those games made it.
+  const runeChoice = mostCommon(recentMatches, (match) => {
+    const keystone = keystoneId(match.primaryRunes, runeStatic);
+    return keystone ? `${keystone}:${match.subStyleId ?? 0}` : null;
+  });
+  const spellChoice = mostCommon(recentMatches, (match) => {
+    const ids = [match.spell1Id ?? 0, match.spell2Id ?? 0].filter((id) => id > 0).sort((a, b) => a - b);
+    return ids.length === 2 ? ids.join("-") : null;
+  });
+  const skillChoice = mostCommon(recentMatches, (match) => {
+    const keys = skillKeys(match.skillOrder?.maxOrder);
+    return keys.length > 0 ? keys.join("") : null;
+  });
+
+  const effectivePatch = proBuilds?.patch ?? winrates?.patch ?? patchFilter;
+  // When no role is in the URL the backend resolves the champion's most-played lane and echoes it
+  // back as proBuilds.role; drive the active tab and the scope/patch links off that.
   const effectiveRole = normalizeProBuildRole(proBuilds?.role ?? roleFilter);
   const effectiveScope = normalizeProBuildScope(proBuilds?.scope ?? scopeFilter);
   const includeOneTricks = scopeFilter !== "pro";
-  const sampleNotice = pickMostSevereAnalyticsSample(
-    (proBuilds as { sample?: unknown } | null)?.sample as AnalyticsSampleLike,
-    (winrates as { sample?: unknown } | null)?.sample as AnalyticsSampleLike
-  );
+  const roleExtraParams: Record<string, string> = {};
+  if (activeRegion !== "ALL") roleExtraParams.region = activeRegion;
+  if (scopeFilter !== "pro") roleExtraParams.scope = scopeFilter;
+  if (patchFilter) roleExtraParams.patch = patchFilter;
 
   return (
-    <div className="grid gap-6">
-      <header className="grid gap-3">
-        <div className="flex items-center gap-3">
+    <div className="grid grid-cols-1 gap-4">
+      <header className="toolbar relative isolate overflow-hidden px-4 py-4 sm:px-5">
+        {champion ? (
+          <div aria-hidden className="splash-backdrop">
+            <Image
+              src={`https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${champion.id}_0.jpg`}
+              alt=""
+              fill
+              priority
+              quality={55}
+              sizes="(min-width: 1024px) 60rem, 100vw"
+              className="object-cover object-[50%_20%]"
+            />
+          </div>
+        ) : null}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
           <Image
             src={championIconUrl(version, champion?.id ?? "Unknown")}
-            alt={championName}
-            width={60}
-            height={60}
-            className="rounded-xl border border-border/60"
+            alt=""
+            width={64}
+            height={64}
+            priority
+            className="size-14 shrink-0 rounded-card border border-border/60 sm:size-16"
           />
-          <div>
-            <h1 className="type-page-title">
-              Pro Solo Queue Builds
-            </h1>
-            <p className="type-ui mt-2 text-fg/75">
-              Ranked Solo/Duo builds from tracked professional accounts for {championName}.
+          <div className="min-w-0 flex-1">
+            <p className="type-caption text-muted">
+              <Link href="/lol/pro-builds" className="rounded-sm transition-colors hover:text-fg">
+                Pro Solo Q
+              </Link>
+            </p>
+            <h1 className="type-page-title text-fg">{championName}</h1>
+            <p className="type-caption mt-1 flex flex-wrap gap-x-3 gap-y-1 text-muted">
+              {effectiveRole !== "ALL" ? <span>{roleDisplayLabel(effectiveRole)}</span> : null}
+              {effectivePatch ? <span>Patch {effectivePatch}</span> : null}
+              <span>{activeRegionLabel}</span>
+              {recentMatches.length > 0 ? (
+                <span className="type-tabular tabular-nums">
+                  {formatGames(recentMatches.length)} recent {plural(recentMatches.length, "game")} from{" "}
+                  {topPlayers.length} {SCOPE_NOUN[effectiveScope]}
+                </span>
+              ) : null}
             </p>
           </div>
+          <Link
+            href={`/lol/champions/${championId}`}
+            className={buttonClassName({ variant: "outline", size: "sm" })}
+          >
+            {championName} stats
+          </Link>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge className="border-primary/45 bg-primary/10 text-primary">
-            Patch {effectivePatch}
-          </Badge>
-          <Badge>{roleDisplayLabel(effectiveRole)}</Badge>
-          <Badge>{SCOPE_LABEL[effectiveScope]}</Badge>
-          <Badge>{activeRegionLabel}</Badge>
-          <Badge>{recentMatches.length} matches</Badge>
-        </div>
-        <div className="mt-3">
-          <AnalyticsSampleBanner sample={sampleNotice} />
-        </div>
-      </header>
-
-      <Card className="p-5">
-        <h2 className="type-section">Filters</h2>
-        <div className="mt-3 grid gap-3">
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
           <RoleFilterTabs
             roles={LANE_ROLES}
             activeRole={effectiveRole}
             baseHref={`/lol/pro-builds/${championId}`}
             extraParams={roleExtraParams}
           />
-          <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} variant="select" />
-          <ProScopeToggle
-            checked={includeOneTricks}
-            href={buildProBuildPageHref(championId, {
-              role: effectiveRole,
-              region: regionFilter,
-              scope: includeOneTricks ? "pro" : "all",
-              patch: patchFilter
-            })}
-          />
-          <AnalyticsPatchFilter patches={patchOptions} activePatch={patchFilter} />
-          {patchFilter ? (
-            <Link
+          <div className="flex flex-wrap items-center gap-2 lg:ml-auto">
+            <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} variant="select" />
+            <AnalyticsPatchFilter patches={patchOptions} activePatch={patchFilter} />
+            <ProScopeToggle
+              checked={includeOneTricks}
               href={buildProBuildPageHref(championId, {
                 role: effectiveRole,
-                region: regionFilter,
-                scope: scopeFilter,
-                patch: null
+                region: activeRegion,
+                scope: includeOneTricks ? "pro" : "all",
+                patch: patchFilter
               })}
-              className="control-tab type-ui h-9 px-3"
-            >
-              Clear Patch
-            </Link>
-          ) : null}
-        </div>
-      </Card>
-
-      {!proBuildsRes.ok ? (
-        <Card className="surface-subtle p-5">
-          <h2 className="type-section">Pro-Build Data Unavailable</h2>
-          <p className="mt-2 text-sm text-fg/80">{proFeedErrorMessage(proBuildsRes)}</p>
-          <p className="mt-1 text-xs text-muted">Try adjusting your filters or check back soon.</p>
-          {proBuildsRes.requestId ? (
-            <details className="mt-3 text-xs text-muted">
-              <summary className="cursor-pointer select-none rounded hover:text-fg/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">Technical details</summary>
-              <p className="mt-1">Request ID: <code className="text-fg/65">{proBuildsRes.requestId}</code></p>
-            </details>
-          ) : null}
-        </Card>
-      ) : null}
-
-      {proBuildsRes.ok ? (
-        <>
-      {recommendedBuild ? (
-        <Card className="border-primary/35 bg-primary/[0.06] p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <Badge className="border-primary/45 bg-primary/10 text-primary">Recommended</Badge>
-                <span className="type-overline text-muted">Most played in this scope</span>
-              </div>
-              <h2 className="type-section">{championName} pro build</h2>
-              <p className="type-ui mt-1 text-muted">
-                The most common completed item path among tracked {SCOPE_LABEL[effectiveScope].toLowerCase()}.
-              </p>
-            </div>
-            <p className="type-tabular tabular-nums text-sm text-muted">
-              <WinRateText value={recommendedBuild.winRate} decimals={1} games={recommendedBuild.games} />
-            </p>
-          </div>
-
-          <div className="mt-4">
-            <ProItemsRow
-              itemIds={recommendedBuild.items ?? []}
-              itemVersion={itemStatic.version}
-              items={itemStatic.items}
-              size={38}
             />
           </div>
-
-          {recommendedMatch ? (
-            <div className="mt-4 grid gap-4 border-t border-border/40 pt-4 lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)]">
-              <div>
-                <p className="type-overline text-muted">Spells & skill priority</p>
-                <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <ProSpellPair
-                    spell1Id={recommendedMatch.spell1Id ?? 0}
-                    spell2Id={recommendedMatch.spell2Id ?? 0}
-                    spellVersion={spellStatic.version}
-                    spells={spellStatic.spells}
-                  />
-                  {recommendedMatch.skillOrder?.maxOrder ? (
-                    <span className="type-ui font-medium text-fg/80">
-                      {recommendedMatch.skillOrder.maxOrder}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-              <div>
-                <p className="type-overline text-muted">Representative rune page</p>
-                <div className="mt-2">
-                  <RuneSetupDisplay
-                    primaryStyleId={recommendedMatch.primaryStyleId ?? 0}
-                    subStyleId={recommendedMatch.subStyleId ?? 0}
-                    primarySelections={recommendedMatch.primaryRunes ?? []}
-                    subSelections={recommendedMatch.subRunes ?? []}
-                    statShards={recommendedMatch.statShards ?? []}
-                    runeById={runeStatic.runeById}
-                    styleById={runeStatic.styleById}
-                    runeSortById={runeStatic.runeSortById}
-                    iconSize={20}
-                    density="compact"
-                  />
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </Card>
-      ) : null}
-
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card className="p-5">
-          <h2 className="type-section">Top Players</h2>
-          {topPlayers.length === 0 ? (
-            <p className="mt-3 text-sm text-muted">
-              No pro-player matches are available for these filters yet.
-            </p>
-          ) : (
-            <ul className="mt-3 grid gap-2">
-              {topPlayers.map((player, idx) => (
-                <li
-                  key={`${player.playerName ?? "player"}-${idx}`}
-                  className="surface-subtle flex items-center justify-between rounded-card px-3 py-2"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-fg">
-                      {player.playerName ?? "Unknown player"}
-                    </p>
-                    <p className="truncate text-xs text-muted">
-                      {player.teamName ?? "No team"}
-                    </p>
-                  </div>
-                  <p className="text-xs text-muted">
-                    <WinRateText value={player.winRate} decimals={1} games={player.games} />
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-
-        <Card className="p-5">
-          <h2 className="type-section">Other Common Builds</h2>
-          {alternativeBuilds.length === 0 ? (
-            <p className="mt-3 text-sm text-muted">
-              {recommendedBuild
-                ? "No other repeat build patterns have enough support yet."
-                : "No repeat build patterns are available for these filters yet."}
-            </p>
-          ) : (
-            <div className="mt-3 grid gap-3">
-              {alternativeBuilds.map((build, idx) => (
-                <div
-                  key={`common-build-${(build.items ?? []).join("-")}`}
-                  className="surface-subtle rounded-card p-3"
-                >
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <p className="text-xs text-muted">Alternative {idx + 1}</p>
-                    <p className="text-xs text-muted">
-                      <WinRateText value={build.winRate} decimals={1} games={build.games} />
-                    </p>
-                  </div>
-                  <ProItemsRow
-                    itemIds={build.items ?? []}
-                    itemVersion={itemStatic.version}
-                    items={itemStatic.items}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-      </div>
-
-      <Card className="p-5">
-        <h2 className="type-section">Recent Tracked Solo Queue Matches</h2>
-        {recentMatches.length === 0 ? (
-          <p className="mt-3 text-sm text-muted">
-            No recent tracked solo-queue matches were found for this champion with these filters.
-          </p>
-        ) : (
-          <ul className="mt-4 grid gap-3">
-            {recentMatches.map((match) => {
-              const playedAt = match.playedAt ?? 0;
-              const hasTimestamp = Number.isFinite(playedAt) && playedAt > 0;
-              const resultClass = match.win ? "text-wr-high" : "text-wr-low";
-              return (
-                <li
-                  key={`${match.matchId ?? "match"}-${match.playerName ?? "player"}`}
-                  className="surface-subtle rounded-card p-3"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-medium text-fg">
-                        {match.playerName ?? "Unknown player"}
-                        <span className="ml-2 text-xs text-muted">
-                          {match.teamName ? `(${match.teamName})` : ""}
-                        </span>
-                      </p>
-                      <p className="text-xs text-muted">
-                        {hasTimestamp
-                          ? `${formatRelativeTime(playedAt)} - ${formatDateTimeMs(playedAt)}`
-                          : "Timestamp unavailable"}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className={`text-sm font-semibold ${resultClass}`}>
-                        {match.win ? "Win" : "Loss"}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 grid gap-3 lg:grid-cols-[auto,1fr]">
-                    <div className="grid gap-1.5">
-                      <p className="text-xs text-muted">Items</p>
-                      <ProItemsRow
-                        itemIds={match.items ?? []}
-                        itemVersion={itemStatic.version}
-                        items={itemStatic.items}
-                      />
-                      {(match.spell1Id || match.spell2Id || match.skillOrder?.maxOrder) ? (
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-1">
-                          <ProSpellPair
-                            spell1Id={match.spell1Id ?? 0}
-                            spell2Id={match.spell2Id ?? 0}
-                            spellVersion={spellStatic.version}
-                            spells={spellStatic.spells}
-                          />
-                          {match.skillOrder?.maxOrder ? (
-                            <span className="text-xs text-muted">
-                              Skills:{" "}
-                              <span className="font-medium text-fg/80">
-                                {match.skillOrder.maxOrder}
-                              </span>
-                            </span>
-                          ) : null}
-                        </div>
-                      ) : null}
-                    </div>
-                    <div className="grid gap-1.5">
-                      <p className="text-xs text-muted">Runes</p>
-                      <RuneSetupDisplay
-                        primaryStyleId={match.primaryStyleId ?? 0}
-                        subStyleId={match.subStyleId ?? 0}
-                        primarySelections={match.primaryRunes ?? []}
-                        subSelections={match.subRunes ?? []}
-                        statShards={match.statShards ?? []}
-                        runeById={runeStatic.runeById}
-                        styleById={runeStatic.styleById}
-                        runeSortById={runeStatic.runeSortById}
-                        iconSize={18}
-                        density="compact"
-                      />
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Card>
-        </>
-      ) : null}
-
-      <Card className="p-5">
-        <h2 className="type-section">
-          More Ways to Explore
-        </h2>
-        <p className="mt-2 text-sm text-fg/90">
-          Open the main champion page or matchup view to compare tracked solo-queue builds with the broader player base.
-        </p>
-        <div className="mt-4 flex flex-wrap gap-2 text-sm">
-          <Link
-            href={`/lol/champions/${championId}`}
-            className="control-tab type-ui"
-          >
-            Open Champion Details
-          </Link>
-          <Link
-            href={`/lol/champions/${championId}#matchups`}
-            className="control-tab type-ui"
-          >
-            View Matchups
-          </Link>
         </div>
-      </Card>
+      </header>
+
+      {!proBuildsRes.ok ? (
+        <section className="page-panel p-5">
+          <h2 className="type-section">Pro-build data unavailable</h2>
+          <p className="type-ui mt-2 text-fg/80">{proFeedErrorMessage(proBuildsRes)}</p>
+          <p className="type-caption mt-1 text-muted">Try another role or region, or check back soon.</p>
+          {proBuildsRes.requestId ? (
+            <p className="type-caption mt-2 text-muted">
+              Request ID: <code className="text-fg/65">{proBuildsRes.requestId}</code>
+            </p>
+          ) : null}
+        </section>
+      ) : recentMatches.length === 0 && !coreBuild ? (
+        <section className="page-panel p-5">
+          <h2 className="type-section">No tracked games yet</h2>
+          <p className="type-ui mt-2 text-muted">
+            No tracked {SCOPE_NOUN[effectiveScope]} have played {championName}
+            {effectiveRole !== "ALL" ? ` ${roleDisplayLabel(effectiveRole).toLowerCase()}` : ""} in this scope.
+            {includeOneTricks ? " Try another role or region." : " Include one-tricks or try another role."}
+          </p>
+        </section>
+      ) : (
+        <>
+          <section aria-labelledby="pro-build-heading" className="page-panel overflow-hidden">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 py-4 sm:px-5">
+              <h2 id="pro-build-heading" className="type-title text-fg">
+                What pros build
+              </h2>
+              <p className="type-caption text-muted">The most common choice in each slot</p>
+            </div>
+            <div className="grid gap-px border-t border-border bg-border sm:grid-cols-2 xl:grid-cols-[1.4fr_1.2fr_1fr_1fr]">
+              <BuildCell
+                label="Core items"
+                footer={coreBuild ? gamesLine(coreBuild.games, coreBuild.winRate) : null}
+              >
+                {coreBuild ? (
+                  <ItemStrip itemIds={coreBuild.items} itemStatic={itemStatic} size={40} className="gap-1.5" />
+                ) : (
+                  <p className="type-ui text-muted">No repeat item path yet.</p>
+                )}
+              </BuildCell>
+
+              <BuildCell
+                label="Runes"
+                footer={runeChoice ? shareOf(runeChoice.count, recentMatches.length) : null}
+              >
+                {runeChoice ? (
+                  <RuneSummary match={runeChoice.entry} runeStatic={runeStatic} />
+                ) : (
+                  <p className="type-ui text-muted">No rune data.</p>
+                )}
+              </BuildCell>
+
+              <BuildCell
+                label="Summoner spells"
+                footer={spellChoice ? shareOf(spellChoice.count, recentMatches.length) : null}
+              >
+                {spellChoice ? (
+                  <div className="flex items-center gap-3">
+                    <SpellPair
+                      spellIds={[spellChoice.entry.spell1Id, spellChoice.entry.spell2Id]}
+                      spellStatic={spellStatic}
+                      size={36}
+                      className="gap-1.5"
+                    />
+                    <span className="type-ui min-w-0 font-semibold text-fg">
+                      {[spellChoice.entry.spell1Id, spellChoice.entry.spell2Id]
+                        .map((id) => spellStatic.spells[String(id ?? 0)]?.name)
+                        .filter(Boolean)
+                        .join(" + ")}
+                    </span>
+                  </div>
+                ) : (
+                  <p className="type-ui text-muted">No spell data.</p>
+                )}
+              </BuildCell>
+
+              <BuildCell
+                label="Skill max order"
+                footer={skillChoice ? shareOf(skillChoice.count, recentMatches.length) : null}
+              >
+                {skillChoice ? (
+                  <SkillOrder maxOrder={skillChoice.entry.skillOrder?.maxOrder} />
+                ) : (
+                  <p className="type-ui text-muted">No skill data.</p>
+                )}
+              </BuildCell>
+            </div>
+          </section>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+            <section aria-labelledby="pro-games-heading" className="page-panel overflow-hidden">
+              <div className="px-4 py-4 sm:px-5">
+                <h2 id="pro-games-heading" className="type-title text-fg">
+                  Recent games
+                </h2>
+              </div>
+              {recentMatches.length === 0 ? (
+                <p className="border-t border-border px-5 py-6 text-sm text-muted">
+                  No recent tracked games with these filters.
+                </p>
+              ) : (
+                <ul className="border-t border-border">
+                  {recentMatches.map((match, idx) => (
+                    <RecentGameRow
+                      key={`${match.matchId ?? "match"}-${match.playerName ?? "player"}-${idx}`}
+                      match={match}
+                      itemStatic={itemStatic}
+                      runeStatic={runeStatic}
+                      spellStatic={spellStatic}
+                    />
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <aside className="grid gap-4">
+              <section aria-labelledby="pro-players-heading" className="page-panel overflow-hidden">
+                <h2 id="pro-players-heading" className="type-section px-4 py-3.5 text-fg sm:px-5">
+                  Who plays it
+                </h2>
+                {topPlayers.length === 0 ? (
+                  <p className="border-t border-border px-5 py-4 text-sm text-muted">No tracked players yet.</p>
+                ) : (
+                  <ul className="border-t border-border">
+                    {topPlayers.map((player, idx) => (
+                      <li
+                        key={`${player.playerName ?? "player"}-${idx}`}
+                        className="flex max-w-none items-center justify-between gap-3 border-b border-border/50 px-4 py-2.5 last:border-b-0 sm:px-5"
+                      >
+                        <span className="grid min-w-0">
+                          <span className="truncate font-semibold text-fg">
+                            {player.playerName ?? "Unknown player"}
+                          </span>
+                          <span className="type-caption truncate text-muted">
+                            {formatGames(player.games)} {plural(player.games, "game")}
+                            {player.teamName ? ` · ${player.teamName}` : ""}
+                          </span>
+                        </span>
+                        <DataBar value={player.winRate} games={player.games} />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+
+              {otherBuilds.length > 0 ? (
+                <section aria-labelledby="pro-other-builds-heading" className="page-panel overflow-hidden">
+                  <h2 id="pro-other-builds-heading" className="type-section px-4 py-3.5 text-fg sm:px-5">
+                    Other item paths
+                  </h2>
+                  <ul className="border-t border-border">
+                    {otherBuilds.slice(0, 5).map((build) => (
+                      <li
+                        key={itemSetKey(build.items)}
+                        className="grid max-w-none gap-1.5 border-b border-border/50 px-4 py-3 last:border-b-0 sm:px-5"
+                      >
+                        <ItemStrip itemIds={build.items} itemStatic={itemStatic} size={28} />
+                        <span className="type-caption text-muted">{gamesLine(build.games, build.winRate)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ) : null}
+            </aside>
+          </div>
+        </>
+      )}
     </div>
+  );
+}
+
+function RuneSummary({ match, runeStatic }: { match: ProMatchBuildDto; runeStatic: RuneStaticData }) {
+  const primary = sortRuneSelections([...(match.primaryRunes ?? [])], runeStatic.runeSortById);
+  const secondary = sortRuneSelections([...(match.subRunes ?? [])], runeStatic.runeSortById);
+  const keystone = runeStatic.runeById[String(primary[0] ?? 0)];
+  const subStyle = runeStatic.styleById[String(match.subStyleId ?? 0)];
+  return (
+    <div className="grid gap-2.5">
+      <div className="flex items-center gap-3">
+        {keystone ? (
+          <Image
+            src={runeIconUrl(keystone.icon)}
+            alt=""
+            width={40}
+            height={40}
+            sizes="40px"
+            className="shrink-0 rounded-full bg-surface-2/70"
+          />
+        ) : null}
+        <span className="grid min-w-0">
+          <span className="type-ui truncate font-semibold text-fg">{keystone?.name ?? "Unknown keystone"}</span>
+          {subStyle ? <span className="type-caption truncate text-muted">with {subStyle.name}</span> : null}
+        </span>
+      </div>
+      <div className="flex items-center gap-1">
+        {primary.slice(1, 4).map((id) => (
+          <RuneIcon key={`p-${id}`} id={id} runeStatic={runeStatic} size={24} />
+        ))}
+        {secondary.length > 0 ? <span aria-hidden className="mx-1 h-4 w-px bg-border" /> : null}
+        {secondary.slice(0, 2).map((id) => (
+          <RuneIcon key={`s-${id}`} id={id} runeStatic={runeStatic} size={24} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RecentGameRow({
+  match,
+  itemStatic,
+  runeStatic,
+  spellStatic
+}: {
+  match: ProMatchBuildDto;
+  itemStatic: Awaited<ReturnType<typeof fetchItemMap>>;
+  runeStatic: RuneStaticData;
+  spellStatic: Awaited<ReturnType<typeof fetchSummonerSpellMap>>;
+}) {
+  const playedAt = match.playedAt ?? 0;
+  const hasTimestamp = Number.isFinite(playedAt) && playedAt > 0;
+  return (
+    <li className="flex max-w-none flex-wrap items-center gap-x-4 gap-y-2 border-b border-border/50 px-4 py-3 last:border-b-0 sm:px-5">
+      <span className={cn("type-ui w-9 shrink-0 font-semibold", match.win ? "text-win" : "text-loss")}>
+        {match.win ? "Win" : "Loss"}
+      </span>
+      <span className="grid min-w-0 flex-1 basis-36">
+        <span className="flex min-w-0 items-baseline gap-1.5">
+          <span className="truncate font-semibold text-fg">{match.playerName ?? "Unknown player"}</span>
+          {match.teamName ? <span className="type-caption truncate text-muted">{match.teamName}</span> : null}
+        </span>
+        <span className="type-caption text-muted">
+          {hasTimestamp ? (
+            <time title={formatDateTimeMs(playedAt)}>{formatRelativeTime(playedAt)}</time>
+          ) : (
+            "Time unavailable"
+          )}
+        </span>
+      </span>
+      <span className="flex shrink-0 items-center gap-1.5">
+        <RunePair primaryRunes={match.primaryRunes} subStyleId={match.subStyleId} runeStatic={runeStatic} size={24} />
+        <SpellPair spellIds={[match.spell1Id, match.spell2Id]} spellStatic={spellStatic} size={24} />
+      </span>
+      {/* A fixed slot for six items keeps the skill column aligned row to row. */}
+      <span className="shrink-0 sm:w-[11.75rem]">
+        <ItemStrip itemIds={match.items} itemStatic={itemStatic} size={28} />
+      </span>
+      <span className="hidden shrink-0 xl:block">
+        <SkillOrder maxOrder={match.skillOrder?.maxOrder} size="sm" />
+      </span>
+    </li>
   );
 }

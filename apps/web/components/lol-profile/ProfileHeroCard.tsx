@@ -3,8 +3,7 @@ import Image from "next/image";
 import { FavoriteButton } from "@/components/FavoriteButton";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Toolbar } from "@/components/ui/Toolbar";
-import { formatPercent } from "@/lib/format";
+import { formatPercent, winRateColorClass } from "@/lib/format";
 import { profileIconUrl } from "@/lib/staticData";
 
 import {
@@ -16,17 +15,17 @@ import {
   type RankInfo,
   type SummonerProfileResponse
 } from "@/components/lol-profile/shared";
-import { rankTierDisplayLabel } from "@/lib/ranks";
+import { rankEmblemUrl, rankTierDisplayLabel } from "@/lib/ranks";
 
 type RankedEntry = {
   label: string;
   rank: RankInfo;
 };
 
-// Flat, answer-first header (the "Ladder" Toolbar primitive) — no splash art, no
-// frosted-glass metric panel. Identity + rank-at-a-glance + the primary action live
-// on one compact line; the full ranked breakdown is progressive-disclosed in the
-// sidebar, so rank appears exactly once here.
+// Identity header. Like the League client's profile banner, it carries a splash of the
+// player's signature champion (top mastery, else most played) behind the name, masked into the
+// surface. Rank sits on the identity line once; the full ranked breakdown stays in the sidebar.
+// Every row exists from first paint with fixed geometry, so data arriving never reflows the page.
 export function ProfileHeroCard({
   title,
   region,
@@ -56,111 +55,155 @@ export function ProfileHeroCard({
   busy: boolean;
   onRefresh: () => void;
 }) {
-  const primaryRank = rankedEntries[0]?.rank;
-  const rankText = primaryRank
-    ? `${rankTierDisplayLabel(primaryRank.tier)} ${primaryRank.division}`
-    : "Unranked";
+  const primary = rankedEntries[0];
+  const primaryRank = primary?.rank;
+  const emblem = rankEmblemUrl(primaryRank?.tier);
+  const rankGames = primaryRank ? primaryRank.wins + primaryRank.losses : 0;
+  const rankWr = rankGames > 0 ? (primaryRank!.wins / rankGames) * 100 : null;
+
+  const signatureChampionId =
+    profile?.topMastery?.[0]?.championId ?? profile?.topChampions?.[0]?.championId ?? null;
+  const signatureChampion =
+    signatureChampionId != null ? championStatic?.champions[String(signatureChampionId)] : undefined;
 
   // Win rate is derived from — and labelled against — the same recent-form window
   // as the pips below, so it never reads as (and never contradicts) the ranked win
-  // rate broken out in the sidebar.
+  // rate on the identity line.
   const recentWins = recentForm.filter(Boolean).length;
   const recentWr =
     recentForm.length > 0 ? formatPercent(recentWins / recentForm.length) : null;
 
   return (
     <div className="flex flex-col gap-3">
-      <Toolbar
-        eyebrow="League profile"
-        title={
-          <span className="flex items-center gap-3">
+      <header className="toolbar relative isolate overflow-hidden px-4 py-4 sm:px-5">
+        {signatureChampion ? (
+          <div aria-hidden className="splash-backdrop">
+            <Image
+              src={`https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${signatureChampion.id}_0.jpg`}
+              alt=""
+              fill
+              priority
+              quality={55}
+              sizes="(min-width: 1024px) 60rem, 100vw"
+              className="object-cover object-[50%_20%]"
+            />
+          </div>
+        ) : null}
+
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-4">
+          <div className="relative shrink-0">
             {profile && championStatic ? (
               <Image
                 src={profileIconUrl(championStatic.version, profile.profileIconId)}
                 alt={`${title} icon`}
-                width={48}
-                height={48}
-                className="rounded-xl border border-border/70 shadow-soft"
+                width={72}
+                height={72}
+                priority
+                className="size-[72px] rounded-card border border-border/70 shadow-soft"
               />
             ) : (
-              <span className="h-12 w-12 rounded-xl border border-border/60 bg-surface/70" />
+              <span className="block size-[72px] rounded-card border border-border/60 bg-surface-2" />
             )}
-            <span className="truncate">{title}</span>
-          </span>
-        }
-        meta={
-          <>
-            <span>Level {profile?.summonerLevel ?? "—"}</span>
-            <span>{region.toUpperCase()}</span>
-            <span className={rankColorClass(primaryRank?.tier)}>
-              {rankText}
-              {primaryRank ? ` · ${primaryRank.leaguePoints} LP` : ""}
+            <span className="type-caption absolute -bottom-2 left-1/2 min-w-9 -translate-x-1/2 rounded-md border border-border bg-surface px-1.5 text-center font-semibold tabular-nums text-fg">
+              {profile?.summonerLevel ?? "—"}
             </span>
-          </>
-        }
-        actions={
-          <>
+          </div>
+
+          <div className="min-w-0 flex-1 basis-56">
+            <h1 className="type-page-title truncate text-fg">
+              {gameName}
+              <span className="font-semibold text-muted">#{tagLine}</span>
+            </h1>
+            <p className="type-ui mt-1.5 flex min-h-8 flex-wrap items-center gap-x-3 gap-y-1">
+              {emblem ? (
+                // The ranked emblem sits in a mostly transparent canvas; scale the crest up inside
+                // a clipped frame, the same crop the sidebar uses.
+                <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden">
+                  <Image
+                    src={emblem}
+                    alt=""
+                    width={128}
+                    height={128}
+                    sizes="128px"
+                    className="size-full scale-[3.3] select-none object-contain"
+                  />
+                </span>
+              ) : null}
+              <span className={`font-semibold ${rankColorClass(primaryRank?.tier)}`}>
+                {primaryRank ? `${rankTierDisplayLabel(primaryRank.tier)} ${primaryRank.division}` : "Unranked"}
+              </span>
+              {primaryRank ? (
+                <span className="type-tabular tabular-nums text-fg/85">{primaryRank.leaguePoints} LP</span>
+              ) : null}
+              {primaryRank ? (
+                <span className="type-tabular tabular-nums text-muted">
+                  {primaryRank.wins}W {primaryRank.losses}L
+                  {rankWr != null ? (
+                    <span className={`ml-1.5 ${winRateColorClass(rankWr)}`}>
+                      {formatPercent(rankWr, { input: "percent", decimals: 1 })}
+                    </span>
+                  ) : null}
+                </span>
+              ) : null}
+              <span className="text-muted">
+                {primary ? `${primary.label} · ` : ""}
+                {region.toUpperCase()}
+              </span>
+            </p>
+          </div>
+
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
             <Button variant="outline" onClick={onRefresh} disabled={busy}>
               {busy ? "Starting…" : "Update Now"}
             </Button>
             <FavoriteButton region={region} gameName={gameName} tagLine={tagLine} />
-          </>
-        }
-        filters={
-          // Gated on the profile, not on recentForm: form is derived from match history,
-          // which is fetched on the client and is empty on the first paint. Keying the row
-          // off the data made the Toolbar drop it (border, padding, and the parent's gap)
-          // and re-insert it on arrival — a ~45px insertion above every other element on
-          // the page, which is what drove this route's CLS to p75 0.77. The row now exists
-          // for the whole lifetime of a profile and only its contents swap.
-          profile ? (
-            <>
-              <span className="type-overline text-muted">Recent form</span>
-              {/* Wins render solid, losses render outlined: a fill/shape cue that
-                  survives red/green color blindness, with color as a redundant
-                  signal. The whole strip is one labelled image for screen readers;
-                  the individual pips are decorative (aria-hidden). */}
-              {recentForm.length > 0 ? (
-                <div
-                  className="flex flex-wrap items-center gap-1"
-                  role="img"
-                  aria-label={`Recent form, latest first: ${recentForm
-                    .map((win) => (win ? "Win" : "Loss"))
-                    .join(", ")}`}
-                >
-                  {recentForm.map((win, idx) => (
-                    <span
-                      key={`${win ? "w" : "l"}-${idx}`}
-                      aria-hidden="true"
-                      className={`h-2.5 w-7 rounded-full ${
-                        win ? "bg-win/80" : "border border-loss/70 bg-loss/25"
-                      }`}
-                      title={win ? "Win" : "Loss"}
-                    />
-                  ))}
-                </div>
-              ) : (
-                // Same pip geometry as the loaded strip, so the swap is a repaint and not
-                // a reflow — and the same primitive the route skeleton uses, so the
-                // handoff from loading.tsx into this component is invisible. Decorative
-                // while empty: there is no form to announce yet.
-                <div className="flex flex-wrap items-center gap-1" aria-hidden="true">
-                  {Array.from({ length: RECENT_FORM_SLOTS }).map((_, idx) => (
-                    <Skeleton key={idx} className="h-2.5 w-7 rounded-full" />
-                  ))}
-                </div>
-              )}
-              {/* Same element and typography in both states so the line box — which sets
-                  the row's height — is identical. Right-aligned, so its width can vary. */}
-              <span className="type-caption ml-auto text-muted">
-                {recentForm.length > 0
-                  ? `Last ${recentForm.length}${recentWr ? ` · ${recentWr} WR` : ""} · ${dataAge}`
-                  : dataAge}
-              </span>
-            </>
-          ) : undefined
-        }
-      />
+          </div>
+        </div>
+
+        {/* Gated on the profile, not on recentForm: form is derived from match history, which is
+            fetched on the client and is empty on the first paint. The row exists for the whole
+            lifetime of a profile and only its contents swap, so its arrival never shifts the page
+            (this route's CLS was p75 0.77 when the row was inserted late). */}
+        {profile ? (
+          <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border/70 pt-3">
+            <span className="type-caption font-semibold text-muted">Last {RECENT_FORM_SLOTS}</span>
+            {/* Wins render solid, losses render outlined: a fill/shape cue that survives red/green
+                color blindness, with color as a redundant signal. The whole strip is one labelled
+                image for screen readers; the individual pips are decorative (aria-hidden). */}
+            {recentForm.length > 0 ? (
+              <div
+                className="flex flex-wrap items-center gap-1"
+                role="img"
+                aria-label={`Recent form, latest first: ${recentForm
+                  .map((win) => (win ? "Win" : "Loss"))
+                  .join(", ")}`}
+              >
+                {recentForm.map((win, idx) => (
+                  <span
+                    key={`${win ? "w" : "l"}-${idx}`}
+                    aria-hidden="true"
+                    className={`h-2.5 w-7 rounded-full ${
+                      win ? "bg-win/80" : "border border-loss/70 bg-loss/25"
+                    }`}
+                    title={win ? "Win" : "Loss"}
+                  />
+                ))}
+              </div>
+            ) : (
+              // Same pip geometry as the loaded strip, so the swap is a repaint and not a reflow.
+              <div className="flex flex-wrap items-center gap-1" aria-hidden="true">
+                {Array.from({ length: RECENT_FORM_SLOTS }).map((_, idx) => (
+                  <Skeleton key={idx} className="h-2.5 w-7 rounded-full" />
+                ))}
+              </div>
+            )}
+            {/* Same element and typography in both states so the line box is identical. */}
+            <span className="type-caption ml-auto text-muted">
+              {recentForm.length > 0 && recentWr ? `${recentWr} WR · ${dataAge}` : dataAge}
+            </span>
+          </div>
+        ) : null}
+      </header>
 
       {accepted?.message ? (
         <p className="rounded-card border border-info/30 bg-info/10 px-4 py-3 text-sm text-fg/84">

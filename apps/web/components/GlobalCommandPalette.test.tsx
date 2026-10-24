@@ -114,7 +114,7 @@ describe("GlobalCommandPalette", () => {
 
     const input = await screen.findByRole("combobox", { name: "Global search input" });
     await user.type(input, "items");
-    await screen.findByRole("option", { name: /Build Atlas/i });
+    await screen.findByRole("option", { name: /Item usage and win rates/i });
     expect(screen.queryByRole("option", { name: /Build Lab/i })).toBeNull();
 
     await user.clear(input);
@@ -132,7 +132,7 @@ describe("GlobalCommandPalette", () => {
     // The point of the entry: Build Lab sits beside the library rather than replacing it. Both match
     // "build" because each carries it in `keywords`.
     await screen.findByRole("option", { name: /Build Lab/i });
-    expect(screen.getByRole("option", { name: /Build Atlas/i })).toBeTruthy();
+    expect(screen.getByRole("option", { name: /Item usage and win rates/i })).toBeTruthy();
 
     // Narrow to a single match before clicking. While two options match, cmdk re-filters as it
     // re-renders, so a node queried before the click can already be detached when it lands — which

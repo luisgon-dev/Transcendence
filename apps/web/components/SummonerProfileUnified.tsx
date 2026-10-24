@@ -57,9 +57,9 @@ const MatchHistorySection = dynamic(
     loading: () => (
       <Card className="profile-section-card rounded-panel p-5 md:p-6">
         <Skeleton className="h-6 w-40" />
-        <div className="mt-5 flex flex-col gap-4">
+        <div className="mt-4 flex flex-col gap-2">
           {Array.from({ length: MATCH_PLACEHOLDER_ROWS }).map((_, i) => (
-            <Skeleton key={i} className="h-28 w-full rounded-panel" />
+            <Skeleton key={i} className="h-[6.5rem] w-full rounded-card" />
           ))}
         </div>
       </Card>
@@ -271,7 +271,9 @@ export function SummonerProfileClient({
                   expandedMatchId: matches.expandedMatchId,
                   details: matches.details,
                   detailBusy: matches.detailBusy,
-                  onToggleExpanded: matches.toggleExpanded
+                  detailFailed: matches.detailFailed,
+                  onToggleExpanded: matches.toggleExpanded,
+                  onRetryDetail: matches.retryDetail
                 }}
               />
             </div>

@@ -1062,6 +1062,26 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             // the raw-SQL migration, as with the other covering indexes in this model.
             entity.HasIndex(x => new { x.ChampionId, x.Role, x.OpponentChampionId, x.Region, x.PrefixHash, x.Family })
                 .HasDatabaseName("IX_BuildLabOptionStats_Read");
+            // The item page's "when it's bought": one item's (or every item's) completions over all
+            // champions in a patch and region. The read key is by champion, so without this the read
+            // scanned the whole table (13.5s on prod, 2026-10-24). The counts are key columns rather
+            // than INCLUDE so the model stays provider-neutral; either way the read is index-only.
+            // Built without CONCURRENTLY: the Build Lab refresher is this table's only writer and runs
+            // in the worker, which applies migrations before it starts any job.
+            entity.HasIndex(x => new
+                {
+                    x.Patch,
+                    x.Region,
+                    x.Family,
+                    x.ActionKey,
+                    x.Stage,
+                    x.GoldBucket,
+                    x.Games,
+                    x.Wins,
+                    x.TimingSecondsSum
+                })
+                .HasDatabaseName("IX_BuildLabOptionStats_ItemPurchases")
+                .HasFilter("\"OpponentChampionId\" = 0 AND \"Family\" IN (1, 2)");
         });
 
         modelBuilder.Entity<BuildLabProcessedMatch>(entity =>

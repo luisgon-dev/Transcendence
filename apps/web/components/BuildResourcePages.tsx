@@ -12,7 +12,7 @@ import {
   type BuildResourceKind
 } from "@/lib/buildResources";
 import { getBackendBaseUrl } from "@/lib/env";
-import { fetchChampionMap, fetchItemMap, fetchRunesReforged } from "@/lib/staticData";
+import { fetchChampionMap, fetchItemDetail, fetchItemMap, fetchRunesReforged } from "@/lib/staticData";
 
 type BuildResourceSearchParams = { region?: string; q?: string; sort?: string };
 
@@ -67,10 +67,11 @@ export async function BuildResourceDetailPage({
   const query = new URLSearchParams();
   if (region.activeRegion !== "ALL") query.set("region", region.activeRegion);
   const endpoint = `${getBackendBaseUrl()}/api/lol/analytics/${kind}/${resourceId}${query.size ? `?${query}` : ""}`;
-  const [analytics, champions, itemMap, runeData] = await Promise.all([
+  const [analytics, champions, itemMap, itemDetail, runeData] = await Promise.all([
     fetchBackendJson<BuildResourceDetailResponse>(endpoint, { next: { revalidate: 60 * 60 } }),
     fetchChampionMap().catch(() => null),
     kind === "items" ? fetchItemMap().catch(() => null) : Promise.resolve(null),
+    kind === "items" ? fetchItemDetail(resourceId).catch(() => null) : Promise.resolve(null),
     kind === "runes" ? fetchRunesReforged().catch(() => null) : Promise.resolve(null)
   ]);
 
@@ -92,6 +93,7 @@ export async function BuildResourceDetailPage({
       response={analytics.body}
       champions={champions}
       itemMap={itemMap}
+      itemDetail={itemDetail}
       runeData={runeData}
       activeRegionLabel={region.activeRegionLabel}
     />

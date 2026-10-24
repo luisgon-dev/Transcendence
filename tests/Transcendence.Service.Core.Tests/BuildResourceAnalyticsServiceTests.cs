@@ -143,6 +143,23 @@ public sealed class BuildResourceAnalyticsServiceTests
             NullLogger<BuildResourceSnapshotRefresher>.Instance);
         await refresher.RefreshAsync(patch, forceFullRebuild: true, CancellationToken.None);
 
+        // Build Lab's item counts behind "when it's bought". NA1 has too few of its own, so the read
+        // falls back to the all-region rows; matchup rows are never part of it.
+        void AddItemCount(string region, int championId, string itemId, short stage, int games, int wins, int opponent = 0) =>
+            db.BuildLabOptionStats.Add(new BuildLabOptionStat
+            {
+                ChampionId = championId, Role = "TOP", OpponentChampionId = opponent, Region = region,
+                PrefixHash = stage, Family = BuildLabFamily.Item, Stage = stage, Patch = patch,
+                ActionKey = itemId, GoldBucket = 2, Games = games, Wins = wins,
+                TimingSecondsSum = games * 600L * stage
+            });
+        AddItemCount("ALL", 266, "3078", 1, 400, 240);
+        AddItemCount("ALL", 64, "3078", 2, 200, 100);
+        AddItemCount("ALL", 266, "6672", 1, 600, 300);
+        AddItemCount("ALL", 266, "3078", 1, 999, 999, opponent: 7);
+        AddItemCount("NA1", 266, "3078", 1, 10, 6);
+        await db.SaveChangesAsync();
+
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddLogging();
         serviceCollection.AddHybridCache();
@@ -169,6 +186,16 @@ public sealed class BuildResourceAnalyticsServiceTests
         detail.Should().NotBeNull();
         detail!.ChampionStats.Should().HaveCount(2);
         detail.Resource.TopChampions.Should().HaveCount(2);
+        var purchases = detail.Purchases!;
+        purchases.Region.Should().Be("ALL");
+        purchases.Kind.Should().Be("ITEM");
+        purchases.Games.Should().Be(600);
+        purchases.Stages.Select(stage => (stage.Stage, stage.Games)).Should().Equal((1, 400), (2, 200));
+        purchases.Stages[0].ShareOfStage.Should().BeApproximately(0.4, 0.0001);
+        purchases.Stages[0].WinRate.Should().BeApproximately(0.6, 0.0001);
+        purchases.Stages[0].StageWinRate.Should().BeApproximately(0.54, 0.0001);
+        purchases.AverageMinutes.Should().BeApproximately((400 * 10.0 + 200 * 20.0) / 600, 0.0001);
+        (await service.GetRuneAsync(8005, "NA1", null))!.Purchases.Should().BeNull();
         (await db.BuildResourceSnapshots.CountAsync(snapshot =>
             snapshot.IsActive && snapshot.Status == BuildResourceSnapshotStatus.Ready)).Should().Be(1);
     }

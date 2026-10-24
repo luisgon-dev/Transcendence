@@ -449,6 +449,26 @@ body::before {
     }
   }
 
+  /* The same masked splash at header scale (profile, pro builds): quieter, because text runs
+     closer to it. Narrow screens wrap the text right across it, so it drops to a faint wash
+     there. The parent sets position, isolation, and overflow. */
+  .splash-backdrop {
+    position: absolute;
+    z-index: -1;
+    inset: 0 0 0 auto;
+    width: min(72%, 60rem);
+    opacity: 0.2;
+    mask-image:
+      linear-gradient(to right, transparent, black 60%),
+      linear-gradient(to bottom, black 45%, transparent);
+    mask-composite: intersect;
+  }
+  @media (min-width: 64rem) {
+    .splash-backdrop {
+      opacity: 0.6;
+    }
+  }
+
   .page-panel {
     position: relative;
     border-radius: var(--radius-panel);

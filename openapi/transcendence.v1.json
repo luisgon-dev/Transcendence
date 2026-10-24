@@ -7484,6 +7484,14 @@
             "items": {
               "$ref": "#/components/schemas/BuildResourceChampionStatDto"
             }
+          },
+          "purchases": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ItemPurchaseTimingDto"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -8793,6 +8801,100 @@
           "pickRate": {
             "type": "number",
             "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ItemPurchaseStageDto": {
+        "required": [
+          "adjustedWinRate",
+          "confidenceHigh",
+          "confidenceLow",
+          "games",
+          "isLowSample",
+          "shareOfStage",
+          "stage",
+          "stageWinRate",
+          "winRate"
+        ],
+        "type": "object",
+        "properties": {
+          "stage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "shareOfStage": {
+            "type": "number",
+            "format": "double"
+          },
+          "winRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "adjustedWinRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "stageWinRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "confidenceLow": {
+            "type": "number",
+            "format": "double"
+          },
+          "confidenceHigh": {
+            "type": "number",
+            "format": "double"
+          },
+          "averageMinutes": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "isLowSample": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ItemPurchaseTimingDto": {
+        "required": [
+          "games",
+          "kind",
+          "patch",
+          "region",
+          "stages"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "patch": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "averageMinutes": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "stages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ItemPurchaseStageDto"
+            }
           }
         },
         "additionalProperties": false

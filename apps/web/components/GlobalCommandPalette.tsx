@@ -73,8 +73,8 @@ const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     requiresBuildLab: true
   },
   {
-    label: "Build Atlas",
-    detail: "Items and runes",
+    label: "Items",
+    detail: "Item usage and win rates",
     href: "/lol/items",
     keywords: "items runes builds atlas library"
   },

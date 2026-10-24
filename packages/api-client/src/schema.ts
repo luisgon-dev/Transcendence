@@ -5454,6 +5454,7 @@ export interface components {
             totalParticipantGames: number;
             resource: components["schemas"]["BuildResourceAnalyticsEntryDto"];
             championStats: components["schemas"]["BuildResourceChampionStatDto"][];
+            purchases?: components["schemas"]["ItemPurchaseTimingDto"] | null;
         };
         BuildResourceAnalyticsEntryDto: {
             /** Format: int32 */
@@ -5820,6 +5821,37 @@ export interface components {
             winRate: number;
             /** Format: double */
             pickRate: number;
+        };
+        ItemPurchaseStageDto: {
+            /** Format: int32 */
+            stage: number;
+            /** Format: int32 */
+            games: number;
+            /** Format: double */
+            shareOfStage: number;
+            /** Format: double */
+            winRate: number;
+            /** Format: double */
+            adjustedWinRate: number;
+            /** Format: double */
+            stageWinRate: number;
+            /** Format: double */
+            confidenceLow: number;
+            /** Format: double */
+            confidenceHigh: number;
+            /** Format: double */
+            averageMinutes?: number | null;
+            isLowSample: boolean;
+        };
+        ItemPurchaseTimingDto: {
+            kind: string;
+            patch: string;
+            region: string;
+            /** Format: int32 */
+            games: number;
+            /** Format: double */
+            averageMinutes?: number | null;
+            stages: components["schemas"]["ItemPurchaseStageDto"][];
         };
         LeaderboardEntry: {
             /** Format: int32 */

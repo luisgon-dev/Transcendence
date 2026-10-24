@@ -63,3 +63,27 @@ export function buildProBuildPageHref(
   const qs = params.toString();
   return qs ? `/lol/pro-builds/${championId}?${qs}` : `/lol/pro-builds/${championId}`;
 }
+
+/**
+ * The entry whose key occurs most often, and how many entries share that key. Entries with a null
+ * key are skipped. Ties keep the first one seen; recent pro matches arrive newest first, so a tie
+ * goes to the more recent choice.
+ */
+export function mostCommon<T>(
+  entries: readonly T[],
+  keyOf: (entry: T) => string | null
+): { entry: T; count: number } | null {
+  const counts = new Map<string, { entry: T; count: number }>();
+  for (const entry of entries) {
+    const key = keyOf(entry);
+    if (key == null) continue;
+    const seen = counts.get(key);
+    if (seen) seen.count += 1;
+    else counts.set(key, { entry, count: 1 });
+  }
+  let best: { entry: T; count: number } | null = null;
+  for (const candidate of counts.values()) {
+    if (!best || candidate.count > best.count) best = candidate;
+  }
+  return best;
+}

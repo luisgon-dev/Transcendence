@@ -153,9 +153,9 @@ export function PerformanceCard({
 
   return (
     <Card className="profile-section-card p-5">
-      <div>
-        <p className="type-kicker text-muted">{activeSeason?.displayName ?? "Active season"} · Solo/Duo</p>
-        <h2 className="mt-2 type-section">How you play</h2>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <h2 className="type-section text-fg">How you play</h2>
+        <p className="type-caption text-muted">{activeSeason?.displayName ?? "Active season"} · Solo/Duo</p>
       </div>
 
       {recentForm ? (
@@ -170,7 +170,7 @@ export function PerformanceCard({
               <FormDirectionIcon tone={recentForm.tone} />
             </span>
             <div>
-              <p className="type-overline text-muted">Recent form</p>
+              <p className="type-caption text-muted">Recent form</p>
               <p className="text-sm font-semibold text-fg">{recentForm.label}</p>
             </div>
           </div>
@@ -187,7 +187,7 @@ export function PerformanceCard({
       {hasAverages ? (
         <div className="mt-4 grid gap-2">
           <div className="flex items-center justify-between gap-2">
-            <p className="type-overline text-muted">Averages</p>
+            <p className="type-caption font-semibold text-fg/85">Season averages</p>
             <p className="type-caption text-muted">Across {formatGames(overviewStats.totalMatches)} {plural(overviewStats.totalMatches, "game")}</p>
           </div>
           {coverageLabel ? (
@@ -217,13 +217,13 @@ export function PerformanceCard({
               >
                 <path d="M4.5 3 7.5 6 4.5 9" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              <span className="type-overline text-muted">By role</span>
+              <span className="type-caption font-semibold text-fg/85">By role</span>
             </span>
             <span className="type-caption text-muted">From last {formatGames(matches.length)} {plural(matches.length, "game")}</span>
           </summary>
-          <div className="mt-3 grid gap-2">
+          <div className="mt-1 grid divide-y divide-border/70">
             {roleRows.map((row) => (
-              <div key={row.role} className="surface-subtle grid gap-2 rounded-control px-3 py-2.5">
+              <div key={row.role} className="grid gap-1.5 py-2.5">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-2">
                     <LaneIcon role={row.role} className="h-4 w-4 shrink-0 text-muted" />

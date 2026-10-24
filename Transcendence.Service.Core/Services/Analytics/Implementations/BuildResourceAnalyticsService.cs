@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
 using Transcendence.Data;
@@ -12,6 +13,7 @@ namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 /// Cached item and rune exploration backed only by a completed Build Atlas generation. The request
 /// path never scans raw match resources. When the requested/default patch is still warming, default
 /// reads use the newest completed patch and explicit patch reads return an empty result immediately.
+/// An item's detail also carries when it is bought, from Build Lab's precomputed counts.
 /// </summary>
 public sealed class BuildResourceAnalyticsService(
     TranscendenceContext context,
@@ -23,6 +25,10 @@ public sealed class BuildResourceAnalyticsService(
     private const int IndexChampionLimit = 3;
     private const int DetailChampionLimit = 100;
 
+    // Build Lab's region rows are sparse (about a fifth of the all-region rows on 16.20), so a region
+    // with fewer of an item's purchases than this reads the all-region counts instead.
+    private const int MinimumRegionalPurchaseGames = 300;
+
     // Keys carry the generation's version (its id and counted-match total), which changes whenever the
     // refresher adds matches in place or promotes a rebuild, so entries never go stale and need no
     // patch tag -- the precomputed-analytics jobs clear that tag twice an hour for tables this does
@@ -31,6 +37,14 @@ public sealed class BuildResourceAnalyticsService(
     {
         Expiration = TimeSpan.FromHours(24),
         LocalCacheExpiration = TimeSpan.FromHours(1)
+    };
+
+    // Build Lab's refresher adds counts every 15 minutes and its keys carry no version, so purchase
+    // reads expire on time instead; an hour behind is fine for a descriptive page.
+    private static readonly HybridCacheEntryOptions PurchaseCacheOptions = new()
+    {
+        Expiration = TimeSpan.FromHours(1),
+        LocalCacheExpiration = TimeSpan.FromMinutes(15)
     };
 
     public Task<BuildResourceAnalyticsIndexResponse> GetItemsAsync(
@@ -95,12 +109,83 @@ public sealed class BuildResourceAnalyticsService(
             return null;
 
         var key = DetailKey(resourceType, resourceId, selection.Version, normalizedRegion);
-        return await cache.GetOrCreateAsync(
+        var detail = await cache.GetOrCreateAsync(
             key,
             cancel => ComputeDetailAsync(resourceType, resourceId, normalizedRegion, selection, cancel),
             CacheOptions,
             tags: ["analytics"],
             cancellationToken: ct);
+        // Attached after the read, not cached inside it: the refresher warms detail entries from its
+        // own rows, and Build Lab's counts move on a different clock.
+        if (detail is null || resourceType != ItemType)
+            return detail;
+        return detail with
+        {
+            Purchases = await GetPurchaseTimingAsync(resourceId, selection.Patch, normalizedRegion, ct)
+        };
+    }
+
+    private async Task<ItemPurchaseTimingDto?> GetPurchaseTimingAsync(
+        int itemId,
+        string patch,
+        string region,
+        CancellationToken ct)
+    {
+        var actionKey = itemId.ToString(CultureInfo.InvariantCulture);
+        var item = await LoadPurchaseCountsAsync(patch, region, actionKey, ct);
+        if (region != AnalyticsRegionCatalog.GlobalRegionCode &&
+            item.Sum(count => count.Games) < MinimumRegionalPurchaseGames)
+        {
+            region = AnalyticsRegionCatalog.GlobalRegionCode;
+            item = await LoadPurchaseCountsAsync(patch, region, actionKey, ct);
+        }
+        if (item.Count == 0)
+            return null;
+
+        var population = await LoadPurchaseCountsAsync(patch, region, null, ct);
+        return ItemPurchaseTiming.Estimate(itemId, patch, region, item, population);
+    }
+
+    private async Task<List<ItemPurchaseCount>> LoadPurchaseCountsAsync(
+        string patch,
+        string region,
+        string? actionKey,
+        CancellationToken ct) =>
+        await cache.GetOrCreateAsync(
+            $"analytics:item-purchases:v1:{patch}:{region}:{actionKey ?? "*"}",
+            async cancel => await PurchaseCountsQuery(context, patch, region, actionKey).ToListAsync(cancel),
+            PurchaseCacheOptions,
+            tags: ["analytics"],
+            cancellationToken: ct);
+
+    /// <summary>
+    /// Item and boots counts over every champion and role, for one item or (null) every item. Served
+    /// by the partial IX_BuildLabOptionStats_ItemPurchases as an index-only scan.
+    /// </summary>
+    internal static IQueryable<ItemPurchaseCount> PurchaseCountsQuery(
+        TranscendenceContext context,
+        string patch,
+        string region,
+        string? actionKey)
+    {
+        // OpponentChampionId and Family stay literals so the planner can match the partial index's
+        // predicate.
+        var rows = context.BuildLabOptionStats.AsNoTracking()
+            .Where(row => row.OpponentChampionId == 0 &&
+                          (row.Family == BuildLabFamily.Item || row.Family == BuildLabFamily.Boots) &&
+                          row.Patch == patch &&
+                          row.Region == region);
+        if (actionKey != null)
+            rows = rows.Where(row => row.ActionKey == actionKey);
+        return rows
+            .GroupBy(row => new { row.Family, row.Stage, row.GoldBucket })
+            .Select(group => new ItemPurchaseCount(
+                group.Key.Family,
+                group.Key.Stage,
+                group.Key.GoldBucket,
+                group.Sum(row => row.Games),
+                group.Sum(row => row.Wins),
+                group.Sum(row => row.TimingSecondsSum)));
     }
 
     private async ValueTask<BuildResourceAnalyticsIndexResponse> ComputeIndexAsync(

@@ -3,10 +3,32 @@ import { describe, expect, it } from "vitest";
 import {
   buildProBuildFilterParams,
   buildProBuildPageHref,
+  mostCommon,
   normalizeProBuildPatch,
   normalizeProBuildRole,
   normalizeProBuildScope
 } from "@/lib/proBuilds";
+
+describe("mostCommon", () => {
+  const key = (entry: { k: string | null }) => entry.k;
+
+  it("returns the most frequent key with its count", () => {
+    const result = mostCommon([{ k: "a" }, { k: "b" }, { k: "b" }, { k: "a" }, { k: "b" }], key);
+    expect(result?.entry.k).toBe("b");
+    expect(result?.count).toBe(3);
+  });
+
+  it("breaks ties toward the first entry seen and skips null keys", () => {
+    const result = mostCommon([{ k: null }, { k: "x" }, { k: "y" }, { k: null }], key);
+    expect(result?.entry.k).toBe("x");
+    expect(result?.count).toBe(1);
+  });
+
+  it("returns null when nothing has a key", () => {
+    expect(mostCommon([], key)).toBeNull();
+    expect(mostCommon([{ k: null }], key)).toBeNull();
+  });
+});
 
 describe("normalizeProBuildRole", () => {
   it("normalizes valid role values", () => {

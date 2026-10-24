@@ -18,7 +18,7 @@ namespace Transcendence.Service.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -1340,6 +1340,10 @@ namespace Transcendence.Service.Migrations
 
                     b.HasIndex("ChampionId", "Role", "OpponentChampionId", "Region", "PrefixHash", "Family")
                         .HasDatabaseName("IX_BuildLabOptionStats_Read");
+
+                    b.HasIndex("Patch", "Region", "Family", "ActionKey", "Stage", "GoldBucket", "Games", "Wins", "TimingSecondsSum")
+                        .HasDatabaseName("IX_BuildLabOptionStats_ItemPurchases")
+                        .HasFilter("\"OpponentChampionId\" = 0 AND \"Family\" IN (1, 2)");
 
                     b.ToTable("BuildLabOptionStats");
                 });

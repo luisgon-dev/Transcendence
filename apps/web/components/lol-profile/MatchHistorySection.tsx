@@ -4,7 +4,6 @@ import Link from "next/link";
 import { memo } from "react";
 
 import { Input } from "@/components/ui/Input";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Select";
@@ -86,7 +85,9 @@ export type MatchHistoryExpansion = {
   expandedMatchId: string | null;
   details: Record<string, MatchDetail | null>;
   detailBusy: Record<string, boolean>;
+  detailFailed: Record<string, boolean>;
   onToggleExpanded(matchId: string): void | Promise<void>;
+  onRetryDetail(matchId: string): void | Promise<void>;
 };
 
 type MatchHistorySectionProps = {
@@ -101,21 +102,25 @@ const MatchHistoryCard = memo(function MatchHistoryCard({
   expanded,
   detail,
   detailBusy,
+  detailFailed,
   region,
   gameName,
   tagLine,
   summonerId,
-  onToggleExpanded
+  onToggleExpanded,
+  onRetryDetail
 }: {
   match: MatchSummary;
   expanded: boolean;
   detail: MatchDetail | null;
   detailBusy: boolean;
+  detailFailed: boolean;
   region: string;
   gameName: string;
   tagLine: string;
   summonerId: string;
   onToggleExpanded(matchId: string): void | Promise<void>;
+  onRetryDetail(matchId: string): void | Promise<void>;
 }) {
   const { championStatic, itemStatic, spellStatic, runeStatic } = useStaticData();
   const queueLabel = formatQueueLabel(match.queueType, match.queueId);
@@ -136,10 +141,10 @@ const MatchHistoryCard = memo(function MatchHistoryCard({
     <div
       className={`match-card-shell min-w-0 max-w-full ${
         match.win ? "match-card-shell--win border-win/28" : "match-card-shell--loss border-loss/28"
-      } rounded-panel border`}
+      } rounded-card border`}
     >
       <button
-        className="match-card-summary relative z-10 block w-full min-w-0 max-w-full px-4 py-4 text-left focus-visible:outline-none md:px-5 md:py-5"
+        className="match-card-summary relative z-10 block w-full min-w-0 max-w-full px-4 py-3 text-left focus-visible:outline-none md:px-5 md:py-3.5"
         onClick={() => void onToggleExpanded(match.matchId)}
         aria-expanded={expanded}
         aria-controls={matchPanelId}
@@ -324,8 +329,20 @@ const MatchHistoryCard = memo(function MatchHistoryCard({
       {expanded ? (
         <div id={matchPanelId} className="overflow-hidden">
           <div className="mt-4 border-t border-border/55 px-4 pt-4 md:px-5">
-            {detailBusy ? <Skeleton className="h-12 w-full" /> : null}
-            {!detailBusy && !detail ? (
+            {/* `undefined` is "not fetched yet" (the first frame before the load starts), so it
+                shares the skeleton; only a stored null means the match has no detail. */}
+            {!detail && (detailBusy || (detail === undefined && !detailFailed)) ? (
+              <Skeleton className="h-12 w-full" />
+            ) : null}
+            {!detailBusy && detailFailed ? (
+              <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-fg/75">
+                Couldn&apos;t load this match&apos;s details.
+                <Button variant="outline" size="sm" onClick={() => void onRetryDetail(match.matchId)}>
+                  Try again
+                </Button>
+              </p>
+            ) : null}
+            {!detailBusy && detail === null ? (
               <p className="text-sm text-fg/75">Detailed stats are unavailable for this match.</p>
             ) : null}
             {detail ? (
@@ -366,26 +383,18 @@ export function MatchHistorySection({
     onPreviousPage,
     onNextPage
   },
-  expansion: { expandedMatchId, details, detailBusy, onToggleExpanded },
+  expansion: { expandedMatchId, details, detailBusy, detailFailed, onToggleExpanded, onRetryDetail },
 }: MatchHistorySectionProps) {
   return (
     <section className="flex min-w-0 max-w-full flex-col gap-5">
       <Card className="profile-section-card min-w-0 max-w-full rounded-panel p-5 md:p-6">
         <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="type-overline text-muted">Match history</p>
-              <h2 className="type-panel-title mt-1">Matches</h2>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge className="surface-chip text-fg/72">
-                Page {history?.page ?? page}/{history?.totalPages ?? 1}
-              </Badge>
-              <Badge className="surface-chip text-fg/72">
-                {(history?.totalCount ?? 0).toLocaleString()} total
-              </Badge>
-              <Badge className="surface-chip text-fg/72">{visibleMatches.length} shown</Badge>
-            </div>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <h2 className="type-title text-fg">Match history</h2>
+            <p className="type-caption type-tabular tabular-nums text-muted">
+              {(history?.totalCount ?? 0).toLocaleString()} games · page {history?.page ?? page} of{" "}
+              {history?.totalPages ?? 1}
+            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
@@ -428,14 +437,14 @@ export function MatchHistorySection({
 
         {historyError ? <p className="mt-4 text-sm text-danger">{historyError}</p> : null}
 
-        <div className="mt-5 flex flex-col gap-4">
+        <div className="mt-4 flex flex-col gap-2">
           {/* First load only (`!history`). Reserves the same rows as the dynamic-import
               fallback and the route skeleton, so each handoff between them is a repaint
               rather than a reflow. A refetch (paging, filters) keeps the previous page
               on screen and needs no placeholder. */}
           {historyBusy && !history
             ? Array.from({ length: MATCH_PLACEHOLDER_ROWS }).map((_, i) => (
-                <Skeleton key={i} className="h-28 w-full rounded-panel" />
+                <Skeleton key={i} className="h-[6.5rem] w-full rounded-card" />
               ))
             : null}
 
@@ -446,11 +455,13 @@ export function MatchHistorySection({
               expanded={expandedMatchId === match.matchId}
               detail={details[match.matchId]}
               detailBusy={detailBusy[match.matchId] === true}
+              detailFailed={detailFailed[match.matchId] === true}
               region={region}
               gameName={gameName}
               tagLine={tagLine}
               summonerId={summonerId}
               onToggleExpanded={onToggleExpanded}
+              onRetryDetail={onRetryDetail}
             />
           ))}
 

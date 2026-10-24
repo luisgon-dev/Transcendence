@@ -2,7 +2,6 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { LiveGameCard } from "@/components/LiveGameCard";
-import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { DataBar } from "@/components/ui/DataBar";
 import { Sparkline } from "@/components/ui/Sparkline";
@@ -24,6 +23,19 @@ type RankedEntry = {
   label: string;
   rank: RankInfo;
 };
+
+// One row vocabulary for every sidebar list: flat, a hover wash, a focus ring. No card-in-card.
+const LIST_ROW =
+  "group -mx-2 flex items-center gap-3 rounded-control px-2 py-2 transition-colors hover:bg-surface-2/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45";
+
+function SectionHeading({ children, aside }: { children: React.ReactNode; aside?: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <h2 className="type-section text-fg">{children}</h2>
+      {aside ? <span className="type-caption text-muted">{aside}</span> : null}
+    </div>
+  );
+}
 
 export function ProfileSidebar({
   profile,
@@ -75,36 +87,25 @@ export function ProfileSidebar({
   return (
     <aside className="grid min-w-0 content-start gap-5 [&>*]:min-w-0 [&>*]:max-w-full xl:sticky xl:top-24">
       <Card className="profile-section-card p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="type-kicker text-muted">Ranked snapshot</p>
-            <h2 className="mt-2 type-section">Solo/Duo &amp; Flex</h2>
-          </div>
-          <Badge className="surface-chip text-fg/72">
-            {profile.rankAge?.ageDescription ?? "updated recently"}
-          </Badge>
-        </div>
+        <SectionHeading aside={`Updated ${profile.rankAge?.ageDescription ?? "recently"}`}>Ranked</SectionHeading>
         {rankedEntries.length === 0 ? (
           <p className="mt-4 text-sm text-fg/80">
             No ranked results yet. This player is currently unranked in Solo/Duo and Flex.
           </p>
         ) : (
-          <div className="mt-4 grid gap-4">
+          <div className="mt-3 grid divide-y divide-border/70">
             {rankedEntries.map(({ label, rank }) => {
               const emblem = rankEmblemUrl(rank.tier);
               const totalGames = rank.wins + rank.losses;
               const wr = totalGames > 0 ? (rank.wins / totalGames) * 100 : null;
 
               return (
-                <div
-                  key={label}
-                  className="surface-subtle grid gap-3 rounded-card px-3 py-3 sm:grid-cols-[96px_minmax(0,1fr)] sm:items-center"
-                >
+                <div key={label} className="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-3 py-3 first:pt-1">
                   {emblem ? (
                     // The communitydragon ranked emblem sits in a large mostly-transparent
                     // canvas (~22% content, centered), so we crop the padding by scaling the
                     // centered crest up inside an overflow-hidden frame.
-                    <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-control border border-border/45 bg-surface/65">
+                    <div className="flex size-[72px] items-center justify-center overflow-hidden">
                       <Image
                         src={emblem}
                         alt={`${rankTierDisplayLabel(rank.tier)} emblem`}
@@ -115,22 +116,24 @@ export function ProfileSidebar({
                       />
                     </div>
                   ) : (
-                    <div className="h-24 w-24 rounded-control border border-border/60 bg-surface/70" />
+                    <div className="size-[72px] rounded-control border border-border/60 bg-surface-2" />
                   )}
                   <div className="min-w-0">
-                    <p className="type-kicker text-muted">{label}</p>
-                    <p className={`mt-2 truncate text-lg font-semibold ${rankColorClass(rank.tier)}`}>
+                    <p className="type-caption text-muted">{label}</p>
+                    <p className={`truncate text-lg font-semibold ${rankColorClass(rank.tier)}`}>
                       {rankTierDisplayLabel(rank.tier)} {rank.division}
                     </p>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-fg/72">
+                    <p className="type-tabular mt-0.5 flex flex-wrap items-center gap-x-2 text-xs tabular-nums text-fg/72">
                       <span>{rank.leaguePoints} LP</span>
-                      <span>{rank.wins}W {rank.losses}L</span>
+                      <span>
+                        {rank.wins}W {rank.losses}L
+                      </span>
                       {wr != null ? (
                         <span className={winRateColorClass(wr)}>
                           {formatPercent(wr, { input: "percent", decimals: 1 })}
                         </span>
                       ) : null}
-                    </div>
+                    </p>
                   </div>
                 </div>
               );
@@ -138,12 +141,12 @@ export function ProfileSidebar({
           </div>
         )}
         {soloSeries.length >= 2 ? (
-          <div className="surface-subtle mt-4 grid gap-3 rounded-card px-3 py-3">
+          <div className="mt-2 grid gap-2.5 border-t border-border/70 pt-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="type-overline text-muted">Solo/Duo progression</p>
+                <p className="type-caption font-semibold text-fg/85">Solo/Duo climb</p>
                 <p className="type-caption text-muted">
-                  {soloSeries.length} observed snapshots · {new Date(soloProgression[0].recordedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}–{new Date(soloProgression.at(-1)!.recordedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                  {soloSeries.length} snapshots · {new Date(soloProgression[0].recordedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}–{new Date(soloProgression.at(-1)!.recordedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                 </p>
               </div>
               <p className={soloDelta != null && soloDelta >= 0 ? "type-caption font-semibold text-success" : "type-caption font-semibold text-danger"}>
@@ -151,27 +154,19 @@ export function ProfileSidebar({
               </p>
             </div>
             <Sparkline values={soloSeries} width={240} height={44} className="h-11 w-full" />
-            <div>
-              <p className="type-note text-muted">
-                Observed rank changes, normalized across divisions; not a Riot per-game LP ledger.
-              </p>
-              <ol className="sr-only">
-                {soloProgression.map((point, index) => (
-                  <li key={`${point.recordedAt}-${index}`}>{new Date(point.recordedAt).toLocaleDateString()}: {point.label}</li>
-                ))}
-              </ol>
-            </div>
+            <p className="type-caption text-muted">
+              Observed rank changes, normalized across divisions; not a Riot per-game LP ledger.
+            </p>
+            <ol className="sr-only">
+              {soloProgression.map((point, index) => (
+                <li key={`${point.recordedAt}-${index}`}>{new Date(point.recordedAt).toLocaleDateString()}: {point.label}</li>
+              ))}
+            </ol>
           </div>
         ) : null}
 
-        {unrankedQueues.length > 0 ? (
-          <div className="mt-3 grid gap-1">
-            {unrankedQueues.map((label) => (
-              <p key={label} className="text-xs text-fg/72">
-                {label}
-              </p>
-            ))}
-          </div>
+        {unrankedQueues.length > 0 && rankedEntries.length > 0 ? (
+          <p className="type-caption mt-2 text-muted">{unrankedQueues.join(" · ")}</p>
         ) : null}
       </Card>
 
@@ -179,43 +174,71 @@ export function ProfileSidebar({
           exploration on mobile and desktop. The card auto-checks on mount. */}
       <LiveGameCard region={region} gameName={gameName} tagLine={tagLine} />
 
+      <Card className="profile-section-card p-5">
+        <SectionHeading>Most played</SectionHeading>
+        <div className="mt-2 grid">
+          {(profile.topChampions ?? []).slice(0, 6).map((championStat) => {
+            const champion = championStatic?.champions[String(championStat.championId)];
+            return (
+              <Link key={championStat.championId} href={`/lol/champions/${championStat.championId}`} className={LIST_ROW}>
+                {champion && championStatic ? (
+                  <Image
+                    src={championIconUrl(championStatic.version, champion.id)}
+                    alt=""
+                    width={34}
+                    height={34}
+                    className="shrink-0 rounded-md border border-border/50"
+                  />
+                ) : (
+                  <span className="size-[34px] shrink-0 rounded-md border border-border/50 bg-surface-2" />
+                )}
+                {/* The bar sits under the name: beside it, a 20rem sidebar leaves the name ~70px. */}
+                <span className="grid min-w-0 flex-1 gap-1">
+                  <span className="truncate text-sm font-semibold text-fg group-hover:text-primary">
+                    {championDisplayName(champion)}
+                  </span>
+                  <DataBar value={championStat.winRate} games={championStat.games} />
+                </span>
+                <span className="type-caption type-tabular grid shrink-0 text-right tabular-nums text-muted">
+                  <span>
+                    {championStat.games} {plural(championStat.games, "game")}
+                  </span>
+                  <span>{championStat.kdaRatio.toFixed(2)} KDA</span>
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </Card>
+
       {(profile.topMastery?.length ?? 0) > 0 ? (
         <Card className="profile-section-card p-5">
-          <div>
-            <p className="type-kicker text-muted">Mastery</p>
-            <h2 className="mt-2 type-section">Top mastery</h2>
-          </div>
-          <div className="mt-4 grid gap-2">
+          <SectionHeading>Mastery</SectionHeading>
+          <div className="mt-2 grid">
             {profile.topMastery!.map((m) => {
               const champion = championStatic?.champions[String(m.championId)];
               const highMastery = m.championLevel >= 7;
               return (
-                <Link
-                  key={m.championId}
-                  href={`/lol/champions/${m.championId}`}
-                  className="surface-subtle group flex items-center gap-3 rounded-control px-3 py-2.5 transition hover:border-border-strong hover:bg-surface-2/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45"
-                >
+                <Link key={m.championId} href={`/lol/champions/${m.championId}`} className={LIST_ROW}>
                   {champion && championStatic ? (
                     <Image
                       src={championIconUrl(championStatic.version, champion.id)}
-                      alt={champion.name}
-                      width={32}
-                      height={32}
-                      className="rounded-lg border border-border/50"
+                      alt=""
+                      width={30}
+                      height={30}
+                      className="shrink-0 rounded-md border border-border/50"
                     />
                   ) : (
-                    <div className="h-8 w-8 rounded-lg border border-border/50 bg-surface/70" />
+                    <span className="size-[30px] shrink-0 rounded-md border border-border/50 bg-surface-2" />
                   )}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-fg group-hover:text-primary">
-                      {championDisplayName(champion)}
-                    </p>
-                    <p className="type-caption text-muted tabular-nums">{m.championPoints.toLocaleString()} pts</p>
-                  </div>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg group-hover:text-primary">
+                    {championDisplayName(champion)}
+                  </span>
+                  <span className="type-caption type-tabular tabular-nums text-muted">
+                    {m.championPoints.toLocaleString()}
+                  </span>
                   <span
-                    className={`type-overline rounded-full border px-2 py-0.5 tabular-nums ${
-                      highMastery ? "border-border-strong bg-surface-2 font-semibold text-fg" : "border-border/50 text-muted"
-                    }`}
+                    className={`type-caption w-9 text-right font-semibold tabular-nums ${highMastery ? "text-fg" : "text-muted"}`}
                   >
                     M{m.championLevel}
                   </span>
@@ -226,46 +249,10 @@ export function ProfileSidebar({
         </Card>
       ) : null}
 
-      <Card className="profile-section-card p-5">
-        <div>
-          <p className="type-kicker text-muted">Champion pool</p>
-          <h2 className="mt-2 type-section">Most played</h2>
-        </div>
-        <div className="mt-4 grid gap-3">
-          {(profile.topChampions ?? []).slice(0, 6).map((championStat, index) => {
-            const champion = championStatic?.champions[String(championStat.championId)];
-            return (
-              <Link
-                key={championStat.championId}
-                href={`/lol/champions/${championStat.championId}`}
-                className="surface-subtle group grid gap-2 rounded-control px-3 py-3 transition hover:border-border-strong hover:bg-surface-2/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="type-kicker text-muted">#{index + 1}</p>
-                    <p className="mt-1 text-sm font-semibold text-fg group-hover:text-primary">
-                      {championDisplayName(champion)}
-                    </p>
-                  </div>
-                  <DataBar value={championStat.winRate} games={championStat.games} />
-                </div>
-                <div className="flex items-center justify-between gap-2 text-xs text-muted">
-                  <span>{championStat.games} {plural(championStat.games, "game")} tracked</span>
-                  <span>{championStat.kdaRatio.toFixed(2)} KDA</span>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      </Card>
-
       {(profile.frequentlyPlayedWith?.length ?? 0) > 0 ? (
         <Card className="profile-section-card p-5">
-          <div>
-            <p className="type-kicker text-muted">Duo signals</p>
-            <h2 className="mt-2 type-section">Played with</h2>
-          </div>
-          <div className="mt-4 grid gap-2">
+          <SectionHeading>Played with</SectionHeading>
+          <div className="mt-2 grid">
             {profile.frequentlyPlayedWith!.map((mate) => {
               // Only show a same-team win-rate once the sample is meaningful (avoids "100% · 1 game" noise).
               const wr = mate.sameTeamGames >= 2 ? (mate.sameTeamWins / mate.sameTeamGames) * 100 : null;
@@ -273,19 +260,19 @@ export function ProfileSidebar({
                 <Link
                   key={mate.summonerId}
                   href={`/lol/summoners/${region}/${encodeRiotIdPath({ gameName: mate.gameName, tagLine: mate.tagLine })}`}
-                  className="surface-subtle group grid gap-1.5 rounded-control px-3 py-2.5 transition hover:border-border-strong hover:bg-surface-2/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45"
+                  className={LIST_ROW}
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="min-w-0 truncate text-sm font-medium text-fg group-hover:text-primary">
+                  <span className="grid min-w-0 flex-1">
+                    <span className="truncate text-sm font-medium text-fg group-hover:text-primary">
                       {mate.gameName}
                       <span className="text-muted">#{mate.tagLine}</span>
-                    </p>
-                    {wr != null ? <DataBar value={wr} games={mate.sameTeamGames} /> : null}
-                  </div>
-                  <div className="flex items-center justify-between gap-2 text-xs text-muted">
-                    <span>{mate.gamesTogether} {plural(mate.gamesTogether, "game")} together</span>
-                    {mate.sameTeamGames > 0 ? <span>{mate.sameTeamGames} as duo</span> : null}
-                  </div>
+                    </span>
+                    <span className="type-caption text-muted">
+                      {mate.gamesTogether} {plural(mate.gamesTogether, "game")} together
+                      {mate.sameTeamGames > 0 ? ` · ${mate.sameTeamGames} as duo` : ""}
+                    </span>
+                  </span>
+                  {wr != null ? <DataBar value={wr} games={mate.sameTeamGames} /> : null}
                 </Link>
               );
             })}

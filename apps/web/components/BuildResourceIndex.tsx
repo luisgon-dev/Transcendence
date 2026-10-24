@@ -2,8 +2,11 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { AnalyticsRegionFilter } from "@/components/AnalyticsRegionFilter";
-import { Badge } from "@/components/ui/Badge";
+import { buttonClassName } from "@/components/ui/buttonStyles";
 import { Card } from "@/components/ui/Card";
+import { DataBar } from "@/components/ui/DataBar";
+import { Table, TableScroll, Th } from "@/components/ui/Table";
+import { Toolbar } from "@/components/ui/Toolbar";
 import type { AnalyticsRegionOption } from "@/lib/analyticsRegionShared";
 import { analyticsFeatureFlags } from "@/lib/analyticsFeatureFlags";
 import {
@@ -13,7 +16,8 @@ import {
   type BuildResourceKind,
   type BuildResourceSort
 } from "@/lib/buildResources";
-import { formatGames, formatPercent, winRateColorClass } from "@/lib/format";
+import { cn } from "@/lib/cn";
+import { formatGames, formatPercent } from "@/lib/format";
 import { championDisplayName } from "@/lib/gameDisplay";
 import { roleDisplayLabel } from "@/lib/roles";
 import {
@@ -25,6 +29,13 @@ import {
   type RuneStaticData
 } from "@/lib/staticData";
 
+const KIND_TABS: Array<{ kind: BuildResourceKind; label: string }> = [
+  { kind: "items", label: "Items" },
+  { kind: "runes", label: "Runes" }
+];
+
+// Items and runes are one library under one nav entry, so the page header is a compact toolbar
+// with an Items | Runes switch rather than a marketing hero: the table is the answer.
 export async function BuildResourceIndex({
   kind,
   response,
@@ -49,7 +60,7 @@ export async function BuildResourceIndex({
   sort: BuildResourceSort;
 }) {
   const isItems = kind === "items";
-  const noun = isItems ? "Item" : "Rune";
+  const noun = isItems ? "item" : "rune";
   const entries = filterAndSortBuildResources(response?.entries ?? [], query, sort);
   // A reference link is only a link if its destination exists: /lol/builds 404s while buildLab is
   // off, so the reference flag can never render one on its own.
@@ -57,149 +68,203 @@ export async function BuildResourceIndex({
   const showBuildLabLinks = flags.buildReferenceLinks && flags.buildLab;
 
   return (
-    <div className="grid gap-7">
-      <section className="page-hero overflow-hidden p-6 sm:p-8">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge>{activeRegionLabel}</Badge>
-          {response?.patch ? <Badge className="border-primary/35 bg-primary/10 text-primary">Patch {response.patch}</Badge> : null}
-          <Badge>{response ? `${formatGames(response.totalParticipantGames)} player-games` : "Analytics unavailable"}</Badge>
-        </div>
-        <p className="type-kicker mt-6 text-primary/85">Resource library</p>
-        <h1 className="type-display mt-3 max-w-4xl">{noun} mechanics and observed ranked usage.</h1>
-        <p className="type-lead mt-4 max-w-3xl">
-          See what gets picked, how it performs, and which champion-role pairs use it most. Win rate is observational, so read it beside sample size and pick rate.
-        </p>
-        <div className="mt-7 flex flex-wrap gap-3">
-          {showBuildLabLinks ? (
-            <Link
-              href="/lol/builds"
-              className="type-ui inline-flex min-h-11 items-center rounded-control bg-primary px-4 font-semibold text-primary-fg transition hover:bg-primary/92"
+    <div className="grid grid-cols-1 gap-4">
+      <Toolbar
+        title={isItems ? "Items" : "Runes"}
+        meta={
+          <>
+            {response?.patch ? <span>Patch {response.patch}</span> : null}
+            <span>{activeRegionLabel}</span>
+            {response ? (
+              <span className="type-tabular tabular-nums">
+                {formatGames(response.totalParticipantGames)} player-games
+              </span>
+            ) : null}
+          </>
+        }
+        actions={
+          <>
+            <nav aria-label="Library" className="flex items-center gap-1">
+              {KIND_TABS.map((tab) => (
+                <Link
+                  key={tab.kind}
+                  href={buildResourceHref(tab.kind, null, activeRegion)}
+                  className="control-tab px-3"
+                  data-active={tab.kind === kind}
+                  aria-current={tab.kind === kind ? "page" : undefined}
+                >
+                  {tab.label}
+                </Link>
+              ))}
+            </nav>
+            {showBuildLabLinks ? (
+              <Link href="/lol/builds" className={buttonClassName({ variant: "outline", size: "sm" })}>
+                Compare in Build Lab
+              </Link>
+            ) : null}
+          </>
+        }
+        filters={
+          <>
+            <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} variant="select" />
+            <form
+              action={`/lol/${kind}`}
+              method="get"
+              className="flex min-w-0 flex-1 flex-wrap items-center gap-2"
             >
-              Compare choices in Build Lab
-            </Link>
-          ) : null}
-          <Link
-            href={buildResourceHref(isItems ? "runes" : "items", null, activeRegion)}
-            className="type-ui inline-flex min-h-11 items-center rounded-control border border-border/70 bg-surface/75 px-4 font-semibold text-fg transition hover:border-primary/35 hover:text-primary"
-          >
-            Browse {isItems ? "runes" : "items"}
-          </Link>
-        </div>
-      </section>
-
-      <Card className="p-5 sm:p-6">
-        <div className="grid gap-5">
-          <div className="grid gap-2 sm:grid-cols-[auto_1fr] sm:items-center sm:gap-5">
-            <p className="type-kicker text-fg/60">Region</p>
-            <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} className="flex flex-wrap gap-x-4 gap-y-1.5" />
-          </div>
-          <form action={`/lol/${kind}`} method="get" className="grid gap-3 border-t border-border/30 pt-5 md:grid-cols-[minmax(0,1fr)_11rem_auto]">
-            {activeRegion !== "ALL" ? <input type="hidden" name="region" value={activeRegion} /> : null}
-            <label className="grid gap-1.5">
-              <span className="field-label">Find {isItems ? "an item" : "a rune"}</span>
-              <input
-                name="q"
-                defaultValue={query}
-                placeholder={isItems ? "Trinity Force" : "Press the Attack"}
-                className="h-11 rounded-control border border-border/70 bg-bg/70 px-3 text-sm text-fg outline-none transition placeholder:text-muted focus:border-primary/45 focus:ring-2 focus:ring-primary/15"
-              />
-            </label>
-            <label className="grid gap-1.5">
-              <span className="field-label">Sort</span>
-              <select name="sort" defaultValue={sort} className="h-11 rounded-control border border-border/70 bg-bg/70 px-3 text-sm text-fg outline-none focus:border-primary/45 focus:ring-2 focus:ring-primary/15">
-                <option value="popular">Most picked</option>
-                <option value="winrate">Highest win rate</option>
-                <option value="name">Name</option>
-              </select>
-            </label>
-            <button type="submit" className="type-ui min-h-11 self-end rounded-control bg-primary px-5 font-semibold text-primary-fg transition hover:bg-primary/92">
-              Apply
-            </button>
-          </form>
-        </div>
-      </Card>
+              {activeRegion !== "ALL" ? <input type="hidden" name="region" value={activeRegion} /> : null}
+              <label className="min-w-[12rem] flex-1">
+                <span className="sr-only">Find {isItems ? "an item" : "a rune"}</span>
+                <input
+                  name="q"
+                  type="search"
+                  defaultValue={query}
+                  placeholder={isItems ? "Find an item" : "Find a rune"}
+                  className="control-input h-9"
+                />
+              </label>
+              <label>
+                <span className="sr-only">Sort</span>
+                <select name="sort" defaultValue={sort} className="control-select h-9 w-auto pr-8">
+                  <option value="popular">Most picked</option>
+                  <option value="winrate">Highest win rate</option>
+                  <option value="name">Name</option>
+                </select>
+              </label>
+              <button type="submit" className={buttonClassName({ variant: "outline", size: "sm" })}>
+                Apply
+              </button>
+            </form>
+          </>
+        }
+      />
 
       {!response ? (
         <Card className="p-6">
-          <h2 className="type-section">{noun} analytics are unavailable</h2>
-          <p className="type-ui mt-2 text-muted">The analytics service could not be reached. Try again after the next data refresh.</p>
+          <h2 className="type-section">{isItems ? "Item" : "Rune"} analytics are unavailable</h2>
+          <p className="type-ui mt-2 text-muted">
+            The analytics service could not be reached. Try again after the next data refresh.
+          </p>
         </Card>
       ) : entries.length === 0 ? (
         <Card className="p-6">
-          <h2 className="type-section">No matching {kind}</h2>
-          <p className="type-ui mt-2 text-muted">Try a different name or region.</p>
+          <h2 className="type-section">No {noun} matches &ldquo;{query}&rdquo;</h2>
+          <p className="type-ui mt-2 text-muted">Try a shorter name or another region.</p>
         </Card>
       ) : (
-        <section className="grid gap-3 lg:grid-cols-2">
-          {entries.map((entry) => {
-            const itemMeta = itemMap?.items[String(entry.resourceId)];
-            const runeMeta = runeData?.runeById[String(entry.resourceId)];
-            const icon = isItems
-              ? itemMap ? itemIconUrl(itemMap.version, entry.resourceId) : null
-              : runeMeta ? runeIconUrl(runeMeta.icon) : null;
-            const description = itemMeta?.plaintext ?? entry.description;
-            return (
-              <Link
-                key={entry.resourceId}
-                href={buildResourceHref(kind, entry.resourceId, activeRegion)}
-                className="group rounded-panel border border-border/55 bg-surface/72 p-5 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:border-primary/28 hover:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-              >
-                <div className="flex gap-4">
-                  {icon ? (
-                    <Image src={icon} alt="" width={56} height={56} sizes="56px" className="h-14 w-14 shrink-0 rounded-xl border border-border/55 bg-bg object-cover" />
-                  ) : (
-                    <div
-                      className="grid h-14 w-14 shrink-0 place-items-center rounded-xl border border-border/55 bg-bg text-lg font-semibold text-muted"
-                      aria-label={`${noun} icon unavailable`}
+        <section aria-label={`${isItems ? "Item" : "Rune"} usage`} className="page-panel overflow-hidden">
+          <TableScroll>
+            <Table className="text-sm">
+              <thead className="border-b border-border">
+                <tr>
+                  <Th className="w-12 pl-4 sm:pl-5">#</Th>
+                  <Th className="w-full">{isItems ? "Item" : "Rune"}</Th>
+                  <Th align="right" className="hidden sm:table-cell">
+                    Pick rate
+                  </Th>
+                  <Th align="right">Win rate</Th>
+                  <Th align="right" className="hidden md:table-cell">
+                    Games
+                  </Th>
+                  <Th className="hidden pr-4 lg:table-cell sm:pr-5">Most used by</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((entry, index) => {
+                  const itemMeta = itemMap?.items[String(entry.resourceId)];
+                  const runeMeta = runeData?.runeById[String(entry.resourceId)];
+                  const icon = isItems
+                    ? itemMap
+                      ? itemIconUrl(itemMap.version, entry.resourceId)
+                      : null
+                    : runeMeta
+                      ? runeIconUrl(runeMeta.icon)
+                      : null;
+                  const description = itemMeta?.plaintext ?? entry.description;
+                  return (
+                    <tr
+                      key={entry.resourceId}
+                      className="tierlist-row tierlist-cv border-b border-border/50 last:border-b-0"
                     >
-                      ?
-                    </div>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <h2 className="type-section truncate transition group-hover:text-primary">{entry.name}</h2>
-                      </div>
-                      <span className="type-meta shrink-0 text-primary">Explore →</span>
-                    </div>
-                    {description ? <p className="mt-3 line-clamp-2 text-sm leading-6 text-fg/68">{description}</p> : null}
-                  </div>
-                </div>
-
-                <div className="mt-5 grid grid-cols-3 gap-3 border-t border-border/30 pt-4">
-                  <Stat label="Pick rate" value={formatPercent(entry.pickRate, { input: "ratio" })} />
-                  <Stat label="Win rate" value={formatPercent(entry.winRate, { input: "ratio" })} valueClassName={winRateColorClass(entry.winRate)} />
-                  <Stat label="Games" value={formatGames(entry.games)} />
-                </div>
-
-                {entry.topChampions.length > 0 ? (
-                  <div className="mt-4 flex flex-wrap items-center gap-2">
-                    <span className="type-kicker mr-1 text-fg/48">Often used by</span>
-                    {entry.topChampions.map((champion) => {
-                      const meta = champions?.champions[String(champion.championId)];
-                      return (
-                        <span key={`${champion.championId}-${champion.role}`} className="inline-flex items-center gap-1.5 rounded-full border border-border/45 bg-bg/55 py-1 pl-1 pr-2 text-xs text-fg/72">
-                          {meta && champions ? <Image src={championIconUrl(champions.version, meta.id)} alt="" width={22} height={22} sizes="22px" className="rounded-full" /> : null}
-                          <span>{championDisplayName(meta)} · {roleDisplayLabel(champion.role)}</span>
-                        </span>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </Link>
-            );
-          })}
+                      <td className="type-tabular py-2 pl-4 pr-3 tabular-nums text-muted sm:pl-5">
+                        {index + 1}
+                      </td>
+                      <td className="max-w-0 py-2 pr-3">
+                        <Link
+                          href={buildResourceHref(kind, entry.resourceId, activeRegion)}
+                          className="group flex min-w-0 items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                        >
+                          {icon ? (
+                            <Image
+                              src={icon}
+                              alt=""
+                              width={36}
+                              height={36}
+                              sizes="36px"
+                              className={cn(
+                                "h-9 w-9 shrink-0 border border-border/60 bg-bg",
+                                isItems ? "rounded-md" : "rounded-full p-0.5"
+                              )}
+                            />
+                          ) : (
+                            <span aria-hidden className="h-9 w-9 shrink-0 rounded-md border border-border/60 bg-surface-2" />
+                          )}
+                          <span className="grid min-w-0">
+                            <span className="truncate font-semibold text-fg transition-colors group-hover:text-primary">
+                              {entry.name}
+                            </span>
+                            {description ? (
+                              <span className="type-caption hidden truncate text-muted sm:block">{description}</span>
+                            ) : null}
+                          </span>
+                        </Link>
+                      </td>
+                      <td className="type-tabular hidden px-3 py-2 text-right tabular-nums text-fg/80 sm:table-cell">
+                        {formatPercent(entry.pickRate, { input: "ratio" })}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <DataBar value={entry.winRate} games={entry.games} className="justify-end" />
+                      </td>
+                      <td className="type-tabular hidden px-3 py-2 text-right tabular-nums text-fg/70 md:table-cell">
+                        {formatGames(entry.games)}
+                      </td>
+                      <td className="hidden py-2 pl-3 pr-4 lg:table-cell sm:pr-5">
+                        <ul className="flex items-center gap-1">
+                          {entry.topChampions.slice(0, 3).map((champion) => {
+                            const meta = champions?.champions[String(champion.championId)];
+                            const label = `${championDisplayName(meta)} · ${roleDisplayLabel(champion.role)}`;
+                            return (
+                              <li key={`${champion.championId}-${champion.role}`} title={label}>
+                                {meta && champions ? (
+                                  <Image
+                                    src={championIconUrl(champions.version, meta.id)}
+                                    alt={label}
+                                    width={26}
+                                    height={26}
+                                    sizes="26px"
+                                    className="rounded-md border border-border/50"
+                                  />
+                                ) : (
+                                  <span className="sr-only">{label}</span>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </Table>
+          </TableScroll>
         </section>
       )}
-    </div>
-  );
-}
 
-function Stat({ label, value, valueClassName = "" }: { label: string; value: string; valueClassName?: string }) {
-  return (
-    <div>
-      <p className="type-kicker text-fg/45">{label}</p>
-      <p className={`type-ui mt-1 font-semibold text-fg ${valueClassName}`}>{value}</p>
+      <p className="type-caption max-w-3xl text-muted">
+        Win rates are observed in completed Ranked Solo/Duo games and still reflect champion strength,
+        build timing, and game length. Read them beside the sample.
+      </p>
     </div>
   );
 }

@@ -13,6 +13,7 @@ type TestOverrides = {
   onQueueChange?: (value: string) => void;
   onNextPage?: () => void;
   onToggleExpanded?: (matchId: string) => void;
+  expansion?: Partial<React.ComponentProps<typeof MatchHistorySection>["expansion"]>;
 };
 
 const MATCH: MatchSummary = {
@@ -88,7 +89,10 @@ function props(overrides: TestOverrides = {}): React.ComponentProps<typeof Match
       expandedMatchId: null,
       details: {},
       detailBusy: {},
-      onToggleExpanded: overrides.onToggleExpanded ?? vi.fn()
+      detailFailed: {},
+      onToggleExpanded: overrides.onToggleExpanded ?? vi.fn(),
+      onRetryDetail: vi.fn(),
+      ...overrides.expansion
     },
   };
 }
@@ -150,5 +154,29 @@ describe("MatchHistorySection", () => {
 
     await user.click(matchButton);
     expect(onToggleExpanded).toHaveBeenCalledWith("NA1_123");
+  });
+
+  it("offers a retry when the detail request failed, and says unavailable only for a stored miss", async () => {
+    const user = userEvent.setup();
+    const onRetryDetail = vi.fn();
+    const { rerender } = render(
+      <MatchHistorySection
+        {...props({
+          visibleMatches: [MATCH],
+          expansion: { expandedMatchId: MATCH.matchId, detailFailed: { [MATCH.matchId]: true }, onRetryDetail }
+        })}
+      />
+    );
+    expect(screen.queryByText("Detailed stats are unavailable for this match.")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onRetryDetail).toHaveBeenCalledWith(MATCH.matchId);
+
+    rerender(
+      <MatchHistorySection
+        {...props({ visibleMatches: [MATCH], expansion: { expandedMatchId: MATCH.matchId, details: { [MATCH.matchId]: null } } })}
+      />
+    );
+    expect(screen.getByText("Detailed stats are unavailable for this match.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
   });
 });

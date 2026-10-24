@@ -4,6 +4,8 @@ import {
   buildResourceHref,
   filterAndSortBuildResources,
   normalizeBuildResourceSort,
+  roleShares,
+  type BuildResourceChampionStat,
   type BuildResourceEntry
 } from "@/lib/buildResources";
 
@@ -23,5 +25,14 @@ describe("build resource helpers", () => {
     expect(normalizeBuildResourceSort("unexpected")).toBe("popular");
     expect(buildResourceHref("runes", 8005, "KR")).toBe("/lol/runes/8005?region=KR");
     expect(buildResourceHref("items", null, "ALL")).toBe("/lol/items");
+  });
+
+  it("sums champion-role rows into a per-role split, largest first", () => {
+    const row = (role: string, games: number, wins: number, shareOfResourceUses: number): BuildResourceChampionStat =>
+      ({ championId: 1, role, games, wins, winRate: wins / games, pickRate: 0.5, shareOfResourceUses });
+    expect(roleShares([row("MIDDLE", 100, 50, 0.2), row("BOTTOM", 300, 160, 0.6), row("MIDDLE", 100, 60, 0.2)])).toEqual([
+      { role: "BOTTOM", games: 300, wins: 160, share: 0.6 },
+      { role: "MIDDLE", games: 200, wins: 110, share: 0.4 }
+    ]);
   });
 });

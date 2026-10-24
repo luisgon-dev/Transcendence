@@ -270,6 +270,7 @@ export function useMatchHistory({
   const [expandedMatchId, setExpandedMatchId] = useState<string | null>(initialExpandMatchId);
   const [details, setDetails] = useState<Record<string, MatchDetail | null>>({});
   const [detailBusy, setDetailBusy] = useState<Record<string, boolean>>({});
+  const [detailFailed, setDetailFailed] = useState<Record<string, boolean>>({});
   const detailRequests = useRef(new Map<string, AbortController>());
   const initialIsUnfiltered = normalizeInitialQueue(initialQueue) === "ALL" && !initialChampion.trim();
   const serverHistoryKey = useRef(
@@ -364,6 +365,7 @@ export function useMatchHistory({
     requests.clear();
     setDetails({});
     setDetailBusy({});
+    setDetailFailed({});
     return () => {
       for (const controller of requests.values()) controller.abort();
       requests.clear();
@@ -389,15 +391,23 @@ export function useMatchHistory({
     const controller = new AbortController();
     detailRequests.current.set(matchId, controller);
     setDetailBusy((state) => ({ ...state, [matchId]: true }));
+    setDetailFailed((state) => ({ ...state, [matchId]: false }));
     try {
       const res = await fetch(
         `${buildLolPublicSummonerByIdPath(summonerId)}/matches/${encodeURIComponent(matchId)}`,
         { cache: "no-store", signal: controller.signal }
       );
       const json = (await res.json().catch(() => null)) as MatchDetail | null;
-      if (!controller.signal.aborted) setDetails((state) => ({ ...state, [matchId]: res.ok && json?.participants ? json : null }));
+      if (controller.signal.aborted) return;
+      // Only a 404 means the match has no stored detail. A timeout or 5xx is transient, so it stays
+      // out of `details`: caching it as null would read "unavailable" until a full page reload.
+      if (res.ok || res.status === 404) {
+        setDetails((state) => ({ ...state, [matchId]: res.ok && json?.participants ? json : null }));
+      } else {
+        setDetailFailed((state) => ({ ...state, [matchId]: true }));
+      }
     } catch {
-      if (!controller.signal.aborted) setDetails((state) => ({ ...state, [matchId]: null }));
+      if (!controller.signal.aborted) setDetailFailed((state) => ({ ...state, [matchId]: true }));
     } finally {
       if (detailRequests.current.get(matchId) === controller) {
         detailRequests.current.delete(matchId);
@@ -428,6 +438,8 @@ export function useMatchHistory({
     expandedMatchId,
     details,
     detailBusy,
+    detailFailed,
+    retryDetail: loadDetail,
     toggleExpanded,
     setQueue: (value: string) => { setQueue(value); setPage(1); },
     setChampionFilter: (value: string) => { setChampionFilter(value); setPage(1); },

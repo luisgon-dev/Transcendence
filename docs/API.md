@@ -201,6 +201,13 @@ without legacy accepted DTOs or cross-version fallbacks.
 - `GET /api/lol/analytics/runes`
 - `GET /api/lol/analytics/runes/{runeId}`
 
+The item detail's `purchases` (null for runes, and until Build Lab has counted the item on the
+patch) says when the item is completed: one stage per legendary slot (`stage` 1 = first completed
+legendary) or a single first-boots stage (`kind: "BOOTS"`), each with games, share of the slot,
+raw win rate, average completion minute, and `adjustedWinRate` standardized to the slot's gold
+difference mix against `stageWinRate`. A region with fewer than 300 of the item's purchases reads
+the all-region counts and reports `region: "ALL"`.
+
 Analytics cache invalidation is intentionally exposed only through the audited
 `POST /api/admin/cache/invalidate` operation.
 

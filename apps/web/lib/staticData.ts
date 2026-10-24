@@ -26,6 +26,12 @@ type DDragonChampionList = {
 type DDragonItem = {
   name: string;
   plaintext?: string;
+  description?: string;
+  gold?: { base: number; total: number };
+  from?: string[];
+  into?: string[];
+  maps?: Record<string, boolean>;
+  inStore?: boolean;
 };
 
 type DDragonItemList = {
@@ -216,6 +222,40 @@ export const fetchItemMap = cache(async (): Promise<ItemMap> => {
   }
 
   return { version, items };
+});
+
+export type ItemDetail = {
+  description: string;
+  totalGold: number | null;
+  combineGold: number | null;
+  from: Array<{ itemId: number; totalGold: number | null }>;
+  into: number[];
+};
+
+const SUMMONERS_RIFT_MAP_ID = "11";
+
+// Kept apart from fetchItemMap: that map is shipped to the browser, and recipes and descriptions
+// would roughly double it for pages that only need names.
+export const fetchItemDetail = cache(async (itemId: number): Promise<ItemDetail | null> => {
+  const version = await fetchLatestVersion();
+  const res = await fetch(
+    `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/item.json`,
+    { next: { revalidate: 60 * 60 * 24 } }
+  );
+  if (!res.ok) throw new Error("Failed to fetch item list.");
+
+  const { data } = (await res.json()) as DDragonItemList;
+  const item = data[String(itemId)];
+  if (!item) return null;
+  // `into` spans every map; Arena and ARAM-only upgrades can't be bought on the Rift.
+  const onRift = (id: string) => data[id]?.maps?.[SUMMONERS_RIFT_MAP_ID] === true && data[id]?.inStore !== false;
+  return {
+    description: item.description ?? "",
+    totalGold: item.gold?.total ?? null,
+    combineGold: item.from?.length ? item.gold?.base ?? null : null,
+    from: (item.from ?? []).map((id) => ({ itemId: Number(id), totalGold: data[id]?.gold?.total ?? null })),
+    into: (item.into ?? []).filter(onRift).map(Number)
+  };
 });
 
 export function itemIconUrl(version: string, itemId: number) {

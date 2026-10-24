@@ -194,7 +194,7 @@ export async function BuildResourceDetail({
                   {formatGames(row.games)}
                 </td>
                 {showBuildLabLinks ? (
-                  <td className="py-2 pl-3 pr-4 text-right sm:pr-5">
+                  <td className="whitespace-nowrap py-2 pl-3 pr-4 text-right sm:pr-5">
                     <Link
                       href={`/lol/builds/${row.championId}?${query.toString()}`}
                       className="type-caption font-semibold text-muted transition-colors hover:text-primary"

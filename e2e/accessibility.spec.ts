@@ -8,7 +8,10 @@ for (const theme of ["light", "dark"]) {
     test(`${theme} ${label} passes accessibility and mobile overflow checks`, async ({ page }) => {
       await page.setViewportSize({ width: theme === "dark" ? 390 : 1365, height: 900 });
       await page.addInitScript(value => localStorage.setItem("theme", value), theme);
-      await page.goto(path);
+      await page.goto(path, { waitUntil: "domcontentloaded" });
+      await page.evaluate(() => document.fonts.ready);
+      if (label === "ranked profile") await expect(page.getByRole("button", { name: /^(Victory|Defeat)\b/i }).first()).toBeVisible();
+      if (label === "tierlist" && process.env.LOCAL_OPERATION_BACKEND === "seeded") await expect(page.locator("table tbody tr").first()).toBeVisible();
       await expect(page.locator("h1").first()).toBeVisible();
       await page.addScriptTag({ path: axePath });
       const failures = await page.evaluate(async () => {

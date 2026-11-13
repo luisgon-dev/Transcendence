@@ -31,7 +31,8 @@ Deployment and maintenance fault tests: 20 passed. Build-input/secret-context an
 ESLint discovery checks: three passed. JavaScript and NuGet dependency audits are
 clean. The OpenAPI/client were regenerated and EF reports no model drift.
 
-Production-browser checks run against a disposable migrated/seeded API, including
+All 47 production-browser checks passed in a clean run with no skips or retries,
+against a disposable migrated/seeded API, including
 profile operation completion without skips, light/dark axe, keyboard navigation
 and match expansion, mobile overflow, and the dense Build Lab layout. CI now runs
 the full browser suite using the same seed. CI execution on GitHub is separate from

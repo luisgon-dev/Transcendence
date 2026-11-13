@@ -28,6 +28,9 @@ Tabular refresh takes a PostgreSQL transaction advisory lock per patch, includin
 direct/operator callers. Ingestion may continue during refresh; a snapshot's
 computed time describes publication, not the last match observation.
 
+Dispatch latency is exported by both the API (foreground enqueue) and the worker
+(outbox recovery). Queue scan/retention gauges are maintained by the worker.
+
 The pending outbox index is checked with `EXPLAIN (ANALYZE, BUFFERS)` against
 20,000 terminal rows. Keep production plan/latency evidence before adding further
 indexes. Terminal operations default to seven days, expired auth tokens to one

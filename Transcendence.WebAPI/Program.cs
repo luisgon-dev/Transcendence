@@ -182,6 +182,7 @@ builder.Services.AddOpenTelemetry()
         .AddHttpClientInstrumentation()
         .AddRuntimeInstrumentation()
         .AddMeter(LeaderboardTelemetry.MeterName)
+        .AddMeter(Transcendence.Service.Core.Services.Operations.OperationTelemetry.MeterName)
         .AddMeter("Microsoft.Extensions.Caching.Hybrid")
         .AddPrometheusExporter());
 

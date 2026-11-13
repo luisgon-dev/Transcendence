@@ -1,12 +1,13 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Transcendence.Data;
 using Transcendence.Data.Models.Service;
 
 namespace Transcendence.Service.Core.Services.Operations;
 
-public sealed class BackgroundOperationTracker(TranscendenceContext db) : IBackgroundOperationTracker
+public sealed class BackgroundOperationTracker(TranscendenceContext db, IOptions<OperationRetentionOptions>? retention = null) : IBackgroundOperationTracker
 {
     public async Task<TrackedOperation> CreateAsync(string kind, string resourceKey, OperationResource resource,
         Guid leaseToken, OperationOwner owner, OperationDispatch dispatch, CancellationToken ct = default)
@@ -70,7 +71,7 @@ public sealed class BackgroundOperationTracker(TranscendenceContext db) : IBackg
         return new OperationStatusResponse(request.Id, execution.Kind, execution.PlatformRegion,
             execution.GameName, execution.TagLine, execution.Status, retry,
             execution.QueuedAtUtc, execution.UpdatedAtUtc, execution.CompletedAtUtc, execution.ErrorCode,
-            phaseDtos, result);
+            phaseDtos, result, execution.CompletedAtUtc?.AddDays(Math.Clamp(retention?.Value.CompletedDays ?? 7, 1, 365)));
     }
 
     public async Task<bool> StartAsync(Guid id, CancellationToken ct = default) =>

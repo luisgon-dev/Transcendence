@@ -137,3 +137,37 @@ describe("proxy token refresh", () => {
     expect(res.headers.get("x-trn-request-id")).toBeTruthy();
   });
 });
+
+describe("navigation token refresh", () => {
+  it("isolates different client IPs and persists the rotated cookies", async () => {
+    const fetch = vi.fn().mockImplementation(async () => Response.json({
+      accessToken: "new-access", refreshToken: "new-refresh",
+      accessTokenExpiresAtUtc: new Date(Date.now() + 900_000).toISOString()
+    }));
+    vi.stubGlobal("fetch", fetch);
+    for (const ip of ["198.51.100.1", "198.51.100.2"]) {
+      const req = new NextRequest("http://localhost:3000/terms", { headers: {
+        "x-real-ip": ip, "x-forwarded-for": "10.0.0.1, 203.0.113.5",
+        cookie: "trn_refresh_token=old-refresh"
+      } });
+      const response = await proxy(req);
+      expect(fetch.mock.lastCall?.[1].headers["x-forwarded-for"]).toBe(ip);
+      expect(response.cookies.get("trn_refresh_token")?.value).toBe("new-refresh");
+      expect(response.headers.get("x-middleware-request-cookie")).toContain("new-access");
+    }
+  });
+
+  it("does not consume a token for prefetch or clear cookies during an outage", async () => {
+    const fetch = vi.fn().mockRejectedValue(new Error("upstream offline"));
+    vi.stubGlobal("fetch", fetch);
+    const headers = { cookie: "trn_refresh_token=old-refresh", "next-router-prefetch": "1" };
+    await proxy(new NextRequest("http://localhost:3000/terms", { headers }));
+    expect(fetch).not.toHaveBeenCalled();
+    const response = await proxy(new NextRequest("http://localhost:3000/terms", {
+      headers: { cookie: headers.cookie }
+    }));
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(fetch.mock.lastCall?.[1].headers["x-forwarded-for"]).toBeUndefined();
+  });
+});

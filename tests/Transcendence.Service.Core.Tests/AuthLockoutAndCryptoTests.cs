@@ -46,7 +46,7 @@ public sealed class AuthLockoutAndCryptoTests
             .Returns(Task.CompletedTask);
 
         return new UserAuthService(repo.Object, jwtService,
-            Options.Create(new AdminBootstrapOptions()), NullLogger<UserAuthService>.Instance);
+            new AuthTestProtection(), NullLogger<UserAuthService>.Instance);
     }
 
     [Fact]
@@ -187,7 +187,7 @@ public sealed class AuthLockoutAndCryptoTests
         var service = new UserAuthService(
             repo.Object,
             jwt.Object,
-            Options.Create(new AdminBootstrapOptions()),
+            new AuthTestProtection(),
             NullLogger<UserAuthService>.Instance);
         return (service, repo);
     }

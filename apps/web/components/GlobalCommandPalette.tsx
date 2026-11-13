@@ -395,7 +395,7 @@ export function GlobalCommandPalette({ buildLabEnabled = false }: { buildLabEnab
               <span className="size-[34px] rounded-md bg-surface-2" />
             )}
             <span className="min-w-0 flex-1 truncate font-medium">{champion.name}</span>
-            <span className="text-xs text-muted group-data-[selected=true]:text-fg/65">
+            <span className="text-xs text-muted group-data-[selected=true]:text-muted">
               Champion
             </span>
           </Command.Item>
@@ -419,7 +419,7 @@ export function GlobalCommandPalette({ buildLabEnabled = false }: { buildLabEnab
             </span>
             <span className="min-w-0 flex-1 truncate font-medium">
               {parsedRiotId.gameName}
-              <span className="text-fg/55">#{parsedRiotId.tagLine}</span>
+              <span className="text-muted">#{parsedRiotId.tagLine}</span>
             </span>
             <span className="text-xs uppercase text-muted">{region}</span>
           </Command.Item>
@@ -450,7 +450,7 @@ export function GlobalCommandPalette({ buildLabEnabled = false }: { buildLabEnab
               )}
               <span className="min-w-0 flex-1 truncate font-medium">
                 {summoner.gameName}
-                <span className="text-fg/55">#{summoner.tagLine}</span>
+                <span className="text-muted">#{summoner.tagLine}</span>
               </span>
               <span className="text-xs text-muted">{summoner.platformRegion}</span>
             </Command.Item>

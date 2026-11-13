@@ -21,7 +21,7 @@ export default async function AdminLayout({
             </p>
           </div>
           <div className="ops-console-note rounded-card px-4 py-3">
-            <p className="type-kicker text-info/78">Session</p>
+            <p className="type-kicker text-info">Session</p>
             <p className="type-ui mt-2 text-fg/82">Admin role active</p>
           </div>
         </div>

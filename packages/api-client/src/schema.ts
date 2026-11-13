@@ -4,6 +4,57 @@
  */
 
 export interface paths {
+    "/api/admin/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AdminReleaseResponse"];
+                        "application/json": components["schemas"]["AdminReleaseResponse"];
+                        "text/json": components["schemas"]["AdminReleaseResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/overview": {
         parameters: {
             query?: never;
@@ -5254,6 +5305,12 @@ export interface components {
             isPaused: boolean;
             isPausable: boolean;
         };
+        AdminReleaseResponse: {
+            /** Format: date-time */
+            checkedAtUtc: string;
+            sourceRevision: string;
+            latestAppliedMigration?: string | null;
+        };
         AdminServerSnapshot: {
             name: string;
             /** Format: int32 */
@@ -6201,6 +6258,8 @@ export interface components {
             errorCode?: string | null;
             phases: components["schemas"]["OperationPhase"][];
             result: components["schemas"]["OperationCompletionResult"];
+            /** Format: date-time */
+            expiresAtUtc?: string | null;
         };
         ParticipantDetailDto: {
             puuid?: string | null;

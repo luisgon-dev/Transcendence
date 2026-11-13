@@ -2,6 +2,8 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Transcendence.Service.Core.Services.Admin.Models;
 
+public record AdminReleaseResponse(DateTime CheckedAtUtc, string SourceRevision, string? LatestAppliedMigration);
+
 public record AdminOverviewResponse(
     DateTime GeneratedAtUtc,
     bool DatabaseConnected,

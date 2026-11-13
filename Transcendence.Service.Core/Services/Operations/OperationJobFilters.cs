@@ -139,6 +139,7 @@ public static class OperationWorkerExtensions
         services.AddSingleton<OperationExecutionFilter>(provider => new(provider.GetRequiredService<IServiceScopeFactory>()) { Order = -1 });
         services.AddSingleton<OperationOutcomeFilter>(provider => new(provider.GetRequiredService<IServiceScopeFactory>()) { Order = 1000 });
         services.AddHostedService<OperationDispatchService>();
+        services.AddHostedService<OperationMaintenanceService>();
         return services;
     }
     public static IGlobalConfiguration UseBackgroundOperationTracking(this IGlobalConfiguration configuration, IServiceProvider provider) =>

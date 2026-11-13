@@ -9,6 +9,7 @@ namespace Transcendence.Service.Core.Services.Admin.Interfaces;
 /// </summary>
 public interface IAdminOverviewFacade
 {
+    Task<AdminReleaseResponse> GetReleaseAsync(string sourceRevision, CancellationToken ct);
     Task<AdminOverviewResponse> GetOverviewAsync(CancellationToken ct);
 
     Task<AdminAnalysisMetricsResponse> GetAnalysisMetricsAsync(CancellationToken ct);

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { setAuthCookies, type AuthTokenResponse } from "@/lib/authCookies";
-import { resolveClientIp } from "@/lib/clientIp";
+import { authRequestHeaders } from "@/lib/authRequestHeaders";
 import { getTrnClient } from "@/lib/trnClient";
 
 type LoginBody = { email?: string; password?: string };
@@ -18,10 +18,9 @@ export async function POST(req: NextRequest) {
   const client = getTrnClient();
   // Forward the real client IP so the backend's auth rate limiter partitions per-attacker instead of
   // collapsing every login into one global window keyed on the BFF's own address.
-  const clientIp = resolveClientIp(req.headers);
   const { data, error, response } = await client.POST("/api/auth/login", {
     body: { email: body.email, password: body.password },
-    ...(clientIp ? { headers: { "x-forwarded-for": clientIp } } : {})
+    headers: authRequestHeaders(req.headers)
   });
 
   if (!data) {

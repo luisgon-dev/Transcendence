@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.DataProtection;
 using Transcendence.Data;
 using Transcendence.Data.Extensions;
 using Transcendence.Service.Core.Services.Admin.Implementations;
@@ -42,8 +43,12 @@ public static class ServiceCollectionExtensions
     // Shared services used by both the keyless WebAPI host and the worker host.
     public static IServiceCollection AddTranscendenceCore(this IServiceCollection services)
     {
+        services.AddDataProtection().SetApplicationName("Transcendence");
         services.AddScoped<IBackgroundOperationTracker, BackgroundOperationTracker>();
         services.AddScoped<IBackgroundOperationDispatcher, BackgroundOperationDispatcher>();
+        services.AddOptions<OperationRetentionOptions>().BindConfiguration("Operations:Retention");
+        services.AddScoped<OperationMaintenance>();
+        services.AddSingleton<OperationTelemetry>();
         services.AddScoped<ICacheService, CacheService>();
         services.AddScoped<IChampionLoadoutAnalysisService, ChampionLoadoutAnalysisService>();
         services.AddScoped<ISummonerStatsService, SummonerStatsService>();

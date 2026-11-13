@@ -34,21 +34,21 @@ export default function RegisterPage() {
 
           <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
             <div className="surface-subtle rounded-card p-4">
-              <p className="type-kicker text-fg/56">Quick return</p>
+              <p className="type-kicker text-muted">Quick return</p>
               <p className="type-ui mt-2 text-fg/84">Your saved pages stay close when you are bouncing between games, patch notes, and profiles.</p>
             </div>
             <div className="surface-subtle rounded-card p-4">
-              <p className="type-kicker text-fg/56">Private scope</p>
+              <p className="type-kicker text-muted">Private scope</p>
               <p className="type-ui mt-2 text-fg/84">Email remains available; Riot Sign On is optional and never shares your Riot password.</p>
             </div>
             <div className="surface-subtle rounded-card p-4">
-              <p className="type-kicker text-fg/56">Built for reuse</p>
+              <p className="type-kicker text-muted">Built for reuse</p>
               <p className="type-ui mt-2 text-fg/84">Useful when the same players, champions, and routes come up repeatedly during ranked sessions.</p>
             </div>
           </div>
 
           <div className="surface-subtle rounded-panel p-4">
-            <p className="type-kicker text-primary/84">Security baseline</p>
+            <p className="type-kicker text-primary">Security baseline</p>
             <p className="field-note mt-2">
               Use a password with at least 12 characters. Longer passphrases are easier to remember and harder to guess.
             </p>
@@ -123,10 +123,10 @@ export default function RegisterPage() {
               </Button>
             </form>
 
-            <p className="type-ui mt-5 text-fg/68">
+            <p className="type-ui mt-5 text-muted">
               Already have an account?{" "}
               <Link
-                className="font-semibold text-primary transition hover:text-primary/84 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/24 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+                className="font-semibold text-primary transition hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/24 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
                 href="/account/login"
               >
                 Sign in

@@ -39,7 +39,7 @@ export function ChampionSynergyPanel({
     <Card className="overflow-hidden p-0" id="synergies">
       <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border/40 px-5 py-4">
         <div>
-          <p className="type-kicker text-primary/80">Duo chemistry</p>
+          <p className="type-kicker text-primary">Duo chemistry</p>
           <h2 className="type-section mt-2">{partnerHeading(synergies.role)}</h2>
           <p className="type-ui mt-1 text-muted">
             Same-team outcomes with {championName} as {roleDisplayLabel(synergies.role)}.
@@ -94,13 +94,13 @@ export function ChampionSynergyPanel({
                 </div>
                 <div className="mt-4 flex items-end justify-between gap-2 border-t border-border/25 pt-3">
                   <div>
-                    <p className="type-kicker text-fg/45">Pair win rate</p>
+                    <p className="type-kicker text-muted">Pair win rate</p>
                     <p className={`type-ui mt-1 font-semibold ${winRateColorClass(partner.winRate)}`}>
                       {formatPercent(partner.winRate, { input: "ratio" })}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className={`type-ui font-semibold ${deltaPositive ? "text-success" : deltaNegative ? "text-wr-low" : "text-fg/65"}`}>
+                    <p className={`type-ui font-semibold ${deltaPositive ? "text-success" : deltaNegative ? "text-wr-low" : "text-muted"}`}>
                       {formatStrengthDelta(partner.winRateDelta)}
                     </p>
                     <p className="type-caption mt-1 text-muted">{formatGames(partner.games)} games</p>

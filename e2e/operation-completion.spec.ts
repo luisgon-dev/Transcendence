@@ -6,6 +6,13 @@ const liveUrl = "/lol/live?region=na&riotId=Kronic%23NA1";
 const localHost = new URL(process.env.BASE_URL ?? "https://kronic.one").hostname;
 test.skip(!["localhost", "127.0.0.1", "[::1]"].includes(localHost), "Operation completion fixtures require the isolated local app/backend.");
 
+
+// Operation behavior is independent of external CDN availability. Exercise real asset
+// delivery separately through readiness; keep these lifecycle fixtures deterministic.
+test.beforeEach(async ({ page }) => {
+  await page.route("**/_next/image?*", route => route.fulfill({ contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aVZkAAAAASUVORK5CYII=", "base64") }));
+});
+
 test.describe("request-correlated live-game completion", () => {
   test.beforeEach(async ({ page }) => {
     await page.route("**/api/static/spells", (route) => route.fulfill({ json: { version: "test", spells: {} } }));
@@ -23,7 +30,7 @@ test.describe("request-correlated live-game completion", () => {
       polls += 1;
       return route.fulfill({ json: operationStatus(completed ? {} : { status: "running", retryAfterSeconds: 1 }) });
     });
-    await page.goto(liveUrl);
+    await page.goto(liveUrl, { waitUntil: "domcontentloaded" });
     await expect.poll(() => polls).toBeGreaterThan(0);
     await expect(page.getByText("Stored snapshot: no active game. Current status has not been verified.")).toBeVisible();
     await expect(page.getByText(/^Checked /)).toHaveCount(0);
@@ -37,7 +44,7 @@ test.describe("request-correlated live-game completion", () => {
     await page.route("**/api/trn/app/lol/operations/*", (route) => route.fulfill({ json: operationStatus({
       status: "failed", errorCode: "INVALID_UPSTREAM_RESPONSE"
     }) }));
-    await page.goto(liveUrl);
+    await page.goto(liveUrl, { waitUntil: "domcontentloaded" });
     await expect(page.getByText(/INVALID_UPSTREAM_RESPONSE/)).toBeVisible();
     await expect(page.getByText("Stored snapshot: no active game. Current status has not been verified.")).toBeVisible();
     await expect(page.getByText(/^Checked /)).toHaveCount(0);
@@ -49,7 +56,7 @@ test.describe("request-correlated live-game completion", () => {
     await page.route("**/api/trn/app/lol/operations/*", (route) => route.fulfill({ json: operationStatus(
       ++polls === 1 ? {} : { status: "failed", errorCode: "RETRIES_EXHAUSTED" }
     ) }));
-    await page.goto(liveUrl);
+    await page.goto(liveUrl, { waitUntil: "domcontentloaded" });
     const stamp = page.getByText(/^Checked /);
     await expect(stamp).toBeVisible();
     const before = await stamp.textContent();
@@ -66,7 +73,7 @@ test.describe("request-correlated live-game completion", () => {
         liveGame: { state: "offline", participants: [], lastUpdatedUtc: observedAtUtc }
       }
     }) }));
-    await page.goto(liveUrl);
+    await page.goto(liveUrl, { waitUntil: "domcontentloaded" });
     await expect(page.getByText("The operation status response is invalid.")).toBeVisible();
     await expect(page.getByText(/^Checked /)).toHaveCount(0);
   });
@@ -110,7 +117,7 @@ test.describe("request-correlated profile completion", () => {
         facets: { queues: [{ queueId: 420, queueType: "RANKED_SOLO_5x5", queueFamily: "RANKED_SOLO_DUO" }], championIds: [103] }
       } });
     });
-    await page.goto("/lol/summoners/na/faker-NA1?page=3&queue=family:RANKED_SOLO_DUO&sort=kda_desc&champion=103");
+    await page.goto("/lol/summoners/na/faker-NA1?page=3&queue=family:RANKED_SOLO_DUO&sort=kda_desc&champion=103", { waitUntil: "domcontentloaded" });
     await expect(page.getByText(`Level ${stored.profile.summonerLevel}`, { exact: true })).toBeVisible();
     await expect.poll(() => historyRequests.length).toBe(1);
     await page.getByRole("button", { name: "Update Now" }).click();
@@ -147,7 +154,7 @@ test.describe("request-correlated profile completion", () => {
     await page.route("**/api/trn/user/lol/operations/*", (route) => route.fulfill({ json: operationStatus({
       kind: "summoner_refresh", gameName: "faker", status: "failed", errorCode: "RETRIES_EXHAUSTED", result: {}
     }) }));
-    await page.goto("/lol/summoners/na/faker-NA1");
+    await page.goto("/lol/summoners/na/faker-NA1", { waitUntil: "domcontentloaded" });
     await expect(page.getByText(`Level ${stored.profile.summonerLevel}`, { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Update Now" }).click();
     await expect(page.getByText(/RETRIES_EXHAUSTED/)).toBeVisible();
@@ -167,7 +174,7 @@ test.describe("request-correlated profile completion", () => {
         kind: "summoner_refresh", gameName: "faker", phases: [{ name: "fullHistory", status: "queued", operationId: childOperationId }],
         result: { profileUpdatedAtUtc: observedAtUtc, recentImportCompletedAtUtc: observedAtUtc }
       }) }));
-    await page.goto("/lol/summoners/na/faker-NA1");
+    await page.goto("/lol/summoners/na/faker-NA1", { waitUntil: "domcontentloaded" });
     await expect(page.getByText(`Level ${stored.profile.summonerLevel}`, { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Update Now" }).click();
     await expect(page.getByText(/recent-match refresh complete.*Full-history completion has not been verified/)).toBeVisible();

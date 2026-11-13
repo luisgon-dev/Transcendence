@@ -50,9 +50,7 @@ Set:
 - `TRN_BACKEND_API_KEY=<api key for AppOnly endpoints>`
   - Note: the web app allowlists AppOnly proxy paths; this key is not exposed as a generic proxy capability.
 
-Optional (admin bootstrap):
-- `ADMIN_BOOTSTRAP_EMAIL_0=<your-admin-email>` before `docker compose up`
-- Register/login that email in web app, then open `/admin`
+Optional (operator admin grant): register the intended account normally, verify its account UUID through the operator database/session, then run `docker compose run --rm --no-deps webapi --Admin:GrantUserId=<existing-account-uuid>`. The command grants once, audits the grant, and exits without serving HTTP. No email-based automatic grants are supported.
 
 Optional:
 - `TRN_BACKEND_TIMEOUT_MS=10000` (server-side backend timeout, milliseconds)
@@ -113,7 +111,8 @@ dotnet user-secrets set "ConnectionStrings:MainDatabase" "Host=localhost;Port=54
 dotnet user-secrets set "ConnectionStrings:Redis" "localhost:6379" --project Transcendence.WebAPI
 dotnet user-secrets set "Auth:Jwt:Key" "CHANGE_THIS_TO_A_REAL_32+_CHAR_SECRET" --project Transcendence.WebAPI
 dotnet user-secrets set "Auth:Jwt:RequireKeyInDevelopment" "false" --project Transcendence.WebAPI
-dotnet user-secrets set "Auth:AdminBootstrap:Emails:0" "admin@example.com" --project Transcendence.WebAPI
+# Grant only an existing verified operator-selected account; command exits after auditing.
+dotnet run --project Transcendence.WebAPI -- --Admin:GrantUserId=<existing-account-uuid>
 dotnet user-secrets set "Auth:BootstrapApiKey" "trn_bootstrap_dev_key" --project Transcendence.WebAPI
 dotnet user-secrets set "Auth:BootstrapApiKeyEnabledInDevelopmentOnly" "true" --project Transcendence.WebAPI
 # Optional password recovery (use a local SMTP catcher or real provider)
@@ -644,7 +643,7 @@ pnpm api:gen
 pnpm api:check
 ```
 
-The exporter starts the WebAPI with the internal `OpenApi:ExportOnly=true` flag, which skips database-backed admin bootstrap work. It also clears the previous contract before downloading Swagger so a startup failure cannot pass by reusing stale output.
+The exporter starts the WebAPI with the internal `OpenApi:ExportOnly=true` flag, which skips database-backed Hangfire initialization. It also clears the previous contract before downloading Swagger so a startup failure cannot pass by reusing stale output.
 
 If hooks are installed (`pnpm hooks:install`), pre-commit runs path-aware checks automatically before each commit:
 - `pnpm precommit:api-sync` runs only when staged files touch API-relevant paths (`Transcendence.WebAPI/`, `Transcendence.Service.Core/`, `Transcendence.Data/`, `scripts/openapi/export.sh`, committed OpenAPI spec), regenerates the client locally, and stages the refreshed spec.
@@ -1219,3 +1218,72 @@ If a change affects any of the following, update docs in the same PR:
 - Runtime behavior, user flows, or UI routes: update `README.md` and/or `docs/ARCHITECTURE.md`
 - API endpoints, payloads, auth, or status codes: update `docs/API.md` and ensure OpenAPI is up to date
 - Environment variables, secrets, compose, or run commands: update `docs/DEVELOPMENT.md`
+
+## November audit deployment and validation
+
+- Production web startup requires `TRN_PUBLIC_ORIGIN` (canonical HTTPS origin; HTTP
+  loopback is allowed for local smoke tests), `TRN_BACKEND_BASE_URL`, a nonempty
+  `TRN_BACKEND_API_KEY`, and `TRN_TRUSTED_PROXY_HEADERS=true`. Validation runs at
+  server startup, not image build. Development may use `.env.local`; `.env.*`
+  files are excluded from every Docker context except safe `.env.example` files.
+- The trusted-header flag is an operator assertion: restrict direct access to web
+  and API ports and configure the edge to **overwrite** `X-Real-IP` and
+  `CF-Connecting-IP` (or remove the latter when Cloudflare is not used), and append
+  only the true connecting address to XFF. Never pass client-supplied copies.
+  The BFF validates addresses and forwards one address on every auth path.
+- WebAPI production additionally requires `Security:TrustedProxyNetworks` as CIDRs.
+  Compose maps `TRUSTED_PROXY_NETWORK_0` (default Docker private `172.16.0.0/12`).
+  Use the narrow subnet of the deployed BFF; loopback remains trusted for local
+  development. Public host ports default to loopback for web/API/Postgres.
+  `WEB_BIND_ADDRESS` / `API_BIND_ADDRESS` permit an explicitly firewalled alternative.
+- Keep API Data Protection keys shared and durable in Redis. All replicas use
+  application name `Transcendence`; losing the key ring makes encrypted refresh
+  recovery unavailable. A recovery-key failure returns 5xx so the BFF preserves
+  cookies. Do not log or store raw refresh/reset tokens.
+- Web optimized images persist in `web_image_cache`. The one-shot `web-cache-init`
+  service fixes mount ownership for the non-root web user; the deploy poller runs
+  it explicitly before `up --no-deps`. Next's native cache limit is 512 MiB and
+  maximum upstream image body is 8 MiB. Do not mount a shared writable cache
+  across unrelated Next versions/instances.
+- `/api/health` remains process liveness. `/api/readiness` checks current static
+  metadata and champion/item/rune/splash delivery through the local optimizer,
+  with an eight-second whole-probe budget, single-flight execution, 30-second
+  success cache and five-second failure cache. The deploy poller waits for both
+  container health and asset readiness, then rolls back on timeout. CDN failure
+  can fail readiness without restart-looping the process. Grafana evaluates
+  asset failure and stale-probe alerts independently.
+- `SOURCE_REVISION` stamps all three runtime images. Web readiness reports it;
+  WebAPI emits `X-Transcendence-Release`. Authenticated admins can query `GET /api/admin/release` for the actual latest
+  applied migration and API source revision (or query `__EFMigrationsHistory` in
+  the operator database); never infer it from a mutable tag.
+  Unknown/missing/divergent Git objects hold API rollout. The migration-only
+  worker remains the sole schema writer.
+- `Operations:Retention` supports `CompletedDays=7`, `ExpiredTokenDays=1`,
+  `BatchSize=500` and `IntervalMinutes=60` (environment keys use `__`). Cleanup
+  preserves active work, parents with children and unexpired token replay hashes.
+  Recovery ciphertext is scrubbed after ten seconds when visited by cleanup.
+  Terminal operation responses include `expiresAtUtc`; after cleanup the owned
+  endpoint returns 404. See `docs/DATA-SLOS.md` for metrics and operating targets.
+
+The Docker Images workflow invokes reusable CI before publishing any image.
+CI checks NuGet and JavaScript advisories, backend/PostgreSQL tests, OpenAPI,
+model drift, fresh migrations, web tests/build, deployment faults, Docker input
+coverage, performance budgets, seeded operation completion and both-theme axe
+checks. Corepack is installed explicitly for Node 26.
+
+Use `pnpm verify` for the local code checks (Docker is required by integration
+ tests). Browser checks require a running local migrated API and web app:
+
+```bash
+# Disposable database only; after normal EF CLI migrations:
+psql "$LOCAL_TEST_DATABASE_URL" -f scripts/perf/seed-leaderboard.sql
+psql "$LOCAL_TEST_DATABASE_URL" -f scripts/e2e/seed-profile.sql
+BASE_URL=http://localhost:3000 LOCAL_OPERATION_BACKEND=seeded pnpm exec playwright test
+```
+
+`LOCAL_OPERATION_BACKEND=seeded` enables all profile completion scenarios; CI sets
+it after seeding its local API. These tests mock lifecycle outcomes in the browser,
+while SSR reads come from the real local API. Do not point write/load tests at
+production. Run generation/build commands before browser tests: rebuilding the
+API client deletes and recreates its output, which can interrupt a running dev
+server's module graph. Use a production server for final browser verification.

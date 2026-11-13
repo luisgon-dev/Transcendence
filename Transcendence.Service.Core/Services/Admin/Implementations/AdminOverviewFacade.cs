@@ -24,6 +24,13 @@ public sealed class AdminOverviewFacade(
     IOptions<MultiRegionIngestionOptions> multiRegionOptions,
     TranscendenceContext db) : IAdminOverviewFacade
 {
+    public async Task<AdminReleaseResponse> GetReleaseAsync(string sourceRevision, CancellationToken ct)
+    {
+        var applied = await db.Database.GetAppliedMigrationsAsync(ct);
+        return new AdminReleaseResponse(DateTime.UtcNow, sourceRevision,
+            applied.Order(StringComparer.Ordinal).LastOrDefault());
+    }
+
     private const int DefaultJobScanPageSize = 250;
 
     private static readonly string[] KnownPlatformRegions =

@@ -213,6 +213,8 @@ namespace Transcendence.Service.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ExpiresAtUtc");
+
                     b.HasIndex("TokenHash")
                         .IsUnique();
 
@@ -255,6 +257,12 @@ namespace Transcendence.Service.Migrations
                     b.Property<DateTime>("ExpiresAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid>("FamilyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ProtectedReplacementToken")
+                        .HasColumnType("text");
+
                     b.Property<string>("ReplacedByTokenHash")
                         .HasColumnType("text");
 
@@ -270,10 +278,17 @@ namespace Transcendence.Service.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ExpiresAtUtc");
+
+                    b.HasIndex("RevokedAtUtc")
+                        .HasFilter("\"ProtectedReplacementToken\" IS NOT NULL");
+
                     b.HasIndex("TokenHash")
                         .IsUnique();
 
                     b.HasIndex("UserAccountId", "ExpiresAtUtc");
+
+                    b.HasIndex("UserAccountId", "FamilyId");
 
                     b.ToTable("UserRefreshTokens");
                 });
@@ -2843,6 +2858,10 @@ namespace Transcendence.Service.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CompletedAtUtc");
+
+                    b.HasIndex("QueuedAtUtc")
+                        .HasDatabaseName("IX_BackgroundOperations_PendingDispatch")
+                        .HasFilter("\"DispatchedAtUtc\" IS NULL AND \"Status\" NOT IN ('succeeded', 'partial', 'failed')");
 
                     b.HasIndex("ParentId", "Kind")
                         .IsUnique();

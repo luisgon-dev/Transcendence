@@ -49,7 +49,7 @@ export function LaneTabs({
             data-active={active}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "group relative inline-flex min-h-11 items-center gap-2 px-3 py-2 text-fg/64 transition-colors duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:text-fg",
+              "group relative inline-flex min-h-11 items-center gap-2 px-3 py-2 text-muted transition-colors duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:text-fg",
               "after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:origin-center after:scale-x-0 after:rounded-full after:bg-primary after:transition-transform after:duration-200 after:[transition-timing-function:var(--ease-out-quart)] motion-reduce:after:transition-none",
               active && "text-primary after:scale-x-100"
             )}

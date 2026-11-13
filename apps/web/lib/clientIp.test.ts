@@ -39,4 +39,8 @@ describe("resolveClientIp", () => {
   it("returns null when no trusted source is present", () => {
     expect(resolveClientIp(h({}))).toBeNull();
   });
+  it("rejects malformed addresses without trusting an earlier forged hop", () => {
+    expect(resolveClientIp(h({ "x-forwarded-for": "1.2.3.4, forged-host" }))).toBeNull();
+    expect(resolveClientIp(h({ "cf-connecting-ip": "not-an-ip", "x-real-ip": "2001:db8::1" }))).toBe("2001:db8::1");
+  });
 });

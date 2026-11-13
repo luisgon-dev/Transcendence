@@ -6,7 +6,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 # Node 26 no longer bundles Corepack, so it is installed explicitly rather than pinning a pnpm
 # version here — `packageManager` in the root package.json stays the single source of truth.
-RUN npm install -g corepack@latest && corepack enable
+RUN npm install -g corepack@0.36.0 && corepack enable
 
 # Copy only what we need for workspace install first (better layer caching).
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -31,6 +31,7 @@ RUN pnpm --filter @transcendence/api-client build
 RUN pnpm --filter web build
 
 FROM node:26-bookworm-slim@sha256:662933cf47f013bc8e4beb31a6116448427a82057ba7c42c97e4c5ba766504c2 AS runner
+ARG SOURCE_REVISION=unknown
 
 WORKDIR /app
 
@@ -38,10 +39,14 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV TRN_RELEASE_SHA=$SOURCE_REVISION
 
 COPY --from=builder --chown=node:node /app/apps/web/.next/standalone ./
 COPY --from=builder --chown=node:node /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder --chown=node:node /app/apps/web/public ./apps/web/public
+
+# Keep the cache parent writable too: Docker creates an absent mount parent as root.
+RUN mkdir -p /app/apps/web/.next/cache/images && chown -R node:node /app/apps/web/.next/cache
 
 USER node
 

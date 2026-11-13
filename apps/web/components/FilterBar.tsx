@@ -107,6 +107,7 @@ export function FilterBar({
       {patchOptions ? (
         <AnalyticsPatchFilter patches={patchOptions} activePatch={activePatch} />
       ) : null}
+      <p className="basis-full text-xs text-muted">Rank filters use each player’s latest stored rank. Rates describe tracked games, not predicted outcomes.</p>
     </div>
   );
 }

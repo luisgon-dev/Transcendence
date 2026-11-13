@@ -1,10 +1,8 @@
 name: CI (Web + Backend)
 
 on:
-  pull_request:
-    branches: ["main"]
-  push:
-    branches: ["main"]
+  workflow_call:
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -22,6 +20,12 @@ jobs:
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
+
+      - name: Audit NuGet dependencies
+        run: |
+          dotnet restore Transcendence.sln
+          dotnet list Transcendence.sln package --vulnerable --include-transitive --format json > nuget-audit.json
+          python3 scripts/security/check-nuget-audit.py nuget-audit.json
 
       - name: Backend Tests
         run: dotnet test Transcendence.sln -v minimal
@@ -51,7 +55,7 @@ jobs:
           node-version-file: ".nvmrc"
 
       - name: Enable Corepack
-        run: corepack enable
+        run: npm install --global corepack@0.36.0 && corepack enable
 
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
@@ -85,7 +89,7 @@ jobs:
           node-version-file: ".nvmrc"
 
       - name: Enable Corepack
-        run: corepack enable
+        run: npm install --global corepack@0.36.0 && corepack enable
 
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
@@ -97,7 +101,7 @@ jobs:
         run: pnpm --filter web lint
 
       - name: Verify ESLint root discovery
-        run: node --test scripts/security/eslint-root-dirs.test.mjs
+        run: node --test scripts/security/*.test.mjs
 
       - name: Test
         run: pnpm --filter web test
@@ -152,7 +156,7 @@ jobs:
           node-version-file: ".nvmrc"
 
       - name: Enable Corepack
-        run: corepack enable
+        run: npm install --global corepack@0.36.0 && corepack enable
 
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
@@ -174,10 +178,13 @@ jobs:
       - name: Seed representative leaderboard data
         env:
           PGPASSWORD: postgres
-        run: psql -h localhost -U postgres -d transcendence_perf -f scripts/perf/seed-leaderboard.sql
+        run: |
+          psql -h localhost -U postgres -d transcendence_perf -f scripts/perf/seed-leaderboard.sql
+          psql -h localhost -U postgres -d transcendence_perf -f scripts/e2e/seed-profile.sql
 
       - name: Start WebAPI
         env:
+          Auth__BootstrapApiKey: ci-local-app-key
           ASPNETCORE_ENVIRONMENT: Development
           ASPNETCORE_URLS: "http://127.0.0.1:8080"
           ConnectionStrings__MainDatabase: "Host=localhost;Port=5432;Database=transcendence_perf;Username=postgres;Password=postgres;Application Name=transcendence-performance-ci;Maximum Pool Size=20;Minimum Pool Size=0"
@@ -215,6 +222,9 @@ jobs:
 
       - name: Start web
         env:
+          TRN_TRUSTED_PROXY_HEADERS: "true"
+          TRN_PUBLIC_ORIGIN: "http://127.0.0.1:3000"
+          TRN_BACKEND_API_KEY: ci-local-app-key
           TRN_BACKEND_BASE_URL: "http://127.0.0.1:8080"
           # The Build Lab layout guard below needs the route; it otherwise 404s behind its flag.
           TRN_FEATURE_BUILD_LAB: "true"
@@ -244,6 +254,12 @@ jobs:
         run: |
           npx playwright install --with-deps chromium
           npx playwright test e2e/build-lab-layout.spec.ts --output .performance-artifacts/playwright
+
+      - name: Operation completion and accessibility regressions
+        env:
+          BASE_URL: "http://127.0.0.1:3000"
+          LOCAL_OPERATION_BACKEND: seeded
+        run: npx playwright test --output .performance-artifacts/playwright-regressions
 
       - name: Stop web
         if: always()

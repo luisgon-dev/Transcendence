@@ -12,7 +12,7 @@ using Transcendence.Service.Core.Services.Jobs.Interfaces;
 namespace Transcendence.Service.Core.Services.Operations;
 
 /// <summary>Recoverable outbox dispatch. A duplicate after a crash retains the same execution ID.</summary>
-public sealed class BackgroundOperationDispatcher(TranscendenceContext db, IBackgroundJobClient jobs)
+public sealed class BackgroundOperationDispatcher(TranscendenceContext db, IBackgroundJobClient jobs, OperationTelemetry? telemetry = null)
     : IBackgroundOperationDispatcher
 {
     public async Task DispatchAsync(Guid executionId, CancellationToken ct = default)
@@ -49,6 +49,7 @@ public sealed class BackgroundOperationDispatcher(TranscendenceContext db, IBack
             await db.BackgroundOperations.Where(x => x.Id == executionId && x.DispatchedAtUtc == null)
                 .ExecuteUpdateAsync(set => set.SetProperty(x => x.DispatchedAtUtc, DateTime.UtcNow)
                     .SetProperty(x => x.HangfireJobId, jobId), ct);
+            telemetry?.Dispatched(row.QueuedAtUtc);
         }
         finally
         {
@@ -78,10 +79,14 @@ public sealed class OperationDispatchService(IServiceScopeFactory scopes, ILogge
             {
                 using var scope = scopes.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<TranscendenceContext>();
-                var pending = await db.BackgroundOperations.AsNoTracking()
+                var query = db.BackgroundOperations.AsNoTracking()
                     .Where(x => x.DispatchedAtUtc == null && x.Status != OperationStatuses.Succeeded
-                        && x.Status != OperationStatuses.Partial && x.Status != OperationStatuses.Failed)
-                    .OrderBy(x => x.QueuedAtUtc).Select(x => x.Id).Take(100).ToListAsync(stoppingToken);
+                        && x.Status != OperationStatuses.Partial && x.Status != OperationStatuses.Failed);
+                var summary = await query.GroupBy(_ => 1)
+                    .Select(g => new { Count = g.LongCount(), Oldest = g.Min(x => x.QueuedAtUtc) })
+                    .SingleOrDefaultAsync(stoppingToken);
+                scope.ServiceProvider.GetRequiredService<OperationTelemetry>().Scan(summary?.Count ?? 0, summary?.Oldest);
+                var pending = await query.OrderBy(x => x.QueuedAtUtc).Select(x => x.Id).Take(100).ToListAsync(stoppingToken);
                 foreach (var id in pending)
                 {
                     using var dispatchScope = scopes.CreateScope();

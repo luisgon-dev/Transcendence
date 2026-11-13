@@ -95,7 +95,7 @@ export default async function HomePage({
         {/* Navigation zone */}
         <div className="mt-8 grid gap-4 border-t border-border/25 pt-4">
           <div className="grid gap-2 sm:grid-cols-[auto_1fr] sm:items-center sm:gap-4">
-            <p className="type-kicker text-fg/65">Region</p>
+            <p className="type-kicker text-muted">Region</p>
             <AnalyticsRegionFilter
               options={regionOptions}
               activeRegion={activeRegion}
@@ -108,7 +108,7 @@ export default async function HomePage({
               <Link
                 key={link.href}
                 href={hrefWithRegion(link.href)}
-                className="type-ui inline-flex items-center border-b border-border/40 px-0.5 pb-1 text-fg/68 transition hover:border-border/68 hover:text-fg"
+                className="type-ui inline-flex items-center border-b border-border/40 px-0.5 pb-1 text-muted transition hover:border-border/68 hover:text-fg"
               >
                 {link.label}
               </Link>
@@ -170,7 +170,7 @@ export default async function HomePage({
                         </td>
                         <td className="px-3 py-2.5 text-xs text-fg/80">
                           <span className="inline-flex items-center gap-1.5">
-                            <LaneIcon role={entry.role} className="h-4 w-4 shrink-0 text-fg/55" />
+                            <LaneIcon role={entry.role} className="h-4 w-4 shrink-0 text-muted" />
                             {roleDisplayLabel(entry.role)}
                           </span>
                         </td>
@@ -226,42 +226,42 @@ export default async function HomePage({
           </Card>
 
           <Card className="p-5">
-            <p className="type-kicker text-fg/56">Player Tools</p>
+            <p className="type-kicker text-muted">Player Tools</p>
             <div className="mt-4 grid gap-3 border-t border-border/25 pt-4">
               <Link
                 href={hrefWithRegion("/lol/leaderboards")}
                 className="type-ui inline-flex items-center justify-between gap-3 text-fg/84 transition hover:text-fg"
               >
                 <span>Leaderboards</span>
-                <span className="text-fg/40" aria-hidden="true">/</span>
+                <span className="text-muted" aria-hidden="true">/</span>
               </Link>
               <Link
                 href={hrefWithRegion("/lol/champions")}
                 className="type-ui inline-flex items-center justify-between gap-3 border-t border-border/20 pt-3 text-fg/84 transition hover:text-fg"
               >
                 <span>Champions</span>
-                <span className="text-fg/40" aria-hidden="true">/</span>
+                <span className="text-muted" aria-hidden="true">/</span>
               </Link>
               <Link
                 href={hrefWithRegion("/lol/pro-builds")}
                 className="type-ui inline-flex items-center justify-between gap-3 border-t border-border/20 pt-3 text-fg/84 transition hover:text-fg"
               >
                 <span>Pro Solo Queue</span>
-                <span className="text-fg/40" aria-hidden="true">/</span>
+                <span className="text-muted" aria-hidden="true">/</span>
               </Link>
               <Link
                 href={hrefWithRegion("/lol/items")}
                 className="type-ui inline-flex items-center justify-between gap-3 border-t border-border/20 pt-3 text-fg/84 transition hover:text-fg"
               >
                 <span>Item & rune atlas</span>
-                <span className="text-fg/40" aria-hidden="true">/</span>
+                <span className="text-muted" aria-hidden="true">/</span>
               </Link>
               <Link
                 href={EXAMPLE_SUMMONER_HREF}
                 className="type-ui inline-flex items-center justify-between gap-3 border-t border-border/20 pt-3 text-fg/84 transition hover:text-fg"
               >
                 <span>Example Profile</span>
-                <span className="text-fg/40" aria-hidden="true">/</span>
+                <span className="text-muted" aria-hidden="true">/</span>
               </Link>
             </div>
           </Card>

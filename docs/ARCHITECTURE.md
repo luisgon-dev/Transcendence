@@ -889,3 +889,34 @@ advisory lock remains authoritative; overlapping triggers skip instead of waitin
 hour-long Hangfire execution lock. Retention discovers expired patches from coverage and the indexed
 ledger rather than scanning the option-stats corpus on every refresh. Existing time/WAL limits,
 transaction sizes, pacing, and worker counts remain in force.
+
+## November audit reliability boundaries
+
+Auth rotation/reset/logout serialize on the account row and claim tokens through
+conditional database updates. A random family ID isolates each login session.
+Encrypted successor recovery tolerates concurrent tabs for ten seconds; replay
+outside that window revokes the affected family. Public auth cannot bootstrap
+admin. An explicit existing-account operator command grants and audits once.
+
+The durable operation dispatcher uses a partial pending index and reports queue
+age, dispatch lag and scan freshness. A separate scoped maintenance worker deletes
+bounded batches of old terminal leaves and expired auth tokens; request grants
+cascade with executions. Active operations and parents with surviving children
+remain visible. Tabular analytics refresh uses a transaction advisory lock per
+patch even for direct callers. Matchup snapshot lifecycle code and match-history
+queries now live in separate focused files; Build Lab presentation and champion
+build variants have separate components.
+
+Image process liveness and dependency readiness are separate. A fixed bounded
+synthetic probe exercises the actual Next optimizer against four asset kinds;
+cache state survives container replacement in a 512 MiB volume. The poller holds
+unknown schema compatibility and requires asset readiness before accepting a web
+rollout. Production config validates the canonical origin and private trusted
+proxy boundary at startup. Images are published only after reusable CI passes.
+
+Scouting links share an encoded identity/region/queue vocabulary across profiles,
+multi-search and live views. Existing match-history filters survive refreshes.
+Semantic text colors meet light/dark contrast targets; keyboard-scrollable tables
+and a delegated image recovery control preserve dense-table rendering costs.
+Closed anonymous event counters measure lookup/probe outcomes and return sessions
+without collecting identities. See `docs/DATA-SLOS.md` for provenance and targets.

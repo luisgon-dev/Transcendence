@@ -1,4 +1,17 @@
-# Transcendence — Remediation Roadmap
+# Current roadmap — November 2026
+
+The implementation checklist and evidence are in [docs/AUDIT-REMEDIATION.md](docs/AUDIT-REMEDIATION.md).
+
+1. Validate the new authentication, migration and asset-readiness boundaries in staging; roll out components in migration-safe order.
+2. Observe seven days of [freshness and coverage signals](docs/DATA-SLOS.md), including a real container restart; inspect host logs if image readiness fails.
+3. Review anonymous lookup success and return-session counts before choosing the next scouting/product change.
+4. Tune cleanup throughput and query policy from measured queue growth and production plans, preserving raw/precomputed equivalence.
+
+The completed 149-item roadmap below is retained as historical evidence, not the current backlog.
+
+---
+
+# Historical roadmap — July 2026
 
 > Generated from the adversarial codebase audit of **2026-07-11** (`Transcendence-Audit-2026-07-11.pdf`).
 > This roadmap places **all 149 verified findings** into four sequenced phases. Every item carries its severity, a fix, the "why", and the `file:line` it lives at.

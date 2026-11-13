@@ -20,6 +20,8 @@ ARG BUILD_CONFIGURATION=Release
 RUN dotnet publish "Transcendence.WebAPI.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
 FROM base AS final
+ARG SOURCE_REVISION=unknown
+ENV TRN_RELEASE_SHA=$SOURCE_REVISION
 # curl is needed for the container HEALTHCHECK (aspnet image ships without it).
 USER root
 RUN apt-get update \

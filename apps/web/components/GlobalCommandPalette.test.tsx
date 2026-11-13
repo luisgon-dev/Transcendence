@@ -139,8 +139,10 @@ describe("GlobalCommandPalette", () => {
     // fails on a slow runner and passes locally.
     await user.clear(input);
     await user.type(input, "build lab");
-    const buildLab = await screen.findByRole("option", { name: /Build Lab/i });
-    await user.click(buildLab);
+    // Wait for the debounced query to select the filtered entry; the unfiltered
+    // menu also contains Build Lab while a champion is still selected.
+    await waitFor(() => expect(screen.getByRole("option", { name: /Build Lab/i }).getAttribute("data-selected")).toBe("true"));
+    await user.keyboard("{Enter}");
     await waitFor(() => expect(router.push).toHaveBeenCalledWith("/lol/builds"));
   });
 

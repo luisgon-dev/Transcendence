@@ -166,22 +166,28 @@ pulled_digest_is() {
     | grep -qxF "${REGISTRY_HOST}/${OWNER}/${repo}@${digest}"
 }
 
-# Images build in parallel, so a webapi image can reach :main a poll before the worker image of the
-# same merge, and the worker is what applies migrations. Deploying that webapi first ran new code
-# against the old schema (seen 2026-09-27: the webapi served ~30s ahead of AddBuildLabCoverage).
-# Holds (returns 0) while the commits from the running worker's revision up to the webapi's contain
-# a migration the worker has not deployed; answers "no hold" whenever it cannot tell, so an
-# unreachable GitHub or an unknown revision never blocks a deploy.
-webapi_waits_for_migrations() {
-  local target_rev="$1" worker_rev
-  worker_rev="$(local_revision transcendence-service)"
-  [ -n "$worker_rev" ] && [ -n "$target_rev" ] && [ "$worker_rev" != "$target_rev" ] || return 1
-  git -C "$COMPOSE_DIR" fetch -q origin 2>/dev/null || return 1
-  git -C "$COMPOSE_DIR" cat-file -e "${target_rev}^{commit}" 2>/dev/null || return 1
-  git -C "$COMPOSE_DIR" cat-file -e "${worker_rev}^{commit}" 2>/dev/null || return 1
-  # The worker already runs this release or a later one: nothing left to wait for.
-  git -C "$COMPOSE_DIR" merge-base --is-ancestor "$target_rev" "$worker_rev" 2>/dev/null && return 1
-  [ -n "$(git -C "$COMPOSE_DIR" diff --name-only "$worker_rev" "$target_rev" -- Transcendence.Service/Migrations 2>/dev/null)" ]
+# 0 = verified compatible, 1 = wait for worker migrations, 2 = unknown (hold and alert).
+# Local immutable commit objects are sufficient; fetch only when an object is missing.
+migration_compatibility() {
+  local target_rev="$1" worker_rev changed rc
+  worker_rev="$(local_revision transcendence-service)" || return 2
+  [[ "$worker_rev" =~ ^[a-f0-9]{40}$ && "$target_rev" =~ ^[a-f0-9]{40}$ ]] || return 2
+  [ "$worker_rev" = "$target_rev" ] && return 0
+  if ! git -C "$COMPOSE_DIR" cat-file -e "${target_rev}^{commit}" 2>/dev/null ||
+     ! git -C "$COMPOSE_DIR" cat-file -e "${worker_rev}^{commit}" 2>/dev/null; then
+    git -C "$COMPOSE_DIR" fetch -q origin 2>/dev/null || return 2
+    git -C "$COMPOSE_DIR" cat-file -e "${target_rev}^{commit}" 2>/dev/null || return 2
+    git -C "$COMPOSE_DIR" cat-file -e "${worker_rev}^{commit}" 2>/dev/null || return 2
+  fi
+  git -C "$COMPOSE_DIR" merge-base --is-ancestor "$target_rev" "$worker_rev" 2>/dev/null
+  rc=$?
+  [ "$rc" -eq 0 ] && return 0
+  [ "$rc" -eq 1 ] || return 2
+  # Divergent histories provide no safe migration ordering.
+  git -C "$COMPOSE_DIR" merge-base --is-ancestor "$worker_rev" "$target_rev" 2>/dev/null || return 2
+  changed="$(git -C "$COMPOSE_DIR" diff --name-only "$worker_rev" "$target_rev" -- Transcendence.Service/Migrations 2>/dev/null)" || return 2
+  [ -z "$changed" ] && return 0
+  return 1
 }
 
 notify() {
@@ -261,6 +267,20 @@ wait_for_healthy() {
 
   detail="$(docker inspect "$container" --format '{{if .State.Health}}{{range .State.Health.Log}}{{.Output}}{{end}}{{else}}{{.State.Error}}{{end}}' 2>/dev/null | tail -c 500)"
   log "ERROR ${svc}: health verification failed after ${HEALTH_TIMEOUT_SECONDS}s (status=${status:-missing}${detail:+; detail=${detail}})"
+  return 1
+}
+
+# Content readiness verifies real optimizer output, independently of process liveness.
+wait_for_web_assets() {
+  local container="$1" started=$SECONDS
+  while (( SECONDS - started < HEALTH_TIMEOUT_SECONDS )); do
+    if docker exec "$container" node -e "fetch('http://127.0.0.1:3000/api/readiness',{signal:AbortSignal.timeout(10000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" >/dev/null 2>&1; then
+      log "READY web: champion, item, rune and splash assets verified"
+      return 0
+    fi
+    sleep "$HEALTH_POLL_SECONDS"
+  done
+  log "ERROR web: image delivery failed post-deploy verification"
   return 1
 }
 
@@ -389,9 +409,16 @@ deploy_one() {
   previous_image_id="$(docker inspect "$container" --format '{{.Image}}' 2>/dev/null)"
   previous_container_id="$(docker inspect "$container" --format '{{.Id}}' 2>/dev/null)"
 
-  if [ "$svc" = "webapi" ] && webapi_waits_for_migrations "$remote_rev"; then
-    log "HOLD webapi: rev ${remote_rev:0:12} has migrations the worker has not applied yet; retrying next poll"
-    return 0
+  if [ "$svc" = "webapi" ]; then
+    local compatibility
+    migration_compatibility "$remote_rev"
+    compatibility=$?
+    case "$compatibility" in
+      0) clear_resolution_failure "$svc" migration-check ;;
+      1) log "HOLD webapi: worker migrations for ${remote_rev:0:12} are not applied"; return 0 ;;
+      *) log "HOLD webapi: schema compatibility is unknown";
+         record_resolution_failure "$svc" migration-check "schema compatibility check"; return 1 ;;
+    esac
   fi
 
   log "UPDATE ${svc}: rev ${current_rev:0:12} -> ${remote_rev:0:12}; deploying"
@@ -414,6 +441,11 @@ deploy_one() {
     log "WARN ${svc}: :main moved after ${remote:0:19} was verified; re-verifying on the next poll"
     return 1
   fi
+  if [ "$svc" = "web" ] && ! run_logged "web cache preparation" \
+      docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" \
+      run --rm --no-deps --pull never web-cache-init; then
+    log "ERROR web: persistent cache is not writable"; return 1
+  fi
   if [ "$svc" = "service" ] && ! run_migrations; then
     mkdir -p "$STATE_DIR"
     printf '%s\n' "$release_id" >"$failed_file"
@@ -434,6 +466,11 @@ deploy_one() {
     rollback_service \
       "$svc" "$container" "$repo" "$previous_image_id" "$release_id" "$previous_container_id" || true
     notify "🚨 deploy: ${svc} failed health verification; rollback attempted"
+    return 1
+  fi
+  if [ "$svc" = "web" ] && ! wait_for_web_assets "$container"; then
+    rollback_service "$svc" "$container" "$repo" "$previous_image_id" "$release_id" "$previous_container_id" || true
+    notify "🚨 deploy: web asset readiness failed; rollback attempted"
     return 1
   fi
   rm -f "$failed_file"

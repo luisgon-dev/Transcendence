@@ -323,11 +323,10 @@ for status-code semantics.
 - **App keys:** the default scheme is an API key sent in `X-API-Key` (`trn_<hex>`, stored as SHA-256).
 - **User JWTs:** HS256, 15-minute access tokens.
 - **Refresh tokens:** 64 random bytes, stored as SHA-256, valid 7 days, rotated on every use. Reusing
-  a rotated token revokes the whole token family.
+  a rotated token outside the ten-second concurrency recovery window revokes its session family. Concurrent requests within that window recover the same encrypted successor.
 - **Passwords:** PBKDF2-SHA256 with 310k iterations.
 - **Policies:** `AppOnly`, `UserOnly`, `AppOrUser`, `AdminOnly` (JWT plus the `admin` role).
-- **Admins** are granted from `Auth:AdminBootstrap:Emails`. Riot RSO sign-in and SMTP password
-  reset are optional.
+- **Admins** are granted explicitly to an existing account with the audited `Admin:GrantUserId` operator command. Public registration/login never grants privileges. Riot RSO sign-in and SMTP password reset are optional.
 
 **Rate limits** use fixed 1-minute windows and return `429` with no queueing. The per-IP limits
 exempt private and loopback addresses:
@@ -595,3 +594,12 @@ matching doc in `docs/` in the same PR.
 ## License
 
 [GPL-3.0](LICENSE) © 2026 luisgon-dev
+
+## Current improvement work
+
+The November audit implementation and checks are tracked in
+[docs/AUDIT-REMEDIATION.md](docs/AUDIT-REMEDIATION.md). Freshness targets and
+rank/sample provenance are in [docs/DATA-SLOS.md](docs/DATA-SLOS.md).
+Web process liveness is `/api/health`; asset readiness is `/api/readiness`.
+Production requires an explicit public origin, backend settings and a trusted
+private proxy boundary. See the deployment instructions in `docs/DEVELOPMENT.md`.

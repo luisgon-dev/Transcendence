@@ -46,7 +46,7 @@ public sealed record OperationStatusResponse(
     string Status, [property: Required] int RetryAfterSeconds,
     [property: Required] DateTime QueuedAtUtc, [property: Required] DateTime UpdatedAtUtc,
     DateTime? CompletedAtUtc, string? ErrorCode,
-    IReadOnlyList<OperationPhase> Phases, OperationResult Result);
+    IReadOnlyList<OperationPhase> Phases, OperationResult Result, DateTime? ExpiresAtUtc = null);
 
 public interface IBackgroundOperationTracker
 {

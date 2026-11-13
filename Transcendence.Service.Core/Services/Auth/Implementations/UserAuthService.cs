@@ -1,5 +1,5 @@
 using System.Security.Cryptography;
-using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.DataProtection;
 using Transcendence.Data.Models.Auth;
 using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Interfaces;
@@ -10,7 +10,7 @@ namespace Transcendence.Service.Core.Services.Auth.Implementations;
 public class UserAuthService(
     IUserAccountRepository userAccountRepository,
     IJwtService jwtService,
-    IOptions<AdminBootstrapOptions> adminBootstrapOptions,
+    IDataProtectionProvider dataProtectionProvider,
     ILogger<UserAuthService> logger) : IUserAuthService
 {
     private const int RefreshTokenDays = 7;
@@ -24,10 +24,8 @@ public class UserAuthService(
     // Per-account brute-force lockout, independent of the per-IP rate limiter.
     private const int MaxFailedLoginAttempts = 10;
     private const int LockoutDurationMinutes = 15;
-    private readonly HashSet<string> _bootstrapAdminEmails = adminBootstrapOptions.Value.Emails
-        .Where(x => !string.IsNullOrWhiteSpace(x))
-        .Select(NormalizeEmail)
-        .ToHashSet(StringComparer.Ordinal);
+    private static readonly TimeSpan RotationRecoveryWindow = TimeSpan.FromSeconds(10);
+    private readonly IDataProtector _refreshProtector = dataProtectionProvider.CreateProtector("Transcendence.RefreshRotation.v1");
 
     public async Task<AuthTokenResponse> RegisterAsync(RegisterRequest request, CancellationToken ct = default)
     {
@@ -49,7 +47,6 @@ public class UserAuthService(
         };
 
         await userAccountRepository.AddUserAsync(user, ct);
-        await EnsureBootstrapAdminRoleAsync(user, ct);
 
         var response = await IssueTokensAsync(user, ct);
         await userAccountRepository.SaveChangesAsync(ct);
@@ -101,7 +98,6 @@ public class UserAuthService(
             user.PasswordHash = HashPassword(request.Password);
             logger.LogInformation("Upgraded password hash cost factor for user {UserAccountId}", user.Id);
         }
-        await EnsureBootstrapAdminRoleAsync(user, ct);
 
         var response = await IssueTokensAsync(user, ct);
         await userAccountRepository.SaveChangesAsync(ct);
@@ -110,60 +106,71 @@ public class UserAuthService(
 
     public async Task<AuthTokenResponse?> RefreshAsync(RefreshRequest request, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(request.RefreshToken))
-            return null;
-
-        var tokenHash = jwtService.HashRefreshToken(request.RefreshToken);
-        var currentToken = await userAccountRepository.GetRefreshTokenByHashAsync(tokenHash, ct);
-        if (currentToken == null) return null;
-
-        if (currentToken.RevokedAtUtc != null)
+        if (string.IsNullOrWhiteSpace(request.RefreshToken)) return null;
+        var hash = jwtService.HashRefreshToken(request.RefreshToken);
+        var current = await userAccountRepository.GetRefreshTokenByHashAsync(hash, ct);
+        var now = DateTime.UtcNow;
+        if (current is null || current.ExpiresAtUtc <= now) return null;
+        if (current.RevokedAtUtc is null)
         {
-            // Refresh-token reuse detection: a token that was already ROTATED (revoked with a successor)
-            // is being presented again — the legitimate client would be using the successor, so this
-            // signals the token was stolen. Revoke the whole family so neither the attacker nor a
-            // possibly-compromised client can keep refreshing; the user must re-authenticate. A token
-            // revoked by logout (no successor) is just replayed/stale — fail without nuking a fresh session.
-            if (currentToken.ReplacedByTokenHash != null)
+            var raw = jwtService.GenerateRefreshToken();
+            var replacement = new UserRefreshToken
             {
-                var revokedCount = await userAccountRepository
-                    .RevokeAllActiveRefreshTokensForUserAsync(currentToken.UserAccountId, ct);
-                await userAccountRepository.SaveChangesAsync(ct);
-                logger.LogWarning(
-                    "Refresh-token reuse detected for user {UserAccountId}; revoked {Count} active token(s) in the family.",
-                    currentToken.UserAccountId, revokedCount);
-            }
-
-            return null;
+                Id = Guid.NewGuid(), UserAccountId = current.UserAccountId,
+                FamilyId = FamilyOf(current), TokenHash = jwtService.HashRefreshToken(raw),
+                CreatedAtUtc = now, ExpiresAtUtc = now.AddDays(RefreshTokenDays)
+            };
+            if (await userAccountRepository.TryRotateRefreshTokenAsync(hash, replacement, _refreshProtector.Protect(raw), now, ct))
+                return Tokens(current.UserAccount, raw);
+            // A different request may have claimed this token while we read it.
+            current = await userAccountRepository.GetRefreshTokenByHashAsync(hash, ct);
+            if (current is null) return null;
         }
 
-        if (currentToken.ExpiresAtUtc <= DateTime.UtcNow)
-            return null;
+        now = DateTime.UtcNow;
+        if (current.ReplacedByTokenHash is null) return null; // logout/reset, never recover
+        if (current.RevokedAtUtc is { } revoked && revoked <= now && now - revoked <= RotationRecoveryWindow)
+            return await RecoverRotationAsync(current, now, ct);
 
-        var user = currentToken.UserAccount;
-        var newRefreshToken = jwtService.GenerateRefreshToken();
-        var newRefreshHash = jwtService.HashRefreshToken(newRefreshToken);
-
-        await userAccountRepository.RevokeRefreshTokenAsync(currentToken, newRefreshHash, ct);
-
-        var replacement = new UserRefreshToken
-        {
-            Id = Guid.NewGuid(),
-            UserAccountId = user.Id,
-            TokenHash = newRefreshHash,
-            CreatedAtUtc = DateTime.UtcNow,
-            ExpiresAtUtc = DateTime.UtcNow.AddDays(RefreshTokenDays)
-        };
-
-        await userAccountRepository.AddRefreshTokenAsync(replacement, ct);
-        await userAccountRepository.SaveChangesAsync(ct);
-
-        return new AuthTokenResponse(
-            AccessToken: jwtService.GenerateAccessToken(user),
-            RefreshToken: newRefreshToken,
-            AccessTokenExpiresAtUtc: jwtService.GetAccessTokenExpirationUtc()
-        );
+        // Pre-migration revoked tokens have no family identity: retain the old fail-closed
+        // user-wide replay response until those tokens expire, without guessing a family.
+        var count = current.FamilyId == Guid.Empty
+            ? await userAccountRepository.RevokeAllActiveRefreshTokensForUserAsync(current.UserAccountId, ct)
+            : await userAccountRepository.RevokeRefreshTokenFamilyAsync(current.UserAccountId, current.FamilyId, ct);
+        if (current.FamilyId == Guid.Empty) await userAccountRepository.SaveChangesAsync(ct);
+        logger.LogWarning("Refresh-token replay for user {UserAccountId}; revoked {Count} token(s) in its session family.",
+            current.UserAccountId, count);
+        return null;
     }
+
+    private async Task<AuthTokenResponse?> RecoverRotationAsync(UserRefreshToken original, DateTime now, CancellationToken ct)
+    {
+        var current = original;
+        // Bound traversal if another request already rotated a successor. Never retain raw tokens.
+        for (var hop = 0; hop < 4 && current.ProtectedReplacementToken is { } protectedToken; hop++)
+        {
+            string raw;
+            try { raw = _refreshProtector.Unprotect(protectedToken); }
+            catch (CryptographicException error)
+            {
+                // A key-ring outage is not an invalid user credential. BFFs preserve cookies on 5xx.
+                throw new InvalidOperationException("Refresh recovery is temporarily unavailable.", error);
+            }
+            if (jwtService.HashRefreshToken(raw) != current.ReplacedByTokenHash) return null;
+            var next = await userAccountRepository.GetRefreshTokenByHashAsync(current.ReplacedByTokenHash!, ct);
+            if (next is null || next.UserAccountId != original.UserAccountId || FamilyOf(next) != FamilyOf(original)
+                || next.ExpiresAtUtc <= now) return null;
+            if (next.RevokedAtUtc is null) return Tokens(next.UserAccount, raw);
+            if (next.RevokedAtUtc is not { } revoked || revoked > now || now - revoked > RotationRecoveryWindow) return null;
+            current = next;
+        }
+        return null;
+    }
+
+    private AuthTokenResponse Tokens(UserAccount user, string refreshToken) => new(
+        jwtService.GenerateAccessToken(user), refreshToken, jwtService.GetAccessTokenExpirationUtc());
+
+    private static Guid FamilyOf(UserRefreshToken token) => token.FamilyId == Guid.Empty ? token.Id : token.FamilyId;
 
     public async Task LogoutAsync(RefreshRequest request, CancellationToken ct = default)
     {
@@ -198,6 +205,7 @@ public class UserAuthService(
         {
             Id = Guid.NewGuid(),
             UserAccountId = user.Id,
+            FamilyId = Guid.NewGuid(),
             TokenHash = refreshHash,
             CreatedAtUtc = DateTime.UtcNow,
             ExpiresAtUtc = DateTime.UtcNow.AddDays(RefreshTokenDays)
@@ -221,6 +229,8 @@ public class UserAuthService(
     {
         if (string.IsNullOrWhiteSpace(email))
             throw new ArgumentException("Email is required.", nameof(email));
+        if (email.Trim().EndsWith("@rso.invalid", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("This email domain is reserved for external sign-in.", nameof(email));
         if (string.IsNullOrWhiteSpace(password) || password.Length < MinimumPasswordLength)
             throw new ArgumentException($"Password must be at least {MinimumPasswordLength} characters.", nameof(password));
     }
@@ -284,28 +294,4 @@ public class UserAuthService(
         return CryptographicOperations.FixedTimeEquals(expectedHash, actualHash);
     }
 
-    private async Task EnsureBootstrapAdminRoleAsync(UserAccount user, CancellationToken ct)
-    {
-        if (_bootstrapAdminEmails.Count == 0)
-            return;
-
-        if (!_bootstrapAdminEmails.Contains(user.EmailNormalized))
-            return;
-
-        var hasAdminRole = user.Roles.Any(x => string.Equals(x.Role, SystemRoles.Admin, StringComparison.Ordinal));
-        if (hasAdminRole)
-            return;
-
-        var role = new UserRole
-        {
-            UserAccountId = user.Id,
-            Role = SystemRoles.Admin,
-            GrantedAtUtc = DateTime.UtcNow,
-            GrantedBy = "bootstrap:auth"
-        };
-
-        user.Roles.Add(role);
-        await userAccountRepository.AddRoleAsync(role, ct);
-        logger.LogInformation("Granted admin bootstrap role during auth flow for user {UserAccountId}", user.Id);
-    }
 }

@@ -233,6 +233,7 @@ if (builder.Configuration.GetValue("Telemetry:Enabled", true))
         .ConfigureResource(resource => resource.AddService("transcendence-worker"))
         .WithMetrics(metrics => metrics
             .AddMeter("Transcendence.IngestionThroughput")
+            .AddMeter(OperationTelemetry.MeterName)
             .AddMeter("Transcendence.RefreshLocks")
             .AddMeter(Transcendence.Service.Core.Services.Diagnostics.PrecomputedAnalyticsTelemetry.MeterName)
             .AddMeter(Transcendence.Service.Core.Services.Diagnostics.BuildLabTelemetry.MeterName)

@@ -68,7 +68,7 @@ export function ProSummonersPanel({
         </h2>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="text-fg/65">
+            <thead className="text-muted">
               <tr>
                 <th className="py-2">Identity</th>
                 <th className="py-2">Region</th>
@@ -94,12 +94,12 @@ function DiscoveryCandidates({ candidates }: { candidates: ProPlayerDiscoveryCan
     <div className="page-panel p-4">
       <div>
         <h2 className="text-lg font-semibold">Pro account candidates ({candidates.length})</h2>
-        <p className="mt-1 text-sm text-fg/60">
+        <p className="mt-1 text-sm text-muted">
           Leaguepedia names are staged here. Confirm the current Riot ID before adding an account.
         </p>
       </div>
       {candidates.length === 0 ? (
-        <p className="mt-4 text-sm text-fg/65">No candidates need review.</p>
+        <p className="mt-4 text-sm text-muted">No candidates need review.</p>
       ) : (
         <div className="mt-4 grid gap-3">
           {candidates.map((candidate) => (
@@ -120,7 +120,7 @@ function CandidateRow({ candidate }: { candidate: ProPlayerDiscoveryCandidate })
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="font-semibold">{candidate.proName}</p>
-          <p className="text-xs text-fg/60">
+          <p className="text-xs text-muted">
             {[candidate.teamName, candidate.role].filter(Boolean).join(" · ") || "No current team"}
           </p>
           <p className="mt-1 whitespace-pre-wrap text-xs text-fg/75">
@@ -261,7 +261,7 @@ function CsvImportForm() {
   return (
     <div className="page-panel p-4">
       <h3 className="mb-3 text-sm font-semibold">CSV Import</h3>
-      <p className="mb-2 text-xs text-fg/60">
+      <p className="mb-2 text-xs text-muted">
         Required columns: gameName, tagLine, platformRegion. Optional: puuid,
         proName, teamName, type (pro|otp, defaults to pro)
       </p>
@@ -306,12 +306,12 @@ function SummonerRow({ row }: { row: ProSummoner }) {
       <td className="py-2">
         {row.gameName && row.tagLine
           ? `${row.gameName}#${row.tagLine}`
-          : <span className="text-fg/65">{row.puuid.slice(0, 12)}...</span>}
+          : <span className="text-muted">{row.puuid.slice(0, 12)}...</span>}
       </td>
       <td className="py-2">{row.platformRegion}</td>
       <td className="py-2">
         <p>{[row.proName, row.teamName].filter(Boolean).join(" / ") || "-"}</p>
-        <p className="text-xs text-fg/55">
+        <p className="text-xs text-muted">
           {row.isPro ? "Pro" : "One-trick"}
           {row.isHighEloOtp && row.otpGames && row.otpSampleSize
             ? ` · ${row.otpGames}/${row.otpSampleSize} games`

@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { scoutingLinks } from "@/lib/scouting";
 import { FormEvent, useState } from "react";
 
 import { LiveGameCard } from "@/components/LiveGameCard";
@@ -13,10 +15,12 @@ type ScoutTarget = RiotId & { region: string };
 
 export function LiveScoutClient({
   initialRegion,
-  initialRiotId
+  initialRiotId,
+  initialQueue
 }: {
   initialRegion?: string;
   initialRiotId?: string;
+  initialQueue?: string;
 } = {}) {
   const normalizedInitialRegion = normalizeLolRegionSlug(initialRegion);
   const parsedInitialRiotId = parseRiotIdInput(initialRiotId ?? "");
@@ -73,7 +77,7 @@ export function LiveScoutClient({
               autoComplete="off"
               autoCapitalize="off"
               spellCheck={false}
-              className="mt-2 h-12 w-full rounded-control border border-border bg-surface px-4 text-sm text-fg shadow-inset outline-none transition placeholder:text-muted/65 focus:border-primary/60 focus:ring-2 focus:ring-primary/25"
+              className="mt-2 h-12 w-full rounded-control border border-border bg-surface px-4 text-sm text-fg shadow-inset outline-none transition placeholder:text-muted focus:border-primary/60 focus:ring-2 focus:ring-primary/25"
             />
           </div>
           <div>
@@ -99,6 +103,10 @@ export function LiveScoutClient({
 
       {target ? (
         <section aria-label={`Live game for ${target.gameName}#${target.tagLine}`}>
+          <nav aria-label="Scouting links" className="flex flex-wrap gap-4 text-sm font-semibold text-primary">
+            <Link className="min-h-11 content-center" href={scoutingLinks({ ...target, queue: initialQueue }).profile}>Player profile</Link>
+            <Link className="min-h-11 content-center" href={scoutingLinks({ ...target, queue: initialQueue }).multi}>Scout lobby</Link>
+          </nav>
           <LiveGameCard
             key={`${target.region}:${target.gameName}:${target.tagLine}`}
             region={target.region}

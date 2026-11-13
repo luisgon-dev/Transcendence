@@ -27,6 +27,21 @@ public sealed class AuthorizationBoundaryTests(PostgresIntegrationFixture fixtur
     private const string UserOnlyEndpoint = "/api/users/me/favorites";                       // GET
     private const string AdminOnlyEndpoint = "/api/admin/pro-summoners";                     // GET
 
+    [Fact]
+    public async Task Release_identity_requires_admin_and_reports_applied_schema()
+    {
+        var client = fixture.Factory.CreateClient();
+        (await client.GetAsync("/api/admin/release")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        client.DefaultRequestHeaders.Authorization = Bearer(MintToken());
+        (await client.GetAsync("/api/admin/release")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        client.DefaultRequestHeaders.Authorization = Bearer(MintToken("admin"));
+        var response = await client.GetAsync("/api/admin/release");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var release = await response.Content.ReadFromJsonAsync<Transcendence.Service.Core.Services.Admin.Models.AdminReleaseResponse>();
+        release!.LatestAppliedMigration.Should().EndWith("AuditAuthAndOperationRetention");
+        release.SourceRevision.Should().NotBeNullOrWhiteSpace();
+    }
+
     // ---- public ----
 
     [Fact]

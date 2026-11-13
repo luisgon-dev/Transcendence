@@ -86,13 +86,13 @@ function stateFilterClass(value: string, active: boolean) {
 
   switch (tone) {
     case "info":
-      return "border-info/18 bg-info/7 text-info/85 hover:bg-info/12";
+      return "border-info/18 bg-info/7 text-info hover:bg-info/12";
     case "warning":
-      return "border-warning/18 bg-warning/7 text-warning/85 hover:bg-warning/12";
+      return "border-warning/18 bg-warning/7 text-warning hover:bg-warning/12";
     case "danger":
-      return "border-danger/18 bg-danger/7 text-danger/85 hover:bg-danger/12";
+      return "border-danger/18 bg-danger/7 text-danger hover:bg-danger/12";
     case "success":
-      return "border-success/18 bg-success/7 text-success/85 hover:bg-success/12";
+      return "border-success/18 bg-success/7 text-success hover:bg-success/12";
     default:
       return "surface-chip text-fg/70 hover:bg-surface-2/72 hover:text-fg";
   }
@@ -125,7 +125,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">Recurring Producers</h2>
-            <p className="mt-1 text-sm text-fg/65">
+            <p className="mt-1 text-sm text-muted">
               Pause producers before clearing a large backlog so the queue stops refilling.
             </p>
           </div>
@@ -138,7 +138,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">Backlog Explorer</h2>
-            <p className="mt-1 text-sm text-fg/65">
+            <p className="mt-1 text-sm text-muted">
               {jobs.totalMatched.toLocaleString()} matching jobs
               {jobs.truncated ? ` · scan truncated at ${jobs.scanLimit.toLocaleString()}` : ""}
             </p>
@@ -159,7 +159,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
         <form method="get" className="mt-4 flex flex-wrap items-end gap-2 text-sm">
           <input type="hidden" name="state" value={state} />
           <label className="grid gap-1">
-            <span className="text-fg/60">Queue</span>
+            <span className="text-muted">Queue</span>
             <input
               type="text"
               name="queue"
@@ -168,7 +168,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
             />
           </label>
           <label className="grid gap-1">
-            <span className="text-fg/60">Region</span>
+            <span className="text-muted">Region</span>
             <input
               type="text"
               name="region"
@@ -177,7 +177,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
             />
           </label>
           <label className="grid gap-1">
-            <span className="text-fg/60">Job Type</span>
+            <span className="text-muted">Job Type</span>
             <input
               type="text"
               name="type"
@@ -186,7 +186,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
             />
           </label>
           <label className="grid gap-1">
-            <span className="text-fg/60">Search</span>
+            <span className="text-muted">Search</span>
             <input
               type="text"
               name="q"
@@ -195,7 +195,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
             />
           </label>
           <label className="grid gap-1">
-            <span className="text-fg/60">Older Than Min</span>
+            <span className="text-muted">Older Than Min</span>
             <input
               type="number"
               name="olderThanMinutes"
@@ -204,7 +204,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
             />
           </label>
           <label className="grid gap-1">
-            <span className="text-fg/60">Offset</span>
+            <span className="text-muted">Offset</span>
             <input
               type="number"
               name="from"
@@ -213,7 +213,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
             />
           </label>
           <label className="grid gap-1">
-            <span className="text-fg/60">Count</span>
+            <span className="text-muted">Count</span>
             <input
               type="number"
               name="count"
@@ -222,7 +222,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
             />
           </label>
           <label className="grid gap-1">
-            <span className="text-fg/60">Scan Limit</span>
+            <span className="text-muted">Scan Limit</span>
             <input
               type="number"
               name="scanLimit"
@@ -243,7 +243,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-medium text-warning">Bulk clear current filtered backlog</p>
-                <p className="mt-1 text-xs text-warning/75">
+                <p className="mt-1 text-xs text-warning">
                   This targets the currently filtered {state} jobs only. Preview count: {jobs.totalMatched.toLocaleString()}.
                   {" "}Each run deletes up to {bulkDeleteLimit.toLocaleString()} jobs.
                 </p>
@@ -264,7 +264,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
             </div>
           </div>
         ) : (
-          <div className="mt-4 rounded-2xl border border-danger/20 bg-danger/10 p-4 text-sm text-danger/85">
+          <div className="mt-4 rounded-2xl border border-danger/20 bg-danger/10 p-4 text-sm text-danger">
             Processing jobs can only be deleted one-by-one from the table or detail page. That operation changes Hangfire state but may not stop already-started side effects immediately.
           </div>
         )}
@@ -277,7 +277,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
               data-tone={stateTone(group.state)}
             >
               <p className="text-sm font-medium text-fg">{group.jobType?.split(".").pop() ?? "Unknown Job"}</p>
-              <p className="mt-1 text-xs text-fg/55">
+              <p className="mt-1 text-xs text-muted">
                 {group.state} · {group.queue}
                 {group.region ? ` · ${group.region}` : ""}
               </p>

@@ -29,17 +29,17 @@ export function BackendErrorCard({
       {children ? <div className="mt-4">{children}</div> : null}
       {hasTechnicalInfo ? (
         <details className="mt-5 text-xs text-muted">
-          <summary className="cursor-pointer select-none rounded hover:text-fg/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+          <summary className="cursor-pointer select-none rounded hover:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
             Request details
           </summary>
           <div className="mt-2 space-y-2">
             {requestId ? (
               <p>
-                Request ID: <code className="text-fg/65">{requestId}</code>
+                Request ID: <code className="text-muted">{requestId}</code>
               </p>
             ) : null}
             {detail ? (
-              <pre className="max-w-full overflow-x-auto rounded-lg border border-border/60 bg-surface-2/60 p-3 text-fg/65">
+              <pre className="max-w-full overflow-x-auto rounded-lg border border-border/60 bg-surface-2/60 p-3 text-muted">
                 {detail}
               </pre>
             ) : null}

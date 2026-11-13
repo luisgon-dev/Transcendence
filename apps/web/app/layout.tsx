@@ -5,6 +5,8 @@ import { Suspense } from "react";
 import "@/app/globals.css";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
+import { JourneyReporter } from "@/components/JourneyReporter";
+import { ImageRecovery } from "@/components/ImageRecovery";
 import { WebVitalsReporter } from "@/components/WebVitalsReporter";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { getMetadataBase, SITE_NAME, socialImageUrl } from "@/lib/seo";
@@ -121,6 +123,8 @@ export default function RootLayout({
           </main>
           <SiteFooter />
           <WebVitalsReporter />
+          <ImageRecovery />
+          <JourneyReporter />
         </TooltipProvider>
       </body>
     </html>

@@ -149,7 +149,6 @@ const MatchHistoryCard = memo(function MatchHistoryCard({
         aria-expanded={expanded}
         aria-controls={matchPanelId}
         aria-describedby={matchMetaId}
-        aria-label={`${match.win ? "Victory" : "Defeat"} on ${championName}. KDA ${match.kills}/${match.deaths}/${match.assists}. ${formatDurationSeconds(match.durationSeconds)}.`}
       >
         <div className="match-snapshot-grid">
           <div className="match-snapshot-identity min-w-0">
@@ -182,7 +181,7 @@ const MatchHistoryCard = memo(function MatchHistoryCard({
                 )}
 
                 <div className="grid grid-cols-2 items-center gap-1.5">
-                  <div className="flex flex-col gap-1" aria-label="Summoner spells">
+                  <div className="flex flex-col gap-1" role="group" aria-label="Summoner spells">
                     {spellIds.map((spellId, spellIdx) => {
                       const spellMeta = spellStatic?.spells[String(spellId)];
                       return spellMeta && spellStatic ? (
@@ -205,7 +204,7 @@ const MatchHistoryCard = memo(function MatchHistoryCard({
                     })}
                   </div>
 
-                  <div className="flex flex-col items-center gap-1" aria-label="Rune preview">
+                  <div className="flex flex-col items-center gap-1" role="group" aria-label="Rune preview">
                     {primaryRuneMeta ? (
                       <Image
                         src={runeIconUrl(primaryRuneMeta.icon)}
@@ -254,7 +253,7 @@ const MatchHistoryCard = memo(function MatchHistoryCard({
           </div>
 
           <div className="match-snapshot-loadout min-w-0">
-            <div className="flex flex-wrap items-center gap-1" aria-label="Item build preview">
+            <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Item build preview">
               {itemSlots.map((itemId, itemIdx) => {
                 const itemMeta = itemStatic?.items[String(itemId)];
                 return (
@@ -290,7 +289,7 @@ const MatchHistoryCard = memo(function MatchHistoryCard({
               })}
             </div>
 
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 type-caption text-fg/68">
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 type-caption text-muted">
               <span className="tabular-nums">{formatCompactNumber(match.damageToChamps)} dmg</span>
               <span className="tabular-nums">{match.visionScore} vision</span>
               <span className="tabular-nums">
@@ -305,7 +304,7 @@ const MatchHistoryCard = memo(function MatchHistoryCard({
               <p className="text-xl font-semibold leading-tight tracking-tight text-fg tabular-nums">
                 <span>{match.kills}</span>
                 <span className="text-muted"> / </span>
-                <span className="text-loss/90">{match.deaths}</span>
+                <span className="text-loss">{match.deaths}</span>
                 <span className="text-muted"> / </span>
                 <span>{match.assists}</span>
               </p>

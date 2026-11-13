@@ -71,12 +71,13 @@ public class UserAuthServiceTests
             {
                 Id = Guid.NewGuid(),
                 UserAccountId = userId,
+                FamilyId = userId,
                 TokenHash = "stolen-hash",
                 ExpiresAtUtc = DateTime.UtcNow.AddDays(1),
                 RevokedAtUtc = DateTime.UtcNow.AddMinutes(-5), // already rotated
                 ReplacedByTokenHash = "successor-hash"
             });
-        repo.Setup(x => x.RevokeAllActiveRefreshTokensForUserAsync(userId, It.IsAny<CancellationToken>()))
+        repo.Setup(x => x.RevokeRefreshTokenFamilyAsync(userId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(2);
 
         var service = BuildService(repo.Object, jwt.Object);
@@ -84,8 +85,7 @@ public class UserAuthServiceTests
         var result = await service.RefreshAsync(new RefreshRequest("stolen-raw"), CancellationToken.None);
 
         result.Should().BeNull();
-        repo.Verify(x => x.RevokeAllActiveRefreshTokensForUserAsync(userId, It.IsAny<CancellationToken>()), Times.Once);
-        repo.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+        repo.Verify(x => x.RevokeRefreshTokenFamilyAsync(userId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Once);
         repo.Verify(x => x.AddRefreshTokenAsync(It.IsAny<UserRefreshToken>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -135,6 +135,8 @@ public class UserAuthServiceTests
             UserAccount = new UserAccount { Id = userId }
         };
         repo.Setup(x => x.GetRefreshTokenByHashAsync("active-hash", It.IsAny<CancellationToken>())).ReturnsAsync(current);
+        repo.Setup(x => x.TryRotateRefreshTokenAsync("active-hash", It.IsAny<UserRefreshToken>(),
+            It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
 
         var service = BuildService(repo.Object, jwt.Object);
 
@@ -143,10 +145,9 @@ public class UserAuthServiceTests
         result.Should().NotBeNull();
         result!.AccessToken.Should().Be("access-jwt");
         result.RefreshToken.Should().Be("new-raw");
-        repo.Verify(x => x.RevokeRefreshTokenAsync(current, "new-hash", It.IsAny<CancellationToken>()), Times.Once);
-        repo.Verify(x => x.AddRefreshTokenAsync(
-            It.Is<UserRefreshToken>(t => t.TokenHash == "new-hash"), It.IsAny<CancellationToken>()), Times.Once);
-        repo.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+        repo.Verify(x => x.TryRotateRefreshTokenAsync("active-hash",
+            It.Is<UserRefreshToken>(t => t.TokenHash == "new-hash" && t.FamilyId == current.Id),
+            It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
         repo.Verify(x => x.RevokeAllActiveRefreshTokensForUserAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -171,7 +172,7 @@ public class UserAuthServiceTests
         return new UserAuthService(
             repo,
             jwt,
-            Options.Create(new AdminBootstrapOptions()),
+            new AuthTestProtection(),
             NullLogger<UserAuthService>.Instance);
     }
 }

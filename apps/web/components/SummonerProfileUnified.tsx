@@ -1,5 +1,6 @@
 "use client";
 
+import { recordJourney } from "@/lib/journeyMetrics";
 import { useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -117,6 +118,8 @@ export function SummonerProfileClient({
     initialLookup,
     initialError
   });
+  const lookupStatus = lookup.profile ? "lookup_succeeded" : initialError ? "lookup_failed" : null;
+  useEffect(() => { if (lookupStatus) recordJourney(lookupStatus); }, [lookupStatus]);
   const matches = useMatchHistory({
     summonerId: lookup.profile?.summonerId,
     championStatic: staticData.championStatic,
@@ -173,6 +176,7 @@ export function SummonerProfileClient({
         data-trn-backend-error={lookup.error && !lookup.profile ? "summoner-profile" : undefined}
       >
         <ProfileHeroCard
+          queue={matches.queue}
           title={title}
           region={region}
           gameName={gameName}

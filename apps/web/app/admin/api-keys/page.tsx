@@ -10,7 +10,7 @@ export default async function AdminApiKeysPage() {
       <h2 className="text-lg font-semibold">API Keys</h2>
       <div className="mt-3 overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <thead className="text-fg/65">
+          <thead className="text-muted">
             <tr>
               <th className="py-2">Name</th>
               <th className="py-2">Prefix</th>

@@ -109,6 +109,7 @@ export default function TermsPage() {
               <li><span className="text-fg/85">Summoner data:</span> summoner names, regions, and match history retrieved from the Riot Games API when you perform searches.</li>
               <li><span className="text-fg/85">Favorites:</span> summoner profiles you choose to save to your account.</li>
               <li><span className="text-fg/85">Session cookies:</span> used for authentication and session management.</li>
+              <li><span className="text-fg/85">Anonymous usage counts:</span> lookup outcomes and return sessions help us improve the site. Small visited/session flags stay in your browser; usage events contain no player names or user identifiers.</li>
             </ul>
 
             <h3 className="type-meta text-fg/80">Information We Do Not Collect</h3>

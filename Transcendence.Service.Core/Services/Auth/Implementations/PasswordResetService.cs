@@ -72,19 +72,8 @@ public sealed class PasswordResetService(
         if (resetToken == null)
             return false;
 
-        var now = DateTime.UtcNow;
-        resetToken.UserAccount.PasswordHash = UserAuthService.HashPasswordForStorage(request.NewPassword);
-        resetToken.UserAccount.FailedLoginAttempts = 0;
-        resetToken.UserAccount.LockoutUntilUtc = null;
-        resetToken.UserAccount.UpdatedAtUtc = now;
-        resetToken.UsedAtUtc = now;
-
-        await userAccountRepository.RevokeActivePasswordResetTokensForUserAsync(
-            resetToken.UserAccountId, ct);
-        await userAccountRepository.RevokeAllActiveRefreshTokensForUserAsync(
-            resetToken.UserAccountId, ct);
-        await userAccountRepository.SaveChangesAsync(ct);
-        return true;
+        return await userAccountRepository.TryCompletePasswordResetAsync(resetToken.Id,
+            resetToken.UserAccountId, UserAuthService.HashPasswordForStorage(request.NewPassword), DateTime.UtcNow, ct);
     }
 
     private static string CreateToken()

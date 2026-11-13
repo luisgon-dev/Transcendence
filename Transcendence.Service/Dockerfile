@@ -18,6 +18,8 @@ ARG BUILD_CONFIGURATION=Release
 RUN dotnet publish "Transcendence.Service.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
 FROM base AS final
+ARG SOURCE_REVISION=unknown
+ENV TRN_RELEASE_SHA=$SOURCE_REVISION
 WORKDIR /app
 COPY --from=publish /app/publish .
 # Liveness: the worker publishes the last job-progress timestamp to /tmp/worker-heartbeat. Mark the container

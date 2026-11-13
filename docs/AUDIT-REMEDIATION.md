@@ -25,7 +25,7 @@ changes; production rollout is separate from local verification.
 
 ## Verification
 
-Local validation: 362 web unit tests; 575 backend unit tests and 74 PostgreSQL
+Local validation: 369 web unit tests; 575 backend unit tests and 74 PostgreSQL
 integration scenarios (full-suite runs plus the added release/retention checks).
 Deployment and maintenance fault tests: 20 passed. Build-input/secret-context and
 ESLint discovery checks: three passed. JavaScript and NuGet dependency audits are
@@ -50,6 +50,14 @@ restart logs were unavailable. Asset checks and cache persistence address the
 observable readiness gap without treating the local cloud proxy as production
 evidence. Keep process liveness shallow so an upstream CDN fault cannot restart-loop
 the web service.
+
+Static metadata fetches also have whole-response deadlines: four seconds for each
+Data Dragon request and two seconds for optional CommunityDragon rune enrichment.
+Metadata routes execute at runtime and never cache a 502. Profiles retain working
+catalogs when another fails and offer an explicit retry with a twelve-second
+client deadline. A controlled stalled-body CDN test verifies that the profile
+renders during the outage, readiness fails, and metadata/readiness recover after
+restoration. This reproduces a failure mode, not the original production incident.
 
 ## Rollout
 

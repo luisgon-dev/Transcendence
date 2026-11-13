@@ -908,11 +908,19 @@ queries now live in separate focused files; Build Lab presentation and champion
 build variants have separate components.
 
 Image process liveness and dependency readiness are separate. A fixed bounded
-synthetic probe exercises the actual Next optimizer against four asset kinds;
+synthetic probe reads the runtime champion catalog, then exercises the actual
+Next optimizer against four asset kinds;
 cache state survives container replacement in a 512 MiB volume. The poller holds
 unknown schema compatibility and requires asset readiness before accepting a web
 rollout. Production config validates the canonical origin and private trusted
 proxy boundary at startup. Images are published only after reusable CI passes.
+
+Each frontend Data Dragon JSON fetch bounds headers and body consumption to four
+seconds. Optional CommunityDragon rune enrichment has a two-second budget and
+retains the Data Dragon/stat-shard fallback. Static routes run at request time so
+a build-time outage cannot bake a cached failure; only successful responses carry
+shared cache headers. Profiles load missing catalogs independently, preserve good
+maps, and expose a retry with a twelve-second client deadline and unmount abort.
 
 Scouting links share an encoded identity/region/queue vocabulary across profiles,
 multi-search and live views. Existing match-history filters survive refreshes.

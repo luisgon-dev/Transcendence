@@ -1245,13 +1245,19 @@ If a change affects any of the following, update docs in the same PR:
   it explicitly before `up --no-deps`. Next's native cache limit is 512 MiB and
   maximum upstream image body is 8 MiB. Do not mount a shared writable cache
   across unrelated Next versions/instances.
-- `/api/health` remains process liveness. `/api/readiness` checks current static
-  metadata and champion/item/rune/splash delivery through the local optimizer,
+- `/api/health` remains process liveness. `/api/readiness` checks the runtime
+  `/api/static/champions` catalog and champion/item/rune/splash delivery through the local optimizer,
   with an eight-second whole-probe budget, single-flight execution, 30-second
   success cache and five-second failure cache. The deploy poller waits for both
   container health and asset readiness, then rolls back on timeout. CDN failure
   can fail readiness without restart-looping the process. Grafana evaluates
   asset failure and stale-probe alerts independently.
+- Static JSON reads bound headers and body to four seconds per Data Dragon
+  request; optional CommunityDragon enrichment has two seconds and falls back to
+  Data Dragon runes/stat shards. Static-route failures return uncached 502s.
+  Profiles keep successful catalogs and offer a game-data retry; browser requests
+  have twelve-second deadlines and abort on unmount. Check both metadata routes
+  and optimized images when investigating a cold-start CDN outage.
 - `SOURCE_REVISION` stamps all three runtime images. Web readiness reports it;
   WebAPI emits `X-Transcendence-Release`. Authenticated admins can query `GET /api/admin/release` for the actual latest
   applied migration and API source revision (or query `__EFMigrationsHistory` in

@@ -4,8 +4,8 @@ import { AssetReadinessProbe } from "@/lib/assetReadiness";
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 function healthyFetch() {
-  return vi.fn(async (input: RequestInfo | URL) => String(input).includes("versions.json")
-    ? Response.json(["16.22.1"])
+  return vi.fn(async (input: RequestInfo | URL) => String(input).includes("/api/static/champions")
+    ? Response.json({ version: "16.22.1", champions: { "103": { id: "Ahri" } } })
     : new Response("image-content", { headers: { "content-type": "image/png" } }));
 }
 
@@ -31,8 +31,8 @@ describe("asset content readiness", () => {
     await vi.advanceTimersByTimeAsync(5001);
     expect((await probe.get()).ready).toBe(true);
     const invalid = new AssetReadinessProbe();
-    fetch.mockImplementation(async input => String(input).includes("versions.json")
-      ? Response.json(["16.22.1"]) : new Response("error page"));
+    fetch.mockImplementation(async input => String(input).includes("/api/static/champions")
+      ? Response.json({ version: "16.22.1", champions: { "103": { id: "Ahri" } } }) : new Response("error page"));
     expect((await invalid.get()).ready).toBe(false);
   });
 
@@ -43,7 +43,7 @@ describe("asset content readiness", () => {
     const result = new AssetReadinessProbe().get();
     await vi.advanceTimersByTimeAsync(8001);
     expect((await result).ready).toBe(false);
-    fetch.mockResolvedValue(Response.json(["https://internal.invalid"]));
+    fetch.mockResolvedValue(Response.json({ version: "https://internal.invalid", champions: { "103": { id: "Ahri" } } }));
     expect((await new AssetReadinessProbe().get()).ready).toBe(false);
     expect(fetch).toHaveBeenCalledTimes(2);
   });

@@ -192,6 +192,15 @@ export function SummonerProfileClient({
           busy={lookup.busy}
           onRefresh={lookup.queueRefresh}
         />
+        {staticData.staticUnavailable ? (
+          <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface px-4 py-3 text-sm text-fg">
+            <p>Some game images and names are temporarily unavailable.</p>
+            <Button variant="outline" size="sm" disabled={staticData.staticBusy} onClick={staticData.retryStaticData}>
+              {staticData.staticBusy ? "Retrying…" : "Retry game data"}
+            </Button>
+          </div>
+        ) : null}
+
 
         {!lookup.profile ? (
           lookup.polling && !lookup.error ? (

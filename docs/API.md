@@ -706,7 +706,11 @@ must not be interpreted as successful completion.
 
 Frontend `GET /api/readiness` returns 200 ready or 503 unavailable, with bounded
 asset-kind checks, check time and release identity. It is dependency readiness;
-`GET /api/health` stays shallow. `GET /api/telemetry/metrics` exports bounded asset,
+it reads the runtime `/api/static/champions` catalog before exercising the image
+optimizer. Frontend `/api/static/{champions,items,spells,runes}` routes retain
+24-hour shared caching on success and return 502 with `Cache-Control: no-store`
+on a bounded upstream failure. `GET /api/health` stays shallow.
+`GET /api/telemetry/metrics` exports bounded asset,
 Web Vitals and anonymous journey counters. `POST /api/telemetry/journey` accepts
 only `{ "event": <closed event name> }`, maximum 128 bytes, returning 204;
 unknown/extra fields return 400, cross-origin 403 and oversized bodies 413.

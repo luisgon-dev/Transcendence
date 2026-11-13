@@ -35,12 +35,13 @@ export class AssetReadinessProbe {
     const remaining = () => Math.max(1, 8_000 - (Date.now() - started));
     try {
       const version = await fetchAndConsumeWithTimeout(
-        "https://ddragon.leagueoflegends.com/api/versions.json", { cache: "no-store" },
+        new URL("/api/static/champions", this.baseUrl), { cache: "no-store" },
         async response => {
           if (!response.ok) throw new Error("Static metadata unavailable");
-          const versions: unknown = await response.json();
-          const latest = Array.isArray(versions) ? versions[0] : null;
+          const catalog = await response.json() as { version?: unknown; champions?: Record<string, { id?: string }> };
+          const latest = catalog.version;
           if (typeof latest !== "string" || !/^\d+\.\d+\.\d+$/.test(latest)) throw new Error("Invalid static version");
+          if (catalog.champions?.["103"]?.id !== "Ahri") throw new Error("Champion metadata unavailable");
           return latest;
         }, { timeoutMs: remaining() }
       );

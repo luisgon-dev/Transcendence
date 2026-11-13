@@ -118,7 +118,8 @@ export function SummonerProfileClient({
     initialLookup,
     initialError
   });
-  const lookupStatus = lookup.profile ? "lookup_succeeded" : initialError ? "lookup_failed" : null;
+  const lookupStatus = lookup.profile ? "lookup_succeeded"
+    : lookup.error || initialLookup?.status === "missing" ? "lookup_failed" : null;
   useEffect(() => { if (lookupStatus) recordJourney(lookupStatus); }, [lookupStatus]);
   const matches = useMatchHistory({
     summonerId: lookup.profile?.summonerId,

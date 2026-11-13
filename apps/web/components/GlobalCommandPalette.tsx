@@ -8,6 +8,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { SearchIcon } from "@/components/ui/icons";
 import { Select } from "@/components/ui/Select";
+import { recordJourney } from "@/lib/journeyMetrics";
 import { GLOBAL_SEARCH_OPEN_EVENT } from "@/lib/globalSearch";
 import { buildLolPublicSummonerSearchPath } from "@/lib/lolPublicApi";
 import { LOL_REGION_OPTIONS } from "@/lib/lolRegions";
@@ -366,6 +367,7 @@ export function GlobalCommandPalette({ buildLabEnabled = false }: { buildLabEnab
   }, [open, prefetchTargets, router]);
 
   function navigate(path: string) {
+    if (path.startsWith("/lol/summoners/")) recordJourney("lookup_started");
     setOpen(false);
     setQuery("");
     setSelectedValue("");

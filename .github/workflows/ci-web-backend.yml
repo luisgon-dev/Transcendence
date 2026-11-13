@@ -221,6 +221,7 @@ jobs:
         run: pnpm web:build
 
       - name: Start web
+        id: web_start
         env:
           TRN_TRUSTED_PROXY_HEADERS: "true"
           TRN_PUBLIC_ORIGIN: "http://127.0.0.1:3000"
@@ -229,7 +230,9 @@ jobs:
           # The Build Lab layout guard below needs the route; it otherwise 404s behind its flag.
           TRN_FEATURE_BUILD_LAB: "true"
         run: |
-          pnpm --filter web start > .performance-artifacts/web.log 2>&1 &
+          cp -a apps/web/.next/static apps/web/.next/standalone/apps/web/.next/
+          cp -a apps/web/public apps/web/.next/standalone/apps/web/
+          PORT=3000 HOSTNAME=127.0.0.1 node apps/web/.next/standalone/apps/web/server.js > .performance-artifacts/web.log 2>&1 &
           echo "$!" > .performance-artifacts/web.pid
 
           for attempt in {1..60}; do
@@ -245,17 +248,15 @@ jobs:
       - name: Frontend lab budgets
         run: pnpm perf:web:ci
 
-      # Build Lab once scrolled 467px sideways on a phone and wrapped names under its bars on a tablet
-      # with nothing failing. This renders it at 390/768/1024/1440px against a dense fixture and fails
-      # on page overflow, a cell spilling into its neighbour, or a row clipped by the results panel.
-      - name: Build Lab layout guard
-        env:
-          BASE_URL: "http://127.0.0.1:3000"
-        run: |
-          npx playwright install --with-deps chromium
-          npx playwright test e2e/build-lab-layout.spec.ts --output .performance-artifacts/playwright
+      # Run functional/a11y checks even if a numeric budget fails. The full suite also
+      # includes the dense Build Lab fixture at phone/tablet/laptop/desktop widths.
+      - name: Install browser for regression checks
+        id: browser_setup
+        if: ${{ !cancelled() && steps.web_start.outcome == 'success' }}
+        run: npx playwright install --with-deps chromium
 
-      - name: Operation completion and accessibility regressions
+      - name: Seeded browser regressions
+        if: ${{ !cancelled() && steps.web_start.outcome == 'success' && steps.browser_setup.outcome == 'success' }}
         env:
           BASE_URL: "http://127.0.0.1:3000"
           LOCAL_OPERATION_BACKEND: seeded
@@ -281,6 +282,7 @@ jobs:
         with:
           name: performance-reports
           path: .performance-artifacts
+          include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 14
 

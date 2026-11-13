@@ -920,3 +920,9 @@ Semantic text colors meet light/dark contrast targets; keyboard-scrollable table
 and a delegated image recovery control preserve dense-table rendering costs.
 Closed anonymous event counters measure lookup/probe outcomes and return sessions
 without collecting identities. See `docs/DATA-SLOS.md` for provenance and targets.
+
+The command palette is mounted on first search intent, rather than eagerly after
+hydration. Its loader buffers that intent until the dialog installs its event
+listeners, avoiding a lost first click/shortcut. The home hero uses a high-priority
+55-quality optimized splash; decorative image bytes and optional dialog work do
+not need to compete on the initial render path.

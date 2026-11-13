@@ -1,29 +1,46 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { dispatchGlobalSearchOpen, GLOBAL_SEARCH_OPEN_EVENT, isGlobalSearchShortcut } from "@/lib/globalSearch";
 
-// The command palette drags framer-motion + cmdk into whatever bundle imports
-// it. Loading it via next/dynamic with { ssr: false } keeps those libraries out
-// of the shared layout chunk so they are only fetched on the client, after
-// hydration. The open trigger is decoupled from render: the palette attaches a
-// window `keydown` (Cmd/Ctrl+K) listener and listens for the
-// `trn:open-command-palette` CustomEvent (dispatched by GlobalSearchLauncher),
-// both wired up in its own useEffect on mount — so lazy-mounting it here does
-// not break opening it.
-//
-// This wrapper is a Client Component on purpose: `ssr: false` is not allowed
-// with next/dynamic inside a Server Component (app/layout.tsx), so the dynamic
-// import lives here instead.
+// Keep the dialog and search libraries off the initial render path. Capture the
+// first intent and replay it only after the palette installs its listeners.
 const GlobalCommandPalette = dynamic(
   () =>
     import("@/components/GlobalCommandPalette").then(
       (mod) => mod.GlobalCommandPalette
     ),
-  { ssr: false }
+  { ssr: false, loading: () => <div role="status" className="fixed left-1/2 top-24 z-50 -translate-x-1/2 rounded-card border border-border bg-surface px-5 py-3 text-sm text-fg shadow-overlay">Loading search…</div> }
 );
 
 // buildLabEnabled arrives as a prop from a Server Component: TRN_FEATURE_BUILD_LAB is unprefixed,
 // so reading it here would be `undefined` in the browser and the flag permanently false.
 export function GlobalCommandPaletteLoader({ buildLabEnabled = false }: { buildLabEnabled?: boolean }) {
-  return <GlobalCommandPalette buildLabEnabled={buildLabEnabled} />;
+  const [requested, setRequested] = useState(false);
+  const ready = useRef(false);
+  const pending = useRef(false);
+  const onReady = useCallback(() => {
+    if (!pending.current) return;
+    ready.current = true;
+    if (pending.current) { pending.current = false; dispatchGlobalSearchOpen(); }
+  }, []);
+  useEffect(() => {
+    const open = () => {
+      if (ready.current) return;
+      pending.current = true; setRequested(true);
+    };
+    const keydown = (event: KeyboardEvent) => {
+      if (ready.current) return;
+      if (event.key === "Escape" && pending.current) { pending.current = false; setRequested(false); }
+      else if (isGlobalSearchShortcut(event)) { event.preventDefault(); open(); }
+    };
+    window.addEventListener(GLOBAL_SEARCH_OPEN_EVENT, open);
+    window.addEventListener("keydown", keydown);
+    return () => {
+      window.removeEventListener(GLOBAL_SEARCH_OPEN_EVENT, open);
+      window.removeEventListener("keydown", keydown);
+    };
+  }, []);
+  return requested ? <GlobalCommandPalette buildLabEnabled={buildLabEnabled} onReady={onReady} /> : null;
 }

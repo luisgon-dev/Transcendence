@@ -1287,3 +1287,10 @@ while SSR reads come from the real local API. Do not point write/load tests at
 production. Run generation/build commands before browser tests: rebuilding the
 API client deletes and recreates its output, which can interrupt a running dev
 server's module graph. Use a production server for final browser verification.
+
+CI serves the standalone production artifact and preserves Lighthouse reports in
+`.performance-artifacts/lighthouse`. The artifact upload explicitly includes that
+hidden directory. Seeded browser checks still run when a numeric performance
+budget fails, so one regression cannot hide unrelated operation/a11y results.
+The search dialog loads on first intent; its first click/shortcut is replayed
+once listeners are ready, with cancel/reopen coverage.

@@ -228,8 +228,9 @@ export default async function LandingPage() {
               src={`https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${leadChamp.id}_0.jpg`}
               alt=""
               fill
-              priority
-              quality={75}
+              loading="eager"
+              fetchPriority="high"
+              quality={55}
               sizes="(min-width: 1024px) 70vw, 100vw"
               className="object-cover object-[50%_22%]"
             />

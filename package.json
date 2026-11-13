@@ -33,7 +33,7 @@
     "web:lint": "pnpm --filter web lint",
     "web:test": "pnpm --filter web test",
     "perf:web": "pnpm web:build && pnpm perf:web:ci",
-    "perf:web:ci": "node scripts/perf/web-lab.mjs --base-url http://127.0.0.1:3000 --routes scripts/perf/routes.ci.json --samples 3 --budgets scripts/perf/web-budgets.json --json-out .performance-artifacts/web-lab.json",
+    "perf:web:ci": "node scripts/perf/web-lab.mjs --base-url http://127.0.0.1:3000 --routes scripts/perf/routes.ci.json --samples 3 --budgets scripts/perf/web-budgets.json --json-out .performance-artifacts/web-lab.json --report-dir .performance-artifacts/lighthouse",
     "perf:api": "k6 run scripts/perf/api-load.js",
     "e2e": "npx playwright test",
     "e2e:local": "BASE_URL=http://localhost:3000 npx playwright test",

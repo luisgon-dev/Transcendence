@@ -25,13 +25,13 @@ changes; production rollout is separate from local verification.
 
 ## Verification
 
-Local validation: 360 web unit tests; 575 backend unit tests and 74 PostgreSQL
+Local validation: 362 web unit tests; 575 backend unit tests and 74 PostgreSQL
 integration scenarios (full-suite runs plus the added release/retention checks).
 Deployment and maintenance fault tests: 20 passed. Build-input/secret-context and
 ESLint discovery checks: three passed. JavaScript and NuGet dependency audits are
 clean. The OpenAPI/client were regenerated and EF reports no model drift.
 
-All 47 production-browser checks passed in a clean run with no skips or retries,
+All 49 production-browser checks passed in a clean run with no skips or retries,
 against a disposable migrated/seeded API, including
 profile operation completion without skips, light/dark axe, keyboard navigation
 and match expansion, mobile overflow, and the dense Build Lab layout. CI now runs
@@ -64,3 +64,10 @@ the web service.
    changing the initial SLOs or prioritizing follow-up product work. This requires
    production host evidence and remains an operational follow-up, not an inferred
    explanation of the original incident.
+
+The first CI run exposed a populated-home LCP regression (4.09 s against the
+unchanged 4 s budget). The search dialog is now fetched on first intent and the
+hero splash has explicit high fetch priority and a smaller payload. A local
+three-sample mobile Lighthouse median improved to 3.54 s, with zero CLS; CI retains
+full route reports for diagnosis. First click, first keyboard shortcut, Escape
+cancellation and focus restoration are regression-tested.

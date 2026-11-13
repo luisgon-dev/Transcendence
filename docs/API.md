@@ -491,6 +491,7 @@ Auth behavior notes:
 
 ### Admin Operations (`AdminOnly`)
 
+- `GET /api/admin/release` returns the source revision and latest applied migration (no-store).
 - `GET /api/admin/overview`
 - `GET /api/admin/metrics/analysis`
 - `GET /api/admin/jobs/recurring`

@@ -6,13 +6,9 @@ x-app-env: &app-env
 
 services:
   postgres:
-    # Mirrors the prod stack so this file is a safe deploy source: pgautoupgrade (runs pg_upgrade across
-    # major versions in place) on Postgres 18, with the data volume mounted at /var/lib/postgresql —
-    # pgautoupgrade keeps PGDATA under /var/lib/postgresql/<major>/docker, NOT /var/lib/postgresql/data
-    # like the stock postgres image, so the mount path must match the image. NOTE: an existing local
-    # postgres:16 volume won't auto-migrate cleanly across this image+mount change — remove it first
-    # (`docker compose down -v`, or `docker volume rm transcendence_postgres_data`) for a clean PG18 init.
-    image: pgautoupgrade/pgautoupgrade:18.3-alpine
+    # PostgreSQL 18 uses the existing /var/lib/postgresql/18/docker data directory.
+    # Major upgrades require an explicit migration; retain a clean backup for rollback.
+    image: postgres:18.7-alpine
     container_name: transcendence-postgres
     labels:
       wud.watch: "false"
@@ -82,7 +78,7 @@ services:
       - transcendence-net
 
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     container_name: transcendence-redis
     labels:
       wud.watch: "false"

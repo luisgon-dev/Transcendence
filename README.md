@@ -71,7 +71,7 @@ flowchart LR
   end
 
   PG[("PostgreSQL 18<br/>match + analytics data<br/>Hangfire storage · refresh locks")]
-  Redis[("Redis 7<br/>HybridCache L2 · DataProtection keys<br/>worker heartbeat")]
+  Redis[("Redis 8<br/>HybridCache L2 · DataProtection keys<br/>worker heartbeat")]
   Riot[["Riot API"]]
   Ext[["Data Dragon · CommunityDragon<br/>Leaguepedia"]]
 
@@ -595,3 +595,8 @@ matching doc in `docs/` in the same PR.
 ## License
 
 [GPL-3.0](LICENSE) © 2026 luisgon-dev
+
+PostgreSQL uses `postgres:18.7-alpine` with the existing parent volume at
+`/var/lib/postgresql` and data in `18/docker`. Patch updates retain that layout;
+major upgrades require an explicit migration and a clean database backup or snapshot.
+Redis 8 retains its existing append-only data and DataProtection keys.

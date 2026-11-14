@@ -719,3 +719,7 @@ See `docs/DATA-SLOS.md` for the fixed vocabulary and privacy/measurement limits.
 `GET /api/admin/release` requires an admin JWT and returns `checkedAtUtc`,
 `sourceRevision` and nullable `latestAppliedMigration`, with no-store caching.
 The schema value comes from the applied migration history, not the image tag.
+
+The backend now targets .NET 11. Regenerating OpenAPI changes response-property
+ordering only; endpoint paths, schemas, authentication and status-code contracts
+remain semantically identical to the .NET 10 export.

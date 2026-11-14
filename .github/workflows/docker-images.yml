@@ -134,6 +134,7 @@ jobs:
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
+          load: ${{ github.event_name == 'pull_request' && (matrix.component == 'webapi' || matrix.component == 'service') }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
@@ -142,8 +143,12 @@ jobs:
           build-args: SOURCE_REVISION=${{ github.sha }}
           # The systemd poller resolves the top-level OCI digest explicitly and supports
           # attestation sub-manifests, so publish both build provenance and an SBOM.
-          provenance: mode=max
-          sbom: true
+          provenance: ${{ github.event_name != 'pull_request' && 'mode=max' || 'false' }}
+          sbom: ${{ github.event_name != 'pull_request' }}
+
+      - name: Smoke test published backend runtime
+        if: github.event_name == 'pull_request' && steps.plan.outputs.run == 'true' && (matrix.component == 'webapi' || matrix.component == 'service')
+        run: bash scripts/ci/backend-runtime-smoke.sh '${{ matrix.component }}' '${{ steps.build-and-push.outputs.imageid }}'
 
       - name: Sign the published Docker image
         if: steps.plan.outputs.run == 'true' && github.event_name != 'pull_request'

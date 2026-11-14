@@ -10,6 +10,7 @@ test("shared build inputs trigger their consuming images", () => {
   assert.deepEqual(affected("packages/web-routes/src/index.js"), ["web", "perf"]);
   assert.deepEqual(affected("packages/api-client/src/index.ts"), ["web"]);
   assert.deepEqual(affected("Directory.Build.props"), ["webapi", "service"]);
+  assert.deepEqual(affected("scripts/ci/backend-runtime-smoke.sh"), ["webapi", "service"]);
   assert.deepEqual(affected(".npmrc"), ["web"]);
   assert.deepEqual(affected(".dockerignore"), ["webapi", "service", "web", "perf"]);
   assert.deepEqual(affected("docs/API.md"), []);

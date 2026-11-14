@@ -1,6 +1,6 @@
 {
-  "webapi": ["config/backend.shared.json", "Transcendence.WebAPI/**", "Transcendence.Service.Core/**", "Transcendence.Data/**", "Transcendence.Service/**", "global.json", "Transcendence.sln", "Directory.Build.props", ".dockerignore", ".github/component-inputs.json", ".github/workflows/docker-images.yml"],
-  "service": ["config/backend.shared.json", "Transcendence.Service/**", "Transcendence.Service.Core/**", "Transcendence.Data/**", "global.json", "Transcendence.sln", "Directory.Build.props", ".dockerignore", ".github/component-inputs.json", ".github/workflows/docker-images.yml"],
+  "webapi": ["config/backend.shared.json", "Transcendence.WebAPI/**", "Transcendence.Service.Core/**", "Transcendence.Data/**", "Transcendence.Service/**", "scripts/ci/**", "global.json", "Transcendence.sln", "Directory.Build.props", ".dockerignore", ".github/component-inputs.json", ".github/workflows/docker-images.yml"],
+  "service": ["config/backend.shared.json", "Transcendence.Service/**", "Transcendence.Service.Core/**", "Transcendence.Data/**", "scripts/ci/**", "global.json", "Transcendence.sln", "Directory.Build.props", ".dockerignore", ".github/component-inputs.json", ".github/workflows/docker-images.yml"],
   "web": ["apps/web/**", "openapi/**", "packages/api-client/**", "packages/web-routes/**", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", ".npmrc", ".nvmrc", ".dockerignore", ".github/component-inputs.json", ".github/workflows/docker-images.yml"],
   "perf": ["scripts/perf/**", "packages/web-routes/**", "package.json", "pnpm-lock.yaml", ".dockerignore", ".github/component-inputs.json", ".github/workflows/docker-images.yml"]
 }

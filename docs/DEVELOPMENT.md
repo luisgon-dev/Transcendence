@@ -1,10 +1,10 @@
 # Development
 
-This repo contains a .NET backend (API + background worker) and a Next.js web frontend.
+This repo contains a .NET 11 backend (API + background worker) and a Next.js web frontend.
 
 ## Prerequisites
 
-- .NET SDK (see `global.json`)
+- .NET SDK 11.0.100 (see `global.json`; stable patches within this SDK feature band are allowed)
 - Docker Desktop (recommended) or local:
   - PostgreSQL 18 (Compose uses `postgres:18.7-alpine`, retaining `/var/lib/postgresql/18/docker`)
   - Redis 8 (Compose uses `redis:8-alpine`, retaining append-only data and Data Protection keys)
@@ -1300,3 +1300,24 @@ hidden directory. Seeded browser checks still run when a numeric performance
 budget fails, so one regression cannot hide unrelated operation/a11y results.
 The search dialog loads on first intent; its first click/shortcut is replayed
 once listeners are ready, with cancel/reopen coverage.
+
+## .NET 11 runtime and tooling
+
+All backend and test projects target `net11.0`, and API/worker containers use pinned
+.NET 11 images. CI selects SDK 11.0.100 from `global.json`; prerelease and future
+major SDKs are excluded. Hosting, authentication, Data Protection, and Extensions
+packages use 11.0.0.
+
+EF Core and `dotnet-ef` stay paired at stable 10.0.15 with Npgsql provider 10.0.3
+until the provider has a stable EF 11 release. This is compatible with the .NET 11
+application target. The local EF and Swagger tools explicitly allow runtime roll
+forward so they run on a machine with only .NET 11 installed; application runtime
+selection stays `net11.0`. Historical migrations must still be generated/changed
+only through EF CLI. A framework upgrade alone does not require a schema migration.
+
+Backend PR image builds load the actual runtime image and run
+`bash scripts/ci/backend-runtime-smoke.sh <webapi|service> <image>`. The check uses
+disposable PostgreSQL 18 and Redis 8 containers on a private network, without host
+ports or persistent volumes. It checks production API readiness and a successful
+worker migration-only run; it never starts Riot ingestion. Published main images
+retain provenance, SBOMs, and signing.

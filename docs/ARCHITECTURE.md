@@ -934,3 +934,9 @@ hydration. Its loader buffers that intent until the dialog installs its event
 listeners, avoiding a lost first click/shortcut. The home hero uses a high-priority
 55-quality optimized splash; decorative image bytes and optional dialog work do
 not need to compete on the initial render path.
+
+The backend application target and container runtimes are .NET 11. Stable EF Core
+10.0.15 and Npgsql provider 10.0.3 remain paired while the provider’s EF 11 release
+is prerelease. Backend image CI verifies runtime startup as well as compilation:
+the API must pass database/cache readiness and the worker must apply migrations
+in its migration-only path against disposable infrastructure.

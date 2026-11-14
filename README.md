@@ -4,7 +4,7 @@
 
 # Transcendence
 
-**League of Legends analytics: a .NET 10 ingestion and analytics backend behind a Next.js 16 frontend.**
+**League of Legends analytics: a .NET 11 ingestion and analytics backend behind a Next.js 16 frontend.**
 
 [![CI](https://github.com/luisgon-dev/Transcendence/actions/workflows/ci-web-backend.yml/badge.svg)](https://github.com/luisgon-dev/Transcendence/actions/workflows/ci-web-backend.yml)
 [![Docker Images](https://github.com/luisgon-dev/Transcendence/actions/workflows/docker-images.yml/badge.svg)](https://github.com/luisgon-dev/Transcendence/actions/workflows/docker-images.yml)
@@ -34,7 +34,7 @@ game lookup, and a 5-player champ-select multi-search.
 - **Scale:** crawls the ranked ladders on 10 Riot platforms and ingests several thousand matches a day
   within an HDD I/O budget. Production holds 500K+ matches and their timelines in a 300 GB PostgreSQL
   database; live figures are on [About the data](https://transcend.kronic.one/about).
-- **Pipeline:** a .NET 10 Hangfire worker (7 servers, 9 queues, 21 recurring jobs) precomputes tier
+- **Pipeline:** a .NET 11 Hangfire worker (7 servers, 9 queues, 21 recurring jobs) precomputes tier
   grades, builds, matchups, and Build Lab win rates. Every Riot call passes a per-region token bucket.
 - **API:** the ASP.NET Core API serves reads and enqueues jobs, and holds no Riot key. It has JWT and
   API-key auth, rate limiting, and HybridCache over Redis.
@@ -463,7 +463,7 @@ Pruning runs only after a deploy, never while a pull is in flight. Runbook:
 ## Local development
 
 **Prerequisites:**
-- [.NET SDK 10.0.302](global.json)
+- [.NET SDK 11.0.100](global.json)
 - [Node 26](.nvmrc), the same version the web and perf images run
 - [pnpm 10.22.0](package.json), pinned through `packageManager` (`corepack enable` works)
 - Docker

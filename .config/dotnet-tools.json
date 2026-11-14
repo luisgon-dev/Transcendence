@@ -7,14 +7,14 @@
       "commands": [
         "swagger"
       ],
-      "rollForward": false
+      "rollForward": true
     },
     "dotnet-ef": {
-      "version": "10.0.14",
+      "version": "10.0.15",
       "commands": [
         "dotnet-ef"
       ],
-      "rollForward": false
+      "rollForward": true
     }
   }
 }

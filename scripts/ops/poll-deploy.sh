@@ -284,6 +284,34 @@ wait_for_web_assets() {
   return 1
 }
 
+# Preserve the failed replacement before rollback removes it. Never dump container environment.
+capture_failure_diagnostics() {
+  local svc="$1" container="$2" reason="$3" release="${4:-unknown}" failure_file temporary
+  mkdir -p "$STATE_DIR" || return 0
+  failure_file="${STATE_DIR}/${svc}-last-failure.log"
+  temporary="$(mktemp "${STATE_DIR}/${svc}-failure.XXXXXX")" || return 0
+  {
+    printf 'Captured at %s; service=%s; reason=%s; release=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$svc" "$reason" "$release"
+    if [ -r "${STATE_DIR}/last-command.log" ]; then
+      printf '\nLast failed Compose command:\n'
+      tail -n 40 "${STATE_DIR}/last-command.log" | tail -c 16384
+    fi
+    printf '\nContainer state:\n'
+    docker inspect "$container" --format 'image={{.Image}} revision={{index .Config.Labels "org.opencontainers.image.revision"}} state={{json .State}}' 2>&1 | tail -c 8192 || true
+    printf '\nRecent application output:\n'
+    docker logs --timestamps --tail 80 "$container" 2>&1 | tail -c 32768 || true
+  } >"$temporary" 2>&1
+  chmod 0600 "$temporary"
+  if mv -f "$temporary" "$failure_file"; then
+    log "DIAGNOSTICS ${svc}: failure preserved in ${failure_file}"
+    while IFS= read -r line; do log "  ${line}"; done < <(tail -n 60 "$failure_file")
+  else
+    rm -f "$temporary"
+    log "WARN ${svc}: could not preserve failure diagnostics"
+  fi
+  return 0
+}
+
 rollback_service() {
   local svc="$1" container="$2" repo="$3" previous_image_id="$4" failed_release="$5"
   local failed_file="${STATE_DIR}/${svc}-failed-digest" previous_container_id="${6:-}"
@@ -388,6 +416,9 @@ deploy_one() {
   fi
   if [ "$release_id" = "$failed_release" ]; then
     log "SKIP ${svc}: remote release ${remote_rev:0:12} previously failed and remains quarantined"
+    if [ -r "${STATE_DIR}/${svc}-last-failure.log" ]; then
+      log "DIAGNOSTICS ${svc}: previous failure is recorded in ${STATE_DIR}/${svc}-last-failure.log"
+    fi
     return 0
   fi
   current="$(local_digest "$container")"
@@ -447,6 +478,7 @@ deploy_one() {
     log "ERROR web: persistent cache is not writable"; return 1
   fi
   if [ "$svc" = "service" ] && ! run_migrations; then
+    capture_failure_diagnostics "$svc" "$container" "migration" "$release_id"
     mkdir -p "$STATE_DIR"
     printf '%s\n' "$release_id" >"$failed_file"
     log "ERROR ${svc}: pre-deploy migration failed; existing worker remains active"
@@ -457,18 +489,21 @@ deploy_one() {
       docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" \
       up -d --no-deps --pull never "$svc"; then
     log "ERROR ${svc}: up -d failed"
+    capture_failure_diagnostics "$svc" "$container" "replacement" "$release_id"
     rollback_service \
       "$svc" "$container" "$repo" "$previous_image_id" "$release_id" "$previous_container_id" || true
     notify "🚨 deploy: ${svc} up -d failed; rollback attempted"
     return 1
   fi
   if ! wait_for_healthy "$svc" "$container"; then
+    capture_failure_diagnostics "$svc" "$container" "health verification" "$release_id"
     rollback_service \
       "$svc" "$container" "$repo" "$previous_image_id" "$release_id" "$previous_container_id" || true
     notify "🚨 deploy: ${svc} failed health verification; rollback attempted"
     return 1
   fi
   if [ "$svc" = "web" ] && ! wait_for_web_assets "$container"; then
+    capture_failure_diagnostics "$svc" "$container" "asset readiness" "$release_id"
     rollback_service "$svc" "$container" "$repo" "$previous_image_id" "$release_id" "$previous_container_id" || true
     notify "🚨 deploy: web asset readiness failed; rollback attempted"
     return 1

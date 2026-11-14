@@ -83,6 +83,7 @@ run_logged() {{ echo "$1" >> "{calls}"; [ "$1" != "{fail}" ]; }}
 run_migrations() {{ echo migration >> "{calls}"; [ "migration" != "{fail}" ]; }}
 wait_for_healthy() {{ echo health >> "{calls}"; [ "health" != "{fail}" ]; }}
 wait_for_web_assets() {{ echo assets >> "{calls}"; [ "assets" != "{fail}" ]; }}
+capture_failure_diagnostics() {{ echo diagnostics >> "{calls}"; }}
 rollback_service() {{ echo rollback >> "{calls}"; }}
 deploy_one '{component}' 'test-container' 'test-repo'
 '''
@@ -114,6 +115,7 @@ deploy_one '{component}' 'test-container' 'test-repo'
             rc, calls, _ = self.run_case(fail=fail)
             self.assertEqual(rc, 1)
             self.assertIn('rollback', calls)
+            self.assertLess(calls.index('diagnostics'), calls.index('rollback'))
 
     def test_web_requires_assets_and_rolls_back_a_failed_probe(self):
         rc, calls, _ = self.run_case(component='web', fail='assets')
@@ -121,11 +123,40 @@ deploy_one '{component}' 'test-container' 'test-repo'
         self.assertIn('web cache preparation', calls)
         self.assertIn('assets', calls)
         self.assertIn('rollback', calls)
+        self.assertLess(calls.index('diagnostics'), calls.index('rollback'))
 
     def test_success_requires_health(self):
         rc, calls, _ = self.run_case()
         self.assertEqual(rc, 0)
         self.assertIn('health', calls)
+
+
+class FailureDiagnosticsTests(unittest.TestCase):
+    def test_failure_output_survives_rollback_with_private_permissions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'last-command.log').write_text('the replacement failed\n')
+            body = f'''source "{SCRIPT}"
+STATE_DIR="{root}"
+docker() {{
+  case "$1" in
+    inspect) echo 'state=exited exitCode=1';;
+    logs) echo 'Missing required trusted proxy configuration';;
+  esac
+}}
+capture_failure_diagnostics webapi test-container 'health verification' release-123
+'''
+            result = subprocess.run(['bash', '-c', body], env=dict(os.environ, POLL_DEPLOY_LIB_ONLY='1'),
+                                    capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0)
+            evidence = root / 'webapi-last-failure.log'
+            self.assertEqual(evidence.stat().st_mode & 0o777, 0o600)
+            content = evidence.read_text()
+            self.assertIn('release-123', content)
+            self.assertIn('the replacement failed', content)
+            self.assertIn('exitCode=1', content)
+            self.assertIn('Missing required trusted proxy configuration', content)
+            self.assertIn('DIAGNOSTICS webapi', result.stdout)
 
 
 if __name__ == '__main__':

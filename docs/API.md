@@ -720,6 +720,12 @@ See `docs/DATA-SLOS.md` for the fixed vocabulary and privacy/measurement limits.
 `sourceRevision` and nullable `latestAppliedMigration`, with no-store caching.
 The schema value comes from the applied migration history, not the image tag.
 
+Live-game probes under Spectator HTTP 429 or regional rate-budget pressure stay `retrying`
+with `errorCode=riot_rate_limited`. The worker preserves the same operation and
+retry deadline without consuming its failure budget, and publishes no new live
+snapshot until a response is verified and saved. `retryAfterSeconds` is a bounded
+client polling hint (at most 30 seconds), not the full upstream backoff.
+
 The backend now targets .NET 11. Regenerating OpenAPI changes response-property
 ordering only; endpoint paths, schemas, authentication and status-code contracts
 remain semantically identical to the .NET 10 export.

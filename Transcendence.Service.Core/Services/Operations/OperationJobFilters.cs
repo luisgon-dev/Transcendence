@@ -9,6 +9,7 @@ using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
 using System.Text.Json;
 using Transcendence.Data.Models.LoL.Account;
+using Transcendence.Service.Core.Services.LiveGame.Models;
 
 namespace Transcendence.Service.Core.Services.Operations;
 
@@ -42,10 +43,12 @@ public sealed class OperationExecutionFilter(IServiceScopeFactory scopes) : JobF
     }
     public void OnStateElection(ElectStateContext context)
     {
-        // Busy duplicates are deferred without consuming the real execution's retry/failure budget.
-        if (TrackedId(context.BackgroundJob.Job) is not null && context.CandidateState is FailedState failed
-            && failed.Exception is OperationExecutionBusyException)
+        // Lock contention and upstream backpressure do not consume the execution's failure budget.
+        if (TrackedId(context.BackgroundJob.Job) is null || context.CandidateState is not FailedState failed) return;
+        if (failed.Exception is OperationExecutionBusyException)
             context.CandidateState = new ScheduledState(TimeSpan.FromSeconds(15)) { Reason = "operation_busy" };
+        else if (failed.Exception is LiveGameProbeDeferredException deferred)
+            context.CandidateState = new ScheduledState(deferred.RetryAfter) { Reason = LiveGameProbeDeferredException.ErrorCode };
     }
     internal static Guid? TrackedId(Job job) => job.Args.FirstOrDefault() is Guid id && id != Guid.Empty
         && (((job.Type == typeof(ISummonerRefreshJob) || job.Type == typeof(SummonerRefreshJob))
@@ -95,7 +98,8 @@ public sealed class OperationOutcomeFilter(IServiceScopeFactory scopes) : JobFil
             || !context.TraversedStates.OfType<FailedState>().Any()) return;
         using var scope = scopes.CreateScope();
         scope.ServiceProvider.GetRequiredService<IBackgroundOperationTracker>()
-            .RetryAsync(id, "worker_retrying", scheduled.EnqueueAt).GetAwaiter().GetResult();
+            .RetryAsync(id, scheduled.Reason == LiveGameProbeDeferredException.ErrorCode
+                ? LiveGameProbeDeferredException.ErrorCode : "worker_retrying", scheduled.EnqueueAt).GetAwaiter().GetResult();
     }
     public void OnStateApplied(ApplyStateContext context, IWriteOnlyTransaction transaction)
     {

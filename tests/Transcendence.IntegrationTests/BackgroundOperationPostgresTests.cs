@@ -15,6 +15,7 @@ using Transcendence.Service.Core.Services.Auth.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Models;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Interfaces;
+using Transcendence.Service.Core.Services.LiveGame.Models;
 using Transcendence.Service.Core.Services.Operations;
 
 namespace Transcendence.IntegrationTests;
@@ -119,6 +120,39 @@ public sealed class BackgroundOperationPostgresTests(PostgresIntegrationFixture 
         (await StatusAsync(tracked)).Status.Should().Be(OperationStatuses.Queued);
         client.ChangeState(row.HangfireJobId!, new DeletedState()).Should().BeTrue();
         (await StatusAsync(tracked)).ErrorCode.Should().Be("job_cancelled");
+    }
+
+    [Fact]
+    public async Task Riot_rate_deferral_schedules_same_probe_without_consuming_failure_budget()
+    {
+        var tracked = await CreateAsync();
+        var storage = Storage();
+        using var provider = FiltersProvider();
+        var filters = new JobFilterCollection();
+        filters.Add(provider.GetRequiredService<OperationExecutionFilter>());
+        filters.Add(new AutomaticRetryAttribute { Attempts = 0, Order = 20 });
+        filters.Add(provider.GetRequiredService<OperationOutcomeFilter>());
+        var client = new BackgroundJobClient(storage, filters);
+        using var scope = fixture.Factory.Services.CreateScope();
+        await new BackgroundOperationDispatcher(Db(scope), client).DispatchAsync(tracked.ExecutionId);
+        var row = await Db(scope).BackgroundOperations.AsNoTracking().SingleAsync(x => x.Id == tracked.ExecutionId);
+
+        client.ChangeState(row.HangfireJobId!, new FailedState(
+            new LiveGameProbeDeferredException("NA1", TimeSpan.FromMinutes(1)))).Should().BeFalse();
+
+        using var connection = storage.GetConnection();
+        connection.GetStateData(row.HangfireJobId!).Name.Should().Be("Scheduled");
+        connection.GetJobParameter(row.HangfireJobId!, "RetryCount").Should().BeNull();
+        var status = await StatusAsync(tracked);
+        status.Status.Should().Be(OperationStatuses.Retrying);
+        status.ErrorCode.Should().Be(LiveGameProbeDeferredException.ErrorCode);
+        // The public polling hint is capped at 30s independently of the worker's retry deadline.
+        status.RetryAfterSeconds.Should().BeInRange(1, 30);
+        var retryAt = await Db(scope).BackgroundOperations.AsNoTracking()
+            .Where(x => x.Id == tracked.ExecutionId).Select(x => x.RetryAtUtc).SingleAsync();
+        retryAt.Should().NotBeNull();
+        retryAt!.Value.Should().BeOnOrAfter(DateTime.UtcNow.AddSeconds(45));
+        status.CompletedAtUtc.Should().BeNull();
     }
 
     [Fact]

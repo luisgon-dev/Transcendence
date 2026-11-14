@@ -69,7 +69,7 @@ public class RiotLiveGamePollingService(
         try
         {
             if (!await rateGate.AcquireAsync(request.Region, ct))
-                throw new InvalidOperationException($"Live-game probe deferred by the {request.Region} Riot rate gate.");
+                throw new LiveGameProbeDeferredException(request.Region, TimeSpan.FromSeconds(30));
 
             var gameInfo = await spectator.GetCurrentGameAsync(request.Platform, puuid, ct);
             if (gameInfo == null)
@@ -109,8 +109,10 @@ public class RiotLiveGamePollingService(
         catch (Exception ex) when (RiotRateLimitHandling.TryGetRetryAfter(ex, out var retryAfter))
         {
             rateGate.Pause(request.Region, retryAfter);
-            throw;
+            throw new LiveGameProbeDeferredException(request.Region, retryAfter, ex);
         }
+        catch (LiveGameProbeDeferredException) { throw; }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (JsonException ex)
         {
             logger.LogWarning(

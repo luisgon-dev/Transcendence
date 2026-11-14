@@ -41,10 +41,10 @@
     "verify": "pnpm web:lint && pnpm web:test && pnpm web:build && pnpm api:gen && pnpm backend:test && python3 -I -m unittest discover -s scripts/ops/tests -p \"test_*.py\" && node --test scripts/security/*.test.mjs && pnpm audit --audit-level=low && dotnet list Transcendence.sln package --vulnerable --include-transitive --format json > /tmp/transcendence-nuget-audit.json && python3 scripts/security/check-nuget-audit.py /tmp/transcendence-nuget-audit.json"
   },
   "devDependencies": {
-    "@playwright/test": "^1.64.1",
+    "@playwright/test": "^1.65.0",
     "@transcendence/web-routes": "workspace:*",
     "axe-core": "^4.14.0",
-    "chrome-launcher": "1.2.2",
+    "chrome-launcher": "1.2.3",
     "lighthouse": "13.6.0"
   }
 }

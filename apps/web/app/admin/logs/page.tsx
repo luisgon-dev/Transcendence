@@ -43,7 +43,7 @@ function buildLogsHref({
 function stat(label: string, value: string) {
   return (
     <div className="page-stat-card">
-      <p className="text-xs uppercase tracking-wide text-fg/60">{label}</p>
+      <p className="text-xs uppercase tracking-wide text-muted">{label}</p>
       <p className="mt-1 text-sm font-semibold text-fg">{value}</p>
     </div>
   );
@@ -219,7 +219,7 @@ export default async function AdminLogsPage(props: { searchParams: SearchParams 
         ) : (
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[980px] text-left text-sm">
-              <thead className="text-[11px] uppercase tracking-wider text-fg/65">
+              <thead className="text-[11px] uppercase tracking-wider text-muted">
                 <tr className="border-b border-border/30">
                   <th className="py-2 pr-4">When</th>
                   <th className="py-2 pr-4">Service</th>

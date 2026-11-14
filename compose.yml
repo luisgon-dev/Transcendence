@@ -70,7 +70,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql
     healthcheck:
@@ -115,6 +115,7 @@ services:
       PORT: 3000
       # The canonical public origin. apps/web/lib/env.ts falls back to a build-time constant when
       # this is unset, so an omission is silent rather than fatal -- it must not be lost.
+      TRN_TRUSTED_PROXY_HEADERS: "true"
       TRN_PUBLIC_ORIGIN: ${TRN_PUBLIC_ORIGIN:-}
       TRN_BACKEND_BASE_URL: http://webapi:8080
       TRN_BACKEND_API_KEY: ${WEB_TRN_BACKEND_API_KEY}
@@ -125,12 +126,28 @@ services:
       # local debugging session; verbose mode can expose upstream/internal failure detail.
       TRN_ERROR_VERBOSITY: ${TRN_ERROR_VERBOSITY:-safe}
     ports:
-      - "${WEB_PORT:-3000}:3000"
+      - "${WEB_BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-3000}:3000"
+    volumes:
+      - web_image_cache:/app/apps/web/.next/cache/images
     depends_on:
+      web-cache-init:
+        condition: service_completed_successfully
       webapi:
         condition: service_healthy
     networks:
       - transcendence-net
+
+  web-cache-init:
+    image: ${WEB_IMAGE:-ghcr.io/luisgon-dev/transcendence-web:main}
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["chown node:node /app/apps/web/.next/cache/images"]
+    volumes:
+      - web_image_cache:/app/apps/web/.next/cache/images
+    restart: "no"
 
   operational-logs-init:
     # Named volumes are created as root:root. The .NET images run as their non-root APP_UID,
@@ -164,11 +181,11 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
+      Security__TrustedProxyNetworks__0: ${TRUSTED_PROXY_NETWORK_0:-172.16.0.0/12}
       Auth__Jwt__Issuer: ${JWT_ISSUER}
       Auth__Jwt__Audience: ${JWT_AUDIENCE}
       Auth__Jwt__Key: ${JWT_SIGNING_KEY}
       Auth__Jwt__AccessTokenMinutes: ${JWT_ACCESS_TOKEN_MINUTES}
-      Auth__AdminBootstrap__Emails__0: ${ADMIN_BOOTSTRAP_EMAIL_0:-}
       Auth__BootstrapApiKey: ${AUTH_BOOTSTRAP_API_KEY}
       Auth__PasswordReset__Enabled: ${PASSWORD_RESET_ENABLED:-false}
       Auth__PasswordReset__PublicBaseUrl: ${PASSWORD_RESET_PUBLIC_BASE_URL:-https://transcend.kronic.one}
@@ -191,7 +208,7 @@ services:
       Analytics__BuildLab__Enabled: ${BUILD_LAB_ENABLED:-false}
       <<: *app-env
     ports:
-      - "${WEBAPI_PORT:-8080}:8080"
+      - "${API_BIND_ADDRESS:-127.0.0.1}:${WEBAPI_PORT:-8080}:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -327,6 +344,7 @@ services:
   # network so Prometheus can scrape webapi/service by name. See config/monitoring/README.md.
 
 volumes:
+  web_image_cache:
   postgres_data:
   redis_data:
   pgadmin_data:

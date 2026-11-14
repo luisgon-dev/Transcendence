@@ -134,7 +134,7 @@ async function LeaderboardResults({ filters, version, champions }: {
                   const profileHref = `/lol/summoners/${profileRegion}/${encodeRiotIdPath(entry)}`;
                   return (
                     <tr key={entry.summonerId} className="border-b border-border/25 last:border-b-0 hover:bg-surface-2/35">
-                      <td className="type-tabular px-4 py-3 text-right font-semibold text-fg/65">{entry.position}</td>
+                      <td className="type-tabular px-4 py-3 text-right font-semibold text-muted">{entry.position}</td>
                       <td className="px-4 py-3">
                         <Link href={profileHref} className="group flex min-w-0 items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35">
                           <Image
@@ -154,7 +154,7 @@ async function LeaderboardResults({ filters, version, champions }: {
                       <td className="type-tabular px-4 py-3 text-fg/82">{rankLabel(entry.tier, entry.division, entry.leaguePoints)}</td>
                       <td className="type-tabular px-4 py-3 text-right tabular-nums">
                         <span className="text-success">{entry.rankedWins}W</span>{" "}
-                        <span className="text-fg/58">{entry.rankedLosses}L</span>
+                        <span className="text-muted">{entry.rankedLosses}L</span>
                       </td>
                       {filters.championId ? <td className="type-tabular px-4 py-3 text-right tabular-nums">{entry.championGames ?? 0}</td> : null}
                       {filters.championId ? <td className="type-tabular px-4 py-3 text-right tabular-nums">{formatPercent(entry.championWinRate ?? 0, { decimals: 1 })}</td> : null}

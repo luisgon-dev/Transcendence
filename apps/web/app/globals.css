@@ -11,6 +11,18 @@
    perceptual uniformity across the data scales and both themes.
 ---------------------------------------------------------------------------- */
 :root {
+  /* Categorical text must stay readable on this theme’s surfaces. */
+  --t-rank-iron: oklch(0.45 0.012 264);
+  --t-rank-bronze: oklch(0.46 0.08 50);
+  --t-rank-silver: oklch(0.46 0.01 264);
+  --t-rank-gold: oklch(0.46 0.09 85);
+  --t-rank-platinum: oklch(0.46 0.08 195);
+  --t-rank-emerald: oklch(0.47 0.11 160);
+  --t-rank-diamond: oklch(0.46 0.10 240);
+  --t-rank-master: oklch(0.49 0.16 305);
+  --t-rank-grandmaster: oklch(0.50 0.18 25);
+  --t-rank-challenger: oklch(0.46 0.09 80);
+
   /* Structure — light */
   --t-bg: oklch(0.985 0.003 255);
   --t-surface: oklch(0.997 0.002 255);
@@ -23,7 +35,7 @@
   /* Action accent (red) — reserved for primary actions / active / focus. A vivid
      scarlet-crimson, pushed more saturated + lighter than the muted data `danger`
      red (hue 27) so "chrome you act on" reads apart from "a measured bad outcome". */
-  --t-primary: oklch(0.555 0.215 25);
+  --t-primary: oklch(0.50 0.19 25);
   --t-primary-fg: oklch(0.985 0.012 25);
   --t-primary-2: oklch(0.62 0.2 36);
 
@@ -40,11 +52,11 @@
   --t-wr-low: oklch(0.50 0.20 27);
 
   /* Tier categorical — light (darkened for contrast on light surfaces) */
-  --t-tier-s: oklch(0.66 0.14 76);
-  --t-tier-a: oklch(0.55 0.13 158);
-  --t-tier-b: oklch(0.55 0.12 235);
-  --t-tier-c: oklch(0.60 0.14 55);
-  --t-tier-d: oklch(0.55 0.015 264);
+  --t-tier-s: oklch(0.47 0.09 76);
+  --t-tier-a: oklch(0.47 0.11 158);
+  --t-tier-b: oklch(0.47 0.10 235);
+  --t-tier-c: oklch(0.47 0.11 55);
+  --t-tier-d: oklch(0.47 0.015 264);
 
   /* Elevation — light */
   --t-shadow-soft: 0 1px 2px oklch(0.24 0.02 264 / 0.06), 0 2px 8px oklch(0.24 0.02 264 / 0.05);
@@ -54,6 +66,18 @@
 }
 
 .dark {
+  /* Categorical text must stay readable on this theme’s surfaces. */
+  --t-rank-iron: oklch(0.70 0.012 264);
+  --t-rank-bronze: oklch(0.70 0.08 50);
+  --t-rank-silver: oklch(0.76 0.01 264);
+  --t-rank-gold: oklch(0.79 0.13 85);
+  --t-rank-platinum: oklch(0.74 0.09 195);
+  --t-rank-emerald: oklch(0.71 0.13 160);
+  --t-rank-diamond: oklch(0.75 0.11 240);
+  --t-rank-master: oklch(0.73 0.16 305);
+  --t-rank-grandmaster: oklch(0.72 0.19 25);
+  --t-rank-challenger: oklch(0.81 0.13 80);
+
   /* Structure — dark (cool slate) */
   --t-bg: oklch(0.17 0.015 264);
   --t-surface: oklch(0.207 0.016 264);
@@ -63,8 +87,8 @@
   --t-fg: oklch(0.965 0.005 255);
   --t-muted: oklch(0.705 0.02 264);
 
-  --t-primary: oklch(0.63 0.21 25);
-  --t-primary-fg: oklch(0.99 0.008 25);
+  --t-primary: oklch(0.68 0.19 25);
+  --t-primary-fg: oklch(0.15 0.012 25);
   --t-primary-2: oklch(0.7 0.2 38);
 
   --t-success: oklch(0.72 0.15 158);
@@ -127,16 +151,16 @@
   --color-tier-d: var(--t-tier-d);
 
   /* Rank categorical (static; used as accent badges/dots) */
-  --color-rank-iron: oklch(0.62 0.012 264);
-  --color-rank-bronze: oklch(0.56 0.08 50);
-  --color-rank-silver: oklch(0.76 0.01 264);
-  --color-rank-gold: oklch(0.79 0.13 85);
-  --color-rank-platinum: oklch(0.74 0.09 195);
-  --color-rank-emerald: oklch(0.71 0.13 160);
-  --color-rank-diamond: oklch(0.75 0.11 240);
-  --color-rank-master: oklch(0.63 0.16 305);
-  --color-rank-grandmaster: oklch(0.62 0.19 25);
-  --color-rank-challenger: oklch(0.81 0.13 80);
+  --color-rank-iron: var(--t-rank-iron);
+  --color-rank-bronze: var(--t-rank-bronze);
+  --color-rank-silver: var(--t-rank-silver);
+  --color-rank-gold: var(--t-rank-gold);
+  --color-rank-platinum: var(--t-rank-platinum);
+  --color-rank-emerald: var(--t-rank-emerald);
+  --color-rank-diamond: var(--t-rank-diamond);
+  --color-rank-master: var(--t-rank-master);
+  --color-rank-grandmaster: var(--t-rank-grandmaster);
+  --color-rank-challenger: var(--t-rank-challenger);
   --color-team-blue: oklch(0.72 0.11 235);
   --color-team-red: oklch(0.66 0.16 20);
 

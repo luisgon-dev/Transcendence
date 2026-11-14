@@ -62,15 +62,19 @@ public sealed class PasswordResetServiceTests
                 storedToken.TokenHash, It.IsAny<CancellationToken>()))
             .ReturnsAsync(storedToken);
         storedToken.UserAccount = user;
-        var previousHash = user.PasswordHash;
+        string? replacementHash = null;
+        repository.Setup(x => x.TryCompletePasswordResetAsync(storedToken.Id, user.Id, It.IsAny<string>(),
+                It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid, Guid, string, DateTime, CancellationToken>((_, _, hash, _, _) => replacementHash = hash)
+            .ReturnsAsync(true);
 
         (await service.CompleteAsync(new PasswordResetCompleteRequest(rawToken!, "new-password-456")))
             .Should().BeTrue();
 
-        user.PasswordHash.Should().NotBe(previousHash);
-        storedToken.UsedAtUtc.Should().NotBeNull();
-        repository.Verify(x => x.RevokeAllActiveRefreshTokensForUserAsync(
-            user.Id, It.IsAny<CancellationToken>()), Times.Once);
+        replacementHash.Should().StartWith("pbkdf2$");
+        replacementHash.Should().NotBe(user.PasswordHash);
+        repository.Verify(x => x.TryCompletePasswordResetAsync(storedToken.Id, user.Id, It.IsAny<string>(),
+            It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

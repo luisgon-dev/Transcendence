@@ -14,7 +14,8 @@ import { championDisplayName } from "@/lib/gameDisplay";
 import { LOL_REGION_OPTIONS } from "@/lib/lolRegions";
 import { parseLobbyText } from "@/lib/multiSearch";
 import { rankTierColorClass, rankTierDisplayLabel } from "@/lib/ranks";
-import { encodeRiotIdPath } from "@/lib/riotid";
+import { recordJourney } from "@/lib/journeyMetrics";
+import { scoutingLinks } from "@/lib/scouting";
 import { roleDisplayLabel } from "@/lib/roles";
 import { championIconUrl } from "@/lib/staticData";
 
@@ -48,9 +49,9 @@ function profileIconUrl(version: string, profileIconId: number): string {
   return `https://ddragon.leagueoflegends.com/cdn/${version}/img/profileicon/${profileIconId}.png`;
 }
 
-export function MultiSearchClient() {
-  const [region, setRegion] = useState("na");
-  const [lobbyText, setLobbyText] = useState("");
+export function MultiSearchClient({ initialRegion = "na", initialRiotId = "", queue }: { initialRegion?: string; initialRiotId?: string; queue?: string } = {}) {
+  const [region, setRegion] = useState(initialRegion);
+  const [lobbyText, setLobbyText] = useState(initialRiotId);
   const [response, setResponse] = useState<MultiSearchResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +89,7 @@ export function MultiSearchClient() {
         throw new Error(problemMessage(body) ?? "Team search is unavailable right now.");
       }
       setResponse(body);
+      recordJourney("multi_search_succeeded");
     } catch (caught) {
       setResponse(null);
       setError(caught instanceof Error ? caught.message : "Team search is unavailable right now.");
@@ -133,7 +135,7 @@ export function MultiSearchClient() {
                 autoCapitalize="off"
                 spellCheck={false}
                 placeholder={"Kronic#NA1\nPlayer Two#NA1 joined the lobby"}
-                className="mt-2 w-full resize-y rounded-control border border-border bg-surface px-4 py-3 text-sm leading-6 text-fg shadow-inset outline-none transition placeholder:text-muted/65 focus:border-primary/60 focus:ring-2 focus:ring-primary/25"
+                className="mt-2 w-full resize-y rounded-control border border-border bg-surface px-4 py-3 text-sm leading-6 text-fg shadow-inset outline-none transition placeholder:text-muted focus:border-primary/60 focus:ring-2 focus:ring-primary/25"
               />
             </div>
             <div>
@@ -171,7 +173,7 @@ export function MultiSearchClient() {
       {response ? (
         <div className="grid gap-5" aria-live="polite">
           <TeamInsights response={response} foundCount={foundCount} />
-          <ResultsTable results={response.results} region={region} staticData={staticData} />
+          <ResultsTable results={response.results} region={region} queue={queue} staticData={staticData} />
         </div>
       ) : (
         <div className="rounded-card border border-dashed border-border px-6 py-10 text-center">
@@ -194,7 +196,7 @@ function TeamInsights({ response, foundCount }: { response: MultiSearchResponse;
         <h2 id="team-read-heading" className={`mt-2 type-section ${rankTierColorClass(insights.averageRankLabel)}`}>
           {rankTierDisplayLabel(insights.averageRankLabel)} average
         </h2>
-        <p className="mt-2 text-sm text-fg/68">Based on {foundCount} of {response.results.length} stored profiles.</p>
+        <p className="mt-2 text-sm text-muted">Based on {foundCount} of {response.results.length} stored profiles.</p>
         <div className="mt-4 flex flex-wrap gap-2">
           {insights.roleCoverage.map((role) => <Badge key={role}>{roleDisplayLabel(role)}</Badge>)}
           {insights.roleCoverage.length === 0 ? <Badge>No known main roles</Badge> : null}
@@ -223,7 +225,7 @@ function TeamInsights({ response, foundCount }: { response: MultiSearchResponse;
             ))}
           </ul>
         ) : (
-          <p className="mt-4 text-sm text-fg/68">No duplicate-main or missing-profile autofill signals in this lobby.</p>
+          <p className="mt-4 text-sm text-muted">No duplicate-main or missing-profile autofill signals in this lobby.</p>
         )}
       </Card>
     </section>
@@ -233,9 +235,11 @@ function TeamInsights({ response, foundCount }: { response: MultiSearchResponse;
 function ResultsTable({
   results,
   region,
-  staticData
+  staticData,
+  queue
 }: {
   results: MultiSearchResult[];
+  queue?: string;
   region: string;
   staticData: ChampionStatic | null;
 }) {
@@ -262,6 +266,7 @@ function ResultsTable({
                 key={`${result.gameName}-${result.tagLine}`}
                 result={result}
                 region={region}
+                queue={queue}
                 staticData={staticData}
               />
             ))}
@@ -272,8 +277,9 @@ function ResultsTable({
   );
 }
 
-function PlayerRow({ result, region, staticData }: { result: MultiSearchResult; region: string; staticData: ChampionStatic | null }) {
-  const href = `/lol/summoners/${region}/${encodeRiotIdPath({ gameName: result.gameName, tagLine: result.tagLine })}`;
+function PlayerRow({ result, region, staticData, queue }: { queue?: string; result: MultiSearchResult; region: string; staticData: ChampionStatic | null }) {
+  const links = scoutingLinks({ region, gameName: result.gameName, tagLine: result.tagLine, queue });
+  const href = links.profile;
   return (
     <tr className="border-b border-border/30 align-middle last:border-b-0">
       <td className="px-5 py-4">
@@ -288,6 +294,7 @@ function PlayerRow({ result, region, staticData }: { result: MultiSearchResult; 
             <span className="type-caption text-muted">{result.found ? `Level ${result.summonerLevel ?? "?"}` : "Not in stored data"}</span>
           </span>
         </Link>
+        <Link href={links.live} className="mt-2 inline-flex min-h-11 items-center text-xs font-semibold text-primary">Check live game</Link>
       </td>
       <td className={`px-4 py-4 font-medium ${rankTierColorClass(result.soloRank?.tier)}`}>
         {rankLabel(result.soloRank)}

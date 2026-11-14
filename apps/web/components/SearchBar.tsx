@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { recordJourney } from "@/lib/journeyMetrics";
 import { cn } from "@/lib/cn";
 import { LOL_REGION_OPTIONS } from "@/lib/lolRegions";
 import { encodeRiotIdPath, parseRiotIdInput } from "@/lib/riotid";
@@ -42,6 +43,7 @@ export function SearchBar({ className }: { className?: string }) {
     }
 
     const riotIdPath = encodeRiotIdPath(riotId);
+    recordJourney("lookup_started");
     router.push(`/lol/summoners/${region}/${riotIdPath}`);
   }
 

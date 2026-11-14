@@ -22,6 +22,7 @@ import {
   type SummonerLookupResponse,
   type SummonerProfileResponse
 } from "@/components/lol-profile/shared";
+import { fetchAndConsumeWithTimeout } from "@/lib/fetchWithTimeout";
 import { championDisplayName } from "@/lib/gameDisplay";
 import { acceptedOperation, operationFailure, operationRequestSignal, pollOperation } from "@/lib/operations";
 import { formatQueueLabel } from "@/lib/queues";
@@ -38,39 +39,45 @@ export function useProfileStaticData(initial: {
   spellStatic: SpellStatic | null;
   runeStatic: RuneStatic | null;
 }) {
-  const [championStatic, setChampionStatic] = useState(initial.championStatic);
-  const [itemStatic, setItemStatic] = useState(initial.itemStatic);
-  const [spellStatic, setSpellStatic] = useState(initial.spellStatic);
-  const [runeStatic, setRuneStatic] = useState(initial.runeStatic);
+  const { championStatic: initialChampion, itemStatic: initialItem,
+    spellStatic: initialSpell, runeStatic: initialRune } = initial;
+  const [championStatic, setChampionStatic] = useState(initialChampion);
+  const [itemStatic, setItemStatic] = useState(initialItem);
+  const [spellStatic, setSpellStatic] = useState(initialSpell);
+  const [runeStatic, setRuneStatic] = useState(initialRune);
+  const [attempt, setAttempt] = useState(0);
+  const [staticUnavailable, setStaticUnavailable] = useState(false);
+  const [staticBusy, setStaticBusy] = useState(!initialChampion || !initialItem || !initialSpell || !initialRune);
+  const retryStaticData = useCallback(() => { setStaticBusy(true); setAttempt(value => value + 1); }, []);
 
   useEffect(() => {
     let cancelled = false;
-    async function loadStatic() {
+    let failed = false;
+    const controller = new AbortController();
+    async function load<T>(url: string, present: T | null, save: (value: T) => void) {
+      if (present) return;
       try {
-        const [champRes, itemRes, spellRes, runeRes] = await Promise.all([
-          championStatic ? null : fetch("/api/static/champions"),
-          itemStatic ? null : fetch("/api/static/items"),
-          spellStatic ? null : fetch("/api/static/spells"),
-          runeStatic ? null : fetch("/api/static/runes")
-        ]);
-        if (cancelled) return;
-        if (champRes?.ok) setChampionStatic((await champRes.json()) as ChampionStatic);
-        if (itemRes?.ok) setItemStatic((await itemRes.json()) as ItemStatic);
-        if (spellRes?.ok) setSpellStatic((await spellRes.json()) as SpellStatic);
-        if (runeRes?.ok) setRuneStatic((await runeRes.json()) as RuneStatic);
-      } catch {
-        // Static decoration is optional; retain the profile shell when a map cannot load.
-      }
+        const data = await fetchAndConsumeWithTimeout(url, { signal: controller.signal }, async response => {
+          if (!response.ok) throw new Error("Static data unavailable");
+          return await response.json() as T;
+        }, { timeoutMs: 12_000 });
+        if (!cancelled) save(data);
+      } catch { if (!cancelled) failed = true; }
     }
-    void loadStatic();
-    return () => {
-      cancelled = true;
-    };
-  }, [championStatic, itemStatic, runeStatic, spellStatic]);
+    void Promise.all([
+      load("/api/static/champions", initialChampion, setChampionStatic),
+      load("/api/static/items", initialItem, setItemStatic),
+      load("/api/static/spells", initialSpell, setSpellStatic),
+      load("/api/static/runes", initialRune, setRuneStatic)
+    ]).then(() => {
+      if (!cancelled) { setStaticUnavailable(failed); setStaticBusy(false); }
+    });
+    return () => { cancelled = true; controller.abort(); };
+  }, [initialChampion, initialItem, initialRune, initialSpell, attempt]);
 
   return useMemo(
-    () => ({ championStatic, itemStatic, spellStatic, runeStatic }),
-    [championStatic, itemStatic, runeStatic, spellStatic]
+    () => ({ championStatic, itemStatic, spellStatic, runeStatic, staticUnavailable, staticBusy, retryStaticData }),
+    [championStatic, itemStatic, runeStatic, spellStatic, staticUnavailable, staticBusy, retryStaticData]
   );
 }
 

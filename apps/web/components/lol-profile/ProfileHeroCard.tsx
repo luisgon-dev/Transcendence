@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { scoutingLinks } from "@/lib/scouting";
 import Image from "next/image";
 
 import { FavoriteButton } from "@/components/FavoriteButton";
@@ -39,9 +41,11 @@ export function ProfileHeroCard({
   accepted,
   error,
   busy,
-  onRefresh
+  onRefresh,
+  queue
 }: {
   title: string;
+  queue?: string;
   region: string;
   gameName: string;
   tagLine: string;
@@ -55,6 +59,7 @@ export function ProfileHeroCard({
   busy: boolean;
   onRefresh: () => void;
 }) {
+  const links = scoutingLinks({ region, gameName, tagLine, queue });
   const primary = rankedEntries[0];
   const primaryRank = primary?.rank;
   const emblem = rankEmblemUrl(primaryRank?.tier);
@@ -105,7 +110,7 @@ export function ProfileHeroCard({
               <span className="block size-[72px] rounded-card border border-border/60 bg-surface-2" />
             )}
             <span className="type-caption absolute -bottom-2 left-1/2 min-w-9 -translate-x-1/2 rounded-md border border-border bg-surface px-1.5 text-center font-semibold tabular-nums text-fg">
-              {profile?.summonerLevel ?? "—"}
+              <span className="sr-only">Level </span>{profile?.summonerLevel ?? "—"}
             </span>
           </div>
 
@@ -156,6 +161,8 @@ export function ProfileHeroCard({
             <Button variant="outline" onClick={onRefresh} disabled={busy}>
               {busy ? "Starting…" : "Update Now"}
             </Button>
+            <Link className="min-h-11 content-center px-3 text-sm font-semibold text-primary" href={links.live}>Live game</Link>
+            <Link className="min-h-11 content-center px-3 text-sm font-semibold text-primary" href={links.multi}>Scout lobby</Link>
             <FavoriteButton region={region} gameName={gameName} tagLine={tagLine} />
           </div>
         </div>

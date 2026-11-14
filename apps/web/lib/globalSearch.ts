@@ -1,5 +1,13 @@
 export const GLOBAL_SEARCH_OPEN_EVENT = "trn:open-command-palette";
 
+export function isGlobalSearchShortcut(event: KeyboardEvent): boolean {
+  const target = event.target;
+  const editable = target instanceof HTMLElement && (target.isContentEditable ||
+    ["input", "textarea", "select"].includes(target.tagName.toLowerCase()));
+  return (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k" &&
+    !event.altKey && !event.shiftKey && !event.isComposing && !editable;
+}
+
 export type GlobalSearchOpenOrigin = {
   centerX: number;
   centerY: number;

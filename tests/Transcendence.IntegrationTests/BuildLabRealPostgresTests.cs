@@ -324,7 +324,8 @@ public sealed class BuildLabRealPostgresTests(PostgresIntegrationFixture fixture
         var attributeOptions = await db.Database
             .SqlQueryRaw<string>(
                 """
-                SELECT c.relname || '.' || array_to_string(a.attoptions, ',') AS "Value"
+                SELECT c.relname || '.n_distinct=' || COALESCE(
+                    (SELECT option_value FROM pg_options_to_table(a.attoptions) WHERE option_name = 'n_distinct'), 'missing') AS "Value"
                 FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid
                 WHERE c.relname IN ('MatchParticipantItemEvents', 'MatchParticipantTimelineSnapshots')
                   AND a.attname = 'MatchId'

@@ -33,7 +33,7 @@ WORKDIR /app
 USER sweep
 
 # Pinned to the versions the repo resolves, so the sweep and the gate measure identically.
-RUN npm install --no-save --omit=dev lighthouse@13.5.0 chrome-launcher@1.2.1
+RUN npm install --no-save --omit=dev lighthouse@13.6.0 chrome-launcher@1.2.2
 
 # Only what the runner actually needs: the runner, the shared route vocabulary and the route
 # list. No workspace install, no app source.

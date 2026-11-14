@@ -6,9 +6,11 @@
     "overrides": {
       "@next/eslint-plugin-next>fast-glob": "npm:tinyglobby@0.2.15",
       "esbuild@>=0.27.3 <0.28.1": "0.28.1",
-      "undici@>=7.0.0 <7.29.1": "7.29.1",
       "brace-expansion@<1.1.21": "1.1.21",
-      "brace-expansion@>=2.0.0 <2.1.7": "2.1.7"
+      "brace-expansion@>=2.0.0 <2.1.7": "2.1.7",
+      "undici@>=7.0.0 <7.30.2": "7.30.2",
+      "fast-uri@>=3.0.0 <3.1.9": "3.1.9",
+      "@typescript-eslint/typescript-estree>minimatch": "11.0.1"
     },
     "onlyBuiltDependencies": [
       "esbuild",
@@ -31,16 +33,18 @@
     "web:lint": "pnpm --filter web lint",
     "web:test": "pnpm --filter web test",
     "perf:web": "pnpm web:build && pnpm perf:web:ci",
-    "perf:web:ci": "node scripts/perf/web-lab.mjs --base-url http://127.0.0.1:3000 --routes scripts/perf/routes.ci.json --samples 3 --budgets scripts/perf/web-budgets.json --json-out .performance-artifacts/web-lab.json",
+    "perf:web:ci": "node scripts/perf/web-lab.mjs --base-url http://127.0.0.1:3000 --routes scripts/perf/routes.ci.json --samples 3 --budgets scripts/perf/web-budgets.json --json-out .performance-artifacts/web-lab.json --report-dir .performance-artifacts/lighthouse",
     "perf:api": "k6 run scripts/perf/api-load.js",
     "e2e": "npx playwright test",
     "e2e:local": "BASE_URL=http://localhost:3000 npx playwright test",
-    "e2e:stack": "bash scripts/e2e/run-compose-stack.sh"
+    "e2e:stack": "bash scripts/e2e/run-compose-stack.sh",
+    "verify": "pnpm web:lint && pnpm web:test && pnpm web:build && pnpm api:gen && pnpm backend:test && python3 -I -m unittest discover -s scripts/ops/tests -p \"test_*.py\" && node --test scripts/security/*.test.mjs && pnpm audit --audit-level=low && dotnet list Transcendence.sln package --vulnerable --include-transitive --format json > /tmp/transcendence-nuget-audit.json && python3 scripts/security/check-nuget-audit.py /tmp/transcendence-nuget-audit.json"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",
     "@transcendence/web-routes": "workspace:*",
-    "chrome-launcher": "^1.2.2",
-    "lighthouse": "^13.5.0"
+    "axe-core": "^4.14.0",
+    "chrome-launcher": "1.2.2",
+    "lighthouse": "13.6.0"
   }
 }

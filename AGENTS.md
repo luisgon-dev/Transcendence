@@ -10,6 +10,7 @@ pnpm web:dev          # dev server
 pnpm web:build        # production build
 pnpm web:test         # Vitest
 pnpm web:lint         # ESLint
+pnpm verify           # local code/security/ops gates (Docker needed)
 pnpm perf:web         # production build + Lighthouse performance budgets
 pnpm perf:api         # k6 API load budgets (requires a seeded running API)
 
@@ -112,3 +113,11 @@ Test summoner for verification: `Kronic#NA1` (region: NA)
 - Never hand-author or hand-edit EF migration files.
 - Always create/remove migrations via EF CLI (`dotnet ef migrations add ...`, `dotnet ef migrations remove`).
 - Always apply schema changes by updating EF model code first, then generating migrations with EF tools.
+
+## Current audit boundaries
+
+Use `docs/AUDIT-REMEDIATION.md` and `docs/DATA-SLOS.md` for current work and data
+provenance. Never restore email-triggered admin grants, mutable-tag schema guesses,
+unbounded retention scans, or dependency checks inside process liveness. Generate
+migrations through EF CLI. Run API generation before starting browser verification
+to avoid replacing the running dev server's generated client modules.

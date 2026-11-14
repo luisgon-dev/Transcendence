@@ -25,8 +25,8 @@ export const metadata: Metadata = {
 export default async function LiveScoutPage({
   searchParams
 }: {
-  searchParams?: Promise<{ region?: string; riotId?: string }>;
+  searchParams?: Promise<{ region?: string; riotId?: string; queue?: string }>;
 }) {
   const resolved = searchParams ? await searchParams : undefined;
-  return <LiveScoutClient initialRegion={resolved?.region} initialRiotId={resolved?.riotId} />;
+  return <LiveScoutClient initialRegion={resolved?.region} initialRiotId={resolved?.riotId} initialQueue={resolved?.queue?.slice(0, 64)} />;
 }

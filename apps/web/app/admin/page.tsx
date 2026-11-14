@@ -33,7 +33,7 @@ function stat(label: string, value: number | string, tone: Tone = "neutral") {
 
   return (
     <div className="ops-stat-card" data-tone={tone}>
-      <p className="type-kicker text-fg/55">{label}</p>
+      <p className="type-kicker text-muted">{label}</p>
       <p className={`mt-3 text-2xl font-semibold ${valueClass}`}>{value}</p>
     </div>
   );
@@ -106,7 +106,7 @@ export default async function AdminOverviewPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">Pipeline Controls</h2>
-            <p className="mt-1 text-sm text-fg/65">
+            <p className="mt-1 text-sm text-muted">
               Snapshot generated at {new Date(overview.generatedAtUtc).toLocaleString()}.
             </p>
           </div>
@@ -138,7 +138,7 @@ export default async function AdminOverviewPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold">Analysis Health</h2>
-              <p className="mt-1 text-sm text-fg/65">
+              <p className="mt-1 text-sm text-muted">
                 Active patch {metrics.activePatchVersion ?? "unknown"}
                 {metrics.activePatchReleasedAtUtc
                   ? ` · released ${new Date(metrics.activePatchReleasedAtUtc).toLocaleString()}`
@@ -162,7 +162,7 @@ export default async function AdminOverviewPage() {
 
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="text-fg/60">
+              <thead className="text-muted">
                 <tr>
                   <th className="py-2">Region</th>
                   <th className="py-2">Health</th>
@@ -177,7 +177,7 @@ export default async function AdminOverviewPage() {
                   <tr key={region.region} className="border-t border-border/40">
                     <td className="py-2 font-medium">
                       {region.region}
-                      {!region.enabled ? <span className="ml-2 text-xs text-fg/65">inactive</span> : null}
+                      {!region.enabled ? <span className="ml-2 text-xs text-muted">inactive</span> : null}
                     </td>
                     <td className="py-2">
                       <span className={`rounded-full px-2.5 py-1 text-xs uppercase tracking-wide ${healthTone(region.health)}`}>
@@ -186,7 +186,7 @@ export default async function AdminOverviewPage() {
                     </td>
                     <td className="py-2">
                       <span className="text-success">{region.currentPatchSuccessfulMatches}</span>
-                      <span className="text-fg/46"> / </span>
+                      <span className="text-muted"> / </span>
                       <span className="text-fg/72">{region.currentPatchTotalMatches}</span>
                     </td>
                     <td className="py-2">
@@ -198,9 +198,9 @@ export default async function AdminOverviewPage() {
                     </td>
                     <td className="py-2">
                       <span className="text-warning">{region.enqueuedJobs} enq</span>
-                      <span className="text-fg/40"> · </span>
+                      <span className="text-muted"> · </span>
                       <span className="text-info">{region.processingJobs} proc</span>
-                      <span className="text-fg/40"> · </span>
+                      <span className="text-muted"> · </span>
                       <span className="text-primary">{region.scheduledJobs} sched</span>
                     </td>
                     <td className="py-2">
@@ -217,7 +217,7 @@ export default async function AdminOverviewPage() {
 
         <div className="page-panel p-5">
           <h2 className="text-lg font-semibold">Top Backlog Groups</h2>
-          <p className="mt-1 text-sm text-fg/65">
+          <p className="mt-1 text-sm text-muted">
             Derived from the first {queues.scanLimit.toLocaleString()} jobs scanned.
           </p>
           <div className="mt-4 grid gap-3">
@@ -232,17 +232,17 @@ export default async function AdminOverviewPage() {
                     <p className="text-sm font-medium text-fg">
                       {group.jobType?.split(".").pop() ?? "Unknown Job"}
                     </p>
-                    <p className="mt-1 text-xs text-fg/55">
+                    <p className="mt-1 text-xs text-muted">
                       {group.state} · {group.queue}
                       {group.region ? ` · ${group.region}` : ""}
                     </p>
                   </div>
                   <div className="text-right">
-                    <span className="type-kicker block text-fg/45">{group.state}</span>
+                    <span className="type-kicker block text-muted">{group.state}</span>
                     <p className={`mt-2 text-xl font-semibold ${stateCountClass(group.state)}`}>{group.count}</p>
                   </div>
                 </div>
-                <p className="mt-2 text-xs text-fg/55">
+                <p className="mt-2 text-xs text-muted">
                   {group.oldestSeenAtUtc ? `oldest ${new Date(group.oldestSeenAtUtc).toLocaleString()}` : "no timestamp"}
                 </p>
               </div>
@@ -256,7 +256,7 @@ export default async function AdminOverviewPage() {
           <h2 className="text-lg font-semibold">Worker Servers</h2>
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="text-fg/60">
+              <thead className="text-muted">
                 <tr>
                   <th className="py-2">Server</th>
                   <th className="py-2">Workers</th>
@@ -284,7 +284,7 @@ export default async function AdminOverviewPage() {
           <h2 className="text-lg font-semibold">Queue Pressure</h2>
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="text-fg/60">
+              <thead className="text-muted">
                 <tr>
                   <th className="py-2">Queue</th>
                   <th className="py-2">Length</th>

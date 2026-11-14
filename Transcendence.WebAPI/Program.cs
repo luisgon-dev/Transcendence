@@ -33,6 +33,8 @@ using Transcendence.WebAPI.Security;
 var builder = WebApplication.CreateBuilder(args);
 ConfigureSharedBackendConfiguration(builder.Configuration, builder.Environment);
 var isOpenApiExport = ParseBool(builder.Configuration["OpenApi:ExportOnly"], false);
+var adminGrantTarget = builder.Configuration["Admin:GrantUserId"];
+var isAdminGrant = !string.IsNullOrWhiteSpace(adminGrantTarget);
 builder.Logging.AddOperationalFileLogger(builder.Configuration, defaultServiceName: "webapi");
 var requireJwtKeyInDevelopment = ParseBool(builder.Configuration["Auth:Jwt:RequireKeyInDevelopment"], false);
 var bootstrapApiKey = builder.Configuration["Auth:BootstrapApiKey"];
@@ -180,6 +182,7 @@ builder.Services.AddOpenTelemetry()
         .AddHttpClientInstrumentation()
         .AddRuntimeInstrumentation()
         .AddMeter(LeaderboardTelemetry.MeterName)
+        .AddMeter(Transcendence.Service.Core.Services.Operations.OperationTelemetry.MeterName)
         .AddMeter("Microsoft.Extensions.Caching.Hybrid")
         .AddPrometheusExporter());
 
@@ -196,6 +199,7 @@ builder.Services.AddStackExchangeRedisCache(options =>
 // unreachable (CI/OpenAPI-export has no Redis; prod startup shouldn't hard-fail on a Redis
 // blip). No-op when Redis isn't configured.
 var dataProtectionRedis = builder.Configuration.GetConnectionString("Redis");
+builder.Services.AddDataProtection().SetApplicationName("Transcendence");
 if (!string.IsNullOrWhiteSpace(dataProtectionRedis))
 {
     var redisOptions = ConfigurationOptions.Parse(dataProtectionRedis);
@@ -296,7 +300,7 @@ builder.Services.AddAuthorization(options =>
 
 // Configure Hangfire client (no server) for enqueueing jobs. Swagger export does not
 // resolve controllers or enqueue work, so avoid initializing PostgreSQL-backed job storage.
-if (!isOpenApiExport)
+if (!isOpenApiExport && !isAdminGrant)
 {
     builder.Services.AddHangfire(config =>
         config.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
@@ -306,25 +310,39 @@ if (!isOpenApiExport)
                 options.UseNpgsqlConnection(builder.Configuration.GetConnectionString("MainDatabase"))));
 }
 
-// Behind nginx + the Next.js BFF (which forwards X-Forwarded-For verbatim), honor the forwarded
-// headers so RemoteIpAddress is the real client rather than the proxy — this is what restores
-// per-IP partitioning on the auth rate limiters (login/register/refresh). ForwardLimit bounds how
-// many hops are trusted (client -> nginx -> BFF) so a forged longer chain can't walk past it. The
-// WebAPI :8080 is only reachable via the proxy chain on a private network, never directly by
-// untrusted clients, so the upstream chain is trusted (KnownProxies/Networks cleared). If the real
-// proxy-hop count differs, adjust ForwardLimit and confirm RemoteIpAddress reflects the true client.
+// Only configured private proxy networks may supply forwarded identity. The BFF forwards one
+// validated client address; direct public access to this port must be blocked at the host edge.
+var trustedProxyCidrs = builder.Configuration.GetSection("Security:TrustedProxyNetworks").Get<string[]>() ?? [];
+if (builder.Environment.IsProduction() && !isOpenApiExport && !isAdminGrant && trustedProxyCidrs.Length == 0)
+    throw new InvalidOperationException("Security:TrustedProxyNetworks must be configured in production.");
+var trustedProxyNetworks = trustedProxyCidrs.Select(System.Net.IPNetwork.Parse).ToArray();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.ForwardLimit = 2;
-    options.KnownIPNetworks.Clear();
-    options.KnownProxies.Clear();
+    options.ForwardLimit = 1;
+    foreach (var network in trustedProxyNetworks) options.KnownIPNetworks.Add(network);
 });
 
 var app = builder.Build();
 
+if (isAdminGrant)
+{
+    if (!Guid.TryParse(adminGrantTarget, out var targetId) || targetId == Guid.Empty)
+        throw new ArgumentException("Admin:GrantUserId must identify an existing account.");
+    using var grantScope = app.Services.CreateScope();
+    var granted = await grantScope.ServiceProvider.GetRequiredService<IAdminBootstrapService>().GrantAsync(targetId);
+    app.Logger.LogInformation("Operator admin bootstrap for {UserAccountId}: {Result}.", targetId,
+        granted ? "granted" : "already admin");
+    return;
+}
+
 // Must run before UseRateLimiter so the limiter partitions on the corrected client IP.
 app.UseForwardedHeaders();
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Transcendence-Release"] = builder.Configuration["TRN_RELEASE_SHA"] ?? "unknown";
+    await next(context);
+});
 var enableSwagger = app.Environment.IsDevelopment()
     || ParseBool(app.Configuration["Swagger:Enable"], false);
 
@@ -356,19 +374,6 @@ app.MapPrometheusScrapingEndpoint(); // Prometheus scrape at /metrics (internal 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
 // Readiness: dependencies (PostgreSQL, Redis) reachable — gates traffic / deploy readiness.
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
-
-if (!isOpenApiExport)
-{
-    using var scope = app.Services.CreateScope();
-    var bootstrap = scope.ServiceProvider.GetRequiredService<IAdminBootstrapService>();
-    var bootstrapLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
-        .CreateLogger("AdminBootstrap");
-    var grants = await bootstrap.EnsureBootstrapAdminsAsync();
-    if (grants > 0)
-        bootstrapLogger.LogInformation("Admin bootstrap granted {Count} account(s).", grants);
-    else
-        bootstrapLogger.LogInformation("Admin bootstrap: no new grants.");
-}
 
 // NOTE: auto-migrate runs in the WORKER host only (Transcendence.Service), which is the migrations assembly
 // (MigrationsAssembly("Transcendence.Service")). The WebAPI does not reference that assembly, so calling

@@ -23,6 +23,14 @@ public class AdminOperationsController(
     IChampionAnalyticsService analyticsService,
     IAdminAuditService adminAuditService) : ControllerBase
 {
+    [HttpGet("release")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    [ProducesResponseType(typeof(AdminReleaseResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetRelease([FromServices] IConfiguration configuration, CancellationToken ct)
+    {
+        return Ok(await overviewFacade.GetReleaseAsync(configuration["TRN_RELEASE_SHA"] ?? "unknown", ct));
+    }
+
     [HttpGet("overview")]
     [ProducesResponseType(typeof(AdminOverviewResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetOverview(CancellationToken ct)

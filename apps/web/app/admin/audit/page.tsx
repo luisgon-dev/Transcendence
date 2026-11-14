@@ -9,7 +9,7 @@ export default async function AdminAuditPage() {
       <h2 className="text-lg font-semibold">Audit Log</h2>
       <div className="mt-3 overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <thead className="text-fg/65">
+          <thead className="text-muted">
             <tr>
               <th className="py-2">When</th>
               <th className="py-2">Actor</th>

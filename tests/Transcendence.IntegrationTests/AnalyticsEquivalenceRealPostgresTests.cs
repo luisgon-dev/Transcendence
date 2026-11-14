@@ -29,6 +29,32 @@ public sealed class AnalyticsEquivalenceRealPostgresTests(PostgresIntegrationFix
     private static readonly string?[] Roles = [null, "TOP", "MIDDLE"];
 
     [Fact]
+    public async Task Concurrent_refresh_patch_rollover_and_retained_facts_preserve_equivalence()
+    {
+        var previous = UniquePatch(); var current = UniquePatch();
+        await using var seed = NewDb();
+        await SeedAsync(seed, previous); await SeedAsync(seed, current);
+        await using var left = NewDb(); await using var right = NewDb();
+        await Task.WhenAll(RefreshAsync(left, previous), RefreshAsync(right, previous));
+        await RefreshAsync(seed, current);
+        // Simulate raw fact retention, then rebuild that patch; the other patch must remain intact.
+        await seed.Matches.Where(x => x.Patch == previous && x.PlatformRegion == "EUW1").ExecuteDeleteAsync();
+        await RefreshAsync(seed, previous);
+        await using var read = NewDb(); var service = WinRateService(read);
+        foreach (var patch in new[] { previous, current })
+        foreach (var queue in new[] { "RANKED_SOLO_DUO", "ARAM" })
+        foreach (var region in Regions)
+        foreach (var tier in Tiers)
+        {
+            var raw = await service.ComputeTierListAsync(null, tier, region, queue, patch, CancellationToken.None);
+            var stats = await service.ComputeTierListFromStatsAsync(null, tier, region, queue, patch, CancellationToken.None);
+            stats.Should().BeEquivalentTo(raw, options => options.WithStrictOrdering()
+                .Excluding(row => row.Movement).Excluding(row => row.PreviousTier));
+        }
+        (await read.ChampionRoleTierStats.CountAsync(x => x.Patch == current)).Should().BeGreaterThan(0);
+    }
+
+    [Fact]
     public async Task WinRates_StatsPath_EqualsRawCompute_OnRealPostgres()
     {
         var patch = UniquePatch();

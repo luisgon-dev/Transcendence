@@ -15,7 +15,11 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  validate:
+    uses: ./.github/workflows/ci-web-backend.yml
+
   build:
+    needs: validate
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -51,40 +55,7 @@ jobs:
         if: github.ref_type != 'tag'
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         with:
-          filters: |
-            webapi:
-              - 'config/backend.shared.json'
-              - 'Transcendence.WebAPI/**'
-              - 'Transcendence.Service.Core/**'
-              - 'Transcendence.Data/**'
-              - 'Transcendence.Service/**'
-              - 'global.json'
-              - 'Transcendence.sln'
-              - 'Transcendence.WebAPI/Dockerfile'
-              - '.github/workflows/docker-images.yml'
-            service:
-              - 'config/backend.shared.json'
-              - 'Transcendence.Service/**'
-              - 'Transcendence.Service.Core/**'
-              - 'Transcendence.Data/**'
-              - 'global.json'
-              - 'Transcendence.sln'
-              - 'Transcendence.Service/Dockerfile'
-              - '.github/workflows/docker-images.yml'
-            web:
-              - 'apps/web/**'
-              - 'openapi/**'
-              - 'packages/api-client/**'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
-              - 'pnpm-workspace.yaml'
-              - '.nvmrc'
-              - 'apps/web/Dockerfile'
-              - '.github/workflows/docker-images.yml'
-            perf:
-              - 'scripts/perf/**'
-              - 'packages/web-routes/**'
-              - '.github/workflows/docker-images.yml'
+          filters: .github/component-inputs.json
 
       - name: Plan component build
         id: plan
@@ -168,6 +139,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           file: ${{ matrix.dockerfile }}
+          build-args: SOURCE_REVISION=${{ github.sha }}
           # The systemd poller resolves the top-level OCI digest explicitly and supports
           # attestation sub-manifests, so publish both build provenance and an SBOM.
           provenance: mode=max

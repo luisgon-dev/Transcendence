@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { fetchStaticJson, OPTIONAL_STATIC_JSON_TIMEOUT_MS } from "@/lib/staticDataFetch";
 
 import { runeDisplayName } from "@/lib/gameDisplay";
 
@@ -152,32 +153,18 @@ export type RuneStaticData = {
 // server render, so the page (and its sibling components) share one result instead of
 // each fetcher independently re-fetching versions.json and re-building the maps.
 const fetchLatestVersion = cache(async () => {
-  const versionsRes = await fetch(
-    "https://ddragon.leagueoflegends.com/api/versions.json",
-    { next: { revalidate: 60 * 60 * 24 } }
-  );
-  if (!versionsRes.ok) {
-    throw new Error("Failed to fetch Data Dragon versions.");
-  }
-
-  const versions = (await versionsRes.json()) as DDragonVersions;
-  const version = versions[0];
-  if (!version) throw new Error("No Data Dragon versions available.");
+  const versions = await fetchStaticJson<DDragonVersions>(
+    "https://ddragon.leagueoflegends.com/api/versions.json", "Failed to fetch Data Dragon versions.");
+  const version = Array.isArray(versions) ? versions[0] : null;
+  if (typeof version !== "string" || !/^\d+\.\d+\.\d+$/.test(version)) throw new Error("Invalid Data Dragon version.");
   return version;
 });
 
 export const fetchChampionMap = cache(async (): Promise<ChampionMap> => {
   const version = await fetchLatestVersion();
 
-  const champsRes = await fetch(
-    `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/champion.json`,
-    { next: { revalidate: 60 * 60 * 24 } }
-  );
-  if (!champsRes.ok) {
-    throw new Error("Failed to fetch champion list.");
-  }
-
-  const champList = (await champsRes.json()) as DDragonChampionList;
+  const champList = await fetchStaticJson<DDragonChampionList>(
+    `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/champion.json`, "Failed to fetch champion list.");
   const champions: ChampionMap["champions"] = {};
 
   for (const champ of Object.values(champList.data)) {
@@ -209,13 +196,8 @@ export function profileIconUrl(version: string, profileIconId: number) {
 export const fetchItemMap = cache(async (): Promise<ItemMap> => {
   const version = await fetchLatestVersion();
 
-  const res = await fetch(
-    `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/item.json`,
-    { next: { revalidate: 60 * 60 * 24 } }
-  );
-  if (!res.ok) throw new Error("Failed to fetch item list.");
-
-  const list = (await res.json()) as DDragonItemList;
+  const list = await fetchStaticJson<DDragonItemList>(
+    `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/item.json`, "Failed to fetch item list.");
   const items: ItemMap["items"] = {};
   for (const [id, item] of Object.entries(list.data)) {
     items[id] = { name: item.name, plaintext: item.plaintext };
@@ -238,13 +220,8 @@ const SUMMONERS_RIFT_MAP_ID = "11";
 // would roughly double it for pages that only need names.
 export const fetchItemDetail = cache(async (itemId: number): Promise<ItemDetail | null> => {
   const version = await fetchLatestVersion();
-  const res = await fetch(
-    `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/item.json`,
-    { next: { revalidate: 60 * 60 * 24 } }
-  );
-  if (!res.ok) throw new Error("Failed to fetch item list.");
-
-  const { data } = (await res.json()) as DDragonItemList;
+  const { data } = await fetchStaticJson<DDragonItemList>(
+    `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/item.json`, "Failed to fetch item list.");
   const item = data[String(itemId)];
   if (!item) return null;
   // `into` spans every map; Arena and ARAM-only upgrades can't be bought on the Rift.
@@ -265,13 +242,8 @@ export function itemIconUrl(version: string, itemId: number) {
 export const fetchSummonerSpellMap = cache(async (): Promise<SummonerSpellMap> => {
   const version = await fetchLatestVersion();
 
-  const res = await fetch(
-    `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/summoner.json`,
-    { next: { revalidate: 60 * 60 * 24 } }
-  );
-  if (!res.ok) throw new Error("Failed to fetch summoner spell list.");
-
-  const list = (await res.json()) as DDragonSpellList;
+  const list = await fetchStaticJson<DDragonSpellList>(
+    `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/summoner.json`, "Failed to fetch summoner spell list.");
   const spells: SummonerSpellMap["spells"] = {};
   for (const spell of Object.values(list.data)) {
     spells[spell.key] = { id: spell.id, name: spell.name };
@@ -287,13 +259,8 @@ export function summonerSpellIconUrl(version: string, spellCdnId: string) {
 export const fetchRunesReforged = cache(async (): Promise<RuneStaticData> => {
   const version = await fetchLatestVersion();
 
-  const res = await fetch(
-    `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/runesReforged.json`,
-    { next: { revalidate: 60 * 60 * 24 } }
-  );
-  if (!res.ok) throw new Error("Failed to fetch runes reforged list.");
-
-  const styles = (await res.json()) as DDragonRunesReforged;
+  const styles = await fetchStaticJson<DDragonRunesReforged>(
+    `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/runesReforged.json`, "Failed to fetch runes reforged list.");
   const runeById: RuneStaticData["runeById"] = {};
   const styleById: RuneStaticData["styleById"] = {};
   const runeSortById: RuneStaticData["runeSortById"] = {};
@@ -309,20 +276,11 @@ export const fetchRunesReforged = cache(async (): Promise<RuneStaticData> => {
   }
 
   try {
-    const perksRes = await fetch(
-      `${CDRAGON_GAME_DATA_BASE}/v1/perks.json`,
-      { next: { revalidate: 60 * 60 * 24 } }
-    );
-
-    if (perksRes.ok) {
-      const perks = (await perksRes.json()) as CommunityDragonPerk[];
-      for (const perk of perks ?? []) {
-        if (!perk?.id || !perk?.iconPath) continue;
-        runeById[String(perk.id)] = {
-          name: runeDisplayName(perk),
-          icon: communityDragonAssetUrl(perk.iconPath)
-        };
-      }
+    const perks = await fetchStaticJson<CommunityDragonPerk[]>(
+      `${CDRAGON_GAME_DATA_BASE}/v1/perks.json`, "Optional rune metadata unavailable.", OPTIONAL_STATIC_JSON_TIMEOUT_MS);
+    for (const perk of perks ?? []) {
+      if (!perk?.id || !perk?.iconPath) continue;
+      runeById[String(perk.id)] = { name: runeDisplayName(perk), icon: communityDragonAssetUrl(perk.iconPath) };
     }
   } catch {
     // Keep ddragon runes available even if CommunityDragon fetch is down.

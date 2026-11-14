@@ -1,3 +1,4 @@
+import { normalizeLolRegionSlug } from "@/lib/lolRegions";
 import type { Metadata } from "next";
 
 import { MultiSearchClient } from "@/components/MultiSearchClient";
@@ -21,6 +22,7 @@ export const metadata: Metadata = {
   twitter: { card: "summary_large_image", title, description, images: [image] }
 };
 
-export default function MultiSearchPage() {
-  return <MultiSearchClient />;
+export default async function MultiSearchPage({ searchParams }: { searchParams: Promise<{ region?: string; riotId?: string; queue?: string }> }) {
+  const params = await searchParams;
+  return <MultiSearchClient initialRegion={normalizeLolRegionSlug(params.region)} initialRiotId={params.riotId?.slice(0, 512)} queue={params.queue?.slice(0, 64)} />;
 }

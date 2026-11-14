@@ -6,6 +6,7 @@ import {
   REFRESH_TOKEN_COOKIE
 } from "@/lib/authCookieShared";
 import { getBackendBaseUrl } from "@/lib/env";
+import { authRequestHeaders } from "@/lib/authRequestHeaders";
 import {
   buildAuthCookieSpecs,
   parseAuthTokenResponse,
@@ -81,7 +82,7 @@ async function refreshSessionCookies(
 
     const res = await fetch(`${getBackendBaseUrl()}/api/auth/refresh`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-trn-request-id": requestId },
+      headers: { "content-type": "application/json", ...authRequestHeaders(req.headers, requestId) },
       body: JSON.stringify({ refreshToken }),
       cache: "no-store",
       signal: AbortSignal.timeout(PROXY_REFRESH_TIMEOUT_MS)
@@ -110,9 +111,8 @@ export async function proxy(req: NextRequest) {
   // Forward refreshed cookies to THIS request so server components read the fresh access
   // token (and therefore don't refresh again during render, which would present the now
   // already-rotated refresh token). NOTE: this "refresh + persist before render" guarantee
-  // holds within a single request only. Concurrent navigations carrying the same stale
-  // token can still each refresh; single-use rotation lets one win and 401s the rest, and
-  // because we never clear on 401 the losers just pass through and self-heal next request.
+  // holds within this request. Concurrent navigations recover the same rotated refresh
+  // token through the backend's bounded, encrypted replacement recovery window.
   if (refreshed) {
     for (const spec of refreshed) req.cookies.set(spec.name, spec.value);
   }

@@ -6,6 +6,7 @@ import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { recordJourney } from "@/lib/journeyMetrics";
 import { cn } from "@/lib/cn";
 import {
   formatDurationSeconds,
@@ -367,6 +368,7 @@ export function LiveGameCard({
       if (completed.status === "failed") throw new Error(operationFailure(completed));
       if (completed.status !== "succeeded") throw new Error("The probe finished only partially. Current live-game status has not been verified.");
       const observation = completed.result.liveGame;
+      recordJourney("live_probe_succeeded");
       const observedAt = completed.result.observedAtUtc ? Date.parse(completed.result.observedAtUtc) : Number.NaN;
       const snapshotTime = observation?.lastUpdatedUtc ? Date.parse(observation.lastUpdatedUtc) : Number.NaN;
       if (
@@ -462,7 +464,7 @@ export function LiveGameCard({
         {error ? <p className="type-ui mt-3 text-danger">{error}</p> : null}
 
         {busy && !checked ? (
-          <div className="mt-4 grid gap-3" aria-label="Checking live game">
+          <div className="mt-4 grid gap-3" role="status" aria-label="Checking live game">
             <Skeleton className="h-4 w-40" />
             <div className="grid gap-3 sm:grid-cols-2">
               <Skeleton className="h-32 w-full" />

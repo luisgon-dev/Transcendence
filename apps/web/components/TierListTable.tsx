@@ -338,8 +338,7 @@ export function TierListTable({
       <tr
         key={`${entry.tier}-${entry.role}-${entry.championId}`}
         className={cn(
-          "tierlist-row tierlist-cv border-b border-border/40 text-sm last:border-0",
-          entry.isLowSample && "opacity-70"
+          "tierlist-row tierlist-cv border-b border-border/40 text-sm last:border-0"
         )}
       >
         <td className="px-2 py-2.5 text-center md:px-3">
@@ -389,7 +388,7 @@ export function TierListTable({
         </td>
         {showRoles ? <td className="hidden px-2 py-2.5 sm:table-cell md:px-3">
           <span className="inline-flex items-center gap-1.5 text-xs text-muted">
-            <LaneIcon role={entry.role} className="size-[18px] shrink-0 text-fg/55" />
+            <LaneIcon role={entry.role} className="size-[18px] shrink-0 text-muted" />
             <span className="hidden md:inline">{roleDisplayLabel(entry.role)}</span>
           </span>
         </td> : null}

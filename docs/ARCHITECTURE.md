@@ -58,7 +58,7 @@ Transcendence is a backend + web monorepo:
   unbounded telemetry cardinality. Automated browsers (`navigator.webdriver`) skip the reporter;
   the collector also discards HeadlessChrome/Lighthouse user agents with HTTP 204. Lab runs remain
   in the separate Lighthouse series rather than entering visitor percentiles.
-- **Auth token refresh runs in `proxy.ts` (Next 16 middleware), not during render.** Auth uses a short-lived access token + a single-use, rotated refresh token (the backend revokes the presented refresh token on every `/api/auth/refresh`, no grace window). Refreshing inside a Server Component render can't persist the rotated cookie (cookie writes are illegal during render), which would burn the refresh token and silently log users out. So `proxy.ts` refreshes a stale access token on page navigations and writes the rotated cookies to **both** the forwarded request (so the SSR render reads the fresh token and doesn't refresh again) and the response (so the browser persists them). It is fail-safe: it only acts when a refresh token exists and the access token is stale, skips prefetch requests (so a speculative prefetch can't burn the single-use token), and on any failure (401/5xx/network/timeout/malformed) passes through **without** clearing cookies. The matcher excludes `/api/*` (route handlers refresh + clear in their own writable context via `getAccessTokenOrRefresh`/`getSessionMe`), `_next`, and static files. Pure helpers live in `lib/proxyAuth.ts`; cookie names + the staleness check in `lib/authCookieShared.ts`.
+- **Auth token refresh runs in `proxy.ts` (Next 16 middleware), not during render.** Auth uses a short-lived access token + an atomically rotated refresh token (concurrent requests recover the same encrypted successor for ten seconds; later replay revokes its login family). Refreshing inside a Server Component render can't persist the rotated cookie (cookie writes are illegal during render), so navigation refresh persists the successor before render. So `proxy.ts` refreshes a stale access token on page navigations and writes the rotated cookies to **both** the forwarded request (so the SSR render reads the fresh token and doesn't refresh again) and the response (so the browser persists them). It is fail-safe: it only acts when a refresh token exists and the access token is stale, skips prefetch requests (to avoid unnecessary rotations), and on any failure (401/5xx/network/timeout/malformed) passes through **without** clearing cookies. The matcher excludes `/api/*` (route handlers refresh + clear in their own writable context via `getAccessTokenOrRefresh`/`getSessionMe`), `_next`, and static files. Pure helpers live in `lib/proxyAuth.ts`; cookie names + the staleness check in `lib/authCookieShared.ts`.
 - Riot Sign On uses two same-origin route handlers: `/api/session/riot/start` creates a 256-bit
   correlation state in an HttpOnly, SameSite=Lax, ten-minute cookie; `/api/session/riot/callback`
   validates it with a constant-time comparison before sending the one-time code to the backend.
@@ -666,7 +666,7 @@ The web app never exposes backend tokens to browser JS:
 ## Admin Surface and Security
 
 - Admin APIs are protected with JWT + `admin` role (`AdminOnly` policy).
-- Admin bootstrap can grant initial admin role from configured email allowlist (`Auth:AdminBootstrap:Emails`).
+- Admin grants require an explicit existing-account operator command (`Admin:GrantUserId`) and are audited. Public registration/login never grants roles; the legacy email allowlist is ignored.
 - Admin mutating operations are rate-limited (`admin-write`) and audited (`AdminAuditEvents`).
 - Auth endpoints have dedicated rate limits for login/register/refresh/logout protection.
 - The admin and user BFFs apply one shared same-origin policy to mutating requests. It compares the request `Origin` against a server-configured canonical origin (`TRN_PUBLIC_ORIGIN`) when set, rather than the client-forwardable `X-Forwarded-Host`. `SameSite=Lax` cookies remain the primary CSRF control; the origin check is defense-in-depth.
@@ -889,3 +889,48 @@ advisory lock remains authoritative; overlapping triggers skip instead of waitin
 hour-long Hangfire execution lock. Retention discovers expired patches from coverage and the indexed
 ledger rather than scanning the option-stats corpus on every refresh. Existing time/WAL limits,
 transaction sizes, pacing, and worker counts remain in force.
+
+## November audit reliability boundaries
+
+Auth rotation/reset/logout serialize on the account row and claim tokens through
+conditional database updates. A random family ID isolates each login session.
+Encrypted successor recovery tolerates concurrent tabs for ten seconds; replay
+outside that window revokes the affected family. Public auth cannot bootstrap
+admin. An explicit existing-account operator command grants and audits once.
+
+The durable operation dispatcher uses a partial pending index and reports queue
+age, dispatch lag and scan freshness. A separate scoped maintenance worker deletes
+bounded batches of old terminal leaves and expired auth tokens; request grants
+cascade with executions. Active operations and parents with surviving children
+remain visible. Tabular analytics refresh uses a transaction advisory lock per
+patch even for direct callers. Matchup snapshot lifecycle code and match-history
+queries now live in separate focused files; Build Lab presentation and champion
+build variants have separate components.
+
+Image process liveness and dependency readiness are separate. A fixed bounded
+synthetic probe reads the runtime champion catalog, then exercises the actual
+Next optimizer against four asset kinds;
+cache state survives container replacement in a 512 MiB volume. The poller holds
+unknown schema compatibility and requires asset readiness before accepting a web
+rollout. Production config validates the canonical origin and private trusted
+proxy boundary at startup. Images are published only after reusable CI passes.
+
+Each frontend Data Dragon JSON fetch bounds headers and body consumption to four
+seconds. Optional CommunityDragon rune enrichment has a two-second budget and
+retains the Data Dragon/stat-shard fallback. Static routes run at request time so
+a build-time outage cannot bake a cached failure; only successful responses carry
+shared cache headers. Profiles load missing catalogs independently, preserve good
+maps, and expose a retry with a twelve-second client deadline and unmount abort.
+
+Scouting links share an encoded identity/region/queue vocabulary across profiles,
+multi-search and live views. Existing match-history filters survive refreshes.
+Semantic text colors meet light/dark contrast targets; keyboard-scrollable tables
+and a delegated image recovery control preserve dense-table rendering costs.
+Closed anonymous event counters measure lookup/probe outcomes and return sessions
+without collecting identities. See `docs/DATA-SLOS.md` for provenance and targets.
+
+The command palette is mounted on first search intent, rather than eagerly after
+hydration. Its loader buffers that intent until the dialog installs its event
+listeners, avoiding a lost first click/shortcut. The home hero uses a high-priority
+55-quality optimized splash; decorative image bytes and optional dialog work do
+not need to compete on the initial render path.

@@ -24,7 +24,7 @@ namespace Transcendence.IntegrationTests;
 ///
 /// The host runs in the Development environment so the JWT dev-fallback signing key resolves
 /// consistently on both the minting side (<c>IJwtService</c>) and the validating side (the JwtBearer
-/// options), and so the bootstrap admin step early-returns without a DB hit (no configured emails).
+/// options). Operator admin grants are never run by this test host.
 /// </summary>
 public sealed class TestWebAppFactory(string connectionString) : WebApplicationFactory<Program>
 {

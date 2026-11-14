@@ -33,21 +33,21 @@ export default function LoginPage() {
 
           <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
             <div className="surface-subtle rounded-card p-4">
-              <p className="type-kicker text-fg/56">Favorites</p>
+              <p className="type-kicker text-muted">Favorites</p>
               <p className="type-ui mt-2 text-fg/84">Pin summoner pages and keep your usual lookups out of the search loop.</p>
             </div>
             <div className="surface-subtle rounded-card p-4">
-              <p className="type-kicker text-fg/56">Faster return</p>
+              <p className="type-kicker text-muted">Faster return</p>
               <p className="type-ui mt-2 text-fg/84">Jump back into current-patch research without rebuilding your path every visit.</p>
             </div>
             <div className="surface-subtle rounded-card p-4">
-              <p className="type-kicker text-fg/56">Verified main</p>
+              <p className="type-kicker text-muted">Verified main</p>
               <p className="type-ui mt-2 text-fg/84">Use Riot Sign On to verify your main without sharing your Riot password.</p>
             </div>
           </div>
 
           <div className="surface-subtle rounded-panel p-4">
-            <p className="type-kicker text-primary/84">Good first move</p>
+            <p className="type-kicker text-primary">Good first move</p>
             <p className="type-ui mt-2 text-fg/78">
               If you only need immediate patch context, the tier list is still the fastest way in.
             </p>
@@ -102,7 +102,7 @@ export default function LoginPage() {
                   </label>
                   <Link
                     href="/account/forgot-password"
-                    className="type-meta rounded-sm font-semibold text-fg/62 transition hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/24 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+                    className="type-meta rounded-sm font-semibold text-muted transition hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/24 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
                   >
                     Forgot password?
                   </Link>
@@ -127,10 +127,10 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            <p className="type-ui mt-5 text-fg/68">
+            <p className="type-ui mt-5 text-muted">
               New here?{" "}
               <Link
-                className="font-semibold text-primary transition hover:text-primary/84 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/24 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+                className="font-semibold text-primary transition hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/24 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
                 href="/account/register"
               >
                 Create an account

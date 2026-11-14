@@ -3,6 +3,8 @@ const nextConfig = {
   output: "standalone",
   cacheComponents: true,
   images: {
+    maximumDiskCacheSize: 512 * 1024 * 1024,
+    maximumResponseBody: 8 * 1024 * 1024,
     // Most remote images are small Data Dragon assets with versioned URLs. Keep transformed
     // WebP results warm for a week; this cuts repeated optimizer work while bounding staleness
     // for the small number of unversioned splash/community assets that share the cache.

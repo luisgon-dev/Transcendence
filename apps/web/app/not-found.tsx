@@ -40,7 +40,7 @@ export default function NotFound() {
 
           <Card className="grid gap-4 rounded-panel p-5">
             <div>
-              <p className="type-kicker text-fg/56">Try Instead</p>
+              <p className="type-kicker text-muted">Try Instead</p>
               <p className="type-ui mt-2 text-fg/74">
                 These routes are stable entry points when you need to get moving again quickly.
               </p>
@@ -55,7 +55,7 @@ export default function NotFound() {
                       className="type-ui flex items-center justify-between rounded-card border border-border/42 bg-surface/38 px-4 py-3 text-fg/86 transition hover:border-primary/28 hover:bg-surface/58 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/24 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
                     >
                       <span>{suggestion.label}</span>
-                      <span aria-hidden="true" className="text-fg/38">/</span>
+                      <span aria-hidden="true" className="text-muted">/</span>
                     </Link>
                   </li>
                 ))}

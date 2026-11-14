@@ -8,7 +8,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { SearchIcon } from "@/components/ui/icons";
 import { Select } from "@/components/ui/Select";
-import { GLOBAL_SEARCH_OPEN_EVENT } from "@/lib/globalSearch";
+import { recordJourney } from "@/lib/journeyMetrics";
+import { GLOBAL_SEARCH_OPEN_EVENT, isGlobalSearchShortcut } from "@/lib/globalSearch";
 import { buildLolPublicSummonerSearchPath } from "@/lib/lolPublicApi";
 import { LOL_REGION_OPTIONS } from "@/lib/lolRegions";
 import { encodeRiotIdPath, parseRiotIdInput } from "@/lib/riotid";
@@ -107,13 +108,6 @@ const NAVIGATION_ITEMS: readonly NavigationItem[] = [
 const RESULT_ITEM_CLASS =
   "group flex min-h-12 cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-left text-fg/82 outline-none transition-colors data-[selected=true]:bg-primary/12 data-[selected=true]:text-fg";
 
-function isEditableTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) return false;
-  if (target.isContentEditable) return true;
-  const tag = target.tagName.toLowerCase();
-  return tag === "input" || tag === "textarea" || tag === "select";
-}
-
 function useDebouncedValue<T>(value: T, delayMs: number) {
   const [debounced, setDebounced] = useState(value);
 
@@ -150,7 +144,7 @@ function ResultGroup({
   );
 }
 
-export function GlobalCommandPalette({ buildLabEnabled = false }: { buildLabEnabled?: boolean }) {
+export function GlobalCommandPalette({ buildLabEnabled = false, onReady }: { buildLabEnabled?: boolean; onReady?: () => void }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
@@ -176,13 +170,7 @@ export function GlobalCommandPalette({ buildLabEnabled = false }: { buildLabEnab
     }
 
     function onKeyDown(event: KeyboardEvent) {
-      if (
-        (event.metaKey || event.ctrlKey) &&
-        event.key.toLowerCase() === "k" &&
-        !event.altKey &&
-        !event.shiftKey &&
-        !isEditableTarget(event.target)
-      ) {
+      if (isGlobalSearchShortcut(event)) {
         event.preventDefault();
         openPalette();
       }
@@ -190,11 +178,12 @@ export function GlobalCommandPalette({ buildLabEnabled = false }: { buildLabEnab
 
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener(GLOBAL_SEARCH_OPEN_EVENT, openPalette);
+    onReady?.();
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener(GLOBAL_SEARCH_OPEN_EVENT, openPalette);
     };
-  }, []);
+  }, [onReady]);
 
   useEffect(() => {
     if (!open) return;
@@ -366,6 +355,7 @@ export function GlobalCommandPalette({ buildLabEnabled = false }: { buildLabEnab
   }, [open, prefetchTargets, router]);
 
   function navigate(path: string) {
+    if (path.startsWith("/lol/summoners/")) recordJourney("lookup_started");
     setOpen(false);
     setQuery("");
     setSelectedValue("");
@@ -395,7 +385,7 @@ export function GlobalCommandPalette({ buildLabEnabled = false }: { buildLabEnab
               <span className="size-[34px] rounded-md bg-surface-2" />
             )}
             <span className="min-w-0 flex-1 truncate font-medium">{champion.name}</span>
-            <span className="text-xs text-muted group-data-[selected=true]:text-fg/65">
+            <span className="text-xs text-muted group-data-[selected=true]:text-muted">
               Champion
             </span>
           </Command.Item>
@@ -419,7 +409,7 @@ export function GlobalCommandPalette({ buildLabEnabled = false }: { buildLabEnab
             </span>
             <span className="min-w-0 flex-1 truncate font-medium">
               {parsedRiotId.gameName}
-              <span className="text-fg/55">#{parsedRiotId.tagLine}</span>
+              <span className="text-muted">#{parsedRiotId.tagLine}</span>
             </span>
             <span className="text-xs uppercase text-muted">{region}</span>
           </Command.Item>
@@ -450,7 +440,7 @@ export function GlobalCommandPalette({ buildLabEnabled = false }: { buildLabEnab
               )}
               <span className="min-w-0 flex-1 truncate font-medium">
                 {summoner.gameName}
-                <span className="text-fg/55">#{summoner.tagLine}</span>
+                <span className="text-muted">#{summoner.tagLine}</span>
               </span>
               <span className="text-xs text-muted">{summoner.platformRegion}</span>
             </Command.Item>

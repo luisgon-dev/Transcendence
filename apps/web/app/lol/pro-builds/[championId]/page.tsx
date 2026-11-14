@@ -319,7 +319,7 @@ export default async function ProBuildsChampionPage({
           <p className="type-caption mt-1 text-muted">Try another role or region, or check back soon.</p>
           {proBuildsRes.requestId ? (
             <p className="type-caption mt-2 text-muted">
-              Request ID: <code className="text-fg/65">{proBuildsRes.requestId}</code>
+              Request ID: <code className="text-muted">{proBuildsRes.requestId}</code>
             </p>
           ) : null}
         </section>

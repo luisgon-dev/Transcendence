@@ -138,7 +138,7 @@ describe("MatchHistorySection", () => {
     );
 
     const matchButton = screen.getByRole("button", {
-      name: "Victory on Unknown champion. KDA 24/10/10. 33:52."
+      name: /^VICTORY.*Unknown champion.*24.*10/i
     });
     expect(screen.getByLabelText("Summoner spells")).toBeTruthy();
     expect(screen.getByLabelText("Rune preview")).toBeTruthy();

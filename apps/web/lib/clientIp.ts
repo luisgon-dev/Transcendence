@@ -1,5 +1,6 @@
 // Pure header parsing — no server-only imports, so it stays unit-testable. Used only from
 // server-side BFF code (route handlers, trnProxy, sessionToken).
+import { isIP } from "node:net";
 
 /** Minimal read surface shared by `NextRequest.headers` (Headers) and `await headers()` (ReadonlyHeaders). */
 type HeaderReader = { get(name: string): string | null };
@@ -20,7 +21,7 @@ const TRUSTED_CLIENT_IP_HEADERS = ["cf-connecting-ip", "x-real-ip"] as const;
 export function resolveClientIp(headers: HeaderReader): string | null {
   for (const key of TRUSTED_CLIENT_IP_HEADERS) {
     const value = headers.get(key)?.trim();
-    if (value) return value;
+    if (value && isIP(value)) return value;
   }
 
   const forwardedFor = headers.get("x-forwarded-for");
@@ -29,7 +30,8 @@ export function resolveClientIp(headers: HeaderReader): string | null {
       .split(",")
       .map((part) => part.trim())
       .filter(Boolean);
-    if (entries.length > 0) return entries[entries.length - 1];
+    const last = entries.at(-1);
+    if (last && isIP(last)) return last;
   }
 
   return null;

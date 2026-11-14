@@ -63,46 +63,46 @@ export default async function AdminJobDetailPage({
 
         <dl className="mt-4 grid gap-3 text-sm md:grid-cols-3">
           <div>
-            <dt className="text-fg/60">State</dt>
+            <dt className="text-muted">State</dt>
             <dd>{detail.currentState ?? "-"}</dd>
           </div>
           <div>
-            <dt className="text-fg/60">Queue</dt>
+            <dt className="text-muted">Queue</dt>
             <dd>{detail.queue}</dd>
           </div>
           <div>
-            <dt className="text-fg/60">Region</dt>
+            <dt className="text-muted">Region</dt>
             <dd>{detail.region ?? "-"}</dd>
           </div>
           <div>
-            <dt className="text-fg/60">Type</dt>
+            <dt className="text-muted">Type</dt>
             <dd>{detail.jobType ?? "-"}</dd>
           </div>
           <div>
-            <dt className="text-fg/60">Method</dt>
+            <dt className="text-muted">Method</dt>
             <dd>{detail.jobMethod ?? "-"}</dd>
           </div>
           <div>
-            <dt className="text-fg/60">Server</dt>
+            <dt className="text-muted">Server</dt>
             <dd>{detail.serverId ?? "-"}</dd>
           </div>
           <div>
-            <dt className="text-fg/60">Created</dt>
+            <dt className="text-muted">Created</dt>
             <dd>{detail.createdAtUtc ? new Date(detail.createdAtUtc).toLocaleString() : "-"}</dd>
           </div>
           <div>
-            <dt className="text-fg/60">State Changed</dt>
+            <dt className="text-muted">State Changed</dt>
             <dd>{detail.stateChangedAtUtc ? new Date(detail.stateChangedAtUtc).toLocaleString() : "-"}</dd>
           </div>
           <div>
-            <dt className="text-fg/60">Failed Attempts</dt>
+            <dt className="text-muted">Failed Attempts</dt>
             <dd>{detail.failedCount}</dd>
           </div>
         </dl>
       </div>
 
       {detail.currentState === "Processing" ? (
-        <div className="rounded-panel border border-danger/20 bg-danger/10 p-5 text-sm text-danger/85">
+        <div className="rounded-panel border border-danger/20 bg-danger/10 p-5 text-sm text-danger">
           Deleting a processing job changes Hangfire state to deleted, but already-started side effects may still complete before the worker observes cancellation.
         </div>
       ) : null}
@@ -120,7 +120,7 @@ export default async function AdminJobDetailPage({
         <h3 className="text-base font-semibold">State Timeline</h3>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="text-fg/60">
+            <thead className="text-muted">
               <tr>
                 <th className="py-2">When</th>
                 <th className="py-2">State</th>

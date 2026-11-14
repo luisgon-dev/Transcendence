@@ -154,6 +154,8 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             entity.HasIndex(x => new { x.ResourceKey, x.LeaseToken }).IsUnique();
             entity.HasIndex(x => new { x.ParentId, x.Kind }).IsUnique();
             entity.HasIndex(x => x.CompletedAtUtc);
+            entity.HasIndex(x => x.QueuedAtUtc).HasDatabaseName("IX_BackgroundOperations_PendingDispatch")
+                .HasFilter("\"DispatchedAtUtc\" IS NULL AND \"Status\" NOT IN ('succeeded', 'partial', 'failed')");
             entity.HasOne(x => x.Parent).WithMany().HasForeignKey(x => x.ParentId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
@@ -390,6 +392,9 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => x.TokenHash).IsUnique();
             entity.HasIndex(x => new { x.UserAccountId, x.ExpiresAtUtc });
+            entity.HasIndex(x => new { x.UserAccountId, x.FamilyId });
+            entity.HasIndex(x => x.ExpiresAtUtc);
+            entity.HasIndex(x => x.RevokedAtUtc).HasFilter("\"ProtectedReplacementToken\" IS NOT NULL");
 
             entity.HasOne(x => x.UserAccount)
                 .WithMany(x => x.RefreshTokens)
@@ -402,6 +407,7 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => x.TokenHash).IsUnique();
             entity.HasIndex(x => new { x.UserAccountId, x.ExpiresAtUtc });
+            entity.HasIndex(x => x.ExpiresAtUtc);
             entity.Property(x => x.TokenHash).IsRequired();
 
             entity.HasOne(x => x.UserAccount)

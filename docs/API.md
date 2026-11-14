@@ -491,6 +491,7 @@ Auth behavior notes:
 
 ### Admin Operations (`AdminOnly`)
 
+- `GET /api/admin/release` returns the source revision and latest applied migration (no-store).
 - `GET /api/admin/overview`
 - `GET /api/admin/metrics/analysis`
 - `GET /api/admin/jobs/recurring`
@@ -685,3 +686,36 @@ backfills use raw data. These are eventual consistency bounds, not guarantees of
 The web BFF applies `TRN_BACKEND_TIMEOUT_MS` through the complete finite response body, including JSON
 consumption, and returns the existing structured 504 on timeout. An early HTTP 200 loading shell does
 not establish that the backend data succeeded. Endpoint contracts and OpenAPI shapes are unchanged.
+
+## Audit contract clarifications (November 2026)
+
+Refresh/reset claims are atomic in PostgreSQL. Refresh tokens belong to a login
+session family. Concurrent refreshes within ten seconds recover the same successor
+through encrypted server-side recovery; later replay revokes that family. Logout
+revokes the family, including a racing successor. Password reset consumes one token
+once and invalidates the user's reset tokens and active refresh sessions. Public
+register/login never grants admin; password registration rejects `@rso.invalid`.
+The operator-only `Admin:GrantUserId` startup command is not an HTTP endpoint.
+
+Terminal `OperationStatusResponse` adds nullable `expiresAtUtc` (default completion
+plus seven days). Active work has no expiration. Cleanup may retain a parent while
+child work exists; expiration is the earliest eligible removal time. An expired or
+unknown owned request returns the same 404 as an inaccessible request, without
+revealing ownership. Persist recent/full-history outcomes separately; deletion
+must not be interpreted as successful completion.
+
+Frontend `GET /api/readiness` returns 200 ready or 503 unavailable, with bounded
+asset-kind checks, check time and release identity. It is dependency readiness;
+it reads the runtime `/api/static/champions` catalog before exercising the image
+optimizer. Frontend `/api/static/{champions,items,spells,runes}` routes retain
+24-hour shared caching on success and return 502 with `Cache-Control: no-store`
+on a bounded upstream failure. `GET /api/health` stays shallow.
+`GET /api/telemetry/metrics` exports bounded asset,
+Web Vitals and anonymous journey counters. `POST /api/telemetry/journey` accepts
+only `{ "event": <closed event name> }`, maximum 128 bytes, returning 204;
+unknown/extra fields return 400, cross-origin 403 and oversized bodies 413.
+See `docs/DATA-SLOS.md` for the fixed vocabulary and privacy/measurement limits.
+
+`GET /api/admin/release` requires an admin JWT and returns `checkedAtUtc`,
+`sourceRevision` and nullable `latestAppliedMigration`, with no-store caching.
+The schema value comes from the applied migration history, not the image tag.

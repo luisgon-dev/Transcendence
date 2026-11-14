@@ -1,5 +1,6 @@
 "use client";
 
+import { recordJourney } from "@/lib/journeyMetrics";
 import { useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -117,6 +118,9 @@ export function SummonerProfileClient({
     initialLookup,
     initialError
   });
+  const lookupStatus = lookup.profile ? "lookup_succeeded"
+    : lookup.error || initialLookup?.status === "missing" ? "lookup_failed" : null;
+  useEffect(() => { if (lookupStatus) recordJourney(lookupStatus); }, [lookupStatus]);
   const matches = useMatchHistory({
     summonerId: lookup.profile?.summonerId,
     championStatic: staticData.championStatic,
@@ -173,6 +177,7 @@ export function SummonerProfileClient({
         data-trn-backend-error={lookup.error && !lookup.profile ? "summoner-profile" : undefined}
       >
         <ProfileHeroCard
+          queue={matches.queue}
           title={title}
           region={region}
           gameName={gameName}
@@ -187,6 +192,15 @@ export function SummonerProfileClient({
           busy={lookup.busy}
           onRefresh={lookup.queueRefresh}
         />
+        {staticData.staticUnavailable ? (
+          <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface px-4 py-3 text-sm text-fg">
+            <p>Some game images and names are temporarily unavailable.</p>
+            <Button variant="outline" size="sm" disabled={staticData.staticBusy} onClick={staticData.retryStaticData}>
+              {staticData.staticBusy ? "Retrying…" : "Retry game data"}
+            </Button>
+          </div>
+        ) : null}
+
 
         {!lookup.profile ? (
           lookup.polling && !lookup.error ? (

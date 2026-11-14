@@ -255,7 +255,7 @@ export async function BuildResourceDetail({
           {showBuildLabLinks ? (
             <Link
               href="/lol/builds"
-              className="type-ui font-semibold text-primary transition-colors hover:text-primary/80"
+              className="type-ui font-semibold text-primary transition-colors hover:text-primary"
             >
               Compare in champion context
             </Link>

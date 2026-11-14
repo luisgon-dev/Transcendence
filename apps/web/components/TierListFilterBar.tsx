@@ -81,7 +81,7 @@ export function TierListFilterBar({
       {/* Rank · Region · Patch — quiet refinement controls. */}
       <div className="flex flex-wrap items-end gap-x-7 gap-y-4">
         <label className="grid gap-1.5">
-          <span className="type-kicker text-fg/55">Queue</span>
+          <span className="type-kicker text-muted">Queue</span>
           <Select
             value={activeQueue}
             onValueChange={(queue) => {
@@ -97,7 +97,7 @@ export function TierListFilterBar({
           />
         </label>
         <label className="grid gap-1.5">
-          <span className="type-kicker text-fg/55">Rank</span>
+          <span className="type-kicker text-muted">Rank</span>
           <RankFilterDropdown
             ranks={ranks}
             activeRank={activeRank}
@@ -109,7 +109,7 @@ export function TierListFilterBar({
 
         {regionOptions && activeRegion ? (
           <label className="grid gap-1.5">
-            <span className="type-kicker text-fg/55">Region</span>
+            <span className="type-kicker text-muted">Region</span>
             <AnalyticsRegionFilter
               variant="select"
               options={regionOptions}
@@ -121,7 +121,7 @@ export function TierListFilterBar({
 
         {patchOptions ? (
           <label className="grid gap-1.5">
-            <span className="type-kicker text-fg/55">Patch</span>
+            <span className="type-kicker text-muted">Patch</span>
             <AnalyticsPatchFilter
               patches={patchOptions}
               activePatch={activePatch}
@@ -133,7 +133,7 @@ export function TierListFilterBar({
 
       {/* Lane — the prominent primary choice, pinned to the table edge. */}
       {showRoles ? <div className="-mx-1 flex items-end gap-x-3 border-b border-border/40 px-1">
-        <span className="type-kicker hidden shrink-0 pb-3 text-fg/45 sm:block">Lane</span>
+        <span className="type-kicker hidden shrink-0 pb-3 text-muted sm:block">Lane</span>
         <LaneTabs
           roles={roles}
           activeRole={activeRole}

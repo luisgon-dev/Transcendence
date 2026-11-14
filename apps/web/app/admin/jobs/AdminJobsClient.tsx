@@ -143,7 +143,7 @@ export function AdminRecurringJobsTable({ jobs }: { jobs: AdminRecurringJob[] })
       <StatusMessage status={status} />
       <div className="mt-4 overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <thead className="text-fg/60">
+          <thead className="text-muted">
             <tr>
               <th className="py-2">Id</th>
               <th className="py-2">Queue</th>
@@ -227,7 +227,7 @@ function RecurringJobRow({
             active
           </span>
         ) : (
-          <span className="surface-chip rounded-full px-2.5 py-1 text-xs uppercase tracking-wide text-fg/65">
+          <span className="surface-chip rounded-full px-2.5 py-1 text-xs uppercase tracking-wide text-muted">
             disabled
           </span>
         )}
@@ -367,7 +367,7 @@ export function AdminJobsTable({
       <StatusMessage status={status} />
       <div className="mt-4 overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <thead className="text-fg/60">
+          <thead className="text-muted">
             <tr>
               <th className="py-2">Job</th>
               <th className="py-2">Type</th>
@@ -391,7 +391,7 @@ export function AdminJobsTable({
             ))}
             {rows.length === 0 ? (
               <tr>
-                <td className="py-3 text-fg/60" colSpan={8}>
+                <td className="py-3 text-muted" colSpan={8}>
                   No jobs matched the current filters.
                 </td>
               </tr>

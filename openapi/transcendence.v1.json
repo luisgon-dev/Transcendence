@@ -6,6 +6,44 @@
     "version": "v1"
   },
   "paths": {
+    "/api/admin/release": {
+      "get": {
+        "tags": [
+          "AdminOperations"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminReleaseResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminReleaseResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminReleaseResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          { }
+        ]
+      }
+    },
     "/api/admin/overview": {
       "get": {
         "tags": [
@@ -6733,6 +6771,27 @@
         },
         "additionalProperties": false
       },
+      "AdminReleaseResponse": {
+        "required": [
+          "checkedAtUtc",
+          "sourceRevision"
+        ],
+        "type": "object",
+        "properties": {
+          "checkedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sourceRevision": {
+            "type": "string"
+          },
+          "latestAppliedMigration": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "AdminServerSnapshot": {
         "required": [
           "name",
@@ -10099,6 +10158,11 @@
                 "$ref": "#/components/schemas/OperationCompletionResult"
               }
             ]
+          },
+          "expiresAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           }
         },
         "additionalProperties": false

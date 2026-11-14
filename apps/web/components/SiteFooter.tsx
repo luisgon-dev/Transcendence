@@ -9,18 +9,18 @@ export function SiteFooter() {
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
           <div className="grid gap-3">
             <div>
-              <p className="type-kicker text-fg/52">Transcendence</p>
+              <p className="type-kicker text-muted">Transcendence</p>
               <p className="type-ui mt-2 max-w-2xl text-fg/74">
                 Fast League lookups, current-patch analytics, and player routes that stay readable under pressure.
               </p>
             </div>
-            <p className="type-note measure text-fg/64">
+            <p className="type-note measure text-muted">
               Transcendence isn&apos;t endorsed by Riot Games. Riot Games and all associated properties are trademarks or registered trademarks of Riot Games, Inc.
             </p>
           </div>
 
           <div className="grid gap-3 lg:justify-items-end">
-            <nav className="type-ui flex flex-wrap items-center gap-x-5 gap-y-2 text-fg/62">
+            <nav className="type-ui flex flex-wrap items-center gap-x-5 gap-y-2 text-muted">
               <Link href="/about" className="site-footer-link">
                 About the data
               </Link>
@@ -44,7 +44,7 @@ export function SiteFooter() {
                 GPL-3.0
               </Link>
             </nav>
-            <p className="type-note text-fg/56">&copy; 2026 luisgon-dev</p>
+            <p className="type-note text-muted">&copy; 2026 luisgon-dev</p>
           </div>
         </div>
       </div>

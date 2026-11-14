@@ -34,7 +34,8 @@ docker run -d --name "$redis" --network "$network" --network-alias redis \
 
 dependencies_ready=false
 for (( attempt=0; attempt<60; attempt++ )); do
-  if docker exec "$database" pg_isready -U postgres -d runtime_smoke >/dev/null 2>&1 \
+  # The image's initialization server accepts Unix sockets before its final TCP server starts.
+  if docker exec "$database" pg_isready -h 127.0.0.1 -U postgres -d runtime_smoke >/dev/null 2>&1 \
     && [[ "$(docker exec "$redis" redis-cli ping 2>/dev/null)" == PONG ]]; then
     dependencies_ready=true
     break

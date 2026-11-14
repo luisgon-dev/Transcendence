@@ -1321,3 +1321,11 @@ disposable PostgreSQL 18 and Redis 8 containers on a private network, without ho
 ports or persistent volumes. It checks production API readiness and a successful
 worker migration-only run; it never starts Riot ingestion. Published main images
 retain provenance, SBOMs, and signing.
+
+Rollbacks now preserve bounded failure evidence before removing a failed
+container: `/var/lib/transcendence-deploy/<service>-last-failure.log` (mode 0600)
+contains the release, reason, container state/health and recent application output.
+The journal receives the last 60 lines. Container environment variables are never
+dumped. Quarantine remains in place until a different release is published or an
+operator fixes the cause and explicitly retries; installing the updated poller
+is required on the host to enable diagnostic capture.

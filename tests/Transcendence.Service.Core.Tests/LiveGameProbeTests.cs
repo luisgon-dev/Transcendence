@@ -21,6 +21,33 @@ namespace Transcendence.Service.Core.Tests;
 public sealed class LiveGameProbeTests
 {
     [Fact]
+    public async Task RatePressureLeavesProbeRetryingWithoutSavingAnObservation()
+    {
+        var summoners = new Mock<ISummonerRepository>();
+        summoners.Setup(x => x.FindByRiotIdAsync("NA1", "Player", "TAG", null,
+            It.IsAny<CancellationToken>())).ReturnsAsync(new Summoner { Id = Guid.NewGuid(), Puuid = "stored" });
+        var polling = new Mock<ILiveGamePollingService>();
+        polling.Setup(x => x.ProbeCurrentGameAsync("NA1", "Player", "TAG", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new LiveGameProbeDeferredException("NA1", TimeSpan.FromSeconds(7)));
+        var snapshots = new Mock<ILiveGameSnapshotRepository>();
+        var operations = OperationTrackerMock.Create();
+        var job = new LiveGameProbeJob(summoners.Object, polling.Object, snapshots.Object,
+            Mock.Of<IRefreshLockRepository>(), NullLogger<LiveGameProbeJob>.Instance, operations.Object);
+        var id = Guid.NewGuid();
+        var before = DateTime.UtcNow;
+
+        await FluentActions.Invoking(() => job.ProbeAsync(id, "NA1", "Player", "TAG", "lock"))
+            .Should().ThrowAsync<LiveGameProbeDeferredException>();
+
+        operations.Verify(x => x.RetryAsync(id, LiveGameProbeDeferredException.ErrorCode,
+            It.Is<DateTime?>(at => at >= before.AddSeconds(7) && at <= DateTime.UtcNow.AddSeconds(8)),
+            It.IsAny<CancellationToken>()), Times.Once);
+        snapshots.VerifyNoOtherCalls();
+        operations.Verify(x => x.CompleteAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<OperationResult>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task PersistenceFailureNeverCertifiesAProbeAndLeavesItRetrying()
     {
         var summoner = new Summoner { Id = Guid.NewGuid(), Puuid = "p" };

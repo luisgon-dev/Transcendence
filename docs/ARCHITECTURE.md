@@ -940,3 +940,14 @@ The backend application target and container runtimes are .NET 11. Stable EF Cor
 is prerelease. Backend image CI verifies runtime startup as well as compilation:
 the API must pass database/cache readiness and the worker must apply migrations
 in its migration-only path against disposable infrastructure.
+
+Standard rune and stat-shard icons retain Data Dragon URLs. CommunityDragon
+metadata supplements missing perks without overwriting those canonical assets;
+this keeps ordinary match/rune views aligned with the readiness canary and avoids
+a second image-host dependency for known icons.
+
+Live polling treats regional rate-budget deferral and HTTP 429 as backpressure.
+A periodic cycle skips the affected region while continuing eligible others,
+retaining prior observations and timestamps. Owned probes reschedule the same
+Hangfire job before ordinary failure retries are counted. Deferrals never become
+verified offline observations.

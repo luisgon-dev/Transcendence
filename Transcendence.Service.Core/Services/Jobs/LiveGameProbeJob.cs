@@ -70,6 +70,14 @@ public sealed class LiveGameProbeJob(
             await operations.CompleteAsync(operationId, OperationStatuses.Succeeded, new OperationResult(
                 SummonerId: summoner.Id, SnapshotId: snapshotId, ObservedAtUtc: observedAt, LiveGame: response), ct);
         }
+        catch (LiveGameProbeDeferredException deferred)
+        {
+            await operations.RetryAsync(operationId, LiveGameProbeDeferredException.ErrorCode,
+                DateTime.UtcNow.Add(deferred.RetryAfter), CancellationToken.None);
+            logger.LogInformation("Live-game probe deferred for {Region}; retry after {RetryAfterSeconds}s.",
+                deferred.PlatformRegion, deferred.RetryAfter.TotalSeconds);
+            throw;
+        }
         catch (Exception)
         {
             await operations.RetryAsync(operationId, "probe_failed", ct: CancellationToken.None);

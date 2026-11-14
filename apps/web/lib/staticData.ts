@@ -72,47 +72,47 @@ const STAT_SHARD_FALLBACKS: Array<{ id: number; name: string; iconPath: string }
   {
     id: 5001,
     name: "Health Scaling",
-    iconPath: "/lol-game-data/assets/v1/perk-images/statmods/statmodshealthscalingicon.png"
+    iconPath: "perk-images/StatMods/StatModsHealthScalingIcon.png"
   },
   {
     id: 5002,
     name: "Armor",
-    iconPath: "/lol-game-data/assets/v1/perk-images/statmods/statmodsarmoricon.png"
+    iconPath: "perk-images/StatMods/StatModsArmorIcon.png"
   },
   {
     id: 5003,
     name: "Magic Resist",
-    iconPath: "/lol-game-data/assets/v1/perk-images/statmods/statmodsmagicresicon.png"
+    iconPath: "perk-images/StatMods/StatModsMagicResIcon.MagicResist_Fix.png"
   },
   {
     id: 5005,
     name: "Attack Speed",
-    iconPath: "/lol-game-data/assets/v1/perk-images/statmods/statmodsattackspeedicon.png"
+    iconPath: "perk-images/StatMods/StatModsAttackSpeedIcon.png"
   },
   {
     id: 5007,
     name: "Ability Haste",
-    iconPath: "/lol-game-data/assets/v1/perk-images/statmods/statmodscdrscalingicon.png"
+    iconPath: "perk-images/StatMods/StatModsCDRScalingIcon.png"
   },
   {
     id: 5008,
     name: "Adaptive Force",
-    iconPath: "/lol-game-data/assets/v1/perk-images/statmods/statmodsadaptiveforceicon.png"
+    iconPath: "perk-images/StatMods/StatModsAdaptiveForceIcon.png"
   },
   {
     id: 5010,
     name: "Move Speed",
-    iconPath: "/lol-game-data/assets/v1/perk-images/statmods/statmodsmovementspeedicon.png"
+    iconPath: "perk-images/StatMods/StatModsMovementSpeedIcon.png"
   },
   {
     id: 5011,
     name: "Health",
-    iconPath: "/lol-game-data/assets/v1/perk-images/statmods/statmodshealthscalingicon.png"
+    iconPath: "perk-images/StatMods/StatModsHealthPlusIcon.png"
   },
   {
     id: 5013,
     name: "Tenacity and Slow Resist",
-    iconPath: "/lol-game-data/assets/v1/perk-images/statmods/statmodstenacityicon.png"
+    iconPath: "perk-images/StatMods/StatModsTenacityIcon.png"
   }
 ];
 
@@ -275,26 +275,23 @@ export const fetchRunesReforged = cache(async (): Promise<RuneStaticData> => {
     }
   }
 
+  // Keep standard runes and shards on the same canonical CDN as the readiness canary.
+  // Optional enrichment must not replace them with a separate image-host dependency.
+  for (const [index, shard] of STAT_SHARD_FALLBACKS.entries()) {
+    const key = String(shard.id);
+    if (!runeById[key]) runeById[key] = { name: shard.name, icon: shard.iconPath };
+    runeSortById[key] = 1000 + index;
+  }
+
   try {
     const perks = await fetchStaticJson<CommunityDragonPerk[]>(
       `${CDRAGON_GAME_DATA_BASE}/v1/perks.json`, "Optional rune metadata unavailable.", OPTIONAL_STATIC_JSON_TIMEOUT_MS);
     for (const perk of perks ?? []) {
-      if (!perk?.id || !perk?.iconPath) continue;
+      if (!perk?.id || !perk?.iconPath || runeById[String(perk.id)]) continue;
       runeById[String(perk.id)] = { name: runeDisplayName(perk), icon: communityDragonAssetUrl(perk.iconPath) };
     }
   } catch {
     // Keep ddragon runes available even if CommunityDragon fetch is down.
-  }
-
-  for (const shard of STAT_SHARD_FALLBACKS) {
-    const key = String(shard.id);
-    if (runeById[key]) continue;
-    runeById[key] = {
-      name: shard.name,
-      icon: communityDragonAssetUrl(shard.iconPath)
-    };
-    // Keep shard display stable if upstream response omits explicit ordering metadata.
-    runeSortById[key] = 1000 + STAT_SHARD_FALLBACKS.findIndex((entry) => entry.id === shard.id);
   }
 
   const trees: RuneTree[] = styles.map((style) => ({

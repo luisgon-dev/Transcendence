@@ -11,6 +11,7 @@ using Transcendence.Data.Repositories.Interfaces;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.LiveGame.Implementations;
 using Transcendence.Service.Core.Services.LiveGame.Interfaces;
+using Transcendence.Service.Core.Services.LiveGame.Models;
 using Transcendence.Service.Core.Services.Operations;
 using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Tests.Support;
@@ -98,8 +99,23 @@ public sealed class SpectatorVerificationTests
         gate.Setup(x => x.AcquireAsync("NA1", It.IsAny<CancellationToken>())).ReturnsAsync(true);
         var act = () => BuildPolling(stub, services, gate).ProbeCurrentGameAsync("NA1", "Player", "TAG");
 
-        await act.Should().ThrowAsync<Exception>();
+        await act.Should().ThrowAsync<LiveGameProbeDeferredException>()
+            .Where(ex => ex.RetryAfter == TimeSpan.FromSeconds(7));
         gate.Verify(x => x.Pause("NA1", TimeSpan.FromSeconds(7)), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExhaustedRegionalBudgetDefersWithoutInventingAnObservation()
+    {
+        using var stub = new RiotApiServiceHttpTests.RiotApiStub { Response = (HttpStatusCode.NotFound, null) };
+        using var services = BuildServices();
+        var gate = new Mock<IRiotRateGate>();
+        gate.Setup(x => x.AcquireAsync("NA1", It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        var act = () => BuildPolling(stub, services, gate).ProbeCurrentGameAsync("NA1", "Player", "TAG");
+
+        await act.Should().ThrowAsync<LiveGameProbeDeferredException>()
+            .Where(ex => ex.PlatformRegion == "NA1" && ex.RetryAfter == TimeSpan.FromSeconds(30));
+        gate.Verify(x => x.Pause(It.IsAny<string>(), It.IsAny<TimeSpan>()), Times.Never);
     }
 
     [Fact]
@@ -129,8 +145,11 @@ public sealed class SpectatorVerificationTests
         var summoners = new Mock<ISummonerRepository>();
         summoners.Setup(x => x.FindByRiotIdAsync("NA1", "Player", "TAG", null,
             It.IsAny<CancellationToken>())).ReturnsAsync(new Summoner { Id = Guid.NewGuid(), Puuid = "stored-puuid" });
-        rateGate ??= new Mock<IRiotRateGate>();
-        rateGate.Setup(x => x.AcquireAsync("NA1", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        if (rateGate is null)
+        {
+            rateGate = new Mock<IRiotRateGate>();
+            rateGate.Setup(x => x.AcquireAsync("NA1", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        }
         return new RiotLiveGamePollingService(stub.BuildContext(), summoners.Object, rateGate.Object,
             services.GetRequiredService<HybridCache>(), Mock.Of<ILiveGameAnalysisService>(),
             NullLogger<RiotLiveGamePollingService>.Instance, stub.BuildSpectatorClient());

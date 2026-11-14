@@ -40,6 +40,11 @@ with a deterministic, **outbound-only** release poll:
 6. On recreate/health failure, restore the exact prior container if Compose left it partially
    renamed. If that container is gone, retag and recreate the prior local image with `--pull never`.
    The failed digest is quarantined until `:main` changes, preventing a minute-by-minute rollback loop.
+   Before rollback removes a replacement, its bounded state/health and recent logs
+   are saved in `/var/lib/transcendence-deploy/<service>-last-failure.log` with mode
+   `0600`; the journal also receives the last 60 lines. This preserves startup
+   failures that would otherwise disappear with the failed container. Environment
+   variables are never dumped. Later quarantine skips point to the saved evidence.
 7. `docker image prune -f`, **only if a service was deployed** in this poll. Never prune on an idle
    poll: under the containerd image store a prune deletes the content of any pull still in flight,
    so a prune every ~60s made every pull longer than one interval (the large images) fail with

@@ -145,8 +145,10 @@ public class LiveGamePollingJob(
         var processed = 0;
         var attemptedRequests = 0;
         var pendingSnapshots = 0;
+        var deferredRegions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var summoner in trackedSummoners)
         {
+            if (deferredRegions.Contains(summoner.PlatformRegion)) continue;
             if (attemptedRequests >= maxRiotRequestsPerRun)
             {
                 logger.LogInformation(
@@ -200,6 +202,14 @@ public class LiveGamePollingJob(
                         latest.GameId);
                 }
             }
+            catch (LiveGameProbeDeferredException deferred)
+            {
+                deferredRegions.Add(summoner.PlatformRegion);
+                logger.LogInformation(
+                    "Live game polling deferred for {Region} by the Riot rate budget; skipping the region for this cycle (retry after {RetryAfterSeconds}s).",
+                    deferred.PlatformRegion, deferred.RetryAfter.TotalSeconds);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (Exception ex)
             {
                 logger.LogWarning(
@@ -215,7 +225,7 @@ public class LiveGamePollingJob(
             await snapshotRepository.SaveChangesAsync(ct);
 
         logger.LogInformation(
-            "Live game polling cycle complete. Processed {Count} summoners, attempted {RequestCount} Riot calls.",
+            "Live game polling cycle complete. Processed {Count} summoners, attempted {RequestCount} live-game probes.",
             processed,
             attemptedRequests);
     }

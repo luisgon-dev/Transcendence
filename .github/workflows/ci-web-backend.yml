@@ -284,7 +284,7 @@ jobs:
           path: .performance-artifacts
           include-hidden-files: true
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 7
 
   migration-safety:
     runs-on: ubuntu-latest

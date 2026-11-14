@@ -33,7 +33,8 @@ with a deterministic, **outbound-only** release poll:
    The webapi also waits for the worker: images build in parallel, so the webapi image can reach
    `:main` a poll before the worker image of the same merge. While the commits from the running
    worker's revision to the webapi's contain a migration the worker has not deployed, the poll logs
-   `HOLD webapi` and retries (it uses the checkout's git history; if it cannot tell, it deploys).
+   `HOLD webapi` and retries. It uses the checkout's Git history; unknown or unavailable
+   compatibility evidence holds API rollout until it can be verified.
 5. Recreate one service at a time with `--no-deps` (PostgreSQL/Redis are never touched), wait for its
    healthcheck, then continue. A component failure aborts all later components for that poll.
 6. On recreate/health failure, restore the exact prior container if Compose left it partially

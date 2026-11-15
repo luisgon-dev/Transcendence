@@ -1347,3 +1347,6 @@ private CIDR when it is outside the application Docker network.
 candidates use 2 for the explicitly trusted NPM/inner-edge chain. Only configured
 known proxies can advance the forwarded identity. Both application bind addresses
 must be explicit during host adoption, especially with NPM in another LXC.
+Fresh staging pulls every application digest before its migration-only run, and
+PostgreSQL readiness probes the final TCP listener. CI retains bounded staging
+logs/state on failure while excluding rendered environment/configuration files.

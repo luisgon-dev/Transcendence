@@ -41,6 +41,9 @@ def main():
     env.touch()
     engine = deploy.Engine(bundle, args.state, env)
     engine.verify_images()
+    # Verification warms the cache. Remove the unused worker fixture so this test
+    # exercises publication's cold-worker path too, rather than hiding a missing pull.
+    engine.run(['docker', 'image', 'rm', fixture['images']['service']])
     deploy.stage(bundle, args.state / 'stage')
     print('Full isolated staging regression passed, including public BFF and image delivery.')
 

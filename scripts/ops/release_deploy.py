@@ -520,6 +520,9 @@ def stage(bundle, directory, timeout=420):
     rendered = directory / "stage.json"
     write_json(rendered, config)
     engine.command = ["docker", "compose", "-p", project, "-f", str(rendered)]
+    # Publication uses a fresh daemon; initializers pull API/web but never the worker.
+    # Acquire every pinned application image before the migration's --pull never.
+    engine.compose("pull", *COMPONENTS, timeout=600)
     try:
         engine.compose("up", "-d", "--no-build", "postgres", "redis", "operational-logs-init", "web-cache-init")
         engine.wait(["postgres", "redis"])

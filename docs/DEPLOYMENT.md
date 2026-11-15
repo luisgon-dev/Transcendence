@@ -15,6 +15,10 @@ PostgreSQL database, seeds a stored profile, starts Redis/API/web, and exercises
 the home page, content readiness, backend diagnostics, profile page and public
 BFF database search. The worker runs only with `Database:MigrateOnly=true`, so
 staging never starts ingestion or recurring jobs.
+Staging explicitly pulls every pinned application image before migration, even
+on a fresh publication runner. PostgreSQL readiness checks its final TCP listener,
+not the temporary initialization server. CI preserves bounded logs/state on staging
+failure without uploading resolved environment files or credentials.
 
 Only successful staging can publish a complete GitHub Release named
 `release-<full source revision>`. Its assets are:

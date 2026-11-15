@@ -383,7 +383,7 @@ class Engine:
                     self.rollback(previous, ["service"] if mode == "blue-green" else COMPONENTS)
                 if current:
                     wait_for_public(base_url, current["release"].removeprefix("release-"), profile,
-                                    route=current.get("candidate"), api_url=api_url)
+                                    route=current.get("candidate") or ("legacy" if mode == "blue-green" else None), api_url=api_url)
                     write_json(current_path, current)
                     if prior_config is not None:
                         Path(current["config"]).write_bytes(prior_config)
@@ -455,7 +455,8 @@ class Engine:
             self.rollback(Path(record["previous"]), ["service"] if record["mode"] == "blue-green" else COMPONENTS)
             if current:
                 wait_for_public(record["base_url"], current["release"].removeprefix("release-"),
-                                record["profile"], route=current.get("candidate"), api_url=record["api_url"])
+                                record["profile"], route=current.get("candidate") or
+                                ("legacy" if record["mode"] == "blue-green" else None), api_url=record["api_url"])
                 write_json(current_path, current)
                 backup = self.attempt / "prior-config.json"
                 if backup.exists():
@@ -466,6 +467,9 @@ class Engine:
             pointer.unlink(missing_ok=True)
             if record["pointer"]:
                 pointer.symlink_to(record["pointer"], target_is_directory=True)
+            rendered = self.attempt / "deployed.json"
+            if rendered.exists() and (not current or Path(current["config"]) != rendered):
+                rendered.replace(self.attempt / "unaccepted.json")
             (self.attempt / "quarantined").write_text("Interrupted rollout recovered; review before explicit retry.\n")
             self.status("quarantined", "Interrupted rollout restored to its captured application baseline")
             transaction.unlink()
@@ -683,8 +687,9 @@ def main():
     else:
         # Direct operator retries serialize with scheduled deployment and the legacy updater too.
         with contextlib.ExitStack() as locks:
-            for path in (args.state / "deploy.lock", *(() if os.environ.get("TRN_RELEASE_BOOTSTRAPPED") == "1"
-                         else (Path("/run/transcendence-deploy.lock"),))):
+            # Always acquire legacy -> release lock, matching the bootstrap parent/agent order.
+            for path in (*(() if os.environ.get("TRN_RELEASE_BOOTSTRAPPED") == "1"
+                           else (Path("/run/transcendence-deploy.lock"),)), args.state / "deploy.lock"):
                 descriptor = locks.enter_context(path.open("w"))
                 fcntl.flock(descriptor, fcntl.LOCK_EX)
             apply_locked(args)

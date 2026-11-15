@@ -25,6 +25,7 @@ namespace Transcendence.Service.Core.Services.Jobs;
 /// Per-champion work is still bounded internally to yield the DB to ingestion/API demand.
 /// </summary>
 [DisableConcurrentExecution(timeoutInSeconds: 60 * 60)]
+[Transcendence.Service.Core.Services.Operations.StorageMaintenanceWork]
 public class WarmDefaultChampionProfilesJob(
     IServiceScopeFactory scopeFactory,
     TranscendenceContext db,

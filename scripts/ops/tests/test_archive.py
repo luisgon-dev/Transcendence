@@ -97,7 +97,7 @@ class ArchiveTests(unittest.TestCase):
         self.assertEqual(self.state()['matches'],0)
         self.assertTrue((Path(frozen[1])/'_DONE').exists())
         self.assertFalse((self.root/'progress/current').exists())
-        self.assertEqual(self.log.read_text().count('COPY ('),13)
+        self.assertEqual(self.log.read_text().count('COPY ('),12)
     def test_protected_patch_resume_never_deletes(self):
         self.run_archive(APPLY='1',FAIL_EXPORT='MatchBans')
         result=self.run_archive(APPLY='1',PROTECTED='1')

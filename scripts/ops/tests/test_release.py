@@ -379,6 +379,27 @@ class DeploymentTests(ReleaseFixture):
 
 
 class BackupTests(unittest.TestCase):
+    def test_cancelled_dump_terminates_only_its_tagged_database_session(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            process = MagicMock(returncode=None)
+            process.poll.return_value = None
+            with patch.dict(os.environ, {'TRN_BACKUP_COMMAND_TIMEOUT_SECONDS': '60'}), \
+                    patch.object(backup, 'run', return_value=b'370000000000') as commands, \
+                    patch.object(backup.subprocess, 'Popen', return_value=process) as launch, \
+                    patch.object(backup.subprocess, 'run', return_value=MagicMock(returncode=0)) as cleanup, \
+                    patch.object(backup.time, 'monotonic', side_effect=[0, 61]), \
+                    patch.object(backup.shutil, 'disk_usage', return_value=type('Disk', (), {'free': 10**12})()):
+                with self.assertRaisesRegex(RuntimeError, 'deadline'):
+                    backup.backup(Path(tmp), 'production-postgres', 5 * 1024**3)
+            application = next(value.split('=', 1)[1] for value in launch.call_args.args[0] if value.startswith('PGAPPNAME='))
+            self.assertIn(application.encode(), cleanup.call_args.kwargs['input'])
+            self.assertIn(b'pg_terminate_backend', cleanup.call_args.kwargs['input'])
+            self.assertNotIn(b"application_name='pg_dump'", cleanup.call_args.kwargs['input'])
+            process.wait.assert_called_once_with(timeout=15)
+            commands.assert_called_once()
+            self.assertFalse((Path(tmp) / 'database.dump').exists())
+            self.assertFalse((Path(tmp) / 'textfile/database_backup.prom').exists())
+
     def test_backup_and_restore_guard_exclude_archiver_and_release_lock_on_failure(self):
         with tempfile.TemporaryDirectory() as tmp, \
                 patch.dict(os.environ, {'TRN_BACKUP_ARCHIVE_STATE_DIR': tmp}):

@@ -32,6 +32,8 @@ def archive_guard():
     if not directory.is_absolute() or directory == Path("/") or not directory.is_dir():
         raise ValueError("Configure an existing absolute archive state directory")
     directory = directory.resolve()
+    if directory == Path("/"):
+        raise ValueError("Archive state cannot resolve to the filesystem root")
     # Match archive-old-patches.sh's lock so cron yields without changing frozen
     # IDs, resume state or chunk exports while a backup/restore is running.
     with (directory / "run.lock").open("a") as lock:
@@ -93,7 +95,8 @@ def backup(state, container, reserve_bytes, archive_state=None):
                     'exec psql -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-${POSTGRES_USER:-postgres}}" -Atc "SELECT pg_database_size(current_database());"'])
         metadata.write_bytes(size)
         with dump.open("wb") as output, tempfile.TemporaryFile() as errors:
-            command = ["docker", "exec", container, "sh", "-c",
+            application = "transcendence-backup-" + secrets.token_hex(12)
+            command = ["docker", "exec", "-e", "PGAPPNAME=" + application, container, "sh", "-c",
                        'exec pg_dump -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-${POSTGRES_USER:-postgres}}" --format=custom --no-owner --no-acl']
             process = subprocess.Popen(command, stdout=output, stderr=errors)
             deadline = time.monotonic() + command_timeout()
@@ -106,8 +109,18 @@ def backup(state, container, reserve_bytes, archive_state=None):
                     raise RuntimeError("PostgreSQL dump failed")
             finally:
                 if process.poll() is None:
-                    process.kill()
-                    process.wait()
+                    # Killing the Docker CLI does not terminate pg_dump inside its container.
+                    # Close only this run's database session before stopping its CLI transport.
+                    cleanup = ["docker", "exec", "-i", container, "sh", "-c",
+                               'exec psql -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-${POSTGRES_USER:-postgres}}" -At']
+                    try:
+                        subprocess.run(cleanup, input=("SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                                       f"WHERE application_name='{application}' AND pid<>pg_backend_pid();\n").encode(),
+                                       capture_output=True, timeout=30, check=True)
+                        process.wait(timeout=15)
+                    except (subprocess.SubprocessError, OSError):
+                        process.kill()
+                        process.wait()
         # The operator initializes and supplies an encrypted off-host restic repository.
         command = ["restic", "backup", "--tag", "transcendence-database", str(dump), str(metadata)]
         if archive_state is not None:

@@ -22,7 +22,7 @@ namespace Transcendence.Service.Core.Tests;
 /// <summary>
 /// The whole Build Lab change set must be inert until <c>Analytics:BuildLab:Enabled</c> is on: the box
 /// is disk-constrained and the Riot key is a low-rate personal one. These tests pin that a flags-OFF
-/// ingest writes nothing to the three Build Lab child tables, keeps the coarse frame cadence, and does
+/// ingest writes nothing to the two Build Lab child tables, keeps the coarse frame cadence, and does
 /// not consider an already-ingested v1 match stale (which would re-fetch every timeline for nothing).
 /// The timeline itself comes from the loopback <see cref="RiotApiServiceHttpTests.RiotApiStub"/>, so
 /// the real Camille request/parse path runs without touching the network.
@@ -51,8 +51,7 @@ public class MatchTimelineIngestionGatingTests
             .IngestMatchTimelineAsync(match.MatchId!, CancellationToken.None);
 
         await using var assertions = harness.NewContext();
-        // The three tables the feature introduces: raw payloads, lossless item lifecycle, rank context.
-        (await assertions.MatchTimelineEventPayloads.CountAsync()).Should().Be(0);
+        // Only structured lifecycle and rank context are retained.
         (await assertions.MatchParticipantItemEvents.CountAsync()).Should().Be(0);
         (await assertions.MatchParticipantRankContexts.CountAsync()).Should().Be(0);
 
@@ -84,15 +83,11 @@ public class MatchTimelineIngestionGatingTests
             .IngestMatchTimelineAsync(match.MatchId!, CancellationToken.None);
 
         await using var assertions = harness.NewContext();
-        (await assertions.MatchTimelineEventPayloads.CountAsync()).Should().BeGreaterThan(0);
         (await assertions.MatchParticipantItemEvents.CountAsync()).Should().BeGreaterThan(0);
         (await assertions.MatchParticipantRankContexts.CountAsync()).Should().Be(2);
-        // Purchases live in the structured lifecycle table; their payload copies are no longer written,
-        // while the kills (which exist nowhere else) still are.
         (await assertions.MatchParticipantItemEvents.CountAsync(row => row.EventType == MatchItemEventType.Purchased))
             .Should().BeGreaterThan(0);
-        (await assertions.MatchTimelineEventPayloads.Select(row => row.EventType).Distinct().ToListAsync())
-            .Should().Equal("CHAMPION_KILL");
+        assertions.Model.GetEntityTypes().Should().NotContain(type => type.GetTableName() == "MatchTimelineEventPayloads");
 
         var state = await assertions.MatchTimelineFetchStates.SingleAsync();
         state.SchemaVersion.Should().Be(MatchTimelineIngestionJob.CurrentTimelineSchemaVersion);
@@ -216,15 +211,6 @@ public class MatchTimelineIngestionGatingTests
                 Tier = "DIAMOND",
                 Source = "STORED_SOLO_RANK"
             });
-            priorIngest.MatchTimelineEventPayloads.Add(new MatchTimelineEventPayload
-            {
-                MatchId = priorMatch.Id,
-                Match = priorMatch,
-                EventIndex = 0,
-                TimestampMs = 61_000,
-                EventType = TimelineBuildParser.ChampionKillType,
-                PayloadJson = """{"type":"CHAMPION_KILL"}"""
-            });
             await priorIngest.SaveChangesAsync();
         }
 
@@ -246,13 +232,12 @@ public class MatchTimelineIngestionGatingTests
             .ToListAsync();
         marks.Should().Equal(2, 4, 6, 15);
 
-        // Untouched, not rewritten: the three Build Lab tables keep exactly the rows the flag-on ingest left.
+        // Untouched, not rewritten: the two Build Lab tables keep exactly the rows the flag-on ingest left.
         (await assertions.MatchParticipantItemEvents.ToListAsync())
             .Should().ContainSingle().Which.ItemId.Should().Be(LegendaryItemId);
         (await assertions.MatchParticipantRankContexts.ToListAsync())
             .Should().ContainSingle().Which.Tier.Should().Be("DIAMOND");
-        (await assertions.MatchTimelineEventPayloads.ToListAsync())
-            .Should().ContainSingle().Which.PayloadJson.Should().Be("""{"type":"CHAMPION_KILL"}""");
+
     }
 
     private static MatchTimelineIngestionJob BuildJob(

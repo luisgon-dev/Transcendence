@@ -42,6 +42,7 @@ public sealed class ChampionSynergyFactMaterializer(
         var counted = 0;
         var walStart = await WalPositionAsync(ct);
         var archivedIds = new List<Guid>();
+        var managedArchiveIds = await db.MatchArchiveEntries.AsNoTracking().Select(x => x.MatchId).Take(500).ToListAsync(ct);
         var patches = await db.Patches.AsNoTracking().OrderByDescending(patch => patch.IsActive)
             .ThenByDescending(patch => patch.ReleaseDate).Take(Math.Clamp(opts.PatchesToMaterialize, 1, 6))
             .Select(patch => patch.Version).ToListAsync(ct);
@@ -61,6 +62,12 @@ public sealed class ChampionSynergyFactMaterializer(
             .Where(source => !db.AnalyticsResponseSnapshots.Any(snapshot =>
                 snapshot.Feature == CoverageFeature && snapshot.ScopeKey == "global" && snapshot.Patch == source.Patch))
             .Select(source => source.Patch).Distinct().ToListAsync(ct);
+        if (managedArchiveIds.Count > 0)
+        {
+            var pendingPatches = await db.MatchArchiveChunks.Where(x => x.CompletedAtUtc == null).Select(x => x.Patch).ToListAsync(ct);
+            archivedIds = managedArchiveIds.Concat(archivedIds).Distinct().ToList();
+            patches = pendingPatches.Concat(patches).Distinct().ToList();
+        }
         patches = patches.Concat(unfinished).Distinct().ToList();
         foreach (var patch in patches)
         {

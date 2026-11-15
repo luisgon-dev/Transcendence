@@ -5,6 +5,7 @@ namespace Transcendence.Service.Core.Services.Jobs;
 
 [DisableConcurrentExecution(600)]
 [AutomaticRetry(Attempts = 0)]
+[Transcendence.Service.Core.Services.Operations.StorageMaintenanceWork]
 public sealed class RefreshChampionSynergyFactsJob(ChampionSynergyFactMaterializer materializer)
 {
     [Queue(HangfireQueues.AnalyticsBatch)]

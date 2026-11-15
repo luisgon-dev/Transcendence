@@ -12,6 +12,7 @@ namespace Transcendence.Service.Core.Services.Jobs;
 /// </summary>
 [DisableConcurrentExecution(timeoutInSeconds: 2 * 60 * 60)]
 [AutomaticRetry(Attempts = 0)]
+[Transcendence.Service.Core.Services.Operations.StorageMaintenanceWork]
 public sealed class RefreshChampionMatchupsJob(
     TranscendenceContext db,
     IPrecomputedAnalyticsRefresher refresher,

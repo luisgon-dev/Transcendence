@@ -30,6 +30,8 @@ public class WorkerJobScheduleOptions
     // Public dataset stats: one grouped scan of Matches (~0.2s from shared buffers on prod); the API
     // only ever reads the stored snapshot.
     public string RefreshDatasetStatsCron { get; set; } = "*/5 * * * *";
+    public string ArchiveMatchesCron { get; set; } = "*/15 * * * *";
+    public bool EnableArchiveMatches { get; set; } = true;
     public string ChampionAnalyticsIngestionCron { get; set; } = "*/2 * * * *";
     public string SummonerMaintenanceCron { get; set; } = "*/5 * * * *";
     public string MatchTimelineBackfillCron { get; set; } = "*/10 * * * *";

@@ -27,6 +27,15 @@ The release controller uses `/etc/transcendence-release.conf` and
 disabled. Keep any Komodo container recreators disabled for these application
 containers too.
 
+NPM's site/API upstreams use the inner edge on `192.168.0.221:3001` and `:8082`.
+The Proxmox firewall permits those ports only from its existing NPM IP set. NPM's
+saved proxy-host records retain certificates 5 and 6 and use a scoped include that
+overwrites client/protocol headers and strips unverified `CF-Connecting-IP`.
+The edge's pinned configuration is under `/root/deploy/transcendence-edge`, with
+`/etc/transcendence-edge.env` and the atomic route at
+`/var/lib/transcendence-release/traffic/active.yml`. NPM's original records and
+API rollback helper are retained on the NPM LXC under `/data/backups` and `/data/scripts`.
+
 ## Unraid database backups
 
 The encrypted repository is physically on Unraid:
@@ -48,16 +57,21 @@ password is on Unraid at
 directory outside the NFS export. Preserve it independently of the application
 LXC. Application `.env` credentials were not copied to the NAS.
 
-The existing `/etc/cron.d/trn-archive` invokes `/root/archive-old-patches.sh` every
-thirty minutes with `APPLY=1 KEEP_PATCHES=3`. It already exports historical match
-chunks to Unraid's `/mnt/user/backup/transcendence-match-archive` (approximately
-30 GiB at adoption). Its installed script matches the repository version. Retain
-its `/var/lib/transcendence-archive/current`, `manifest.json` and frozen database
-work table together; a partially exported chunk must not be treated as complete.
-Set `TRN_BACKUP_ARCHIVE_STATE_DIR=/var/lib/transcendence-archive` so database
-backup/restore work shares the existing archive lock and encrypted snapshots
-include the matching resume state. The old-patch retention and historical NAS
-exports remain separate from restic's database snapshot retention.
+The legacy `/etc/cron.d/trn-archive` ran every thirty minutes with
+`APPLY=1 KEEP_PATCHES=3`; its exact cron/script/checkpoint baseline is retained in
+the private adoption directory. Managed adoption replaces that scheduler with
+the worker's `archive-matches` job and imports its pending 500-match cohort for
+patch 16.18. Completed history already occupies approximately 30 GiB on Unraid at
+`/mnt/user/backup/transcendence-match-archive`; retain those files and manifests.
+
+The existing Proxmox `nas-backup` mount supplies that exact subdirectory to LXC
+104 at `/mnt/transcendence-match-archive`. Its external `transcendence_match_archive`
+Docker volume binds the NAS path. `transcendence_maintenance_state` binds
+`/var/lib/transcendence-archive`, preserving the original lock inode across host
+backup tools and worker containers. Keep
+`TRN_BACKUP_ARCHIVE_STATE_DIR=/var/lib/transcendence-archive`. Database checkpoints
+own managed progress; the original local state becomes an adoption receipt.
+Old-patch exports remain separate from restic database snapshot retention.
 
 Use the repository backup and restore units. Their timers run daily at 03:00 and
 Sunday at 05:00 America/Los_Angeles, with up to twenty minutes of jitter. Enable
@@ -95,8 +109,26 @@ production database is not.
 the existing Grafana provisioning directory. Its four rules cover degraded
 releases, stale release verification, stale NAS backups and stale restore drills.
 Node exporter already mounts `/var/lib/transcendence-perf/textfile`.
+`storage.yml` provisions four worker archive alerts covering failures, frozen
+cohort age, a stale runner and incomplete legacy adoption.
 
 Check actual public readiness and source/slot response headers, the recorded
 release state, NAS snapshot existence, and restored application table queries
 before declaring an adoption complete. A running timer or healthy container
 alone is insufficient.
+
+## Raw timeline JSON retirement
+
+A source and live-catalog audit found no current API, frontend, repository, analytics, view,
+materialized view, function or foreign-key consumer of `MatchTimelineEventPayloads`. Its only current
+application access was the writer; the kill-scalar backfill served a retired modeler. The table
+occupied 148,327,620,608 bytes at audit. The owner explicitly requested deletion of current and past
+payloads. Collection and the obsolete backfill are removed, and an EF-generated migration drops the
+table. Historical `MatchTimelineEventPayloads.csv.gz` files are removed with their manifest entries;
+other archive files, counts, checkpoints and completed markers are preserved. The scoped deletion
+receipt records paths, sizes and manifest metadata, without retaining payload contents.
+
+Structured item events, purchases, skills, snapshots, rank contexts, compact facts, Build Lab counts,
+and live-game snapshot JSON remain. Timeline schema v2 continues to describe its retained structured
+features; no mass re-fetch is needed. The unfinished pre-retirement dump was canceled with explicit
+owner approval, and the replacement full NAS backup and restore drill cover the reduced database.

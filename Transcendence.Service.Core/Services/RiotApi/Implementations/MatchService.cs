@@ -10,6 +10,7 @@ using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.RiotApi;
 using Transcendence.Service.Core.Services.RiotApi.Interfaces;
 using Transcendence.Service.Core.Services.StaticData.Interfaces;
+using Transcendence.Service.Core.Services.Operations;
 using Match = Transcendence.Data.Models.LoL.Match.Match;
 using RiotMatch = Camille.RiotGames.MatchV5.Match;
 using Summoner = Transcendence.Data.Models.LoL.Account.Summoner;
@@ -27,7 +28,8 @@ public class MatchService(
     IStaticDataService staticDataService,
     IRiotRateGate rateGate,
     IOptions<MatchFetchOptions> fetchOptions,
-    ILogger<MatchService> logger) : IMatchService
+    ILogger<MatchService> logger,
+    IOptions<MatchArchiveOptions>? archiveOptions = null) : IMatchService
 {
     private readonly MatchFetchOptions _fetchOptions = fetchOptions.Value;
     private sealed record RiotMatchFetchResult(RiotMatch? Match, bool DeferredByRateLimit);
@@ -60,6 +62,8 @@ public class MatchService(
         var info = matchDto.Info;
         // Build match entity (do not persist here; caller handles persistence).
         var match = CreateMatch(matchDto.Metadata.MatchId, info, platformRoute);
+        if (!await MatchRawRetentionPolicy.ApplyAsync(context, match, archiveOptions?.Value ?? new(), cancellationToken))
+            return match;
 
         // Ensure static data for this match patch exists
         await staticDataService.EnsureStaticDataForPatchAsync(match.Patch!, cancellationToken);
@@ -108,6 +112,8 @@ public class MatchService(
 
         var info = matchDto.Info;
         var match = CreateMatch(matchDto.Metadata.MatchId, info, platformRoute);
+        if (!await MatchRawRetentionPolicy.ApplyAsync(context, match, archiveOptions?.Value ?? new(), cancellationToken))
+            return match;
 
         await staticDataService.EnsureStaticDataForPatchAsync(match.Patch!, cancellationToken);
 
@@ -196,6 +202,8 @@ public class MatchService(
     {
         var match = await matchRepository.GetMatchByIdAsync(matchId, cancellationToken)
                     ?? new DataMatch { MatchId = matchId, Status = FetchStatus.Unfetched };
+        if (match.Id != Guid.Empty && await context.MatchArchiveEntries.AnyAsync(x => x.MatchId == match.Id, cancellationToken))
+            return false;
 
         // Check retention window BEFORE attempting fetch
         if (match.MatchDate > 0)
@@ -278,6 +286,12 @@ public class MatchService(
             // Parse and store match data
             var info = matchDto.Info;
             ApplyMatchFields(match, matchDto.Metadata.MatchId, info, platformRoute);
+            if (!await MatchRawRetentionPolicy.ApplyAsync(context, match, archiveOptions?.Value ?? new(), cancellationToken))
+            {
+                if (match.Id == Guid.Empty) context.Matches.Add(match);
+                await context.SaveChangesAsync(cancellationToken);
+                return false;
+            }
 
             // Ensure static data for this match patch exists
             await staticDataService.EnsureStaticDataForPatchAsync(match.Patch!, cancellationToken);

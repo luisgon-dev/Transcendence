@@ -31,7 +31,8 @@ public sealed class AdminJobsFacade(
         WorkerRecurringJobPolicy.ChampionAnalyticsIngestionJobId,
         WorkerRecurringJobPolicy.SummonerMaintenanceJobId,
         WorkerRecurringJobPolicy.MatchTimelineBackfillJobId,
-        WorkerRecurringJobPolicy.RetryFailedMatchesJobId
+        WorkerRecurringJobPolicy.RetryFailedMatchesJobId,
+        WorkerRecurringJobPolicy.ArchiveMatchesJobId
     ];
 
     private static readonly string[] KnownPlatformRegions =

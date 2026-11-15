@@ -50,6 +50,7 @@ builder.Services.AddHangfire((provider, config) =>
         .UseSimpleAssemblyNameTypeSerializer()
         .UseRecommendedSerializerSettings()
         .UseFilter(new WorkerProgressFilter(provider.GetRequiredService<IWorkerHeartbeat>()))
+        .UseFilter(provider.GetRequiredService<Transcendence.Service.Core.Services.Operations.StorageMaintenanceFilter>())
         .UseFilter(new AutomaticRetryAttribute
         {
             Attempts = hangfireRetryAttempts
@@ -90,6 +91,14 @@ builder.Services.AddHangfireServer(options =>
     options.ServerName = HangfireQueues.AnalyticsBatch;
     options.Queues = [HangfireQueues.AnalyticsBatch];
     options.WorkerCount = batchWorkerCount;
+});
+
+// One bounded archive actor, independent of user refreshes and facts materialization.
+builder.Services.AddHangfireServer(options =>
+{
+    options.ServerName = HangfireQueues.Maintenance;
+    options.Queues = [HangfireQueues.Maintenance];
+    options.WorkerCount = 1;
 });
 
 // Dedicated worker pool for per-match timeline ingestion. The main pool's shared refresh-low queue
@@ -234,6 +243,7 @@ if (builder.Configuration.GetValue("Telemetry:Enabled", true))
         .WithMetrics(metrics => metrics
             .AddMeter("Transcendence.IngestionThroughput")
             .AddMeter(OperationTelemetry.MeterName)
+            .AddMeter(Transcendence.Service.Core.Services.Operations.MatchArchiveTelemetry.MeterName)
             .AddMeter("Transcendence.RefreshLocks")
             .AddMeter(Transcendence.Service.Core.Services.Diagnostics.PrecomputedAnalyticsTelemetry.MeterName)
             .AddMeter(Transcendence.Service.Core.Services.Diagnostics.BuildLabTelemetry.MeterName)
@@ -281,6 +291,7 @@ if (builder.Configuration.GetValue("Telemetry:Enabled", true))
 {
     host.Services.GetService<OpenTelemetry.Metrics.MeterProvider>();
     host.Services.GetRequiredService<Transcendence.Service.Core.Services.Diagnostics.BuildLabTelemetry>();
+    host.Services.GetRequiredService<Transcendence.Service.Core.Services.Operations.MatchArchiveTelemetry>();
 }
 
 // Apply pending EF migrations before the worker starts (gated by Database:AutoMigrate). The worker is the
@@ -295,6 +306,21 @@ if (builder.Configuration.GetValue("Database:MigrateOnly", false))
     host.Services.GetRequiredService<ILoggerFactory>()
         .CreateLogger("DatabaseMigration")
         .LogInformation("Database migration-only run completed; worker host will not start.");
+    return;
+}
+
+if (builder.Configuration.GetValue("ArchiveRetention:AdoptLegacyOnly", false))
+{
+    using var scope = host.Services.CreateScope();
+    await scope.ServiceProvider.GetRequiredService<Transcendence.Service.Core.Services.Operations.MatchArchiveRetention>()
+        .AdoptLegacyAsync(builder.Configuration["ArchiveRetention:LegacyNasRoot"] ?? "/mnt/user/backup/transcendence-match-archive", CancellationToken.None);
+    return;
+}
+
+if (builder.Configuration.GetValue("ArchiveRetention:RunOnceOnly", false))
+{
+    using var scope = host.Services.CreateScope();
+    await scope.ServiceProvider.GetRequiredService<MatchArchiveRetention>().RunAsync(CancellationToken.None);
     return;
 }
 

@@ -159,9 +159,10 @@ services:
     user: "0:0"
     entrypoint: ["/bin/sh", "-c"]
     command:
-      - 'chown -R "$${APP_UID}:$${APP_UID}" /var/log/transcendence && chmod 0755 /var/log/transcendence'
+      - 'touch /var/lib/transcendence/maintenance/run.lock && chown -R "$${APP_UID}:$${APP_UID}" /var/log/transcendence /var/lib/transcendence/maintenance && chmod 0755 /var/log/transcendence /var/lib/transcendence/maintenance'
     volumes:
       - operational_logs:/var/log/transcendence
+      - maintenance_state:/var/lib/transcendence/maintenance
 
   webapi:
     image: ${WEBAPI_IMAGE:-ghcr.io/luisgon-dev/transcendence-webapi:main}
@@ -239,6 +240,10 @@ services:
       # One switch for Build Lab: the stats refresh AND the detailed timeline capture it reads (see
       # BuildLabOptions.Enabled). Turning it off stops that capture as well as the refresh.
       Analytics__BuildLab__Enabled: ${BUILD_LAB_ENABLED:-false}
+      ArchiveRetention__Enabled: ${MATCH_ARCHIVE_ENABLED:-false}
+      ArchiveRetention__KeepPatches: ${MATCH_ARCHIVE_KEEP_PATCHES:-3}
+      ArchiveRetention__FreezeMatches: ${MATCH_ARCHIVE_FREEZE_MATCHES:-250}
+      ArchiveRetention__MaxIoPressure: ${MATCH_ARCHIVE_MAX_IO_PRESSURE:-35}
       # HDD-friendly defaults: independent queues still share one database device.
       Jobs__Hangfire__Workers__Main: ${WORKER_MAIN_CONCURRENCY:-8}
       Jobs__Hangfire__Workers__Analytics: ${WORKER_ANALYTICS_CONCURRENCY:-1}
@@ -278,6 +283,8 @@ services:
         condition: service_completed_successfully
     volumes:
       - operational_logs:/var/log/transcendence
+      - maintenance_state:/var/lib/transcendence/maintenance
+      - match_archive:/var/lib/transcendence/archive
     networks:
       - transcendence-net
 
@@ -348,6 +355,12 @@ volumes:
   redis_data:
   pgadmin_data:
   operational_logs:
+  maintenance_state:
+    name: ${MAINTENANCE_STATE_VOLUME_NAME:-transcendence_maintenance_state}
+    external: ${MAINTENANCE_STATE_VOLUME_EXTERNAL:-false}
+  match_archive:
+    name: ${MATCH_ARCHIVE_VOLUME_NAME:-transcendence_match_archive}
+    external: ${MATCH_ARCHIVE_VOLUME_EXTERNAL:-false}
 
 networks:
   transcendence-net:

@@ -18,7 +18,7 @@ namespace Transcendence.Service.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.13")
+                .HasAnnotation("ProductVersion", "10.0.15")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -2571,40 +2571,6 @@ namespace Transcendence.Service.Migrations
                     b.ToTable("MatchTeamObjectives");
                 });
 
-            modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.MatchTimelineEventPayload", b =>
-                {
-                    b.Property<Guid>("MatchId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("EventIndex")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("EventType")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<int?>("KillerId")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("KillerTeamId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("PayloadJson")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
-
-                    b.Property<int?>("TeamId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TimestampMs")
-                        .HasColumnType("integer");
-
-                    b.HasKey("MatchId", "EventIndex");
-
-                    b.ToTable("MatchTimelineEventPayloads");
-                });
-
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.MatchTimelineFetchState", b =>
                 {
                     b.Property<Guid>("MatchId")
@@ -2990,6 +2956,71 @@ namespace Transcendence.Service.Migrations
                     b.ToTable("UnitWinPercent");
                 });
 
+            modelBuilder.Entity("Transcendence.Data.Models.Service.MatchArchiveChunk", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("FrozenMatches")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<bool>("LegacySource")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ManifestJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Patch")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("PrunedMatches")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RelativePath")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime?>("VerifiedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompletedAtUtc", "CreatedAtUtc");
+
+                    b.ToTable("MatchArchiveChunks");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Service.MatchArchiveEntry", b =>
+                {
+                    b.Property<Guid>("ChunkId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("ChunkId", "MatchId");
+
+                    b.HasIndex("MatchId")
+                        .IsUnique();
+
+                    b.ToTable("MatchArchiveEntries");
+                });
+
             modelBuilder.Entity("Transcendence.Data.Models.Service.RefreshLock", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3365,17 +3396,6 @@ namespace Transcendence.Service.Migrations
                     b.Navigation("Match");
                 });
 
-            modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.MatchTimelineEventPayload", b =>
-                {
-                    b.HasOne("Transcendence.Data.Models.LoL.Match.Match", "Match")
-                        .WithMany()
-                        .HasForeignKey("MatchId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Match");
-                });
-
             modelBuilder.Entity("Transcendence.Data.Models.LoL.Match.MatchTimelineFetchState", b =>
                 {
                     b.HasOne("Transcendence.Data.Models.LoL.Match.Match", "Match")
@@ -3446,6 +3466,17 @@ namespace Transcendence.Service.Migrations
                     b.HasOne("Transcendence.Data.Models.Service.CurrentChampionLoadout", null)
                         .WithMany("UnitWinPercents")
                         .HasForeignKey("CurrentChampionLoadoutId");
+                });
+
+            modelBuilder.Entity("Transcendence.Data.Models.Service.MatchArchiveEntry", b =>
+                {
+                    b.HasOne("Transcendence.Data.Models.Service.MatchArchiveChunk", "Chunk")
+                        .WithMany()
+                        .HasForeignKey("ChunkId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Chunk");
                 });
 
             modelBuilder.Entity("Transcendence.Data.Models.Auth.UserAccount", b =>

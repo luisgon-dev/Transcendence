@@ -6,6 +6,13 @@ This repo's API contract is defined by the committed OpenAPI spec:
 
 If you change endpoints, request/response shapes, or auth semantics, update the spec (see `README.md` and `docs/DEVELOPMENT.md`) in the same PR.
 
+## Match data retention
+
+Raw match detail follows the configured active-host patch window (newest three patches plus any
+active patch when managed archiving is enabled). Archived raw chunks are offline NAS recovery data,
+not an API query tier. Compact `SummonerMatchFacts`/season history and materialized analytics survive
+raw pruning, so an older player's history does not depend on retaining every timeline payload online.
+
 ## Authentication
 
 High-level model:
@@ -509,6 +516,11 @@ Auth behavior notes:
 - `POST /api/admin/cache/invalidate`
 - `GET /api/admin/audit-log`
 - `GET /api/admin/logs/services`
+
+`archive-matches` appears in the existing recurring-job list and supports the existing admin
+trigger/pause/resume routes. Pausing stops future occurrences; an in-progress bounded window
+finishes at its checkpoint. Source rows remain protected by NAS verification and the shared
+maintenance gate. Changing this job's controls requires no additional NAS credentials in the API.
 
 `GET /api/admin/overview` now includes:
 - queue totals plus deleted-job count

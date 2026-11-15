@@ -817,27 +817,21 @@ bought by the flag flip, not by the deploy — see "Enabling Build Lab on an exi
   `ACCESS EXCLUSIVE` lock, which queues behind any long-running reader — do not deploy during an
   analytics sweep or an `archive-old-patches.sh` run.
 - **Storage sizing.** With `Analytics:BuildLab:Enabled=false` the frame cadence stays at
-  `Jobs:TimelineIngestion:FrameIntervalMinutes` (default 2) and the three Build Lab-only capture
-  tables stay empty. **Turning Build Lab on drops the cadence to one minute, which roughly doubles
-  `MatchParticipantTimelineSnapshots`** (~22.5M → ~45M rows for the retained corpus) and starts writing
-  `MatchTimelineEventPayloads` — one `jsonb` row per *persisted* event (the item lifecycle plus
-  `CHAMPION_KILL`/`BUILDING_KILL`/`ELITE_MONSTER_KILL`, with null union members dropped; every other
-  Match-V5 event type is discarded at ingestion) — plus `MatchParticipantItemEvents` and
-  `MatchParticipantRankContexts`. Confirm free space against the retention policy (`KEEP_PATCHES`, see
-  `scripts/ops/README.md`) *before* flipping the flag.
-- **The flag gates the payload *and* the stamp, together.** The one-minute cadence, the item lifecycle
-  events, the raw event payloads, the rank contexts, **and** the version the ingest stamps are all
-  derived from `Analytics:BuildLab:Enabled` on the same run. So a v2 row is proof the extras are
-  present, a v1 row is proof they are not, and the stats refresh (which counts only timelines at
-  `SchemaVersion >= 2`) can trust the stamp. A flag-off deployment can never manufacture a v2 row that
-  silently lacks the payload.
+  `Jobs:TimelineIngestion:FrameIntervalMinutes` (default 2), and the Build Lab-only structured item
+  lifecycle/rank-context tables stay empty. Enabling Build Lab captures one-minute frames plus
+  `MatchParticipantItemEvents` and `MatchParticipantRankContexts`; budget for that larger corpus.
+  Raw timeline event JSON is retired and never written, regardless of the flag.
+- **The flag gates the structured features and stamp together.** One-minute frames, lifecycle events,
+  rank contexts and the version stamp share the same flag. Schema v2 remains the structured feature
+  contract used by analytics. Removing the unused JSON corpus does not stale those features or trigger
+  an unnecessary Riot re-ingestion of otherwise current timelines.
 
 #### Enabling Build Lab on an existing corpus
 
 Enabling is a **config flip**, and the cost is a one-time re-ingestion of every retained timeline
 against a low-rate Riot key. Do it in this order:
 
-1. Confirm free disk against the doubled snapshot table plus the three capture tables *before*
+1. Confirm free disk against the doubled snapshot table plus the two capture tables *before*
    flipping (see **Storage sizing** above), and confirm `KEEP_PATCHES` retention is actually running.
    Retention decides how many patches get re-fetched.
 2. Flip `BUILD_LAB_ENABLED=true` and recreate the worker and WebAPI. The ingestion target rises to v2,
@@ -849,7 +843,7 @@ against a low-rate Riot key. Do it in this order:
    the active patch (`transcendence_buildlab_backlog_matches` near 0 and a useful `countedMatches` in
    the response's `coverage`). Backend enablement and public exposure are separate switches on purpose.
 
-**Turning it back off** stops the payload writes and drops the target to v1 immediately; existing v2
+**Turning it back off** stops the extra structured writes and drops the target to v1 immediately; existing v2
 rows are left alone (they are `>= 1`, so never re-fetched) and stay usable if the flag is flipped on
 again. Only a row that fails and retries while the flag is off is rewritten down to v1.
 
@@ -1205,7 +1199,8 @@ A cache populated from an accepted snapshot may retain it for its normal TTL (le
 synergies six hours). Background job failures and hardware contention can breach these targets;
 `data-health-sweep.sh` exposes ages/fallbacks for alerting rather than hiding that delay.
 
-Install the bounded archive, lab runner, and five-minute data checks following `scripts/ops/README.md`.
+Use the managed archive adoption in `docs/DEPLOYMENT.md`; the host archive scripts are retained for
+legacy recovery. Install the lab runner and five-minute data checks following `scripts/ops/README.md`.
 Keep the lightweight data-health unit at best-effort I/O priority 7; idle I/O scheduling can starve
 the probe itself during database load and prevent fresh metrics from being published.
 Validate scripts with `python3 -m unittest discover -s scripts/ops/tests`; validate compact raw/fact
@@ -1350,3 +1345,39 @@ must be explicit during host adoption, especially with NPM in another LXC.
 Fresh staging pulls every application digest before its migration-only run, and
 PostgreSQL readiness probes the final TCP listener. CI retains bounded staging
 logs/state on failure while excluding rendered environment/configuration files.
+
+### Managed raw storage
+
+`ArchiveRetention:Enabled` defaults to false. Production Compose exposes `MATCH_ARCHIVE_ENABLED`,
+`MATCH_ARCHIVE_KEEP_PATCHES` (3), `MATCH_ARCHIVE_FREEZE_MATCHES` (250), and
+`MATCH_ARCHIVE_MAX_IO_PRESSURE` (35). The worker registers `archive-matches` every fifteen minutes
+on `storage-maintenance`; `Jobs:Schedule:ArchiveMatchesCron` and `EnableArchiveMatches` use the
+existing scheduling-profile policy. A single actor verifies the NAS mount and resumes its durable
+database checkpoint. Other `ArchiveRetention` budgets default to 25-match deletes, two-second pacing,
+120-second export statements, fifteen-second delete statements, twenty minutes per window and
+256 MiB of cluster WAL. Pressure/WAL/time checks occur between bounded operations.
+
+`match_archive` is a named Docker volume mounted only in the worker at
+`/var/lib/transcendence/archive`. Configure `MATCH_ARCHIVE_VOLUME_EXTERNAL=true` and precreate it
+as a bind of the real NAS mount for production. An automatically created local volume is suitable
+only while the feature is off; enabling archival on it fails mount validation. `maintenance_state`
+is shared with the log initializer and worker at `/var/lib/transcendence/maintenance`. Existing hosts
+can bind it to their original archive-state directory using
+`MAINTENANCE_STATE_VOLUME_EXTERNAL=true`, preserving the same lock inode for a running backup.
+Both volume names can be overridden in `.env`.
+
+Periodic disk-heavy jobs declare `StorageMaintenanceWork`. They share read leases during normal
+operation and yield to the next recurrence when archive/backup/restore owns the exclusive lease.
+Foreground refreshes and imports do not declare that role. The raw-match importer and timeline
+writer honor the same retention/frozen-cohort policy; compact full-history facts and season stats
+have independent ownership. Raw timeline event JSON collection is removed; structured timeline
+features, item lifecycle, rank provenance and live-game JSON remain.
+
+`AddManagedMatchArchiving` was generated with EF CLI and creates only checkpoint tables/indexes.
+`RetireUnusedTimelineEventPayloads`, also generated with EF CLI, drops the unused JSON table.
+Stop the previous worker before applying that retirement; do not roll back to a writer that requires
+the dropped table. This is an intentional data deletion, including historical NAS payload files,
+not a reversible archive move. No hot-table rewrite or schema-v2 re-ingestion is required.
+Do not hand-edit either migration. Run `MatchArchiveStorageTests`
+and `MatchArchivePostgresTests` when changing cascade discovery, CSV verification, checkpointing,
+adoption or maintenance locking. The latter use real PostgreSQL and generated migrations.

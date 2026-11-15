@@ -62,6 +62,7 @@ public class MatchTimelineBackfillJob(
 
         IQueryable<Match> query = db.Matches
             .AsNoTracking()
+            .Where(m => !db.MatchArchiveEntries.Any(a => a.MatchId == m.Id))
             .Where(m => m.Status == FetchStatus.Success)
             .Where(m => m.MatchId != null && m.MatchId != "")
             .Where(m => m.QueueId == QueueCatalog.RankedSoloDuoQueueId ||

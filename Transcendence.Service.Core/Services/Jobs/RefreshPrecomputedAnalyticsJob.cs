@@ -14,6 +14,7 @@ namespace Transcendence.Service.Core.Services.Jobs;
 /// </summary>
 [DisableConcurrentExecution(timeoutInSeconds: 30 * 60)]
 [AutomaticRetry(Attempts = 0)]
+[Transcendence.Service.Core.Services.Operations.StorageMaintenanceWork]
 public class RefreshPrecomputedAnalyticsJob(
     TranscendenceContext db,
     IPrecomputedAnalyticsRefresher refresher,

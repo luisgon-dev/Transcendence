@@ -43,6 +43,7 @@ public sealed class MatchArchivePostgresTests(PostgresIntegrationFixture fixture
         var maintenance = Path.Combine(root, "maintenance");
         Directory.CreateDirectory(maintenance);
         await File.WriteAllTextAsync(Path.Combine(maintenance, "run.lock"), "");
+        await File.WriteAllTextAsync(Path.Combine(maintenance, "exclusive.lock"), "");
         var pressure = Path.Combine(root, "pressure");
         await File.WriteAllTextAsync(pressure, "full avg60=0.00\n");
         settings = new MatchArchiveOptions

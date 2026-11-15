@@ -1367,7 +1367,9 @@ can bind it to their original archive-state directory using
 Both volume names can be overridden in `.env`.
 
 Periodic disk-heavy jobs declare `StorageMaintenanceWork`. They share read leases during normal
-operation and yield to the next recurrence when archive/backup/restore owns the exclusive lease.
+operation and yield to the next recurrence when archive/backup/restore requests the exclusive lease.
+`exclusive.lock` gives waiting maintenance priority while existing shared work drains; `run.lock`
+provides the actual storage exclusion. Both use OS locks, so a crashed process leaves no stale marker.
 Foreground refreshes and imports do not declare that role. The raw-match importer and timeline
 writer honor the same retention/frozen-cohort policy; compact full-history facts and season stats
 have independent ownership. Raw timeline event JSON collection is removed; structured timeline

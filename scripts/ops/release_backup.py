@@ -36,16 +36,20 @@ def archive_guard():
         raise ValueError("Archive state cannot resolve to the filesystem root")
     # Match archive-old-patches.sh's lock so cron yields without changing frozen
     # IDs, resume state or chunk exports while a backup/restore is running.
-    with (directory / "run.lock").open("a") as lock:
+    # Announce exclusive work before waiting: new analytics readers must yield while
+    # existing readers drain, rather than starving a backup under continuous load.
+    with contextlib.ExitStack() as locks:
         deadline = time.monotonic() + command_timeout()
-        while True:
-            try:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except BlockingIOError:
-                if time.monotonic() >= deadline:
-                    raise RuntimeError("Timed out waiting for the active archive window")
-                time.sleep(1)
+        for name in ("exclusive.lock", "run.lock"):
+            lock = locks.enter_context((directory / name).open("a"))
+            while True:
+                try:
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError("Timed out waiting for the active archive window")
+                    time.sleep(1)
         yield directory
 
 
@@ -124,7 +128,8 @@ def backup(state, container, reserve_bytes, archive_state=None):
         # The operator initializes and supplies an encrypted off-host restic repository.
         command = ["restic", "backup", "--tag", "transcendence-database", str(dump), str(metadata)]
         if archive_state is not None:
-            command += ["--exclude", str(archive_state / "run.lock"), str(archive_state)]
+            command += ["--exclude", str(archive_state / "run.lock"),
+                        "--exclude", str(archive_state / "exclusive.lock"), str(archive_state)]
         call(command)
         call(["restic", "check"])
         call(["restic", "forget", "--tag", "transcendence-database", "--group-by", "host,paths",

@@ -407,12 +407,14 @@ class BackupTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'operation failed'):
                 with backup.archive_guard() as directory:
                     self.assertEqual(directory, Path(tmp).resolve())
-                    with lock_path.open('a') as other:
-                        with self.assertRaises(BlockingIOError):
-                            backup.fcntl.flock(other, backup.fcntl.LOCK_EX | backup.fcntl.LOCK_NB)
+                    for path in (lock_path, Path(tmp) / 'exclusive.lock'):
+                        with path.open('a') as other:
+                            with self.assertRaises(BlockingIOError):
+                                backup.fcntl.flock(other, backup.fcntl.LOCK_EX | backup.fcntl.LOCK_NB)
                     raise RuntimeError('operation failed')
-            with lock_path.open('a') as other:
-                backup.fcntl.flock(other, backup.fcntl.LOCK_EX | backup.fcntl.LOCK_NB)
+            for path in (lock_path, Path(tmp) / 'exclusive.lock'):
+                with path.open('a') as other:
+                    backup.fcntl.flock(other, backup.fcntl.LOCK_EX | backup.fcntl.LOCK_NB)
 
     def test_large_dump_can_exceed_thirty_minutes_within_configured_deadline(self):
         with tempfile.TemporaryDirectory() as tmp:

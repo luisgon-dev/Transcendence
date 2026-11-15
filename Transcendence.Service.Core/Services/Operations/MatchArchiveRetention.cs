@@ -49,14 +49,44 @@ public sealed class MatchArchiveTelemetry : IDisposable
 /// <summary>Same local flock as host backup/restore; opening read-only also works through a read-only mount.</summary>
 internal static class ArchiveMaintenanceLease
 {
+    public static async Task<IDisposable?> AcquireExclusiveAsync(string directory, TimeSpan wait, CancellationToken ct)
+    {
+        var priority = TryFile(Path.Combine(directory, "exclusive.lock"), FileShare.None);
+        if (priority is null) return null;
+        try
+        {
+            var started = Stopwatch.StartNew();
+            do
+            {
+                var storage = TryFile(Path.Combine(directory, "run.lock"), FileShare.None);
+                if (storage is not null) return new ExclusiveLease(storage, priority);
+                await Task.Delay(250, ct);
+            } while (started.Elapsed < wait);
+            priority.Dispose();
+            return null;
+        }
+        catch { priority.Dispose(); throw; }
+    }
+
+    private sealed class ExclusiveLease(FileStream storage, FileStream priority) : IDisposable
+    {
+        public void Dispose() { storage.Dispose(); priority.Dispose(); }
+    }
+
     public static FileStream? TryAcquire(string directory, bool exclusive = true)
     {
-        var path = Path.Combine(directory, "run.lock");
+        using var priority = exclusive ? null : TryFile(Path.Combine(directory, "exclusive.lock"), FileShare.Read);
+        if (!exclusive && priority is null) return null;
+        return TryFile(Path.Combine(directory, "run.lock"), exclusive ? FileShare.None : FileShare.Read);
+    }
+
+    private static FileStream? TryFile(string path, FileShare share)
+    {
         if (!File.Exists(path)) throw new InvalidOperationException("Archive maintenance volume is not initialized");
         if (AppContext.TryGetSwitch("System.IO.DisableFileLocking", out var disabled) && disabled)
             throw new InvalidOperationException("Archive maintenance requires OS file locking");
         FileStream first;
-        try { first = new FileStream(path, FileMode.Open, FileAccess.Read, exclusive ? FileShare.None : FileShare.Read); }
+        try { first = new FileStream(path, FileMode.Open, FileAccess.Read, share); }
         catch (IOException) { return null; }
         // Fail closed if the filesystem/runtime silently ignored the exclusivity request.
         try
@@ -83,7 +113,8 @@ public sealed class MatchArchiveRetention(
     {
         if (!Settings.Enabled) return;
         telemetry.Tick();
-        using var maintenance = ArchiveMaintenanceLease.TryAcquire(Settings.MaintenanceDirectory);
+        using var maintenance = await ArchiveMaintenanceLease.AcquireExclusiveAsync(Settings.MaintenanceDirectory,
+            TimeSpan.FromSeconds(Math.Clamp(Settings.MaxRunSeconds, 1, 3600)), ct);
         if (maintenance is null)
         {
             logger.LogInformation("Match archival deferred while backup/restore maintenance owns the storage gate.");

@@ -82,6 +82,7 @@ public sealed class MatchArchiveStorageTests
         var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         await File.WriteAllTextAsync(Path.Combine(root, "run.lock"), "");
+        await File.WriteAllTextAsync(Path.Combine(root, "exclusive.lock"), "");
         async Task<int> PythonLock()
         {
             var start = new ProcessStartInfo("python3") { RedirectStandardError = true, UseShellExecute = false };
@@ -112,6 +113,7 @@ public sealed class MatchArchiveStorageTests
         var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         await File.WriteAllTextAsync(Path.Combine(root, "run.lock"), "");
+        await File.WriteAllTextAsync(Path.Combine(root, "exclusive.lock"), "");
         try
         {
             using var first = ArchiveMaintenanceLease.TryAcquire(root, exclusive: false);
@@ -122,6 +124,31 @@ public sealed class MatchArchiveStorageTests
             StorageMaintenanceFilter.UsesGate(typeof(Transcendence.Service.Core.Services.Jobs.RefreshChampionSynergyFactsJob)).Should().BeTrue();
             StorageMaintenanceFilter.UsesGate(typeof(Transcendence.Service.Core.Services.Jobs.FetchLatestMatchInformation)).Should().BeFalse();
             StorageMaintenanceFilter.UsesGate(typeof(Transcendence.Service.Core.Services.Jobs.ArchiveMatchesJob)).Should().BeFalse();
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task Waiting_maintenance_defers_new_analytics_and_releases_priority_after_completion()
+    {
+        var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        await File.WriteAllTextAsync(Path.Combine(root, "run.lock"), "");
+        await File.WriteAllTextAsync(Path.Combine(root, "exclusive.lock"), "");
+        try
+        {
+            using var existing = ArchiveMaintenanceLease.TryAcquire(root, exclusive: false);
+            var pending = ArchiveMaintenanceLease.AcquireExclusiveAsync(root, TimeSpan.FromSeconds(5), CancellationToken.None);
+            pending.IsCompleted.Should().BeFalse();
+            ArchiveMaintenanceLease.TryAcquire(root, exclusive: false).Should().BeNull();
+            existing!.Dispose();
+            using (var maintenance = await pending)
+            {
+                maintenance.Should().NotBeNull();
+                ArchiveMaintenanceLease.TryAcquire(root, exclusive: false).Should().BeNull();
+            }
+            using var resumed = ArchiveMaintenanceLease.TryAcquire(root, exclusive: false);
+            resumed.Should().NotBeNull();
         }
         finally { Directory.Delete(root, true); }
     }

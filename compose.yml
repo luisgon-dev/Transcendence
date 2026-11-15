@@ -159,7 +159,7 @@ services:
     user: "0:0"
     entrypoint: ["/bin/sh", "-c"]
     command:
-      - 'touch /var/lib/transcendence/maintenance/run.lock && chown -R "$${APP_UID}:$${APP_UID}" /var/log/transcendence /var/lib/transcendence/maintenance && chmod 0755 /var/log/transcendence /var/lib/transcendence/maintenance'
+      - 'touch /var/lib/transcendence/maintenance/run.lock /var/lib/transcendence/maintenance/exclusive.lock && chown -R "$${APP_UID}:$${APP_UID}" /var/log/transcendence /var/lib/transcendence/maintenance && chmod 0755 /var/log/transcendence /var/lib/transcendence/maintenance'
     volumes:
       - operational_logs:/var/log/transcendence
       - maintenance_state:/var/lib/transcendence/maintenance

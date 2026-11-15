@@ -271,6 +271,16 @@ and restore timestamps advance only after the entire operation succeeds.
 Defaults are daily at 3 AM Pacific and Sunday at 5 AM Pacific, with up to twenty
 minutes of jitter. Customize them with systemd timer overrides.
 
+Large production databases need budgets based on their measured dump and index
+rebuild times. `TRN_BACKUP_COMMAND_TIMEOUT_SECONDS` bounds each backup/restic/restore
+command (default six hours, accepted range 60–86400 seconds). The units separately
+bound the complete backup to twelve hours and restore drill to eighteen hours;
+adjust those with systemd overrides when changing command budgets. A restore drill
+waits for an already-running scheduled backup before starting. Disk headroom checks,
+cleanup, repository validation and successful restored table queries remain required
+regardless of the timeout. Enable schedules only after a complete production-size
+backup and restore drill pass.
+
 ## Monitoring and network requirements
 
 The release and backup services write textfile metrics into the existing
@@ -295,3 +305,7 @@ enabled. A CDN failure must fail content readiness, not silently skip the gate.
 The old poller and its break-glass runbook remain in `scripts/ops/README.md` for
 hosts that have not migrated. A merge alone neither installs host services nor
 switches the user's existing proxy or backup destination.
+
+The [production host configuration](PRODUCTION-HOST.md) records the adopted LXC
+addresses, dedicated Unraid repository, recovery password location and isolated
+restore workspace. Verify live state before reusing that dated host inventory.

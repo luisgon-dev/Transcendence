@@ -14,8 +14,15 @@ import tempfile
 import time
 
 
+def command_timeout():
+    seconds = int(os.environ.get("TRN_BACKUP_COMMAND_TIMEOUT_SECONDS", "21600"))
+    if not 60 <= seconds <= 86400:
+        raise ValueError("Backup command timeout must be between 60 and 86400 seconds")
+    return seconds
+
+
 def run(command, diagnostics=None, **kwargs):
-    result = subprocess.run(command, capture_output=True, timeout=1800, **kwargs)
+    result = subprocess.run(command, capture_output=True, timeout=command_timeout(), **kwargs)
     if result.returncode:
         if diagnostics is not None:
             diagnostics.write_bytes((result.stdout + result.stderr)[-65536:])
@@ -63,7 +70,7 @@ def backup(state, container, reserve_bytes):
             command = ["docker", "exec", container, "sh", "-c",
                        'exec pg_dump -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-${POSTGRES_USER:-postgres}}" --format=custom --no-owner --no-acl']
             process = subprocess.Popen(command, stdout=output, stderr=errors)
-            deadline = time.monotonic() + 1800
+            deadline = time.monotonic() + command_timeout()
             try:
                 while process.poll() is None:
                     if time.monotonic() >= deadline or shutil.disk_usage(state).free < reserve_bytes:
@@ -101,7 +108,7 @@ def restore_drill(state, image, reserve_bytes=5 * 1024**3):
         dump = Path(scratch) / "database.dump"
         with dump.open("wb") as output:
             result = subprocess.run(["restic", "dump", snapshot,
-                                     str(state / "database.dump")], stdout=output, stderr=subprocess.DEVNULL, timeout=1800)
+                                     str(state / "database.dump")], stdout=output, stderr=subprocess.DEVNULL, timeout=command_timeout())
             if result.returncode or not dump.stat().st_size:
                 raise RuntimeError("Could not retrieve the latest database backup")
         try:
@@ -122,7 +129,7 @@ def restore_drill(state, image, reserve_bytes=5 * 1024**3):
             with dump.open("rb") as source:
                 result = subprocess.run(["docker", "exec", "-i", container, "pg_restore", "-U", "postgres",
                                          "-d", "restore_drill", "--exit-on-error", "--no-owner", "--no-acl"],
-                                        stdin=source, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1800)
+                                        stdin=source, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=command_timeout())
                 if result.returncode:
                     raise RuntimeError("Database restore failed")
             # Check actual migrated application tables, not just archive readability.

@@ -9,5 +9,5 @@ EnvironmentFile=/etc/transcendence-backup.conf
 Environment=TRN_RELEASE_TEXTFILE_DIR=/var/lib/transcendence-perf/textfile
 ExecStart=/usr/bin/python3 -B /var/lib/transcendence-release/current/scripts/ops/release_backup.py backup
 UMask=0077
-TimeoutStartSec=2h
+TimeoutStartSec=12h
 TimeoutStopSec=5min

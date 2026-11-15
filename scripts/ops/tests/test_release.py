@@ -8,7 +8,7 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -379,6 +379,32 @@ class DeploymentTests(ReleaseFixture):
 
 
 class BackupTests(unittest.TestCase):
+    def test_large_dump_can_exceed_thirty_minutes_within_configured_deadline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            process = MagicMock(returncode=0)
+            process.poll.side_effect = [None, 0, 0]
+            def start_dump(*args, **kwargs):
+                kwargs['stdout'].write(b'complete database dump')
+                kwargs['stdout'].flush()
+                return process
+            with patch.dict(os.environ, {'TRN_BACKUP_COMMAND_TIMEOUT_SECONDS': '3600'}), \
+                    patch.object(backup, 'run', return_value=b'370000000000'), \
+                    patch.object(backup.subprocess, 'Popen', side_effect=start_dump), \
+                    patch.object(backup.time, 'monotonic', side_effect=[0, 1801]), \
+                    patch.object(backup.time, 'sleep'), \
+                    patch.object(backup.shutil, 'disk_usage', return_value=type('Disk', (), {'free': 10**12})()):
+                backup.backup(Path(tmp), 'production-postgres', 5 * 1024**3)
+            process.kill.assert_not_called()
+            self.assertTrue((Path(tmp) / 'textfile/database_backup.prom').exists())
+            self.assertFalse((Path(tmp) / 'database.dump').exists())
+
+    def test_unsafe_timeout_is_rejected_before_running_commands(self):
+        with patch.dict(os.environ, {'TRN_BACKUP_COMMAND_TIMEOUT_SECONDS': '0'}), \
+                patch.object(backup.subprocess, 'run') as run:
+            with self.assertRaisesRegex(ValueError, 'timeout'):
+                backup.run(['restic', 'check'])
+            run.assert_not_called()
+
     def test_missing_nas_mount_cannot_fall_back_to_a_local_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaisesRegex(ValueError, 'not mounted'):

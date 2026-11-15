@@ -729,3 +729,9 @@ client polling hint (at most 30 seconds), not the full upstream backoff.
 The backend now targets .NET 11. Regenerating OpenAPI changes response-property
 ordering only; endpoint paths, schemas, authentication and status-code contracts
 remain semantically identical to the .NET 10 export.
+
+Forwarded client identity is accepted only through configured private proxy
+networks. Deployments can configure one or two trusted hops for NPM/inner-edge
+routing; the default remains one, and an unknown intermediate stops traversal.
+`/health/ready` also emits `X-TRN-Release` so deployments can verify the public API
+route reached the expected image revision without admin credentials.

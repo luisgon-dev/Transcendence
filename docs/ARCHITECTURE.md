@@ -371,56 +371,39 @@ The discovery lane stalls when all workers park on a few long, non-stoppable job
 
 ### Deployment & rollback
 
-The stack ships continuously: a push to `main` triggers the `Docker Images` workflow, which builds and pushes the changed component images to GHCR tagged both `:main` (the moving tag) and `:sha-<short>` (immutable, one per commit). Runtime and build base images are tag-and-digest pinned, and each published application image includes maximum-mode build provenance plus an SBOM before cosign signing. On the prod host (`root@192.168.0.221`) a **systemd-timer release poller** (`scripts/ops/poll-deploy.sh`, every ~60s—see `scripts/ops/README.md`) resolves both the current `:main` OCI manifest digest and `org.opencontainers.image.revision` label from GHCR. Both are compared to the running container because a rebuilt GHCR/Buildx tag can retain its reported manifest digest. The poller compares **every** app service against remote `:main`. The stack it drives is a git checkout of this repo at `/root/transcendence` plus an untracked `.env` (Compose project `transcendence`), not a Portainer-managed copy.
+The recommended delivery unit is a signed complete release bundle. Main CI builds
+all three application images, records their immutable digests, then tests those
+exact artifacts against isolated PostgreSQL/Redis using production application
+configuration and a migration-only worker. The bundle includes checksummed Compose
+configuration and versioned deployment/backup tooling. It is keyless-signed by
+`docker-images.yml` on main and published only after staging passes; legacy `:main`
+aliases advance afterwards.
 
-Before deploying a new release, the poller verifies the image's cosign **keyless** signature against
-the digest it resolved. Verification runs `cosign verify` from the digest-pinned
-`ghcr.io/sigstore/cosign` container image, so the host needs no cosign install. It requires the
-certificate identity to be this repo's `.github/workflows/docker-images.yml` on `refs/heads/main`,
-and the OIDC issuer `https://token.actions.githubusercontent.com`. A release that fails verification
-is not deployed; the check is retried every poll (not quarantined, so a sigstore outage cannot strand a
-good release) and alerts after 3 consecutive failures. After the pull, the local `:main` must still be
-the verified digest, which closes the window in which `:main` could move between verify and pull.
+The host's installed bootstrap verifies the archive before executing its versioned
+agent. Preflight checks configuration, credentials, source identity and disk space;
+staging cannot inherit production infrastructure or secrets. Migration runs once
+before normal application replacement. Public probes verify the expected web
+revision, real image output, backend integration and a BFF database query. Only a
+complete healthy rollout advances the current release. PostgreSQL and Redis are
+never recreated by an application deployment.
 
-Rollout order is worker → WebAPI → web. Before replacing the worker, the poller runs the newly pulled
-worker image once with `Database:AutoMigrate=true` and `Database:MigrateOnly=true`; the process applies
-pending migrations and exits without starting Hangfire. A migration failure quarantines that image digest
-and aborts the remaining rollout, so an API/web release cannot get ahead of its schema. Each replacement is
-then health-gated. Compose output from pull/migration/recreate failures is retained and emitted to the
-service journal. On recreate or health failure, rollback first restores the exact previous container when
-Compose left it partially renamed; if that container is gone, the prior local image ID is retagged and
-recreated with `--pull never`. The failed digest remains quarantined until `:main` changes. Any component
-failure aborts later components in that poll cycle. PostgreSQL and Redis are never recreated by the poller.
+Failure captures diagnostics and restores the previous application's actual
+configuration and retained images. The failed release stays visibly quarantined;
+subsequent polls cannot report it successful. Migrations remain applied, requiring
+expand/contract compatibility across old and new application versions. Destructive
+or hot-table migrations need separate maintenance review. No automatic EF Down or
+global image/volume prune occurs.
 
-**wud is retired for the app containers** (wud 8.2.2 silently failed to resolve the GHCR digest for
-these packages); it may still linger in the stack for sidecars, but Compose pins `wud.watch=false`
-on `web`, `webapi`, and `service` so it cannot race the systemd poller during a release.
+Optional blue-green web/API slots use unique DNS names and an explicitly installed
+inner proxy. Traffic changes only after candidate verification, and failure restores
+the previous route and worker. A single deployment owner is required. Daily encrypted
+off-host backups and weekly isolated database restore drills have separate opt-in
+units and persistent freshness metrics. Installation, promotion, rollback, retention,
+backup and proxy details are in [DEPLOYMENT.md](DEPLOYMENT.md).
 
-Hot-table index migrations remain the exception and must be applied out-of-band before deployment
-(see DEVELOPMENT.md); the CI `migration-apply` job additionally applies the full chain to ephemeral
-PostgreSQL on every PR.
-
-**Rollback.** The poller rolls back on its own when a replacement fails to start or pass its
-healthcheck. It restores the previous container (or retags and recreates the previous local image)
-and quarantines the failed `digest:revision` in `/var/lib/transcendence-deploy/<svc>-failed-digest`
-until `:main` changes.
-
-**Rollback (break-glass).** Use this for a release that deploys healthy but is wrong. Every build
-also publishes an immutable `:sha-<short>` tag, so you can re-point a service at a known-good commit
-instead of reverting and waiting for a rebuild:
-
-1. Find the good SHA — `git log --oneline` on `main`, the `:sha-` tags on the GHCR package, or the previously-running image via `docker inspect <container> --format '{{.Image}}'`.
-2. Pause the poller with `systemctl disable --now transcendence-deploy.timer`. It compares every
-   service against remote `:main` regardless of the configured tag, so while running it would keep
-   redeploying a pinned service.
-3. Pin the image in `/root/transcendence/.env` (`WEB_IMAGE`, `WEBAPI_IMAGE`, or `SERVICE_IMAGE` =
-   `ghcr.io/luisgon-dev/transcendence-<component>:sha-<good>`), then run
-   `docker compose -p transcendence --env-file .env -f compose.yml up -d --no-deps <svc>` from
-   `/root/transcendence`.
-4. Once the fix is on `main` and its image is published, remove the pin and re-enable the timer
-   (`systemctl enable --now transcendence-deploy.timer`) to resume auto-tracking.
-
-A schema-affecting deploy cannot be fully undone by an image rollback alone — an out-of-band migration (see DEVELOPMENT.md) must be reversed deliberately.
+Existing hosts continue using `scripts/ops/poll-deploy.sh` until the explicit host
+installer replaces their timer. Its legacy recovery procedures remain in
+`scripts/ops/README.md`. Application containers retain `wud.watch=false`.
 
 ### Metrics-based alerting
 

@@ -1,0 +1,198 @@
+# Optional services do not alert before their first successful run; stale metrics persist on failure.
+apiVersion: 1
+groups:
+- orgId: 1
+  name: transcendence-deployment
+  folder: Transcendence
+  interval: 1m
+  rules:
+  - uid: trn-release-incomplete
+    title: Application release incomplete
+    condition: B
+    for: 10m
+    noDataState: OK
+    execErrState: Alerting
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        editorMode: code
+        expr: transcendence_release_healthy
+        instant: true
+        range: false
+        intervalMs: 1000
+        maxDataPoints: 43200
+        datasource:
+          type: prometheus
+          uid: prometheus
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: math
+        expression: $A < 1
+        intervalMs: 1000
+        maxDataPoints: 43200
+        datasource:
+          type: __expr__
+          uid: __expr__
+    labels:
+      severity: critical
+    annotations:
+      summary: Application release incomplete
+      description: The desired application release is not verified healthy. Inspect
+        release status and quarantine diagnostics.
+    notification_settings:
+      receiver: transcendence-discord
+      group_by:
+      - alertname
+      - grafana_folder
+  - uid: trn-release-poll-stale
+    title: Release deployer stopped reporting
+    condition: B
+    for: 5m
+    noDataState: OK
+    execErrState: Alerting
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        editorMode: code
+        expr: time() - transcendence_release_checked_timestamp_seconds
+        instant: true
+        range: false
+        intervalMs: 1000
+        maxDataPoints: 43200
+        datasource:
+          type: prometheus
+          uid: prometheus
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: math
+        expression: $A > 1200
+        intervalMs: 1000
+        maxDataPoints: 43200
+        datasource:
+          type: __expr__
+          uid: __expr__
+    labels:
+      severity: critical
+    annotations:
+      summary: Release deployer stopped reporting
+      description: Release verification has not completed in over 20 minutes. Check
+        the release timer, signature verification, and public smoke probes.
+    notification_settings:
+      receiver: transcendence-discord
+      group_by:
+      - alertname
+      - grafana_folder
+  - uid: trn-database-backup-stale
+    title: Database backup stale
+    condition: B
+    for: 10m
+    noDataState: OK
+    execErrState: Alerting
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        editorMode: code
+        expr: time() - transcendence_database_backup_last_success_timestamp_seconds
+        instant: true
+        range: false
+        intervalMs: 1000
+        maxDataPoints: 43200
+        datasource:
+          type: prometheus
+          uid: prometheus
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: math
+        expression: $A > 129600
+        intervalMs: 1000
+        maxDataPoints: 43200
+        datasource:
+          type: __expr__
+          uid: __expr__
+    labels:
+      severity: critical
+    annotations:
+      summary: Database backup stale
+      description: No verified off-host PostgreSQL backup has completed for 36 hours.
+    notification_settings:
+      receiver: transcendence-discord
+      group_by:
+      - alertname
+      - grafana_folder
+  - uid: trn-database-restore-stale
+    title: Database restore drill stale
+    condition: B
+    for: 10m
+    noDataState: OK
+    execErrState: Alerting
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        editorMode: code
+        expr: time() - transcendence_database_restore_drill_last_success_timestamp_seconds
+        instant: true
+        range: false
+        intervalMs: 1000
+        maxDataPoints: 43200
+        datasource:
+          type: prometheus
+          uid: prometheus
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: math
+        expression: $A > 691200
+        intervalMs: 1000
+        maxDataPoints: 43200
+        datasource:
+          type: __expr__
+          uid: __expr__
+    labels:
+      severity: critical
+    annotations:
+      summary: Database restore drill stale
+      description: No isolated database restore drill has passed for eight days.
+    notification_settings:
+      receiver: transcendence-discord
+      group_by:
+      - alertname
+      - grafana_folder

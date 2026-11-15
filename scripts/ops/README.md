@@ -1,5 +1,7 @@
 # Ops scripts
 
+For new and migrated hosts, use the [complete-release deployment runbook](../../docs/DEPLOYMENT.md). It covers versioned configuration/tooling, isolated staging, rollback retention, blue-green routing, backup/restore drills and deployment status alerts. The per-image poller below is retained for hosts awaiting explicit migration.
+
 ## `poll-deploy.sh` — pull-based prod deploy (replaces wud)
 
 Prod is a single Docker host on a private LAN with no public SSH and no tunnel, so a

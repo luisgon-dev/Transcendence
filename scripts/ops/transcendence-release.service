@@ -1,0 +1,14 @@
+[Unit]
+Description=Deploy a verified complete Transcendence release
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/transcendence-release.conf
+Environment=TRN_RELEASE_TEXTFILE_DIR=/var/lib/transcendence-perf/textfile
+ExecStart=/usr/bin/python3 /root/deploy/release_bootstrap.py
+UMask=0077
+TimeoutStartSec=45min
+TimeoutStopSec=30min

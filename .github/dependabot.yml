@@ -78,6 +78,8 @@ updates:
       - "/Transcendence.Service"
       - "/apps/web"
       - "/scripts/perf"
+      - "/scripts/ci"
+      - "/config/deploy"
     schedule:
       interval: "weekly"
       day: "monday"

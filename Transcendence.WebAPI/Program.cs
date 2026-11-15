@@ -312,16 +312,9 @@ if (!isOpenApiExport && !isAdminGrant)
 
 // Only configured private proxy networks may supply forwarded identity. The BFF forwards one
 // validated client address; direct public access to this port must be blocked at the host edge.
-var trustedProxyCidrs = builder.Configuration.GetSection("Security:TrustedProxyNetworks").Get<string[]>() ?? [];
-if (builder.Environment.IsProduction() && !isOpenApiExport && !isAdminGrant && trustedProxyCidrs.Length == 0)
-    throw new InvalidOperationException("Security:TrustedProxyNetworks must be configured in production.");
-var trustedProxyNetworks = trustedProxyCidrs.Select(System.Net.IPNetwork.Parse).ToArray();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
-{
-    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.ForwardLimit = 1;
-    foreach (var network in trustedProxyNetworks) options.KnownIPNetworks.Add(network);
-});
+    Transcendence.WebAPI.Security.ProxyHeaders.Configure(options, builder.Configuration,
+        builder.Environment.IsProduction() && !isOpenApiExport && !isAdminGrant));
 
 var app = builder.Build();
 
@@ -337,6 +330,12 @@ if (isAdminGrant)
 }
 
 // Must run before UseRateLimiter so the limiter partitions on the corrected client IP.
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path == "/health/ready")
+        context.Response.Headers["X-TRN-Release"] = Environment.GetEnvironmentVariable("TRN_RELEASE_SHA") ?? "unknown";
+    await next(context);
+});
 app.UseForwardedHeaders();
 app.Use(async (context, next) =>
 {

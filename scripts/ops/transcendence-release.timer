@@ -1,0 +1,11 @@
+[Unit]
+Description=Check for complete Transcendence releases
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=5min
+RandomizedDelaySec=20s
+Unit=transcendence-release.service
+
+[Install]
+WantedBy=timers.target

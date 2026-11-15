@@ -60,6 +60,8 @@ Monorepo with a **.NET backend** (WebAPI + Hangfire Worker) and a **Next.js fron
 - **Tech stack** — PostgreSQL 18, Redis 8, Hangfire (job processing), HybridCache (L1 in-memory + L2 Redis).
 
 For deeper context see `docs/ARCHITECTURE.md`, `docs/DEVELOPMENT.md`, and `docs/API.md`.
+For production delivery use `docs/DEPLOYMENT.md`: signed complete release bundles,
+isolated staging, retained rollback configurations and explicit host adoption.
 
 ## Canonical Docs (Keep These Correct)
 

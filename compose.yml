@@ -178,6 +178,8 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       Security__TrustedProxyNetworks__0: ${TRUSTED_PROXY_NETWORK_0:-172.16.0.0/12}
+      Security__TrustedProxyNetworks__1: ${TRUSTED_PROXY_NETWORK_1:-127.0.0.1/32}
+      Security__ForwardedHeaderLimit: ${FORWARDED_HEADER_LIMIT:-1}
       Auth__Jwt__Issuer: ${JWT_ISSUER}
       Auth__Jwt__Audience: ${JWT_AUDIENCE}
       Auth__Jwt__Key: ${JWT_SIGNING_KEY}

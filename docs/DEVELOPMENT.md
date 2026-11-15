@@ -318,7 +318,7 @@ locally you can leave them unset. Prod sets them in `/root/transcendence/.env`.
 | --- | --- |
 | `TRN_PUBLIC_ORIGIN` | web: canonical origin and the BFF same-origin/CSRF check (required in production) |
 | `ALERTS_WEBHOOK_URL` | worker: `Alerts__Webhook__Url`, the Discord-compatible ingestion-health alert webhook (`poll-deploy.sh` reads the same variable from `.env` for deploy notifications) |
-| `WEB_IMAGE`, `WEBAPI_IMAGE`, `SERVICE_IMAGE` | image references, defaulting to `ghcr.io/luisgon-dev/transcendence-<component>:main`; pin one to a `:sha-<short>` tag for a break-glass rollback (see ARCHITECTURE.md "Deployment & rollback") |
+| `WEB_IMAGE`, `WEBAPI_IMAGE`, `SERVICE_IMAGE` | image references, defaulting to `ghcr.io/luisgon-dev/transcendence-<component>:main`; local/legacy overrides only; managed production releases supply all three immutable digests (see DEPLOYMENT.md) |
 | `DOZZLE_IMAGE`, `WUD_PORT` | `ops-tools` Dozzle image and the `wud` profile's UI port (default `3001`) |
 | `POSTGRES_SHARED_BUFFERS`, `POSTGRES_WORK_MEM`, `POSTGRES_EFFECTIVE_CACHE_SIZE`, `POSTGRES_MAINTENANCE_WORK_MEM` | Postgres memory (`postgres -c` flags; stock defaults) |
 | `POSTGRES_MAX_WORKER_PROCESSES`, `POSTGRES_MAX_PARALLEL_WORKERS`, `POSTGRES_MAX_PARALLEL_WORKERS_PER_GATHER`, `POSTGRES_MAX_PARALLEL_MAINTENANCE_WORKERS` | Postgres parallelism (defaults 8 / 8 / 2 / 2) |
@@ -1329,3 +1329,21 @@ The journal receives the last 60 lines. Container environment variables are neve
 dumped. Quarantine remains in place until a different release is published or an
 operator fixes the cause and explicitly retries; installing the updated poller
 is required on the host to enable diagnostic capture.
+
+
+## Complete release deployment
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the signed release contract, one-time host
+installer, isolated staging, whole-application rollback, optional blue-green edge,
+backup and restore units, monitoring and all controller configuration variables.
+Application `.env` secrets stay outside signed bundles; resolved rollback files are
+private. Main aliases advance only after a complete release passes exact-image
+staging. Installing the new bootstrap disables the legacy timer; a repository
+merge alone does not change the host's deployment owner.
+
+`TRUSTED_PROXY_NETWORK_1` defaults to loopback and can name the TLS proxy's exact
+private CIDR when it is outside the application Docker network.
+`FORWARDED_HEADER_LIMIT` defaults to 1 and accepts only 1 or 2; blue-green API
+candidates use 2 for the explicitly trusted NPM/inner-edge chain. Only configured
+known proxies can advance the forwarded identity. Both application bind addresses
+must be explicit during host adoption, especially with NPM in another LXC.

@@ -1,0 +1,8 @@
+{
+  "revision": "8deaa5ee92c29c90e816be870774b3cca3b418a7",
+  "images": {
+    "service": "ghcr.io/luisgon-dev/transcendence-service@sha256:daab3da48b659f58c7d8a143fc4fcf204c48238c9a6f1e8ac6ed53b552c9a9ff",
+    "webapi": "ghcr.io/luisgon-dev/transcendence-webapi@sha256:052929ba631e325f2edc611f5ae11bac71a3f7e12dd3f4062487bdcb815f08e1",
+    "web": "ghcr.io/luisgon-dev/transcendence-web@sha256:b6023815388073681e020fdb6ac50c6e07b1af7a02ef89c6c369de5baa826878"
+  }
+}

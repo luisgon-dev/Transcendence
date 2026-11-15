@@ -379,6 +379,20 @@ class DeploymentTests(ReleaseFixture):
 
 
 class BackupTests(unittest.TestCase):
+    def test_backup_and_restore_guard_exclude_archiver_and_release_lock_on_failure(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.dict(os.environ, {'TRN_BACKUP_ARCHIVE_STATE_DIR': tmp}):
+            lock_path = Path(tmp) / 'run.lock'
+            with self.assertRaisesRegex(RuntimeError, 'operation failed'):
+                with backup.archive_guard() as directory:
+                    self.assertEqual(directory, Path(tmp).resolve())
+                    with lock_path.open('a') as other:
+                        with self.assertRaises(BlockingIOError):
+                            backup.fcntl.flock(other, backup.fcntl.LOCK_EX | backup.fcntl.LOCK_NB)
+                    raise RuntimeError('operation failed')
+            with lock_path.open('a') as other:
+                backup.fcntl.flock(other, backup.fcntl.LOCK_EX | backup.fcntl.LOCK_NB)
+
     def test_large_dump_can_exceed_thirty_minutes_within_configured_deadline(self):
         with tempfile.TemporaryDirectory() as tmp:
             process = MagicMock(returncode=0)
@@ -387,14 +401,21 @@ class BackupTests(unittest.TestCase):
                 kwargs['stdout'].write(b'complete database dump')
                 kwargs['stdout'].flush()
                 return process
+            archive = Path(tmp) / 'archive'
+            archive.mkdir()
+            (archive / 'current').write_text('frozen archive resume state')
             with patch.dict(os.environ, {'TRN_BACKUP_COMMAND_TIMEOUT_SECONDS': '3600'}), \
-                    patch.object(backup, 'run', return_value=b'370000000000'), \
+                    patch.object(backup, 'run', return_value=b'370000000000') as commands, \
                     patch.object(backup.subprocess, 'Popen', side_effect=start_dump), \
                     patch.object(backup.time, 'monotonic', side_effect=[0, 1801]), \
                     patch.object(backup.time, 'sleep'), \
                     patch.object(backup.shutil, 'disk_usage', return_value=type('Disk', (), {'free': 10**12})()):
-                backup.backup(Path(tmp), 'production-postgres', 5 * 1024**3)
+                backup.backup(Path(tmp), 'production-postgres', 5 * 1024**3, archive)
             process.kill.assert_not_called()
+            restic_command = commands.call_args_list[1].args[0]
+            self.assertIn(str(archive), restic_command)
+            self.assertIn(str(archive / 'run.lock'), restic_command)
+            self.assertEqual((archive / 'current').read_text(), 'frozen archive resume state')
             self.assertTrue((Path(tmp) / 'textfile/database_backup.prom').exists())
             self.assertFalse((Path(tmp) / 'database.dump').exists())
 

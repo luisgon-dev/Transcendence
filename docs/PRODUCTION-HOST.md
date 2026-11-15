@@ -48,6 +48,17 @@ password is on Unraid at
 directory outside the NFS export. Preserve it independently of the application
 LXC. Application `.env` credentials were not copied to the NAS.
 
+The existing `/etc/cron.d/trn-archive` invokes `/root/archive-old-patches.sh` every
+thirty minutes with `APPLY=1 KEEP_PATCHES=3`. It already exports historical match
+chunks to Unraid's `/mnt/user/backup/transcendence-match-archive` (approximately
+30 GiB at adoption). Its installed script matches the repository version. Retain
+its `/var/lib/transcendence-archive/current`, `manifest.json` and frozen database
+work table together; a partially exported chunk must not be treated as complete.
+Set `TRN_BACKUP_ARCHIVE_STATE_DIR=/var/lib/transcendence-archive` so database
+backup/restore work shares the existing archive lock and encrypted snapshots
+include the matching resume state. The old-patch retention and historical NAS
+exports remain separate from restic's database snapshot retention.
+
 Use the repository backup and restore units. Their timers run daily at 03:00 and
 Sunday at 05:00 America/Los_Angeles, with up to twenty minutes of jitter. Enable
 the timers only after both the full backup and isolated restore verification

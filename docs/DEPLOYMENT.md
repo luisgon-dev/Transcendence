@@ -281,6 +281,22 @@ cleanup, repository validation and successful restored table queries remain requ
 regardless of the timeout. Enable schedules only after a complete production-size
 backup and restore drill pass.
 
+When the old-patch archive job is installed, set
+`TRN_BACKUP_ARCHIVE_STATE_DIR=/var/lib/transcendence-archive` to its actual state
+directory. Backups and restore drills take the archiver's existing `run.lock`,
+waiting for an in-flight archive window and making later cron runs yield. The
+backup captures the resume state alongside the database in the same encrypted
+snapshot while that lock is held. Restore both the database and the saved archive
+state together before resuming pruning; never drop a nonempty frozen work table
+or invent a replacement state file.
+
+Archived match chunks already live separately on Unraid under
+`/mnt/user/backup/transcendence-match-archive`. Database dumps contain only data
+still in PostgreSQL; they do not recreate records already pruned into archives.
+Preserve every completed chunk, its manifest and any older flat patch archive.
+The new backup retention applies only to the encrypted restic database snapshots
+and does not remove these historical match exports.
+
 ## Monitoring and network requirements
 
 The release and backup services write textfile metrics into the existing

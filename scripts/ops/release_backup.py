@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Encrypted off-host PostgreSQL backups and isolated restore drills using restic."""
 import argparse
+import contextlib
 import fcntl
 import os
 import json
@@ -19,6 +20,31 @@ def command_timeout():
     if not 60 <= seconds <= 86400:
         raise ValueError("Backup command timeout must be between 60 and 86400 seconds")
     return seconds
+
+
+@contextlib.contextmanager
+def archive_guard():
+    configured = os.environ.get("TRN_BACKUP_ARCHIVE_STATE_DIR")
+    if not configured:
+        yield None
+        return
+    directory = Path(configured)
+    if not directory.is_absolute() or directory == Path("/") or not directory.is_dir():
+        raise ValueError("Configure an existing absolute archive state directory")
+    directory = directory.resolve()
+    # Match archive-old-patches.sh's lock so cron yields without changing frozen
+    # IDs, resume state or chunk exports while a backup/restore is running.
+    with (directory / "run.lock").open("a") as lock:
+        deadline = time.monotonic() + command_timeout()
+        while True:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("Timed out waiting for the active archive window")
+                time.sleep(1)
+        yield directory
 
 
 def run(command, diagnostics=None, **kwargs):
@@ -57,7 +83,7 @@ def validate_destination(repository, mount):
         raise ValueError("Use a remote restic backend or an explicitly guarded NAS mount")
 
 
-def backup(state, container, reserve_bytes):
+def backup(state, container, reserve_bytes, archive_state=None):
     dump = state / "database.dump"
     metadata = state / "database-size.txt"
     def call(command):
@@ -83,7 +109,10 @@ def backup(state, container, reserve_bytes):
                     process.kill()
                     process.wait()
         # The operator initializes and supplies an encrypted off-host restic repository.
-        call(["restic", "backup", "--tag", "transcendence-database", str(dump), str(metadata)])
+        command = ["restic", "backup", "--tag", "transcendence-database", str(dump), str(metadata)]
+        if archive_state is not None:
+            command += ["--exclude", str(archive_state / "run.lock"), str(archive_state)]
+        call(command)
         call(["restic", "check"])
         call(["restic", "forget", "--tag", "transcendence-database", "--group-by", "host,paths",
              "--keep-daily", "7", "--keep-weekly", "4", "--keep-monthly", "6", "--prune"])
@@ -170,10 +199,11 @@ def main():
     args.state.mkdir(parents=True, exist_ok=True)
     with (args.state / "lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        if args.action == "backup":
-            backup(args.state, args.container, args.reserve_gib * 1024**3)
-        else:
-            restore_drill(args.state, args.postgres_image, args.reserve_gib * 1024**3)
+        with archive_guard() as archive_state:
+            if args.action == "backup":
+                backup(args.state, args.container, args.reserve_gib * 1024**3, archive_state)
+            else:
+                restore_drill(args.state, args.postgres_image, args.reserve_gib * 1024**3)
     print("Database " + args.action + " verified", flush=True)
 
 

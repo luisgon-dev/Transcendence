@@ -228,6 +228,16 @@ jobs:
       - name: Test the exact production artifacts in isolation
         if: steps.publication.outputs.complete != 'true'
         run: python3 release-bundle/scripts/ops/release_deploy.py stage --bundle release-bundle --state "$RUNNER_TEMP/release-stage"
+      - name: Preserve staging failure evidence
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-staging-failure
+          path: |
+            ${{ runner.temp }}/release-stage/**/*.log
+            ${{ runner.temp }}/release-stage/**/*-state.json
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Sign the complete configuration and image contract
         if: steps.publication.outputs.complete != 'true'
         run: cosign sign-blob --yes --bundle release-output/release.sigstore.json release-output/release.tgz

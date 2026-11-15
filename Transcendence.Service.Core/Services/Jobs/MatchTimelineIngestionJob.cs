@@ -4,8 +4,6 @@ using Camille.RiotGames.MatchV5;
 using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Service.Core.Services.Analytics;
@@ -36,12 +34,13 @@ public class MatchTimelineIngestionJob(
     public const int BaselineTimelineSchemaVersion = 1;
 
     /// <summary>
-    /// The Build Lab schema: one-minute feature frames, lossless item lifecycle events, raw event
-    /// payloads, and rank observation provenance. Every one of those is gated on
+    /// The Build Lab schema: one-minute feature frames, lossless item lifecycle events,
+    /// and rank observation provenance. Every one of those is gated on
     /// <c>Analytics:BuildLab:Enabled</c>, so this version is stamped ONLY when the flag was on for the
     /// ingest — a row at this version is therefore proof the extras are present, which is what the
     /// generation cohort filter relies on.
     /// </summary>
+    // Retiring the unused raw JSON table does not invalidate these retained structured features.
     public const int CurrentTimelineSchemaVersion = 2;
 
     /// <summary>
@@ -53,14 +52,6 @@ public class MatchTimelineIngestionJob(
     /// </summary>
     public static int TargetSchemaVersion(bool buildLabEnabled) =>
         buildLabEnabled ? CurrentTimelineSchemaVersion : BaselineTimelineSchemaVersion;
-
-    // Camille's event union serializes every member of every event shape, so the default options
-    // write ~40 mostly-null fields per row into jsonb; dropping nulls collapses each payload to the
-    // fields the event actually carries.
-    private static readonly JsonSerializerOptions PayloadSerializerOptions = new()
-    {
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
 
     [Queue(HangfireQueues.TimelineIngest)]
     public async Task IngestMatchTimelineAsync(string matchId, CancellationToken ct = default)
@@ -82,6 +73,9 @@ public class MatchTimelineIngestionJob(
             logger.LogWarning("[Timeline] Match {MatchId} not found. Skipping timeline ingestion.", matchId);
             return;
         }
+
+        if (await db.MatchArchiveEntries.AnyAsync(x => x.MatchId == match.Id, ct))
+            return; // A frozen archive cohort is immutable while its verified export/prune resumes.
 
         // Race-safe get-or-create. The ingestion and backfill paths can target the same match
         // concurrently; both would find no row and Add one, colliding on PK_MatchTimelineFetchStates
@@ -187,6 +181,8 @@ public class MatchTimelineIngestionJob(
                 await db.Database.ExecuteSqlInterpolatedAsync(
                     $"SELECT pg_advisory_xact_lock(hashtextextended({matchId}, 0))", ct);
             }
+            if (await db.MatchArchiveEntries.AnyAsync(x => x.MatchId == match.Id, ct))
+                return;
 
             // Replace the whole snapshot set for this match so re-ingestion is idempotent.
             var existingSnapshots = await db.MatchParticipantTimelineSnapshots
@@ -200,8 +196,6 @@ public class MatchTimelineIngestionJob(
             // Derive and stage the ordered build path (item purchases + skill orders) from the same
             // frames; committed atomically with the snapshots by the SaveChangesAsync below.
             var buildPathCoverageOk = await StageBuildPathRowsAsync(match, timeline.Info.Frames, buildLabEnabled, ct);
-            if (buildLabEnabled)
-                await StageTimelineEventPayloadsAsync(match, timeline.Info.Frames, ct);
 
             state.Status = MatchTimelineFetchStatus.Success;
             state.RetryCount = 0;
@@ -583,51 +577,6 @@ public class MatchTimelineIngestionJob(
         }
 
         return events;
-    }
-
-    private async Task StageTimelineEventPayloadsAsync(
-        DataMatch match,
-        FramesTimeLine[] frames,
-        CancellationToken ct)
-    {
-        var rows = frames
-            .Where(frame => frame?.Events != null)
-            .SelectMany(frame => frame.Events ?? [])
-            .Where(timelineEvent => timelineEvent != null &&
-                                    TimelineBuildParser.IsPersistedPayloadEvent(timelineEvent.Type) &&
-                                    !TimelineBuildParser.IsStoredAsItemLifecycle(
-                                        timelineEvent.Type, timelineEvent.ParticipantId))
-            .OrderBy(timelineEvent => timelineEvent.Timestamp)
-            .Select((timelineEvent, index) => new MatchTimelineEventPayload
-            {
-                MatchId = match.Id,
-                Match = match,
-                EventIndex = index,
-                TimestampMs = (int)timelineEvent.Timestamp,
-                EventType = timelineEvent.Type ?? "UNKNOWN",
-                // Lifted out of the JSON as well as kept in it. The retired modeler's cohort scan read
-                // only these three, and reading them back out of jsonb forced a full sequential scan of
-                // the whole table -- see MatchTimelineEventPayload for the measurement. Written here
-                // so a row is complete the moment it lands; the backfill exists only for rows that
-                // predate this.
-                KillerId = timelineEvent.KillerId,
-                // Camille types these as the Team enum; its underlying values are the 100/200 Riot
-                // sends, which is what the serialized JSON has always carried and what the modeler
-                // compares against. The cast keeps the column and the JSON byte-identical in meaning,
-                // which the backfill then verifies against real rows rather than assuming.
-                KillerTeamId = (int?)timelineEvent.KillerTeamId,
-                TeamId = (int?)timelineEvent.TeamId,
-                PayloadJson = JsonSerializer.Serialize(timelineEvent, PayloadSerializerOptions)
-            })
-            .ToList();
-
-        // Set-based: nothing reads the prior payloads, so materializing them into the change tracker
-        // only to mark them Deleted is pure overhead on a per-match hot path.
-        await db.MatchTimelineEventPayloads
-            .Where(row => row.MatchId == match.Id)
-            .ExecuteDeleteAsync(ct);
-        if (rows.Count > 0)
-            db.MatchTimelineEventPayloads.AddRange(rows);
     }
 
     private async Task<Dictionary<int, BuildItemMetadata>> LoadItemMetadataAsync(

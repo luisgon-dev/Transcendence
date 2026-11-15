@@ -157,6 +157,12 @@ migration that creates the new narrow fact/generation tables.
 
 ## `archive-old-patches.sh` — bounded archive-then-prune
 
+**Legacy recovery only after managed adoption.** The worker's `archive-matches` job now owns
+retention, schema-derived cascade coverage, verified NAS exports and database checkpoints. Follow
+[managed archival](../../docs/DEPLOYMENT.md#managed-match-archival) to preserve/import existing
+progress and disable the old cron. Never run both owners. The commands below describe an
+unmigrated host or an explicitly restored legacy baseline.
+
 Keep the active and newest three patches. Eligible old details are frozen in chunks (default 500
 matches), exported to `<NAS_DIR>/<patch>/chunk-<UTC>-<PID>/`, verified, and pruned in paced batches
 (default 25 matches, two-second pause). All thirteen tables in `TABLES` cover the full match cascade.

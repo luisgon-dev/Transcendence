@@ -1,0 +1,270 @@
+# JSON is valid YAML; managed storage lifecycle provisioning.
+{
+  "apiVersion": 1,
+  "groups": [
+    {
+      "orgId": 1,
+      "name": "transcendence-storage",
+      "folder": "Transcendence",
+      "interval": "1m",
+      "rules": [
+        {
+          "uid": "trn-archive-failed",
+          "title": "NAS match archive failed",
+          "condition": "B",
+          "for": "5m",
+          "noDataState": "OK",
+          "execErrState": "Alerting",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 900,
+                "to": 0
+              },
+              "datasourceUid": "prometheus",
+              "model": {
+                "refId": "A",
+                "editorMode": "code",
+                "expr": "sum(increase(match_archive_failures_total[15m]))",
+                "instant": true,
+                "range": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "prometheus"
+                }
+              }
+            },
+            {
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "math",
+                "expression": "$A > 0",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            }
+          ],
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "NAS match archive failed",
+            "description": "Managed archive failed; source rows and the last verified NAS files are retained."
+          },
+          "notification_settings": {
+            "receiver": "transcendence-discord",
+            "group_by": [
+              "alertname",
+              "grafana_folder"
+            ]
+          }
+        },
+        {
+          "uid": "trn-archive-stalled",
+          "title": "NAS match archive progress stalled",
+          "condition": "B",
+          "for": "15m",
+          "noDataState": "OK",
+          "execErrState": "Alerting",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 900,
+                "to": 0
+              },
+              "datasourceUid": "prometheus",
+              "model": {
+                "refId": "A",
+                "editorMode": "code",
+                "expr": "max(match_archive_pending_age_seconds)",
+                "instant": true,
+                "range": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "prometheus"
+                }
+              }
+            },
+            {
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "math",
+                "expression": "$A > 86400",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            }
+          ],
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "NAS match archive progress stalled",
+            "description": "A frozen raw-match cohort has been pending over 24 hours. Check NAS, I/O budgets and compact-fact coverage."
+          },
+          "notification_settings": {
+            "receiver": "transcendence-discord",
+            "group_by": [
+              "alertname",
+              "grafana_folder"
+            ]
+          }
+        },
+        {
+          "uid": "trn-archive-runner-stale",
+          "title": "NAS match archive runner stale",
+          "condition": "B",
+          "for": "15m",
+          "noDataState": "OK",
+          "execErrState": "Alerting",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 900,
+                "to": 0
+              },
+              "datasourceUid": "prometheus",
+              "model": {
+                "refId": "A",
+                "editorMode": "code",
+                "expr": "(time() - max(match_archive_last_run_seconds)) and (max(match_archive_last_run_seconds) > 0)",
+                "instant": true,
+                "range": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "prometheus"
+                }
+              }
+            },
+            {
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "math",
+                "expression": "$A > 3600",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            }
+          ],
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "NAS match archive runner stale",
+            "description": "The archive actor has not reported for an hour after its first run. Check the worker and storage queue."
+          },
+          "notification_settings": {
+            "receiver": "transcendence-discord",
+            "group_by": [
+              "alertname",
+              "grafana_folder"
+            ]
+          }
+        },
+        {
+          "uid": "trn-archive-adoption",
+          "title": "Legacy archive adoption incomplete",
+          "condition": "B",
+          "for": "30m",
+          "noDataState": "OK",
+          "execErrState": "Alerting",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 900,
+                "to": 0
+              },
+              "datasourceUid": "prometheus",
+              "model": {
+                "refId": "A",
+                "editorMode": "code",
+                "expr": "max(match_archive_adoption_required)",
+                "instant": true,
+                "range": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "prometheus"
+                }
+              }
+            },
+            {
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "math",
+                "expression": "$A > 0",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            }
+          ],
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Legacy archive adoption incomplete",
+            "description": "Legacy frozen progress still awaits explicit managed adoption; source data has not been pruned."
+          },
+          "notification_settings": {
+            "receiver": "transcendence-discord",
+            "group_by": [
+              "alertname",
+              "grafana_folder"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

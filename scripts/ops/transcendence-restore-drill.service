@@ -1,6 +1,6 @@
 [Unit]
 Description=Verify a Transcendence backup by restoring an isolated database
-After=docker.service network-online.target
+After=docker.service network-online.target transcendence-backup.service
 Requires=docker.service
 
 [Service]
@@ -9,5 +9,5 @@ EnvironmentFile=/etc/transcendence-backup.conf
 Environment=TRN_RELEASE_TEXTFILE_DIR=/var/lib/transcendence-perf/textfile
 ExecStart=/usr/bin/python3 -B /var/lib/transcendence-release/current/scripts/ops/release_backup.py restore-drill
 UMask=0077
-TimeoutStartSec=2h
+TimeoutStartSec=18h
 TimeoutStopSec=5min

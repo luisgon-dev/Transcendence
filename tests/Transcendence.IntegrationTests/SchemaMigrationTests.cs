@@ -72,18 +72,12 @@ public sealed class SchemaMigrationTests(PostgresIntegrationFixture fixture)
     }
 
     [Fact]
-    public async Task TimelinePayloads_CarryOnlyTheirPrimaryKey()
+    public async Task Unused_timeline_payload_table_is_removed()
     {
-        // Every ingested match writes ~455 payload rows; each extra index is ~455 more random writes per
-        // match. The two the retired modeler used were dropped (0 scans on prod, 34 GB). Add one back
-        // only with a reader that needs it.
         using var scope = fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<TranscendenceContext>();
-        var indexes = await db.Database.SqlQueryRaw<string>("""
-            SELECT indexname AS "Value" FROM pg_indexes WHERE tablename = 'MatchTimelineEventPayloads'
-            """).ToListAsync();
-
-        indexes.Should().Equal("PK_MatchTimelineEventPayloads");
+        (await db.Database.SqlQueryRaw<bool>("SELECT to_regclass('public.\"MatchTimelineEventPayloads\"') IS NULL AS \"Value\"").SingleAsync())
+            .Should().BeTrue();
     }
 
     [Fact]

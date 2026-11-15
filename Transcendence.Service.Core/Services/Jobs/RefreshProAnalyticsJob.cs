@@ -12,6 +12,7 @@ namespace Transcendence.Service.Core.Services.Jobs;
 /// small phase separate prevents an unrelated failure from leaving pro roster changes invisible.
 /// </summary>
 [DisableConcurrentExecution(timeoutInSeconds: 30 * 60)]
+[Transcendence.Service.Core.Services.Operations.StorageMaintenanceWork]
 public sealed class RefreshProAnalyticsJob(
     TranscendenceContext db,
     IPrecomputedAnalyticsRefresher refresher,

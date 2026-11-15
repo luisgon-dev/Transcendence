@@ -8,7 +8,7 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -379,6 +379,76 @@ class DeploymentTests(ReleaseFixture):
 
 
 class BackupTests(unittest.TestCase):
+    def test_cancelled_dump_terminates_only_its_tagged_database_session(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            process = MagicMock(returncode=None)
+            process.poll.return_value = None
+            with patch.dict(os.environ, {'TRN_BACKUP_COMMAND_TIMEOUT_SECONDS': '60'}), \
+                    patch.object(backup, 'run', return_value=b'370000000000') as commands, \
+                    patch.object(backup.subprocess, 'Popen', return_value=process) as launch, \
+                    patch.object(backup.subprocess, 'run', return_value=MagicMock(returncode=0)) as cleanup, \
+                    patch.object(backup.time, 'monotonic', side_effect=[0, 61]), \
+                    patch.object(backup.shutil, 'disk_usage', return_value=type('Disk', (), {'free': 10**12})()):
+                with self.assertRaisesRegex(RuntimeError, 'deadline'):
+                    backup.backup(Path(tmp), 'production-postgres', 5 * 1024**3)
+            application = next(value.split('=', 1)[1] for value in launch.call_args.args[0] if value.startswith('PGAPPNAME='))
+            self.assertIn(application.encode(), cleanup.call_args.kwargs['input'])
+            self.assertIn(b'pg_terminate_backend', cleanup.call_args.kwargs['input'])
+            self.assertNotIn(b"application_name='pg_dump'", cleanup.call_args.kwargs['input'])
+            process.wait.assert_called_once_with(timeout=15)
+            commands.assert_called_once()
+            self.assertFalse((Path(tmp) / 'database.dump').exists())
+            self.assertFalse((Path(tmp) / 'textfile/database_backup.prom').exists())
+
+    def test_backup_and_restore_guard_exclude_archiver_and_release_lock_on_failure(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.dict(os.environ, {'TRN_BACKUP_ARCHIVE_STATE_DIR': tmp}):
+            lock_path = Path(tmp) / 'run.lock'
+            with self.assertRaisesRegex(RuntimeError, 'operation failed'):
+                with backup.archive_guard() as directory:
+                    self.assertEqual(directory, Path(tmp).resolve())
+                    for path in (lock_path, Path(tmp) / 'exclusive.lock'):
+                        with path.open('a') as other:
+                            with self.assertRaises(BlockingIOError):
+                                backup.fcntl.flock(other, backup.fcntl.LOCK_EX | backup.fcntl.LOCK_NB)
+                    raise RuntimeError('operation failed')
+            for path in (lock_path, Path(tmp) / 'exclusive.lock'):
+                with path.open('a') as other:
+                    backup.fcntl.flock(other, backup.fcntl.LOCK_EX | backup.fcntl.LOCK_NB)
+
+    def test_large_dump_can_exceed_thirty_minutes_within_configured_deadline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            process = MagicMock(returncode=0)
+            process.poll.side_effect = [None, 0, 0]
+            def start_dump(*args, **kwargs):
+                kwargs['stdout'].write(b'complete database dump')
+                kwargs['stdout'].flush()
+                return process
+            archive = Path(tmp) / 'archive'
+            archive.mkdir()
+            (archive / 'current').write_text('frozen archive resume state')
+            with patch.dict(os.environ, {'TRN_BACKUP_COMMAND_TIMEOUT_SECONDS': '3600'}), \
+                    patch.object(backup, 'run', return_value=b'370000000000') as commands, \
+                    patch.object(backup.subprocess, 'Popen', side_effect=start_dump), \
+                    patch.object(backup.time, 'monotonic', side_effect=[0, 1801]), \
+                    patch.object(backup.time, 'sleep'), \
+                    patch.object(backup.shutil, 'disk_usage', return_value=type('Disk', (), {'free': 10**12})()):
+                backup.backup(Path(tmp), 'production-postgres', 5 * 1024**3, archive)
+            process.kill.assert_not_called()
+            restic_command = commands.call_args_list[1].args[0]
+            self.assertIn(str(archive), restic_command)
+            self.assertIn(str(archive / 'run.lock'), restic_command)
+            self.assertEqual((archive / 'current').read_text(), 'frozen archive resume state')
+            self.assertTrue((Path(tmp) / 'textfile/database_backup.prom').exists())
+            self.assertFalse((Path(tmp) / 'database.dump').exists())
+
+    def test_unsafe_timeout_is_rejected_before_running_commands(self):
+        with patch.dict(os.environ, {'TRN_BACKUP_COMMAND_TIMEOUT_SECONDS': '0'}), \
+                patch.object(backup.subprocess, 'run') as run:
+            with self.assertRaisesRegex(ValueError, 'timeout'):
+                backup.run(['restic', 'check'])
+            run.assert_not_called()
+
     def test_missing_nas_mount_cannot_fall_back_to_a_local_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaisesRegex(ValueError, 'not mounted'):

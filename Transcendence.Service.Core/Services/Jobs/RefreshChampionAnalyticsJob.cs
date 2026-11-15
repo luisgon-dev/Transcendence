@@ -16,6 +16,7 @@ namespace Transcendence.Service.Core.Services.Jobs;
 /// Runs at 4 AM UTC to minimize user impact.
 /// </summary>
 [DisableConcurrentExecution(timeoutInSeconds: 60 * 60)]
+[Transcendence.Service.Core.Services.Operations.StorageMaintenanceWork]
 public class RefreshChampionAnalyticsJob(
     IChampionAnalyticsService analyticsService,
     IStaticDataService staticDataService,

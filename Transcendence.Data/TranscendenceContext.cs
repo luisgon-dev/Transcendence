@@ -36,7 +36,6 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<MatchParticipantItemPurchase> MatchParticipantItemPurchases { get; set; }
     public DbSet<MatchParticipantItemEvent> MatchParticipantItemEvents { get; set; }
     public DbSet<MatchParticipantRankContext> MatchParticipantRankContexts { get; set; }
-    public DbSet<MatchTimelineEventPayload> MatchTimelineEventPayloads { get; set; }
     public DbSet<MatchParticipantSkillOrder> MatchParticipantSkillOrders { get; set; }
 
     // Precomputed analytics aggregates (refreshed on a cadence; the read path rolls these up by scope)
@@ -74,6 +73,8 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
     public DbSet<RefreshLock> RefreshLocks { get; set; }
     public DbSet<BackgroundOperation> BackgroundOperations { get; set; }
     public DbSet<BackgroundOperationRequest> BackgroundOperationRequests { get; set; }
+    public DbSet<MatchArchiveChunk> MatchArchiveChunks { get; set; }
+    public DbSet<MatchArchiveEntry> MatchArchiveEntries { get; set; }
     public DbSet<ApiClientKey> ApiClientKeys { get; set; }
     public DbSet<UserAccount> UserAccounts { get; set; }
     public DbSet<UserRole> UserRoles { get; set; }
@@ -143,6 +144,21 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<MatchArchiveChunk>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Patch).HasMaxLength(64);
+            entity.Property(x => x.RelativePath).HasMaxLength(256);
+            entity.Property(x => x.LastError).HasMaxLength(1000);
+            entity.HasIndex(x => new { x.CompletedAtUtc, x.CreatedAtUtc });
+        });
+        modelBuilder.Entity<MatchArchiveEntry>(entity =>
+        {
+            entity.HasKey(x => new { x.ChunkId, x.MatchId });
+            entity.HasIndex(x => x.MatchId).IsUnique();
+            entity.HasOne(x => x.Chunk).WithMany().HasForeignKey(x => x.ChunkId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
         modelBuilder.Entity<BackgroundOperation>(entity =>
         {
             entity.HasKey(x => x.Id);
@@ -666,23 +682,6 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
         });
 
         modelBuilder.Entity<MatchParticipantRankContext>()
-            .HasQueryFilter(x => x.Match.Status != FetchStatus.PermanentlyUnfetchable);
-
-        modelBuilder.Entity<MatchTimelineEventPayload>(entity =>
-        {
-            entity.HasKey(x => new { x.MatchId, x.EventIndex });
-            entity.Property(x => x.EventType).HasMaxLength(64);
-            entity.Property(x => x.PayloadJson).HasColumnType("jsonb");
-            // Only the primary key: the (MatchId, EventType, TimestampMs) and partial KillEvents indexes
-            // served the retired Build Lab modeler's cohort scan and nothing has read them since
-            // (0 scans on prod, 34 GB). Every ingested match wrote ~455 rows into each of them.
-            entity.HasOne(x => x.Match)
-                .WithMany()
-                .HasForeignKey(x => x.MatchId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<MatchTimelineEventPayload>()
             .HasQueryFilter(x => x.Match.Status != FetchStatus.PermanentlyUnfetchable);
 
         modelBuilder.Entity<MatchParticipantSkillOrder>(entity =>

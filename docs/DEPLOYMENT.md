@@ -271,6 +271,99 @@ and restore timestamps advance only after the entire operation succeeds.
 Defaults are daily at 3 AM Pacific and Sunday at 5 AM Pacific, with up to twenty
 minutes of jitter. Customize them with systemd timer overrides.
 
+Large production databases need budgets based on their measured dump and index
+rebuild times. `TRN_BACKUP_COMMAND_TIMEOUT_SECONDS` bounds each backup/restic/restore
+command (default six hours, accepted range 60–86400 seconds). The units separately
+bound the complete backup to twelve hours and restore drill to eighteen hours;
+adjust those with systemd overrides when changing command budgets. A restore drill
+waits for an already-running scheduled backup before starting. Disk headroom checks,
+cleanup, repository validation and successful restored table queries remain required
+regardless of the timeout. Enable schedules only after a complete production-size
+backup and restore drill pass.
+
+When the old-patch archive job is installed, set
+`TRN_BACKUP_ARCHIVE_STATE_DIR=/var/lib/transcendence-archive` to its actual state
+directory. Backups and restore drills take the archiver's existing `run.lock`,
+waiting for an in-flight archive window and making later cron runs yield. The
+backup captures the resume state alongside the database in the same encrypted
+snapshot while that lock is held. Restore both the database and the saved archive
+state together before resuming pruning; never drop a nonempty frozen work table
+or invent a replacement state file.
+
+Archived match chunks already live separately on Unraid under
+`/mnt/user/backup/transcendence-match-archive`. Database dumps contain only data
+still in PostgreSQL; they do not recreate records already pruned into archives.
+Preserve every completed chunk, its manifest and any older flat patch archive.
+The new backup retention applies only to the encrypted restic database snapshots
+and does not remove these historical match exports.
+
+## Managed match archival
+
+Use the application worker's `archive-matches` job for new/adopted installations. Its database
+checkpoint follows deployments and database backups, and its dedicated queue appears alongside the
+other jobs in existing admin operations. The legacy host cron is not a second scheduler.
+
+1. Pause the old archive cron and preserve its scripts, `current`, `manifest.json` and frozen work
+   table. Never discard a partially pruned chunk. Preserve every existing NAS archive directory.
+2. Mount the existing NAS match archive into the application host at
+   `/mnt/transcendence-match-archive`. For an LXC, bind the already-mounted Proxmox NFS subdirectory
+   into the LXC. Grant the worker's actual `APP_UID` write/default ACLs on archive parent directories
+   and its pending chunk. The worker needs filesystem access, not a NAS administrator SSH key.
+3. Before deploying the new complete release, create these external volumes on the Docker host:
+
+   ```bash
+   docker volume create --driver local --opt type=none --opt o=bind \
+     --opt device=/mnt/transcendence-match-archive transcendence_match_archive
+   docker volume create --driver local --opt type=none --opt o=bind \
+     --opt device=/var/lib/transcendence-archive transcendence_maintenance_state
+   ```
+
+   Set `MATCH_ARCHIVE_VOLUME_EXTERNAL=true`, `MAINTENANCE_STATE_VOLUME_EXTERNAL=true`,
+   `MATCH_ARCHIVE_ENABLED=true` and the desired three-patch policy in the private application `.env`.
+   Keep `TRN_BACKUP_ARCHIVE_STATE_DIR=/var/lib/transcendence-archive` in the backup configuration.
+   The maintenance volume binds that same directory/inode, so an already-running backup continues
+   excluding archive and heavy periodic analytics work. The initializer prepares its file ownership.
+4. Deploy through the signed complete-release controller. The additive EF migration creates
+   `MatchArchiveChunks`/`MatchArchiveEntries`. A legacy frozen cohort makes the job wait for explicit
+   adoption. NAS mount validation, source retention and normal serving stay in effect while waiting.
+   This release also retires the unused raw JSON event table: stop the old worker first, then apply
+   the generated retirement migration. Retain a release that does not write that table as the
+   rollback floor; older writer images require an explicit compatibility repair. The WebAPI has no
+   reader of this table and can continue serving during the worker transition.
+5. After the backup/restore gate is free, invoke the installed release's service configuration once:
+
+   ```bash
+   config=$(python3 -c 'import json; print(json.load(open("/var/lib/transcendence-release/current.json"))["config"])')
+   docker compose -p transcendence -f "$config" run --rm --no-deps --pull never \
+     -e ArchiveRetention__AdoptLegacyOnly=true service
+   ```
+
+   This imports the exact legacy frozen IDs and NAS path, validates any already-verified manifest,
+   and preserves partial exports. It renames `current` to an adoption receipt only after the durable
+   database checkpoint commits. Repeating the command does not create another cohort. The old
+   `_patch_archive_pending` table is drained transactionally with imported IDs; do not drop it manually.
+6. Verify one real managed export/prune window, complete manifest hashes/counts, surviving compact
+   facts, and the queued job/metrics. Keep legacy cron disabled. Restore a database checkpoint together
+   with its matching archive state and immutable NAS files. A backup taken before this additive
+   migration can be restored with its retained prior release, then migrated/adopted normally.
+   For a bounded acceptance run, use the same Compose command with
+   `-e ArchiveRetention__RunOnceOnly=true` in place of `AdoptLegacyOnly`. It takes the normal gate,
+   database ownership lock and budgets, then exits without starting another Hangfire server.
+
+The archive is direct `COPY` → gzip on the NAS. It counts CSV records while streaming, including
+quoted newlines; it does not run a separate large row-count query before each export. Completed files
+are verified on readback and checkpointed per table, so a timed-out later export can resume. Pruning
+is bounded and waits for compact synergy coverage. Promotion of a patch back into retention prevents
+later prune batches. Restore CSV into the matching release's schema in parent-before-child order,
+using the CSV header's explicit column list and manifests. Reconcile primary keys before importing
+overlapping historical captures. The PostgreSQL integration test reconstructs a deleted cohort from
+these files and checks that the independent compact facts survive.
+
+Row pruning plus autovacuum reuses database pages; it does not promise a smaller disk file. A future
+partition migration must account for foreign keys, query pruning, backfill disk space and rollback.
+It is not performed by these maintenance jobs. Never substitute `VACUUM FULL` for the bounded policy
+during normal serving.
+
 ## Monitoring and network requirements
 
 The release and backup services write textfile metrics into the existing
@@ -295,3 +388,7 @@ enabled. A CDN failure must fail content readiness, not silently skip the gate.
 The old poller and its break-glass runbook remain in `scripts/ops/README.md` for
 hosts that have not migrated. A merge alone neither installs host services nor
 switches the user's existing proxy or backup destination.
+
+The [production host configuration](PRODUCTION-HOST.md) records the adopted LXC
+addresses, dedicated Unraid repository, recovery password location and isolated
+restore workspace. Verify live state before reusing that dated host inventory.

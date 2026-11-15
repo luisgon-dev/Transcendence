@@ -24,7 +24,7 @@ WORK="_patch_archive_pending"
 TABLES=(Matches MatchParticipants MatchParticipantItems MatchParticipantRunes MatchBans
         MatchTeamObjectives MatchParticipantTimelineSnapshots MatchTimelineFetchStates
         MatchParticipantItemPurchases MatchParticipantSkillOrders
-        MatchParticipantItemEvents MatchParticipantRankContexts MatchTimelineEventPayloads)
+        MatchParticipantItemEvents MatchParticipantRankContexts)
 SSH_NAS=(ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 "root@${NAS_HOST}")
 
 for option in KEEP_PATCHES DELETE_BATCH FREEZE_MATCHES MAX_RUN_SECONDS MAX_WAL_MB DELETE_TIMEOUT_MS EXPORT_TIMEOUT_MS; do

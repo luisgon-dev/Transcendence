@@ -137,6 +137,12 @@ public static class ServiceCollectionExtensions
     // Worker-only orchestration, bootstrap, and recurring job graph.
     public static IServiceCollection AddTranscendenceWorkerCore(this IServiceCollection services)
     {
+        services.AddOptions<MatchArchiveOptions>().BindConfiguration("ArchiveRetention");
+        services.AddSingleton<IMatchArchiveDestination, NetworkMatchArchiveDestination>();
+        services.AddSingleton<MatchArchiveTelemetry>();
+        services.AddSingleton<StorageMaintenanceFilter>();
+        services.AddScoped<MatchArchiveRetention>();
+        services.AddScoped<ArchiveMatchesJob>();
         services.AddScoped<ISummonerBootstrapService, SummonerBootstrapService>();
         services.AddScoped<ChampionAnalyticsIngestionJob>();
         services.AddScoped<RefreshChampionAnalyticsJob>();

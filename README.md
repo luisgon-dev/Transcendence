@@ -184,27 +184,30 @@ gate is in-process, so budgets are not shared across worker replicas.
   heavily clustered event and snapshot tables and set per-table autovacuum/analyze thresholds.
   [`scripts/ci/check-migrations.sh`](scripts/ci/check-migrations.sh) rejects new blocking
   `CreateIndex` and `defaultValueSql` column adds on the hot tables.
-- **Retention:** [`archive-old-patches.sh`](scripts/ops/archive-old-patches.sh) runs weekly and keeps
-  the newest 3 patches plus the active one. It streams 13 tables out with `COPY | gzip` to cold
-  storage, verifies row counts, then deletes with batched cascades (20k rows per batch).
-  `ChampionMatchupFact` has no FK to `Matches`, so matchup history survives archiving.
+- **Retention:** the worker's `archive-matches` job keeps the newest 3 patches plus the active one.
+  Its frozen cohorts/checkpoints live in PostgreSQL. It derives all raw cascade tables from the EF
+  model, streams verified gzip/CSV chunks directly to a mounted NAS, and prunes in paced 25-match
+  transactions. Raw ingestion uses the same window; compact profile/analytics history survives.
+  Backup/restore and disk-heavy periodic jobs share a maintenance gate. See
+  [managed storage](docs/DEPLOYMENT.md#managed-match-archival); the host scripts are legacy migration tools.
 
 ### Job topology
 
 Hangfire runs on PostgreSQL storage with a sliding invisibility timeout and a global
-`AutomaticRetry` of 1. It is split into seven servers, so one slow lane can't starve another:
+`AutomaticRetry` of 1. It is split into eight servers, so one slow lane can't starve another:
 
 | Server | Queues (priority order) | Workers | Workload |
 | --- | --- | --- | --- |
 | main | `refresh-high` → `default` → `refresh-low` | 8 | User refreshes, live-game probes, general jobs |
 | analytics | `analytics-warm` | 1 | Cache warming, adaptive analytics refresh |
 | batch | `analytics-batch` | 1 | Heavy analytics materialization (matchups, Build Atlas, synergies) |
+| storage | `storage-maintenance` | 1 | Bounded NAS archive/verify/prune lifecycle |
 | timeline | `timeline-ingest` | 2 | Timeline fetch and parse |
 | discovery | `discovery` | 2 | Producer-driven summoner refreshes (Riot-bound) |
 | history | `history-backfill` | 1 | Full-history backfill |
 | apex | `apex-crawl` | 1 | Apex ladder crawl (one run at a time, most of a day per pass) |
 
-Worker counts come from `Jobs:Hangfire:Workers:*`.
+Worker counts come from `Jobs:Hangfire:Workers:*`; storage uses one bounded actor.
 
 <details>
 <summary><strong>Recurring jobs</strong> (production <code>stable</code> profile, UTC)</summary>
@@ -220,6 +223,7 @@ the worker verifies registration (3 attempts) and fails if a mandatory job is mi
 | `refresh-lock-lifecycle-cleanup` | `*/5 * * * *` | Mandatory |
 | `retry-failed-matches` | `0 * * * *` | Mandatory |
 | `detect-patch` | `0 */6 * * *` | Mandatory |
+| `archive-matches` | `*/15 * * * *` | Opt-in NAS export/verify/prune; shared maintenance gate |
 | `refresh-champion-analytics-adaptive` | `*/5 * * * *` | Fires after 250 new matches (100 during a new-patch ramp) |
 | `summoner-maintenance` | `*/5 * * * *` | |
 | `match-timeline-backfill` | `*/5 * * * *` | 1,500 per batch, current patch, 60 min cooldown |
@@ -602,3 +606,6 @@ PostgreSQL uses `postgres:18.7-alpine` with the existing parent volume at
 `/var/lib/postgresql` and data in `18/docker`. Patch updates retain that layout;
 major upgrades require an explicit migration and a clean database backup or snapshot.
 Redis 8 retains its existing append-only data and DataProtection keys.
+
+Raw timeline event JSON is retired; structured timeline features and managed NAS archives remain.
+See [production host configuration](docs/PRODUCTION-HOST.md) for the retention and backup setup.

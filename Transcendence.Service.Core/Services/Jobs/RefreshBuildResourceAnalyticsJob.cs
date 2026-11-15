@@ -15,6 +15,7 @@ namespace Transcendence.Service.Core.Services.Jobs;
 /// Generation promotion is handled by the refresher; this job only resolves the active patch and
 /// applies bootstrap/no-op policy.
 /// </summary>
+[Transcendence.Service.Core.Services.Operations.StorageMaintenanceWork]
 public sealed class RefreshBuildResourceAnalyticsJob(
     TranscendenceContext db,
     IBuildResourceSnapshotRefresher refresher,

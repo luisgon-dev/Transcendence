@@ -444,39 +444,44 @@ executes arbitrary plans, drops indexes, or changes database settings.
 
 ### Match Detail Retention and Archival
 
-The binding constraint on tier-list sample size is storage, not the Riot API budget, so old-patch match
-detail is archived off-box and pruned to keep the database from growing unbounded while ingestion scales up.
+The worker owns raw storage retention through `ArchiveMatchesJob` on the dedicated
+`storage-maintenance` queue. `ArchiveRetention` is opt-in and keeps the active patch plus the
+newest `KeepPatches` (default three). Raw ingestion uses the same policy: older details become small
+identity/status tombstones rather than refilling the host with archived payloads. Full-history
+`SummonerMatchFacts`, season aggregates and compact analytics facts remain independent of this
+raw-detail lifetime.
 
-- **Policy:** keep full match detail for the newest `KEEP_PATCHES` (default 3 = active + last 2); every older
-  patch is archived to the NAS, then pruned from Postgres. Cached analytics aggregates for old patches are
-  unaffected (they are recomputed/served from their own stores, not the raw match tables).
-- Full-history profile facts (`SummonerMatchFacts` and the season aggregate/coverage tables) are outside the
-  `Matches` cascade and are not archived by this patch-retention job. They are the durable store for selected
-  players' deeper profile insights.
-- **Archival job** (`scripts/ops/archive-old-patches.sh`, weekly cron on the Docker host): for each eligible
-  patch it streams `Matches` + all cascade children (`MatchParticipants`, `MatchParticipantItems`,
-  `MatchParticipantRunes`, `MatchBans`, `MatchTeamObjectives`, `MatchParticipantTimelineSnapshots`,
-  `MatchTimelineFetchStates`, `MatchParticipantItemPurchases`, `MatchParticipantSkillOrders`,
-  `MatchParticipantItemEvents`, `MatchParticipantRankContexts`, `MatchTimelineEventPayloads`)
-  out via Postgres `COPY` → `gzip` → `ssh` to the NAS, verifies each archive
-  (gzip integrity + exact row count) and only then prunes (one cascading `DELETE` on `Matches`, batched).
-  Restore is `zcat <Table>.csv.gz | psql -c "COPY \"<Table>\" FROM STDIN WITH (FORMAT csv, HEADER true)"`
-  (parents before children).
-- **Consistency under the live writer:** the ingestion worker keeps inserting old-patch matches (lapsed
-  players returning, retried failed matches), so each patch's match-ID set is first frozen into a work table
-  (T0 snapshot); count/export/verify/delete are all bounded to that frozen set. Rows inserted after T0 are
-  excluded (no verify race, no data loss) and archived on the next run (residuals land in a non-clobbering
-  `NAS/<patch>/residual-<epoch>/` once a patch is already `_DONE`).
-- **Plan/throughput:** export uses an adaptive query plan (large slices sequential-scan; small slices force
-  index nested-loops) because the prod DB is HDD-backed; deletes free pages for reuse inside Postgres
-  (`VACUUM FULL` is intentionally avoided — it locks the table — so the file does not shrink but the DB stops
-  growing as new ingestion reuses the freed pages). A one-time `scripts/ops/archive-remaining-bulk.sh` does the
-  same with a single frozen set across all old patches for an initial backlog sweep.
-- **The table list is exhaustive by contract.** The prune is one cascading `DELETE` on `Matches`, so a child
-  table absent from a script's `TABLES` array is destroyed with no archive. Adding a `Match` child in
-  `TranscendenceContext` requires adding it to both archive scripts in the same change.
-- With retention bounding growth, ingestion is scaled up: more enabled regions and a higher per-patch
-  `TargetSuccessfulMatchesForCurrentPatch` (steady-state detail ≈ `KEEP_PATCHES × target` matches).
+`MatchArchiveChunks` and `MatchArchiveEntries` own a bounded, immutable cohort (default 250 matches).
+The job derives its raw table cascade from EF foreign-key metadata, streams PostgreSQL COPY CSV
+through gzip directly to NFS/SMB, counts logical CSV records including quoted newlines, and reads
+back each file to verify its count and SHA-256. Per-table checkpoints survive cancellation and
+rollout. A complete manifest must cover every current cascade table before pruning is allowed.
+Verified files are never replaced after partial pruning. The active/retained patch is rechecked
+inside each small prune transaction, serialized with patch promotion. Source deletion and removal
+of frozen IDs commit together. `_DONE` is written only when the complete cohort has been pruned.
+
+The timeline writer and freezer share the existing per-match advisory lock, and the writer rechecks
+frozen ownership before committing a rewrite. Timeline backfill excludes owned cohorts. Compact
+synergy materialization prioritizes frozen IDs; pruning waits for its inclusion ledger, preserving
+analytics after raw removal. Failed or unavailable NAS verification retains source rows and durable
+progress. The destination must actually be NFS/SMB; a bind of a local fallback directory is rejected.
+
+The host backup/restore tools and archive actor share an exclusive maintenance flock. Periodic
+analytics marked `StorageMaintenanceWork` hold shared leases, allowing normal analytics concurrency
+but deferring new periodic work while an exclusive owner runs. Job-specific concurrency locks are
+acquired first so duplicate jobs waiting for a Hangfire lock cannot block backups. User refreshes,
+live probes and selected-player imports continue on their existing lanes. The next recurring tick
+retries deferred periodic work; timestamps continue exposing actual snapshot age.
+
+The legacy cron/scripts remain migration and break-glass tools. Adoption pauses cron, preserves its
+state and NAS files, and explicitly imports its frozen IDs/manifest into the database checkpoint.
+The former bulk entrypoint is not a second scheduler. Existing flat archives and completed chunks
+remain part of historical recovery; database backup retention never deletes them.
+
+Pruning plus autovacuum makes heap/index pages reusable. It normally does not shrink the filesystem.
+Partitioning could eventually make old-cohort removal cheaper, but converting the existing large
+live tables is a separate capacity/migration project. Neither the archive job nor a deployment
+performs `VACUUM FULL`, a hot-table rewrite, a global Docker prune, or an implicit retention reset.
 
 ### Ingestion Throughput Telemetry
 
@@ -707,7 +712,7 @@ There is no offline model, no generation, and nothing to promote: readers see th
 
 1. **Capture.** The worker remains the only Riot collector and canonical database writer. Timeline
    schema v2 adds per-frame current-gold/lane-CS/jungle-CS, lossless ordered item lifecycle events
-   (purchase/undo/sale/destruction, including components), selected raw timeline event payloads, and
+   (purchase/undo/sale/destruction, including components), and
    nullable match-adjacent rank provenance. **Every one of those is gated on
    `Analytics:BuildLab:Enabled`**, and so is the *effective* schema version:
    `MatchTimelineIngestionJob.TargetSchemaVersion(buildLabEnabled)` returns the v1 baseline (ordered
@@ -787,10 +792,9 @@ is the single source, and the "two-minute profile" is a read-time predicate on `
 table, no dual-write. Because cadence is therefore a storage decision rather than a schema one, it is
 **flag-coupled**: with Build Lab disabled the job honours `Jobs:TimelineIngestion:FrameIntervalMinutes`
 (default 2), and only with it enabled does it drop to one minute. A feature-off deployment does not
-double the ~22.5M-row hot table just to keep the option open. `MatchParticipantItemEvents`,
-`MatchTimelineEventPayloads` (item lifecycle plus `CHAMPION_KILL`, `BUILDING_KILL`,
-`ELITE_MONSTER_KILL`, null union members dropped), and `MatchParticipantRankContexts` are likewise
-written only when Build Lab is enabled.
+double the ~22.5M-row hot table just to keep the option open. `MatchParticipantItemEvents` and `MatchParticipantRankContexts` are likewise written only when
+Build Lab is enabled. The retired raw JSON event corpus is no longer collected or stored; no current
+reader used it. Live-game snapshot JSON is a separate, actively read table and remains supported.
 
 ## Data Access
 

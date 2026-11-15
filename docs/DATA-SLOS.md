@@ -13,6 +13,7 @@ changing query or index policy. Never label a stored observation as a fresh prob
 | Patch coverage | Selected-patch sample status reaches its configured sufficient threshold within 24 hours of regional rollout | Dataset/sample endpoints report games, target coverage and patch phase; report regions still on the previous patch rather than combining them silently |
 | Recent profile import | 95% of accepted requests reach a terminal outcome within two minutes outside a Riot rate-limit incident | Owned operation status timestamps and phase/result fields; partial/failed outcomes remain explicit |
 | Exhaustive history | Eventual terminal outcome; separate from recent-profile success | Child operation and season coverage delta; no fixed completion SLA while Riot throttles historical work |
+| Raw storage lifecycle | No frozen archive chunk pending for more than 24 hours; zero unverified prunes | `match_archive_pending`, `match_archive_pending_age_seconds`, `match_archive_failures_total`; investigate pressure, NAS availability and compact-fact coverage before increasing batch sizes |
 
 ## Provenance and equivalence
 
@@ -37,6 +38,20 @@ indexes. Terminal operations default to seven days, expired auth tokens to one
 additional day. Cleanup is leaf-first and batch-limited; active operations are
 never expired to hide stuck work. Increase cleanup throughput if creation exceeds
 the default 500 rows/table/hour; `operation_retention_deleted_total` records work.
+
+## Managed storage maintenance
+
+Managed archive retention preserves the active patch and the newest configured patch window. Its
+row cohort and per-table export progress are durable database state. Each gzip/CSV export is read
+back and checked against its streamed row count and SHA-256 before source pruning. Schema-derived
+cascade coverage must match the verified manifest. Frozen timelines stop accepting rewrites, and
+new raw imports outside the same window retain only small identity/status tombstones. Compact
+per-summoner facts, season aggregates and analytics inclusion ledgers have separate retention.
+
+The archive job, backups and restore drills take an exclusive shared-host maintenance lease.
+Disk-heavy periodic analytics take shared leases and defer to the next recurrence while an exclusive
+owner is active. Foreground refresh/import work is outside that deferral policy. A large backup can
+therefore delay scheduled analytics; freshness timestamps continue reporting their actual age.
 
 ## Product measurement
 

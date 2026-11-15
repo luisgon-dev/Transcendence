@@ -38,7 +38,7 @@ public sealed class AuthorizationBoundaryTests(PostgresIntegrationFixture fixtur
         var response = await client.GetAsync("/api/admin/release");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var release = await response.Content.ReadFromJsonAsync<Transcendence.Service.Core.Services.Admin.Models.AdminReleaseResponse>();
-        release!.LatestAppliedMigration.Should().EndWith("AuditAuthAndOperationRetention");
+        release!.LatestAppliedMigration.Should().EndWith("RetireUnusedTimelineEventPayloads");
         release.SourceRevision.Should().NotBeNullOrWhiteSpace();
     }
 

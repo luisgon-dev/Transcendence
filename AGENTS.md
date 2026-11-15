@@ -58,6 +58,9 @@ Monorepo with a **.NET backend** (WebAPI + Hangfire Worker) and a **Next.js fron
 - **BFF proxy** — Next.js proxies API requests to the backend; auth tokens live in HttpOnly cookies.
 - **Summoner refresh flow** — the Riot-ID lookup returns `200` with `ready` / `refreshing` / `missing` availability. Signed-in `POST …/refresh` returns required `OperationAcceptedResponse`; clients poll authenticated `GET /api/lol/operations/{operationId}` for recent-import completion, not lookup readiness. Full history is separately tracked child work. Live probes use the same owned operation boundary and return the exact persisted observation.
 - **Tech stack** — PostgreSQL 18, Redis 8, Hangfire (job processing), HybridCache (L1 in-memory + L2 Redis).
+- **Raw storage lifecycle** — `archive-matches` is a managed worker job on `storage-maintenance`.
+  Preserve `MatchArchiveChunks`/`MatchArchiveEntries`, all NAS chunk manifests, compact history and
+  the shared backup/restore maintenance lock. Do not re-enable legacy host archive cron after adoption.
 
 For deeper context see `docs/ARCHITECTURE.md`, `docs/DEVELOPMENT.md`, and `docs/API.md`.
 For production delivery use `docs/DEPLOYMENT.md`: signed complete release bundles,

@@ -49,6 +49,7 @@ public sealed class WorkerRecurringJobPolicy(
     public const string RefreshBuildResourceAnalyticsJobId = "refresh-build-resource-analytics";
     public const string RefreshBuildLabStatsJobId = "refresh-build-lab-stats";
     public const string RefreshDatasetStatsJobId = "refresh-dataset-stats";
+    public const string ArchiveMatchesJobId = "archive-matches";
 
     // Jobs that no longer exist. They stay in the descriptor list as permanently disabled entries so
     // startup keeps removing them from Hangfire storage on hosts that registered them before; a
@@ -89,6 +90,7 @@ public sealed class WorkerRecurringJobPolicy(
         RefreshBuildResourceAnalyticsJobId,
         RefreshBuildLabStatsJobId,
         RefreshDatasetStatsJobId,
+        ArchiveMatchesJobId,
         RetiredCreateBuildLabGenerationJobId,
         RetiredPromoteBuildLabGenerationJobId
     ];
@@ -112,6 +114,11 @@ public sealed class WorkerRecurringJobPolicy(
     {
         var descriptors = new List<WorkerRecurringJobDescriptor>
         {
+            CreateDescriptor(ArchiveMatchesJobId, "Jobs:Schedule:ArchiveMatchesCron",
+                schedule.ArchiveMatchesCron, schedule.EnableArchiveMatches,
+                (manager, cron) => manager.AddOrUpdate<ArchiveMatchesJob>(ArchiveMatchesJobId,
+                    job => job.ExecuteAsync(CancellationToken.None), cron,
+                    new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc })),
             CreateDescriptor(RefreshChampionSynergyFactsJobId, "Jobs:Schedule:RefreshChampionSynergyFactsCron",
                 schedule.RefreshChampionSynergyFactsCron, schedule.EnableRefreshChampionSynergyFacts,
                 (manager, cron) => manager.AddOrUpdate<RefreshChampionSynergyFactsJob>(RefreshChampionSynergyFactsJobId,

@@ -16,6 +16,7 @@ namespace Transcendence.Service.Core.Services.Jobs;
 /// Tops up the Build Lab stats with matches counted since the last run. Each run is bounded by
 /// <see cref="BuildLabOptions.MaxMatchesPerRun"/>, so a fresh patch backfills across several runs.
 /// </summary>
+[Transcendence.Service.Core.Services.Operations.StorageMaintenanceWork]
 public sealed class RefreshBuildLabStatsJob(
     TranscendenceContext db,
     IBuildLabStatsRefresher refresher,

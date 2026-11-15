@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily Transcendence database backup
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 America/Los_Angeles
+RandomizedDelaySec=20min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

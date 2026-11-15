@@ -1,0 +1,33 @@
+# Optional inner edge. Configure the existing TLS proxy to use these private ports after testing.
+services:
+  release-edge:
+    image: traefik:v3.7.19@sha256:b7b1b31e6440de0b1f7c4e0f6cf0a0f3f004866761d30c025fe00c80daaf7d9c
+    restart: unless-stopped
+    cpus: "0.5"
+    mem_limit: 256m
+    pids_limit: 128
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    command:
+      - --entrypoints.web.address=:3000
+      - --entrypoints.webapi.address=:8080
+      - --entrypoints.web.forwardedheaders.trustedips=${EDGE_TRUSTED_PROXY_CIDRS:?Set the actual TLS proxy CIDRs}
+      - --entrypoints.webapi.forwardedheaders.trustedips=${EDGE_TRUSTED_PROXY_CIDRS:?Set the actual TLS proxy CIDRs}
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
+    ports:
+      - ${RELEASE_EDGE_BIND_ADDRESS:-127.0.0.1}:${RELEASE_EDGE_WEB_PORT:-3001}:3000
+      - ${RELEASE_EDGE_BIND_ADDRESS:-127.0.0.1}:${RELEASE_EDGE_API_PORT:-8082}:8080
+    volumes:
+      # Mount the directory so atomic file replacement triggers the file watcher.
+      - ${RELEASE_TRAFFIC_DIRECTORY:-/var/lib/transcendence-release/traffic}:/etc/traefik/dynamic:ro
+    networks:
+      app:
+        # Stable monitoring targets survive slot changes. Initial adoption can briefly
+        # share these aliases with legacy containers until their traffic has drained.
+        aliases: [transcendence-web, transcendence-webapi]
+networks:
+  app:
+    external: true
+    name: ${RELEASE_APP_NETWORK:-transcendence_transcendence-net}

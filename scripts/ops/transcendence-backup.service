@@ -1,0 +1,13 @@
+[Unit]
+Description=Encrypted off-host Transcendence database backup
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/transcendence-backup.conf
+Environment=TRN_RELEASE_TEXTFILE_DIR=/var/lib/transcendence-perf/textfile
+ExecStart=/usr/bin/python3 -B /var/lib/transcendence-release/current/scripts/ops/release_backup.py backup
+UMask=0077
+TimeoutStartSec=2h
+TimeoutStopSec=5min

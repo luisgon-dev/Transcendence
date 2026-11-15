@@ -1,0 +1,14 @@
+# JSON syntax is valid YAML; the .yml suffix is required by Traefik's file watcher.
+{
+  "http": {
+    "routers": {
+      "web": {"entryPoints": ["web"], "rule": "PathPrefix(`/`)", "service": "web", "middlewares": ["deployment"]},
+      "webapi": {"entryPoints": ["webapi"], "rule": "PathPrefix(`/`)", "service": "webapi", "middlewares": ["deployment"]}
+    },
+    "middlewares": {"deployment": {"headers": {"customResponseHeaders": {"X-TRN-Deployment": "legacy"}}}},
+    "services": {
+      "web": {"loadBalancer": {"servers": [{"url": "http://LEGACY_WEB_PRIVATE_IP:3000"}]}},
+      "webapi": {"loadBalancer": {"servers": [{"url": "http://LEGACY_API_PRIVATE_IP:8080"}]}}
+    }
+  }
+}

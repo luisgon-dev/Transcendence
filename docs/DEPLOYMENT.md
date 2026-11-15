@@ -1,0 +1,293 @@
+# Complete application releases
+
+The recommended production path is GitHub Actions → signed release bundle → host
+pull → isolated staging → migration → application rollout → public verification.
+Docker Compose remains the runtime. PostgreSQL and Redis are never recreated by
+an application deployment. The existing per-image poller remains available during
+host migration; install exactly one automatic deployment controller.
+
+## Release contract
+
+Every main build produces all three application images. CI records their exact
+OCI digests and source revision, assembles `release.tgz`, then starts those same
+artifacts in a disposable production-mode Compose stack. It migrates a fresh
+PostgreSQL database, seeds a stored profile, starts Redis/API/web, and exercises
+the home page, content readiness, backend diagnostics, profile page and public
+BFF database search. The worker runs only with `Database:MigrateOnly=true`, so
+staging never starts ingestion or recurring jobs.
+
+Only successful staging can publish a complete GitHub Release named
+`release-<full source revision>`. Its assets are:
+
+- `release.json`: schema version, source revision, all three image digests, and
+  checksums of the Compose configuration and deployment tooling.
+- `release.tgz`: that manifest, configuration, agent, backup tooling and seed.
+- `release.sigstore.json`: keyless cosign bundle covering the entire archive.
+
+The release remains a draft until all assets are uploaded. Legacy `:main` aliases
+advance afterwards for hosts still migrating. Coordinated deployments never
+resolve those aliases. Existing completed releases must not be edited or reused
+for different image digests; publish another commit instead.
+
+The installed bootstrap verifies the archive before extraction or code execution,
+requiring the repository's `docker-images.yml` workflow on `refs/heads/main` and
+GitHub's OIDC issuer. It rejects path traversal, links, duplicate archive entries,
+unexpected files, checksum drift and unsupported protocols. The versioned agent
+also verifies each application image's signature and source identity.
+
+## Adopt on the production host
+
+Prerequisites: Linux, Python 3.12+, Docker Engine/Compose v2, outbound GitHub/GHCR,
+Sigstore and application CDN access, and sufficient Docker disk headroom. Keep
+the existing `/root/transcendence/.env` root-owned mode 0600. This file stays
+outside release bundles. Preserve its actual port bindings, database tuning,
+proxy settings and credentials when reviewing the new configuration.
+
+Wait for the first complete release to appear in GitHub before installation.
+Set `WEB_BIND_ADDRESS` and `API_BIND_ADDRESS` explicitly in the application `.env`
+before adoption. With Nginx Proxy Manager in another LXC, use the Docker LXC's
+private LAN address; loopback is reachable only inside the Docker LXC. See
+`config/deploy/npm.env.example`. Also configure `TRUSTED_PROXY_NETWORK_1` as the
+NPM LXC's exact IP/CIDR, while network 0 covers the BFF/application Docker subnet.
+From an updated repository checkout:
+
+```bash
+git pull --ff-only
+install -m 0600 config/deploy/release.env.example /etc/transcendence-release.conf
+# Review /etc/transcendence-release.conf and the existing application .env.
+bash scripts/ops/install-release-deployer.sh
+systemctl start transcendence-release.service
+journalctl -u transcendence-release.service -n 100 --no-pager
+cat /var/lib/transcendence-release/status.json
+```
+
+The installer disables future legacy timer polls; an in-progress legacy run can
+finish under the shared lock. The new timer checks every five minutes after the
+previous run completes. `flock` serializes scheduled deployment, direct retries
+and the old updater. Keep Komodo/other automatic recreators disabled for these
+same containers. Komodo can invoke this bootstrap as the sole controller instead
+of enabling the timer; it must not independently update the three images.
+
+The bootstrap is intentionally small and stable. Bundle changes automatically
+update the versioned deployment agent; a future bootstrap protocol change needs
+an explicit reinstall. No inbound SSH or GitHub runner on the Docker host is
+required.
+
+## Deployment behavior
+
+1. Validate the complete image/configuration contract, trusted proxy settings,
+   public origin and credentials; check free space on both state and Docker disks
+   (default reserve 5 GiB, `TRN_RELEASE_MIN_FREE_GIB`, minimum 1 GiB).
+2. Verify and pull all three digest-pinned images, then repeat the capacity check.
+3. Test the bundle again in a separate, resource-limited staging project. Each
+   network/volume is unique; production environment variables cannot override
+   the staging secrets, Redis address, feature flags or PostgreSQL tuning.
+4. Capture a private rollback configuration, actual running image IDs, ports,
+   mounts, environment and networks. Retention tags keep previous images local.
+5. Prepare log/cache mount ownership and run the migration-only worker once.
+   Normal API/worker containers have automatic migration disabled.
+6. Replace worker → API → web, health-check each, verify their actual image IDs,
+   then probe the public site and expected web revision through the real proxy.
+   The public API readiness route must also return the expected `X-TRN-Release`.
+7. Commit `current.json` and the `current` tooling symlink only after validation.
+
+The public probe retries transient asset warmup within a bounded deadline.
+Readiness includes actual optimized champion/item/rune/splash output. A 200 from
+backend diagnostics is insufficient unless its JSON also says `ok: true`.
+
+Application failures preserve bounded private diagnostics before rolling back the
+whole application to its captured configuration. Database changes are retained.
+**Migrations must support both the previous and new application versions**:
+expand first, migrate data separately, remove obsolete schema in a later release
+after rollback support expires. Destructive/hot-table migrations require a
+separate reviewed maintenance plan; image rollback never runs EF `Down`.
+
+A failed release stays quarantined across polls and reports a nonzero exit and
+degraded metrics. A newer verified release can proceed. Inspect the private
+`attempts/<release>/` directory before an explicit retry:
+
+```bash
+systemctl stop transcendence-release.timer
+release=release-REPLACE_WITH_FULL_REVISION
+bundle=/var/lib/transcendence-release/releases/$release
+python3 "$bundle/scripts/ops/release_deploy.py" retry --bundle "$bundle"
+systemctl start transcendence-release.timer
+```
+
+Each rollout also writes a durable `transaction.json` before production changes.
+Graceful interruption stops its named migration container and restores the captured
+application baseline. If the process/host is killed outright, future polls stop
+and preserve the original snapshot instead of treating a mixed stack as the new
+baseline. Use the retained bundle's recovery command before retrying or deploying
+another release:
+
+```bash
+python3 "$bundle/scripts/ops/release_deploy.py" recover --bundle "$bundle"
+```
+
+Recovery uses the transaction's saved routes, public origins and configuration,
+and leaves the interrupted release quarantined for review. Stop operations allow
+time for rollback; a hard kill requires this explicit recovery step. PostgreSQL
+and Redis are never stopped by recovery.
+
+Pass the matching `--mode`, `--traffic-file`, `--base-url`, `--api-url`, `--env-file` and
+`--network` when using nondefault deployment settings. Direct retries acquire
+the deployment locks too. Never delete quarantine automatically on a timer.
+
+For an application rollback after a release was accepted, set `TRN_RELEASE_PIN`
+in `/etc/transcendence-release.conf` to a retained complete release, then start the
+service. The pin persists across polls until an operator removes it. Confirm
+schema backward compatibility first. Recovery of database contents is a distinct
+operation using backups.
+
+Successful rollouts retain three successful configurations and a bounded recent
+failure history by default (`TRN_RELEASE_RETAIN`, 2–10). State and resolved
+configuration contain credentials and remain mode 0600 under a private directory.
+Only owned retention tags/old slot containers are eligible for cleanup; there is
+no global image/volume prune.
+
+## Optional blue-green web/API routing
+
+Replacement deployment is the default. Blue-green requires explicit adoption of
+the inner Traefik edge because the existing TLS proxy's configuration is not
+owned by this repository. Install and validate this route before enabling it:
+
+```bash
+systemctl stop transcendence-release.timer
+install -d -m 0755 /var/lib/transcendence-release/traffic
+python3 scripts/ops/release_edge.py
+# Set EDGE_TRUSTED_PROXY_CIDRS to the actual TLS proxy source CIDRs.
+docker compose -p transcendence-edge -f config/deploy/compose.yml up -d
+```
+
+The preparation helper targets the current containers' private IPs and refuses to
+overwrite an existing route. Keep the release timer paused while preparing and
+testing this edge so a replacement cannot invalidate those initial IPs. After
+testing NPM's new upstream and enabling blue-green mode, restart the release timer.
+Subsequent releases use unique slot DNS names automatically.
+
+The inner edge uses private host ports 3001/8082 by default. Test it, then point
+the existing TLS proxy to those ports or its internal Docker service. Retain TLS,
+trusted-header rewriting and the original public origins. Set in the release
+configuration:
+
+```dotenv
+TRN_RELEASE_MODE=blue-green
+TRN_RELEASE_TRAFFIC_FILE=/var/lib/transcendence-release/traffic/active.yml
+TRN_RELEASE_NETWORK=transcendence_transcendence-net
+```
+
+For NPM in a separate LXC, configure `RELEASE_EDGE_BIND_ADDRESS` as the Docker
+LXC's private LAN IP and `EDGE_TRUSTED_PROXY_CIDRS` as the NPM LXC's IP/32.
+Keep the existing certificate/SSL settings in NPM. Its website proxy host forwards
+HTTP to `Docker-LXC-IP:3001`; the separate API proxy host forwards to `:8082`.
+Permit those ports only from the NPM LXC. The browser continues using the same
+HTTPS origins. No NPM administrator token is needed for later release switches.
+
+The candidate API trusts at most two configured forwarding hops for NPM → inner
+edge. Normal replacement deployment defaults to one (`FORWARDED_HEADER_LIMIT`);
+only known proxy networks may advance either hop. Keep network CIDRs narrow.
+NPM must overwrite client IP/protocol headers; remove an incoming
+`CF-Connecting-IP` unless the edge has verified a Cloudflare sender. The BFF
+continues forwarding one validated client address to the API.
+
+Candidates use unique service names and DNS aliases on the existing application
+network; warming a candidate cannot redirect the active web process's API calls.
+Cache/log volumes stay shared and persistent. The candidate is verified on an
+ephemeral loopback port before worker replacement and atomic traffic-file
+switching. Public verification confirms the expected source revision and the
+slot's `X-TRN-Deployment` response header, including adoption at the same source
+revision. NPM must preserve that response header.
+Failure restores the previous traffic file and worker; a successful cutover stops
+the old web/API slot. The edge supplies stable monitoring aliases after legacy
+containers stop. The file must have a `.yml` extension for Traefik's watcher.
+
+To return to replacement mode, first restore the normal containers and explicitly
+route the edge to them during a maintenance window; remove/re-adopt the managed
+release state only after verifying that route. The agent rejects an implicit
+mode change that would leave traffic attached to an unmanaged slot. Blue-green
+does not provide host or database failover; that requires additional hosts.
+
+## Backups and restore drills
+
+Install `restic` on the host and configure an **off-host** encrypted repository.
+Initialize it explicitly, store its password independently of the Docker host,
+and install `config/deploy/backup.env.example` as the root-only
+`/etc/transcendence-backup.conf` with your provider credentials and password-file
+path. Keep a separate protected recovery copy of the application environment and
+cluster roles; these database backups contain application data/schema without
+ownership/ACL restoration.
+
+For the Unraid NAS, a dedicated NFS/SMB backup share is supported without granting
+the application LXC NAS-administrator SSH access. Export a dedicated share with
+access restricted to the mounting client's private IP. Mount it persistently at
+`/mnt/transcendence-backups`; if the Docker LXC cannot mount NFS itself, mount on
+the LXC host and bind that mounted share into the container. Ensure the LXC's
+mapped user can write it. `backup.env.example` uses a restic subdirectory there.
+The backup code requires both a real mount point and an NFS/SMB filesystem, so an
+unmounted share or a bind of its empty local directory cannot fill the Docker disk.
+
+After installing the backup configuration/password file, initialize the repository
+in an operator shell before enabling the services:
+
+```bash
+set -a
+. /etc/transcendence-backup.conf
+set +a
+python3 /var/lib/transcendence-release/current/scripts/ops/release_backup.py check-destination
+restic init
+```
+
+Keep the repository password in an independent recovery location. A dedicated
+restricted SFTP account or another remote restic backend is also supported; use
+the NAS mount guard only for filesystem repositories. NAS-side snapshots, when
+available, can protect retained backups independently of the application host.
+
+After one successful managed release, install the units:
+
+```bash
+for unit in transcendence-backup.service transcendence-backup.timer transcendence-restore-drill.service transcendence-restore-drill.timer; do
+  install -m 0644 "scripts/ops/$unit" "/etc/systemd/system/$unit"
+done
+systemctl daemon-reload
+systemctl start transcendence-backup.service
+systemctl start transcendence-restore-drill.service
+# Enable schedules after both manual checks succeed.
+systemctl enable --now transcendence-backup.timer transcendence-restore-drill.timer
+```
+
+The daily dump streams to a private temporary file with a deadline and disk-space
+guard, uploads with restic, checks repository integrity and applies tag-scoped
+7-daily/4-weekly/6-monthly retention. Local dumps are removed after every outcome.
+The weekly drill selects one snapshot for this host, retrieves that exact dump,
+restores a fresh PostgreSQL 18 container with no network or published ports, then
+queries real migration and summoner tables. It checks disk headroom first and
+removes only its own disposable container/volume afterwards. Successful backup
+and restore timestamps advance only after the entire operation succeeds.
+Defaults are daily at 3 AM Pacific and Sunday at 5 AM Pacific, with up to twenty
+minutes of jitter. Customize them with systemd timer overrides.
+
+## Monitoring and network requirements
+
+The release and backup services write textfile metrics into the existing
+`/var/lib/transcendence-perf/textfile` collector directory. Override with
+`TRN_RELEASE_TEXTFILE_DIR` only if node-exporter mounts that same directory.
+Sync `config/monitoring/grafana/provisioning/alerting/deployment.yml` using the
+existing monitoring runbook. It alerts on a rollout degraded for ten minutes,
+verification stale for twenty minutes, backup older than 36 hours, or restore
+drill older than eight days. Optional services do not alert before their first
+successful metric; verify that first run manually during installation.
+
+`status.json` records desired/deployed release, phase and last verification time.
+Quarantine and later idle polls cannot turn a failed rollout green. Missing or
+manually changed container images and a failed public probe remain degraded.
+
+Staging requires normal application CDN connectivity from its containers. Next's
+image optimizer pins outbound destinations for SSRF protection; generic Node proxy
+settings do not cover every optimizer request. Configure the network's approved
+egress route when required. Keep TLS verification and image-host/IP validation
+enabled. A CDN failure must fail content readiness, not silently skip the gate.
+
+The old poller and its break-glass runbook remain in `scripts/ops/README.md` for
+hosts that have not migrated. A merge alone neither installs host services nor
+switches the user's existing proxy or backup destination.

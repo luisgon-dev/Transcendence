@@ -71,6 +71,26 @@ jobs:
       - name: Audit Dependencies
         run: pnpm audit --audit-level=high
 
+  release-staging:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify complete deployment with fixed signed runtime artifacts
+        run: python3 scripts/ci/staging-regression.py --state "$RUNNER_TEMP/release-staging"
+      - name: Install pinned restic test binary
+        run: |
+          restic_image="$(awk '$1 == "FROM" {print $2; exit}' scripts/ci/Dockerfile)"
+          docker create --name restic-tool "$restic_image"
+          docker cp restic-tool:/usr/bin/restic "$RUNNER_TEMP/restic"
+          docker rm restic-tool
+      - name: Verify encrypted backup and actual database restore
+        run: python3 scripts/ci/backup-regression.py --restic "$RUNNER_TEMP/restic"
+      - name: Verify real edge cutover and rollback
+        run: python3 scripts/ci/edge-regression.py
+
   web:
     runs-on: ubuntu-latest
 

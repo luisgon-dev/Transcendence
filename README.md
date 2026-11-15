@@ -429,36 +429,30 @@ to `main`:
 | `performance` | Migrates and seeds Postgres. Runs k6 against p95 budgets (ready < 200 ms; leaderboards < 500–750 ms; query matrix < 1.5 s) and Lighthouse budgets (performance ≥ 0.8, LCP ≤ 4 s, CLS ≤ 0.1, TBT ≤ 350 ms, ≤ 1.6 MB) |
 | `migration-safety` | `check-migrations.sh` plus `ef migrations has-pending-model-changes` |
 | `migration-apply` | Applies the full migration chain to an empty database |
+| `release-staging` | Verifies signed runtime fixtures in isolated production-mode Compose, real CDN/image and BFF delivery, encrypted backup and actual database restore |
 
 **Images** ([`docker-images.yml`](.github/workflows/docker-images.yml)):
 - **Components:** `webapi`, `service`, `web`, and `perf`, built as a matrix.
-- **Path filters:** each component rebuilds only when its paths change. Release tags rebuild all of
-  them.
-- **Publishing:** images go to GHCR, tagged `:main`, `sha-<short>`, and semver. Each image ships an
+- **Application releases:** all three app images build together; the optional perf image uses path filters.
+- **Publishing:** images go to GHCR, tagged `sha-<short>` and semver. Each image ships an
   SBOM and max-mode provenance, and is signed with **cosign keyless** (GitHub OIDC).
 - **Supply chain:** all actions are SHA-pinned, and Dependabot runs weekly for npm, NuGet, Actions,
   and Docker.
 - **Runtime:** every Dockerfile is multi-stage and digest-pinned, runs as non-root, and bakes in a
   `HEALTHCHECK`.
 
-**Deploy** is pull-based. On the production host, a systemd timer runs
-[`poll-deploy.sh`](scripts/ops/poll-deploy.sh) every 60 s:
+**Deploy** is pull-based using a complete signed release bundle. After all image builds,
+signatures and exact-artifact staging pass, CI publishes a release containing digest-pinned
+images, checksummed Compose configuration and versioned deployment tooling. Legacy `:main`
+aliases advance only afterwards. The host verifies the bundle, stages it in isolation,
+runs migrations once, and verifies the complete application through the public proxy.
+Failed rollouts preserve diagnostics, restore the previous application configuration and
+remain visibly quarantined. Database migrations are retained and must be backward compatible.
 
-1. Resolve each remote `:main` digest and its `org.opencontainers.image.revision` label, and compare
-   them with the running container.
-2. **Verify the signature:** run `cosign verify` (from a digest-pinned container) on the exact digest,
-   requiring `docker-images.yml` on `refs/heads/main` as the signer. An unverified release is never
-   pulled; after the pull, the local `:main` must still be the verified digest.
-3. **Worker first:** run a one-shot container with `Database__MigrateOnly=true`. If the migration
-   fails, quarantine that digest.
-4. **Hold the API** while the worker's revision is behind on `Migrations/`.
-5. Recreate services in order (worker → API → web), then wait up to 420 s for the container to
-   report healthy.
-6. **On failure:** roll back to the previous container or image and quarantine the digest until
-   `:main` moves. Every outcome is posted to a webhook.
-
-Pruning runs only after a deploy, never while a pull is in flight. Runbook:
-[`scripts/ops/README.md`](scripts/ops/README.md).
+The opt-in host installer replaces the legacy per-image timer. Optional blue-green routing,
+encrypted off-host backups, restore drills and deployment alerts are included. Installation,
+promotion, rollback and proxy setup: [deployment runbook](docs/DEPLOYMENT.md). The legacy
+poller's runbook remains in [`scripts/ops/README.md`](scripts/ops/README.md).
 
 ## Local development
 

@@ -1336,6 +1336,11 @@ private. Main aliases advance only after a complete release passes exact-image
 staging. Installing the new bootstrap disables the legacy timer; a repository
 merge alone does not change the host's deployment owner.
 
+For encrypted NAS recovery of application credentials, opt in with
+`TRN_BACKUP_APP_ENV_FILE=/root/transcendence/.env` in the private backup configuration.
+The file must have no group/other permissions and is included in each encrypted database snapshot;
+keep the restic password separately. The backup CI fixture verifies byte-for-byte recovery.
+
 `TRUSTED_PROXY_NETWORK_1` defaults to loopback and can name the TLS proxy's exact
 private CIDR when it is outside the application Docker network.
 `FORWARDED_HEADER_LIMIT` defaults to 1 and accepts only 1 or 2; blue-green API

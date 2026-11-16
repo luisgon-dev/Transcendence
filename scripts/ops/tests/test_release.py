@@ -540,6 +540,18 @@ class BackupTests(unittest.TestCase):
                 backup.run(['restic', 'check'])
             run.assert_not_called()
 
+    def test_missing_or_public_application_secrets_fail_before_dump(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(backup.subprocess, 'Popen') as dump:
+            environment = Path(tmp) / 'application.env'
+            for contents in (None, 'fixture-secret'):
+                if contents is not None:
+                    environment.write_text(contents)
+                    environment.chmod(0o644)
+                with patch.dict(os.environ, {'TRN_BACKUP_APP_ENV_FILE': str(environment)}):
+                    with self.assertRaisesRegex(ValueError, 'absolute private file'):
+                        backup.backup(Path(tmp), 'production-postgres', 1024**3)
+            dump.assert_not_called()
+
     def test_missing_nas_mount_cannot_fall_back_to_a_local_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaisesRegex(ValueError, 'not mounted'):

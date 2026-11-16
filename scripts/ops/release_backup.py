@@ -92,6 +92,13 @@ def validate_destination(repository, mount):
 def backup(state, container, reserve_bytes, archive_state=None):
     dump = state / "database.dump"
     metadata = state / "database-size.txt"
+    recovery = os.environ.get("TRN_BACKUP_APP_ENV_FILE") or None
+    if recovery:
+        recovery = Path(recovery)
+        if not recovery.is_absolute() or not recovery.is_file() or recovery.stat().st_mode & 0o077:
+            raise ValueError("Application recovery environment must be an existing absolute private file")
+        # Restic otherwise stores a command-line symlink rather than its contents.
+        recovery = recovery.resolve(strict=True)
     def call(command):
         return run(command, diagnostics=state / "last-command.log")
     try:
@@ -127,6 +134,8 @@ def backup(state, container, reserve_bytes, archive_state=None):
                         process.wait()
         # The operator initializes and supplies an encrypted off-host restic repository.
         command = ["restic", "backup", "--tag", "transcendence-database", str(dump), str(metadata)]
+        if recovery is not None:
+            command.append(str(recovery))
         if archive_state is not None:
             command += ["--exclude", str(archive_state / "run.lock"),
                         "--exclude", str(archive_state / "exclusive.lock"), str(archive_state)]
@@ -160,8 +169,12 @@ def restore_drill(state, image, reserve_bytes=5 * 1024**3):
                 raise RuntimeError("Could not retrieve the latest database backup")
         try:
             # Private network namespace, no published ports, no production volume or ingestion worker.
+            # This clone is discarded after verification. Avoid vacuum scans and
+            # frequent checkpoints competing with its bulk load/index rebuilds.
             run(["docker", "run", "-d", "--name", container, "--network", "none", "--memory", "2g",
-                 "--cpus", "2", "-e", "POSTGRES_HOST_AUTH_METHOD=trust", "-e", "POSTGRES_DB=restore_drill", image])
+                 "--cpus", "2", "-e", "POSTGRES_HOST_AUTH_METHOD=trust", "-e", "POSTGRES_DB=restore_drill", image,
+                 "-c", "autovacuum=off", "-c", "max_wal_size=8GB", "-c", "checkpoint_timeout=15min",
+                 "-c", "maintenance_work_mem=512MB"])
             for _ in range(60):
                 result = subprocess.run(["docker", "exec", container, "pg_isready", "-h", "127.0.0.1", "-U", "postgres"], capture_output=True)
                 if result.returncode == 0:

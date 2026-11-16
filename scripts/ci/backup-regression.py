@@ -2,6 +2,7 @@
 """Round-trip a disposable database through an encrypted local restic test repository."""
 import argparse
 import importlib.util
+import json
 import os
 from pathlib import Path
 import secrets
@@ -26,7 +27,11 @@ def main():
         password = scratch / 'password'
         password.write_text(secrets.token_hex(32))
         password.chmod(0o600)
+        application_env = scratch / 'application.env'
+        application_env.write_bytes(b'BACKUP_FIXTURE_SECRET=encrypted-recovery-fixture\n')
+        application_env.chmod(0o600)
         os.environ.update(RESTIC_REPOSITORY=str(scratch / 'repository'), RESTIC_PASSWORD_FILE=str(password),
+                          TRN_BACKUP_APP_ENV_FILE=str(application_env),
                           RESTIC_CACHE_DIR=str(scratch / 'cache'),
                           TRN_RELEASE_TEXTFILE_DIR=str(scratch / 'metrics'),
                           PATH=str(args.restic.resolve().parent) + os.pathsep + os.environ['PATH'])
@@ -50,6 +55,9 @@ def main():
             backup.run(['docker', 'exec', '-i', container, 'psql', '-U', 'postgres', '-d', 'backup_fixture',
                         '-v', 'ON_ERROR_STOP=1'], input=sql.encode())
             backup.backup(state, container, 1024**3)
+            snapshots = json.loads(backup.run(['restic', 'snapshots', '--json', '--tag', 'transcendence-database']))
+            recovered = backup.run(['restic', 'dump', snapshots[-1]['id'], str(application_env)])
+            assert recovered == application_env.read_bytes(), 'Encrypted application environment recovery failed'
             backup.restore_drill(state, image, 1024**3)
             assert not (state / 'database.dump').exists()
             assert (scratch / 'metrics/database_backup.prom').is_file()

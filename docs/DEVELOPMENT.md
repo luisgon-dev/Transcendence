@@ -1387,3 +1387,9 @@ not a reversible archive move. No hot-table rewrite or schema-v2 re-ingestion is
 Do not hand-edit either migration. Run `MatchArchiveStorageTests`
 and `MatchArchivePostgresTests` when changing cascade discovery, CSV verification, checkpointing,
 adoption or maintenance locking. The latter use real PostgreSQL and generated migrations.
+
+Archive failures reload the durable checkpoint before recording an error or retrying a smaller
+transaction, so EF's tentative tracked values cannot become false prune progress after rollback.
+The archive connection is closed and its advisory ownership released even if pending-count metrics
+fail. PostgreSQL fault-injection tests cover checkpoint-write timeouts, exact resume counts, and
+connection cleanup after a failed metrics query.

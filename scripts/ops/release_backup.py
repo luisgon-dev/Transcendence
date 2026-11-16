@@ -92,6 +92,13 @@ def validate_destination(repository, mount):
 def backup(state, container, reserve_bytes, archive_state=None):
     dump = state / "database.dump"
     metadata = state / "database-size.txt"
+    recovery = os.environ.get("TRN_BACKUP_APP_ENV_FILE") or None
+    if recovery:
+        recovery = Path(recovery)
+        if not recovery.is_absolute() or not recovery.is_file() or recovery.stat().st_mode & 0o077:
+            raise ValueError("Application recovery environment must be an existing absolute private file")
+        # Restic otherwise stores a command-line symlink rather than its contents.
+        recovery = recovery.resolve(strict=True)
     def call(command):
         return run(command, diagnostics=state / "last-command.log")
     try:
@@ -127,6 +134,8 @@ def backup(state, container, reserve_bytes, archive_state=None):
                         process.wait()
         # The operator initializes and supplies an encrypted off-host restic repository.
         command = ["restic", "backup", "--tag", "transcendence-database", str(dump), str(metadata)]
+        if recovery is not None:
+            command.append(str(recovery))
         if archive_state is not None:
             command += ["--exclude", str(archive_state / "run.lock"),
                         "--exclude", str(archive_state / "exclusive.lock"), str(archive_state)]

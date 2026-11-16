@@ -218,8 +218,13 @@ Install `restic` on the host and configure an **off-host** encrypted repository.
 Initialize it explicitly, store its password independently of the Docker host,
 and install `config/deploy/backup.env.example` as the root-only
 `/etc/transcendence-backup.conf` with your provider credentials and password-file
-path. Keep a separate protected recovery copy of the application environment and
-cluster roles; these database backups contain application data/schema without
+path. After approving credential storage in the encrypted repository, set
+`TRN_BACKUP_APP_ENV_FILE=/root/transcendence/.env` to include the private application environment
+in every database snapshot. The file must exist at an absolute path with no group/other permissions;
+a missing or public file fails the backup before dumping. Recover it with
+`restic dump SNAPSHOT_ID /root/transcendence/.env` into a mode-0600 file on the replacement host.
+Keep the repository password in an independent recovery location. Also preserve cluster roles;
+these database backups contain application data/schema without
 ownership/ACL restoration.
 
 For the Unraid NAS, a dedicated NFS/SMB backup share is supported without granting

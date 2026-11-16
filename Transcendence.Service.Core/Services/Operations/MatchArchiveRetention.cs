@@ -121,12 +121,21 @@ public sealed class MatchArchiveRetention(
             return;
         }
         destination.Verify(Settings.Directory);
-        await db.Database.OpenConnectionAsync(ct);
+        try
+        {
+            await db.Database.OpenConnectionAsync(ct);
+            await RunConnectedAsync(ct);
+        }
+        finally { await db.Database.CloseConnectionAsync(); }
+    }
+
+    private async Task RunConnectedAsync(CancellationToken ct)
+    {
         if (db.Database.GetDbConnection() is not NpgsqlConnection connection)
             throw new InvalidOperationException("Managed match archival requires PostgreSQL");
         var acquired = await db.Database.SqlQueryRaw<bool>(
             $"SELECT pg_try_advisory_lock(hashtextextended('{AdvisoryName}',0)) AS \"Value\"").SingleAsync(ct);
-        if (!acquired) { await db.Database.CloseConnectionAsync(); return; }
+        if (!acquired) return;
         var previousTimeout = db.Database.GetCommandTimeout();
         db.Database.SetCommandTimeout(Math.Clamp(Settings.CommandTimeoutSeconds, 1, 600));
         MatchArchiveChunk? chunk = null;
@@ -224,6 +233,7 @@ public sealed class MatchArchiveRetention(
                 }
                 catch (PostgresException error) when (error.SqlState is "57014" or "55P03" && batch > 1)
                 {
+                    await db.Entry(chunk).ReloadAsync(ct);
                     // The whole transaction has rolled back, including its checkpoint.
                     await db.Entry(chunk).ReloadAsync(ct);
                     batch = Math.Max(1, (batch + 1) / 2);
@@ -238,6 +248,9 @@ public sealed class MatchArchiveRetention(
         {
             if (chunk is not null)
             {
+                // A failed transaction can leave tentative progress marked Modified in EF.
+                // Reload durable ownership before saving the error, including ambiguous commits.
+                await db.Entry(chunk).ReloadAsync(CancellationToken.None);
                 chunk.LastError = error.GetType().Name + ": " + error.Message;
                 if (chunk.LastError.Length > 1000) chunk.LastError = chunk.LastError[..1000];
                 await db.SaveChangesAsync(CancellationToken.None);
@@ -246,14 +259,19 @@ public sealed class MatchArchiveRetention(
         }
         finally
         {
-            if (chunk is not null && chunk.CompletedAtUtc is null)
+            try
             {
-                var remaining = await db.MatchArchiveEntries.CountAsync(x => x.ChunkId == chunk.Id, CancellationToken.None);
-                telemetry.Observe(remaining, chunk.CreatedAtUtc);
+                if (chunk is not null && chunk.CompletedAtUtc is null)
+                {
+                    var remaining = await db.MatchArchiveEntries.CountAsync(x => x.ChunkId == chunk.Id, CancellationToken.None);
+                    telemetry.Observe(remaining, chunk.CreatedAtUtc);
+                }
             }
-            db.Database.SetCommandTimeout(previousTimeout);
-            try { await db.Database.ExecuteSqlRawAsync($"SELECT pg_advisory_unlock(hashtextextended('{AdvisoryName}',0))", CancellationToken.None); }
-            finally { await db.Database.CloseConnectionAsync(); }
+            finally
+            {
+                db.Database.SetCommandTimeout(previousTimeout);
+                await db.Database.ExecuteSqlRawAsync($"SELECT pg_advisory_unlock(hashtextextended('{AdvisoryName}',0))", CancellationToken.None);
+            }
         }
     }
 

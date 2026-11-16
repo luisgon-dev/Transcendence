@@ -1,7 +1,10 @@
 using System.Text.Json;
 using System.IO.Compression;
+using System.Data;
+using System.Data.Common;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Npgsql;
@@ -154,6 +157,72 @@ public sealed class MatchArchivePostgresTests(PostgresIntegrationFixture fixture
         await retention.RunAsync(CancellationToken.None);
         (await db.Matches.IgnoreQueryFilters().CountAsync()).Should().Be(1);
         (await db.MatchArchiveChunks.SingleAsync()).PrunedMatches.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Failed_checkpoint_update_cannot_persist_uncommitted_prune_progress()
+    {
+        var match = await SeedAsync(facts: true);
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE FUNCTION delay_archive_progress() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN
+                IF NEW."PrunedMatches" > OLD."PrunedMatches" THEN PERFORM pg_sleep(2); END IF;
+                RETURN NEW;
+            END $$;
+            CREATE TRIGGER delay_archive_progress BEFORE UPDATE OF "PrunedMatches" ON "MatchArchiveChunks"
+            FOR EACH ROW EXECUTE FUNCTION delay_archive_progress();
+            """);
+        settings.DeleteTimeoutSeconds = 1;
+        Func<Task> run = () => retention.RunAsync(CancellationToken.None);
+        var failure = await run.Should().ThrowAsync<Exception>();
+        failure.Which.ToString().Should().Contain("Timeout");
+        db.Database.GetDbConnection().State.Should().Be(ConnectionState.Closed);
+        var checkpoint = await db.MatchArchiveChunks.AsNoTracking().SingleAsync();
+        checkpoint.VerifiedAtUtc.Should().NotBeNull();
+        checkpoint.LastError.Should().NotBeNullOrEmpty();
+        checkpoint.PrunedMatches.Should().Be(0);
+        (await db.Matches.IgnoreQueryFilters().AnyAsync(x => x.Id == match.Id)).Should().BeTrue();
+        (await db.MatchArchiveEntries.CountAsync()).Should().Be(1);
+
+        settings.DeleteTimeoutSeconds = 15;
+        await retention.RunAsync(CancellationToken.None);
+        checkpoint = await db.MatchArchiveChunks.AsNoTracking().SingleAsync();
+        checkpoint.PrunedMatches.Should().Be(checkpoint.FrozenMatches).And.Be(1);
+        checkpoint.CompletedAtUtc.Should().NotBeNull();
+        (await db.MatchArchiveEntries.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Failed_pending_metrics_query_still_releases_database_connection_and_ownership()
+    {
+        await SeedAsync(facts: false);
+        var connection = db.Database.GetConnectionString()!;
+        await db.DisposeAsync();
+        db = new TranscendenceContext(new DbContextOptionsBuilder<TranscendenceContext>()
+            .UseNpgsql(connection, pg => pg.MigrationsAssembly("Transcendence.Service"))
+            .AddInterceptors(new FailPendingCount()).Options);
+        retention = new MatchArchiveRetention(db, Options.Create(settings), new TestDestination(), telemetry,
+            NullLogger<MatchArchiveRetention>.Instance);
+        Func<Task> run = () => retention.RunAsync(CancellationToken.None);
+        await run.Should().ThrowAsync<InvalidOperationException>().WithMessage("Injected pending metrics failure");
+        db.Database.GetDbConnection().State.Should().Be(ConnectionState.Closed);
+        await using var other = new NpgsqlConnection(connection);
+        await other.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT pg_try_advisory_lock(hashtextextended('transcendence-match-archive-v1',0))", other);
+        (await command.ExecuteScalarAsync()).Should().Be(true);
+    }
+
+    private sealed class FailPendingCount : DbCommandInterceptor
+    {
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.Contains("SELECT count(*)", StringComparison.Ordinal) &&
+                command.CommandText.Contains("FROM \"MatchArchiveEntries\"", StringComparison.Ordinal))
+                throw new InvalidOperationException("Injected pending metrics failure");
+            return ValueTask.FromResult(result);
+        }
     }
 
     [Fact]

@@ -5,6 +5,7 @@ import contextlib
 import fcntl
 import os
 import json
+import importlib.util
 from pathlib import Path
 import secrets
 import signal
@@ -205,11 +206,14 @@ def restore_drill(state, image, reserve_bytes=5 * 1024**3):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("backup", "restore-drill", "check-destination"))
+    parser.add_argument("action", choices=("backup", "restore-drill", "check-destination",
+                                          "backup-native", "backup-native-full", "restore-native"))
     parser.add_argument("--state", type=Path, default=Path("/var/lib/transcendence-backup"))
     parser.add_argument("--container", default="transcendence-postgres")
     parser.add_argument("--postgres-image", default="postgres:18.7-alpine")
     parser.add_argument("--reserve-gib", type=int, default=5)
+    parser.add_argument("--source-host", default=os.environ.get("TRN_BACKUP_SOURCE_HOST", socket.gethostname()))
+    parser.add_argument("--snapshot", help="An explicit verified native snapshot to test")
     args = parser.parse_args()
     def interrupted(signum, frame):
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
@@ -221,7 +225,10 @@ def main():
     os.umask(0o077)
     if not os.environ.get("RESTIC_REPOSITORY") or not os.environ.get("RESTIC_PASSWORD_FILE"):
         raise ValueError("Configure an initialized off-host restic repository and password file")
-    validate_destination(os.environ["RESTIC_REPOSITORY"], os.environ.get("TRN_BACKUP_MOUNT_POINT"))
+    # A recovery host may read the encrypted repository directly on the NAS.
+    # Only write actions require a remote mount; restic still authenticates reads.
+    if args.action != "restore-native":
+        validate_destination(os.environ["RESTIC_REPOSITORY"], os.environ.get("TRN_BACKUP_MOUNT_POINT"))
     if args.action == "check-destination":
         print("Backup destination is remote or a verified mounted NAS filesystem")
         return
@@ -231,7 +238,22 @@ def main():
     with (args.state / "lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         with archive_guard() as archive_state:
-            if args.action == "backup":
+            if args.action in ("backup-native", "backup-native-full", "restore-native"):
+                spec = importlib.util.spec_from_file_location("release_pg_backup", Path(__file__).with_name("release_pg_backup.py"))
+                native = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(native)
+                import sys
+                engine = native.NativeBackups(sys.modules[__name__], args.state, args.container,
+                                              args.reserve_gib * 1024**3)
+                if args.action == "restore-native":
+                    engine.restore(args.source_host, args.snapshot)
+                else:
+                    full = args.action == "backup-native-full"
+                    if full:
+                        engine.prepare_source()
+                    if engine.backup(full, archive_state) is None:
+                        return
+            elif args.action == "backup":
                 backup(args.state, args.container, args.reserve_gib * 1024**3, archive_state)
             else:
                 restore_drill(args.state, args.postgres_image, args.reserve_gib * 1024**3)

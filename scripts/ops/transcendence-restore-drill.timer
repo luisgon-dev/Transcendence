@@ -1,8 +1,8 @@
 [Unit]
-Description=Weekly Transcendence database restore drill
+Description=Optional quarterly recovery-host test; leave disabled on the application host
 
 [Timer]
-OnCalendar=Sun *-*-* 05:00:00 America/Los_Angeles
+OnCalendar=Sun *-01,04,07,10-01..07 05:00:00 America/Los_Angeles
 RandomizedDelaySec=20min
 Persistent=true
 

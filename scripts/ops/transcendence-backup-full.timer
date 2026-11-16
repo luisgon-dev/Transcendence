@@ -1,0 +1,10 @@
+[Unit]
+Description=Monthly PostgreSQL full baseline
+
+[Timer]
+OnCalendar=*-*-01 01:00:00 America/Los_Angeles
+RandomizedDelaySec=20min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

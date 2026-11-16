@@ -1,5 +1,5 @@
 [Unit]
-Description=Verify a Transcendence backup by restoring an isolated database
+Description=Manual/off-host native PostgreSQL recovery test
 After=docker.service network-online.target transcendence-backup.service
 Requires=docker.service
 
@@ -7,7 +7,11 @@ Requires=docker.service
 Type=oneshot
 EnvironmentFile=/etc/transcendence-backup.conf
 Environment=TRN_RELEASE_TEXTFILE_DIR=/var/lib/transcendence-perf/textfile
-ExecStart=/usr/bin/python3 -B /var/lib/transcendence-release/current/scripts/ops/release_backup.py restore-drill
+ExecStart=/usr/bin/python3 -B /var/lib/transcendence-release/current/scripts/ops/release_backup.py restore-native
 UMask=0077
+Nice=19
+IOSchedulingClass=idle
+CPUQuota=100%
+MemoryMax=1G
 TimeoutStartSec=18h
 TimeoutStopSec=5min

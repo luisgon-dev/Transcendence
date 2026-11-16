@@ -88,6 +88,8 @@ jobs:
           docker rm restic-tool
       - name: Verify encrypted backup and actual database restore
         run: python3 scripts/ci/backup-regression.py --restic "$RUNNER_TEMP/restic"
+      - name: Verify native full and two changed-block backups with physical recovery
+        run: python3 scripts/ci/native-backup-regression.py --restic "$RUNNER_TEMP/restic"
       - name: Verify real edge cutover and rollback
         run: python3 scripts/ci/edge-regression.py
       - name: Preserve staging failure evidence

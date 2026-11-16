@@ -214,98 +214,91 @@ does not provide host or database failover; that requires additional hosts.
 
 ## Backups and restore drills
 
-Install `restic` on the host and configure an **off-host** encrypted repository.
-Initialize it explicitly, store its password independently of the Docker host,
-and install `config/deploy/backup.env.example` as the root-only
-`/etc/transcendence-backup.conf` with your provider credentials and password-file
-path. After approving credential storage in the encrypted repository, set
-`TRN_BACKUP_APP_ENV_FILE=/root/transcendence/.env` to include the private application environment
-in every database snapshot. The file must exist at an absolute path with no group/other permissions;
-a missing or public file fails the backup before dumping. Recover it with
-`restic dump SNAPSHOT_ID /root/transcendence/.env` into a mode-0600 file on the replacement host.
-Keep the repository password in an independent recovery location. Also preserve cluster roles;
-these database backups contain application data/schema without
-ownership/ACL restoration.
+Use PostgreSQL 18's native changed-block backups with the existing encrypted restic NAS repository.
+The regular policy is a monthly physical full baseline and daily incrementals. Full restore tests
+are manual after significant backup/database changes or at quarterly review, preferably off-host.
+The optional quarterly timer is for a recovery machine; leave it disabled on the serving host.
+A physical restore preserves indexes rather than rebuilding hundreds of millions of rows.
 
-For the Unraid NAS, a dedicated NFS/SMB backup share is supported without granting
-the application LXC NAS-administrator SSH access. Export a dedicated share with
-access restricted to the mounting client's private IP. Mount it persistently at
-`/mnt/transcendence-backups`; if the Docker LXC cannot mount NFS itself, mount on
-the LXC host and bind that mounted share into the container. Ensure the LXC's
-mapped user can write it. `backup.env.example` uses a restic subdirectory there.
-The backup code requires both a real mount point and an NFS/SMB filesystem, so an
-unmounted share or a bind of its empty local directory cannot fill the Docker disk.
+`backup-native` reads only blocks changed since the preceding verified native manifest.
+This differs from `backup`, the legacy logical-dump command: restic deduplicates a dump's storage,
+but producing that dump still reads/compresses the entire database. Keep legacy commands/snapshots
+for compatibility and rollback; do not schedule daily logical full dumps.
 
-After installing the backup configuration/password file, initialize the repository
-in an operator shell before enabling the services:
+Install `restic`, initialize an off-host encrypted repository explicitly, and install
+`config/deploy/backup.env.example` root-owned mode 0600 as `/etc/transcendence-backup.conf`.
+A local NAS repository requires a real NFS/SMB mount at `TRN_BACKUP_MOUNT_POINT`; missing mounts
+fail closed instead of filling the application disk. A Proxmox host can mount the restricted export
+and bind it into the Docker LXC. Other remote restic backends are also supported.
+
+After approving encrypted credential storage, set `TRN_BACKUP_APP_ENV_FILE` to the private
+application environment. Missing/public files fail before expensive work. Keep the restic password
+independently of the application host, outside the application's NAS export. Physical backups also
+contain cluster roles/ACLs; the external application environment still needs its own recovery copy.
+
+The native client uses the exact registry digest of the running PostgreSQL image, temporarily
+shares its network namespace, and connects through the existing loopback replication rule. It does
+not expose a database port, create another always-on service, or need new credentials. A custom
+installation must permit that local backup connection. Only default tablespaces are currently
+supported; another layout fails preflight rather than producing an incomplete backup.
+
+`backup-native-full` explicitly enables `summarize_wal` and retains fourteen days of WAL summaries
+with a PostgreSQL reload. A daily incremental never silently falls back to a full scan if a parent,
+summary range, compatible image or checksum setting is unavailable. Take an explicit new full
+baseline after a PostgreSQL image/checksum change or a gap longer than summary retention.
+
+Defaults limit the temporary client to one CPU/512 MiB, full reads to 16 MiB/s and changed-block
+reads to 4 MiB/s. Replication backends belonging to that run receive idle I/O priority; their
+unique application name scopes cancellation and priority changes. Native units also use nice 19,
+idle I/O, a one-CPU quota and 1 GiB memory for the controller/restic work. Backup deadlines and disk
+headroom guards remain enforced. These are ceilings, not promised completion times; foreground
+activity can make low-priority backups take longer.
+
+Each backup validates data-file checksums with `pg_verifybackup`, validates the included WAL with
+`pg_waldump`, uploads encrypted artifacts, checks restic, and reads back the manifest. Only then is
+the snapshot tagged verified and eligible as the next incremental's parent. Retention keeps two
+complete full-plus-incremental chains, including every dependency; unknown/missing/cyclic metadata
+fails closed. Legacy logical snapshots and separate match archives are excluded from this policy.
+
+Install native units from the verified release bundle after a successful release:
 
 ```bash
-set -a
-. /etc/transcendence-backup.conf
-set +a
-python3 /var/lib/transcendence-release/current/scripts/ops/release_backup.py check-destination
-restic init
-```
-
-Keep the repository password in an independent recovery location. A dedicated
-restricted SFTP account or another remote restic backend is also supported; use
-the NAS mount guard only for filesystem repositories. NAS-side snapshots, when
-available, can protect retained backups independently of the application host.
-
-After one successful managed release, install the units:
-
-```bash
-for unit in transcendence-backup.service transcendence-backup.timer transcendence-restore-drill.service transcendence-restore-drill.timer; do
+for unit in transcendence-backup.service transcendence-backup.timer transcendence-backup-full.service transcendence-backup-full.timer transcendence-restore-drill.service transcendence-restore-drill.timer; do
   install -m 0644 "scripts/ops/$unit" "/etc/systemd/system/$unit"
 done
 systemctl daemon-reload
-systemctl start transcendence-backup.service
-systemctl start transcendence-restore-drill.service
-# Enable schedules after both manual checks succeed.
-systemctl enable --now transcendence-backup.timer transcendence-restore-drill.timer
+systemctl disable --now transcendence-restore-drill.timer
+# Explicitly run/schedule the first physical baseline in an off-peak window.
+# A logical dump cannot seed changed-block backups.
+systemctl start transcendence-backup-full.service
+# Enable only the daily changed-block and monthly-full schedules on this host.
+systemctl enable --now transcendence-backup.timer transcendence-backup-full.timer
 ```
 
-The daily dump streams to a private temporary file with a deadline and disk-space
-guard, uploads with restic, checks repository integrity and applies tag-scoped
-7-daily/4-weekly/6-monthly retention. Local dumps are removed after every outcome.
-The weekly drill selects one snapshot for this host, retrieves that exact dump,
-restores a fresh PostgreSQL 18 container with no network or published ports, then
-queries real migration and summoner tables. It checks disk headroom first and
-removes only its own disposable container/volume afterwards. Successful backup
-and restore timestamps advance only after the entire operation succeeds.
-Defaults are daily at 3 AM Pacific and Sunday at 5 AM Pacific, with up to twenty
-minutes of jitter. Customize them with systemd timer overrides.
+The monthly full runs on day 1 at 01:00 Pacific; daily incrementals run at 03:00 Pacific, with up to
+20 minutes of jitter. Daily work waits for an active full and skips a redundant incremental when
+a full finished within six hours. Schedule a one-time off-peak baseline when adopting between
+monthly runs. Preserve an existing verified backup until that baseline passes. Set required mount
+assertions in site-specific drop-ins on both backup services when using a dedicated staging volume.
 
-Large production databases need budgets based on their measured dump and index
-rebuild times. `TRN_BACKUP_COMMAND_TIMEOUT_SECONDS` bounds each backup/restic/restore
-command (default six hours, accepted range 60–86400 seconds). The units separately
-bound the complete backup to twelve hours and restore drill to eighteen hours;
-adjust those with systemd overrides when changing command budgets. A restore drill
-waits for an already-running scheduled backup before starting. Disk headroom checks,
-cleanup, repository validation and successful restored table queries remain required
-regardless of the timeout. Enable schedules only after a complete production-size
-backup and restore drill pass.
+A manual recovery test may run on the NAS or another recovery host with Python, restic, Docker and
+ample disposable space. Select the original source hostname, read/decrypt the required chain,
+verify each artifact, combine it with `pg_combinebackup`, verify the reconstructed files/WAL, then
+start the pinned PostgreSQL image with no network or published ports. Actual application queries
+and complete cleanup must pass before a restore-success timestamp advances. It never attaches a
+production volume. Native restore preflight accounts for inputs, combined output and staging, so
+an undersized application workspace is rejected before materializing the chain.
 
-The disposable restore PostgreSQL instance keeps its two-CPU/2 GiB limit and uses native
-bulk-load settings: `autovacuum=off`, `max_wal_size=8GB`, `checkpoint_timeout=15min`, and
-`maintenance_work_mem=512MB`, plus `wal_compression=on`. These avoid redundant scans and frequent checkpoints while loading
-data and rebuilding indexes, following [PostgreSQL's bulk-load guidance](https://www.postgresql.org/docs/18/populate.html).
-They apply only to the discarded drill container; production PostgreSQL retains its own settings.
-Durability settings and all dump/restore error checks remain enabled.
-WAL compression uses PostgreSQL's built-in `pglz` method to reduce full-page-image write traffic
-during index creation; it trades some CPU for disk I/O without disabling crash recovery.
+```bash
+# Configure RESTIC_REPOSITORY and RESTIC_PASSWORD_FILE privately on the recovery host.
+python3 scripts/ops/release_backup.py restore-native --source-host SOURCE_HOST --state /large/disposable/recovery-workspace
+```
 
-For a large restore drill on the application machine, use the checked-in private-runtime templates:
-`config/deploy/restore-docker.json`, `config/deploy/transcendence-restore-docker.service`, and
-`config/deploy/restore-workspace.conf`. Adapt mount paths, install the JSON as
-`/etc/transcendence-restore-docker.json`, the service under `/etc/systemd/system`, and the drop-in as
-`/etc/systemd/system/transcendence-restore-drill.service.d/workspace.conf`; reload systemd afterwards.
-The private network namespace and private writable `/run/containerd` are required alongside the
-separate data/exec roots. Let that Docker daemon manage its own containerd in the same namespaces.
-The preload commands deliberately use the production Unix socket to pull/save the pinned PostgreSQL
-image, then load it through the private Unix socket; the restore daemon has no network egress.
-Validate the configured units, execute a real disposable PostgreSQL container, and confirm the
-production bridge/containers remain intact. See [the host runbook](PRODUCTION-HOST.md#restore-workspace).
+The repository may be read locally on the NAS for recovery; only backup writes require the remote
+mount guard. Restore archive checkpoint files and the application environment separately into
+private recovery directories before resuming the real worker. Never print recovered credentials.
+The isolated legacy Docker-runtime templates remain available for old logical snapshots, with
+private mount/network namespaces; they are not needed for routine changed-block backups.
 
 On an adopted host, also set `TRN_RELEASE_MAINTENANCE_DIR` in the release-controller configuration
 to that same initialized local state directory. The controller holds the exclusive storage gate
@@ -328,7 +321,7 @@ state together before resuming pruning; never drop a nonempty frozen work table
 or invent a replacement state file.
 
 Archived match chunks already live separately on Unraid under
-`/mnt/user/backup/transcendence-match-archive`. Database dumps contain only data
+`/mnt/user/backup/transcendence-match-archive`. Database snapshots contain only data
 still in PostgreSQL; they do not recreate records already pruned into archives.
 Preserve every completed chunk, its manifest and any older flat patch archive.
 The new backup retention applies only to the encrypted restic database snapshots

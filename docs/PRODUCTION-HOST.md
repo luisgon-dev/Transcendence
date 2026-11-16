@@ -24,7 +24,9 @@ Compose changes; do not reset it or use it as a second deployment controller.
 
 The release controller uses `/etc/transcendence-release.conf` and
 `/var/lib/transcendence-release`. The legacy `transcendence-deploy.timer` is
-disabled. Keep any Komodo container recreators disabled for these application
+disabled. After lock initialization, the controller also uses
+`TRN_RELEASE_MAINTENANCE_DIR=/var/lib/transcendence-archive` so storage maintenance defers
+promotions while current-release health verification continues. Keep any Komodo container recreators disabled for these application
 containers too.
 
 NPM's site/API upstreams use the inner edge on `192.168.0.221:3001` and `:8082`.

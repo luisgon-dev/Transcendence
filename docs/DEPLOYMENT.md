@@ -293,6 +293,16 @@ image, then load it through the private Unix socket; the restore daemon has no n
 Validate the configured units, execute a real disposable PostgreSQL container, and confirm the
 production bridge/containers remain intact. See [the host runbook](PRODUCTION-HOST.md#restore-workspace).
 
+On an adopted host, also set `TRN_RELEASE_MAINTENANCE_DIR` in the release-controller configuration
+to that same initialized local state directory. The controller holds the exclusive storage gate
+across image preparation, isolated staging, migrations and rollout. A busy backup/restore/archive
+defers promotion without quarantining the release; the next timer poll retries. It independently
+attests and probes the retained running release, so `maintenance` status still reports a healthy
+current deployment when that verification succeeds. An unchanged-release health check never waits
+for the storage gate. `TRN_RELEASE_MAINTENANCE_WAIT_SECONDS` bounds waiting for existing shared
+analytics to drain (default 30, range 0–1200 seconds); new heavy work yields during that wait.
+Enable this only after both `exclusive.lock` and `run.lock` exist, including on a fresh host.
+
 When the old-patch archive job is installed, set
 `TRN_BACKUP_ARCHIVE_STATE_DIR=/var/lib/transcendence-archive` to its actual state
 directory. Backups and restore drills announce exclusive work through `exclusive.lock`, then

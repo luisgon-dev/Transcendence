@@ -160,8 +160,12 @@ def restore_drill(state, image, reserve_bytes=5 * 1024**3):
                 raise RuntimeError("Could not retrieve the latest database backup")
         try:
             # Private network namespace, no published ports, no production volume or ingestion worker.
+            # This clone is discarded after verification. Avoid vacuum scans and
+            # frequent checkpoints competing with its bulk load/index rebuilds.
             run(["docker", "run", "-d", "--name", container, "--network", "none", "--memory", "2g",
-                 "--cpus", "2", "-e", "POSTGRES_HOST_AUTH_METHOD=trust", "-e", "POSTGRES_DB=restore_drill", image])
+                 "--cpus", "2", "-e", "POSTGRES_HOST_AUTH_METHOD=trust", "-e", "POSTGRES_DB=restore_drill", image,
+                 "-c", "autovacuum=off", "-c", "max_wal_size=8GB", "-c", "checkpoint_timeout=15min",
+                 "-c", "maintenance_work_mem=512MB"])
             for _ in range(60):
                 result = subprocess.run(["docker", "exec", container, "pg_isready", "-h", "127.0.0.1", "-U", "postgres"], capture_output=True)
                 if result.returncode == 0:

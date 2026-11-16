@@ -281,6 +281,13 @@ cleanup, repository validation and successful restored table queries remain requ
 regardless of the timeout. Enable schedules only after a complete production-size
 backup and restore drill pass.
 
+The disposable restore PostgreSQL instance keeps its two-CPU/2 GiB limit and uses native
+bulk-load settings: `autovacuum=off`, `max_wal_size=8GB`, `checkpoint_timeout=15min`, and
+`maintenance_work_mem=512MB`. These avoid redundant scans and frequent checkpoints while loading
+data and rebuilding indexes, following [PostgreSQL's bulk-load guidance](https://www.postgresql.org/docs/18/populate.html).
+They apply only to the discarded drill container; production PostgreSQL retains its own settings.
+Durability settings and all dump/restore error checks remain enabled.
+
 For a large restore drill on the application machine, use the checked-in private-runtime templates:
 `config/deploy/restore-docker.json`, `config/deploy/transcendence-restore-docker.service`, and
 `config/deploy/restore-workspace.conf`. Adapt mount paths, install the JSON as

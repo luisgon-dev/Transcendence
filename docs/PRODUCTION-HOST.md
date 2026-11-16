@@ -158,7 +158,7 @@ owner approval, and the replacement full NAS backup and restore drill cover the 
 
 ## Live archive acceptance
 
-Release `e6e19d436283ef5be4eab26698f78492c361fc48` is serving through the verified inner edge
+The initial adoption release `e6e19d436283ef5be4eab26698f78492c361fc48` served through the verified inner edge
 in blue-green slot `trn-slot-e6e19d436283`. Its generated migrations retired the unused table and
 created managed checkpoint ownership. The database then reported 207 GiB and the production root
 had about 381 GiB available, compared with about 243 GiB before retirement.
@@ -177,3 +177,18 @@ exactly their 621 manifest entries. The metadata-only receipt is
 Private host acceptance evidence is in `/var/lib/transcendence-archive/managed-acceptance-result.json`
 and the adjacent adoption/acceptance logs. The full database NAS snapshot and isolated restore drill
 must also pass before schedules are enabled; these archive checks alone do not satisfy that gate.
+
+## Full NAS backup acceptance
+
+The replacement full backup passed on November 15, 2026. Snapshot
+`eaffd1677db3d38c36e8fbfa7e4ea38aa72f6ed6d233d81153fad650d3e021a4`
+contains a 14,793,959,085-byte custom dump from a 222,294,455,999-byte source database, plus the
+archive adoption/checkpoint receipts. Snapshot contents, lock-file exclusions, `restic check`,
+retention and actual pack-file placement on the Unraid array passed. Private evidence is at
+`/root/deploy/activation-20261115/backup-acceptance.json`.
+
+The full isolated restore exposed eleven requested checkpoints in its first twenty minutes and
+an automatic vacuum scan during data loading. The disposable clone now uses the native bulk-load
+settings documented in [DEPLOYMENT.md](DEPLOYMENT.md#backups-and-restore-drills); these reloadable
+settings were also applied to the in-progress drill without abandoning its import. Production
+database settings were not changed. Complete restore success and cleanup still gate timer activation.

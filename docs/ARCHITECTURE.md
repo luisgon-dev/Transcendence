@@ -331,18 +331,14 @@ Operational implication:
 #### Low-priority ingestion is ranked-head-only; defer-age guardrail retired
 
 - **Ranked-head-only.** Low-priority analytics ingestion (both producers, `discovery` lane) fetches only the current-patch **ranked head** with the not-rolled-out early-stop — it does **not** widen into all-modes-head/non-ranked backfill. That widening (`SummonerMaintenanceJob`'s `EnableAllModesWidening`, default **off**) is the "budget bomb": for an uncovered summoner it pulls the player's entire ancient match history through the rate gate (~20+ min, old-patch yield) and saturates the lane. Non-ranked **profile** backfill is handled on demand by the high-priority `RefreshByRiotId` path instead, where a user actually opened the profile.
-- **Defer-age starvation guardrail disabled** (`Jobs:StarvationGuardrail:Enabled=false`). Its signal (oldest eligible summoner's `UpdatedAt` age ≥ 6h) is structurally unsatisfiable at this scale on the yield-limited personal key — of ~4.1M summoners only a few thousand are <6h fresh, so the breach predicate was **permanently** true and forced catch-up fired perpetually (bypassing the API-priority pause and, with widening, driving the ancient-history grind). The adaptive throughput budget's coverage/velocity-driven `CatchUp` mode + the per-region cold-start override remain the legitimate bursting mechanisms. Re-enable only with a delta/growth-based defer signal, not absolute age.
+- **Defer-age starvation guardrail disabled** (`Jobs:StarvationGuardrail:Enabled=false`). Its signal (oldest eligible summoner's `UpdatedAt` age ≥ 6h) is structurally unsatisfiable at this scale on the yield-limited personal key — only a small fraction of summoners are fresh within that window, so the breach predicate was **permanently** true and forced catch-up fired perpetually (bypassing the API-priority pause and, with widening, driving the ancient-history grind). The adaptive throughput budget's coverage/velocity-driven `CatchUp` mode + the per-region cold-start override remain the legitimate bursting mechanisms. Re-enable only with a delta/growth-based defer signal, not absolute age.
 - **`Summoner.LastActiveAtUtc`** — the most recent game-creation time across a summoner's ingested matches (maintained in `MatchService` via the EF-tracked match graph, monotonic; null until first seen in an ingested match). This is the durable *activity* signal (distinct from `UpdatedAt`, which is fetch/coverage recency) intended to drive future activity-aware candidate selection — preferring summoners who recently *played* current-patch ranked over merely-stale ones. It populates going forward as matches ingest.
 
-#### Ingestion observability runbook (discovery-lane health)
+#### Discovery-lane observability
 
-The discovery lane stalls when all workers park on a few long, non-stoppable jobs (the failure above). Signature + checks (prod is `root@192.168.0.221`, container `transcendence-postgres`, db `transcendence`):
-
-- **Workers stuck:** `SELECT count(*) FROM hangfire.jobqueue WHERE queue='discovery' AND fetchedat IS NOT NULL` equals the lane WorkerCount, with identical `now()-fetchedat` age for 20+ min (none cycling) and `transcendence-service` CPU near-idle (parked, not computing). Healthy = `oldest_run` age stays small and cycles.
-- **Budget-bomb / perpetual-catch-up regression:** non-zero counts of `jobqueue` discovery jobs whose `hangfire.job.invocationdata` contains `forced-catch-up` (guardrail mis-fire) or `includeAllModes` true (widening) — both should be **0** in steady state.
-- **Yield:** `docker logs transcendence-service --since 10m | grep 'AnalyticsRefresh] Completed' | grep -oE 'rankedHead=[0-9]+' | sort | uniq -c` — the `rankedHead>0` share is the productive-yield headline.
-- **Active-patch growth:** `SELECT count(*) FROM "Matches" WHERE "Status"=1 AND "Patch"=(SELECT "Version" FROM "Patches" WHERE "IsActive")` sampled over a window.
-- **Recovery:** purge the enqueued backlog (`WITH del AS (DELETE FROM hangfire.jobqueue WHERE queue='discovery' AND fetchedat IS NULL RETURNING jobid::bigint AS id) DELETE FROM hangfire.job j USING del WHERE j.id=del.id;`); producers refill with fresh current-window jobs within minutes.
+Monitor queue age, worker turnover, productive ranked-head yield and active-patch growth together.
+Idle workers with long-running fetched jobs can indicate blocked ingestion rather than spare capacity.
+Keep host access details, diagnostic commands and recovery procedures in the private operator runbook.
 
 #### Analytics cache warm-coverage + invalidation
 
@@ -354,7 +350,7 @@ The discovery lane stalls when all workers park on a few long, non-stoppable job
 - **Champion tier grade (single source of truth).** Tiers are scored by one shared pure scorer (`ChampionTierScorer`) that every path calls — the raw live compute, the precomputed-stats read, and the hourly refresher — so a champion's grade is identical on the tier list, the champions grid, and the champion detail hero, and the raw-vs-stats equivalence holds by construction. Methodology: **per-role-first** (champions compared only to same-role peers; the unified view shows each champion at its primary role), **strength = win-rate delta vs the role baseline** with empirical-Bayes shrinkage (Beta prior fit per role via method-of-moments; tuned by `Analytics:Tiering:*`), **role-volume-adaptive sample gates** (live-calibrated bounds keep broad scopes conservative while thin scopes can resolve real signal), **absolute cutoffs** on the delta (so `S` can be empty on a balanced patch), and pick/ban kept on a separate `contestedScore` popularity axis. The computed grade is **persisted** as `ChampionScopeGradeStat` by `PrecomputedAnalyticsRefresher.RefreshTabularCoreAsync` in the same delete+insert transaction as the raw atoms — for region=ALL and rank scopes `{ALL, EMERALD_PLUS}` only (the scopes every web surface defaults to), per lane role plus a primary-role overview row, with patch-over-patch `movement` resolved against the previous patch (by `Patches.ReleaseDate`). The tier-list read serves this persisted grade directly for those default scopes; a specific region or exact tier recomputes live via the same scorer (no movement), mirroring `ChampionMatchupStat`'s all-region-persisted / region-filtered-live pattern. `TierListResponse.confidence` distinguishes a resolved spread from a flat or insufficient scope so the UI does not present uniform B as confident balance. The champion profile endpoint projects this champion's tier-list entry into a `grade` field so the detail hero renders the list grade (no frontend re-derivation). The tier-list cache key is `analytics:tierlist:v4:` (bumped from `v3` for the calibrated grades and confidence contract).
 - **Build Atlas is an independently promoted generation.** `RefreshBuildResourceAnalyticsJob` runs hourly on the reserved `analytics-batch` lane, independently of the champion precompute phases. The first run for a patch is a full rebuild from the retained ranked-Solo/Duo corpus in bounded match batches, and a short final transaction retires the previous generation and promotes the new one. Later runs add new matches in place to the **active** generation: they process only matches absent from its inclusion ledger, and each batch's changed and new stat rows, ledger rows, and match count commit together, so readers see a whole batch or none of it (counts only grow, as in Build Lab). Incremental runs used to clone the whole generation every hour; that clone was removed (`BuildResourceSnapshotRefresher.AddToActiveGenerationAsync`). Item/rune use is deduplicated to one participant/resource, and exact participant/champion-role populations are persisted in the same generation as the resource atoms. Building/Failed generations are never readable, and a run with no new matches leaves the current generation unchanged. Failed manifests remain for diagnosis while their unused payload and inclusion-ledger rows are removed immediately and swept after later promotions; post-promotion cleanup is best-effort and cannot invalidate an already Ready generation. Startup and patch detection enqueue an `onlyIfMissing` bootstrap so an existing patch can self-heal after deployment and a new patch begins warming immediately. The job also holds a PostgreSQL session advisory lock for its full execution; this is the authoritative cross-trigger mutex for startup, recurring, and manually queued invocations, while Hangfire's concurrency attribute remains a secondary guard. Hangfire PostgreSQL sliding invisibility renewal keeps long-running jobs owned beyond the storage provider's 30-minute dequeue window, preventing a live execution from being fetched again and canceled.
 - **Build Atlas requests never scan raw match resources.** Item/rune index and detail reads resolve only an active Ready generation, and generation IDs are part of the HybridCache key so promotion switches readers without broad invalidation. While the active patch is warming, unpinned/default requests continue on the newest completed patch; an explicit patch with no completed generation returns an empty/not-found result immediately. This bounds API latency even when the retained participant/resource corpus is large.
-- **Item purchase timing reads Build Lab's counts, not Build Atlas.** An item detail's `purchases` pools `BuildLabOptionStats` item and boots rows (`OpponentChampionId = 0`) over every champion for the patch and region, through the partial `IX_BuildLabOptionStats_ItemPurchases`; before it, the read scanned the table (13.5s on prod). It is attached after the detail cache read with its own one-hour entries,…1434 tokens truncated…; its existing bounded database command lifecycle remains in place.
+- **Item purchase timing reads Build Lab's counts, not Build Atlas.** An item detail's `purchases` pools `BuildLabOptionStats` item and boots rows (`OpponentChampionId = 0`) over every champion for the patch and region, through the partial `IX_BuildLabOptionStats_ItemPurchases`; this avoids a full-table scan. It is attached after the detail cache read with its own one-hour entries,…1434 tokens truncated…; its existing bounded database command lifecycle remains in place.
 - **Reserved worker pools share a disk budget.** `analytics-warm` (one worker) serves profile warming, regional leaderboards, pro/dataset snapshots, and adaptive warming. `analytics-batch` (one worker) serves Build Lab, compact synergy catch-up, tabular precompute, matchup/build snapshots, and Build Atlas. Main=8, timeline=2, discovery=2, history=1. Timeline and discovery producers enforce queue backpressure; Build Lab has time/WAL/transaction limits and pacing. These defaults reserve execution capacity without claiming physical I/O isolation. Queue attributes, served queues, and recurring registration are tested together.
 
 ### Deployment & rollback
@@ -385,8 +381,13 @@ global image/volume prune occurs.
 Optional blue-green web/API slots use unique DNS names and an explicitly installed
 inner proxy. Traffic changes only after candidate verification, and failure restores
 the previous route and worker. A single deployment owner is required. Daily encrypted
-off-host backups and weekly isolated database restore drills have separate opt-in
-units and persistent freshness metrics. Installation, promotion, rollback, retention,
+off-host backups use PostgreSQL 18 native changed-block backups: a monthly physical full baseline,
+daily incrementals referencing the preceding manifest, and dependency-aware retention of complete
+chains in the encrypted restic repository. The client reuses the pinned PostgreSQL image and its
+private network namespace, with CPU/memory/rate limits and idle I/O priority for its replication
+backends. Full recovery tests are manual/off-host after significant changes; an optional quarterly
+timer belongs on a recovery host, not the serving machine. Persistent freshness metrics cover both.
+Installation, promotion, rollback, retention,
 backup and proxy details are in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 Existing hosts continue using `scripts/ops/poll-deploy.sh` until the explicit host
@@ -400,8 +401,8 @@ The web frontend (`/api/telemetry/metrics`), WebAPI (`/metrics`, ASP.NET Core ex
 exporter are scraped by Prometheus
 (`config/monitoring/prometheus.yml`), which Grafana reads. Prometheus + Grafana are their own
 **single-source-of-truth stack** at `config/monitoring/` (`compose.yml` + a prod overlay
-`compose.prod.yml`), deployed identically local and prod (prod at `/root/transcendence-monitoring/`,
-synced from the repo—not part of the app's Compose project at `/root/transcendence` or the `poll-deploy` pipeline; see
+`compose.prod.yml`), deployed identically local and prod (synced from the repo as a separate
+Compose project outside the application's release pipeline; see
 `config/monitoring/README.md`). Grafana is file-provisioned. Beyond the worker's own in-app
 **ingestion** health alerter, Grafana owns **infrastructure** alerting so an external process pages:
 
@@ -526,18 +527,15 @@ was last ingested. It is built so that no request ever counts rows:
   `analytics-warm` lane, `[DisableConcurrentExecution]`) calls `IDatasetStatsRefresher`, which is
   registered only in `AddTranscendenceWorkerCore`, so the WebAPI cannot resolve it. Every match figure
   comes from one grouped pass over `Matches`
-  (`count(*) FILTER (...)` per platform, `GROUP BY "PlatformRegion"`). On production (568K rows, 105 MB
-  heap) that is a parallel seq scan answered entirely from shared buffers: 214 ms, 13,424 buffer hits,
-  no disk reads. The players figure is `pg_class.reltuples` for `Summoners` (0.1 ms catalog lookup)
-  because an exact `count(*)` over its ~4.8M rows outlasts a 60 s statement timeout on the production
-  disk; it is labelled approximate and is `null` for a never-analyzed table rather than falling back to
-  the exact count. `pg_database_size` adds ~8 ms.
+  (`count(*) FILTER (...)` per platform, `GROUP BY "PlatformRegion"`). The players figure uses `pg_class.reltuples` for `Summoners` to avoid an exact full-table count.
+  It is labelled approximate and is `null` for a never-analyzed table rather than falling back to
+  an expensive exact count. The worker also records `pg_database_size`.
 - **Store.** The result is upserted as one `AnalyticsResponseSnapshot` row
   (`Feature = "dataset-stats"`, `ScopeKey = "global"`, `Patch = "*"`), reusing the durable response-snapshot
   table, so there is no new table or migration. `"*"` can never equal a real patch version, so the pro
   refresh's per-patch delete never touches the row.
 - **Serve.** `DatasetStatsService` reads that row by its unique `(Feature, ScopeKey, Patch)` index
-  (0.1 ms, 2 buffer hits) behind a local-only HybridCache entry (60 s, distributed cache disabled; the
+  behind a local-only HybridCache entry (60 s, distributed cache disabled; the
   lookup is cheaper than a Redis round trip and needs no cross-host invalidation). HybridCache runs one
   fill per key, so a burst on a cold cache issues one lookup. A missing row returns `404`.
 
@@ -736,8 +734,7 @@ There is no offline model, no generation, and nothing to promote: readers see th
    GoldBucket)` with `Games`, `Wins`, `TimingSecondsSum`. Every column is a plain sum, so patches,
    regions, and opponents add at read time. `OpponentChampionId = 0` and `Region = 'ALL'` are the
    all-games scope every decision lands in; the lane opponent and the platform region are counted
-   additionally, but **only** for Starter, the first item, Boots, RunePage, and Spells — measured on
-   prod, 75% of matchup keys for items 1–3 were single-game. There is no opponent×region scope.
+   additionally, but **only** for Starter, the first item, Boots, RunePage, and Spells to limit sparse keys. There is no opponent×region scope.
    `GoldBucket` is the team gold difference at the decision minute (the frame at
    `floor(timestamp / 60000)`), bucketed at −2500/−750/750/2500; pregame decisions and missing frames
    fall in the middle bucket (2).
@@ -780,7 +777,7 @@ is the single source, and the "two-minute profile" is a read-time predicate on `
 table, no dual-write. Because cadence is therefore a storage decision rather than a schema one, it is
 **flag-coupled**: with Build Lab disabled the job honours `Jobs:TimelineIngestion:FrameIntervalMinutes`
 (default 2), and only with it enabled does it drop to one minute. A feature-off deployment does not
-double the ~22.5M-row hot table just to keep the option open. `MatchParticipantItemEvents` and `MatchParticipantRankContexts` are likewise written only when
+double the hot table just to keep the option open. `MatchParticipantItemEvents` and `MatchParticipantRankContexts` are likewise written only when
 Build Lab is enabled. The retired raw JSON event corpus is no longer collected or stored; no current
 reader used it. Live-game snapshot JSON is a separate, actively read table and remains supported.
 

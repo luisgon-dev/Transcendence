@@ -180,17 +180,17 @@ groups:
       model:
         refId: B
         type: math
-        expression: $A > 691200
+        expression: $A > 8640000
         intervalMs: 1000
         maxDataPoints: 43200
         datasource:
           type: __expr__
           uid: __expr__
     labels:
-      severity: critical
+      severity: warning
     annotations:
       summary: Database restore drill stale
-      description: No isolated database restore drill has passed for eight days.
+      description: No isolated recovery test has passed for 100 days. Run a manual off-host test after significant backup/database changes or at quarterly review.
     notification_settings:
       receiver: transcendence-discord
       group_by:

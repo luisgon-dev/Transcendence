@@ -609,3 +609,6 @@ Redis 8 retains its existing append-only data and DataProtection keys.
 
 Raw timeline event JSON is retired; structured timeline features and managed NAS archives remain.
 See [production host configuration](docs/PRODUCTION-HOST.md) for the retention and backup setup.
+Database protection uses daily PostgreSQL changed-block backups and a throttled monthly full
+baseline in the encrypted NAS repository. Full restore tests are manual/off-host or optional
+quarterly on a recovery host. Daily full dumps and weekly restores are not the serving-host policy.

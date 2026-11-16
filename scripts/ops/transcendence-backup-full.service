@@ -1,0 +1,17 @@
+[Unit]
+Description=Throttled monthly PostgreSQL physical baseline
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/transcendence-backup.conf
+Environment=TRN_RELEASE_TEXTFILE_DIR=/var/lib/transcendence-perf/textfile
+ExecStart=/usr/bin/python3 -B /var/lib/transcendence-release/current/scripts/ops/release_backup.py backup-native-full
+UMask=0077
+Nice=19
+IOSchedulingClass=idle
+CPUQuota=100%
+MemoryMax=1G
+TimeoutStartSec=18h
+TimeoutStopSec=5min

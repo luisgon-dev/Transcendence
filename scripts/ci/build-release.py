@@ -26,6 +26,10 @@ def build(revision, records, output):
         images[component] = record["image"]
     paths = [ROOT / "compose.yml", ROOT / "scripts/e2e/seed-profile.sql"]
     paths += sorted((ROOT / "scripts/ops").glob("release_*.py"))
+    paths += sorted((ROOT / "scripts/ops").glob("transcendence-backup*.service"))
+    paths += sorted((ROOT / "scripts/ops").glob("transcendence-backup*.timer"))
+    paths += [ROOT / "scripts/ops/transcendence-restore-drill.service",
+              ROOT / "scripts/ops/transcendence-restore-drill.timer"]
     paths += sorted((ROOT / "config/deploy").glob("*"))
     files = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
              for p in paths if p.is_file()}

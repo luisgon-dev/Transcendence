@@ -1370,6 +1370,10 @@ Periodic disk-heavy jobs declare `StorageMaintenanceWork`. They share read lease
 operation and yield to the next recurrence when archive/backup/restore requests the exclusive lease.
 `exclusive.lock` gives waiting maintenance priority while existing shared work drains; `run.lock`
 provides the actual storage exclusion. Both use OS locks, so a crashed process leaves no stale marker.
+On adopted hosts, set `TRN_RELEASE_MAINTENANCE_DIR` in the release controller's private configuration
+to that same initialized directory. Promotions share the exclusive gate; current-release health
+checks continue during a storage hold. See `TRN_RELEASE_MAINTENANCE_WAIT_SECONDS` and installation
+requirements in [DEPLOYMENT.md](DEPLOYMENT.md).
 Foreground refreshes and imports do not declare that role. The raw-match importer and timeline
 writer honor the same retention/frozen-cohort policy; compact full-history facts and season stats
 have independent ownership. Raw timeline event JSON collection is removed; structured timeline

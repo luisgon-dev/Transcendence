@@ -378,6 +378,97 @@ class DeploymentTests(ReleaseFixture):
                 deploy.http_probe('https://example.com', SHA, '/profile', route='new-slot')
 
 
+class StorageCoordinationTests(ReleaseFixture):
+    def maintenance(self):
+        directory = self.root / 'maintenance'
+        directory.mkdir()
+        for name in ('exclusive.lock', 'run.lock'):
+            (directory / name).touch()
+        return directory
+
+    def test_busy_backup_defers_promotion_without_quarantining_and_verifies_current(self):
+        engine = deploy.Engine(self.bundle, self.state, self.env)
+        current = dict(release='release-' + 'b' * 40, mode='blue-green', candidate='trn-slot-b')
+        deploy.write_json(self.state / 'current.json', current)
+        directory = self.maintenance()
+        active = MagicMock(release=current['release'])
+        with (directory / 'exclusive.lock').open() as backup_lock, \
+                patch.dict(os.environ, {'TRN_RELEASE_MAINTENANCE_DIR': str(directory)}), \
+                patch.object(engine, '_apply') as promote, \
+                patch.object(deploy, 'Engine', return_value=active), contextlib.redirect_stdout(io.StringIO()):
+            deploy.fcntl.flock(backup_lock, deploy.fcntl.LOCK_EX)
+            engine.apply('https://example.com', '/profile', mode='blue-green')
+        promote.assert_not_called()
+        active._apply.assert_called_once()
+        self.assertEqual(json.loads((self.state / 'current.json').read_text()), current)
+        self.assertEqual(json.loads((self.state / 'status.json').read_text())['phase'], 'maintenance')
+        self.assertIn('transcendence_release_healthy 1', (self.state / 'textfile/release.prom').read_text())
+        self.assertFalse((engine.attempt / 'quarantined').exists())
+
+    def test_unchanged_release_health_checks_continue_during_backup(self):
+        engine = deploy.Engine(self.bundle, self.state, self.env)
+        deploy.write_json(self.state / 'current.json', dict(release=engine.release, mode='replace'))
+        directory = self.maintenance()
+        with (directory / 'exclusive.lock').open() as backup_lock, \
+                patch.dict(os.environ, {'TRN_RELEASE_MAINTENANCE_DIR': str(directory)}), \
+                patch.object(engine, '_apply', return_value='verified') as verify:
+            deploy.fcntl.flock(backup_lock, deploy.fcntl.LOCK_EX)
+            self.assertEqual(engine.apply('https://example.com', '/profile'), 'verified')
+        verify.assert_called_once()
+
+    def test_maintenance_never_masks_an_unhealthy_current_release(self):
+        engine = deploy.Engine(self.bundle, self.state, self.env)
+        current = dict(release='release-' + 'b' * 40, mode='replace')
+        deploy.write_json(self.state / 'current.json', current)
+        directory = self.maintenance()
+        active = MagicMock(release=current['release'])
+        active._apply.side_effect = RuntimeError('current image drifted')
+        with (directory / 'exclusive.lock').open() as backup_lock, \
+                patch.dict(os.environ, {'TRN_RELEASE_MAINTENANCE_DIR': str(directory)}), \
+                patch.object(deploy, 'Engine', return_value=active), contextlib.redirect_stdout(io.StringIO()):
+            deploy.fcntl.flock(backup_lock, deploy.fcntl.LOCK_EX)
+            with self.assertRaisesRegex(RuntimeError, 'image drifted'):
+                engine.apply('https://example.com', '/profile')
+        self.assertEqual(json.loads((self.state / 'status.json').read_text())['phase'], 'degraded')
+        self.assertIn('transcendence_release_healthy 0', (self.state / 'textfile/release.prom').read_text())
+        self.assertFalse((engine.attempt / 'quarantined').exists())
+
+    def test_promotion_owns_both_locks_and_releases_them_after_failure(self):
+        engine = deploy.Engine(self.bundle, self.state, self.env)
+        directory = self.maintenance()
+        def fail(*args):
+            for path in directory.iterdir():
+                with path.open() as other:
+                    with self.assertRaises(BlockingIOError):
+                        deploy.fcntl.flock(other, deploy.fcntl.LOCK_SH | deploy.fcntl.LOCK_NB)
+            raise RuntimeError('promotion failed')
+        with patch.dict(os.environ, {'TRN_RELEASE_MAINTENANCE_DIR': str(directory)}), \
+                patch.object(engine, '_apply', side_effect=fail):
+            with self.assertRaisesRegex(RuntimeError, 'promotion failed'):
+                engine.apply('https://example.com', '/profile')
+        for path in directory.iterdir():
+            with path.open() as other:
+                deploy.fcntl.flock(other, deploy.fcntl.LOCK_EX | deploy.fcntl.LOCK_NB)
+
+    def test_busy_analytics_wait_is_bounded_and_releases_maintenance_priority(self):
+        directory = self.maintenance()
+        with (directory / 'run.lock').open() as analytics, \
+                patch.dict(os.environ, {'TRN_RELEASE_MAINTENANCE_DIR': str(directory),
+                                        'TRN_RELEASE_MAINTENANCE_WAIT_SECONDS': '0'}):
+            deploy.fcntl.flock(analytics, deploy.fcntl.LOCK_SH)
+            with deploy.storage_maintenance() as acquired:
+                self.assertFalse(acquired)
+            with (directory / 'exclusive.lock').open() as other:
+                deploy.fcntl.flock(other, deploy.fcntl.LOCK_EX | deploy.fcntl.LOCK_NB)
+
+    def test_configured_missing_or_root_maintenance_directory_fails_closed(self):
+        for directory in ('/', 'relative', str(self.root / 'missing')):
+            with self.subTest(directory=directory), \
+                    patch.dict(os.environ, {'TRN_RELEASE_MAINTENANCE_DIR': directory}):
+                with self.assertRaises(ValueError), deploy.storage_maintenance():
+                    self.fail('Unsafe maintenance directory was accepted')
+
+
 class BackupTests(unittest.TestCase):
     def test_cancelled_dump_terminates_only_its_tagged_database_session(self):
         with tempfile.TemporaryDirectory() as tmp:

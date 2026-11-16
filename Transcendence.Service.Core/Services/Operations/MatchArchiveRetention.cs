@@ -117,7 +117,7 @@ public sealed class MatchArchiveRetention(
             TimeSpan.FromSeconds(Math.Clamp(Settings.MaxRunSeconds, 1, 3600)), ct);
         if (maintenance is null)
         {
-            logger.LogInformation("Match archival deferred while backup/restore maintenance owns the storage gate.");
+            logger.LogInformation("Match archival deferred while storage maintenance owns the gate.");
             return;
         }
         destination.Verify(Settings.Directory);
@@ -302,7 +302,7 @@ public sealed class MatchArchiveRetention(
     public async Task AdoptLegacyAsync(string legacyNasRoot, CancellationToken ct)
     {
         using var maintenance = ArchiveMaintenanceLease.TryAcquire(Settings.MaintenanceDirectory)
-            ?? throw new InvalidOperationException("Wait for backup/restore maintenance before adopting archive progress");
+            ?? throw new InvalidOperationException("Wait for active storage maintenance before adopting archive progress");
         destination.Verify(Settings.Directory);
         var state = Path.Combine(Settings.MaintenanceDirectory, "current");
         if (!File.Exists(state))

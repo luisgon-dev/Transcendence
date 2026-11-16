@@ -23,6 +23,39 @@ COSIGN = "ghcr.io/sigstore/cosign/cosign:v2.6.3@sha256:4bedb8de1c5c1abd8dea60de7
 IDENTITY = "https://github.com/luisgon-dev/Transcendence/.github/workflows/docker-images.yml@refs/heads/main"
 
 
+@contextlib.contextmanager
+def storage_maintenance():
+    """Serialize promotions with archive/backup/restore work on an adopted host."""
+    configured = os.environ.get("TRN_RELEASE_MAINTENANCE_DIR")
+    if not configured:
+        yield True
+        return
+    directory = Path(configured)
+    if not directory.is_absolute() or not directory.is_dir() or directory.resolve() == Path("/"):
+        raise ValueError("Release maintenance requires the initialized local archive state directory")
+    wait = int(os.environ.get("TRN_RELEASE_MAINTENANCE_WAIT_SECONDS", "30"))
+    if not 0 <= wait <= 1200:
+        raise ValueError("Release maintenance wait must be between 0 and 1200 seconds")
+    with contextlib.ExitStack() as locks:
+        for name in ("exclusive.lock", "run.lock"):
+            path = directory / name
+            if not path.is_file() or path.is_symlink():
+                raise ValueError("Release maintenance lock files are missing or unsafe")
+            lock = locks.enter_context(path.open("r"))
+            deadline = time.monotonic() + (wait if name == "run.lock" else 0)
+            while True:
+                try:
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        locks.close()
+                        yield False
+                        return
+                    time.sleep(.25)
+        yield True
+
+
 def write_json(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -255,30 +288,57 @@ class Engine:
         finally:
             self.command = command
 
-    def status(self, phase, error=None):
+    def status(self, phase, error=None, current_verified=False):
         value = dict(desired=self.release, phase=phase, checkedAt=time.time(), error=error)
         current = self.state / "current.json"
         value["deployed"] = json.loads(current.read_text())["release"] if current.exists() else "legacy"
         write_json(self.state / "status.json", value)
         try:
-            self.export_metrics(phase, value["checkedAt"])
+            self.export_metrics(phase, value["checkedAt"], current_verified)
         except OSError:
             print("Release status saved; metrics exporter directory needs attention", flush=True)
         print(json.dumps(value), flush=True)
 
-    def export_metrics(self, phase, checked_at):
+    def export_metrics(self, phase, checked_at, current_verified=False):
         directory = Path(os.environ.get("TRN_RELEASE_TEXTFILE_DIR", self.state / "textfile"))
         directory.mkdir(parents=True, exist_ok=True)
         directory.chmod(0o755)
         temporary = directory / "release.prom.tmp"
         temporary.write_text(
-            f'transcendence_release_healthy {int(phase == "healthy")}\n'
+            f'transcendence_release_healthy {int(phase == "healthy" or current_verified)}\n'
             f'transcendence_release_checked_timestamp_seconds {checked_at}\n'
             f'transcendence_release_quarantined {int(phase in ("quarantined", "failed", "rollback_failed"))}\n')
         temporary.chmod(0o644)
         temporary.replace(directory / "release.prom")
 
     def apply(self, base_url, profile, retain=3, mode="replace", traffic_file=None, network=None, api_url=None):
+        if not 2 <= retain <= 10:
+            raise ValueError("Retain between 2 and 10 releases")
+        path = self.state / "current.json"
+        current = json.loads(path.read_text()) if path.exists() else None
+        arguments = (base_url, profile, retain, mode, traffic_file, network, api_url)
+        # Health verification of an unchanged release remains available during long storage jobs.
+        unchanged = current and current["release"] == self.release and current.get("mode", "replace") == mode
+        if unchanged or (self.attempt / "quarantined").exists():
+            return self._apply(*arguments)
+        with storage_maintenance() as acquired:
+            if acquired:
+                return self._apply(*arguments)
+            if current:
+                # Attest the existing images and route against THEIR retained release contract.
+                try:
+                    active = Engine(self.state / "current", self.state, self.env_file, self.project, self.timeout)
+                    if active.release != current["release"]:
+                        raise RuntimeError("Current release pointer does not match its deployment record")
+                    active._apply(base_url, profile, retain, current.get("mode", "replace"),
+                                  traffic_file, network, api_url)
+                except Exception:
+                    self.status("degraded", "Current release failed verification during a storage hold")
+                    raise
+            self.status("maintenance", current_verified=bool(current))
+            print("Promotion deferred for storage maintenance; the release timer will retry.", flush=True)
+
+    def _apply(self, base_url, profile, retain=3, mode="replace", traffic_file=None, network=None, api_url=None):
         if not 2 <= retain <= 10:
             raise ValueError("Retain between 2 and 10 releases")
         failed = self.attempt / "quarantined"

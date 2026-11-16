@@ -36,7 +36,7 @@ public sealed class StorageMaintenanceFilter : JobFilterAttribute, IServerFilter
         if (lease is null)
         {
             context.Canceled = true;
-            logger.LogInformation("Deferred periodic {JobType} while backup/restore/archive maintenance owns the storage gate; the next recurrence retries.", context.BackgroundJob.Job.Type.Name);
+            logger.LogInformation("Deferred periodic {JobType} while storage maintenance owns the gate; the next recurrence retries.", context.BackgroundJob.Job.Type.Name);
             return;
         }
         context.Items[LeaseKey] = lease;

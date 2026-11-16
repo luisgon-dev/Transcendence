@@ -155,6 +155,14 @@ It creates the successful-ranked-match and minute-15 timeline indexes with
 runs `ANALYZE`. The script is idempotent, must run outside a transaction, and does not replace the EF
 migration that creates the new narrow fact/generation tables.
 
+## Shared storage maintenance
+
+The complete-release controller can share these storage locks with
+`TRN_RELEASE_MAINTENANCE_DIR` (same local directory as `TRN_BACKUP_ARCHIVE_STATE_DIR`).
+Set it after both lock files are initialized. New promotions defer while storage work owns the
+exclusive gate; health checks of the retained deployment continue. Waiting for shared analytics
+is bounded by `TRN_RELEASE_MAINTENANCE_WAIT_SECONDS` (default 30, range 0–1200).
+
 ## `archive-old-patches.sh` — bounded archive-then-prune
 
 **Legacy recovery only after managed adoption.** The worker's `archive-matches` job now owns

@@ -1,0 +1,18 @@
+[Unit]
+Description=Isolated Docker daemon for Transcendence NAS restore verification
+After=network-online.target
+RequiresMountsFor=/var/lib/transcendence-backup
+AssertPathIsMountPoint=/var/lib/transcendence-backup
+StopWhenUnneeded=yes
+
+[Service]
+PrivateNetwork=yes
+TemporaryFileSystem=/run/containerd:mode=0755
+Type=notify
+ExecStart=/usr/bin/dockerd --config-file=/etc/transcendence-restore-docker.json
+UMask=0077
+Delegate=yes
+KillMode=process
+TimeoutStartSec=3min
+TimeoutStopSec=3min
+LimitNOFILE=1048576

@@ -1,0 +1,21 @@
+{
+  "data-root": "/var/lib/transcendence-backup/docker",
+  "exec-root": "/run/transcendence-restore-docker",
+  "pidfile": "/run/transcendence-restore-docker.pid",
+  "hosts": [
+    "unix:///run/transcendence-restore-docker.sock"
+  ],
+  "group": "root",
+  "bridge": "none",
+  "iptables": false,
+  "ip6tables": false,
+  "ip-forward": false,
+  "ip-masq": false,
+  "log-driver": "local",
+  "storage-driver": "overlay2",
+  "features": {
+    "containerd-snapshotter": false
+  },
+  "containerd-namespace": "transcendence-restore",
+  "containerd-plugins-namespace": "transcendence-restore-plugins"
+}

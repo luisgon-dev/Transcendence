@@ -66,7 +66,11 @@ patch 16.18. Completed history already occupies approximately 30 GiB on Unraid a
 
 The existing Proxmox `nas-backup` mount supplies that exact subdirectory to LXC
 104 at `/mnt/transcendence-match-archive`. Its external `transcendence_match_archive`
-Docker volume binds the NAS path. `transcendence_maintenance_state` binds
+Docker volume binds the NAS path. Archive parent/patch directories and the adopted pending chunk
+use native owner `1654:100`, matching the worker image's actual `APP_UID`; the existing NFS export
+did not honor the attempted per-user ACL for access checks. A real UID-1654 write/fsync/read/delete
+probe passed at the root, patch and chunk levels. Recheck these permissions after an image UID or
+NAS permission change. `transcendence_maintenance_state` binds
 `/var/lib/transcendence-archive`, preserving the original lock inode across host
 backup tools and worker containers. Keep
 `TRN_BACKUP_ARCHIVE_STATE_DIR=/var/lib/transcendence-archive`. Database checkpoints
@@ -92,10 +96,27 @@ its existing volume.
 `transcendence-restore-docker.service` reads
 `/etc/transcendence-restore-docker.json`, uses
 `/run/transcendence-restore-docker.sock`, and stores its data below the dedicated
-workspace. It has a separate execution directory, no Docker bridge, no iptables
-management, and a root-only socket. The restore unit requires this daemon and
-sets `DOCKER_HOST` only for the restore drill. The backup unit continues using
-the production Docker daemon to read PostgreSQL.
+workspace. The checked-in templates are
+[`restore-docker.json`](../config/deploy/restore-docker.json),
+[`transcendence-restore-docker.service`](../config/deploy/transcendence-restore-docker.service)
+and [`restore-workspace.conf`](../config/deploy/restore-workspace.conf).
+
+The daemon has a private network namespace and a private writable `/run/containerd` tmpfs.
+It starts its own managed containerd inside the **same mount and network namespaces**; production's
+containerd socket is hidden. Separate data/exec roots and `bridge=none` alone are insufficient:
+a second daemon sharing the host network namespace can remove its default Docker bridge, and an
+external containerd in a different mount namespace cannot see the daemon's rootfs mounts.
+The production default bridge was restored without restarting the serving containers.
+
+The restore unit requires this private daemon and sets `DOCKER_HOST` only for the drill. Since
+that daemon has no network egress, the unit first pulls PostgreSQL 18.7 with the production Docker
+socket and streams `image save` into the private socket's `image load`. Update that preload image
+with the restore tool's PostgreSQL image when changing versions. The backup unit reads PostgreSQL
+through the production Docker daemon. Neither routine modifies production container storage.
+
+Acceptance checked the daemon/managed-child namespace identities, executed `psql --version` inside
+a disposable `--network none` container, and verified production PostgreSQL and `docker0` remained
+intact after stopping the private runtime.
 
 Both units require their mount points. The restore daemon stops when it is no
 longer needed, and the restore service trims the scratch filesystem afterwards
@@ -132,3 +153,25 @@ Structured item events, purchases, skills, snapshots, rank contexts, compact fac
 and live-game snapshot JSON remain. Timeline schema v2 continues to describe its retained structured
 features; no mass re-fetch is needed. The unfinished pre-retirement dump was canceled with explicit
 owner approval, and the replacement full NAS backup and restore drill cover the reduced database.
+
+## Live archive acceptance
+
+Release `e6e19d436283ef5be4eab26698f78492c361fc48` is serving through the verified inner edge
+in blue-green slot `trn-slot-e6e19d436283`. Its generated migrations retired the unused table and
+created managed checkpoint ownership. The database then reported 207 GiB and the production root
+had about 381 GiB available, compared with about 243 GiB before retirement.
+
+The imported patch-16.18 chunk `e5358dd1-0c3e-49bb-8043-87cd34e9de92` completed all 500 matches.
+All twelve NAS files passed independent compressed-file SHA-256 and logical CSV record counts;
+the raw cohort was pruned, all 500 synergy-source records remained, and the sampled player's 263
+history facts remained. Managed and legacy pending tables both reached zero, and `_DONE` exists.
+The old cron entry is retired into the private baseline directory. The native backup acquired its
+exclusive maintenance lock before the normal worker restarted; logs confirmed heavy periodic jobs
+yielded while normal worker health and metrics stayed available.
+
+Historical JSON retirement removed 621 payload files totaling 15,206,730,227 bytes and updated
+exactly their 621 manifest entries. The metadata-only receipt is
+`/mnt/user/backup/transcendence-match-archive/_retirements/20261115-unused-timeline-json.json`.
+Private host acceptance evidence is in `/var/lib/transcendence-archive/managed-acceptance-result.json`
+and the adjacent adoption/acceptance logs. The full database NAS snapshot and isolated restore drill
+must also pass before schedules are enabled; these archive checks alone do not satisfy that gate.

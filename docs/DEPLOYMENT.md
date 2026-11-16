@@ -281,10 +281,23 @@ cleanup, repository validation and successful restored table queries remain requ
 regardless of the timeout. Enable schedules only after a complete production-size
 backup and restore drill pass.
 
+For a large restore drill on the application machine, use the checked-in private-runtime templates:
+`config/deploy/restore-docker.json`, `config/deploy/transcendence-restore-docker.service`, and
+`config/deploy/restore-workspace.conf`. Adapt mount paths, install the JSON as
+`/etc/transcendence-restore-docker.json`, the service under `/etc/systemd/system`, and the drop-in as
+`/etc/systemd/system/transcendence-restore-drill.service.d/workspace.conf`; reload systemd afterwards.
+The private network namespace and private writable `/run/containerd` are required alongside the
+separate data/exec roots. Let that Docker daemon manage its own containerd in the same namespaces.
+The preload commands deliberately use the production Unix socket to pull/save the pinned PostgreSQL
+image, then load it through the private Unix socket; the restore daemon has no network egress.
+Validate the configured units, execute a real disposable PostgreSQL container, and confirm the
+production bridge/containers remain intact. See [the host runbook](PRODUCTION-HOST.md#restore-workspace).
+
 When the old-patch archive job is installed, set
 `TRN_BACKUP_ARCHIVE_STATE_DIR=/var/lib/transcendence-archive` to its actual state
-directory. Backups and restore drills take the archiver's existing `run.lock`,
-waiting for an in-flight archive window and making later cron runs yield. The
+directory. Backups and restore drills announce exclusive work through `exclusive.lock`, then
+take the existing `run.lock`. New heavy analytics work yields while existing work drains; the
+managed archive actor uses the same protocol. Legacy cron also yields on `run.lock`. The
 backup captures the resume state alongside the database in the same encrypted
 snapshot while that lock is held. Restore both the database and the saved archive
 state together before resuming pruning; never drop a nonempty frozen work table
@@ -307,8 +320,9 @@ other jobs in existing admin operations. The legacy host cron is not a second sc
    table. Never discard a partially pruned chunk. Preserve every existing NAS archive directory.
 2. Mount the existing NAS match archive into the application host at
    `/mnt/transcendence-match-archive`. For an LXC, bind the already-mounted Proxmox NFS subdirectory
-   into the LXC. Grant the worker's actual `APP_UID` write/default ACLs on archive parent directories
-   and its pending chunk. The worker needs filesystem access, not a NAS administrator SSH key.
+   into the LXC. Grant the worker's actual `APP_UID` native directory ownership or effective write
+   permissions on archive parent directories and its pending chunk. Test a real write/fsync/read
+   through NFS as that UID: NAS-side ACL display alone is insufficient. The worker needs filesystem access, not a NAS administrator SSH key.
 3. Before deploying the new complete release, create these external volumes on the Docker host:
 
    ```bash

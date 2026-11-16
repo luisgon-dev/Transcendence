@@ -288,10 +288,12 @@ backup and restore drill pass.
 
 The disposable restore PostgreSQL instance keeps its two-CPU/2 GiB limit and uses native
 bulk-load settings: `autovacuum=off`, `max_wal_size=8GB`, `checkpoint_timeout=15min`, and
-`maintenance_work_mem=512MB`. These avoid redundant scans and frequent checkpoints while loading
+`maintenance_work_mem=512MB`, plus `wal_compression=on`. These avoid redundant scans and frequent checkpoints while loading
 data and rebuilding indexes, following [PostgreSQL's bulk-load guidance](https://www.postgresql.org/docs/18/populate.html).
 They apply only to the discarded drill container; production PostgreSQL retains its own settings.
 Durability settings and all dump/restore error checks remain enabled.
+WAL compression uses PostgreSQL's built-in `pglz` method to reduce full-page-image write traffic
+during index creation; it trades some CPU for disk I/O without disabling crash recovery.
 
 For a large restore drill on the application machine, use the checked-in private-runtime templates:
 `config/deploy/restore-docker.json`, `config/deploy/transcendence-restore-docker.service`, and

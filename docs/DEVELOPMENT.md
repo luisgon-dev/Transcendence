@@ -1398,3 +1398,10 @@ transaction, so EF's tentative tracked values cannot become false prune progress
 The archive connection is closed and its advisory ownership released even if pending-count metrics
 fail. PostgreSQL fault-injection tests cover checkpoint-write timeouts, exact resume counts, and
 connection cleanup after a failed metrics query.
+
+### Desktop health metrics
+
+`DesktopTelemetry__Releases__0=0.1.6` (and subsequent indices, max 16) opts known
+release versions into labelled desktop health metrics; all others use `other`.
+No secret, database migration or new scrape target is needed. The opt-in desktop
+client must be deployed separately. See `docs/API.md` for the closed event schema.

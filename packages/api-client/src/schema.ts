@@ -2689,6 +2689,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/desktop-telemetry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["DesktopTelemetryBatch"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Content Too Large */
+                413: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/lol/leaderboards": {
         parameters: {
             query?: never;
@@ -5842,6 +5906,20 @@ export interface components {
             lastMatchIngestedAtUtc?: string | null;
             /** Format: date-time */
             computedAtUtc: string;
+        };
+        DesktopTelemetryBatch: {
+            release: string;
+            os: string;
+            arch: string;
+            events: components["schemas"]["DesktopTelemetryEvent"][];
+        };
+        DesktopTelemetryEvent: {
+            name: string;
+            outcome: string;
+            /** Format: int32 */
+            count: number;
+            /** Format: double */
+            durationMs?: number | null;
         };
         FavoriteSummonerDto: {
             /** Format: uuid */

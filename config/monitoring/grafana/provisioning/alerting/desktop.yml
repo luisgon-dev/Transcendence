@@ -1,0 +1,51 @@
+# Diagnostic signal only: untrusted opt-in client reports, never an authoritative availability SLO.
+apiVersion: 1
+groups:
+- orgId: 1
+  name: transcendence-desktop
+  folder: Transcendence
+  interval: 1m
+  rules:
+  - uid: trn-desktop-update-failures
+    title: Desktop clients report update failures
+    condition: B
+    for: 10m
+    noDataState: OK
+    execErrState: Error
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 900
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        editorMode: code
+        expr: sum(increase(transcendence_desktop_events_total{event=~"update_check|update_download|update_install",outcome=~"failure|timeout"}[15m]))
+        instant: true
+        range: false
+        intervalMs: 1000
+        maxDataPoints: 43200
+        datasource:
+          type: prometheus
+          uid: prometheus
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: math
+        expression: $A > 20
+        intervalMs: 1000
+        maxDataPoints: 43200
+        datasource:
+          type: __expr__
+          uid: __expr__
+    labels:
+      severity: warning
+      source: unverified-desktop-reports
+    annotations:
+      summary: More than 20 opt-in update failures reported in 15 minutes
+      description: Inspect Desktop Health and GlitchTip. Reports are untrusted and not distinct users; verify actual updater health before taking action. Missing reports do not establish health.

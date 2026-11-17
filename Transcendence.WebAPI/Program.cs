@@ -1,3 +1,4 @@
+using Transcendence.WebAPI.Telemetry;
 using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Authentication;
@@ -52,11 +53,20 @@ builder.Services.AddControllers(options =>
     // ProblemDetailsErrorBodyFilter. Empty-body 4xx/5xx + model validation are already ProblemDetails
     // via [ApiController]; unhandled exceptions via ApiExceptionHandler.
     options.Filters.Add<ProblemDetailsErrorBodyFilter>());
+builder.Services.AddSingleton<DesktopTelemetry>();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    // No private-address exemption. Hash into a fixed number of buckets to bound limiter memory.
+    options.AddPolicy("desktop-telemetry", context => RateLimitPartition.GetFixedWindowLimiter(
+        partitionKey: (context.Connection.RemoteIpAddress?.GetHashCode() ?? 0) & 1023,
+        factory: _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 12, Window = TimeSpan.FromMinutes(1), QueueLimit = 0,
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+        }));
     // Public read limiters are partitioned PER CLIENT IP (not one global window), so a single client
     // cannot exhaust everyone's budget. Internal/SSR traffic is exempt — the web frontend's server-side
     // fetches reach the API directly (no X-Forwarded-For → a private/loopback address), and would
@@ -181,6 +191,11 @@ builder.Services.AddOpenTelemetry()
         .AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation()
         .AddRuntimeInstrumentation()
+        .AddMeter(DesktopTelemetry.MeterName)
+        .AddView("transcendence.desktop.duration", new ExplicitBucketHistogramConfiguration
+        {
+            Boundaries = [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60, 120, 600]
+        })
         .AddMeter(LeaderboardTelemetry.MeterName)
         .AddMeter(Transcendence.Service.Core.Services.Operations.OperationTelemetry.MeterName)
         .AddMeter("Microsoft.Extensions.Caching.Hybrid")
@@ -361,6 +376,17 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseExceptionHandler();
+// Keep oversized telemetry (including chunked requests) a 413 rather than a generic 500.
+app.Use(async (context, next) =>
+{
+    try { await next(context); }
+    catch (BadHttpRequestException error) when (context.Request.Path == "/api/desktop-telemetry"
+        && error.StatusCode == StatusCodes.Status413PayloadTooLarge && !context.Response.HasStarted)
+    {
+        context.Response.Clear();
+        context.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
+    }
+});
 app.UseHttpsRedirection();
 app.UseRateLimiter();
 

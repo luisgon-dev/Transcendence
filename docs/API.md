@@ -747,3 +747,38 @@ networks. Deployments can configure one or two trusted hops for NPM/inner-edge
 routing; the default remains one, and an unknown intermediate stops traversal.
 `/health/ready` also emits `X-TRN-Release` so deployments can verify the public API
 route reached the expected image revision without admin credentials.
+
+## Desktop telemetry (opt-in aggregates)
+
+`POST /api/desktop-telemetry` accepts anonymous, untrusted diagnostic counters from
+Transcendence Desktop. It deliberately requires no embedded API secret. It is not
+an authenticated usage, billing, availability or security signal.
+
+```json
+{"release":"0.1.6","os":"windows","arch":"x86_64","events":[{"name":"app_launch","outcome":"success","count":1,"durationMs":125}]}
+```
+
+The entire batch is validated before any recording. Body limit: 16 KiB; 1–32 events;
+count 1–100. Optional `durationMs` is a finite 0–600000 single-operation sample and
+requires count=1. Omit duration for aggregated counters. Unknown JSON fields are
+rejected. Only semver-shaped release strings (32 chars maximum), os
+`windows|macos|linux`, arch `x86_64|aarch64`, outcome
+`success|failure|timeout|cancelled`, and these event names are allowed:
+`app_launch`, `update_check`, `update_download`, `update_install`, `update_launch`,
+`backend_request`, `recommendation`, `league_connect`, `league_import`, `league_restore`.
+Do not send usernames, device/session identifiers, URLs, request bodies or errors.
+
+Responses: 204 accepted, 400 invalid JSON/schema/batch, 413 oversized, 415 wrong
+content type, 429 throttled. Clients should drop rejected reports, respect backoff
+and keep queues bounded; delivery is best-effort, not exactly-once.
+
+Limits: 12 requests/minute per client-IP hash bucket (1024 fixed buckets, collisions
+share a budget, no private-IP exemption), plus 300 accepted requests/minute per API
+process. IPs are used transiently by the limiter, never as metric labels. Multiple
+API processes each have their own budget; use edge limits for a multi-replica deployment.
+Trusted proxy configuration remains unchanged.
+
+Set `DesktopTelemetry:Releases` (environment form `DesktopTelemetry__Releases__0`,
+etc.) to at most 16 known releases for version breakdowns. Unknown/unlisted releases
+map to `other`; default is no known releases. Keep the list short and retire old
+versions periodically. No database or per-installation records are stored.

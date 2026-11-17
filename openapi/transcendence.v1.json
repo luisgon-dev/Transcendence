@@ -3149,6 +3149,61 @@
         }
       }
     },
+    "/api/desktop-telemetry": {
+      "post": {
+        "tags": [
+          "DesktopTelemetry"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/DesktopTelemetryBatch"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Content Too Large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/lol/leaderboards": {
       "get": {
         "tags": [
@@ -8753,6 +8808,71 @@
         },
         "additionalProperties": false
       },
+      "DesktopTelemetryBatch": {
+        "required": [
+          "arch",
+          "events",
+          "os",
+          "release"
+        ],
+        "type": "object",
+        "properties": {
+          "release": {
+            "maxLength": 32,
+            "minLength": 1,
+            "type": "string"
+          },
+          "os": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "arch": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "events": {
+            "maxItems": 32,
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DesktopTelemetryEvent"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "DesktopTelemetryEvent": {
+        "required": [
+          "count",
+          "name",
+          "outcome"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "outcome": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "count": {
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer",
+            "format": "int32"
+          },
+          "durationMs": {
+            "maximum": 600000,
+            "minimum": 0,
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "FavoriteSummonerDto": {
         "required": [
           "createdAtUtc",
@@ -12509,6 +12629,9 @@
     },
     {
       "name": "DatasetStats"
+    },
+    {
+      "name": "DesktopTelemetry"
     },
     {
       "name": "Leaderboards"

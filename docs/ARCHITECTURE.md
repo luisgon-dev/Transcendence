@@ -923,3 +923,13 @@ A periodic cycle skips the affected region while continuing eligible others,
 retaining prior observations and timestamps. Owned probes reschedule the same
 Hangfire job before ordinary failure retries are counted. Deferrals never become
 verified offline observations.
+
+### Desktop diagnostic aggregates
+
+The API's `Transcendence.Desktop` meter exposes bounded opt-in event counters and
+single-operation durations to the existing internal Prometheus scrape. Anonymous
+batches are strict-schema, size- and rate-limited; they carry no persistent user or
+installation ID. Release labels use an operator-provided allowlist of at most 16
+versions; unknown versions collapse to `other`. These untrusted counts are not
+unique installations, crash-free sessions, or authoritative uptime. Desktop error
+reports/symbolication belong to the separately deployed GlitchTip service.

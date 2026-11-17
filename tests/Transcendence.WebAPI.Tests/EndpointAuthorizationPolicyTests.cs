@@ -31,6 +31,8 @@ public sealed class EndpointAuthorizationPolicyTests
     /// </summary>
     private static readonly HashSet<string> AnonymousEndpoints = new(StringComparer.Ordinal)
     {
+        // Anonymous opt-in aggregates: closed schema and bounded cardinality/rate budget.
+        "POST api/desktop-telemetry",
         // Static analytics reference data.
         "GET api/lol/analytics/tierlist",
         "GET api/lol/analytics/regions",

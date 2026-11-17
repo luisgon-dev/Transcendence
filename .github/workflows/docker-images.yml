@@ -18,6 +18,45 @@ jobs:
   validate:
     uses: ./.github/workflows/ci-web-backend.yml
 
+  # Preserve classic branch-protection contexts after extracting reusable CI.
+  # Every compatibility gate requires the entire validation suite to succeed;
+  # skipped, cancelled or failed validation must never produce a green gate.
+  required-backend:
+    name: backend
+    needs: validate
+    if: always()
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Require complete validation suite
+        env:
+          VALIDATE_RESULT: ${{ needs.validate.result }}
+        run: test "$VALIDATE_RESULT" = success
+
+  required-web:
+    name: web
+    needs: validate
+    if: always()
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Require complete validation suite
+        env:
+          VALIDATE_RESULT: ${{ needs.validate.result }}
+        run: test "$VALIDATE_RESULT" = success
+
+  required-migration-safety:
+    name: migration-safety
+    needs: validate
+    if: always()
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Require complete validation suite
+        env:
+          VALIDATE_RESULT: ${{ needs.validate.result }}
+        run: test "$VALIDATE_RESULT" = success
+
   build:
     needs: validate
     runs-on: ubuntu-latest

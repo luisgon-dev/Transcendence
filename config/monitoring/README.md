@@ -153,3 +153,17 @@ when the five-minute `dataset-stats` snapshot is over thirty minutes old.
 Back up rules and reload Grafana file provisioning when installing. Current-patch `profile-warm` age
 is also exposed: target complete successful coverage within two hours. Observe queue completion and
 WAL/device latency when changing worker throughput; separate worker pools still share the HDD.
+
+## Desktop health
+
+`desktop-health.json` uses the API's existing scrape. Reports only appear after
+opt-in clients send data to the deployed API endpoint. Configure its bounded
+`DesktopTelemetry:Releases` allowlist to break out versions; default is `other`.
+Launch-event volume is not distinct installations or adoption percentage. Reports
+are anonymous, unverified, best-effort and may be lost/duplicated. Never derive
+crash-free sessions from them. Duration panels count individual samples only.
+No alert contact or notification route is added by this dashboard.
+The optional `alerting/desktop.yml` provisioning rule warns only after more than
+20 client-reported update failures in 15 minutes persists for 10 minutes. It uses
+the existing Grafana notification policy, not a new recipient. Review that policy
+before provisioning; client reports can be spoofed, so verify updater health.

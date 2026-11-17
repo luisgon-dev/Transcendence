@@ -1,0 +1,223 @@
+{
+  "uid": "trn-desktop-health",
+  "panels": [
+    {
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0.0
+      },
+      "targets": [
+        {
+          "legendFormat": "{{event}} {{outcome}} {{release}} {{os}}",
+          "expr": "sum by (release) (increase(transcendence_desktop_events_total{event=\"app_launch\",outcome=\"success\"}[$__range]))",
+          "refId": "A"
+        }
+      ],
+      "title": "Launch events by release (not installations)",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "id": 1
+    },
+    {
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0.0
+      },
+      "targets": [
+        {
+          "legendFormat": "{{event}} {{outcome}} {{release}} {{os}}",
+          "expr": "sum by (event,outcome) (rate(transcendence_desktop_events_total[5m]))",
+          "refId": "A"
+        }
+      ],
+      "title": "Operation outcomes",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "id": 2
+    },
+    {
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8.0
+      },
+      "targets": [
+        {
+          "legendFormat": "{{event}} {{outcome}} {{release}} {{os}}",
+          "expr": "sum by (event,release) (increase(transcendence_desktop_events_total{event=~\"update_.*\",outcome=~\"failure|timeout\"}[$__range]))",
+          "refId": "A"
+        }
+      ],
+      "title": "Update failures",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "id": 3
+    },
+    {
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8.0
+      },
+      "targets": [
+        {
+          "legendFormat": "{{event}} {{outcome}} {{release}} {{os}}",
+          "expr": "histogram_quantile(0.95, sum by (le,event) (rate(transcendence_desktop_duration_seconds_bucket{event=~\"backend_request|recommendation\"}[5m])))",
+          "refId": "A"
+        }
+      ],
+      "title": "API and recommendation p95",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "id": 4
+    },
+    {
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16.0
+      },
+      "targets": [
+        {
+          "legendFormat": "{{event}} {{outcome}} {{release}} {{os}}",
+          "expr": "sum by (event,os) (increase(transcendence_desktop_events_total{event=~\"league_.*\",outcome=~\"failure|timeout\"}[$__range]))",
+          "refId": "A"
+        }
+      ],
+      "title": "League connectivity and import failures",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "id": 5
+    },
+    {
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16.0
+      },
+      "targets": [
+        {
+          "legendFormat": "{{event}} {{outcome}} {{release}} {{os}}",
+          "expr": "histogram_quantile(0.95, sum by (le,os) (rate(transcendence_desktop_duration_seconds_bucket{event=\"app_launch\"}[5m])))",
+          "refId": "A"
+        }
+      ],
+      "title": "Startup p95",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "id": 6
+    }
+  ],
+  "version": 1,
+  "time": {
+    "to": "now",
+    "from": "now-24h"
+  },
+  "tags": [
+    "transcendence",
+    "desktop"
+  ],
+  "schemaVersion": 39,
+  "description": "Unverified opt-in aggregate reports. Launch counts are not unique installations; no crash-free session calculation. Missing data does not establish health. Unknown releases map to other.",
+  "title": "Transcendence - Desktop Health",
+  "timezone": "browser",
+  "refresh": "1m"
+}

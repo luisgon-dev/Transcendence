@@ -45,6 +45,7 @@ public sealed class WorkerRecurringJobPolicy(
     public const string RefreshPrecomputedAnalyticsJobId = "refresh-precomputed-analytics";
     public const string RefreshChampionMatchupsJobId = "refresh-champion-matchups";
     public const string RefreshChampionBuildSnapshotsJobId = "refresh-champion-build-snapshots";
+    public const string RefreshRequestedChampionSectionsJobId = "refresh-requested-champion-sections";
     public const string RefreshProAnalyticsJobId = "refresh-pro-analytics";
     public const string RefreshBuildResourceAnalyticsJobId = "refresh-build-resource-analytics";
     public const string RefreshBuildLabStatsJobId = "refresh-build-lab-stats";
@@ -86,6 +87,7 @@ public sealed class WorkerRecurringJobPolicy(
         RefreshPrecomputedAnalyticsJobId,
         RefreshChampionMatchupsJobId,
         RefreshChampionBuildSnapshotsJobId,
+        RefreshRequestedChampionSectionsJobId,
         RefreshProAnalyticsJobId,
         RefreshBuildResourceAnalyticsJobId,
         RefreshBuildLabStatsJobId,
@@ -177,6 +179,12 @@ public sealed class WorkerRecurringJobPolicy(
                 schedule.RefreshChampionBuildSnapshotsCron,
                 schedule.EnableRefreshChampionBuildSnapshots,
                 ConfigureRefreshChampionBuildSnapshots),
+            CreateDescriptor(
+                RefreshRequestedChampionSectionsJobId,
+                "Jobs:Schedule:RefreshRequestedChampionSectionsCron",
+                schedule.RefreshRequestedChampionSectionsCron,
+                schedule.EnableRefreshRequestedChampionSections,
+                ConfigureRefreshRequestedChampionSections),
             CreateDescriptor(
                 RefreshProAnalyticsJobId,
                 "Jobs:Schedule:RefreshProAnalyticsCron",
@@ -368,6 +376,15 @@ public sealed class WorkerRecurringJobPolicy(
         string cronExpression) =>
         recurringJobManager.AddOrUpdate<RefreshChampionBuildSnapshotsJob>(
             RefreshChampionBuildSnapshotsJobId,
+            job => job.ExecuteAsync(CancellationToken.None),
+            cronExpression,
+            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
+    private static void ConfigureRefreshRequestedChampionSections(
+        IRecurringJobManager recurringJobManager,
+        string cronExpression) =>
+        recurringJobManager.AddOrUpdate<RefreshRequestedChampionSectionsJob>(
+            RefreshRequestedChampionSectionsJobId,
             job => job.ExecuteAsync(CancellationToken.None),
             cronExpression,
             new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });

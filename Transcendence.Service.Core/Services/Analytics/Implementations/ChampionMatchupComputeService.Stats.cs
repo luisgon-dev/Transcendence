@@ -33,32 +33,40 @@ public partial class ChampionMatchupComputeService
         string patch,
         CancellationToken ct)
     {
-        var normalizedQueue = AnalyticsQueueCatalog.Normalize(queueFamily);
-        var regionFilter = AnalyticsRegionCatalog.NormalizeToFilter(region);
-        var activeSnapshotId = normalizedQueue == QueueCatalog.QueueFamilyRankedSoloDuo && regionFilter == null
-            ? await _context.ChampionMatchupSnapshots
-                .AsNoTracking()
-                .Where(snapshot =>
-                    snapshot.Patch == patch &&
-                    snapshot.IsActive &&
-                    snapshot.Status == Data.Models.LoL.Analytics.ChampionMatchupSnapshotStatus.Ready)
-                .Select(snapshot => (Guid?)snapshot.Id)
-                .FirstOrDefaultAsync(ct)
-            : null;
-        var hasLegacyStats = activeSnapshotId == null &&
-                             normalizedQueue == QueueCatalog.QueueFamilyRankedSoloDuo &&
-                             regionFilter == null &&
-                             await _context.ChampionMatchupStats
-                                 .AsNoTracking()
-                                 .AnyAsync(stat => stat.Patch == patch && stat.SnapshotId == null, ct);
-        // Only the all-region scope is precomputed; a specific region or an un-refreshed patch falls back
-        // to the raw self-join compute. During rollout, legacy rows remain readable until the first
-        // complete generation is promoted; Building generations are never visible.
-        if (normalizedQueue != QueueCatalog.QueueFamilyRankedSoloDuo ||
-            regionFilter != null ||
-            (activeSnapshotId == null && !hasLegacyStats))
-            return await ComputeMatchupsAsync(championId, role, rankTier, region, normalizedQueue, patch, ct);
+        var scope = new ChampionSectionScope(patch, AnalyticsQueueCatalog.Normalize(queueFamily), region, rankTier, role, championId);
+        var snapshot = await ReadMatchupsSnapshotAsync(scope, allowLegacyEmpty: true, ct);
+        return snapshot?.Data ?? await ComputeMatchupsAsync(championId, role, rankTier, region, scope.QueueFamily, patch, ct);
+    }
 
+    public Task<ChampionScopedSection<ChampionMatchupsResponse>?> ReadMatchupsSnapshotAsync(
+        ChampionSectionScope scope, CancellationToken ct) =>
+        ReadMatchupsSnapshotAsync(scope, allowLegacyEmpty: false, ct);
+
+    private async Task<ChampionScopedSection<ChampionMatchupsResponse>?> ReadMatchupsSnapshotAsync(
+        ChampionSectionScope scope, bool allowLegacyEmpty, CancellationToken ct)
+    {
+        if (scope.QueueFamily != QueueCatalog.QueueFamilyRankedSoloDuo ||
+            AnalyticsRegionCatalog.NormalizeToFilter(scope.Region) != null)
+            return null;
+
+        var snapshot = await _context.ChampionMatchupSnapshots
+            .AsNoTracking()
+            .Where(snapshot =>
+                snapshot.Patch == scope.Patch &&
+                snapshot.IsActive &&
+                snapshot.Status == Data.Models.LoL.Analytics.ChampionMatchupSnapshotStatus.Ready)
+            .Select(snapshot => new { snapshot.Id, snapshot.SourceCutoffUtc })
+            .FirstOrDefaultAsync(ct);
+        if (snapshot is null && allowLegacyEmpty && !await _context.ChampionMatchupStats
+                .AsNoTracking().AnyAsync(stat => stat.Patch == scope.Patch && stat.SnapshotId == null, ct))
+            return null;
+
+        var activeSnapshotId = (Guid?)snapshot?.Id;
+        var rankTier = scope.RankTier;
+        var region = scope.Region;
+        var patch = scope.Patch;
+        var championId = scope.ChampionId;
+        var role = scope.Role!;
         var rankTierScope = AnalyticsScopeMath.ParseRankTierScope(rankTier);
         var scopeToken = AnalyticsScopeMath.ScopeTokenOf(rankTierScope);
         var tierFilter = RankTierCatalog.ResolveScopeTiers(scopeToken);
@@ -89,6 +97,9 @@ public partial class ChampionMatchupComputeService
             })
             .ToListAsync(ct);
 
+        if (rolled.Count == 0 && !allowLegacyEmpty)
+            return null;
+
         var aggregates = rolled
             .Select(m => new MatchupAggregate(
                 m.OpponentChampionId,
@@ -101,7 +112,8 @@ public partial class ChampionMatchupComputeService
                 m.LatestTimelineAtUtc))
             .ToList();
 
-        return BuildMatchupsResponse(championId, role, rankTierScope, normalizedRegion, patch, aggregates);
+        return new(ChampionSectionState.Ready, snapshot?.SourceCutoffUtc,
+            BuildMatchupsResponse(championId, role, rankTierScope, normalizedRegion, patch, aggregates));
     }
 
 }

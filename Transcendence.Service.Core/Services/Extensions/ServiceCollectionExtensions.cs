@@ -78,12 +78,15 @@ public static class ServiceCollectionExtensions
         // series exist and read 0 instead of being absent. See Service/Program.cs.
         services.AddSingleton<BuildLabTelemetry>();
 
+        services.AddOptions<MatchArchiveOptions>().BindConfiguration("ArchiveRetention");
+
         // Analytics services
         services.AddScoped<IChampionWinRateComputeService, ChampionWinRateComputeService>();
         services.AddScoped<IChampionBuildComputeService, ChampionBuildComputeService>();
         services.AddScoped<IChampionProComputeService, ChampionProComputeService>();
         services.AddScoped<IChampionMatchupComputeService, ChampionMatchupComputeService>();
         services.AddScoped<IChampionAnalyticsService, ChampionAnalyticsService>();
+        services.AddScoped<ChampionScopedSectionService>();
         services.AddScoped<IAnalyticsPatchQueryService, AnalyticsPatchQueryService>();
         services.AddScoped<IDatasetStatsService, DatasetStatsService>();
         services.AddScoped<IBuildResourceAnalyticsService, BuildResourceAnalyticsService>();
@@ -137,7 +140,6 @@ public static class ServiceCollectionExtensions
     // Worker-only orchestration, bootstrap, and recurring job graph.
     public static IServiceCollection AddTranscendenceWorkerCore(this IServiceCollection services)
     {
-        services.AddOptions<MatchArchiveOptions>().BindConfiguration("ArchiveRetention");
         services.AddSingleton<IMatchArchiveDestination, NetworkMatchArchiveDestination>();
         services.AddSingleton<MatchArchiveTelemetry>();
         services.AddSingleton<StorageMaintenanceFilter>();
@@ -152,6 +154,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<RefreshChampionSynergyFactsJob>();
         services.AddScoped<RefreshPrecomputedAnalyticsJob>();
         services.AddScoped<RefreshChampionBuildSnapshotsJob>();
+        services.AddScoped<RefreshRequestedChampionSectionsJob>();
         services.AddScoped<RefreshChampionMatchupsJob>();
         services.AddScoped<RefreshProAnalyticsJob>();
         services.AddScoped<RefreshBuildResourceAnalyticsJob>();

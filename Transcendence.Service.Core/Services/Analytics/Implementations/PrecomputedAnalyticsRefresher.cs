@@ -322,7 +322,11 @@ public partial class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefres
 
         await ExecuteInTransactionIfNeededAsync(async () =>
         {
-            await _context.AnalyticsResponseSnapshots.Where(x => x.Patch == patch).ExecuteDeleteAsync(ct);
+            await _context.AnalyticsResponseSnapshots
+                .Where(x => x.Patch == patch &&
+                            (x.Feature == AnalyticsSnapshotSerialization.ProBuildsFeature ||
+                             x.Feature == AnalyticsSnapshotSerialization.ProPlayrateFeature))
+                .ExecuteDeleteAsync(ct);
             _context.AnalyticsResponseSnapshots.AddRange(rows);
             await _context.SaveChangesAsync(ct);
         }, ct);

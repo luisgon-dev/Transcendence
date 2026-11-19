@@ -1,8 +1,10 @@
 using System.Globalization;
+using System.Text.Json.Serialization;
 using Transcendence.Service.Core.Services.Analytics.Implementations;
 
 namespace Transcendence.Service.Core.Services.Analytics.Models;
 
+[JsonConverter(typeof(JsonStringEnumConverter<ChampionSectionState>))]
 public enum ChampionSectionState
 {
     Ready,

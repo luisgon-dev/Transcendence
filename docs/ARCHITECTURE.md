@@ -314,7 +314,11 @@ Operational implication:
 
 - Riot's **match `gameVersion`** (the deployed game build, the value `NormalizePatch` derives the patch from) **lags the Data Dragon patch label** and rolls out **region-by-region over ~a day**. Promoting the active analytics patch the instant Data Dragon updates makes ingestion target a patch whose games don't exist yet — so it discards every real match (the big regions can be hours/days behind, e.g. NA still producing `16.11` match data while Data Dragon already reports `16.12`).
 - `StaticDataService.DetectAndRefreshAsync` therefore **records the new patch + fetches its static assets immediately but gates promotion**: a new patch becomes active only once its `gameVersion` has actually rolled out — `Jobs:PatchPromotion:MinRegionsRolledOut` regions (default 5) each with ≥ `MinMatchesPerRegionToCount` (default 200) Success matches — with a `MaxWaitHoursBeforeForcePromote` (default 72) stuck-guard. Bootstrap (no active patch yet) promotes immediately.
-- To break the chicken-and-egg (you must collect the new patch to measure its rollout) **and** keep ingestion productive during the rollover, the analytics consumer (`SummonerRefreshJob.RefreshForAnalytics`) persists matches on the **{active patch} ∪ {most-recently-detected patch}** set (`GetIngestiblePatchesAsync`), not the single active patch, and clamps the match-id fetch window to `Jobs:MatchIngestion:AnalyticsRecentWindowDays` (default 4) so it only scans recent games. The new patch accumulates in the background and StaticDataService promotes it data-driven; analytics **read** queries still scope to the single active patch.
+- To collect the data that measures rollout, `SummonerRefreshJob.RefreshForAnalytics` accepts the active
+  and most recently detected patches from `GetIngestiblePatchesAsync`. It clamps the match ID fetch
+  window to `Jobs:MatchIngestion:AnalyticsRecentWindowDays` (default 4). After promotion commits,
+  the worker queues the first tabular rollup for that patch. The scheduled tabular job also recovers
+  from missed or deferred work.
 - **Early-stop on not-yet-rolled-out regions.** Riot match ids are newest-first, so the newest ranked match reveals a region's current game build. When a patch filter is in effect and that newest match is **not** on an acceptable patch, the region hasn't rolled out — `SyncMatchWindowAsync` skips the rest of that summoner after a single fetch instead of pulling ~100 old-patch games it would only discard. On a personal-tier Riot key (low rate budget) this is essential: without it, refreshing the laggard regions burns the scarce budget on matches that are thrown away, starving the productive regions and saturating Camille's rate limiter (which manifests as stalled consumers).
 
 #### Riot request-rate gate (`IRiotRateGate`)
@@ -500,11 +504,19 @@ performs `VACUUM FULL`, a hot-table rewrite, a global Docker prune, or an implic
 
 ### Analytics Response Semantics
 
-- Analytics APIs default to the active patch and can query stored historical patches with a `patch` query parameter.
-- Analytics APIs intentionally do not fall back to a different patch payload when the selected patch has no data.
+- The active game patch and published champion analytics advance independently. For each queue,
+  the tier list and champion profile select the active patch after its role-tier atoms and global
+  overview grades commit together. Until then, default reads use the latest earlier publication.
+  An explicit request stays pinned and can return a preparing or unavailable state. The web labels
+  the data from the same response that provides it and reads those responses on each request.
+- Champion profiles read builds and matchups from published exact-scope results. A short database
+  transaction admits deduplicated requests with materialized games and retained source data.
+  A storage-gated worker computes a small batch independently of the request. Previous results stay
+  visible while eligible scopes refresh. Durable synergy snapshots can also appear in the profile.
 - Responses include sample metadata (`sampleStatus`, `sampleSize`, `minimumRecommendedSampleSize`, `patchAgeHours`, `isEarlyPatchWindow`) so web surfaces can show selected-patch low-sample/no-data states explicitly.
-- `GET /api/lol/analytics/status` is the lightweight source of truth for the active LoL analytics patch used by public web chrome and landing surfaces.
-- `GET /api/lol/analytics/patches` lists active and historical LoL patches available to public analytics filters.
+- `GET /api/lol/analytics/status` supplies the active game patch to the public header.
+  Champion analytics selectors use `GET /api/lol/analytics/published-patches`.
+  Other analytics filters can use `GET /api/lol/analytics/patches` for observed match counts.
 - Public tier-list and champion analytics reads accept a queue family (`solo`, `flex`, `aram`, `arena`). Patch availability, cache keys, samples, bans, grades, and tier-list atoms are isolated by queue so a non-Solo request cannot reuse Solo/Duo data.
 - Item/rune analytics aggregate current or selected-patch Ranked Solo/Duo participants into one row
   per participant/resource before grouping, so duplicate item slots cannot inflate pick rate. The

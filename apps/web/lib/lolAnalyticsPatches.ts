@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { components } from "@transcendence/api-client";
+import { connection } from "next/server";
 import { cache } from "react";
 
 import { fetchBackendJson } from "@/lib/backendCall";
@@ -21,6 +22,7 @@ export const fetchLolAnalyticsPatches = cache(async (queue?: string | null): Pro
 });
 
 export const fetchPublishedAnalyticsPatches = cache(async (queue?: string | null): Promise<LolAnalyticsPatchOption[]> => {
+  await connection();
   const normalizedQueue = normalizeAnalyticsQueue(queue);
   const query = normalizedQueue === "solo" ? "" : `?queue=${normalizedQueue}`;
   const res = await fetchBackendJson<components["schemas"]["PublishedAnalyticsPatchOptionDto"][]>(

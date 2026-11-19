@@ -854,12 +854,22 @@ one-worker `analytics-batch` pool; response warming has a separate one-worker `a
 
 - `refresh-precomputed-analytics` publishes only the tabular core
   (`Jobs:Schedule:RefreshPrecomputedAnalyticsCron`, default `30 * * * *`).
+  A committed active-patch transition also queues the first tabular rollup.
 - `refresh-champion-matchups` advances the incremental/resumable matchup generation
   (`Jobs:Schedule:RefreshChampionMatchupsCron`, default `35 * * * *`).
 - `refresh-champion-build-snapshots` atomically replaces serialized champion build responses
   (`Jobs:Schedule:RefreshChampionBuildSnapshotsCron`, default `10 */6 * * *`).
 - `refresh-build-resource-analytics` retains its independent schedule on `analytics-batch`.
 - `refresh-pro-analytics` retains its independent schedule on `analytics-warm`.
+- `refresh-requested-champion-sections` runs on `analytics-warm` every minute by default.
+  `Jobs:Schedule:RefreshRequestedChampionSectionsCron` controls its schedule.
+  Configure `Jobs:Schedule:EnableRefreshRequestedChampionSections` consistently on the API and worker
+  so admission and processing agree. The worker processes up to four exact-scope sections per run,
+  with a maximum of 96 outstanding requests and 256 retained responses per section. Active scopes
+  can request refresh after two hours. Historical scopes can request an initial result while their
+  source is retained. Results are retained for up to 60 days within the row limit.
+  A scoped request can return unavailable when its input exceeds the worker's 5,000-participant
+  build limit or 20,000-pair matchup limit. Any previously published result stays readable.
 
 Each job has its own concurrency boundary. Deterministic full-corpus jobs disable automatic retries,
 so a slow build sweep cannot amplify database load or delay matchup ownership.

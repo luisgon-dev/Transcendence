@@ -401,12 +401,14 @@ async function ChampionHeroMeta({
       <div className="-mt-2 flex flex-wrap items-center gap-2 text-xs">
         {queueOption.hasRoles ? (
           <>
-            <Link
-              href="#synergies"
-              className="rounded-lg border border-border/60 bg-surface-2/50 px-2.5 py-1 font-medium text-fg/80 transition-colors hover:bg-surface-2/80"
-            >
-              Partners
-            </Link>
+            {profile.synergies ? (
+              <Link
+                href="#synergies"
+                className="rounded-lg border border-border/60 bg-surface-2/50 px-2.5 py-1 font-medium text-fg/80 transition-colors hover:bg-surface-2/80"
+              >
+                Partners
+              </Link>
+            ) : null}
             <Link
               href="#matchups"
               className="rounded-lg border border-border/60 bg-surface-2/50 px-2.5 py-1 font-medium text-fg/80 transition-colors hover:bg-surface-2/80"
@@ -535,7 +537,7 @@ async function ChampionSections({
   const counters = matchups?.counters ?? [];
   const favorableMatchups = matchups?.favorableMatchups ?? [];
   // Confidence threshold for build variants (omit -> Confidence falls back to DEFAULT_MIN_GAMES).
-  const buildMinGames = builds?.sample?.minimumRecommendedSampleSize;
+  const buildMinGames = builds?.sample?.minimumRecommendedSampleSize ?? winrates?.sample?.minimumRecommendedSampleSize;
   const allMatchups = [...counters, ...favorableMatchups]
     .filter((m): m is MatchupEntryDto => Boolean(m?.opponentChampionId))
     .filter(

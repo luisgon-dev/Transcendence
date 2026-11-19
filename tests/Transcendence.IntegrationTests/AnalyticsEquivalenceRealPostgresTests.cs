@@ -4,6 +4,7 @@ using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using System.Net.Http.Json;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Account;
 using Transcendence.Data.Models.LoL.Analytics;
@@ -27,6 +28,55 @@ public sealed class AnalyticsEquivalenceRealPostgresTests(PostgresIntegrationFix
     private static readonly string?[] Regions = [null, "NA1", "EUW1"];                 // null = ALL
     private static readonly string?[] Tiers = [null, "ALL", "EMERALD_PLUS", "EMERALD", "DIAMOND"];
     private static readonly string?[] Roles = [null, "TOP", "MIDDLE"];
+
+    [Fact]
+    public async Task Profile_and_tier_list_switch_only_after_the_active_rollup_commits()
+    {
+        var previous = UniquePatch();
+        var current = UniquePatch();
+        var released = new DateTime(2010, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        await using var db = NewDb();
+        var originalActive = await db.Patches.Where(patch => patch.IsActive).Select(patch => patch.Version).ToListAsync();
+        await db.Patches.Where(patch => patch.IsActive).ExecuteUpdateAsync(set => set.SetProperty(patch => patch.IsActive, false));
+        try
+        {
+            db.Patches.AddRange(
+                new Patch { Version = previous, ReleaseDate = released },
+                new Patch { Version = current, ReleaseDate = released.AddDays(14), IsActive = true });
+            AddGames(db, previous, "NA1", "EMERALD", 103, "MIDDLE", wins: 3, losses: 1);
+            AddGames(db, current, "NA1", "EMERALD", 103, "MIDDLE", wins: 2, losses: 4);
+            await db.SaveChangesAsync();
+            await RefreshAsync(db, previous);
+
+            using var client = fixture.Factory.CreateClient();
+            const string profileUrl = "/api/lol/analytics/champions/103/profile?rankTier=EMERALD_PLUS&role=MIDDLE&region=NA1";
+            const string tierListUrl = "/api/lol/analytics/tierlist?rankTier=EMERALD_PLUS&role=MIDDLE&region=NA1";
+            var earlierProfile = (await client.GetFromJsonAsync<ChampionProfileAnalyticsResponse>(profileUrl))!;
+            earlierProfile.PatchSelection.Should().Be(new AnalyticsPatchSelection(
+                AnalyticsPatchSelectionState.Ready, current, null, previous));
+            earlierProfile.WinRates.ByRoleTier.Should().ContainSingle().Which.Games.Should().Be(4);
+            (await client.GetFromJsonAsync<TierListResponse>(tierListUrl))!.Patch.Should().Be(previous);
+
+            var pending = (await client.GetFromJsonAsync<ChampionProfileAnalyticsResponse>($"{profileUrl}&patch={current}"))!;
+            pending.PatchSelection.State.Should().Be(AnalyticsPatchSelectionState.Preparing);
+            pending.WinRates.ByRoleTier.Should().BeEmpty();
+
+            await RefreshAsync(db, current);
+            var updated = (await client.GetFromJsonAsync<ChampionProfileAnalyticsResponse>(profileUrl))!;
+            updated.PatchSelection.Should().Be(new AnalyticsPatchSelection(
+                AnalyticsPatchSelectionState.Ready, current, null, current));
+            updated.WinRates.ByRoleTier.Should().ContainSingle().Which.Games.Should().Be(6);
+            (await client.GetFromJsonAsync<TierListResponse>(tierListUrl))!.Patch.Should().Be(current);
+        }
+        finally
+        {
+            await db.Patches.Where(patch => patch.Version == current)
+                .ExecuteUpdateAsync(set => set.SetProperty(patch => patch.IsActive, false));
+            if (originalActive.Count > 0)
+                await db.Patches.Where(patch => originalActive.Contains(patch.Version))
+                    .ExecuteUpdateAsync(set => set.SetProperty(patch => patch.IsActive, true));
+        }
+    }
 
     [Fact]
     public async Task Concurrent_refresh_patch_rollover_and_retained_facts_preserve_equivalence()

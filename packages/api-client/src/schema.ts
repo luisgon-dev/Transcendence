@@ -1123,6 +1123,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/lol/analytics/published-patches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    queue?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PublishedAnalyticsPatchOptionDto"][];
+                        "application/json": components["schemas"]["PublishedAnalyticsPatchOptionDto"][];
+                        "text/json": components["schemas"]["PublishedAnalyticsPatchOptionDto"][];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/lol/analytics/regions": {
         parameters: {
             query?: never;
@@ -5418,6 +5475,14 @@ export interface components {
          * @enum {integer}
          */
         AnalyticsPatchPhase: 0 | 1 | 2 | 3;
+        AnalyticsPatchSelection: {
+            state: components["schemas"]["AnalyticsPatchSelectionState"];
+            activePatch?: string | null;
+            requestedPatch?: string | null;
+            effectivePatch?: string | null;
+        };
+        /** @enum {string} */
+        AnalyticsPatchSelectionState: "Ready" | "Preparing" | "Unavailable";
         AnalyticsPatchStatusDto: {
             patch?: string | null;
             /** Format: date-time */
@@ -5724,11 +5789,18 @@ export interface components {
             winRates: components["schemas"]["ChampionWinRateSummary"];
             builds: components["schemas"]["ChampionBuildsResponse"];
             matchups: components["schemas"]["ChampionMatchupsResponse"];
+            patchSelection: components["schemas"]["AnalyticsPatchSelection"];
             grade?: components["schemas"]["ChampionGradeDto"] | null;
             queueFamily: string;
             trend?: components["schemas"]["ChampionTrendResponse"] | null;
             synergies?: components["schemas"]["ChampionSynergiesResponse"] | null;
             recommendation?: components["schemas"]["ChampionRecommendationSummary"] | null;
+            buildsState: components["schemas"]["ChampionSectionState"];
+            /** Format: date-time */
+            buildsComputedAtUtc?: string | null;
+            matchupsState: components["schemas"]["ChampionSectionState"];
+            /** Format: date-time */
+            matchupsComputedAtUtc?: string | null;
         };
         ChampionRecommendationSummary: {
             available: boolean;
@@ -5736,6 +5808,8 @@ export interface components {
             summary?: components["schemas"]["BuildLabSummaryDto"] | null;
             unavailableReason?: string | null;
         };
+        /** @enum {string} */
+        ChampionSectionState: "Ready" | "Preparing" | "Unavailable";
         ChampionStatDto: {
             /** Format: int32 */
             championId: number;
@@ -6560,6 +6634,18 @@ export interface components {
             displayName: string;
             queueScope: string;
         };
+        PublishedAnalyticsPatchOptionDto: {
+            patch: string;
+            /** Format: date-time */
+            releasedAtUtc: string;
+            /** Format: date-time */
+            detectedAtUtc?: string | null;
+            isActive: boolean;
+            /** Format: int32 */
+            matchCount: number;
+            queueFamily: string;
+            state: components["schemas"]["AnalyticsPatchSelectionState"];
+        };
         RankHistoryEntryDto: {
             queueType?: string | null;
             tier?: string | null;
@@ -6920,6 +7006,7 @@ export interface components {
             computedAtUtc?: string | null;
             queueFamily: string;
             confidence: components["schemas"]["TierScopeConfidence"];
+            patchSelection?: components["schemas"]["AnalyticsPatchSelection"] | null;
         };
         /**
          * Format: int32

@@ -122,7 +122,8 @@ try {
   }
   browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1360, height: 1050 } });
-  const oldBanner = page.getByText("Showing patch 16.22 while 16.23 stats are calculated.", { exact: true });
+  const oldBanner = page.getByRole("status")
+    .getByText("Showing patch 16.22 while 16.23 stats are calculated.", { exact: true });
   await page.goto(`${origin}/lol`);
   await expect(oldBanner).toBeVisible();
   await page.goto(`${origin}/lol/champions`);
@@ -139,17 +140,18 @@ try {
 
   const filter = page.getByLabel("Patch", { exact: true });
   await filter.selectOption(active);
-  await expect(page.getByText("Stats for patch 16.23 are being calculated.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("status")
+    .getByText("Stats for patch 16.23 are being calculated.", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Caitlyn", exact: true })).toBeVisible();
   await expect(filter).toHaveValue(active);
-  await expect(page.getByText("52.3%", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("52.3%", { exact: true }).filter({ visible: true })).toHaveCount(0);
   assert(profileRequests.some(params => params.get("patch") === active && params.get("role") === role && params.get("rankTier") === "EMERALD_PLUS"));
 
   published = true;
   await filter.selectOption("");
   await expect(page.getByText("63.4%", { exact: true }).first()).toBeVisible();
   await expect(oldBanner).toHaveCount(0);
-  await expect(page.getByText("Builds are being calculated for these filters.")).toBeVisible();
+  await expect(page.getByRole("status").getByText("Builds are being calculated for these filters.")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Matchups", exact: true })).toBeVisible();
   buildsReady = true;
   await page.getByRole("button", { name: "Check again", exact: true }).click();

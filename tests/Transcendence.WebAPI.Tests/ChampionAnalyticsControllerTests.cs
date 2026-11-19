@@ -49,7 +49,7 @@ public class ChampionAnalyticsControllerTests
                 103, "MIDDLE", "EMERALD_PLUS", "KR", "RANKED_SOLO_DUO", It.IsAny<AnalyticsPublication>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChampionTrendResponse(103, "RANKED_SOLO_DUO", "MIDDLE", "EMERALD_PLUS", "KR", []));
         var synergy = new Mock<IChampionSynergyService>();
-        synergy.Setup(x => x.GetSynergiesAsync(
+        synergy.Setup(x => x.ReadPublishedSynergiesAsync(
                 103, "MIDDLE", "EMERALD_PLUS", "KR", "RANKED_SOLO_DUO", "15.1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChampionSynergiesResponse(
                 103, "MIDDLE", "EMERALD_PLUS", "KR", "15.1", "RANKED_SOLO_DUO", 20, 11, 0.55,
@@ -99,6 +99,21 @@ public class ChampionAnalyticsControllerTests
     }
 
     [Fact]
+    public async Task GetProfile_AnswersWithoutRecommendation_WhenTheLookupOutlastsTheBudget()
+    {
+        var pending = new TaskCompletionSource<ChampionRecommendationSummary>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var controller = ScopedProfileController(_ => Task.FromResult(Synergies()), TimeSpan.FromMilliseconds(100), pending.Task);
+
+        var result = await controller.GetProfile(103, null, null, null, null, "15.1", CancellationToken.None);
+
+        var payload = result.Result.Should().BeOfType<OkObjectResult>().Subject.Value
+            .Should().BeOfType<ChampionProfileAnalyticsResponse>().Subject;
+        payload.Recommendation.Should().BeNull();
+        payload.Synergies.Should().NotBeNull();
+        pending.TrySetCanceled();
+    }
+
+    [Fact]
     public async Task GetProfile_StillFails_WhenSynergiesFailWithinTheBudget()
     {
         var controller = ScopedProfileController(
@@ -126,7 +141,8 @@ public class ChampionAnalyticsControllerTests
     // The production shape: every section runs in its own DI scope, in parallel.
     private static ChampionAnalyticsController ScopedProfileController(
         Func<CancellationToken, Task<ChampionSynergiesResponse>> synergies,
-        TimeSpan budget)
+        TimeSpan budget,
+        Task<ChampionRecommendationSummary>? recommendation = null)
     {
         var analytics = new Mock<IChampionAnalyticsService>();
         analytics
@@ -144,20 +160,28 @@ public class ChampionAnalyticsControllerTests
             .ReturnsAsync(new ChampionTrendResponse(103, "RANKED_SOLO_DUO", "MIDDLE", "all", "ALL", []));
         var synergy = new Mock<IChampionSynergyService>();
         synergy
-            .Setup(x => x.GetSynergiesAsync(103, "MIDDLE", null, null, "RANKED_SOLO_DUO", "15.1", It.IsAny<CancellationToken>()))
-            .Returns<int, string, string?, string?, string?, string?, CancellationToken>(
-                (_, _, _, _, _, _, ct) => synergies(ct));
+            .Setup(x => x.ReadPublishedSynergiesAsync(103, "MIDDLE", null, null, "RANKED_SOLO_DUO", "15.1", It.IsAny<CancellationToken>()))
+            .Returns<int, string, string?, string?, string, string, CancellationToken>(
+                async (_, _, _, _, _, _, ct) => await synergies(ct));
 
         var services = new ServiceCollection();
         services.AddScoped(_ => analytics.Object);
         services.AddScoped(_ => synergy.Object);
+        if (recommendation != null)
+        {
+            var buildLab = new Mock<IBuildLabService>();
+            buildLab.Setup(x => x.GetChampionRecommendationAsync(
+                    103, "MIDDLE", null, "15.1", null, It.IsAny<CancellationToken>()))
+                .Returns(recommendation);
+            services.AddScoped(_ => buildLab.Object);
+        }
         var provider = services.BuildServiceProvider();
         return new ChampionAnalyticsController(
             analytics.Object,
             provider.GetRequiredService<IServiceScopeFactory>(),
             ReadyPublication(),
             synergy.Object,
-            synergyWaitBudget: budget);
+            optionalSectionWaitBudget: budget);
     }
 
     [Fact]

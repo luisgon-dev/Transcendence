@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { connection } from "next/server";
 import { cache, Suspense } from "react";
 import type { components } from "@transcendence/api-client/schema";
 
@@ -109,6 +110,7 @@ type HomeLiveData = {
 // root page. Rank is pinned to the tier list's default (Emerald+) so the
 // preview matches where its links lead.
 async function loadHomeLiveData(): Promise<HomeLiveData> {
+  await connection();
   try {
     const [{ version, champions }, tierListRes] = await Promise.all([
       fetchChampionMap(),

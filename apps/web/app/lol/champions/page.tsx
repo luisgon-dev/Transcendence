@@ -1,5 +1,7 @@
 import type { components } from "@transcendence/api-client";
 
+import { AnalyticsPatchFilter } from "@/components/AnalyticsPatchFilter";
+import { AnalyticsPatchNotice } from "@/components/AnalyticsPatchNotice";
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { AnalyticsRegionFilter } from "@/components/AnalyticsRegionFilter";
 import { BackendErrorCard } from "@/components/BackendErrorCard";
@@ -12,6 +14,8 @@ import { fetchBackendJson } from "@/lib/backendCall";
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
+import { fetchPublishedAnalyticsPatches } from "@/lib/lolAnalyticsPatches";
+import { latestPublishedPatchHref, normalizeAnalyticsPatch } from "@/lib/lolPatchFilters";
 import { DEFAULT_TIERLIST_RANK_TIER } from "@/lib/ranks";
 import { fetchChampionMap } from "@/lib/staticData";
 import {
@@ -24,23 +28,26 @@ type TierListResponse = components["schemas"]["TierListResponse"];
 export default async function ChampionsPage({
   searchParams
 }: {
-  searchParams?: Promise<{ region?: string }>;
+  searchParams?: Promise<{ region?: string; patch?: string }>;
 }) {
-  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const resolvedSearchParams = searchParams ? await searchParams : {};
   const { activeRegion, options: regionOptions } = await resolveAnalyticsRegion(
-    resolvedSearchParams?.region
+    resolvedSearchParams.region
   );
   const verbosity = getErrorVerbosity();
   const tierListQuery = new URLSearchParams({
     rankTier: DEFAULT_TIERLIST_RANK_TIER
   });
+  const selectedPatch = normalizeAnalyticsPatch(resolvedSearchParams.patch);
   if (activeRegion !== "ALL") tierListQuery.set("region", activeRegion);
-  const [{ version, champions }, tierListRes] = await Promise.all([
+  if (selectedPatch) tierListQuery.set("patch", selectedPatch);
+  const [{ version, champions }, tierListRes, patchOptions] = await Promise.all([
     fetchChampionMap(),
     fetchBackendJson<TierListResponse>(
       `${getBackendBaseUrl()}/api/lol/analytics/tierlist?${tierListQuery.toString()}`,
-      { next: { revalidate: 60 * 60 } }
-    )
+      { cache: "no-store" }
+    ),
+    fetchPublishedAnalyticsPatches()
   ]);
 
   if (!tierListRes.ok) {
@@ -70,7 +77,7 @@ export default async function ChampionsPage({
     { tier: UITierGrade | null; role: string; winRate: number; games: number }
   >();
 
-  if (tierListRes.ok && tierListRes.body) {
+  if (tierListRes.body) {
     const entries = normalizeTierListEntries(tierListRes.body.entries);
     for (const entry of entries) {
       const existing = tierMap.get(entry.championId);
@@ -106,13 +113,28 @@ export default async function ChampionsPage({
       <Toolbar
         eyebrow="Champions"
         title="Champions"
-        meta={<span>Builds, win rates, and matchups</span>}
-        filters={<AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />}
+        meta={
+          <span>{tierListRes.body?.patchSelection?.effectivePatch
+            ? `Patch ${tierListRes.body.patchSelection.effectivePatch} builds, win rates, and matchups`
+            : "Builds, win rates, and matchups"}</span>
+        }
+        filters={
+          <div className="flex flex-wrap items-center gap-3">
+            <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />
+            <AnalyticsPatchFilter patches={patchOptions} activePatch={selectedPatch} />
+          </div>
+        }
       />
-      <AnalyticsSampleBanner
-        sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
+      <AnalyticsPatchNotice
+        selection={tierListRes.body?.patchSelection}
+        latestHref={selectedPatch ? latestPublishedPatchHref("/lol/champions", resolvedSearchParams) : undefined}
       />
-      <ChampionsGridClient champions={list} version={version} activeRegion={activeRegion} />
+      {!tierListRes.body?.patchSelection || tierListRes.body.patchSelection.state === "Ready" ? (
+        <AnalyticsSampleBanner
+          sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
+        />
+      ) : null}
+      <ChampionsGridClient champions={list} version={version} activeRegion={activeRegion} activePatch={selectedPatch} />
     </div>
   );
 }

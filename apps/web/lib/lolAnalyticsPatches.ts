@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { components } from "@transcendence/api-client";
 import { cache } from "react";
 
 import { fetchBackendJson } from "@/lib/backendCall";
@@ -17,4 +18,24 @@ export const fetchLolAnalyticsPatches = cache(async (queue?: string | null): Pro
   );
 
   return res.ok ? (res.body ?? []) : [];
+});
+
+export const fetchPublishedAnalyticsPatches = cache(async (queue?: string | null): Promise<LolAnalyticsPatchOption[]> => {
+  const normalizedQueue = normalizeAnalyticsQueue(queue);
+  const query = normalizedQueue === "solo" ? "" : `?queue=${normalizedQueue}`;
+  const res = await fetchBackendJson<components["schemas"]["PublishedAnalyticsPatchOptionDto"][]>(
+    `${getBackendBaseUrl()}/api/lol/analytics/published-patches${query}`,
+    { cache: "no-store" }
+  );
+  if (!res.ok) return [];
+  return (res.body ?? []).flatMap(option =>
+    typeof option.patch === "string" ? [{
+      patch: option.patch,
+      releasedAtUtc: option.releasedAtUtc,
+      detectedAtUtc: option.detectedAtUtc,
+      isActive: option.isActive ?? false,
+      rankedSoloDuoMatchCount: option.matchCount ?? 0,
+      state: option.state
+    }] : []
+  );
 });

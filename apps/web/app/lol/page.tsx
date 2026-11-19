@@ -2,13 +2,13 @@ import Image from "next/image";
 import Link from "next/link";
 import type { components } from "@transcendence/api-client/schema";
 
+import { AnalyticsPatchNotice } from "@/components/AnalyticsPatchNotice";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { LaneIcon } from "@/components/ui/LaneIcon";
 import { AnalyticsRegionFilter } from "@/components/AnalyticsRegionFilter";
 import { GlobalSearchLauncher } from "@/components/GlobalSearchLauncher";
 import { fetchBackendJson } from "@/lib/backendCall";
-import { fetchLolAnalyticsStatus } from "@/lib/lolAnalyticsStatus";
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { getBackendBaseUrl } from "@/lib/env";
 import { formatGames, formatPercent } from "@/lib/format";
@@ -40,15 +40,15 @@ export default async function HomePage({
   );
   const tierListQuery = new URLSearchParams();
   if (activeRegion !== "ALL") tierListQuery.set("region", activeRegion);
-  const [{ version, champions }, analyticsStatus, tierListRes] = await Promise.all([
+  const [{ version, champions }, tierListRes] = await Promise.all([
     fetchChampionMap(),
-    fetchLolAnalyticsStatus(),
     fetchBackendJson<TierListResponse>(`${getBackendBaseUrl()}/api/lol/analytics/tierlist?${tierListQuery.toString()}`, {
-      next: { revalidate: 60 * 60 }
+      cache: "no-store"
     })
   ]);
 
-  const patch = analyticsStatus?.patch ?? tierListRes.body?.patch ?? null;
+  const patchSelection = tierListRes.body?.patchSelection;
+  const patch = patchSelection ? patchSelection.effectivePatch : tierListRes.body?.patch;
   const entries = tierListRes.ok
     ? normalizeTierListEntries(tierListRes.body?.entries ?? [])
     : [];
@@ -70,7 +70,6 @@ export default async function HomePage({
           {patch ? (
             <Badge className="border-primary/40 bg-primary/10 text-primary">Patch {patch}</Badge>
           ) : null}
-          <Badge className="border-success/40 bg-success/10 text-success">Current Analytics Data</Badge>
           <Badge>{activeRegionLabel}</Badge>
         </div>
 
@@ -116,6 +115,7 @@ export default async function HomePage({
           </div>
         </div>
       </section>
+      <AnalyticsPatchNotice selection={patchSelection} />
 
       <section className="grid gap-5 lg:grid-cols-[1.6fr_1fr]">
         <Card className="p-0">

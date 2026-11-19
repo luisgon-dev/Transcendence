@@ -2,12 +2,23 @@ using System.Reflection;
 using FluentAssertions;
 using Hangfire;
 using Transcendence.Service.Core.Services.Jobs;
+using Transcendence.Service.Core.Services.Operations;
 
 namespace Transcendence.Service.Core.Tests;
 
 // Cache refreshes and heavy batch work have separate reserved worker pools.
 public class AnalyticsLaneIsolationTests
 {
+    [Fact]
+    public void PatchKickoff_SharesTheTabularQueueLockAndStorageGate()
+    {
+        var type = typeof(RefreshPrecomputedAnalyticsJob);
+        var kickoff = type.GetMethod(nameof(RefreshPrecomputedAnalyticsJob.ExecuteForPatchAsync))!;
+        kickoff.GetCustomAttribute<QueueAttribute>()!.Queue.Should().Be(HangfireQueues.AnalyticsBatch);
+        type.GetCustomAttribute<DisableConcurrentExecutionAttribute>()!.Resource.Should().Be("RefreshPrecomputedAnalyticsJob.ExecuteAsync");
+        type.GetCustomAttribute<StorageMaintenanceWorkAttribute>().Should().NotBeNull();
+    }
+
     [Theory]
     [InlineData(typeof(RefreshPrecomputedAnalyticsJob), HangfireQueues.AnalyticsBatch)]
     [InlineData(typeof(RefreshChampionBuildSnapshotsJob), HangfireQueues.AnalyticsBatch)]

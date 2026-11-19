@@ -51,6 +51,12 @@ public interface IChampionWinRateComputeService
         string patch,
         CancellationToken ct);
 
+    Task<List<ChampionWinRateDto>> ComputeMaterializedWinRatesAsync(
+        int championId,
+        ChampionAnalyticsFilter filter,
+        string patch,
+        CancellationToken ct);
+
     /// <summary>
     /// Tier list served from the precomputed aggregate tables, falling back to
     /// <see cref="ComputeTierListAsync"/> when no aggregates exist for the patch yet. Tiering/ordering and
@@ -65,6 +71,14 @@ public interface IChampionWinRateComputeService
         CancellationToken ct);
 
     Task<List<TierListEntry>> ComputeTierListFromStatsAsync(
+        string? role,
+        string? rankTier,
+        string? region,
+        string? queueFamily,
+        string patch,
+        CancellationToken ct);
+
+    Task<List<TierListEntry>> ComputeMaterializedTierListAsync(
         string? role,
         string? rankTier,
         string? region,

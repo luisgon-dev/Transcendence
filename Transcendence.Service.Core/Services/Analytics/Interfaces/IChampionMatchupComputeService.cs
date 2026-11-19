@@ -51,4 +51,10 @@ public interface IChampionMatchupComputeService
         string queueFamily,
         string patch,
         CancellationToken ct);
+
+    Task<ChampionScopedSection<ChampionMatchupsResponse>?> ReadMatchupsSnapshotAsync(
+        ChampionSectionScope scope, CancellationToken ct);
+
+    Task<ChampionMatchupsResponse?> ComputeScopedMatchupsAsync(
+        ChampionSectionScope scope, int maxPairs, CancellationToken ct);
 }

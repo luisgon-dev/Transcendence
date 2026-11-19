@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection;
+using Transcendence.Service.Core.Services.Analytics.Implementations;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Analytics;
@@ -16,20 +17,14 @@ namespace Transcendence.WebAPI.Controllers;
 public class ChampionAnalyticsController(
     IChampionAnalyticsService analyticsService,
     IServiceScopeFactory? serviceScopeFactory,
+    IAnalyticsPublicationService publicationService,
     IChampionSynergyService? synergyService = null,
     IBuildLabService? buildLabService = null,
     ILogger<ChampionAnalyticsController>? logger = null,
-    TimeSpan? synergyWaitBudget = null) : ControllerBase
+    TimeSpan? optionalSectionWaitBudget = null,
+    ChampionScopedSectionService? scopedSections = null) : ControllerBase
 {
-    /// <summary>
-    /// How long the profile waits for synergies. A cached entry answers in milliseconds; a miss is a
-    /// live computation over the participant tables that took 10.9s on average on prod (up to 108s),
-    /// so past this budget the profile is returned without the synergy section. The fill keeps running
-    /// in its own DI scope and caches its result for the next view.
-    /// </summary>
-    public static readonly TimeSpan DefaultSynergyWaitBudget = TimeSpan.FromSeconds(2);
-
-    private readonly TimeSpan _synergyWaitBudget = synergyWaitBudget ?? DefaultSynergyWaitBudget;
+    private readonly TimeSpan _optionalSectionWaitBudget = optionalSectionWaitBudget ?? TimeSpan.FromSeconds(2);
 
     private static readonly HashSet<string> ValidRoles = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -67,54 +62,40 @@ public class ChampionAnalyticsController(
 
         var normalizedQueue = AnalyticsQueueCatalog.Normalize(queue);
         var hasRoles = AnalyticsQueueCatalog.HasRoles(normalizedQueue);
+        var publication = await publicationService.ResolveAsync(normalizedQueue, patch, ct);
+        var selection = publication.Selection;
+        if (selection.EffectivePatch == null)
+            return Ok(EmptyProfile(championId, hasRoles ? normalizedRole ?? "MIDDLE" : AnalyticsQueueCatalog.AllRoles,
+                rankTier, region, normalizedQueue, selection));
 
-        var winRates = await analyticsService.GetWinRatesAsync(
-            championId,
-            new ChampionAnalyticsFilter(
-                RankTier: rankTier,
-                Region: region,
-                Patch: patch,
-                QueueFamily: normalizedQueue),
-            ct);
+        patch = selection.EffectivePatch;
+        var filter = new ChampionAnalyticsFilter(rankTier, region, normalizedRole, patch, normalizedQueue);
+        var winRates = await analyticsService.GetPublishedWinRatesAsync(championId, filter, publication, ct);
 
-        ChampionWinRateSummary? fallbackWinRates = null;
-        if (normalizedRole == null && ShouldUseAllRankFallback(rankTier) && winRates.ByRoleTier.Count == 0)
+        var primaryRole = hasRoles ? normalizedRole ?? ChampionRoleResolver.PickMostPlayed(winRates.ByRoleTier) : null;
+        var rank = rankTier?.Trim().ToUpperInvariant().Replace("+", "_PLUS");
+        if (hasRoles && primaryRole == null && rank != null && rank != RankTierCatalog.AllScope &&
+            RankTierCatalog.RankScopeTokens.Contains(rank))
         {
-            fallbackWinRates = await analyticsService.GetWinRatesAsync(
-                championId,
-                new ChampionAnalyticsFilter(
-                    Region: region,
-                    Patch: patch,
-                    QueueFamily: normalizedQueue),
-                ct);
+            var allRanks = await analyticsService.GetPublishedWinRatesAsync(
+                championId, filter with { RankTier = null }, publication, ct);
+            primaryRole = ChampionRoleResolver.PickMostPlayed(allRanks.ByRoleTier);
         }
 
-        var effectiveRole = hasRoles
-            ? normalizedRole
-              ?? ChampionRoleResolver.PickMostPlayed(winRates.ByRoleTier)
-              ?? ChampionRoleResolver.PickMostPlayed(fallbackWinRates?.ByRoleTier)
-              ?? "MIDDLE"
-            : AnalyticsQueueCatalog.AllRoles;
-
-        ChampionBuildsResponse builds;
-        ChampionMatchupsResponse matchups;
+        var effectiveRole = hasRoles ? primaryRole ?? "MIDDLE" : AnalyticsQueueCatalog.AllRoles;
         ChampionGradeDto? grade;
         ChampionTrendResponse trend;
         ChampionSynergiesResponse? synergies;
         ChampionRecommendationSummary? recommendation;
         if (serviceScopeFactory == null)
         {
-            builds = await analyticsService.GetBuildsAsync(
-                championId, effectiveRole, rankTier, region, normalizedQueue, patch, ct);
-            matchups = await analyticsService.GetMatchupsAsync(
-                championId, effectiveRole, rankTier, region, normalizedQueue, patch, ct);
-            grade = await analyticsService.GetGradeAsync(
-                championId, effectiveRole, rankTier, region, normalizedQueue, patch, ct);
-            trend = await analyticsService.GetTrendAsync(
-                championId, effectiveRole, rankTier, normalizedQueue, ct);
+            grade = await analyticsService.GetPublishedGradeAsync(
+                championId, effectiveRole, rankTier, region, normalizedQueue, publication, ct);
+            trend = await analyticsService.GetPublishedTrendAsync(
+                championId, effectiveRole, rankTier, region, normalizedQueue, publication, ct);
             synergies = synergyService == null
-                ? EmptySynergies(championId, effectiveRole, rankTier, region, patch, normalizedQueue)
-                : await synergyService.GetSynergiesAsync(
+                ? null
+                : await synergyService.ReadPublishedSynergiesAsync(
                     championId, effectiveRole, rankTier, region, normalizedQueue, patch, ct);
             recommendation = buildLabService == null ||
                              normalizedQueue != QueueCatalog.QueueFamilyRankedSoloDuo
@@ -125,45 +106,69 @@ public class ChampionAnalyticsController(
         else
         {
             var fanOutStarted = Stopwatch.GetTimestamp();
-            var buildsTask = RunInAnalyticsScopeAsync(
-                scoped => scoped.GetBuildsAsync(
-                    championId, effectiveRole, rankTier, region, normalizedQueue, patch, ct));
-            var matchupsTask = RunInAnalyticsScopeAsync(
-                scoped => scoped.GetMatchupsAsync(
-                    championId, effectiveRole, rankTier, region, normalizedQueue, patch, ct));
             var gradeTask = RunInAnalyticsScopeAsync(
-                scoped => scoped.GetGradeAsync(
-                    championId, effectiveRole, rankTier, region, normalizedQueue, patch, ct));
+                scoped => scoped.GetPublishedGradeAsync(
+                    championId, effectiveRole, rankTier, region, normalizedQueue, publication, ct));
             var trendTask = RunInAnalyticsScopeAsync(
-                scoped => scoped.GetTrendAsync(championId, effectiveRole, rankTier, normalizedQueue, ct));
+                scoped => scoped.GetPublishedTrendAsync(championId, effectiveRole, rankTier, region, normalizedQueue, publication, ct));
             var synergiesTask = RunInSynergyScopeAsync(
-                scoped => scoped.GetSynergiesAsync(
+                scoped => scoped.ReadPublishedSynergiesAsync(
                     championId, effectiveRole, rankTier, region, normalizedQueue, patch, ct));
             var recommendationTask = normalizedQueue == QueueCatalog.QueueFamilyRankedSoloDuo
                 ? RunInBuildLabScopeAsync(scoped => scoped.GetChampionRecommendationAsync(
                     championId, effectiveRole, null, patch, region, ct))
                 : Task.FromResult<ChampionRecommendationSummary?>(null);
 
-            await Task.WhenAll(buildsTask, matchupsTask, gradeTask, trendTask, recommendationTask);
-            builds = await buildsTask;
-            matchups = await matchupsTask;
+            await Task.WhenAll(gradeTask, trendTask);
             grade = await gradeTask;
             trend = await trendTask;
-            recommendation = await recommendationTask;
-            synergies = await WaitForSynergiesAsync(synergiesTask, fanOutStarted, championId, effectiveRole, ct);
+            recommendation = await WaitForOptionalSectionAsync(recommendationTask, "Build Lab", fanOutStarted, championId, ct);
+            synergies = await WaitForOptionalSectionAsync(synergiesTask, "synergies", fanOutStarted, championId, ct);
         }
 
-        return Ok(new ChampionProfileAnalyticsResponse(
+        var scopedRoleGames = winRates.ByRoleTier.Where(entry => entry.Role == effectiveRole).Sum(entry => entry.Games);
+        var sections = scopedSections == null ? null : await scopedSections.GetAsync(
+            new ChampionSectionScope(patch, normalizedQueue, region, rankTier, effectiveRole, championId), scopedRoleGames, ct);
+        var profile = EmptyProfile(championId, effectiveRole, rankTier, region, normalizedQueue, selection);
+        return Ok(profile with
+        {
+            WinRates = winRates,
+            Grade = grade,
+            Trend = trend,
+            Builds = sections?.Builds.Data ?? profile.Builds,
+            Matchups = sections?.Matchups.Data ?? profile.Matchups,
+            BuildsState = sections?.Builds.State ?? ChampionSectionState.Unavailable,
+            BuildsComputedAtUtc = sections?.Builds.ComputedAtUtc,
+            MatchupsState = sections?.Matchups.State ?? ChampionSectionState.Unavailable,
+            MatchupsComputedAtUtc = sections?.Matchups.ComputedAtUtc,
+            Synergies = synergies,
+            Recommendation = recommendation
+        });
+    }
+
+    private static ChampionProfileAnalyticsResponse EmptyProfile(
+        int championId, string role, string? rankTier, string? region, string queue, AnalyticsPatchSelection selection)
+    {
+        var patch = selection.EffectivePatch ?? selection.RequestedPatch ?? selection.ActivePatch ?? "Unknown";
+        var rank = string.IsNullOrWhiteSpace(rankTier) ? RankTierCatalog.AllScope : rankTier.Trim().ToUpperInvariant().Replace("+", "_PLUS");
+        var regionCode = AnalyticsRegionCatalog.NormalizeOrDefault(region);
+        return new ChampionProfileAnalyticsResponse(
             championId,
-            effectiveRole,
-            winRates,
-            builds,
-            matchups,
-            grade,
-            normalizedQueue,
-            trend,
-            synergies,
-            recommendation));
+            role,
+            new ChampionWinRateSummary(championId, patch, [], QueueFamily: queue),
+            new ChampionBuildsResponse(championId, role, rank == RankTierCatalog.AllScope ? "all" : rank, regionCode, patch, [], [], QueueFamily: queue),
+            new ChampionMatchupsResponse
+            {
+                ChampionId = championId, Role = role, RankTier = rank == RankTierCatalog.AllScope ? null : rank,
+                Region = regionCode, Patch = patch, QueueFamily = queue
+            },
+            selection,
+            QueueFamily: queue,
+            Trend: new ChampionTrendResponse(championId, queue, role, rank, regionCode, []),
+            BuildsState: selection.State == AnalyticsPatchSelectionState.Preparing
+                ? ChampionSectionState.Preparing : ChampionSectionState.Unavailable,
+            MatchupsState: selection.State == AnalyticsPatchSelectionState.Preparing && AnalyticsQueueCatalog.HasRoles(queue)
+                ? ChampionSectionState.Preparing : ChampionSectionState.Unavailable);
     }
 
     [HttpGet("{championId}/synergies")]
@@ -350,36 +355,26 @@ public class ChampionAnalyticsController(
         return await action(scopedAnalyticsService);
     }
 
-    // Synergies are the profile's only section computed live from match rows on a cache miss (every
-    // other section reads a durable snapshot or precomputed table). Waiting for that computation is
-    // what pushed the profile past 10s, and since cache fills run to completion even after the caller
-    // leaves (FillToCompletionHybridCache), waiting bought nothing. The task owns its DI scope, so
-    // leaving it running never disposes a DbContext under a live command; a result or failure that
-    // arrives within the budget is returned or thrown exactly as before.
-    private async Task<ChampionSynergiesResponse?> WaitForSynergiesAsync(
-        Task<ChampionSynergiesResponse> synergiesTask,
+    private async Task<T?> WaitForOptionalSectionAsync<T>(
+        Task<T?> sectionTask,
+        string section,
         long fanOutStarted,
         int championId,
-        string role,
-        CancellationToken ct)
+        CancellationToken ct) where T : class
     {
-        var remaining = _synergyWaitBudget - Stopwatch.GetElapsedTime(fanOutStarted);
-        if (!synergiesTask.IsCompleted && remaining > TimeSpan.Zero)
-            await Task.WhenAny(synergiesTask, Task.Delay(remaining, ct));
+        var remaining = _optionalSectionWaitBudget - Stopwatch.GetElapsedTime(fanOutStarted);
+        if (!sectionTask.IsCompleted && remaining > TimeSpan.Zero)
+            await Task.WhenAny(sectionTask, Task.Delay(remaining, ct));
 
-        if (synergiesTask.IsCompleted)
-            return await synergiesTask;
+        if (sectionTask.IsCompleted)
+            return await sectionTask;
 
-        // Observe a late failure so it is logged rather than lost.
-        _ = synergiesTask.ContinueWith(
+        _ = sectionTask.ContinueWith(
             task => logger?.LogWarning(task.Exception,
-                "Background synergy fill failed for champion {ChampionId} {Role}.", championId, role),
+                "Optional {Section} lookup failed for champion {ChampionId}.", section, championId),
             CancellationToken.None,
             TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);
-        logger?.LogInformation(
-            "Synergies for champion {ChampionId} {Role} were not cached; answered the profile without them while the fill completes.",
-            championId, role);
         return null;
     }
 
@@ -397,25 +392,6 @@ public class ChampionAnalyticsController(
         return scopedBuildLabService == null ? default : await action(scopedBuildLabService);
     }
 
-    private static ChampionSynergiesResponse EmptySynergies(
-        int championId,
-        string role,
-        string? rankTier,
-        string? region,
-        string? patch,
-        string queueFamily) =>
-        new(
-            championId,
-            role,
-            rankTier ?? "all",
-            AnalyticsRegionCatalog.NormalizeOrDefault(region),
-            patch ?? string.Empty,
-            queueFamily,
-            0,
-            0,
-            0,
-            []);
-
     private static string? NormalizeRole(string? role)
     {
         if (string.IsNullOrWhiteSpace(role))
@@ -423,14 +399,6 @@ public class ChampionAnalyticsController(
 
         var normalized = role.Trim().ToUpperInvariant();
         return ValidRoles.Contains(normalized) ? normalized : null;
-    }
-
-    private static bool ShouldUseAllRankFallback(string? rankTier)
-    {
-        if (string.IsNullOrWhiteSpace(rankTier))
-            return false;
-
-        return !string.Equals(rankTier.Trim(), "all", StringComparison.OrdinalIgnoreCase);
     }
 
 }

@@ -1,8 +1,10 @@
 import Image from "next/image";
 import Link from "next/link";
+import { connection } from "next/server";
 import { cache, Suspense } from "react";
 import type { components } from "@transcendence/api-client/schema";
 
+import { AnalyticsPatchNotice } from "@/components/AnalyticsPatchNotice";
 import { GlobalSearchLauncher } from "@/components/GlobalSearchLauncher";
 import { TierBadge } from "@/components/TierBadge";
 import { UpdatedAgo } from "@/components/UpdatedAgo";
@@ -22,7 +24,6 @@ import { getBackendBaseUrl } from "@/lib/env";
 import { formatGames, formatPercent } from "@/lib/format";
 import { championDisplayName } from "@/lib/gameDisplay";
 import { selectStarterPicks } from "@/lib/homeGuidance";
-import { fetchLolAnalyticsStatus } from "@/lib/lolAnalyticsStatus";
 import { platformRegionToSlug } from "@/lib/lolRegions";
 import { DEFAULT_TIERLIST_RANK_TIER } from "@/lib/ranks";
 import { encodeRiotIdPath } from "@/lib/riotid";
@@ -99,6 +100,7 @@ type HomeLiveData = {
   version: string;
   champions: Awaited<ReturnType<typeof fetchChampionMap>>["champions"];
   patch: string | null;
+  patchSelection: TierListResponse["patchSelection"];
   tierEntries: ReturnType<typeof normalizeTierListEntries>;
 };
 
@@ -108,24 +110,26 @@ type HomeLiveData = {
 // root page. Rank is pinned to the tier list's default (Emerald+) so the
 // preview matches where its links lead.
 async function loadHomeLiveData(): Promise<HomeLiveData> {
+  await connection();
   try {
-    const [{ version, champions }, analyticsStatus, tierListRes] = await Promise.all([
+    const [{ version, champions }, tierListRes] = await Promise.all([
       fetchChampionMap(),
-      fetchLolAnalyticsStatus(),
       fetchBackendJson<TierListResponse>(
         `${getBackendBaseUrl()}/api/lol/analytics/tierlist?rankTier=${DEFAULT_TIERLIST_RANK_TIER}`,
-        { next: { revalidate: 60 * 60 } }
+        { cache: "no-store" }
       )
     ]);
 
+    const patchSelection = tierListRes.body?.patchSelection;
     return {
       version,
       champions,
-      patch: analyticsStatus?.patch ?? tierListRes.body?.patch ?? null,
+      patch: patchSelection ? patchSelection.effectivePatch ?? null : tierListRes.body?.patch ?? null,
+      patchSelection,
       tierEntries: tierListRes.ok ? normalizeTierListEntries(tierListRes.body?.entries ?? []) : []
     };
   } catch {
-    return { version: "", champions: {}, patch: null, tierEntries: [] };
+    return { version: "", champions: {}, patch: null, patchSelection: null, tierEntries: [] };
   }
 }
 
@@ -199,7 +203,7 @@ function DatasetLine({ stats }: { stats: DatasetStats }) {
 export default async function LandingPage() {
   // Awaited with the rest of the page rather than streamed separately: the dataset line sits in the
   // hero, and a fallback that later collapsed (no snapshot yet) would shift everything below it.
-  const [{ version, champions, patch, tierEntries }, datasetStats] = await Promise.all([
+  const [{ version, champions, patch, patchSelection, tierEntries }, datasetStats] = await Promise.all([
     loadHomeLiveData(),
     fetchDatasetStats()
   ]);
@@ -279,6 +283,8 @@ export default async function LandingPage() {
 
         {datasetStats ? <DatasetLine stats={datasetStats} /> : null}
       </section>
+
+      <AnalyticsPatchNotice selection={patchSelection} />
 
       {lanes.length > 0 ? (
         <section aria-labelledby="lanes-heading" className="page-panel overflow-hidden">

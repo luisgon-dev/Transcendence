@@ -33,6 +33,18 @@ public sealed class ChampionSynergyService(
         LocalCacheExpiration = TimeSpan.FromHours(1)
     };
 
+    public Task<ChampionSynergiesResponse?> ReadPublishedSynergiesAsync(
+        int championId, string role, string? rankTier, string? region, string queueFamily, string patch,
+        CancellationToken ct = default)
+    {
+        if (!AnalyticsQueueCatalog.HasRoles(queueFamily))
+            return Task.FromResult<ChampionSynergiesResponse?>(null);
+
+        var rank = AnalyticsScopeMath.ParseRankTierScope(rankTier).CacheToken;
+        var key = CacheKey(championId, role, rank, AnalyticsRegionCatalog.NormalizeOrDefault(region), queueFamily, patch);
+        return ReadSnapshotAsync(SnapshotKey(key), patch, oldest: null, ct);
+    }
+
     public async Task<ChampionSynergiesResponse> GetSynergiesAsync(
         int championId,
         string role,
@@ -56,12 +68,8 @@ public sealed class ChampionSynergyService(
             key,
             async cancel =>
             {
-                var oldest = DateTime.UtcNow.AddHours(-24);
-                var payload = await context.AnalyticsResponseSnapshots.AsNoTracking()
-                    .Where(row => row.Feature == "synergies" && row.ScopeKey == snapshotKey && row.Patch == patch &&
-                                  row.ComputedAtUtc >= oldest)
-                    .Select(row => row.Payload).FirstOrDefaultAsync(cancel);
-                if (payload != null && JsonSerializer.Deserialize<ChampionSynergiesResponse>(payload) is { } stored)
+                var stored = await ReadSnapshotAsync(snapshotKey, patch, DateTime.UtcNow.AddHours(-24), cancel);
+                if (stored != null)
                     return stored;
                 return await ComputeAsync(championId, normalizedRole, rankScope, normalizedRegion,
                     normalizedQueue, patch, cancel);
@@ -69,6 +77,16 @@ public sealed class ChampionSynergyService(
             CacheOptions,
             tags: ["analytics"],
             cancellationToken: ct);
+    }
+
+    private async Task<ChampionSynergiesResponse?> ReadSnapshotAsync(
+        string key, string patch, DateTime? oldest, CancellationToken ct)
+    {
+        var payload = await context.AnalyticsResponseSnapshots.AsNoTracking()
+            .Where(row => row.Feature == "synergies" && row.ScopeKey == key && row.Patch == patch &&
+                          (oldest == null || row.ComputedAtUtc >= oldest))
+            .Select(row => row.Payload).SingleOrDefaultAsync(ct);
+        return payload == null ? null : JsonSerializer.Deserialize<ChampionSynergiesResponse>(payload);
     }
 
     private static string CacheKey(int champion, string role, string tier, string region, string queue, string patch) =>

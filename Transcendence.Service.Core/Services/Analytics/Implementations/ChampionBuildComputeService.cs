@@ -57,7 +57,17 @@ public sealed class ChampionBuildComputeService : IChampionBuildComputeService
         string? region,
         string queueFamily,
         string patch,
-        CancellationToken ct)
+        CancellationToken ct) =>
+        (await ComputeBuildsCoreAsync(championId, role, rankTier, region, queueFamily, patch, null, ct))!;
+
+    public Task<ChampionBuildsResponse?> ComputeScopedBuildsAsync(
+        ChampionSectionScope scope, int maxParticipants, CancellationToken ct) =>
+        ComputeBuildsCoreAsync(scope.ChampionId, scope.Role!, scope.RankTier, scope.Region,
+            scope.QueueFamily, scope.Patch, maxParticipants, ct);
+
+    private async Task<ChampionBuildsResponse?> ComputeBuildsCoreAsync(
+        int championId, string role, string? rankTier, string? region, string queueFamily,
+        string patch, int? maxParticipants, CancellationToken ct)
     {
         var normalizedQueue = AnalyticsQueueCatalog.Normalize(queueFamily);
         var effectiveRole = AnalyticsQueueCatalog.HasRoles(normalizedQueue)
@@ -87,6 +97,9 @@ public sealed class ChampionBuildComputeService : IChampionBuildComputeService
         baseQuery = AnalyticsScopeMath.ApplyRankTierScopeToParticipants(
             baseQuery, rankTierScope, _context.Ranks.AsNoTracking(), normalizedQueue);
 
+        if (maxParticipants is { } limit)
+            baseQuery = baseQuery.OrderBy(mp => mp.Id).Take(limit + 1);
+
         var matchData = await baseQuery
             .Select(mp => new
             {
@@ -104,6 +117,10 @@ public sealed class ChampionBuildComputeService : IChampionBuildComputeService
             })
             .ToListAsync(ct);
 
+        if (maxParticipants is { } inputLimit && (matchData.Count == 0 || matchData.Count > inputLimit))
+            return null;
+
+        ct.ThrowIfCancellationRequested();
         var allItemIds = matchData
             .SelectMany(m => m.Items)
             .Where(itemId => itemId != 0)
@@ -308,29 +325,30 @@ public sealed class ChampionBuildComputeService : IChampionBuildComputeService
         string patch,
         CancellationToken ct)
     {
-        var normalizedQueue = AnalyticsQueueCatalog.Normalize(queueFamily);
-        var regionFilter = AnalyticsRegionCatalog.NormalizeToFilter(region);
-        var scopeToken = AnalyticsScopeMath.ScopeTokenOf(AnalyticsScopeMath.ParseRankTierScope(rankTier));
+        var scope = new ChampionSectionScope(patch, AnalyticsQueueCatalog.Normalize(queueFamily), region, rankTier, role, championId);
+        var snapshot = await ReadBuildsSnapshotAsync(scope, ct);
+        return snapshot?.Data ?? await ComputeBuildsAsync(championId, role, rankTier, region, scope.QueueFamily, patch, ct);
+    }
 
-        // Only EMERALD_PLUS + ALL are precomputed, at the all-region scope; a specific tier/region (or a
-        // missing/un-refreshed snapshot) falls back to the live build compute.
-        if (normalizedQueue == QueueCatalog.QueueFamilyRankedSoloDuo &&
-            regionFilter == null &&
-            (scopeToken == RankTierCatalog.EmeraldPlusScope || scopeToken == RankTierCatalog.AllScope))
-        {
-            var payload = await _context.ChampionBuildSnapshots.AsNoTracking()
-                .Where(x => x.Patch == patch && x.ChampionId == championId && x.Role == role && x.RankScope == scopeToken)
-                .Select(x => x.Payload)
-                .FirstOrDefaultAsync(ct);
+    public async Task<ChampionScopedSection<ChampionBuildsResponse>?> ReadBuildsSnapshotAsync(
+        ChampionSectionScope scope, CancellationToken ct)
+    {
+        var scopeToken = AnalyticsScopeMath.ScopeTokenOf(AnalyticsScopeMath.ParseRankTierScope(scope.RankTier));
+        if (scope.QueueFamily != QueueCatalog.QueueFamilyRankedSoloDuo ||
+            AnalyticsRegionCatalog.NormalizeToFilter(scope.Region) != null ||
+            scopeToken is not (RankTierCatalog.EmeraldPlusScope or RankTierCatalog.AllScope))
+            return null;
 
-            if (payload != null)
-            {
-                var cached = BuildSnapshotSerialization.Deserialize(payload);
-                if (cached != null)
-                    return cached;
-            }
-        }
+        var snapshot = await _context.ChampionBuildSnapshots.AsNoTracking()
+            .Where(x => x.Patch == scope.Patch && x.ChampionId == scope.ChampionId &&
+                        x.Role == scope.Role && x.RankScope == scopeToken)
+            .Select(x => new { x.Payload, x.ComputedAtUtc })
+            .FirstOrDefaultAsync(ct);
 
-        return await ComputeBuildsAsync(championId, role, rankTier, region, normalizedQueue, patch, ct);
+        if (snapshot is null)
+            return null;
+
+        var data = BuildSnapshotSerialization.Deserialize(snapshot.Payload);
+        return data is null ? null : new(ChampionSectionState.Ready, snapshot.ComputedAtUtc, data);
     }
 }

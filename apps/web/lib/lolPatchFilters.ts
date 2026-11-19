@@ -6,6 +6,7 @@ export type LolAnalyticsPatchOption = {
   rankedSoloDuoMatchCount: number;
   matchCount?: number;
   queueFamily?: string;
+  state?: "Ready" | "Preparing" | "Unavailable";
 };
 
 const DEFAULT_VISIBLE_HISTORICAL_PATCH_COUNT = 3;
@@ -40,4 +41,13 @@ export function buildPatchPreservingParams(params: Record<string, string | null 
     next.set(key, value);
   }
   return next;
+}
+
+export function latestPublishedPatchHref(path: string, params: Record<string, string | undefined>): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (key !== "patch" && value) query.set(key, value);
+  }
+  const filters = query.toString();
+  return filters ? `${path}?${filters}` : path;
 }

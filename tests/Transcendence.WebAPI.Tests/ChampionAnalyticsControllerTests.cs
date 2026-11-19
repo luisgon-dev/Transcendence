@@ -17,12 +17,13 @@ public class ChampionAnalyticsControllerTests
     {
         var service = new Mock<IChampionAnalyticsService>();
         service
-            .Setup(x => x.GetWinRatesAsync(
+            .Setup(x => x.GetPublishedWinRatesAsync(
                 103,
                 It.Is<ChampionAnalyticsFilter>(filter =>
                     filter.RankTier == "EMERALD_PLUS" &&
                     filter.Region == "KR" &&
                     filter.Patch == "15.1"),
+                It.IsAny<AnalyticsPublication>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChampionWinRateSummary(
                 103,
@@ -44,18 +45,18 @@ public class ChampionAnalyticsControllerTests
                 Region = "KR",
                 Patch = "15.1"
             });
-        service.Setup(x => x.GetTrendAsync(
-                103, "MIDDLE", "EMERALD_PLUS", "RANKED_SOLO_DUO", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ChampionTrendResponse(103, "RANKED_SOLO_DUO", "MIDDLE", "EMERALD_PLUS", "ALL", []));
+        service.Setup(x => x.GetPublishedTrendAsync(
+                103, "MIDDLE", "EMERALD_PLUS", "KR", "RANKED_SOLO_DUO", It.IsAny<AnalyticsPublication>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ChampionTrendResponse(103, "RANKED_SOLO_DUO", "MIDDLE", "EMERALD_PLUS", "KR", []));
         var synergy = new Mock<IChampionSynergyService>();
-        synergy.Setup(x => x.GetSynergiesAsync(
+        synergy.Setup(x => x.ReadPublishedSynergiesAsync(
                 103, "MIDDLE", "EMERALD_PLUS", "KR", "RANKED_SOLO_DUO", "15.1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChampionSynergiesResponse(
                 103, "MIDDLE", "EMERALD_PLUS", "KR", "15.1", "RANKED_SOLO_DUO", 20, 11, 0.55,
                 [new ChampionSynergyEntryDto(64, "JUNGLE", 10, 6, 0.6, 0.5, 0.05, 0.01)]));
-        var controller = new ChampionAnalyticsController(service.Object, null, synergy.Object);
+        var controller = new ChampionAnalyticsController(service.Object, null, ReadyPublication(), synergy.Object);
 
-        var result = await controller.GetProfile(103, null, "EMERALD_PLUS", "KR", null, "15.1", CancellationToken.None);
+        var result = await controller.GetProfile(103, null, "EMERALD_PLUS", "KR", null, null, CancellationToken.None);
 
         var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
         var payload = ok.Value.Should().BeOfType<ChampionProfileAnalyticsResponse>().Subject;
@@ -63,6 +64,7 @@ public class ChampionAnalyticsControllerTests
         payload.WinRates.ByRoleTier.Should().HaveCount(2);
         payload.Builds.Role.Should().Be("MIDDLE");
         payload.Matchups.Role.Should().Be("MIDDLE");
+        payload.PatchSelection.Should().Be(new AnalyticsPatchSelection(AnalyticsPatchSelectionState.Ready, "15.2", null, "15.1"));
         payload.Synergies!.BestPartners.Should().ContainSingle();
     }
 
@@ -97,6 +99,21 @@ public class ChampionAnalyticsControllerTests
     }
 
     [Fact]
+    public async Task GetProfile_AnswersWithoutRecommendation_WhenTheLookupOutlastsTheBudget()
+    {
+        var pending = new TaskCompletionSource<ChampionRecommendationSummary>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var controller = ScopedProfileController(_ => Task.FromResult(Synergies()), TimeSpan.FromMilliseconds(100), pending.Task);
+
+        var result = await controller.GetProfile(103, null, null, null, null, "15.1", CancellationToken.None);
+
+        var payload = result.Result.Should().BeOfType<OkObjectResult>().Subject.Value
+            .Should().BeOfType<ChampionProfileAnalyticsResponse>().Subject;
+        payload.Recommendation.Should().BeNull();
+        payload.Synergies.Should().NotBeNull();
+        pending.TrySetCanceled();
+    }
+
+    [Fact]
     public async Task GetProfile_StillFails_WhenSynergiesFailWithinTheBudget()
     {
         var controller = ScopedProfileController(
@@ -112,14 +129,24 @@ public class ChampionAnalyticsControllerTests
         new(103, "MIDDLE", "all", "ALL", "15.1", "RANKED_SOLO_DUO", 20, 11, 0.55,
             [new ChampionSynergyEntryDto(64, "JUNGLE", 10, 6, 0.6, 0.5, 0.05, 0.01)]);
 
+    private static IAnalyticsPublicationService ReadyPublication()
+    {
+        var service = new Mock<IAnalyticsPublicationService>();
+        service.Setup(x => x.ResolveAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string _, string? requested, CancellationToken _) =>
+                new AnalyticsPublication(new(AnalyticsPatchSelectionState.Ready, "15.2", requested, "15.1")));
+        return service.Object;
+    }
+
     // The production shape: every section runs in its own DI scope, in parallel.
     private static ChampionAnalyticsController ScopedProfileController(
         Func<CancellationToken, Task<ChampionSynergiesResponse>> synergies,
-        TimeSpan budget)
+        TimeSpan budget,
+        Task<ChampionRecommendationSummary>? recommendation = null)
     {
         var analytics = new Mock<IChampionAnalyticsService>();
         analytics
-            .Setup(x => x.GetWinRatesAsync(103, It.IsAny<ChampionAnalyticsFilter>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetPublishedWinRatesAsync(103, It.IsAny<ChampionAnalyticsFilter>(), It.IsAny<AnalyticsPublication>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChampionWinRateSummary(103, "15.1",
                 [new ChampionWinRateDto(103, "MIDDLE", "all", 20, 11, 0.55, 0.2, 0.01, 1, 50, "15.1")]));
         analytics
@@ -129,30 +156,39 @@ public class ChampionAnalyticsControllerTests
             .Setup(x => x.GetMatchupsAsync(103, "MIDDLE", null, null, "RANKED_SOLO_DUO", "15.1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChampionMatchupsResponse { ChampionId = 103, Role = "MIDDLE", Patch = "15.1" });
         analytics
-            .Setup(x => x.GetTrendAsync(103, "MIDDLE", null, "RANKED_SOLO_DUO", It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetPublishedTrendAsync(103, "MIDDLE", null, null, "RANKED_SOLO_DUO", It.IsAny<AnalyticsPublication>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChampionTrendResponse(103, "RANKED_SOLO_DUO", "MIDDLE", "all", "ALL", []));
         var synergy = new Mock<IChampionSynergyService>();
         synergy
-            .Setup(x => x.GetSynergiesAsync(103, "MIDDLE", null, null, "RANKED_SOLO_DUO", "15.1", It.IsAny<CancellationToken>()))
-            .Returns<int, string, string?, string?, string?, string?, CancellationToken>(
-                (_, _, _, _, _, _, ct) => synergies(ct));
+            .Setup(x => x.ReadPublishedSynergiesAsync(103, "MIDDLE", null, null, "RANKED_SOLO_DUO", "15.1", It.IsAny<CancellationToken>()))
+            .Returns<int, string, string?, string?, string, string, CancellationToken>(
+                async (_, _, _, _, _, _, ct) => await synergies(ct));
 
         var services = new ServiceCollection();
         services.AddScoped(_ => analytics.Object);
         services.AddScoped(_ => synergy.Object);
+        if (recommendation != null)
+        {
+            var buildLab = new Mock<IBuildLabService>();
+            buildLab.Setup(x => x.GetChampionRecommendationAsync(
+                    103, "MIDDLE", null, "15.1", null, It.IsAny<CancellationToken>()))
+                .Returns(recommendation);
+            services.AddScoped(_ => buildLab.Object);
+        }
         var provider = services.BuildServiceProvider();
         return new ChampionAnalyticsController(
             analytics.Object,
             provider.GetRequiredService<IServiceScopeFactory>(),
+            ReadyPublication(),
             synergy.Object,
-            synergyWaitBudget: budget);
+            optionalSectionWaitBudget: budget);
     }
 
     [Fact]
     public async Task GetSynergies_ReturnsServiceUnavailable_WhenSynergyServiceIsNotRegistered()
     {
         var analytics = new Mock<IChampionAnalyticsService>();
-        var controller = new ChampionAnalyticsController(analytics.Object, null);
+        var controller = new ChampionAnalyticsController(analytics.Object, null, ReadyPublication());
 
         var result = await controller.GetSynergies(
             103, "MIDDLE", "EMERALD_PLUS", "KR", "flex", "15.1", CancellationToken.None);
@@ -165,9 +201,10 @@ public class ChampionAnalyticsControllerTests
     public async Task GetProfile_CollapsesRoleForAramAndForwardsQueueToEverySurface()
     {
         var service = new Mock<IChampionAnalyticsService>();
-        service.Setup(x => x.GetWinRatesAsync(
+        service.Setup(x => x.GetPublishedWinRatesAsync(
                 103,
                 It.Is<ChampionAnalyticsFilter>(filter => filter.QueueFamily == "ARAM"),
+                It.IsAny<AnalyticsPublication>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChampionWinRateSummary(103, "15.1", [], QueueFamily: "ARAM"));
         service.Setup(x => x.GetBuildsAsync(
@@ -176,19 +213,20 @@ public class ChampionAnalyticsControllerTests
         service.Setup(x => x.GetMatchupsAsync(
                 103, "ALL", null, null, "ARAM", "15.1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChampionMatchupsResponse { ChampionId = 103, Role = "ALL", Patch = "15.1", QueueFamily = "ARAM" });
-        service.Setup(x => x.GetTrendAsync(
-                103, "ALL", null, "ARAM", It.IsAny<CancellationToken>()))
+        service.Setup(x => x.GetPublishedTrendAsync(
+                103, "ALL", null, null, "ARAM", It.IsAny<AnalyticsPublication>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChampionTrendResponse(103, "ARAM", "ALL", "all", "ALL", []));
 
-        var controller = new ChampionAnalyticsController(service.Object, null);
+        var controller = new ChampionAnalyticsController(service.Object, null, ReadyPublication());
         var result = await controller.GetProfile(103, null, null, null, "aram", "15.1", CancellationToken.None);
 
         var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
         var payload = ok.Value.Should().BeOfType<ChampionProfileAnalyticsResponse>().Subject;
         payload.EffectiveRole.Should().Be("ALL");
         payload.QueueFamily.Should().Be("ARAM");
-        service.Verify(x => x.GetGradeAsync(
-            103, "ALL", null, null, "ARAM", "15.1", It.IsAny<CancellationToken>()), Times.Once);
+        service.Verify(x => x.GetPublishedGradeAsync(
+            103, "ALL", null, null, "ARAM", It.Is<AnalyticsPublication>(x => x.Selection.EffectivePatch == "15.1"),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -213,7 +251,7 @@ public class ChampionAnalyticsControllerTests
         service
             .Setup(x => x.GetProBuildsAsync(103, "KR", "MIDDLE", null, "15.1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChampionProBuildsResponse(103, "15.1", "MIDDLE", "KR", "all", [], [], []));
-        var controller = new ChampionAnalyticsController(service.Object, null);
+        var controller = new ChampionAnalyticsController(service.Object, null, ReadyPublication());
 
         var result = await controller.GetProBuilds(103, "KR", null, null, "15.1", CancellationToken.None);
 
@@ -232,7 +270,7 @@ public class ChampionAnalyticsControllerTests
         service
             .Setup(x => x.GetProBuildsAsync(103, "KR", "TOP", "pro", "15.1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChampionProBuildsResponse(103, "15.1", "TOP", "KR", "pro", [], [], []));
-        var controller = new ChampionAnalyticsController(service.Object, null);
+        var controller = new ChampionAnalyticsController(service.Object, null, ReadyPublication());
 
         var result = await controller.GetProBuilds(103, "KR", "TOP", "pro", "15.1", CancellationToken.None);
 
@@ -249,7 +287,7 @@ public class ChampionAnalyticsControllerTests
     public async Task GetProBuilds_RejectsUnknownRole()
     {
         var service = new Mock<IChampionAnalyticsService>();
-        var controller = new ChampionAnalyticsController(service.Object, null);
+        var controller = new ChampionAnalyticsController(service.Object, null, ReadyPublication());
 
         var result = await controller.GetProBuilds(103, null, "BANANA", null, null, CancellationToken.None);
 
@@ -265,7 +303,7 @@ public class ChampionAnalyticsControllerTests
     public async Task GetWinRates_RejectsUnsupportedQueueBeforeCallingService()
     {
         var service = new Mock<IChampionAnalyticsService>();
-        var controller = new ChampionAnalyticsController(service.Object, null);
+        var controller = new ChampionAnalyticsController(service.Object, null, ReadyPublication());
 
         var result = await controller.GetWinRates(
             103, "EMERALD_PLUS", "KR", "MIDDLE", "15.1", "twisted-treeline", CancellationToken.None);
@@ -282,7 +320,7 @@ public class ChampionAnalyticsControllerTests
         service
             .Setup(x => x.GetBuildsAsync(103, "MIDDLE", "EMERALD_PLUS", "KR", "RANKED_FLEX", "15.1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChampionBuildsResponse(103, "MIDDLE", "EMERALD_PLUS", "KR", "15.1", [], [], QueueFamily: "RANKED_FLEX"));
-        var controller = new ChampionAnalyticsController(service.Object, null);
+        var controller = new ChampionAnalyticsController(service.Object, null, ReadyPublication());
 
         var result = await controller.GetBuilds(103, "MIDDLE", "EMERALD_PLUS", "KR", "flex", "15.1", CancellationToken.None);
 
@@ -304,7 +342,7 @@ public class ChampionAnalyticsControllerTests
                 Region = "KR",
                 Patch = "15.1"
             });
-        var controller = new ChampionAnalyticsController(service.Object, null);
+        var controller = new ChampionAnalyticsController(service.Object, null, ReadyPublication());
 
         var result = await controller.GetMatchups(103, "MIDDLE", "EMERALD_PLUS", "KR", "flex", "15.1", CancellationToken.None);
 

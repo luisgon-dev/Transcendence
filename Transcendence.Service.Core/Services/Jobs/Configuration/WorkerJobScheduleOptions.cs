@@ -21,6 +21,7 @@ public class WorkerJobScheduleOptions
     public string RefreshChampionMatchupsCron { get; set; } = "35 * * * *";
     // Full serialized build responses are expensive and atomically replaced; refresh them less often.
     public string RefreshChampionBuildSnapshotsCron { get; set; } = "10 */6 * * *";
+    public string RefreshRequestedChampionSectionsCron { get; set; } = "* * * * *";
     // Lightweight roster-backed snapshots run independently so a heavy matchup timeout cannot stale pro surfaces.
     public string RefreshProAnalyticsCron { get; set; } = "20 * * * *";
     // Independent from the champion precompute job, which may run long or fail on matchup aggregation.
@@ -45,6 +46,7 @@ public class WorkerJobScheduleOptions
     public bool EnableRefreshPrecomputedAnalytics { get; set; } = true;
     public bool EnableRefreshChampionMatchups { get; set; } = true;
     public bool EnableRefreshChampionBuildSnapshots { get; set; } = true;
+    public bool EnableRefreshRequestedChampionSections { get; set; } = true;
     public bool EnableRefreshProAnalytics { get; set; } = true;
     public bool EnableRefreshBuildResourceAnalytics { get; set; } = true;
     public bool EnableRefreshBuildLabStats { get; set; } = true;

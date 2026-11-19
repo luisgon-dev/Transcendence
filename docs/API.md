@@ -299,9 +299,10 @@ Returns a public ranked leaderboard for one platform region. Query parameters:
 Regional boards are ordered by tier, league points, wins, and losses. Champion boards are ordered by champion-game sample, ranked tier, league points, and champion win rate. Responses include the resolved platform region and queue, generation time, profile identity, current rank and record, plus champion games, wins, win rate, and KDA when champion filters are active.
 Champion-board region filtering uses the match's recorded platform region, so an account transfer does not move historical games between regional boards.
 
-Early-patch semantics:
-- Analytics endpoints default to the active patch and support a `patch` query parameter for stored historical patches.
-- Historical patch requests do not fall back to another patch; unknown patch values return empty `200 OK` payloads with the requested patch echoed.
+- **Published champion analytics.** Tier lists and champion profiles default to the latest published patch for the selected queue. During rollover, an omitted `patch` can serve the previous published patch. The `patchSelection` object identifies the `activePatch`, `requestedPatch`, `effectivePatch`, and state.
+- An explicit `patch` stays pinned. An active patch awaiting its first rollup returns `200 OK` with `state: "Preparing"`, empty analytics, and no effective patch. An unknown or unpublished historical patch returns `state: "Unavailable"` and echoes the requested patch. A published patch with zero games for the selected filters stays `Ready`.
+- `GET /api/lol/analytics/published-patches?queue=solo` lists the active patch and up to eleven earlier published patches. Options include the patch, queue, release and detection timestamps, `isActive`, materialized `matchCount`, and `Ready` or `Preparing` state. With no active patch, up to twelve published patches are returned. The separate `/patches` endpoint still reports observed match counts.
+- Standalone legacy win-rate, build and matchup routes retain their active-patch defaults and compute behavior. Champion pages use the published profile instead.
 - Responses now include `sample` metadata for UI messaging:
   - `sampleStatus` (`sufficient`, `low_sample`, `no_data`)
   - `sampleSize`
@@ -311,7 +312,7 @@ Early-patch semantics:
   - `patchPhase` (`bootstrap`, `provisional`, `maturing`, `steady`)
   - `isProvisional`
 - `low_sample` and `no_data` are expected during early patch windows while ingestion ramps up.
-- Tier-list entries carry `movement` / `previousTier` for the persisted region=ALL default scopes (rank scope `all` or `EMERALD_PLUS`); they are omitted (movement `SAME`/null) for specific-region or exact-tier views (computed live) and when no previous patch exists.
+- Tier-list entries carry `movement` / `previousTier` for the persisted region=ALL default scopes (rank scope `all` or `EMERALD_PLUS`). Specific regions and exact ranks derive grades from the materialized counts and omit movement. A previous patch is required for movement.
 
 `queue` query semantics across tier list, patch options, champion profile, win rates, builds, and matchups:
 - `solo` (or omitted): Ranked Solo/Duo (`RANKED_SOLO_DUO`)
@@ -398,16 +399,21 @@ not outrank supported pairings. The same `synergies` payload is included by the 
 
 `GET /api/lol/analytics/champions/{championId}/profile` returns the champion detail payload in one request:
 - Query filters: `role`, `rankTier`, `region`, `queue`, `patch`
-- Response: `{ championId, effectiveRole, winRates, builds, matchups, grade, queueFamily, trend, synergies, recommendation }`
-- `synergies` is `null` when the scope's synergies are not cached and their live computation does not
-  finish within 2s of the request's fan-out. The computation keeps running in its own scope and caches
-  its result, so a later request includes it; the web hides the section while it is `null`. The
-  default lane of every champion is kept cached by the hourly default-profile warm. A synergy failure
-  that arrives within the 2s still fails the request, as before.
+- The response includes `winRates`, `builds`, `matchups`, `grade`, `trend`, `synergies`,
+  `recommendation`, and the page's `patchSelection`. `buildsState` and `matchupsState` independently
+  report `Ready`, `Preparing`, or `Unavailable`. Each section can carry its own computed timestamp.
+  A completed empty snapshot is `Ready`. A published snapshot remains visible while a fresher one runs.
+- `synergies` is available for scopes with a durable snapshot. The profile's synergy and Build Lab
+  recommendation lookups share a two-second wait budget. The standalone synergy endpoint keeps its
+  existing behavior.
 - `grade` (`ChampionGradeDto`, nullable) is the champion's tier grade for the resolved `effectiveRole` + scope — the **same** grade the tier list shows for that champion in that role (so the detail page hero is consistent with the list). It carries `tier`, `strengthScore`, `winRate`, `pickRate`, `banRate`, `contestedScore`, `games`, `roleBaseline`, `isLowSample`, `movement`, `previousTier`, `role`, `rankScope`. Null when the champion is not graded in scope (render "Unrated").
-- The endpoint reuses the cached winrate, build, matchup, and tier-list aggregates. For Solo/Duo and Flex, when `role` is omitted it chooses the most-played role from winrates; if a scoped rank filter has no winrate rows, it uses all-rank winrates only to choose the role while keeping the requested rank filter for build and matchup data. ARAM/Arena resolve `effectiveRole=ALL`.
-- The build and matchup reads run in separate backend scopes so their cached aggregate reads can execute concurrently without sharing an EF `DbContext`.
-- `trend` is the last 12 durable patch-grade points for the same champion, queue, role, and rank scope at the global region grain. Each point carries `patch`, `releasedAtUtc`, `tier`, `games`, `winRate`, `pickRate`, `banRate`, `strengthScore`, and `isLowSample`; it is empty for exact-tier scopes that are not persisted. The champion page renders a real patch-over-patch win-rate chart only when at least two points exist.
+- The profile pins its reads to the effective patch and preserves the requested queue, region, and rank.
+  For Solo/Duo and Flex, an omitted `role` uses the most-played role. When that rank has no win-rate
+  rows, materialized all-rank win rates can choose the role. The other reads keep the original rank.
+  ARAM and Arena resolve `effectiveRole=ALL`.
+- `trend` contains up to 12 durable patch-grade points through the effective patch for the same
+  champion, queue, role, rank, and region. Trend data is available for the materialized global
+  scopes. The champion page renders the chart once at least two points exist.
 
 Additional analytics fields:
 - Tier list and champion winrate surfaces include queue-scoped `banRate`.

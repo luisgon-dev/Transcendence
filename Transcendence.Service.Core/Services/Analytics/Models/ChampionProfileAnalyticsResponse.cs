@@ -9,9 +9,14 @@ public record ChampionProfileAnalyticsResponse(
     ChampionWinRateSummary WinRates,
     ChampionBuildsResponse Builds,
     ChampionMatchupsResponse Matchups,
+    AnalyticsPatchSelection PatchSelection,
     ChampionGradeDto? Grade = null,
     string QueueFamily = "RANKED_SOLO_DUO",
     ChampionTrendResponse? Trend = null,
     ChampionSynergiesResponse? Synergies = null,
-    ChampionRecommendationSummary? Recommendation = null
+    ChampionRecommendationSummary? Recommendation = null,
+    ChampionSectionState BuildsState = ChampionSectionState.Unavailable,
+    DateTime? BuildsComputedAtUtc = null,
+    ChampionSectionState MatchupsState = ChampionSectionState.Unavailable,
+    DateTime? MatchupsComputedAtUtc = null
 );

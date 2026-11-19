@@ -15,7 +15,8 @@ namespace Transcendence.WebAPI.Controllers;
 public class AnalyticsController(
     IChampionAnalyticsService analyticsService,
     IAnalyticsPatchQueryService patchQueryService,
-    IOptions<MultiRegionIngestionOptions> multiRegionOptions) : ControllerBase
+    IOptions<MultiRegionIngestionOptions> multiRegionOptions,
+    IAnalyticsPublicationService publicationService) : ControllerBase
 {
     /// <summary>
     /// Get champion tier list ranked by composite score (70% win rate + 30% pick rate).
@@ -25,7 +26,8 @@ public class AnalyticsController(
     /// <param name="role">Optional role filter (TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY). Leave empty for unified tier list across all roles.</param>
     /// <param name="rankTier">Optional rank tier filter (ALL, EMERALD_PLUS, IRON, BRONZE, SILVER, GOLD, PLATINUM, EMERALD, DIAMOND, MASTER, GRANDMASTER, CHALLENGER)</param>
     /// <param name="region">Optional platform region filter (for example NA1, EUW1, KR). Defaults to ALL/global.</param>
-    /// <param name="patch">Optional patch version. Defaults to the active analytics patch.</param>
+    /// <param name="queue">Optional queue family. Defaults to ranked solo/duo.</param>
+    /// <param name="patch">Optional patch version. Defaults to the newest published patch for the queue.</param>
     /// <param name="ct">Cancellation token</param>
     [HttpGet("tierlist")]
     [ProducesResponseType(typeof(TierListResponse), StatusCodes.Status200OK)]
@@ -40,8 +42,22 @@ public class AnalyticsController(
         if (!AnalyticsQueueCatalog.IsSupported(queue))
             return BadRequest("Invalid queue. Expected solo, aram, arena, or flex.");
 
-        var tierList = await analyticsService.GetTierListAsync(role, rankTier, region, queue, patch, ct);
+        var publication = await publicationService.ResolveAsync(queue, patch, ct);
+        var tierList = await analyticsService.GetPublishedTierListAsync(role, rankTier, region, queue, publication, ct);
         return Ok(tierList);
+    }
+
+    [HttpGet("published-patches")]
+    [ProducesResponseType(typeof(IReadOnlyList<PublishedAnalyticsPatchOptionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetPublishedPatches(
+        [FromQuery] string? queue = null,
+        CancellationToken ct = default)
+    {
+        if (!AnalyticsQueueCatalog.IsSupported(queue))
+            return BadRequest("Invalid queue. Expected solo, aram, arena, or flex.");
+
+        return Ok(await publicationService.GetPatchOptionsAsync(queue, ct));
     }
 
     [HttpGet("regions")]

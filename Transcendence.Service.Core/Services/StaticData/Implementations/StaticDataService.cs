@@ -1,5 +1,7 @@
+using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using System.Data;
 using System.Globalization;
 using System.Net;
 using System.Security.Cryptography;
@@ -9,6 +11,7 @@ using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Match;
 using Transcendence.Data.Models.LoL.Static;
 using Transcendence.Service.Core.Services.Cache;
+using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Services.StaticData.DTOs;
 using Transcendence.Service.Core.Services.StaticData.Interfaces;
@@ -21,7 +24,9 @@ public class StaticDataService(
     IHttpClientFactory httpClientFactory,
     ICacheService cacheService,
     IOptions<PatchPromotionOptions> patchPromotionOptions,
-    ILogger<StaticDataService> logger)
+    ILogger<StaticDataService> logger,
+    IOptions<WorkerJobScheduleOptions> scheduleOptions,
+    IBackgroundJobClient backgroundJobs)
     : IStaticDataService
 {
     private static readonly JsonSerializerOptions CaseInsensitiveJsonOptions = new()
@@ -48,6 +53,7 @@ public class StaticDataService(
             return;
 
         var currentPatch = await context.Patches
+            .AsNoTracking()
             .FirstOrDefaultAsync(p => p.IsActive, cancellationToken);
 
         if (currentPatch != null && currentPatch.Version == latestPatch)
@@ -61,8 +67,8 @@ public class StaticDataService(
         if (currentPatch == null)
         {
             // Bootstrap: no active patch yet, so promote immediately to get analytics running.
-            await PromotePatchAsync(latestPatch, previous: null, cancellationToken);
-            logger.LogInformation("Promoted patch {Latest} to active (bootstrap — no prior active patch).", latestPatch);
+            if (await PromotePatchAsync(latestPatch, cancellationToken))
+                logger.LogInformation("Promoted patch {Latest} to active (bootstrap — no prior active patch).", latestPatch);
             return;
         }
 
@@ -98,39 +104,56 @@ public class StaticDataService(
             return;
         }
 
-        await PromotePatchAsync(latestPatch, previous: currentPatch, cancellationToken);
-        logger.LogInformation(
-            "Promoted patch {Latest} to active ({Regions} regions rolled out, age {Age:F1}h, forcedByAge={Forced}).",
-            latestPatch,
-            regionsRolledOut,
-            ageHours,
-            forcedByAge && !rolledOut);
+        if (await PromotePatchAsync(latestPatch, cancellationToken))
+            logger.LogInformation(
+                "Promoted patch {Latest} to active ({Regions} regions rolled out, age {Age:F1}h, forcedByAge={Forced}).",
+                latestPatch,
+                regionsRolledOut,
+                ageHours,
+                forcedByAge && !rolledOut);
     }
 
-    private async Task PromotePatchAsync(string version, Patch? previous, CancellationToken cancellationToken)
+    private async Task<bool> PromotePatchAsync(string version, CancellationToken cancellationToken)
     {
-        if (previous != null)
-            previous.IsActive = false;
-
-        var row = await context.Patches.FirstOrDefaultAsync(p => p.Version == version, cancellationToken);
-        if (row == null)
+        string? previousVersion;
+        await using (var transaction = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken))
         {
-            row = new Patch
-            {
-                Version = version,
-                ReleaseDate = DateTime.UtcNow,
-                DetectedAt = DateTime.UtcNow
-            };
-            context.Patches.Add(row);
+            var previous = await context.Patches.FirstOrDefaultAsync(p => p.IsActive, cancellationToken);
+            if (previous?.Version == version)
+                return false;
+
+            var row = await context.Patches.SingleAsync(p => p.Version == version, cancellationToken);
+            if (previous != null && previous.ReleaseDate > row.ReleaseDate)
+                return false;
+
+            previousVersion = previous?.Version;
+            if (previous != null)
+                previous.IsActive = false;
+            row.IsActive = true;
+            await context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
         }
 
-        row.IsActive = true;
-        await context.SaveChangesAsync(cancellationToken);
+        if (scheduleOptions.Value.EnableRefreshPrecomputedAnalytics)
+        {
+            try
+            {
+                var jobId = backgroundJobs.Enqueue<RefreshPrecomputedAnalyticsJob>(
+                    job => job.ExecuteForPatchAsync(version, CancellationToken.None));
+                if (jobId == null)
+                    logger.LogWarning("Queueing the first tabular analytics refresh for patch {Patch} was canceled. The recurring job will retry.", version);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to queue the first tabular analytics refresh for patch {Patch}. The recurring job will retry.", version);
+            }
+        }
 
         await cacheService.RemoveAsync(AnalyticsCacheKeys.ActivePatch, cancellationToken);
 
-        if (previous != null)
-            await cacheService.RemoveByTagAsync(CacheTags.ForPatch(previous.Version), cancellationToken);
+        if (previousVersion != null)
+            await cacheService.RemoveByTagAsync(CacheTags.ForPatch(previousVersion), cancellationToken);
+        return true;
     }
 
     private static DateTime EnsureUtc(DateTime value) =>

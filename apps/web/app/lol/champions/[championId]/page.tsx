@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { cache, Suspense } from "react";
 import type { components } from "@transcendence/api-client";
 
+import { AnalyticsPatchNotice } from "@/components/AnalyticsPatchNotice";
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { BuildBreakdown } from "@/components/BuildBreakdown";
@@ -15,6 +16,7 @@ import {
 } from "@/components/ChampionRecommendation";
 import { FilterBar } from "@/components/FilterBar";
 import { MatchupsTable, type MatchupRow } from "@/components/MatchupsTable";
+import { RefreshAnalyticsButton } from "@/components/RefreshAnalyticsButton";
 import { ItemBuildDisplay } from "@/components/ItemBuildDisplay";
 import { BuildVariants, ChevronGlyph } from "@/components/ChampionBuildVariants";
 import { StatsBar } from "@/components/StatsBar";
@@ -31,8 +33,8 @@ import { pickMostSevereAnalyticsSample, type AnalyticsSampleLike } from "@/lib/a
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { formatGames, matchupVerdict } from "@/lib/format";
 import { championDisplayName } from "@/lib/gameDisplay";
-import { fetchLolAnalyticsPatches } from "@/lib/lolAnalyticsPatches";
-import { normalizeAnalyticsPatch } from "@/lib/lolPatchFilters";
+import { fetchPublishedAnalyticsPatches } from "@/lib/lolAnalyticsPatches";
+import { latestPublishedPatchHref, normalizeAnalyticsPatch } from "@/lib/lolPatchFilters";
 import { resolveDefaultedRankTier, rankTierDisplayLabel, rankTierLadderOrdinal } from "@/lib/ranks";
 import { roleDisplayLabel } from "@/lib/roles";
 import {
@@ -87,11 +89,11 @@ export async function generateMetadata({
   try {
     const [{ champions }, patches] = await Promise.all([
       fetchChampionMap(),
-      selectedPatch ? Promise.resolve([]) : fetchLolAnalyticsPatches(queue.value)
+      selectedPatch ? Promise.resolve([]) : fetchPublishedAnalyticsPatches(queue.value)
     ]);
     const champion = champions[championId];
     if (champion?.name?.trim()) championName = championDisplayName(champion);
-    patch ??= patches.find((candidate) => candidate.isActive)?.patch ?? patches[0]?.patch ?? null;
+    patch ??= patches.find((candidate) => candidate.state === "Ready")?.patch ?? null;
   } catch {
     // Metadata stays human-readable if static data is temporarily unavailable.
   }
@@ -150,9 +152,7 @@ function pickBestEntry(
 }
 
 /**
- * Loads the champion profile + the static maps the data sections need. Wrapped in cache()
- * so the two streamed regions (hero meta + sections) below share a single profile fetch and
- * a single static-data transform within one render instead of fetching/parsing twice.
+ * The hero and analytics sections share the same request-time publication.
  */
 const loadChampionData = cache(async (championId: number, sp: ChampionSearchParams) => {
   const { activeRegion, activeRegionLabel, options: regionOptions } =
@@ -174,14 +174,11 @@ const loadChampionData = cache(async (championId: number, sp: ChampionSearchPara
   if (activeQueue !== "solo") winrateQuery.set("queue", activeQueue);
   const profileQuery = winrateQuery.toString() ? `?${winrateQuery.toString()}` : "";
 
-  const [itemStatic, runeStatic, spellStatic, patchOptions, profileRes] = await Promise.all([
-    fetchItemMap(),
-    fetchRunesReforged(),
-    fetchSummonerSpellMap(),
-    fetchLolAnalyticsPatches(activeQueue),
+  const [patchOptions, profileRes] = await Promise.all([
+    fetchPublishedAnalyticsPatches(activeQueue),
     fetchBackendJson<ChampionProfileAnalyticsResponse>(
       `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/profile${profileQuery}`,
-      { next: { revalidate: 60 * 60 } }
+      { cache: "no-store" }
     )
   ]);
 
@@ -194,9 +191,6 @@ const loadChampionData = cache(async (championId: number, sp: ChampionSearchPara
     explicitRole,
     normalizedRankTier,
     selectedPatch,
-    itemStatic,
-    runeStatic,
-    spellStatic,
     patchOptions,
     profileRes
   };
@@ -314,6 +308,8 @@ async function ChampionHeroMeta({
   }
 
   const profile = profileRes.body!;
+  const patchSelection = profile.patchSelection;
+  const ready = !patchSelection || patchSelection.state === "Ready";
   const winrates = profile.winRates ?? null;
   const builds = profile.builds ?? null;
   const matchups = profile.matchups ?? null;
@@ -327,8 +323,8 @@ async function ChampionHeroMeta({
   const heroTier = heroGrade?.tier ?? null;
   const sampleNotice = pickMostSevereAnalyticsSample(
     (winrates as { sample?: unknown } | null)?.sample as AnalyticsSampleLike,
-    (builds as { sample?: unknown } | null)?.sample as AnalyticsSampleLike,
-    (matchups as { sample?: unknown } | null)?.sample as AnalyticsSampleLike
+    !profile.buildsState || profile.buildsState === "Ready" ? builds?.sample : null,
+    !profile.matchupsState || profile.matchupsState === "Ready" ? matchups?.sample : null
   );
   const linkParams = new URLSearchParams();
   if (normalizedRankTier) linkParams.set("rankTier", normalizedRankTier);
@@ -339,9 +335,36 @@ async function ChampionHeroMeta({
     ...(selectedPatch ? { patch: selectedPatch } : {}),
     ...(activeQueue !== "solo" ? { queue: activeQueue } : {})
   };
+  const filters = (
+    <FilterBar
+      roles={ROLES}
+      activeRole={ready ? effectiveRole : explicitRole ?? "ALL"}
+      activeRank={normalizedRankTier ?? "all"}
+      regionOptions={regionOptions}
+      activeRegion={activeRegion}
+      patchOptions={patchOptions}
+      activePatch={selectedPatch}
+      activeQueue={activeQueue}
+      showRoles={queueOption.hasRoles}
+      extraParams={sharedFilterParams}
+      explicitAllRank
+      baseHref={`/lol/champions/${championId}`}
+    />
+  );
+  const patchNotice = (
+    <AnalyticsPatchNotice
+      selection={patchSelection}
+      latestHref={selectedPatch ? latestPublishedPatchHref(`/lol/champions/${championId}`, searchParams) : undefined}
+    />
+  );
+
+  if (!ready) {
+    return <>{patchNotice}{filters}</>;
+  }
 
   return (
     <>
+      {patchNotice}
       <div className="flex flex-wrap items-center gap-2">
         {heroTier ? (
           <TierStoryBadge
@@ -366,6 +389,7 @@ async function ChampionHeroMeta({
         )}
         <p className="text-sm text-muted">
           {queueOption.hasRoles ? `${roleDisplayLabel(effectiveRole)} · ` : ""}{queueOption.label} &middot; {rankTierDisplayLabel(normalizedRankTier ?? "all")} &middot; {activeRegionLabel}
+          {patchSelection?.effectivePatch ? ` · Patch ${patchSelection.effectivePatch}` : null}
         </p>
         {(winrates as ChampionWinRateSummary | null)?.computedAtUtc ? (
           <UpdatedAgo
@@ -377,12 +401,14 @@ async function ChampionHeroMeta({
       <div className="-mt-2 flex flex-wrap items-center gap-2 text-xs">
         {queueOption.hasRoles ? (
           <>
-            <Link
-              href="#synergies"
-              className="rounded-lg border border-border/60 bg-surface-2/50 px-2.5 py-1 font-medium text-fg/80 transition-colors hover:bg-surface-2/80"
-            >
-              Partners
-            </Link>
+            {profile.synergies ? (
+              <Link
+                href="#synergies"
+                className="rounded-lg border border-border/60 bg-surface-2/50 px-2.5 py-1 font-medium text-fg/80 transition-colors hover:bg-surface-2/80"
+              >
+                Partners
+              </Link>
+            ) : null}
             <Link
               href="#matchups"
               className="rounded-lg border border-border/60 bg-surface-2/50 px-2.5 py-1 font-medium text-fg/80 transition-colors hover:bg-surface-2/80"
@@ -408,20 +434,7 @@ async function ChampionHeroMeta({
       />
 
       {/* ── Filters ── */}
-      <FilterBar
-        roles={ROLES}
-        activeRole={effectiveRole}
-        activeRank={normalizedRankTier ?? "all"}
-        regionOptions={regionOptions}
-        activeRegion={activeRegion}
-        patchOptions={patchOptions}
-        activePatch={selectedPatch}
-        activeQueue={activeQueue}
-        showRoles={queueOption.hasRoles}
-        extraParams={sharedFilterParams}
-        explicitAllRank
-        baseHref={`/lol/champions/${championId}`}
-      />
+      {filters}
       <div className="mt-3">
         <AnalyticsSampleBanner sample={sampleNotice} />
       </div>
@@ -451,9 +464,6 @@ async function ChampionSections({
     explicitRole,
     normalizedRankTier,
     selectedPatch,
-    itemStatic,
-    runeStatic,
-    spellStatic,
     profileRes
   } = data;
 
@@ -486,13 +496,8 @@ async function ChampionSections({
     );
   }
 
-  const itemVersion = itemStatic.version;
-  const items = itemStatic.items;
-  const runeById = runeStatic.runeById;
-  const styleById = runeStatic.styleById;
-  const runeTrees = runeStatic.trees;
-
   const profile = profileRes.body!;
+  if (profile.patchSelection && profile.patchSelection.state !== "Ready") return null;
   const winrates = profile.winRates ?? null;
   const builds = profile.builds ?? null;
   const matchups = profile.matchups ?? null;
@@ -500,6 +505,23 @@ async function ChampionSections({
   const synergies = profile.synergies ?? null;
   const recommendation = profile.recommendation ?? null;
   const flags = await analyticsFeatureFlags();
+  const hasBuildAssets = Boolean(builds?.builds?.length || (flags.championRecommendations && recommendation?.available));
+  const [itemStatic, runeStatic, spellStatic] = hasBuildAssets
+    ? await Promise.all([fetchItemMap(), fetchRunesReforged(), fetchSummonerSpellMap()])
+    : [
+        { version, items: {} },
+        { version, trees: [], runeById: {}, styleById: {}, runeSortById: {} },
+        { version, spells: {} }
+      ] satisfies [
+        Awaited<ReturnType<typeof fetchItemMap>>,
+        Awaited<ReturnType<typeof fetchRunesReforged>>,
+        Awaited<ReturnType<typeof fetchSummonerSpellMap>>
+      ];
+  const itemVersion = itemStatic.version;
+  const items = itemStatic.items;
+  const runeById = runeStatic.runeById;
+  const styleById = runeStatic.styleById;
+  const runeTrees = runeStatic.trees;
   const effectiveRole = queueOption.hasRoles
     ? normalizeRole(profile.effectiveRole) ?? explicitRole ?? pickMostPlayedRole(winrates) ?? "MIDDLE"
     : "ALL";
@@ -515,7 +537,7 @@ async function ChampionSections({
   const counters = matchups?.counters ?? [];
   const favorableMatchups = matchups?.favorableMatchups ?? [];
   // Confidence threshold for build variants (omit -> Confidence falls back to DEFAULT_MIN_GAMES).
-  const buildMinGames = builds?.sample?.minimumRecommendedSampleSize;
+  const buildMinGames = builds?.sample?.minimumRecommendedSampleSize ?? winrates?.sample?.minimumRecommendedSampleSize;
   const allMatchups = [...counters, ...favorableMatchups]
     .filter((m): m is MatchupEntryDto => Boolean(m?.opponentChampionId))
     .filter(
@@ -632,13 +654,16 @@ async function ChampionSections({
               </Link>
             ) : null}
           </div>
-          {!builds ? (
-            <div className="mt-2">
-              <p className="text-sm text-fg/75">Build data is unavailable right now.</p>
-              <p className="mt-1 text-xs text-muted">Try selecting a different region or check back after patch data has been processed.</p>
+          {profile.buildsComputedAtUtc ? <UpdatedAgo timestamp={profile.buildsComputedAtUtc} className="mt-1 text-xs" /> : null}
+          {profile.buildsState === "Preparing" ? (
+            <div role="status" className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-fg/75">
+              <p>Builds are being calculated for these filters.</p>
+              <RefreshAnalyticsButton />
             </div>
+          ) : profile.buildsState === "Unavailable" || !builds ? (
+            <p className="mt-2 text-sm text-fg/75">Builds are unavailable for these filters.</p>
           ) : buildRows.length === 0 ? (
-            <p className="mt-2 text-sm text-fg/75">There are not enough games for this queue yet.</p>
+            <p className="mt-2 text-sm text-fg/75">There are not enough games for these filters yet.</p>
           ) : (
             <div className="mt-4 grid gap-4">
               {/* Sectioned, timing-aware build path (spells, skills, starters, boots, core, situational) */}
@@ -709,22 +734,30 @@ async function ChampionSections({
 
         {/* ── Matchups (one sortable table owns matchups; no redundant lists) ── */}
         {queueOption.hasRoles ? <Card className="min-w-0 p-5" id="matchups">
-          {!matchups ? (
+          {profile.matchupsState === "Preparing" ? (
             <>
               <h2 className="type-section">Matchups</h2>
-              <div className="mt-2">
-                <p className="text-sm text-fg/75">Matchup data is unavailable right now.</p>
-                <p className="mt-1 text-xs text-muted">Try selecting a different region or check back after patch data has been processed.</p>
+              <div role="status" className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-fg/75">
+                <p>Matchups are being calculated for these filters.</p>
+                {profile.buildsState !== "Preparing" ? <RefreshAnalyticsButton /> : null}
               </div>
             </>
+          ) : profile.matchupsState === "Unavailable" || !matchups ? (
+            <>
+              <h2 className="type-section">Matchups</h2>
+              <p className="mt-2 text-sm text-fg/75">Matchups are unavailable for these filters.</p>
+            </>
           ) : (
-            <MatchupsTable
-              title="Matchups"
-              subtitle={`Lane matchups for ${champName} as ${roleDisplayLabel(effectiveRole)}`}
-              rows={matchupRows}
-              version={version}
-              linkQuery={linkQuery}
-            />
+            <>
+              <MatchupsTable
+                title="Matchups"
+                subtitle={`Lane matchups for ${champName} as ${roleDisplayLabel(effectiveRole)}`}
+                rows={matchupRows}
+                version={version}
+                linkQuery={linkQuery}
+              />
+              {profile.matchupsComputedAtUtc ? <UpdatedAgo timestamp={profile.matchupsComputedAtUtc} className="mt-3 text-xs" /> : null}
+            </>
           )}
         </Card> : null}
       </div>

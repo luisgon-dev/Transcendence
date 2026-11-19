@@ -1199,6 +1199,73 @@
         }
       }
     },
+    "/api/lol/analytics/published-patches": {
+      "get": {
+        "tags": [
+          "Analytics"
+        ],
+        "parameters": [
+          {
+            "name": "queue",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PublishedAnalyticsPatchOptionDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PublishedAnalyticsPatchOptionDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PublishedAnalyticsPatchOptionDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/lol/analytics/regions": {
       "get": {
         "tags": [
@@ -6993,6 +7060,42 @@
         "type": "integer",
         "format": "int32"
       },
+      "AnalyticsPatchSelection": {
+        "required": [
+          "state"
+        ],
+        "type": "object",
+        "properties": {
+          "state": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AnalyticsPatchSelectionState"
+              }
+            ]
+          },
+          "activePatch": {
+            "type": "string",
+            "nullable": true
+          },
+          "requestedPatch": {
+            "type": "string",
+            "nullable": true
+          },
+          "effectivePatch": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AnalyticsPatchSelectionState": {
+        "enum": [
+          "Ready",
+          "Preparing",
+          "Unavailable"
+        ],
+        "type": "string"
+      },
       "AnalyticsPatchStatusDto": {
         "type": "object",
         "properties": {
@@ -8166,9 +8269,12 @@
       "ChampionProfileAnalyticsResponse": {
         "required": [
           "builds",
+          "buildsState",
           "championId",
           "effectiveRole",
           "matchups",
+          "matchupsState",
+          "patchSelection",
           "queueFamily",
           "winRates"
         ],
@@ -8199,6 +8305,13 @@
             "allOf": [
               {
                 "$ref": "#/components/schemas/ChampionMatchupsResponse"
+              }
+            ]
+          },
+          "patchSelection": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AnalyticsPatchSelection"
               }
             ]
           },
@@ -8236,6 +8349,30 @@
               }
             ],
             "nullable": true
+          },
+          "buildsState": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ChampionSectionState"
+              }
+            ]
+          },
+          "buildsComputedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "matchupsState": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ChampionSectionState"
+              }
+            ]
+          },
+          "matchupsComputedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -8271,6 +8408,14 @@
           }
         },
         "additionalProperties": false
+      },
+      "ChampionSectionState": {
+        "enum": [
+          "Ready",
+          "Preparing",
+          "Unavailable"
+        ],
+        "type": "string"
       },
       "ChampionStatDto": {
         "required": [
@@ -11014,6 +11159,49 @@
         },
         "additionalProperties": false
       },
+      "PublishedAnalyticsPatchOptionDto": {
+        "required": [
+          "isActive",
+          "matchCount",
+          "patch",
+          "queueFamily",
+          "releasedAtUtc",
+          "state"
+        ],
+        "type": "object",
+        "properties": {
+          "patch": {
+            "type": "string"
+          },
+          "releasedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "detectedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "matchCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "queueFamily": {
+            "type": "string"
+          },
+          "state": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AnalyticsPatchSelectionState"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
       "RankHistoryEntryDto": {
         "required": [
           "dateRecorded",
@@ -12310,6 +12498,14 @@
                 "$ref": "#/components/schemas/TierScopeConfidence"
               }
             ]
+          },
+          "patchSelection": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AnalyticsPatchSelection"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false

@@ -435,6 +435,17 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
         if (!await HasStatsAsync(patch, queueFamily, ct))
             return await ComputeWinRatesAsync(championId, filter, patch, ct);
 
+        return await ComputeMaterializedWinRatesAsync(championId, filter, patch, ct);
+    }
+
+    public async Task<List<ChampionWinRateDto>> ComputeMaterializedWinRatesAsync(
+        int championId,
+        ChampionAnalyticsFilter filter,
+        string patch,
+        CancellationToken ct)
+    {
+        var queueFamily = AnalyticsQueueCatalog.Normalize(filter.QueueFamily);
+
         var minimumGamesRequired = await AnalyticsSampleThreshold.ResolveAsync(_context, _options, patch, ct);
         var rankTierScope = AnalyticsScopeMath.ParseRankTierScope(filter.RankTier);
         var scopeToken = AnalyticsScopeMath.ScopeTokenOf(rankTierScope);
@@ -552,6 +563,19 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
         var normalizedQueue = AnalyticsQueueCatalog.Normalize(queueFamily);
         if (!await HasStatsAsync(patch, normalizedQueue, ct))
             return await ComputeTierListAsync(role, rankTier, region, normalizedQueue, patch, ct);
+
+        return await ComputeMaterializedTierListAsync(role, rankTier, region, normalizedQueue, patch, ct);
+    }
+
+    public async Task<List<TierListEntry>> ComputeMaterializedTierListAsync(
+        string? role,
+        string? rankTier,
+        string? region,
+        string? queueFamily,
+        string patch,
+        CancellationToken ct)
+    {
+        var normalizedQueue = AnalyticsQueueCatalog.Normalize(queueFamily);
 
         var normalizedRole = string.IsNullOrWhiteSpace(role) ? "ALL" : role.ToUpperInvariant();
         var isUnifiedRole = normalizedRole == "ALL";

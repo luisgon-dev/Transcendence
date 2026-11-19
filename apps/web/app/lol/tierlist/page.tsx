@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { AnalyticsPatchNotice } from "@/components/AnalyticsPatchNotice";
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
 import { TierListFilterBar } from "@/components/TierListFilterBar";
@@ -17,8 +18,8 @@ import { normalizeAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyt
 import { analyticsQueueOption, normalizeAnalyticsQueue } from "@/lib/analyticsQueues";
 import { GLOBAL_ANALYTICS_REGION } from "@/lib/analyticsRegionShared";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
-import { fetchLolAnalyticsPatches } from "@/lib/lolAnalyticsPatches";
-import { normalizeAnalyticsPatch } from "@/lib/lolPatchFilters";
+import { fetchPublishedAnalyticsPatches } from "@/lib/lolAnalyticsPatches";
+import { latestPublishedPatchHref, normalizeAnalyticsPatch } from "@/lib/lolPatchFilters";
 import {
   DEFAULT_TIERLIST_RANK_TIER,
   normalizeRankTierParam,
@@ -50,14 +51,14 @@ export async function generateMetadata({
   const rank = rankTierDisplayLabel(normalizeRankTierParam(resolved.rankTier) ?? DEFAULT_TIERLIST_RANK_TIER);
   let patch = normalizeAnalyticsPatch(resolved.patch);
   if (!patch) {
-    const patches = await fetchLolAnalyticsPatches(queue.value);
-    patch = patches.find((candidate) => candidate.isActive)?.patch ?? patches[0]?.patch ?? null;
+    const patches = await fetchPublishedAnalyticsPatches(queue.value);
+    patch = patches.find((candidate) => candidate.state === "Ready")?.patch ?? null;
   }
 
   const roleLabel = roleDisplayLabel(role);
   const patchLabel = patch ? ` Patch ${patch}` : "";
   const title = `League of Legends ${queue.label} ${queue.hasRoles ? `${roleLabel} ` : ""}Tier List${patchLabel}`;
-  const description = `${rank} ${queue.label} champion rankings${queue.hasRoles ? ` for ${roleLabel.toLowerCase()}` : ""}, with win rates, pick rates, sample confidence, and current-patch data.`;
+  const description = `${rank} ${queue.label} champion rankings${queue.hasRoles ? ` for ${roleLabel.toLowerCase()}` : ""}, with win rates, pick rates, and sample confidence.`;
   const image = socialImageUrl(title, "League tier list", `${rank}, trustworthy samples, and role-specific rankings`);
 
   return {
@@ -80,7 +81,7 @@ export default async function TierListPage({
 }: {
   searchParams?: Promise<TierListSearchParams>;
 }) {
-  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const resolvedSearchParams = searchParams ? await searchParams : {};
   const activeQueue = normalizeAnalyticsQueue(resolvedSearchParams?.queue);
   const queueOption = analyticsQueueOption(activeQueue);
   const { activeRegion, activeRegionLabel, options: regionOptions } = await resolveAnalyticsRegion(
@@ -104,19 +105,18 @@ export default async function TierListPage({
 
     return fetchBackendJson<TierListResponse>(
       `${getBackendBaseUrl()}/api/lol/analytics/tierlist?${requestQuery.toString()}`,
-      { next: { revalidate: 60 * 60 } }
+      { cache: "no-store" }
     );
   };
-  const { result: res, usedGlobalFallback } = await fetchWithGlobalAnalyticsRegionFallback(
-    activeRegion,
-    fetchTierList
-  );
+  const [{ result: res, usedGlobalFallback }, patchOptions] = await Promise.all([
+    fetchWithGlobalAnalyticsRegionFallback(activeRegion, fetchTierList),
+    fetchPublishedAnalyticsPatches(activeQueue)
+  ]);
   const {
     effectiveRegion,
     effectiveRegionLabel,
     fallbackMessage
   } = resolveAnalyticsRegionPresentation(activeRegion, activeRegionLabel, regionOptions, usedGlobalFallback);
-  const patchOptions = await fetchLolAnalyticsPatches(activeQueue);
   const sharedFilterParams = {
     ...(selectedPatch ? { patch: selectedPatch } : {}),
     ...(activeQueue !== "solo" ? { queue: activeQueue } : {})
@@ -163,7 +163,9 @@ export default async function TierListPage({
   }
 
   const tierlist = res.body!;
-  const { version, champions } = await fetchChampionMap();
+  const patchSelection = tierlist.patchSelection;
+  const ready = !patchSelection || patchSelection.state === "Ready";
+  const { version, champions } = ready ? await fetchChampionMap() : { version: "", champions: {} };
   const normalizedEntries = normalizeTierListEntries(tierlist.entries);
 
   const rankTierValue =
@@ -200,7 +202,6 @@ export default async function TierListPage({
           meta row while docked, so the separate freshness strip below no longer needs to stick. */}
       <Toolbar
         className="tierlist-toolbar-dock z-30"
-        eyebrow="Current patch"
         title="Tier List"
         meta={
           <>
@@ -214,8 +215,12 @@ export default async function TierListPage({
             {queueOption.hasRoles ? <span>{roleDisplayLabel(tierlist.role ?? "ALL")}</span> : null}
             {queueOption.hasRoles ? <span aria-hidden="true">·</span> : null}
             <span>{rankTierDisplayLabel(rankTierValue ?? "all")}</span>
-            <span aria-hidden="true">·</span>
-            <span className="type-tabular tabular-nums">{normalizedEntries.length} champions</span>
+            {ready ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span className="type-tabular tabular-nums">{normalizedEntries.length} champions</span>
+              </>
+            ) : null}
             {tierlist.computedAtUtc ? (
               <>
                 <span aria-hidden="true">·</span>
@@ -243,15 +248,22 @@ export default async function TierListPage({
 
       {fallbackMessage ? <p className="type-ui px-1 text-muted">{fallbackMessage}</p> : null}
 
-      {/* Sample-size readout. No longer sticky — the sticky filter Toolbar above owns the docked
-          region now, and its meta row already surfaces the "updated N ago" freshness. */}
-      <AnalyticsSampleBanner
-        sample={sample}
-        variant="strip"
-        className="rounded-lg border border-border bg-surface/92 px-3 py-2 shadow-soft"
+      <AnalyticsPatchNotice
+        selection={patchSelection}
+        latestHref={selectedPatch ? latestPublishedPatchHref("/lol/tierlist", resolvedSearchParams) : undefined}
       />
 
-      {tierScopeConfidence !== "RESOLVED" ? (
+      {/* Sample-size readout. No longer sticky — the sticky filter Toolbar above owns the docked
+          region now, and its meta row already surfaces the "updated N ago" freshness. */}
+      {ready ? (
+        <AnalyticsSampleBanner
+          sample={sample}
+          variant="strip"
+          className="rounded-lg border border-border bg-surface/92 px-3 py-2 shadow-soft"
+        />
+      ) : null}
+
+      {ready && tierScopeConfidence !== "RESOLVED" ? (
         <Card
           role="status"
           className="border-warning/40 bg-warning/10 px-4 py-3"
@@ -271,17 +283,19 @@ export default async function TierListPage({
         </Card>
       ) : null}
 
-      <TierListTable
-        entries={entriesWithBaseline}
-        champions={champions}
-        version={version}
-        rankTierValue={rankTierValue}
-        activeRegion={effectiveRegion}
-        activePatch={selectedPatch}
-        activeQueue={activeQueue}
-        showRoles={queueOption.hasRoles}
-        minGames={minGames}
-      />
+      {ready ? (
+        <TierListTable
+          entries={entriesWithBaseline}
+          champions={champions}
+          version={version}
+          rankTierValue={rankTierValue}
+          activeRegion={effectiveRegion}
+          activePatch={selectedPatch}
+          activeQueue={activeQueue}
+          showRoles={queueOption.hasRoles}
+          minGames={minGames}
+        />
+      ) : null}
     </div>
   );
 }

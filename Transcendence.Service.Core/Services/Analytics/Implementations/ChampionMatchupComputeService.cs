@@ -44,7 +44,17 @@ public partial class ChampionMatchupComputeService : IChampionMatchupComputeServ
         string? region,
         string queueFamily,
         string patch,
-        CancellationToken ct)
+        CancellationToken ct) =>
+        (await ComputeMatchupsCoreAsync(championId, role, rankTier, region, queueFamily, patch, null, ct))!;
+
+    public Task<ChampionMatchupsResponse?> ComputeScopedMatchupsAsync(
+        ChampionSectionScope scope, int maxPairs, CancellationToken ct) =>
+        ComputeMatchupsCoreAsync(scope.ChampionId, scope.Role!, scope.RankTier, scope.Region,
+            scope.QueueFamily, scope.Patch, maxPairs, ct);
+
+    private async Task<ChampionMatchupsResponse?> ComputeMatchupsCoreAsync(
+        int championId, string role, string? rankTier, string? region, string queueFamily,
+        string patch, int? maxPairs, CancellationToken ct)
     {
         var normalizedQueue = AnalyticsQueueCatalog.Normalize(queueFamily);
         var rankTierScope = AnalyticsScopeMath.ParseRankTierScope(rankTier);
@@ -94,6 +104,9 @@ public partial class ChampionMatchupComputeService : IChampionMatchupComputeServ
                 OpponentParticipantId = x.Opponent.ParticipantId
             });
 
+        if (maxPairs is { } limit)
+            lanePairsQuery = lanePairsQuery.Take(limit + 1);
+
         var timelineSnapshotQuery = _context.MatchParticipantTimelineSnapshots
             .AsNoTracking()
             .Where(s => s.MinuteMark == minuteMark);
@@ -133,6 +146,11 @@ public partial class ChampionMatchupComputeService : IChampionMatchupComputeServ
                         .Max()
                 })
             .ToListAsync(ct);
+
+        if (maxPairs is { } inputLimit &&
+            (matchupData.Sum(x => x.Games) > inputLimit ||
+             (matchupData.Count == 0 && !await championQuery.AnyAsync(ct))))
+            return null;
 
         var aggregates = matchupData
             .Select(m => new MatchupAggregate(

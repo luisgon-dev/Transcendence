@@ -75,5 +75,6 @@ public record TierListResponse(
     // When the precomputed analytics for this patch were last refreshed (null while serving live compute).
     DateTime? ComputedAtUtc = null,
     string QueueFamily = "RANKED_SOLO_DUO",
-    TierScopeConfidence Confidence = TierScopeConfidence.INSUFFICIENT
+    TierScopeConfidence Confidence = TierScopeConfidence.INSUFFICIENT,
+    AnalyticsPatchSelection? PatchSelection = null
 );

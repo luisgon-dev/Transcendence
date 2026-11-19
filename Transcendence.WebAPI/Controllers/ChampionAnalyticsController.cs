@@ -16,6 +16,7 @@ namespace Transcendence.WebAPI.Controllers;
 public class ChampionAnalyticsController(
     IChampionAnalyticsService analyticsService,
     IServiceScopeFactory? serviceScopeFactory,
+    IAnalyticsPublicationService publicationService,
     IChampionSynergyService? synergyService = null,
     IBuildLabService? buildLabService = null,
     ILogger<ChampionAnalyticsController>? logger = null,
@@ -67,32 +68,27 @@ public class ChampionAnalyticsController(
 
         var normalizedQueue = AnalyticsQueueCatalog.Normalize(queue);
         var hasRoles = AnalyticsQueueCatalog.HasRoles(normalizedQueue);
+        var publication = await publicationService.ResolveAsync(normalizedQueue, patch, ct);
+        var selection = publication.Selection;
+        if (selection.EffectivePatch == null)
+            return Ok(EmptyProfile(championId, hasRoles ? normalizedRole ?? "MIDDLE" : AnalyticsQueueCatalog.AllRoles,
+                rankTier, region, normalizedQueue, selection));
 
-        var winRates = await analyticsService.GetWinRatesAsync(
+        patch = selection.EffectivePatch;
+        var winRates = await analyticsService.GetPublishedWinRatesAsync(
             championId,
             new ChampionAnalyticsFilter(
                 RankTier: rankTier,
                 Region: region,
+                Role: normalizedRole,
                 Patch: patch,
                 QueueFamily: normalizedQueue),
+            publication,
             ct);
-
-        ChampionWinRateSummary? fallbackWinRates = null;
-        if (normalizedRole == null && ShouldUseAllRankFallback(rankTier) && winRates.ByRoleTier.Count == 0)
-        {
-            fallbackWinRates = await analyticsService.GetWinRatesAsync(
-                championId,
-                new ChampionAnalyticsFilter(
-                    Region: region,
-                    Patch: patch,
-                    QueueFamily: normalizedQueue),
-                ct);
-        }
 
         var effectiveRole = hasRoles
             ? normalizedRole
               ?? ChampionRoleResolver.PickMostPlayed(winRates.ByRoleTier)
-              ?? ChampionRoleResolver.PickMostPlayed(fallbackWinRates?.ByRoleTier)
               ?? "MIDDLE"
             : AnalyticsQueueCatalog.AllRoles;
 
@@ -108,10 +104,10 @@ public class ChampionAnalyticsController(
                 championId, effectiveRole, rankTier, region, normalizedQueue, patch, ct);
             matchups = await analyticsService.GetMatchupsAsync(
                 championId, effectiveRole, rankTier, region, normalizedQueue, patch, ct);
-            grade = await analyticsService.GetGradeAsync(
-                championId, effectiveRole, rankTier, region, normalizedQueue, patch, ct);
-            trend = await analyticsService.GetTrendAsync(
-                championId, effectiveRole, rankTier, normalizedQueue, ct);
+            grade = await analyticsService.GetPublishedGradeAsync(
+                championId, effectiveRole, rankTier, region, normalizedQueue, publication, ct);
+            trend = await analyticsService.GetPublishedTrendAsync(
+                championId, effectiveRole, rankTier, region, normalizedQueue, publication, ct);
             synergies = synergyService == null
                 ? EmptySynergies(championId, effectiveRole, rankTier, region, patch, normalizedQueue)
                 : await synergyService.GetSynergiesAsync(
@@ -132,10 +128,10 @@ public class ChampionAnalyticsController(
                 scoped => scoped.GetMatchupsAsync(
                     championId, effectiveRole, rankTier, region, normalizedQueue, patch, ct));
             var gradeTask = RunInAnalyticsScopeAsync(
-                scoped => scoped.GetGradeAsync(
-                    championId, effectiveRole, rankTier, region, normalizedQueue, patch, ct));
+                scoped => scoped.GetPublishedGradeAsync(
+                    championId, effectiveRole, rankTier, region, normalizedQueue, publication, ct));
             var trendTask = RunInAnalyticsScopeAsync(
-                scoped => scoped.GetTrendAsync(championId, effectiveRole, rankTier, normalizedQueue, ct));
+                scoped => scoped.GetPublishedTrendAsync(championId, effectiveRole, rankTier, region, normalizedQueue, publication, ct));
             var synergiesTask = RunInSynergyScopeAsync(
                 scoped => scoped.GetSynergiesAsync(
                     championId, effectiveRole, rankTier, region, normalizedQueue, patch, ct));
@@ -159,11 +155,33 @@ public class ChampionAnalyticsController(
             winRates,
             builds,
             matchups,
+            selection,
             grade,
             normalizedQueue,
             trend,
             synergies,
             recommendation));
+    }
+
+    private static ChampionProfileAnalyticsResponse EmptyProfile(
+        int championId, string role, string? rankTier, string? region, string queue, AnalyticsPatchSelection selection)
+    {
+        var patch = selection.RequestedPatch ?? selection.ActivePatch ?? "Unknown";
+        var rank = string.IsNullOrWhiteSpace(rankTier) ? RankTierCatalog.AllScope : rankTier.Trim().ToUpperInvariant().Replace("+", "_PLUS");
+        var regionCode = AnalyticsRegionCatalog.NormalizeOrDefault(region);
+        return new ChampionProfileAnalyticsResponse(
+            championId,
+            role,
+            new ChampionWinRateSummary(championId, patch, [], QueueFamily: queue),
+            new ChampionBuildsResponse(championId, role, rank == RankTierCatalog.AllScope ? "all" : rank, regionCode, patch, [], [], QueueFamily: queue),
+            new ChampionMatchupsResponse
+            {
+                ChampionId = championId, Role = role, RankTier = rank == RankTierCatalog.AllScope ? null : rank,
+                Region = regionCode, Patch = patch, QueueFamily = queue
+            },
+            selection,
+            QueueFamily: queue,
+            Trend: new ChampionTrendResponse(championId, queue, role, rank, regionCode, []));
     }
 
     [HttpGet("{championId}/synergies")]
@@ -423,14 +441,6 @@ public class ChampionAnalyticsController(
 
         var normalized = role.Trim().ToUpperInvariant();
         return ValidRoles.Contains(normalized) ? normalized : null;
-    }
-
-    private static bool ShouldUseAllRankFallback(string? rankTier)
-    {
-        if (string.IsNullOrWhiteSpace(rankTier))
-            return false;
-
-        return !string.Equals(rankTier.Trim(), "all", StringComparison.OrdinalIgnoreCase);
     }
 
 }

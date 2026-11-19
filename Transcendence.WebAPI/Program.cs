@@ -19,6 +19,8 @@ using System.Net.Sockets;
 using System.Threading.RateLimiting;
 using System.Text;
 using Transcendence.Service.Core.Services.Analytics.Models;
+using Transcendence.Service.Core.Services.Analytics.Implementations;
+using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Implementations;
 using Transcendence.Service.Core.Services.Auth.Interfaces;
 using Transcendence.Service.Core.Services.Auth.Models;
@@ -247,6 +249,7 @@ builder.Services.FillCacheEntriesToCompletion();
 
 // Register keyless application services used by the WebAPI host.
 builder.Services.AddTranscendenceCore();
+builder.Services.AddScoped<IAnalyticsPublicationService, AnalyticsPublicationService>();
 builder.Services.Configure<ChampionAnalyticsComputeOptions>(builder.Configuration.GetSection("Analytics:Compute"));
 builder.Services.Configure<TieringOptions>(builder.Configuration.GetSection("Analytics:Tiering"));
 builder.Services.Configure<BuildLabOptions>(builder.Configuration.GetSection("Analytics:BuildLab"));

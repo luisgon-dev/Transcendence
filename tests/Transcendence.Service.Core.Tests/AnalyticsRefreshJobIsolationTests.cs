@@ -1,11 +1,13 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Moq;
 using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Static;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Jobs;
+using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.Service.Core.Tests.Support;
 
 namespace Transcendence.Service.Core.Tests;
@@ -24,7 +26,8 @@ public class AnalyticsRefreshJobIsolationTests
             harness.Db,
             harness.Refresher.Object,
             harness.Analytics.Object,
-            NullLogger<RefreshPrecomputedAnalyticsJob>.Instance);
+            NullLogger<RefreshPrecomputedAnalyticsJob>.Instance,
+            Options.Create(new WorkerJobScheduleOptions()));
 
         await job.ExecuteAsync(CancellationToken.None);
 
@@ -43,6 +46,30 @@ public class AnalyticsRefreshJobIsolationTests
         harness.Refresher.Verify(
             refresher => refresher.RefreshProSurfacesAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    [Theory]
+    [InlineData("16.13", true, false)]
+    [InlineData("16.14", false, false)]
+    [InlineData("16.14", true, true)]
+    public async Task TabularKickoff_OnlyRefreshesTheExpectedActivePatch(string expectedPatch, bool enabled, bool refresh)
+    {
+        await using var harness = await CreateHarnessAsync();
+        harness.Refresher
+            .Setup(x => x.RefreshTabularCoreAsync("16.14", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PrecomputedAnalyticsRefreshResult(1, 2, 3, 4));
+        var job = new RefreshPrecomputedAnalyticsJob(harness.Db, harness.Refresher.Object, harness.Analytics.Object,
+            NullLogger<RefreshPrecomputedAnalyticsJob>.Instance,
+            Options.Create(new WorkerJobScheduleOptions { EnableRefreshPrecomputedAnalytics = enabled }));
+
+        await job.ExecuteForPatchAsync(expectedPatch, CancellationToken.None);
+
+        harness.Refresher.Verify(x => x.RefreshTabularCoreAsync("16.14", It.IsAny<CancellationToken>()),
+            Times.Exactly(refresh ? 1 : 0));
+        harness.Refresher.VerifyNoOtherCalls();
+        harness.Analytics.Verify(x => x.InvalidateAnalyticsCacheForPatchAsync("16.14", It.IsAny<CancellationToken>()),
+            Times.Exactly(refresh ? 1 : 0));
+        harness.Analytics.VerifyNoOtherCalls();
     }
 
     [Fact]

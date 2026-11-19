@@ -8,6 +8,21 @@ namespace Transcendence.Service.Core.Services.Analytics.Interfaces;
 /// </summary>
 public interface IChampionAnalyticsService
 {
+    Task<ChampionWinRateSummary> GetPublishedWinRatesAsync(
+        int championId, ChampionAnalyticsFilter filter, AnalyticsPublication publication, CancellationToken ct);
+
+    Task<TierListResponse> GetPublishedTierListAsync(
+        string? role, string? rankTier, string? region, string? queueFamily,
+        AnalyticsPublication publication, CancellationToken ct);
+
+    Task<ChampionGradeDto?> GetPublishedGradeAsync(
+        int championId, string role, string? rankTier, string? region, string? queueFamily,
+        AnalyticsPublication publication, CancellationToken ct);
+
+    Task<ChampionTrendResponse> GetPublishedTrendAsync(
+        int championId, string? role, string? rankTier, string? region, string? queueFamily,
+        AnalyticsPublication publication, CancellationToken ct);
+
     /// <summary>
     /// Gets champion win rates by role and tier with caching.
     /// Data is cached for 24 hours.

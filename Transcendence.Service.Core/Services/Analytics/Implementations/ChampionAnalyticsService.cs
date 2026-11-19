@@ -29,6 +29,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
     private const string ProRosterCacheKeyPrefix = "analytics:proroster:";
     private const string MatchupsCacheKeyPrefix = "analytics:matchups:";
     private const string AnalyticsCacheTag = "analytics";
+    private const string PublishedCacheKeyPrefix = "analytics:published:";
 
     // Active-patch metadata changes ~biweekly; a short cache removes the per-request Patches lookup
     // that every analytics endpoint runs (cutting DB round-trips so reads degrade less under load).
@@ -139,6 +140,90 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
 
         return value;
     }
+
+    public async Task<ChampionWinRateSummary> GetPublishedWinRatesAsync(
+        int championId, ChampionAnalyticsFilter filter, AnalyticsPublication publication, CancellationToken ct)
+    {
+        var selection = publication.Selection;
+        var patch = selection.EffectivePatch ?? selection.RequestedPatch ?? selection.ActivePatch ?? "Unknown";
+        var queue = AnalyticsQueueCatalog.Normalize(filter.QueueFamily);
+        var role = NormalizePublishedRole(filter.Role, queue);
+        var region = AnalyticsRegionCatalog.NormalizeOrDefault(filter.Region);
+        var rank = NormalizeRankTier(filter.RankTier);
+        var patchContext = BuildPublicationPatchContext(publication);
+        List<ChampionWinRateDto> rates = [];
+
+        if (selection.EffectivePatch != null && IsPublishedScope(role, rank, region) &&
+            await _context.ChampionRoleTierStats.AsNoTracking().AnyAsync(x =>
+                x.Patch == patch && x.QueueFamily == queue && x.ChampionId == championId, ct))
+        {
+            var normalizedFilter = filter with
+            {
+                Patch = patch,
+                QueueFamily = queue,
+                Role = role == AnalyticsQueueCatalog.AllRoles ? null : role,
+                RankTier = rank == "all" ? null : rank,
+                Region = AnalyticsRegionCatalog.NormalizeToFilter(region)
+            };
+            rates = await GetOrCreateWithEmptyTtlAsync(
+                PublishedCacheKeyPrefix + BuildWinRateKey(championId, normalizedFilter, patch),
+                async cancel => await _winRateService.ComputeMaterializedWinRatesAsync(championId, normalizedFilter, patch, cancel),
+                static entries => entries.Count == 0,
+                [AnalyticsCacheTag, $"champion:{championId}", CacheTags.ForPatch(patch)], ct);
+        }
+
+        return new ChampionWinRateSummary(championId, patch, rates,
+            BuildSampleMetadata(rates.Sum(x => Math.Max(0, x.Games)), patchContext), publication.ComputedAtUtc, queue);
+    }
+
+    public async Task<TierListResponse> GetPublishedTierListAsync(
+        string? role, string? rankTier, string? region, string? queueFamily,
+        AnalyticsPublication publication, CancellationToken ct)
+    {
+        var selection = publication.Selection;
+        var patch = selection.EffectivePatch ?? selection.RequestedPatch ?? selection.ActivePatch ?? "Unknown";
+        var queue = AnalyticsQueueCatalog.Normalize(queueFamily);
+        var normalizedRole = NormalizePublishedRole(role, queue);
+        var normalizedRegion = AnalyticsRegionCatalog.NormalizeOrDefault(region);
+        var rank = NormalizeRankTier(rankTier);
+        List<TierListEntry> entries = [];
+
+        if (selection.EffectivePatch != null && IsPublishedScope(normalizedRole, rank, normalizedRegion))
+        {
+            var cacheKey = $"{PublishedCacheKeyPrefix}{TierListCacheKeyPrefix}{queue}:{normalizedRole}:{rank}:{normalizedRegion}:{patch}";
+            entries = await _cache.GetOrCreateAsync(
+                cacheKey,
+                async cancel => await _winRateService.ComputeMaterializedTierListAsync(
+                    normalizedRole, rank, normalizedRegion, queue, patch, cancel),
+                AnalyticsCacheOptions,
+                tags: [AnalyticsCacheTag, CacheTags.ForPatch(patch), "tierlist"],
+                cancellationToken: ct);
+        }
+
+        return new TierListResponse(patch, normalizedRole, rank, normalizedRegion, entries,
+            BuildSampleMetadata(entries.Sum(x => Math.Max(0, x.Games)), BuildPublicationPatchContext(publication)),
+            publication.ComputedAtUtc, queue, DeriveTierScopeConfidence(entries), selection);
+    }
+
+    public async Task<ChampionGradeDto?> GetPublishedGradeAsync(
+        int championId, string role, string? rankTier, string? region, string? queueFamily,
+        AnalyticsPublication publication, CancellationToken ct) =>
+        ProjectGrade(championId, await GetPublishedTierListAsync(role, rankTier, region, queueFamily, publication, ct));
+
+    private ActivePatchContext BuildPublicationPatchContext(AnalyticsPublication publication) =>
+        publication.Selection.EffectivePatch is { } patch && publication.EffectivePatchReleasedAtUtc is { } releaseDate
+            ? BuildPatchContext(patch, releaseDate)
+            : new ActivePatchContext(null, 0, false, AnalyticsPatchPhase.Bootstrap);
+
+    private bool IsPublishedScope(string role, string rank, string region) =>
+        (role is "ALL" or "TOP" or "JUNGLE" or "MIDDLE" or "BOTTOM" or "UTILITY") &&
+        (rank is "all" or RankTierCatalog.Unranked || RankTierCatalog.RankScopeTokens.Contains(rank)) &&
+        AnalyticsRegionCatalog.BuildAvailableRegions(_multiRegionOptions).Any(x => x.Code == region);
+
+    private static string NormalizePublishedRole(string? role, string queue) =>
+        !AnalyticsQueueCatalog.HasRoles(queue) || string.IsNullOrWhiteSpace(role)
+            ? AnalyticsQueueCatalog.AllRoles
+            : role.Trim().ToUpperInvariant();
 
     public async Task<ChampionWinRateSummary> GetWinRatesAsync(
         int championId,
@@ -303,6 +388,11 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         // The grade IS the champion's entry in the per-role tier list — reuse its cache so the detail-page
         // hero is guaranteed to match the list (and carries the persisted region=ALL movement).
         var tierList = await GetTierListAsync(role, rankTier, region, queueFamily, patch, ct);
+        return ProjectGrade(championId, tierList);
+    }
+
+    private static ChampionGradeDto? ProjectGrade(int championId, TierListResponse tierList)
+    {
         var entry = tierList.Entries.FirstOrDefault(e => e.ChampionId == championId);
         if (entry == null)
             return null;
@@ -554,12 +644,22 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
         return response with { Sample = BuildSampleMetadata(sampleSize, patchContext) };
     }
 
-    public async Task<ChampionTrendResponse> GetTrendAsync(
+    public Task<ChampionTrendResponse> GetTrendAsync(
         int championId,
         string? role,
         string? rankTier,
         string? queueFamily,
-        CancellationToken ct)
+        CancellationToken ct) =>
+        ReadTrendAsync(championId, role, rankTier, AnalyticsRegionCatalog.GlobalRegionCode, queueFamily, null, ct);
+
+    public Task<ChampionTrendResponse> GetPublishedTrendAsync(
+        int championId, string? role, string? rankTier, string? region, string? queueFamily,
+        AnalyticsPublication publication, CancellationToken ct) =>
+        ReadTrendAsync(championId, role, rankTier, AnalyticsRegionCatalog.NormalizeOrDefault(region), queueFamily, publication, ct);
+
+    private async Task<ChampionTrendResponse> ReadTrendAsync(
+        int championId, string? role, string? rankTier, string region, string? queueFamily,
+        AnalyticsPublication? publication, CancellationToken ct)
     {
         var normalizedQueue = AnalyticsQueueCatalog.Normalize(queueFamily);
         var normalizedRole = AnalyticsQueueCatalog.HasRoles(normalizedQueue) &&
@@ -568,6 +668,12 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             ? role.Trim().ToUpperInvariant()
             : AnalyticsQueueCatalog.AllRoles;
         var rankScope = AnalyticsScopeMath.ScopeTokenOf(AnalyticsScopeMath.ParseRankTierScope(rankTier));
+        if (region != AnalyticsRegionCatalog.GlobalRegionCode ||
+            (publication != null && publication.Selection.EffectivePatch == null))
+            return new ChampionTrendResponse(championId, normalizedQueue, normalizedRole, rankScope, region, []);
+
+        var throughRelease = publication?.EffectivePatchReleasedAtUtc;
+        var throughPatch = publication?.Selection.EffectivePatch;
 
         var rows = await (
                 from grade in _context.ChampionScopeGradeStats.AsNoTracking()
@@ -576,7 +682,9 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
                       grade.QueueFamily == normalizedQueue &&
                       grade.PlatformRegion == AnalyticsRegionCatalog.GlobalRegionCode &&
                       grade.RankScope == rankScope &&
-                      grade.Role == normalizedRole
+                      grade.Role == normalizedRole &&
+                      (throughRelease == null || patch.ReleaseDate < throughRelease ||
+                       (patch.ReleaseDate == throughRelease && string.Compare(patch.Version, throughPatch) <= 0))
                 orderby patch.ReleaseDate descending, patch.Version descending
                 select new
                 {

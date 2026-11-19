@@ -34,7 +34,8 @@ public class AnalyticsControllerTests
         var controller = new AnalyticsController(
             Mock.Of<IChampionAnalyticsService>(),
             new AnalyticsPatchQueryService(db),
-            Options.Create(new MultiRegionIngestionOptions()));
+            Options.Create(new MultiRegionIngestionOptions()),
+            new AnalyticsPublicationService(db));
 
         var result = await controller.GetStatus(CancellationToken.None);
 
@@ -87,7 +88,8 @@ public class AnalyticsControllerTests
         var controller = new AnalyticsController(
             Mock.Of<IChampionAnalyticsService>(),
             new AnalyticsPatchQueryService(db),
-            Options.Create(new MultiRegionIngestionOptions()));
+            Options.Create(new MultiRegionIngestionOptions()),
+            new AnalyticsPublicationService(db));
 
         var result = await controller.GetPatches(null, CancellationToken.None);
 
@@ -106,7 +108,8 @@ public class AnalyticsControllerTests
         var controller = new AnalyticsController(
             Mock.Of<IChampionAnalyticsService>(),
             new AnalyticsPatchQueryService(db),
-            Options.Create(new MultiRegionIngestionOptions()));
+            Options.Create(new MultiRegionIngestionOptions()),
+            new AnalyticsPublicationService(db));
 
         var result = await controller.GetPatches("normal", CancellationToken.None);
 
@@ -117,19 +120,26 @@ public class AnalyticsControllerTests
     public async Task GetTierList_ForwardsPatchAndQueueFilters()
     {
         await using var db = CreateDbContext();
-        var service = new Mock<IChampionAnalyticsService>();
+        var service = new Mock<IChampionAnalyticsService>(MockBehavior.Strict);
+        var publicationService = new Mock<IAnalyticsPublicationService>(MockBehavior.Strict);
+        var publication = new AnalyticsPublication(new(AnalyticsPatchSelectionState.Ready, "15.2", "15.1", "15.1"));
+        publicationService.Setup(x => x.ResolveAsync("aram", "15.1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(publication);
         service
-            .Setup(x => x.GetTierListAsync("TOP", "EMERALD_PLUS", "KR", "aram", "15.1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TierListResponse("15.1", "ALL", "EMERALD_PLUS", "KR", [], QueueFamily: "ARAM"));
+            .Setup(x => x.GetPublishedTierListAsync("TOP", "EMERALD_PLUS", "KR", "aram", publication, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TierListResponse("15.1", "ALL", "EMERALD_PLUS", "KR", [], QueueFamily: "ARAM",
+                PatchSelection: publication.Selection));
         var controller = new AnalyticsController(
             service.Object,
             new AnalyticsPatchQueryService(db),
-            Options.Create(new MultiRegionIngestionOptions()));
+            Options.Create(new MultiRegionIngestionOptions()),
+            publicationService.Object);
 
         var result = await controller.GetTierList("TOP", "EMERALD_PLUS", "KR", "aram", "15.1", CancellationToken.None);
 
-        result.Should().BeOfType<OkObjectResult>();
-        service.Verify(x => x.GetTierListAsync("TOP", "EMERALD_PLUS", "KR", "aram", "15.1", It.IsAny<CancellationToken>()), Times.Once);
+        var payload = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<TierListResponse>().Subject;
+        payload.PatchSelection.Should().Be(publication.Selection);
+        service.Verify(x => x.GetPublishedTierListAsync("TOP", "EMERALD_PLUS", "KR", "aram", publication, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -140,7 +150,8 @@ public class AnalyticsControllerTests
         var controller = new AnalyticsController(
             service.Object,
             new AnalyticsPatchQueryService(db),
-            Options.Create(new MultiRegionIngestionOptions()));
+            Options.Create(new MultiRegionIngestionOptions()),
+            new AnalyticsPublicationService(db));
 
         var result = await controller.GetTierList(null, null, null, "normal", null, CancellationToken.None);
 

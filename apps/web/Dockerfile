@@ -11,6 +11,7 @@ RUN npm install -g corepack@0.36.0 && corepack enable
 # Copy only what we need for workspace install first (better layer caching).
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY .npmrc ./.npmrc
+COPY apps/web/patches apps/web/patches
 COPY openapi openapi
 COPY packages/api-client/package.json packages/api-client/package.json
 COPY packages/web-routes/package.json packages/web-routes/package.json

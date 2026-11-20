@@ -15,7 +15,10 @@
     "onlyBuiltDependencies": [
       "esbuild",
       "unrs-resolver"
-    ]
+    ],
+    "patchedDependencies": {
+      "next@16.4.6": "apps/web/patches/next@16.4.6.patch"
+    }
   },
   "scripts": {
     "backend:test": "dotnet test tests/Transcendence.Service.Core.Tests/Transcendence.Service.Core.Tests.csproj -v minimal && dotnet test tests/Transcendence.WebAPI.Tests/Transcendence.WebAPI.Tests.csproj -v minimal && dotnet test tests/Transcendence.IntegrationTests/Transcendence.IntegrationTests.csproj -v minimal",

@@ -6,7 +6,7 @@
 # measures production so the numbers are true.
 #
 # Base is pinned to the same digest as apps/web/Dockerfile, the base the rest of the fleet uses.
-FROM node:26-bookworm-slim@sha256:28147155d47dc31abe0a46e0d12b59b2fb3d0a2dcc5dc65fce76a074180b16fe
+FROM node:26-bookworm-slim@sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1
 
 # Chromium from the distro rather than Puppeteer's downloader: nothing here needs a browser
 # download path, and avoiding it keeps the image off `extract-zip` and its unpatched advisories.

@@ -893,10 +893,13 @@ build variants have separate components.
 
 Image process liveness and dependency readiness are separate. A fixed bounded
 synthetic probe reads the runtime champion catalog, then exercises the actual
-Next optimizer against four asset kinds;
-cache state survives container replacement in a 512 MiB volume. The poller holds
-unknown schema compatibility and requires asset readiness before accepting a web
-rollout. Production config validates the canonical origin and private trusted
+Next optimizer against four asset kinds. The optimized image cache persists
+across container replacements with a 512 MiB limit. The pinned Next.js patch
+rebuilds the eviction index from file metadata in the background. Cached images
+are served immediately during the rebuild, and new transforms can be served
+without persistence until the index is ready to enforce the limit. The release
+deployer requires asset readiness before accepting a web rollout. Production
+config validates the canonical origin and private trusted
 proxy boundary at startup. Images are published only after reusable CI passes.
 
 Each frontend Data Dragon JSON fetch bounds headers and body consumption to four

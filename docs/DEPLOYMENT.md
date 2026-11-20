@@ -96,8 +96,9 @@ required.
 7. Commit `current.json` and the `current` tooling symlink only after validation.
 
 The public probe retries transient asset warmup within a bounded deadline.
-Readiness includes actual optimized champion/item/rune/splash output. A 200 from
-backend diagnostics is insufficient unless its JSON also says `ok: true`.
+Readiness includes actual optimized champion/item/rune/splash output. Failed
+readiness responses report known failed asset kinds in deployment diagnostics.
+Backend diagnostics must return HTTP 200 and `ok: true` in the response body.
 
 Application failures preserve bounded private diagnostics before rolling back the
 whole application to its captured configuration. Database changes are retained.

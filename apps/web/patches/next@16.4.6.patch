@@ -1,0 +1,117 @@
+diff --git a/dist/server/image-optimizer.js b/dist/server/image-optimizer.js
+index 64a567edb27010733751ce087d7d43b64ad24c7f..1cb47bf2094ed955c4ffb24040984ea50ae1c2ed 100644
+--- a/dist/server/image-optimizer.js
++++ b/dist/server/image-optimizer.js
+@@ -124,11 +124,12 @@ async function initCacheEntries(cacheDir) {
+     const entries = [];
+     for (const cacheKey of cacheKeys){
+         try {
+-            const { expireAt, buffer } = await readFromCacheDir(cacheDir, cacheKey);
++            const { file, filePath } = await findCacheFile(cacheDir, cacheKey);
++            const { size } = await _fs.promises.stat(filePath);
+             entries.push({
+                 key: cacheKey,
+-                size: buffer.byteLength,
+-                expireAt
++                size,
++                expireAt: Number(file.split('.', 2)[1])
+             });
+         } catch  {
+         // Skip entries that can't be read from disk
+@@ -156,15 +157,19 @@ async function writeToCacheDir(cacheDir, cacheKey, extension, maxAge, expireAt,
+     });
+     await _fs.promises.writeFile(filename, buffer);
+ }
+-async function readFromCacheDir(cacheDir, cacheKey) {
++async function findCacheFile(cacheDir, cacheKey) {
+     const dir = (0, _path.join)(/* turbopackIgnore: true */ cacheDir, cacheKey);
+     const files = await _fs.promises.readdir(dir);
+     const file = files[0];
+     if (!file) {
+         throw new Error(`Invariant: cache entry "${cacheKey}" not found in dir "${cacheDir}"`);
+     }
+-    const [maxAgeSt, expireAtSt, etag, upstreamEtag, extension] = file.split('.', 5);
+     const filePath = (0, _path.join)(/* turbopackIgnore: true */ dir, file);
++    return { file, filePath };
++}
++async function readFromCacheDir(cacheDir, cacheKey) {
++    const { file, filePath } = await findCacheFile(cacheDir, cacheKey);
++    const [maxAgeSt, expireAtSt, etag, upstreamEtag, extension] = file.split('.', 5);
+     const buffer = await _fs.promises.readFile(/* turbopackIgnore: true */ filePath);
+     if (buffer.byteLength === 0) {
+         throw new Error(`Invariant: image cache entry "${cacheKey}" is empty`);
+@@ -391,8 +396,8 @@ class ImageOptimizerCache {
+         try {
+             const now = Date.now();
+             const { maxAge, expireAt, etag, upstreamEtag, buffer, extension } = await readFromCacheDir(this.cacheDir, cacheKey);
+-            // Promote entry in LRU (mark as recently used)
+-            const lru = await this.cacheDiskLRU;
++            // Serve hits while the eviction index is being rebuilt.
++            const lru = this.cacheDiskLRU.ready;
+             lru == null ? void 0 : lru.get(cacheKey);
+             return {
+                 value: {
+@@ -450,8 +455,10 @@ class ImageOptimizerCache {
+         // Fall back to filesystem cache
+         const expireAt = Math.max(revalidate, this.nextConfig.images.minimumCacheTTL) * 1000 + Date.now();
+         try {
+-            const lru = await this.cacheDiskLRU;
+-            const success = lru == null ? void 0 : lru.set(cacheKey, value.buffer.byteLength);
++            // Skip persistence until existing entries count towards the size limit.
++            const lru = this.cacheDiskLRU.ready;
++            if (!lru) return;
++            const success = lru.set(cacheKey, value.buffer.byteLength);
+             if (success === false) {
+                 throw new Error(`image of size ${value.buffer.byteLength} could not be tracked by lru cache`);
+             }
+diff --git a/dist/server/lib/disk-lru-cache.external.js b/dist/server/lib/disk-lru-cache.external.js
+index b2cce64c2d1cece24fcf33ddf95d03ec9ccbb209..1b99068a840c5d503233e6e2bc1603f980dfadb3 100644
+--- a/dist/server/lib/disk-lru-cache.external.js
++++ b/dist/server/lib/disk-lru-cache.external.js
+@@ -24,12 +24,13 @@ const _fs = require("fs");
+ const _lrucache = require("./lru-cache");
+ /**
+  * Module-level LRU singleton for disk cache eviction.
+- * Initialized once on first `set()`, shared across all consumers.
+- * Once resolved, the promise stays resolved — subsequent calls just await the cached result.
+- */ let _diskLRUPromise = null;
+-async function getOrInitDiskLRU(cacheDir, maxDiskSize, readEntries, evictEntry) {
+-    if (!_diskLRUPromise) {
+-        _diskLRUPromise = (async ()=>{
++ * Rebuilt once in the background while cached images remain readable.
++ */ let _diskLRUState = null;
++function getOrInitDiskLRU(cacheDir, maxDiskSize, readEntries, evictEntry) {
++    if (!_diskLRUState) {
++        const state = { ready: null };
++        _diskLRUState = state;
++        (async ()=>{
+             let maxSize = maxDiskSize;
+             if (typeof maxSize === 'undefined') {
+                 // Ensure cacheDir exists before checking disk space
+@@ -45,19 +46,20 @@ async function getOrInitDiskLRU(cacheDir, maxDiskSize, readEntries, evictEntry)
+             for (const entry of entries){
+                 // Skip entries with a non-positive size: `LRUCache.set()` rejects
+                 // sizes <= 0, so a single such entry (e.g. a 0-byte or corrupt cache
+-                // file) would otherwise throw here and permanently reject this cached
+-                // singleton promise, breaking the disk cache for the whole process.
++                // file) would otherwise prevent the index from becoming ready.
+                 if (entry.size > 0) {
+                     lru.set(entry.key, entry.size);
+                 }
+             }
+-            return lru;
+-        })();
++            state.ready = lru;
++        })().catch((error)=>{
++            console.error('Failed to initialize the Next.js image cache eviction index', error);
++        });
+     }
+-    return _diskLRUPromise;
++    return _diskLRUState;
+ }
+ function resetDiskLRU() {
+-    _diskLRUPromise = null;
++    _diskLRUState = null;
+ }
+
+ //# sourceMappingURL=disk-lru-cache.external.js.map

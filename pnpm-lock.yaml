@@ -14,6 +14,11 @@ overrides:
   fast-uri@>=3.0.0 <3.1.9: 3.1.9
   '@typescript-eslint/typescript-estree>minimatch': 11.0.1
 
+patchedDependencies:
+  next@16.4.6:
+    hash: 6807a5e66a2aae0e74ad10157ac89c2b1c15126cce2fd00021d08b60ea1ad1f0
+    path: apps/web/patches/next@16.4.6.patch
+
 importers:
 
   .:
@@ -53,7 +58,7 @@ importers:
         version: 11.18.2(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       next:
         specifier: ^16.4.5
-        version: 16.4.6(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.65.1)(@types/node@25.9.9)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 16.4.6(patch_hash=6807a5e66a2aae0e74ad10157ac89c2b1c15126cce2fd00021d08b60ea1ad1f0)(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.65.1)(@types/node@25.9.9)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       radix-ui:
         specifier: ^1.8.1
         version: 1.8.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -8561,7 +8566,7 @@ snapshots:
 
   natural-compare@1.4.0: {}
 
-  next@16.4.6(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.65.1)(@types/node@25.9.9)(react-dom@19.3.1(react@19.3.1))(react@19.3.1):
+  next@16.4.6(patch_hash=6807a5e66a2aae0e74ad10157ac89c2b1c15126cce2fd00021d08b60ea1ad1f0)(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.65.1)(@types/node@25.9.9)(react-dom@19.3.1(react@19.3.1))(react@19.3.1):
     dependencies:
       '@next/env': 16.4.6
       '@swc/helpers': 0.5.23

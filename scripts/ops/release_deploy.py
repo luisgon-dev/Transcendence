@@ -5,6 +5,7 @@ import contextlib
 import fcntl
 from copy import deepcopy
 import hashlib
+import http.client
 import json
 import os
 from pathlib import Path
@@ -15,6 +16,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+import urllib.error
 import urllib.request
 
 COMPONENTS = ("service", "webapi", "web")
@@ -106,7 +108,22 @@ def http_probe(base, revision, profile, route=None, api_url=None):
     """Exercise the serving path and optimized assets, not just process health."""
     def get(path, is_json=False):
         request = urllib.request.Request(base.rstrip("/") + path, headers={"Cache-Control": "no-cache"})
-        with urllib.request.urlopen(request, timeout=20) as response:
+        try:
+            response = urllib.request.urlopen(request, timeout=20)
+        except urllib.error.HTTPError as failure:
+            if path != "/api/readiness":
+                raise
+            with failure:
+                try:
+                    payload = json.loads(failure.read(4096))
+                except (ValueError, OSError, http.client.HTTPException):
+                    payload = None
+            checks = payload.get("checks") if isinstance(payload, dict) else None
+            failed = [name for name in ("champion", "item", "rune", "splash")
+                      if isinstance(checks, dict) and checks.get(name) is False]
+            details = ", ".join(failed) if failed else "no failed asset kinds reported"
+            raise RuntimeError(f"Web asset readiness returned HTTP {failure.code} ({details})") from None
+        with response:
             if path == "/api/readiness" and route and response.headers.get("x-trn-deployment") != route:
                 raise RuntimeError("Traffic has not reached the expected deployment slot")
             body = response.read(2 * 1024 * 1024)

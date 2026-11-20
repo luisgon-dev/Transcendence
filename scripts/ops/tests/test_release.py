@@ -9,6 +9,7 @@ import tarfile
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
+import urllib.error
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -363,6 +364,18 @@ class DeploymentTests(ReleaseFixture):
             def read(self, *args): return responses.pop(0)
         with patch.object(deploy.urllib.request, 'urlopen', side_effect=lambda *a, **k: Response()):
             with self.assertRaisesRegex(RuntimeError, 'Web-to-API'):
+                deploy.http_probe('https://example.com', SHA, '/profile')
+
+    def test_asset_failure_reports_only_known_failed_checks(self):
+        home = MagicMock()
+        home.__enter__.return_value = home
+        home.status = 200
+        home.read.return_value = b'html'
+        body = io.BytesIO(b'{"checks":{"champion":false,"item":true,"rune":"private","splash":false,'
+                          b'"unknown":false},"message":"private upstream URL"}')
+        unavailable = urllib.error.HTTPError('https://example.com/api/readiness', 503, '', {}, body)
+        with patch.object(deploy.urllib.request, 'urlopen', side_effect=[home, unavailable]):
+            with self.assertRaisesRegex(RuntimeError, r'^Web asset readiness returned HTTP 503 \(champion, splash\)$'):
                 deploy.http_probe('https://example.com', SHA, '/profile')
 
     def test_same_source_revision_cannot_mask_a_cutover_that_never_happened(self):

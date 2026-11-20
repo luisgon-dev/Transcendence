@@ -46,7 +46,7 @@
   "devDependencies": {
     "@playwright/test": "^1.65.0",
     "@transcendence/web-routes": "workspace:*",
-    "axe-core": "^4.14.0",
+    "axe-core": "^4.14.1",
     "chrome-launcher": "1.2.3",
     "lighthouse": "13.6.0"
   }
